@@ -1,0 +1,20 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-voice-stopSpeaking",
+    "method": "voice.stopSpeaking",
+    "params": {},
+    "idempotencyKey": "key-voice-stopSpeaking"
+  },
+  "response": {
+    "id": "request-voice-stopSpeaking",
+    "ok": true,
+    "result": {
+      "answered": "voice.stopSpeaking"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

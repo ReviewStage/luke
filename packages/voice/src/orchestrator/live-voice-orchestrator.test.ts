@@ -110,6 +110,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   let microphoneGranted = true;
   let microphoneAsks = 0;
   let microphoneAsk: (() => Promise<boolean>) | undefined;
+  const stops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
     bridge: {
       reportView: (view, exchange) => {
@@ -121,6 +122,10 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
         return microphoneAsk ? microphoneAsk() : microphoneGranted;
       },
       hostedUnavailableNote: async () => undefined,
+      stopSpeaking: async () => {
+        stops.push(calls[calls.length - 1]?.mutes ?? 0);
+        return true;
+      },
     },
     createCall: (events) => {
       const call = new FakeCall(events);
@@ -142,6 +147,8 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
       microphoneAsk = ask;
     },
     microphoneAsks: () => microphoneAsks,
+    /** The call's mute count at each moment the host was told to stop: what was sent first. */
+    stops,
     latest: () => calls[calls.length - 1],
   };
 }
@@ -228,16 +235,29 @@ test("a press during a session opened for Luke's speech unmutes it once started,
   assert.equal(call.mutes, 1);
 });
 
-test("the stop key mutes a standing session once, does nothing against none, and ends the hold so the release mutes nothing more", async () => {
+test("the stop key tells the host to stop before it mutes a standing session once, does nothing against none, and ends the hold so the release mutes nothing more", async () => {
   const f = fixture();
   assert.equal(await f.orchestrator.stopSpeaking(), false);
+  assert.deepEqual(f.stops, []);
   const pressed = f.orchestrator.beginTalk();
   f.latest()?.started();
   await pressed;
   assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.deepEqual(f.stops, [0]);
   assert.equal(f.latest()?.mutes, 1);
   await f.orchestrator.endTalk();
+  assert.deepEqual(f.stops, [0]);
   assert.equal(f.latest()?.mutes, 1);
+});
+
+test("the talk key's release mutes and never tells the host to stop", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  f.latest()?.started();
+  await pressed;
+  await f.orchestrator.endTalk();
+  assert.equal(f.latest()?.mutes, 1);
+  assert.deepEqual(f.stops, []);
 });
 
 test("a press without the microphone asks for it, and a refusal opens nothing", async () => {

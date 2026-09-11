@@ -509,7 +509,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Luke does not listen through your microphone except while you hold the
   talk key. The press opens the microphone and letting go closes it, so
   macOS's microphone indicator is lit exactly while the key is down; the stop
-  key closes it too. A voice session Luke opens to speak to you opens no
+  key closes it too, and is the one key that also tells Luke to stop talking,
+  while letting go of the talk key lets him finish. A voice session Luke
+  opens to speak to you opens no
   microphone at all. If Luke's key helper cannot start, the key reports
   presses alone, so one press opens the microphone and the next closes it,
   and the Keyboard shortcuts page says so.

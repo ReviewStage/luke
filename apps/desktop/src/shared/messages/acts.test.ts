@@ -145,6 +145,10 @@ test("the live session acts carry the peer's offer verbatim, a transport state t
   assert.ok(activity(false));
   assert.equal(activity("yes"), undefined);
   assert.equal(parsedAct({ kind: ACT_KIND.VOICE_END_LIVE_SESSION, payload: {} }), undefined);
+  assert.deepEqual(parsedAct({ kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
+    kind: ACT_KIND.VOICE_STOP_SPEAKING,
+  });
+  assert.equal(parsedAct({ kind: ACT_KIND.VOICE_STOP_SPEAKING, payload: {} }), undefined);
 });
 
 test("a voice command is one of the three commands and carries nothing else", () => {

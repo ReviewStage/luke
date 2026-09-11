@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "stopped": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "stopped"
+  ],
+  "additionalProperties": false
+}

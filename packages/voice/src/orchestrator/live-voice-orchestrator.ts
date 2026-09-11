@@ -48,6 +48,8 @@ export interface LiveVoiceBridge {
   requestMicrophone(): Promise<boolean>;
   /** The neutral note said when the hosted service's ceiling refuses a session. */
   hostedUnavailableNote(): Promise<string | undefined>;
+  /** Tells the host to stop Luke speaking, answering whether a session stood to tell; the stop key's ask alone. */
+  stopSpeaking(): Promise<boolean>;
 }
 
 export interface LiveVoiceOrchestratorOptions {
@@ -185,8 +187,12 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The stop key, and the panel's Escape: the microphone closes and the host
-   * tells the model to stop. Pressed while a press's session is still
+   * The stop key, and the panel's Escape: the host tells the model to stop,
+   * and then the microphone closes. The stop goes first so a press
+   * mid-sentence reaches the model as soon as it can, and the mute lands even
+   * where the host could not be reached. The talk key's release is `endTalk`
+   * and never carries the stop: under hold-to-talk it mutes while Luke is
+   * routinely still answering. Pressed while a press's session is still
    * opening, it cancels that press's unmute, so the session opens muted.
    */
   async stopSpeaking(): Promise<boolean> {
@@ -196,6 +202,7 @@ export class LiveVoiceOrchestrator {
     if (this.#opening) return true;
     const call = this.#call;
     if (!call?.standing) return false;
+    await this.#bridge.stopSpeaking();
     await call.mute();
     return true;
   }

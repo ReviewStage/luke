@@ -36,6 +36,7 @@ const BRIDGE: LiveVoiceBridge = {
     (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
   hostedUnavailableNote: async () =>
     hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
+  stopSpeaking: () => act(ACT_KIND.VOICE_STOP_SPEAKING).catch(() => false),
 };
 
 /** The two streams the meters listen to and the element plays, as the call hands them over. */

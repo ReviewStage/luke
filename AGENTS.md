@@ -451,12 +451,16 @@ Canonical commands:
   the renderer's tapped live events to the development trace writer the
   host owns, under the same gate, so an untraced run drops them at the
   host; and the live voice session's `voice.createLiveSession`,
-  `voice.endLiveSession`, `voice.reportLiveTransport`, and
-  `voice.reportLiveActivity`, with the `voiceLiveSession.changed` event
+  `voice.endLiveSession`, `voice.reportLiveTransport`,
+  `voice.reportLiveActivity`, and `voice.stopSpeaking`, with the
+  `voiceLiveSession.changed` event
   beside them, each mutating and idempotency-keyed so a retried SDP offer
   cannot create and bill a second session, their shapes declared once as
   `@sidecar/wire` schemas in `protocol.ts`, and answered by the host's live
-  composer, which owns the one session; the retired credential-mint path's
+  composer, which owns the one session — `voice.stopSpeaking` being the one
+  ask that tells the model to stop, sent by the stop key alone, since the
+  mute the talk key's release sends says nothing about Luke's own output and
+  the host reads no stop into it; the retired credential-mint path's
   methods and events — the credential mint, the speech settle, the receiver
   report, the delivery claims, and the speech offers — are gone from the
   table rather than kept as names no handler answers, so a client of an
@@ -1083,7 +1087,13 @@ Canonical commands:
   only on the session's own acknowledgment of that press's unmute, and the
   release (or the stop key) sends the mute and then, whatever the session
   answered, takes the track off the line and stops the device, so the
-  system's microphone indicator is lit exactly while the key is down. A
+  system's microphone indicator is lit exactly while the key is down. The
+  two keys mean two different things and the host hears them as two: the
+  talk key's release only closes the microphone, and Luke keeps answering
+  through it, while the stop key first asks the host, through
+  `voice.stopSpeaking`, to tell the model to stop speaking and wait, and
+  then closes the microphone the same way; no timing heuristic turns one
+  into the other. A
   session Luke opens for his own speech carries no capture device at all,
   only a sending line with no track that the next press fills, and typed asks
   open none. The one place a press stands in for a release is the Electron

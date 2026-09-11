@@ -22,6 +22,7 @@ const SCHEMAS = {
   voiceCreateLiveSessionResultSchema: protocol.voiceCreateLiveSessionResultSchema,
   voiceReportLiveTransportParamsSchema: protocol.voiceReportLiveTransportParamsSchema,
   voiceReportLiveActivityParamsSchema: protocol.voiceReportLiveActivityParamsSchema,
+  voiceStopSpeakingResultSchema: protocol.voiceStopSpeakingResultSchema,
   voiceLiveSessionChangedSchema: protocol.voiceLiveSessionChangedSchema,
 } satisfies RecordedJsonSchemas<typeof protocol>;
 
