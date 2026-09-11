@@ -46,6 +46,7 @@ export {
   PANEL_FORM_FACTOR,
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
+  PanelFormFactorSchema,
   PEEK_MIN_WIDTH,
   PEEK_SIDE_GROWTH,
   peekWidth,
