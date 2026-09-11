@@ -11,9 +11,24 @@ export { decodeArchiveContentEffect, ZstdUnsupported } from "./compression.effec
 export { runConversationMaintenanceEffect } from "./maintenance-run.effect.js";
 export type { MaintenanceReport } from "./maintenance-run.js";
 export type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
-export { type StoreClient, storeClient } from "./store-client.js";
-export type { StorePort } from "./wire.js";
-export { serveStore } from "./worker-host.js";
+export {
+  type StoreAskFailure,
+  type StoreClient,
+  StoreNotOpen,
+  type StoreTransport,
+  StoreWorkerGone,
+  storeClient,
+  workerStoreTransport,
+} from "./store-client.js";
+export {
+  type OperationParams,
+  type OperationResult,
+  type StoreOpenOptions,
+  StoreOperationFailed,
+  type StoreOperationName,
+  StoreRpcs,
+} from "./store-operations.js";
+export { inProcessStoreTransport, storeWorkerLayer } from "./worker-host.js";
 export {
   readWorkspaceFileEffect,
   WorkspaceFileIOError,

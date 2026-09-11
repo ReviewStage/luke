@@ -1,17 +1,17 @@
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import type { SqlClient } from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
+import { SqlError } from "@effect/sql/SqlError";
 import { Cause, type Context, Effect, Exit, Layer, Scope } from "effect";
-import { migrateStoreSchemaSync } from "./migration.js";
+import { migrateStoreSchema, type StoreSchemaRefused } from "./migration.js";
 import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
 
 /**
- * The agent's database connection, spoken to synchronously. It runs on the
- * store's own worker thread in the app — Electron's main thread never calls
- * it — and in-thread in tests, where the same operations are exercised
- * against a file or `:memory:`. The table groups each have a module of their
- * own over this handle: the brain's envelope, the conversation's lines,
- * and the remembered facts.
+ * The agent's database connection. It runs on the store's own worker thread
+ * in the app — Electron's main thread never calls it — and in-thread in
+ * tests, where the same operations are exercised against a file or
+ * `:memory:`. The table groups each have a module of their own over this
+ * handle: the brain's envelope, the conversation's lines, and the remembered
+ * facts.
  *
  * Every operation that changes more than one row runs in one transaction,
  * with WAL journaling and full synchronous commits, so a crash leaves the
@@ -21,15 +21,12 @@ import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
  * receipts in the same statement that removes the session.
  *
  * The handle is opened by `sql-node-sqlite.ts`, and one `@effect/sql` client
- * over it is built here, once, at the open: `sql` hands that one client out
- * as a layer, and `run` provides it to a table module's effect for the
- * callers that still hold a synchronous surface. The conversation, directory,
- * and transcript tables are effects over that client already; the
- * synchronous `prepare`, `exec`, and `transaction` below are the surface the
- * rest move off in P5-10b..d, kept until the last of them has. Bringing the
- * schema to this build's version is already the client's work, in
- * `migration.ts`, which `open` runs over that layer before handing the
- * database back.
+ * over it is built by `open`, once, on the runtime that opens it: `sql`
+ * hands that one client out as a layer, which is what every table module's
+ * effect runs over. The synchronous surface below — `run`, `prepare`,
+ * `exec`, `transaction`, `close` — is the handle the two OpenClaw ports
+ * (`archives.ts`, `maintenance-run.ts`) and the suites that open a database
+ * by hand still hold, and nothing else reaches the database through it.
  */
 
 export const AGENT_DATABASE_FILE = "agent.sqlite";
@@ -50,18 +47,50 @@ export class StoreDatabase {
    */
   readonly sql: Layer.Layer<SqlClient>;
 
-  private constructor(db: DatabaseSync) {
+  private constructor(
+    db: DatabaseSync,
+    scope: Scope.CloseableScope,
+    client: Context.Context<SqlClient>,
+  ) {
     this.#db = db;
-    this.#scope = Effect.runSync(Scope.make());
-    this.#client = Effect.runSync(Scope.extend(Layer.build(layerFromHandle(db)), this.#scope));
-    this.sql = Layer.succeedContext(this.#client);
+    this.#scope = scope;
+    this.#client = client;
+    this.sql = Layer.succeedContext(client);
   }
 
-  /** Opens or creates the database at `location` and brings its schema to this build's version. */
-  static open(location: string): StoreDatabase {
-    const database = new StoreDatabase(openDatabaseHandle(location));
-    migrateStoreSchemaSync(database.sql);
-    return database;
+  /**
+   * Opens or creates the database at `location`, builds its one client, and
+   * brings its schema to this build's version, all on the calling runtime.
+   * The handle answered is released by its own `close`; a caller that holds
+   * a scope releases it there with `Effect.acquireRelease`.
+   */
+  static open(location: string): Effect.Effect<StoreDatabase, SqlError | StoreSchemaRefused> {
+    // Every step is a synchronous call into node:sqlite, so nothing is gained
+    // by an interruption landing between them and a handle would be left open
+    // by one; the open runs whole or not at all.
+    return Effect.uninterruptible(
+      Effect.gen(function* () {
+        const db = yield* Effect.try({
+          try: () => openDatabaseHandle(location),
+          catch: (cause) => new SqlError({ cause, message: "the database cannot be opened" }),
+        });
+        const scope = yield* Scope.make();
+        const database = yield* Effect.gen(function* () {
+          const client = yield* Scope.extend(Layer.build(layerFromHandle(db)), scope);
+          const opened = new StoreDatabase(db, scope, client);
+          yield* Effect.provide(migrateStoreSchema, client);
+          return opened;
+        }).pipe(
+          Effect.onError(() =>
+            Effect.zipRight(
+              Scope.close(scope, Exit.void),
+              Effect.sync(() => db.close()),
+            ),
+          ),
+        );
+        return database;
+      }),
+    );
   }
 
   /**
@@ -71,11 +100,12 @@ export class StoreDatabase {
    * synchronous call into `node:sqlite`, so the run waits on nothing.
    *
    * @deprecated A strangler shim on the `Effect.runSync` allowlist in
-   * `docs/adr/0001-effect.md`. P5-11 makes the worker an Rpc server with a
-   * runtime edge of its own, where every operation runs its own effect and
-   * this door is gone.
+   * `docs/adr/0001-effect.md`: the synchronous reach of the two OpenClaw
+   * ports, `archives.ts` and `maintenance-run.ts`, into the tables, which
+   * import nothing from `effect` and so call the tables' synchronous doors.
+   * It goes when those ports are handed a synchronous accessor of their own.
    */
-  run<A>(effect: Effect.Effect<A, SqlError, SqlClient>): A {
+  run<A, E>(effect: Effect.Effect<A, E, SqlClient>): A {
     const exit = Effect.runSyncExit(Effect.provide(effect, this.#client));
     if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
     return exit.value;
@@ -87,12 +117,12 @@ export class StoreDatabase {
     this.#db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   }
 
-  /** @deprecated A table module moves onto `sql` in P5-10a..d, and this goes with the last one. */
+  /** @deprecated The ports' synchronous surface; it goes with `run`. */
   prepare(sql: string): StatementSync {
     return this.#db.prepare(sql);
   }
 
-  /** @deprecated A table module moves onto `sql` in P5-10a..d, and this goes with the last one. */
+  /** @deprecated The ports' synchronous surface; it goes with `run`. */
   exec(sql: string): void {
     this.#db.exec(sql);
   }
@@ -103,8 +133,8 @@ export class StoreDatabase {
    * is also atomic as one step of a larger one, and a failure anywhere rolls
    * the whole outer transaction back.
    *
-   * @deprecated `sql.withTransaction` nests the same way, and a table module
-   * moves onto it in P5-10a..d; this goes with the last one.
+   * @deprecated The ports' synchronous surface; `sql.withTransaction` nests
+   * the same way, and this goes with `run`.
    */
   transaction<T>(work: () => T): T {
     const depth = this.#transactionDepth;
@@ -123,7 +153,16 @@ export class StoreDatabase {
     }
   }
 
+  /**
+   * Releases the client and closes the handle; a second call does nothing.
+   *
+   * @deprecated The handle's synchronous release, on the same allowlist row
+   * as `run`: the worker releases its database through
+   * `Effect.acquireRelease` over this, and the suites that open one by hand
+   * call it directly.
+   */
   close(): void {
+    if (!this.#db.isOpen) return;
     Effect.runSync(Scope.close(this.#scope, Exit.void));
     this.#db.close();
   }

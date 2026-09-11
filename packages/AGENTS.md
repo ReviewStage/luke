@@ -367,9 +367,20 @@ table module under `brain/src/store/` is an `Effect` over that client and
 nothing else — it takes no handle, reads its rows through `@effect/sql`'s
 `SqlSchema` against a schema declared beside it rather than a cast, and
 derives a row that is a shared shape from that shape's own declaration
-instead of stating it twice — and the synchronous function each one still
-exports is `StoreDatabase#run` wearing its old signature, for the callers
-that hold a handle rather than a client until P5-11. `store/workspace-files.ts`
+instead of stating it twice. The worker over those modules is an
+`@effect/rpc` server: `store/store-operations.ts` declares every operation
+once as an `RpcGroup`, `store/worker-host.ts` answers it one request at a
+time on the worker-runner protocol with the table effects run over the one
+client the open built, `store/worker-entry.ts` is the runtime edge that
+launches it, and `store/store-client.ts` is the main thread's `RpcClient`
+over a one-worker `NodeWorker` pool behind the Promise face the host still
+holds; `inProcessStoreTransport` serves the same handlers in the calling
+thread for a test. The synchronous function a table module still exports is
+`StoreDatabase#run` wearing its old signature, for the two OpenClaw ports
+(`store/archives.ts`, `store/maintenance-run.ts`) that hold a handle rather
+than a client and import nothing from `effect`, and for the suites beside
+them; the children, notebook, and memory index tables, which no port reads,
+export none. `store/workspace-files.ts`
 touches no client at all — the notebook's own files are read and written
 synchronously by hand because they run inside the worker's own sync
 transactions — so its sibling, `workspace-files.effect.ts`, states what

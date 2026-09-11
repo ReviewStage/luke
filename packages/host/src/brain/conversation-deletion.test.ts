@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { MessageChannel } from "node:worker_threads";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -13,7 +12,7 @@ import {
   responsesModelAnswer,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
-import { type StoreClient, type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
+import { inProcessStoreTransport, type StoreClient, storeClient } from "@sidecar/brain/store";
 import {
   type BareResponsesModel,
   bareModelAdapter,
@@ -105,11 +104,7 @@ function repository(client: StoreClient) {
 
 async function composed(t: TestContext) {
   const root = await temporaryDirectory(t, "luke-clear-");
-  const channel = new MessageChannel();
-  // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
-  serveStore(channel.port2 as unknown as StorePort);
-  // SAFETY: as above, for the client's end of the same channel.
-  const client = storeClient(channel.port1 as unknown as StorePort);
+  const client = storeClient(inProcessStoreTransport());
   let clock = NOW;
   let ids = 0;
   let generations = 0;
@@ -307,8 +302,6 @@ async function composed(t: TestContext) {
     close: async () => {
       for (const agent of [...followers.keys()]) await stop(agent);
       await client.close();
-      channel.port1.close();
-      channel.port2.close();
     },
   };
 }

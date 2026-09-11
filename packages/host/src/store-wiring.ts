@@ -6,7 +6,7 @@ import {
   type NotebookEntry,
   type NotebookMutation,
   type StoreClient,
-  type StorePort,
+  type StoreTransport,
   storeClient,
 } from "@sidecar/brain/store";
 import { type ChildStore, memoryChildStore } from "@sidecar/runtime";
@@ -41,7 +41,8 @@ import { ConversationThread, MemoryConversationStore } from "./conversation-thre
 export interface StoreWiringDependencies {
   /** Whether this run keeps anything on disk; a fixture or capture run does not. */
   persistent: boolean;
-  createWorker: () => StorePort;
+  /** How the store's client reaches its server: the worker thread in the app, the calling thread in a test. */
+  transport: StoreTransport;
   /** The agent's directory under Luke's application data, created on open. */
   agentRoot: () => string;
   /** The agent's identity workspace, the notebook's root; the worker writes USER.md there. */
@@ -157,7 +158,7 @@ export interface StoreWiring {
 export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
   let store: StoreClient | undefined;
   const client = (): StoreClient => {
-    store ??= storeClient(dependencies.createWorker());
+    store ??= storeClient(dependencies.transport);
     return store;
   };
 

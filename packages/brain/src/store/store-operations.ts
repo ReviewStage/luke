@@ -1,4 +1,6 @@
 import path from "node:path";
+import { Rpc, RpcGroup } from "@effect/rpc";
+import type { SqlError } from "@effect/sql/SqlError";
 import type {
   EmbeddingModelIdentity,
   EmbeddingWrite,
@@ -9,83 +11,56 @@ import type {
   MemorySearchOutcome,
   MemorySearchQuery,
 } from "@sidecar/memory";
-import type {
-  AgentId,
-  ArchiveReason,
-  ChildCompletionRecord,
-  ChildRunRecord,
-  ConversationAppendOutcome,
-  ConversationRecord,
-  SessionKey,
+import {
+  type AgentId,
+  ArchiveReasonSchema,
+  agentId,
+  type ChildCompletionRecord,
+  type ChildRunRecord,
+  type ConversationAppendOutcome,
+  type ConversationRecord,
+  type SessionKey,
+  sessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { type DeletionOptions, type DeletionOutcome, deleteConversation } from "./archives.js";
-import {
-  type EnvelopeRead,
-  loadBrainEnvelopeEffect,
-  saveBrainEnvelopeEffect,
-} from "./brain-envelope.js";
-import {
-  deleteChildCompletionEffect,
-  deleteChildRunEffect,
-  listChildCompletionsEffect,
-  listChildRunsEffect,
-  putChildCompletionEffect,
-  putChildRunEffect,
-} from "./children-table.js";
-import {
-  appendConversationEffect,
-  type ConversationSearchHit,
-  conversationClearedAtEffect,
-  listConversationEffect,
-  searchConversationEffect,
-} from "./conversation-table.js";
-import {
-  archiveConversationEffect,
-  type ConversationCreation,
-  createConversationEffect,
-  listConversationsEffect,
-  pinConversationEffect,
-  unarchiveConversationEffect,
-} from "./conversations-table.js";
+import { Effect, Schema, type Scope } from "effect";
+import type { DeletionOptions, DeletionOutcome } from "./archives.js";
+import type { EnvelopeRead } from "./brain-envelope.js";
+import type { ConversationSearchHit } from "./conversation-table.js";
+import { type ConversationCreation, createConversationEffect } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
-import { type MaintenanceReport, runConversationMaintenance } from "./maintenance-run.js";
-import { type FlushState, flushStateEffect, recordFlushEffect } from "./memory-flush-table.js";
+import type { MaintenanceReport } from "./maintenance-run.js";
+import type { FlushState } from "./memory-flush-table.js";
+import type { MemoryIndexStatus } from "./memory-index-table.js";
+import { StoreSchemaRefused } from "./migration.js";
 import {
-  applyMemorySyncEffect,
-  type MemoryIndexStatus,
-  memoryIndexStatusEffect,
-  planMemorySyncEffect,
-  readMemoryLines,
-  rebuildMemoryIndexEffect,
-  searchMemoryIndexEffect,
-} from "./memory-index-table.js";
-import {
-  forgetNotebookEntryEffect,
-  listNotebookEntriesEffect,
   migrateFactsIntoNotebookEffect,
   type NotebookEntry,
   type NotebookMutation,
-  rememberNotebookEntryEffect,
 } from "./notebook-table.js";
 
 /**
- * Every operation the store answers, as one function each. The name a caller
- * sends is the key here; the parameters and the answer are the function's own
- * types, so an operation is declared once and the client's methods, the
- * worker's dispatch, and the wire's vocabulary check all derive from this
- * table. Every parameter and every answer is structured-cloneable — nothing
- * here is a function or a handle — so the same table runs over a
- * `MessagePort` in a test and a `Worker` in the app.
+ * Every operation the store answers, as one `RpcGroup`. An operation is
+ * declared once here — its name, what it takes, what it answers, and what
+ * it refuses with — and the worker's handlers, the client's methods, and the
+ * types both ends speak all derive from that one declaration: a handler the
+ * group names and the host does not supply is a compile error, and so is a
+ * caller's typo.
  *
- * The keys are written as raw strings rather than gathered into an `as const`
- * constants object, which is the one place this file departs from the
- * repository's rule for fixed value sets. They are that set's declaration:
- * the name and what it does are one entry, `StoreOperationName` derives from
- * them by `keyof`, and a caller's typo is a compile error. A constants object
- * beside them would be the second list the rule exists to prevent.
+ * What the declarations carry is bounded the way the boundary is. Both ends
+ * are one build in one process, and the port between them makes a
+ * structured clone of every message, so what a request needs established is
+ * the envelope's shape and the fields the store itself declares: those are
+ * `Schema.Struct`s here, and a request whose fields the schema refuses is
+ * refused before any handler runs. A shape another package owns — a
+ * conversation entry, a child's record, the brain's envelope save, the
+ * memory index's plan — has no schema of its own yet anywhere in the tree,
+ * and declaring one here would be a second statement of it, so it rides as
+ * `carried`: typed by the declaration, cloned by the port, validated nowhere,
+ * exactly as the hand-rolled envelope before this one let it ride behind a
+ * `SAFETY:` comment. When its package declares the schema, the field here
+ * takes it in place of `carried`.
  */
 
 /** An open store as an operation sees it: the database, and the two directories it owns. */
@@ -97,180 +72,258 @@ export interface OpenStore {
   readonly workspace: string;
 }
 
+/**
+ * A value carried across the worker boundary as the structured clone the
+ * port makes of it: typed by the declaration alone. The predicate admits
+ * everything, because both ends are the same build and the sender typed the
+ * value against this same declaration.
+ */
+const carried = <A>(): Schema.Schema<A> => Schema.declare((_value): _value is A => true);
+
+/** A session key on the boundary: the non-empty string the runtime's own constructor brands. */
+const SessionKeySchema: Schema.Schema<SessionKey, string> = Schema.transform(
+  Schema.NonEmptyString,
+  carried<SessionKey>(),
+  { strict: true, decode: sessionKey, encode: (key) => key },
+);
+
+/** An agent id on the boundary, branded the same way. */
+const AgentIdSchema: Schema.Schema<AgentId, string> = Schema.transform(
+  Schema.NonEmptyString,
+  carried<AgentId>(),
+  { strict: true, decode: agentId, encode: (id) => id },
+);
+
 /** An operation that takes nothing beyond the open store. */
-export type NoParams = Record<string, never>;
+const NoParams = Schema.Struct({});
 
 /**
- * The floor an operation's answer stands on: enough to keep `void` and
- * `null` out of the table, and no more. It is deliberately not a proof of
- * structured-cloneability — `object` admits a function and a live database
- * handle both — so what keeps every answer cloneable is each entry's own
- * narrower return type, which is the thing to read when adding one.
+ * What an operation that could not be carried out fails with: the message of
+ * whatever the store threw or failed with. The cause stays on the worker,
+ * where it was raised; what the host is owed is the answer that the request
+ * did not take effect, and why in words.
  */
-export type StoreAnswer = boolean | number | undefined | object;
+export class StoreOperationFailed extends Schema.TaggedError<StoreOperationFailed>()(
+  "StoreOperationFailed",
+  { message: Schema.String },
+) {}
 
-type StoreOperation = (store: OpenStore, params: never) => StoreAnswer;
-
-export const STORE_OPERATIONS = {
-  "brain.load": (s, p: { sessionKey: SessionKey }): EnvelopeRead =>
-    s.db.run(loadBrainEnvelopeEffect(p.sessionKey)),
-  "brain.save": (s, p: { sessionKey: SessionKey; save: BrainStateSave }): boolean =>
-    s.db.run(saveBrainEnvelopeEffect(p.sessionKey, p.save)),
-
-  "conversation.append": (
-    s,
-    p: { sessionKey: SessionKey; entries: readonly ConversationEntry[]; now: number },
-  ): ConversationAppendOutcome<ConversationEntry> =>
-    s.db.run(appendConversationEffect(p.sessionKey, p.entries, p.now)),
-  "conversation.list": (
-    s,
-    p: { sessionKey: SessionKey; now: number },
-  ): readonly ConversationEntry[] => s.db.run(listConversationEffect(p.sessionKey, p.now)),
-  "conversation.cutoff": (s, p: { sessionKey: SessionKey }): number | undefined =>
-    s.db.run(conversationClearedAtEffect(p.sessionKey)),
-  "conversation.search": (
-    s,
-    p: { sessionKeys: readonly SessionKey[]; query: string; limit: number; now: number },
-  ): readonly ConversationSearchHit[] =>
-    s.db.run(searchConversationEffect(p.sessionKeys, p.query, p.limit, p.now)),
-
-  "notebook.list": (s, p: { now: number }): readonly NotebookEntry[] =>
-    s.db.run(listNotebookEntriesEffect(s.workspace, p.now)),
-  "notebook.remember": (
-    s,
-    p: { id: string; words: string; replaces?: string; now: number },
-  ): NotebookMutation => s.db.run(rememberNotebookEntryEffect(s.workspace, p, p.now)),
-  "notebook.forget": (s, p: { id: string; now: number }): NotebookMutation =>
-    s.db.run(forgetNotebookEntryEffect(s.workspace, p.id, p.now)),
-
-  "memory.plan-sync": (s, p: { identity?: EmbeddingModelIdentity; now: number }): MemoryScanPlan =>
-    s.db.run(
-      planMemorySyncEffect(
-        s.workspace,
-        p.identity,
-        s.db.run(listNotebookEntriesEffect(s.workspace, p.now)),
-      ),
-    ),
-  "memory.apply-sync": (
-    s,
-    p: {
-      changed: readonly IndexedFileWrite[];
-      removed: readonly string[];
-      embeddings: readonly EmbeddingWrite[];
-      identity?: EmbeddingModelIdentity;
-      now: number;
-    },
-  ): MemoryApplyReport =>
-    s.db.run(
-      applyMemorySyncEffect(
-        { changed: p.changed, removed: p.removed },
-        p.embeddings,
-        p.identity,
-        p.now,
-      ),
-    ),
-  "memory.search": (s, p: MemorySearchQuery): MemorySearchOutcome =>
-    s.db.run(searchMemoryIndexEffect(p)),
-  "memory.get": (
-    s,
-    p: { path: string; from?: number; lines?: number },
-  ): MemoryReadResult | undefined => readMemoryLines(s.workspace, p.path, p.from, p.lines),
-  "memory.rebuild": (s, _p: NoParams): boolean => s.db.run(rebuildMemoryIndexEffect),
-  "memory.status": (s, _p: NoParams): MemoryIndexStatus => s.db.run(memoryIndexStatusEffect),
-  "memory.flush-state.get": (
-    s,
-    p: { sessionKey: SessionKey; generationId: string },
-  ): FlushState | undefined => s.db.run(flushStateEffect(p.sessionKey, p.generationId)),
-  "memory.flush-state.put": (s, p: { sessionKey: SessionKey; state: FlushState }): boolean => {
-    s.db.run(recordFlushEffect(p.sessionKey, p.state));
-    return true;
-  },
-
-  "conversations.list": (s, _p: NoParams): readonly ConversationRecord[] =>
-    s.db.run(listConversationsEffect),
-  "conversations.create": (s, p: ConversationCreation): ConversationRecord =>
-    s.db.run(createConversationEffect(p)),
-  "conversations.archive": (
-    s,
-    p: { sessionKey: SessionKey; now: number; reason: ArchiveReason },
-  ): boolean => s.db.run(archiveConversationEffect(p.sessionKey, p.now, p.reason)),
-  "conversations.unarchive": (s, p: { sessionKey: SessionKey }): boolean =>
-    s.db.run(unarchiveConversationEffect(p.sessionKey)),
-  "conversations.pin": (s, p: { sessionKey: SessionKey; pinnedAt: number | undefined }): boolean =>
-    s.db.run(pinConversationEffect(p.sessionKey, p.pinnedAt)),
-  "conversations.delete": (
-    s,
-    p: { sessionKey: SessionKey; now: number } & DeletionOptions,
-  ): DeletionOutcome | undefined => deleteConversation(s.db, s.agentRoot, p.sessionKey, p.now, p),
-
-  "maintenance.run": (s, p: { now: number; preserve: readonly SessionKey[] }): MaintenanceReport =>
-    runConversationMaintenance(s.db, s.agentRoot, p),
-
-  "children.list": (s, _p: NoParams): readonly ChildRunRecord[] => s.db.run(listChildRunsEffect),
-  "children.put": (s, p: { record: ChildRunRecord }): boolean =>
-    s.db.run(putChildRunEffect(p.record)),
-  "children.delete": (s, p: { childId: string }): boolean =>
-    s.db.run(deleteChildRunEffect(p.childId)),
-  "completions.list": (s, _p: NoParams): readonly ChildCompletionRecord[] =>
-    s.db.run(listChildCompletionsEffect),
-  "completions.put": (s, p: { completion: ChildCompletionRecord }): boolean =>
-    s.db.run(putChildCompletionEffect(p.completion)),
-  "completions.delete": (s, p: { completionId: string }): boolean =>
-    s.db.run(deleteChildCompletionEffect(p.completionId)),
-} as const satisfies Record<string, StoreOperation>;
-
-export type StoreOperationName = keyof typeof STORE_OPERATIONS;
-
-/** One operation's parameters and answer, read off the table by name. */
-export type OperationParams<Name extends StoreOperationName> = Parameters<
-  (typeof STORE_OPERATIONS)[Name]
->[1];
-export type OperationResult<Name extends StoreOperationName> = ReturnType<
-  (typeof STORE_OPERATIONS)[Name]
->;
-
-/** The parameters of some operation: what a request carries before its name selects one. */
-export type AnyOperationParams = OperationParams<StoreOperationName>;
-
-export function isStoreOperationName(value: UnparsedWireValue): value is StoreOperationName {
-  return isWireString(value) && Object.hasOwn(STORE_OPERATIONS, value);
-}
+/** What an operation against a worker whose store is not open is refused with. */
+export const STORE_NOT_OPEN = "the brain's store is not open";
 
 /**
- * The two messages that are not operations: they create and destroy the
- * `OpenStore` every operation's first parameter is, so the worker owns them
- * and the table holds neither.
+ * The open's parameters, read rather than assumed: they are the one payload
+ * the worker acts on before any operation runs, since they name the
+ * directory it opens a database in.
  */
-export const STORE_LIFECYCLE = { OPEN: "open", CLOSE: "close" } as const;
-
-export interface StoreOpenOptions {
+const StoreOpenOptionsSchema = Schema.Struct({
   /** The agent's own directory under Luke's application data; the database lives in it. */
-  agentRoot: string;
+  agentRoot: Schema.String,
   /** The agent's identity workspace, the notebook's root; `<agentRoot>/workspace` by default. */
-  workspaceDirectory?: string;
-  agentId: AgentId;
-  sessionKey: SessionKey;
-  conversationName: string;
-  now: number;
-}
+  workspaceDirectory: Schema.optionalWith(Schema.String, { exact: true }),
+  agentId: AgentIdSchema,
+  sessionKey: SessionKeySchema,
+  conversationName: Schema.String,
+  now: Schema.Number,
+});
+export type StoreOpenOptions = Schema.Schema.Type<typeof StoreOpenOptionsSchema>;
+
+const operation = <
+  const Tag extends string,
+  Payload extends Schema.Schema.Any | Schema.Struct.Fields,
+  Success extends Schema.Schema.Any,
+>(
+  tag: Tag,
+  payload: Payload,
+  success: Success,
+) => Rpc.make(tag, { payload, success, error: StoreOperationFailed });
+
+export const StoreRpcs = RpcGroup.make(
+  /**
+   * The two operations that are not table operations: they make and unmake
+   * the store every other operation runs against, so the worker owns them
+   * and answers an open's refusal typed, with the version it found where the
+   * schema is the reason.
+   */
+  Rpc.make("store.open", {
+    payload: StoreOpenOptionsSchema,
+    success: Schema.Boolean,
+    error: Schema.Union(StoreSchemaRefused, StoreOperationFailed),
+  }),
+  operation("store.close", NoParams, Schema.Boolean),
+
+  operation("brain.load", { sessionKey: SessionKeySchema }, carried<EnvelopeRead>()),
+  operation(
+    "brain.save",
+    { sessionKey: SessionKeySchema, save: carried<BrainStateSave>() },
+    Schema.Boolean,
+  ),
+
+  operation(
+    "conversation.append",
+    {
+      sessionKey: SessionKeySchema,
+      entries: carried<readonly ConversationEntry[]>(),
+      now: Schema.Number,
+    },
+    carried<ConversationAppendOutcome<ConversationEntry>>(),
+  ),
+  operation(
+    "conversation.list",
+    { sessionKey: SessionKeySchema, now: Schema.Number },
+    carried<readonly ConversationEntry[]>(),
+  ),
+  operation(
+    "conversation.cutoff",
+    { sessionKey: SessionKeySchema },
+    Schema.UndefinedOr(Schema.Number),
+  ),
+  operation(
+    "conversation.search",
+    {
+      sessionKeys: Schema.Array(SessionKeySchema),
+      query: Schema.String,
+      limit: Schema.Number,
+      now: Schema.Number,
+    },
+    carried<readonly ConversationSearchHit[]>(),
+  ),
+
+  operation("notebook.list", { now: Schema.Number }, carried<readonly NotebookEntry[]>()),
+  operation(
+    "notebook.remember",
+    {
+      id: Schema.String,
+      words: Schema.String,
+      replaces: Schema.optionalWith(Schema.String, { exact: true }),
+      now: Schema.Number,
+    },
+    carried<NotebookMutation>(),
+  ),
+  operation(
+    "notebook.forget",
+    { id: Schema.String, now: Schema.Number },
+    carried<NotebookMutation>(),
+  ),
+
+  operation(
+    "memory.plan-sync",
+    {
+      identity: Schema.optionalWith(carried<EmbeddingModelIdentity>(), { exact: true }),
+      now: Schema.Number,
+    },
+    carried<MemoryScanPlan>(),
+  ),
+  operation(
+    "memory.apply-sync",
+    {
+      changed: carried<readonly IndexedFileWrite[]>(),
+      removed: Schema.Array(Schema.String),
+      embeddings: carried<readonly EmbeddingWrite[]>(),
+      identity: Schema.optionalWith(carried<EmbeddingModelIdentity>(), { exact: true }),
+      now: Schema.Number,
+    },
+    carried<MemoryApplyReport>(),
+  ),
+  operation("memory.search", carried<MemorySearchQuery>(), carried<MemorySearchOutcome>()),
+  operation(
+    "memory.get",
+    {
+      path: Schema.String,
+      from: Schema.optionalWith(Schema.Number, { exact: true }),
+      lines: Schema.optionalWith(Schema.Number, { exact: true }),
+    },
+    carried<MemoryReadResult | undefined>(),
+  ),
+  operation("memory.rebuild", NoParams, Schema.Boolean),
+  operation("memory.status", NoParams, carried<MemoryIndexStatus>()),
+  operation(
+    "memory.flush-state.get",
+    { sessionKey: SessionKeySchema, generationId: Schema.String },
+    carried<FlushState | undefined>(),
+  ),
+  operation(
+    "memory.flush-state.put",
+    { sessionKey: SessionKeySchema, state: carried<FlushState>() },
+    Schema.Boolean,
+  ),
+
+  operation("conversations.list", NoParams, carried<readonly ConversationRecord[]>()),
+  operation("conversations.create", carried<ConversationCreation>(), carried<ConversationRecord>()),
+  operation(
+    "conversations.archive",
+    { sessionKey: SessionKeySchema, now: Schema.Number, reason: ArchiveReasonSchema },
+    Schema.Boolean,
+  ),
+  operation("conversations.unarchive", { sessionKey: SessionKeySchema }, Schema.Boolean),
+  operation(
+    "conversations.pin",
+    { sessionKey: SessionKeySchema, pinnedAt: Schema.optionalWith(Schema.Number, { exact: true }) },
+    Schema.Boolean,
+  ),
+  operation(
+    "conversations.delete",
+    carried<{ sessionKey: SessionKey; now: number } & DeletionOptions>(),
+    carried<DeletionOutcome | undefined>(),
+  ),
+
+  operation(
+    "maintenance.run",
+    { now: Schema.Number, preserve: Schema.Array(SessionKeySchema) },
+    carried<MaintenanceReport>(),
+  ),
+
+  operation("children.list", NoParams, carried<readonly ChildRunRecord[]>()),
+  operation("children.put", { record: carried<ChildRunRecord>() }, Schema.Boolean),
+  operation("children.delete", { childId: Schema.String }, Schema.Boolean),
+  operation("completions.list", NoParams, carried<readonly ChildCompletionRecord[]>()),
+  operation("completions.put", { completion: carried<ChildCompletionRecord>() }, Schema.Boolean),
+  operation("completions.delete", { completionId: Schema.String }, Schema.Boolean),
+);
+
+/** One operation of the group, by any of its tags. */
+export type StoreRpc = RpcGroup.Rpcs<typeof StoreRpcs>;
+
+export type StoreOperationName = StoreRpc["_tag"];
+
+/** One operation's parameters and answer, read off the group by name. */
+export type OperationParams<Name extends StoreOperationName> = Rpc.PayloadConstructor<
+  Rpc.ExtractTag<StoreRpc, Name>
+>;
+export type OperationResult<Name extends StoreOperationName> = Rpc.Success<
+  Rpc.ExtractTag<StoreRpc, Name>
+>;
 
 const WORKSPACE_DIRECTORY = "workspace";
 
-/** Opens the database under the agent root given, creating the conversation the open names. */
-export function openStore(options: StoreOpenOptions): OpenStore {
-  const workspace = options.workspaceDirectory ?? path.join(options.agentRoot, WORKSPACE_DIRECTORY);
-  const db = StoreDatabase.open(path.join(options.agentRoot, AGENT_DATABASE_FILE));
-  const store: OpenStore = { db, agentRoot: options.agentRoot, workspace };
-  db.run(
-    createConversationEffect({
-      agentId: options.agentId,
-      sessionKey: options.sessionKey,
-      name: options.conversationName,
-      now: options.now,
-    }),
-  );
-  // The stable facts an earlier build kept move into the notebook at the
-  // first open that finds them, under their own ids, and never again.
-  db.run(migrateFactsIntoNotebookEffect(workspace, options.now));
-  return store;
+/**
+ * Opens the database under the agent root given and creates the conversation
+ * the open names; the store lives in the scope and closes with it. The
+ * stable facts an earlier build kept move into the notebook at the first
+ * open that finds them, under their own ids, and never again.
+ */
+export function openStore(
+  options: StoreOpenOptions,
+): Effect.Effect<OpenStore, SqlError | StoreSchemaRefused, Scope.Scope> {
+  return Effect.gen(function* () {
+    const workspace =
+      options.workspaceDirectory ?? path.join(options.agentRoot, WORKSPACE_DIRECTORY);
+    const db = yield* Effect.acquireRelease(
+      StoreDatabase.open(path.join(options.agentRoot, AGENT_DATABASE_FILE)),
+      (database) => Effect.sync(() => database.close()),
+    );
+    yield* Effect.provide(
+      Effect.zipRight(
+        createConversationEffect({
+          agentId: options.agentId,
+          sessionKey: options.sessionKey,
+          name: options.conversationName,
+          now: options.now,
+        }),
+        migrateFactsIntoNotebookEffect(workspace, options.now),
+      ),
+      db.sql,
+    );
+    return { db, agentRoot: options.agentRoot, workspace };
+  });
 }

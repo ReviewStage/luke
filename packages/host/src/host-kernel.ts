@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { StorePort } from "@sidecar/brain/store";
+import type { Worker } from "node:worker_threads";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
 import type { WireValue } from "@sidecar/wire";
 import type { MachinePresence } from "./device-presence.js";
@@ -25,7 +25,8 @@ export interface HostSeams {
   /** The environment the host reads its development overrides from. */
   environment: NodeJS.ProcessEnv;
   cipher: SecretCipher;
-  createWorker: () => StorePort;
+  /** Spawns the brain store's worker thread; the host's store wiring connects its client to it. */
+  createWorker: () => Worker;
   now: () => number;
   createId: () => string;
   report: (message: string) => void;

@@ -212,34 +212,38 @@ it are still promises reading a record, so the layers are built and the
 is a `runSync` over a scope that closes at once, holding nothing; P7-01 and
 P7-02 hand the layer to the host itself and delete the door.
 
-`migrateStoreSchemaSync` in `packages/brain/src/store/migration.ts` is on the
-allowlist for the shape of its caller rather than its own: `StoreDatabase.open`
-is a synchronous constructor that hands back a handle, so the migration effect
-is run there with `runSyncExit` over a layer built around that one call and
-closed with it. Every statement the migration issues is a synchronous call into
-`node:sqlite`, so the run waits on nothing and holds nothing; P5-11 makes the
-store worker an Rpc server that opens the database on its own runtime edge and
-runs `migrateStoreSchema` there, and this door goes with it.
-
 `StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
-allowlist for the same reason its `open` is: the conversation, directory,
-transcript, envelope, children, notebook, and memory index tables are
-effects over the store's own `SqlClient`, while the operations table, the
-recoverable deletion, and the maintenance pass still hold a handle and
-answer synchronously, so each of their effects is run there with
-`runSyncExit` over the one client the database built at its open. Every
+allowlist as the two OpenClaw ports' reach into the store. The store's worker
+is an Rpc server: `store-operations.ts` declares every operation once as an
+`RpcGroup`, `worker-host.ts` answers each on the worker's own runtime edge
+(`worker-entry.ts`'s `NodeRuntime.runMain` over `NodeWorkerRunner.launch`),
+one request at a time, and the handlers run the table effects over the one
+client the database built at its open, so no operation runs an effect of
+its own any more and the hand-rolled envelope, `wire.ts`, is gone with
+`migrateStoreSchemaSync`, whose migration the open now runs on the runtime
+that opens it. What still runs synchronously is `archives.ts` and
+`maintenance-run.ts`: each is a port of OpenClaw `b7528507` that imports
+nothing from `effect` and holds a `StoreDatabase` handle, so the tables it
+reads — the conversation, directory, transcript, envelope, and archive
+registry doors, `listTranscript`, `standingGeneration`, `conversationRecord`,
+`archivePayload`, and the rest — are each `run` wearing the door's old
+signature, a `runSyncExit` over that same client; the children, notebook, and
+memory index tables, which no port reads, export no door any more. Every
 statement underneath is a synchronous call into `node:sqlite`, so the run
-waits on nothing and holds nothing, and what it failed with is thrown
-exactly as the synchronous surface throws. The synchronous doors those
-callers still name — `appendConversation`, `listConversations`,
-`listTranscript`, `loadBrainEnvelope`, `saveBrainEnvelope`, `listChildRuns`,
-`rememberNotebookEntry`, `searchMemoryIndex`, and the rest — are that one
-run wearing each caller's old signature, and one whose last caller has
-moved onto the effect is deleted where it stood rather than kept for P5-11;
-the memory flush table names no door of its own, since the operations table
-is its only caller and reaches its effect through the same run directly.
-P5-11 makes the store worker an Rpc server that runs every operation's
-effect on its own runtime edge, and the run and its doors go with it.
+waits on nothing and holds nothing, and it runs inside the worker's own
+handler, on the edge, never on the main thread. `close()` is the same
+handle's synchronous release, for the worker's `acquireRelease` and the
+suites that open a database by hand. Both go when those two ports are handed
+a synchronous accessor of their own instead of the handle; the plan schedules
+no such PR, and this row is where that is recorded.
+
+`storeClient`'s Promise face in `packages/brain/src/store/store-client.ts`
+is on the allowlist too: the host's store wiring still holds a `StoreClient`
+of promises, so `settled` runs each ask — one request through the Rpc client
+over the one-worker `NodeWorker` pool, admitted in order and raced against
+the worker's own exit — with `runPromiseExit` and rejects with the failure
+itself. P7-08 composes the brain's layers and takes the Rpc client, and the
+face goes with it.
 
 `AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is on the same
 terms: its callers are the host's composers, which still hold a plain object
@@ -556,14 +560,11 @@ design decision stated as such:
 | `promiseAgentRuntime`, the `Promise` door over `AgentRuntimeEffect` | P5-14b | P7-08 |
 | `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P7-08 |
 | `WakeQueue`'s `push`/`take`/`requeue`/`clear` over `Effect.runSync` | P5-02 | P7-08 |
-| `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
+| `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
-| `migrateStoreSchemaSync` door over `migrateStoreSchema` | P5-09 | P5-11 |
-| `StoreDatabase#run` over the store's own `SqlClient` | P5-10a | P5-11 |
-| The conversation, directory, and transcript tables' synchronous doors | P5-10a | P5-11 |
-| The children, notebook, and memory index tables' synchronous doors | P5-10b | P5-11 |
-| The envelope and generation tables' synchronous doors | P5-10d | P5-11 |
-| The archive registry table's synchronous doors | P5-10c | P5-11 |
+| `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
+| The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
+| `storeClient`'s Promise face (`settled`) over the store's Rpc client | P5-11 | P7-08 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P7-08 |
 | `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P7-08 |
