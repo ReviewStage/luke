@@ -1,4 +1,6 @@
-import type { SQLInputValue } from "node:sqlite";
+import * as Client from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
+import * as SqlSchema from "@effect/sql/SqlSchema";
 import {
   type AgentId,
   type ArchiveReason,
@@ -9,8 +11,11 @@ import {
   isArchiveReason,
   isConversationKind,
   type SessionKey,
+  sessionKey as sessionKeyOf,
 } from "@sidecar/runtime/vocabulary";
-import { nullable, type StoreDatabase } from "./database.js";
+import { Effect, Option, Schema } from "effect";
+import type { StoreDatabase } from "./database.js";
+import { changedRows, columnsDecoded } from "./rows.js";
 
 /**
  * The conversation directory: every logical conversation the agent holds,
@@ -19,19 +24,27 @@ import { nullable, type StoreDatabase } from "./database.js";
  * the row and its history — and leaves the active list by being archived,
  * never by being deleted, until the recoverable deletion removes it with an
  * archive behind it.
+ *
+ * Every read here decodes its columns through a schema rather than trusting a
+ * cast, and the record it answers with is `@sidecar/runtime`'s own
+ * `ConversationRecord`, built through that shape's own guards and its session
+ * key's own constructor, so the directory has one statement of what a
+ * conversation is and this module states none of it a second time.
  */
 
-type ConversationRow = {
-  session_key: string;
-  kind: string;
-  name: string;
-  created_at: number;
-  last_activity_at: number;
-  archived_at: number | null;
-  archive_reason: string | null;
-  pinned_at: number | null;
-  session_id: string | null;
-};
+const ConversationRow = Schema.Struct({
+  session_key: Schema.String,
+  kind: Schema.String,
+  name: Schema.String,
+  created_at: Schema.Number,
+  last_activity_at: Schema.Number,
+  archived_at: Schema.NullOr(Schema.Number),
+  archive_reason: Schema.NullOr(Schema.String),
+  pinned_at: Schema.NullOr(Schema.Number),
+  session_id: Schema.NullOr(Schema.String),
+});
+
+type ConversationRow = Schema.Schema.Type<typeof ConversationRow>;
 
 const CONVERSATION_COLUMNS = `c.session_key, c.kind, c.name, c.created_at, c.last_activity_at,
        c.archived_at, c.archive_reason, c.pinned_at, s.session_id`;
@@ -46,8 +59,7 @@ function recordFromRow(row: ConversationRow): ConversationRecord {
     ? row.archive_reason
     : undefined;
   return {
-    // SAFETY: the column holds the key the constructor admitted when the row was written.
-    sessionKey: row.session_key as SessionKey,
+    sessionKey: sessionKeyOf(row.session_key),
     kind,
     name: row.name,
     createdAt: row.created_at,
@@ -59,26 +71,42 @@ function recordFromRow(row: ConversationRow): ConversationRecord {
   };
 }
 
-export function listConversations(database: StoreDatabase): readonly ConversationRecord[] {
-  // SAFETY: the columns selected are the ones the row type names, typed by the schema.
-  const rows = database
-    .prepare(
-      `SELECT ${CONVERSATION_COLUMNS} ${CONVERSATION_FROM} ORDER BY c.created_at, c.session_key`,
-    )
-    .all() as ConversationRow[];
-  return rows.map(recordFromRow);
-}
+const everyConversationRow = SqlSchema.findAll({
+  Request: Schema.Void,
+  Result: ConversationRow,
+  execute: () =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT ${sql.literal(CONVERSATION_COLUMNS)} ${sql.literal(CONVERSATION_FROM)}
+            ORDER BY c.created_at, c.session_key`,
+    ),
+});
 
-export function conversationRecord(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
-): ConversationRecord | undefined {
-  // SAFETY: as above, for one row or none.
-  const row = database
-    .prepare(`SELECT ${CONVERSATION_COLUMNS} ${CONVERSATION_FROM} WHERE c.session_key = ?`)
-    .get(sessionKey) as ConversationRow | undefined;
-  return row ? recordFromRow(row) : undefined;
-}
+const conversationRowAt = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: ConversationRow,
+  execute: (key) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT ${sql.literal(CONVERSATION_COLUMNS)} ${sql.literal(CONVERSATION_FROM)}
+            WHERE c.session_key = ${key}`,
+    ),
+});
+
+export const listConversationsEffect: Effect.Effect<
+  readonly ConversationRecord[],
+  SqlError,
+  Client.SqlClient
+> = Effect.map(columnsDecoded(everyConversationRow()), (rows) => rows.map(recordFromRow));
+
+export const conversationRecordEffect = (
+  key: SessionKey,
+): Effect.Effect<ConversationRecord | undefined, SqlError, Client.SqlClient> =>
+  Effect.map(columnsDecoded(conversationRowAt(key)), (row) =>
+    Option.match(row, { onNone: () => undefined, onSome: recordFromRow }),
+  );
 
 export interface ConversationCreation {
   agentId: AgentId;
@@ -90,109 +118,114 @@ export interface ConversationCreation {
 }
 
 /** Creates the conversation, or answers the one that already stands at the key; idempotent. */
-export function createConversation(
-  database: StoreDatabase,
+export const createConversationEffect = (
   creation: ConversationCreation,
-): ConversationRecord {
-  return database.transaction(() => {
-    database
-      .prepare("INSERT OR IGNORE INTO agents (agent_id, created_at) VALUES (?, ?)")
-      .run(creation.agentId, creation.now);
-    database
-      .prepare(
-        `INSERT OR IGNORE INTO conversations
-           (session_key, agent_id, name, created_at, kind, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        creation.sessionKey,
-        creation.agentId,
-        creation.name,
-        creation.now,
-        creation.kind ?? conversationKindOf(creation.sessionKey),
-        creation.now,
-      );
-    const created = conversationRecord(database, creation.sessionKey);
-    if (!created) throw new Error(`conversation ${creation.sessionKey} was not created`);
-    return created;
-  });
-}
+): Effect.Effect<ConversationRecord, SqlError, Client.SqlClient> =>
+  Effect.flatMap(Client.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* sql`INSERT OR IGNORE INTO agents (agent_id, created_at)
+                   VALUES (${creation.agentId}, ${creation.now})`;
+        yield* sql`INSERT OR IGNORE INTO conversations
+                     (session_key, agent_id, name, created_at, kind, last_activity_at)
+                   VALUES (${creation.sessionKey}, ${creation.agentId}, ${creation.name},
+                           ${creation.now}, ${creation.kind ?? conversationKindOf(creation.sessionKey)},
+                           ${creation.now})`;
+        const created = yield* conversationRecordEffect(creation.sessionKey);
+        if (!created) {
+          return yield* Effect.die(
+            new Error(`conversation ${creation.sessionKey} was not created`),
+          );
+        }
+        return created;
+      }),
+    ),
+  );
 
 /** The conversation's durable Clear cutoff, which outlives the generation whose marker raised it. */
-export function conversationCutoff(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
-): number | undefined {
-  // SAFETY: the query selects the one nullable integer column the row type names.
-  const row = database
-    .prepare("SELECT conversation_cleared_at FROM conversations WHERE session_key = ?")
-    .get(sessionKey) as { conversation_cleared_at: number | null } | undefined;
-  return row?.conversation_cleared_at ?? undefined;
-}
+export const conversationCutoffEffect = (
+  key: SessionKey,
+): Effect.Effect<number | undefined, SqlError, Client.SqlClient> =>
+  Effect.map(columnsDecoded(cutoffRowAt(key)), (row) =>
+    Option.flatMapNullable(row, ({ conversation_cleared_at }) => conversation_cleared_at).pipe(
+      Option.getOrUndefined,
+    ),
+  );
+
+const cutoffRowAt = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: Schema.Struct({ conversation_cleared_at: Schema.NullOr(Schema.Number) }),
+  execute: (key) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) => sql`SELECT conversation_cleared_at FROM conversations WHERE session_key = ${key}`,
+    ),
+});
 
 /** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
-export function raiseConversationCutoff(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+export const raiseConversationCutoffEffect = (
+  key: SessionKey,
   clearedAt: number,
-): void {
-  database
-    .prepare(
-      `UPDATE conversations SET conversation_cleared_at = MAX(COALESCE(conversation_cleared_at, ?), ?)
-       WHERE session_key = ?`,
-    )
-    .run(clearedAt, clearedAt, sessionKey);
-}
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.flatMap(
+    Client.SqlClient,
+    (sql) =>
+      sql`UPDATE conversations
+          SET conversation_cleared_at = MAX(COALESCE(conversation_cleared_at, ${clearedAt}), ${clearedAt})
+          WHERE session_key = ${key}`,
+  ).pipe(Effect.asVoid);
 
 /** Moves the conversation's latest activity forward to `now`; never back. */
-export function touchConversation(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+export const touchConversationEffect = (
+  key: SessionKey,
   now: number,
-): void {
-  database
-    .prepare(
-      "UPDATE conversations SET last_activity_at = MAX(last_activity_at, ?) WHERE session_key = ?",
-    )
-    .run(now, sessionKey);
-}
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.flatMap(
+    Client.SqlClient,
+    (sql) =>
+      sql`UPDATE conversations SET last_activity_at = MAX(last_activity_at, ${now})
+          WHERE session_key = ${key}`,
+  ).pipe(Effect.asVoid);
 
 /** Archives the conversation for the reason given; a main conversation cannot be archived at all. */
-export function archiveConversation(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+export const archiveConversationEffect = (
+  key: SessionKey,
   now: number,
   reason: ArchiveReason,
-): boolean {
-  const record = conversationRecord(database, sessionKey);
-  if (!record || record.kind === CONVERSATION_KIND.MAIN) return false;
-  if (record.archivedAt !== undefined) return true;
-  database
-    .prepare("UPDATE conversations SET archived_at = ?, archive_reason = ? WHERE session_key = ?")
-    .run(now, reason, sessionKey);
-  return true;
-}
+): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    const record = yield* conversationRecordEffect(key);
+    if (!record || record.kind === CONVERSATION_KIND.MAIN) return false;
+    if (record.archivedAt !== undefined) return true;
+    yield* sql`UPDATE conversations SET archived_at = ${now}, archive_reason = ${reason}
+               WHERE session_key = ${key}`;
+    return true;
+  });
 
-export function unarchiveConversation(database: StoreDatabase, sessionKey: SessionKey): boolean {
-  const { changes } = database
-    .prepare(
-      "UPDATE conversations SET archived_at = NULL, archive_reason = NULL WHERE session_key = ?",
-    )
-    .run(sessionKey);
-  return changes > 0;
-}
+export const unarchiveConversationEffect = (
+  key: SessionKey,
+): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    const changes = yield* changedRows(
+      sql`UPDATE conversations SET archived_at = NULL, archive_reason = NULL
+          WHERE session_key = ${key}`.raw,
+    );
+    return changes > 0;
+  });
 
-export function pinConversation(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+export const pinConversationEffect = (
+  key: SessionKey,
   pinnedAt: number | undefined,
-): boolean {
-  const pin: SQLInputValue = nullable(pinnedAt);
-  const { changes } = database
-    .prepare("UPDATE conversations SET pinned_at = ? WHERE session_key = ?")
-    .run(pin, sessionKey);
-  return changes > 0;
-}
+): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    const changes = yield* changedRows(
+      sql`UPDATE conversations SET pinned_at = ${pinnedAt ?? null} WHERE session_key = ${key}`.raw,
+    );
+    return changes > 0;
+  });
 
 /**
  * Removes everything a conversation holds beneath its row: its history
@@ -202,12 +235,16 @@ export function pinConversation(
  * recoverable deletion and maintenance are the two callers, and each has
  * committed or needs no archive by the time it gets here.
  */
-export function removeConversationRows(database: StoreDatabase, sessionKey: SessionKey): void {
-  database.prepare("DELETE FROM conversation_events WHERE session_key = ?").run(sessionKey);
-  database.prepare("DELETE FROM compaction_boundaries WHERE session_key = ?").run(sessionKey);
-  database.prepare("DELETE FROM transcript_events WHERE session_key = ?").run(sessionKey);
-  database.prepare("DELETE FROM conversation_sessions WHERE session_key = ?").run(sessionKey);
-}
+const removeConversationRowsEffect = (
+  key: SessionKey,
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    yield* sql`DELETE FROM conversation_events WHERE session_key = ${key}`;
+    yield* sql`DELETE FROM compaction_boundaries WHERE session_key = ${key}`;
+    yield* sql`DELETE FROM transcript_events WHERE session_key = ${key}`;
+    yield* sql`DELETE FROM conversation_sessions WHERE session_key = ${key}`;
+  });
 
 /**
  * Removes what stood at or before `instant`: the lines and transcript
@@ -216,27 +253,115 @@ export function removeConversationRows(database: StoreDatabase, sessionKey: Sess
  * A line accepted after the instant — a voice line landing while the
  * deletion waited on the disk — is not the deletion's to take.
  */
+const removeConversationRowsAtOrBeforeEffect = (
+  key: SessionKey,
+  instant: number,
+  keepSessionId: string | undefined,
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    yield* sql`DELETE FROM conversation_events
+               WHERE session_key = ${key} AND recorded_at <= ${instant}`;
+    yield* sql`DELETE FROM compaction_boundaries
+               WHERE session_key = ${key} AND created_at <= ${instant}`;
+    yield* sql`DELETE FROM transcript_events
+               WHERE session_key = ${key} AND recorded_at <= ${instant}`;
+    yield* sql`DELETE FROM conversation_sessions
+               WHERE session_key = ${key} AND session_id IS NOT ${keepSessionId ?? null}`;
+  });
+
+/** Removes the conversation row itself, after the rows under it are gone. */
+const removeConversationRowEffect = (
+  key: SessionKey,
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.flatMap(
+    Client.SqlClient,
+    (sql) => sql`DELETE FROM conversations WHERE session_key = ${key}`,
+  ).pipe(Effect.asVoid);
+
+/**
+ * The synchronous doors onto the effects above, for the callers that still
+ * hold a handle rather than a client: the envelope's save, the recoverable
+ * deletion, the maintenance pass, and the store's own tests.
+ *
+ * @deprecated Each goes with the caller that holds it: the store's operations
+ * run the effects themselves already, and P5-11 runs every remaining one on
+ * the worker's own runtime edge.
+ */
+export function listConversations(database: StoreDatabase): readonly ConversationRecord[] {
+  return database.run(listConversationsEffect);
+}
+
+/** @deprecated The synchronous door onto {@link conversationRecordEffect}; see {@link listConversations}. */
+export function conversationRecord(
+  database: StoreDatabase,
+  key: SessionKey,
+): ConversationRecord | undefined {
+  return database.run(conversationRecordEffect(key));
+}
+
+/** @deprecated The synchronous door onto {@link createConversationEffect}; see {@link listConversations}. */
+export function createConversation(
+  database: StoreDatabase,
+  creation: ConversationCreation,
+): ConversationRecord {
+  return database.run(createConversationEffect(creation));
+}
+
+/** @deprecated The synchronous door onto {@link conversationCutoffEffect}; see {@link listConversations}. */
+export function conversationCutoff(database: StoreDatabase, key: SessionKey): number | undefined {
+  return database.run(conversationCutoffEffect(key));
+}
+
+/** @deprecated The synchronous door onto {@link raiseConversationCutoffEffect}; see {@link listConversations}. */
+export function raiseConversationCutoff(
+  database: StoreDatabase,
+  key: SessionKey,
+  clearedAt: number,
+): void {
+  database.run(raiseConversationCutoffEffect(key, clearedAt));
+}
+
+/** @deprecated The synchronous door onto {@link touchConversationEffect}; see {@link listConversations}. */
+export function touchConversation(database: StoreDatabase, key: SessionKey, now: number): void {
+  database.run(touchConversationEffect(key, now));
+}
+
+/** @deprecated The synchronous door onto {@link archiveConversationEffect}; see {@link listConversations}. */
+export function archiveConversation(
+  database: StoreDatabase,
+  key: SessionKey,
+  now: number,
+  reason: ArchiveReason,
+): boolean {
+  return database.run(archiveConversationEffect(key, now, reason));
+}
+
+/** @deprecated The synchronous door onto {@link pinConversationEffect}; see {@link listConversations}. */
+export function pinConversation(
+  database: StoreDatabase,
+  key: SessionKey,
+  pinnedAt: number | undefined,
+): boolean {
+  return database.run(pinConversationEffect(key, pinnedAt));
+}
+
+/** @deprecated The synchronous door onto {@link removeConversationRowsEffect}; see {@link listConversations}. */
+export function removeConversationRows(database: StoreDatabase, key: SessionKey): void {
+  database.run(removeConversationRowsEffect(key));
+}
+
+/** @deprecated The synchronous door onto {@link removeConversationRowsAtOrBeforeEffect}; see {@link listConversations}. */
 export function removeConversationRowsAtOrBefore(
   database: StoreDatabase,
-  sessionKey: SessionKey,
+  key: SessionKey,
   instant: number,
   keepSessionId: string | undefined,
 ): void {
-  database
-    .prepare("DELETE FROM conversation_events WHERE session_key = ? AND recorded_at <= ?")
-    .run(sessionKey, instant);
-  database
-    .prepare("DELETE FROM compaction_boundaries WHERE session_key = ? AND created_at <= ?")
-    .run(sessionKey, instant);
-  database
-    .prepare("DELETE FROM transcript_events WHERE session_key = ? AND recorded_at <= ?")
-    .run(sessionKey, instant);
-  database
-    .prepare("DELETE FROM conversation_sessions WHERE session_key = ? AND session_id IS NOT ?")
-    .run(sessionKey, keepSessionId ?? null);
+  database.run(removeConversationRowsAtOrBeforeEffect(key, instant, keepSessionId));
 }
 
-/** Removes the conversation row itself, after the rows under it are gone. */
-export function removeConversationRow(database: StoreDatabase, sessionKey: SessionKey): void {
-  database.prepare("DELETE FROM conversations WHERE session_key = ?").run(sessionKey);
+/** @deprecated The synchronous door onto {@link removeConversationRowEffect}; see {@link listConversations}. */
+export function removeConversationRow(database: StoreDatabase, key: SessionKey): void {
+  database.run(removeConversationRowEffect(key));
 }

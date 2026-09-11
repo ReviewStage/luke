@@ -342,7 +342,14 @@ included — stands behind its own subpath the renderer never opens.
 is a door the web functions and the renderer open, and the store beneath it
 reaches `node:sqlite` — and, through `store/sql-node-sqlite.ts`'s `SqlClient`
 over that same handle, `@effect/sql` and `@effect/experimental` — so the store
-and its worker entry each get a subpath and the barrel exports neither.
+and its worker entry each get a subpath and the barrel exports neither. A
+table module under `brain/src/store/` is an `Effect` over that client and
+nothing else — it takes no handle, reads its rows through `@effect/sql`'s
+`SqlSchema` against a schema declared beside it rather than a cast, and
+derives a row that is a shared shape from that shape's own declaration
+instead of stating it twice — and the synchronous function each one still
+exports is `StoreDatabase#run` wearing its old signature, for the callers
+that hold a handle rather than a client until P5-11.
 `@sidecar/brain/envelope` is the third: the envelope's shape and its readings
 are what everything under `brain/src/store/` needs, and reaching them through
 the barrel — or through `state-store.ts`, which is the store class over them —

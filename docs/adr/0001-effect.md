@@ -217,6 +217,21 @@ closed with it. Every statement the migration issues is a synchronous call into
 store worker an Rpc server that opens the database on its own runtime edge and
 runs `migrateStoreSchema` there, and this door goes with it.
 
+`StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
+allowlist for the same reason its `open` is: the conversation, directory, and
+transcript tables are effects over the store's own `SqlClient`, while the
+operations table, the envelope's save, the recoverable deletion, and the
+maintenance pass still hold a handle and answer synchronously, so each of
+their effects is run there with `runSyncExit` over the one client the database
+built at its open. Every statement underneath is a synchronous call into
+`node:sqlite`, so the run waits on nothing and holds nothing, and what it
+failed with is thrown exactly as the synchronous surface throws. The
+synchronous doors those callers still name — `appendConversation`,
+`listConversations`, `appendTranscript`, and the rest — are that one run
+wearing each caller's old signature. P5-11 makes the store worker an Rpc
+server that runs every operation's effect on its own runtime edge, and the
+run and its doors go with it.
+
 `AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is on the same
 terms: its callers are the host's composers, which still hold a plain object
 with `record*` methods rather than a fiber, so each tapped line — the entry an
@@ -398,6 +413,8 @@ design decision stated as such:
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
 | `migrateStoreSchemaSync` door over `migrateStoreSchema` | P5-09 | P5-11 |
+| `StoreDatabase#run` over the store's own `SqlClient` | P5-10a | P5-11 |
+| The conversation, directory, and transcript tables' synchronous doors | P5-10a | P5-11 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P5-14 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |

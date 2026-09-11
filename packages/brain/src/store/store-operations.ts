@@ -31,19 +31,19 @@ import {
   putChildRun,
 } from "./children-table.js";
 import {
-  appendConversation,
+  appendConversationEffect,
   type ConversationSearchHit,
-  conversationClearedAt,
-  listConversation,
-  searchConversation,
+  conversationClearedAtEffect,
+  listConversationEffect,
+  searchConversationEffect,
 } from "./conversation-table.js";
 import {
-  archiveConversation,
+  archiveConversationEffect,
   type ConversationCreation,
-  createConversation,
-  listConversations,
-  pinConversation,
-  unarchiveConversation,
+  createConversationEffect,
+  listConversationsEffect,
+  pinConversationEffect,
+  unarchiveConversationEffect,
 } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
@@ -117,18 +117,18 @@ export const STORE_OPERATIONS = {
     s,
     p: { sessionKey: SessionKey; entries: readonly ConversationEntry[]; now: number },
   ): ConversationAppendOutcome<ConversationEntry> =>
-    appendConversation(s.db, p.sessionKey, p.entries, p.now),
+    s.db.run(appendConversationEffect(p.sessionKey, p.entries, p.now)),
   "conversation.list": (
     s,
     p: { sessionKey: SessionKey; now: number },
-  ): readonly ConversationEntry[] => listConversation(s.db, p.sessionKey, p.now),
+  ): readonly ConversationEntry[] => s.db.run(listConversationEffect(p.sessionKey, p.now)),
   "conversation.cutoff": (s, p: { sessionKey: SessionKey }): number | undefined =>
-    conversationClearedAt(s.db, p.sessionKey),
+    s.db.run(conversationClearedAtEffect(p.sessionKey)),
   "conversation.search": (
     s,
     p: { sessionKeys: readonly SessionKey[]; query: string; limit: number; now: number },
   ): readonly ConversationSearchHit[] =>
-    searchConversation(s.db, p.sessionKeys, p.query, p.limit, p.now),
+    s.db.run(searchConversationEffect(p.sessionKeys, p.query, p.limit, p.now)),
 
   "notebook.list": (s, p: { now: number }): readonly NotebookEntry[] =>
     listNotebookEntries(s.db, s.workspace, p.now),
@@ -174,17 +174,18 @@ export const STORE_OPERATIONS = {
     return true;
   },
 
-  "conversations.list": (s, _p: NoParams): readonly ConversationRecord[] => listConversations(s.db),
+  "conversations.list": (s, _p: NoParams): readonly ConversationRecord[] =>
+    s.db.run(listConversationsEffect),
   "conversations.create": (s, p: ConversationCreation): ConversationRecord =>
-    createConversation(s.db, p),
+    s.db.run(createConversationEffect(p)),
   "conversations.archive": (
     s,
     p: { sessionKey: SessionKey; now: number; reason: ArchiveReason },
-  ): boolean => archiveConversation(s.db, p.sessionKey, p.now, p.reason),
+  ): boolean => s.db.run(archiveConversationEffect(p.sessionKey, p.now, p.reason)),
   "conversations.unarchive": (s, p: { sessionKey: SessionKey }): boolean =>
-    unarchiveConversation(s.db, p.sessionKey),
+    s.db.run(unarchiveConversationEffect(p.sessionKey)),
   "conversations.pin": (s, p: { sessionKey: SessionKey; pinnedAt: number | undefined }): boolean =>
-    pinConversation(s.db, p.sessionKey, p.pinnedAt),
+    s.db.run(pinConversationEffect(p.sessionKey, p.pinnedAt)),
   "conversations.delete": (
     s,
     p: { sessionKey: SessionKey; now: number } & DeletionOptions,
@@ -246,12 +247,14 @@ export function openStore(options: StoreOpenOptions): OpenStore {
   const workspace = options.workspaceDirectory ?? path.join(options.agentRoot, WORKSPACE_DIRECTORY);
   const db = StoreDatabase.open(path.join(options.agentRoot, AGENT_DATABASE_FILE));
   const store: OpenStore = { db, agentRoot: options.agentRoot, workspace };
-  createConversation(db, {
-    agentId: options.agentId,
-    sessionKey: options.sessionKey,
-    name: options.conversationName,
-    now: options.now,
-  });
+  db.run(
+    createConversationEffect({
+      agentId: options.agentId,
+      sessionKey: options.sessionKey,
+      name: options.conversationName,
+      now: options.now,
+    }),
+  );
   // The stable facts an earlier build kept move into the notebook at the
   // first open that finds them, under their own ids, and never again.
   migrateFactsIntoNotebook(db, workspace, options.now);

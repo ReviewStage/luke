@@ -29,7 +29,10 @@ import { Cache, Context, Duration, Effect, Layer, Schema, Scope, Stream } from "
  * IMMEDIATE`, each level inside it is the savepoint named for its depth, and
  * a failed step rolls back to its own savepoint and releases it, leaving the
  * transaction around it standing; a step that succeeds is released by the
- * commit that ends the whole.
+ * commit that ends the whole. A transaction opened while the synchronous
+ * surface's own already stands over the same handle nests in it the same
+ * way, since the two share the connection and SQLite refuses a second
+ * BEGIN.
  *
  * `node:sqlite` binds null, numbers, bigints, strings, and bytes and nothing
  * else, so a parameter of any other kind is refused as a `SqlError` at the
@@ -196,7 +199,15 @@ const SPAN_ATTRIBUTES: ReadonlyArray<readonly [string, string]> = [
   [DB_SYSTEM_NAME_ATTRIBUTE, "sqlite"],
 ];
 
-const savepointAt = (depth: number) => `step_${depth}`;
+/**
+ * The savepoints an Effect transaction takes, named apart from the
+ * synchronous surface's own `step_<depth>` so the two can stand at once over
+ * the one handle without either releasing the other's.
+ */
+const savepointAt = (depth: number) => `effect_step_${depth}`;
+
+/** The savepoint an Effect transaction opened inside a standing one takes in place of a BEGIN. */
+const NESTED_OUTERMOST_SAVEPOINT = savepointAt(0);
 
 const control = (statement: string) => (connection: Connection) =>
   Effect.asVoid(connection.executeUnprepared(statement, [], undefined));
@@ -218,6 +229,14 @@ const makeFromHandle = (
       compiler: Statement.makeCompilerSqlite(),
       spanAttributes: SPAN_ATTRIBUTES,
     });
+    // The synchronous surface and this client share the one handle, so an
+    // Effect transaction opened while `StoreDatabase#transaction` already
+    // stands nests inside it as a savepoint: SQLite refuses a second BEGIN,
+    // and a step of a larger atomic operation has to roll back to its own
+    // point and leave the transaction around it standing. One outermost
+    // transaction holds the connection's permit for its whole scope, so
+    // which of the two a commit ends is the one thing tracked here.
+    let nestedInHandleTransaction = false;
     // The library's own transaction folds every failure into a ROLLBACK, and
     // a ROLLBACK with nothing open is itself an error SQLite raises: a BEGIN
     // IMMEDIATE refused as busy, or a failure SQLite already rolled back on
@@ -233,10 +252,27 @@ const makeFromHandle = (
           (held): readonly [Scope.CloseableScope, Connection] => [scope, held],
         ),
       ),
-      begin: control("BEGIN IMMEDIATE"),
+      begin: (held) =>
+        Effect.suspend(() => {
+          nestedInHandleTransaction = db.isTransaction;
+          return nestedInHandleTransaction
+            ? control(`SAVEPOINT ${NESTED_OUTERMOST_SAVEPOINT}`)(held)
+            : control("BEGIN IMMEDIATE")(held);
+        }),
       savepoint: (held, depth) => control(`SAVEPOINT ${savepointAt(depth)}`)(held),
-      commit: control("COMMIT"),
-      rollback: (held) => (db.isTransaction ? control("ROLLBACK")(held) : Effect.void),
+      commit: (held) =>
+        nestedInHandleTransaction
+          ? control(`RELEASE ${NESTED_OUTERMOST_SAVEPOINT}`)(held)
+          : control("COMMIT")(held),
+      rollback: (held) => {
+        if (nestedInHandleTransaction) {
+          return Effect.zipRight(
+            control(`ROLLBACK TO ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
+            control(`RELEASE ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
+          );
+        }
+        return db.isTransaction ? control("ROLLBACK")(held) : Effect.void;
+      },
       rollbackSavepoint: (held, depth) =>
         Effect.zipRight(
           control(`ROLLBACK TO ${savepointAt(depth)}`)(held),
