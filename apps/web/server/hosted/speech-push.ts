@@ -74,11 +74,14 @@ import {
 
 /**
  * The platforms whose live session can claim an offer and say it, so whose
- * reported presence is a reason to wait for a claim. The phone reports
- * presence too, from its conversation screen, but nothing on it speaks a
- * briefing yet, so a developer reading the phone with the Mac idle is pushed
- * to at once rather than made to wait out a grace nobody will use. Widening
- * this is a product decision made when another platform can speak.
+ * reported presence is a reason to wait for a claim. A platform joins this
+ * set when it can claim an offer and speak it, not when it can report
+ * presence: the phone reports presence from its conversation screen and
+ * holds voice calls, but nothing on it claims a briefing today, and the
+ * watch never speaks, so a developer reading the phone with the Mac idle is
+ * pushed to at once rather than made to wait out a grace nobody will use.
+ * Adding a platform here is a product decision that comes with its claim
+ * path, never a widening on its own.
  */
 const SPEAKING_PLATFORMS: ReadonlySet<DevicePlatform> = new Set([DEVICE_PLATFORM.MACOS]);
 
