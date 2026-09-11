@@ -28,6 +28,18 @@ is the only code that reaches a handler, and it re-resolves every target from
 the plugin's own latest roster. Transcript reading belongs inside the plugin,
 through `jsonlTranscriptReader` for a provider whose records are JSONL.
 
+Which plugins stand is a `Layer`. `providersLayer` in
+`@sidecar/providers/effect` merges one layer per registration, each built from
+the registration object `registrations.ts` declares for it, and the
+`Providers` service is the registry read out of that merge. A registration
+claims the id its plugin publishes while its own layer builds, so two
+registrations naming one id fail the build with
+`DuplicateProviderRegistration` rather than one silently replacing the other
+at a lookup nobody watches. `providerRegistrations` is the strangler shim over
+it: the composers that hold the registry are still promises reading a record,
+so it builds the layers and reads the service there, and P7-01 and P7-02
+delete it once the host takes the layer itself.
+
 There are no base classes: a plugin is a value, and the shared mechanics are
 functions with one home each: `observationPass` for a file-backed pass,
 `cloudPass` for a key-observed one, `hostClaims` for a workspace manager's
