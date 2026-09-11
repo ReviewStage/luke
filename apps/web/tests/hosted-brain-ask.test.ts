@@ -35,6 +35,12 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
+import {
+  conversationOwnedBy,
+  recordedRuntimeSession,
+} from "../server/hosted/brain-host/recorded-session";
+import { ASK_DISPATCH_REFUSAL, newestSession } from "../server/hosted/store/asks";
+import type { HostedStoreRun } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -67,7 +73,7 @@ function beforeItsTurn(row: AskRow): AskRow {
 }
 
 /** The ask record as a table would hold it, in memory. */
-function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
+function memoryAsks(run: HostedStoreRun): AskRecord & { rows: Map<string, AskRow> } {
   const rows = new Map<string, AskRow>();
   const inFlight = new Map<string, Promise<void>>();
   const put = (row: AskRow) => {
@@ -94,25 +100,26 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
       return row?.userId === userId ? row : undefined;
     },
     async latestSession(userId, conversationId) {
-      let latest: AskRow | undefined;
-      for (const row of rows.values()) {
-        if (row.userId !== userId || row.conversationId !== conversationId) continue;
-        if (row.sessionId === undefined) continue;
-        if (latest?.sessionId === undefined || row.sessionId > latest.sessionId) latest = row;
-      }
-      return latest?.sessionId;
+      return latestSession(userId, conversationId);
     },
-    async dispatchOnce(id, dispatch) {
-      // One dispatch at a time per ask, as the row lock serialises them on the real record.
-      const turn = (inFlight.get(id) ?? Promise.resolve()).then(async () => {
+    async dispatchOnce(target, id, dispatch) {
+      // One dispatch at a time per conversation, as the conversation lock serialises them on the real record.
+      const turn = (inFlight.get(target.conversationId) ?? Promise.resolve()).then(async () => {
+        if (!(await run(conversationOwnedBy(target.userId, target.conversationId)))) {
+          return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
+        }
         const row = rows.get(id);
         assert.ok(row);
         if (row.sessionId !== undefined) return row;
-        const answered = await dispatch();
+        const session = newestSession(
+          await run(recordedRuntimeSession(target)),
+          latestSession(target.userId, target.conversationId),
+        );
+        const answered = await dispatch(session);
         return answered === undefined ? row : put({ ...row, ...answered });
       });
       inFlight.set(
-        id,
+        target.conversationId,
         turn.then(
           () => undefined,
           () => undefined,
@@ -126,6 +133,15 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
       put({ ...row, cancelRequestedAt: at });
     },
   };
+  function latestSession(userId: string, conversationId: string): string | undefined {
+    let latest: AskRow | undefined;
+    for (const row of rows.values()) {
+      if (row.userId !== userId || row.conversationId !== conversationId) continue;
+      if (row.sessionId === undefined) continue;
+      if (latest?.sessionId === undefined || row.sessionId > latest.sessionId) latest = row;
+    }
+    return latest?.sessionId;
+  }
 }
 
 type EveCall =
@@ -184,7 +200,7 @@ interface Harness {
 }
 
 function harness(): Harness {
-  const asks = memoryAsks();
+  const asks = memoryAsks(database.run);
   const eve = fakeEve();
   const built: Harness = {
     asks,

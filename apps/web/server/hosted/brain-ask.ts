@@ -22,7 +22,7 @@ import {
 } from "./brain-host/eve-sessions.js";
 import { hostTurnId } from "./brain-host/ids.js";
 import { standingMain } from "./brain-host/main.js";
-import { conversationOwnedBy, recordedRuntimeSession } from "./brain-host/recorded-session.js";
+import { conversationOwnedBy } from "./brain-host/recorded-session.js";
 import {
   errorResponse,
   HOSTED_API_ERROR,
@@ -31,7 +31,7 @@ import {
   readJsonBody,
 } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
-import type { AskRecord, AskRow } from "./store/asks.js";
+import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow } from "./store/asks.js";
 import type { HostedStoreRun } from "./store/database.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
@@ -295,34 +295,43 @@ export async function acceptAsk(seams: AskSeams, input: AskInput): Promise<AskOu
     answer: { id: ask.id, conversationId, queuedAt: ask.createdAt.getTime() },
   };
   if (ask.sessionId !== undefined) return accepted;
-
   const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
-  const sessionId = newestSession(
-    await run(recordedRuntimeSession({ userId, conversationId })),
-    await seams.asks.latestSession(userId, conversationId),
-  );
-  // The dispatch runs under the ask row's own lock: of two retries in flight for one client
-  // id, the first hands the ask to eve and the second finds the session already written and
-  // hands it nothing, so one ask is one delivery however many times it is asked.
+
+  // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
+  // conversation: of two retries for one client id the second finds the session written and
+  // hands eve nothing, and of two first asks the second reads the session the first opened and
+  // sends into it rather than opening a second the forward-only claim would lose. A Clear that
+  // lands between the admission above and this lock finds no conversation to dispatch in, and the
+  // ask is refused as not found rather than dispatched into a conversation the account has cleared.
   let failed: AskOutcome | undefined;
-  await seams.asks.dispatchOnce(ask.id, async () => {
-    if (sessionId !== undefined) {
-      const sent = await seams.eve.send(sessionId, message);
-      if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
-        return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
+  const dispatched = await seams.asks.dispatchOnce(
+    { userId, conversationId },
+    ask.id,
+    async (sessionId) => {
+      if (sessionId !== undefined) {
+        const sent = await seams.eve.send(sessionId, message);
+        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
+          return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
+        }
+        if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
+          failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: sent.status };
+          return undefined;
+        }
       }
-      if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
-        failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: sent.status };
+      const opened = await seams.eve.open(message);
+      if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
+        failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
         return undefined;
       }
-    }
-    const opened = await seams.eve.open(message);
-    if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
-      failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
-      return undefined;
-    }
-    return { sessionId: opened.sessionId, turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID) };
-  });
+      return {
+        sessionId: opened.sessionId,
+        turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID),
+      };
+    },
+  );
+  if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
+    return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
+  }
   return failed ?? accepted;
 }
 
@@ -383,22 +392,4 @@ export async function handleBrainTurn(options: BrainAskOptions): Promise<Respons
   }
   if (standing === undefined) return notFound();
   return jsonResponse(HOSTED_HTTP_STATUS.OK, standing.answer);
-}
-
-/**
- * The session a follow-up goes to: the newest the account's record knows of,
- * whether the conversation row has recorded it yet or only the ask that
- * opened it has. eve's session ids sort by the instant they were minted,
- * the same ordering the row's forward-only claim relies on, so the greater
- * id is the newer session; a row still recording a session the last ask
- * moved on from would otherwise be sent to, retried against, and reopened
- * beside.
- */
-function newestSession(
-  recorded: string | undefined,
-  latestDispatched: string | undefined,
-): string | undefined {
-  if (recorded === undefined) return latestDispatched;
-  if (latestDispatched === undefined) return recorded;
-  return latestDispatched > recorded ? latestDispatched : recorded;
 }

@@ -21,7 +21,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
+import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
@@ -89,8 +89,10 @@ test("a read is the account's own: an ask is named for its account and for nobod
   assert.equal(await asks.named(other, earlier.id), undefined);
   assert.equal(await asks.latestSession(owner, conversationId), undefined);
 
-  await asks.dispatchOnce(earlier.id, async () => ({ sessionId: "wrun_02_newer" }));
-  await asks.dispatchOnce(later.id, async () => ({
+  await asks.dispatchOnce({ userId: owner, conversationId }, earlier.id, async () => ({
+    sessionId: "wrun_02_newer",
+  }));
+  await asks.dispatchOnce({ userId: owner, conversationId }, later.id, async () => ({
     sessionId: "wrun_01_older",
     deliveryId: "delivery-2",
   }));
@@ -103,19 +105,26 @@ test("a second dispatch on an ask already handed to eve runs nothing and changes
   const conversationId = await conversation(userId);
   const ask = await asks.record(write(userId, conversationId));
   const turnId = randomUUID();
-  await asks.dispatchOnce(ask.id, async () => ({ sessionId: "wrun_1", turnId }));
+  await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => ({
+    sessionId: "wrun_1",
+    turnId,
+  }));
   let ran = 0;
-  const after = await asks.dispatchOnce(ask.id, async () => {
-    ran += 1;
-    return { sessionId: "wrun_2", deliveryId: "delivery-1" };
-  });
+  const after = dispatchedRow(
+    await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
+      ran += 1;
+      return { sessionId: "wrun_2", deliveryId: "delivery-1" };
+    }),
+  );
   assert.equal(ran, 0);
   assert.equal(after.sessionId, "wrun_1");
   assert.equal(after.turnId, turnId);
   assert.equal(after.deliveryId, undefined);
   const undispatched = await asks.record(write(userId, conversationId));
   assert.equal(
-    (await asks.dispatchOnce(undispatched.id, async () => undefined)).sessionId,
+    dispatchedRow(
+      await asks.dispatchOnce({ userId, conversationId }, undispatched.id, async () => undefined),
+    ).sessionId,
     undefined,
   );
 
@@ -131,15 +140,15 @@ test("binding a turn's deliveries names the turn on each delivered ask not yet b
   const waiting = await asks.record(write(userId, conversationId));
   const alsoWaiting = await asks.record(write(userId, conversationId));
   const unrelated = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(waiting.id, async () => ({
+  await asks.dispatchOnce(target, waiting.id, async () => ({
     sessionId: "wrun_1",
     deliveryId: "delivery-a",
   }));
-  await asks.dispatchOnce(alsoWaiting.id, async () => ({
+  await asks.dispatchOnce(target, alsoWaiting.id, async () => ({
     sessionId: "wrun_1",
     deliveryId: "delivery-b",
   }));
-  await asks.dispatchOnce(unrelated.id, async () => ({
+  await asks.dispatchOnce(target, unrelated.id, async () => ({
     sessionId: "wrun_1",
     deliveryId: "delivery-c",
   }));
@@ -152,6 +161,14 @@ test("binding a turn's deliveries names the turn on each delivered ask not yet b
   assert.deepEqual(await asks.bindDeliveries(target, ["delivery-a", "delivery-b"], turnId), []);
   assert.deepEqual(await asks.bindDeliveries(target, [], turnId), []);
 });
+
+/** The row a dispatch answered; a refusal fails the test naming it. */
+function dispatchedRow(answer: AskRow | typeof ASK_DISPATCH_REFUSAL.NO_CONVERSATION): AskRow {
+  if (answer === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
+    assert.fail("the dispatch refused: the conversation is not standing");
+  }
+  return answer;
+}
 
 function eveAccepting(
   sessionId: string,
@@ -279,4 +296,77 @@ test("over the real record, a follow-up ask stands queued under its own id until
     }),
     { ok: false, refusal: ASK_REFUSAL.NOT_FOUND },
   );
+});
+
+test("two first asks of different client ids on a conversation with no session open one session between them: the second waits on the conversation's lock, reads the session the first opened, and sends into it", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const eve = eveAccepting(`wrun_${randomUUID()}`);
+  const seams = { run: database.run, asks, eve, now: () => NOW };
+  const ask = (clientId: string) =>
+    acceptAsk(seams, {
+      userId,
+      conversationId,
+      clientId,
+      question: "what changed?",
+      origin: ASK_ORIGIN.TYPED,
+    });
+  const [first, second] = await Promise.all([ask(randomUUID()), ask(randomUUID())]);
+  assert.ok(first.ok && second.ok);
+  assert.notEqual(first.answer.id, second.answer.id);
+  assert.equal(eve.opens, 1);
+  assert.deepEqual(eve.deliveries, ["delivery-1"]);
+  const rows = await Promise.all([
+    asks.named(userId, first.answer.id),
+    asks.named(userId, second.answer.id),
+  ]);
+  assert.equal(rows[0]?.sessionId, rows[1]?.sessionId);
+  assert.equal([rows[0]?.deliveryId, rows[1]?.deliveryId].filter((d) => d !== undefined).length, 1);
+});
+
+test("a dispatch on a conversation cleared since the ask was admitted runs nothing and answers no row, so the Clear is the caller's refusal and not a failure", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const ask = await asks.record(write(userId, conversationId));
+  await database.db
+    .update(conversations)
+    .set({ deletedAt: new Date(NOW) })
+    .where(eq(conversations.id, conversationId));
+  let dispatched = 0;
+  const outcome = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
+    dispatched += 1;
+    return { sessionId: "wrun_never" };
+  });
+  assert.equal(outcome, ASK_DISPATCH_REFUSAL.NO_CONVERSATION);
+  assert.equal(dispatched, 0);
+  assert.equal((await asks.named(userId, ask.id))?.sessionId, undefined);
+});
+
+test("an ask whose conversation is cleared between its admission and its dispatch is refused as not found, and eve is not reached", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const eve = eveAccepting(`wrun_${randomUUID()}`);
+  const clearingBeforeDispatch = {
+    ...asks,
+    dispatchOnce: async (...args: Parameters<typeof asks.dispatchOnce>) => {
+      await database.db
+        .update(conversations)
+        .set({ deletedAt: new Date(NOW) })
+        .where(eq(conversations.id, conversationId));
+      return asks.dispatchOnce(...args);
+    },
+  };
+  const outcome = await acceptAsk(
+    { run: database.run, asks: clearingBeforeDispatch, eve, now: () => NOW },
+    {
+      userId,
+      conversationId,
+      clientId: randomUUID(),
+      question: "still there?",
+      origin: ASK_ORIGIN.TYPED,
+    },
+  );
+  assert.deepEqual(outcome, { ok: false, refusal: ASK_REFUSAL.NOT_FOUND });
+  assert.equal(eve.opens, 0);
+  assert.deepEqual(eve.deliveries, []);
 });
