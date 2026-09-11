@@ -1537,3 +1537,18 @@ migration runs.
 A file ported from OpenClaw obeys none of this: its internals stay faithful to
 the pinned source and it imports nothing from `effect`. The Effect wrap is a
 sibling module beside it.
+
+The Effect project's own agent skill is vendored under `.agents/skills/`, byte
+for byte at the upstream commit the README beside it and `skills-lock.json`
+pin. Read `.agents/skills/effect-ts/SKILL.md` before writing Effect code: it is
+the discipline of answering an Effect API from the installed Effect's own
+source rather than from memory. The vendored set matches the pinned 3.x line
+and is swapped when the ADR's Effect 4 trigger fires, which is why upstream's
+`effect-v3-to-v4` skill is absent rather than kept here unused. Two of that
+skill's own instructions belong to the 4.x line and not to this one, and the
+README says so in as many words: `effect` is added as `"effect": "catalog:"`
+and never by that install step, and the guide it names,
+`node_modules/effect/AGENTS.md`, is published on 4.x alone, so there is no
+repository-local Effect guide to read completely. This section and the ADR are
+the standing guidance, and `node_modules/effect/src`, which 3.22.2 does ship,
+answers an API neither covers.

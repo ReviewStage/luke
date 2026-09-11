@@ -69,6 +69,31 @@ written, and the companion packages the migration depends on (`@effect/platform`
 decision is re-evaluated when Effect 4 has a stable release and all three ship
 4-compatible stable lines; until then every package pins the 3.x catalog entry.
 
+## The Effect project's own agent skills
+
+The Effect project publishes agent skills of its own, and the one that suits
+this version line is vendored under `.agents/skills/`, byte for byte at the
+upstream commit its README and the root `skills-lock.json` pin. The root
+`AGENTS.md`'s "Effect idioms" section points at it: `effect-ts` is the skill to
+read before writing Effect code.
+
+Only that one is vendored. Upstream's other skill, `effect-v3-to-v4`, is a
+migration workflow toward the version the section above decides against, so it
+is installed when that re-evaluation fires rather than kept unreferenced in the
+meantime. The vendored `effect-ts` is upstream's general skill and is itself
+written against the 4.x line in two places, which the README beside it names
+rather than editing out of the file: its install step would move this
+repository off the pinned catalog entry, and the guide it sends an agent to,
+`node_modules/effect/AGENTS.md`, is published on 4.x alone — `effect@3.22.2`
+ships no such file, only its full `src/`, which is the escalation that does
+work here. The standing guidance is this document and that section, with the
+installed source for an API neither covers.
+
+Vendoring is checked-in files and a pinned hash, never a fetch at run time or a
+dependency: nothing in the build reads a skill, and no workspace declares the
+installer. An agent's own skills directory holds symlinks into `.agents/`, is
+local state, and is restored from the lock file.
+
 ## `exactOptionalPropertyTypes`
 
 The flag was trialled in `tsconfig.base.json` against the whole workspace, with
