@@ -12,9 +12,9 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { wireStore } from "./store-wiring.js";
-import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 /**
  * The store wiring over a real database served in-thread: a conversation the

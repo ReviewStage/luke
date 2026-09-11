@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { shouldRunIntroduction } from "./introduction-flow.js";
 import { ONBOARDING_STATE_FILE, onboardingStateFile } from "./onboarding-state.js";
-import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const SIGNED_IN_AT = "2026-08-24T00:00:00.000Z";
 const LATER = "2026-08-24T00:05:00.000Z";

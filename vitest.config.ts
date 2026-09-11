@@ -25,6 +25,7 @@ export default defineConfig({
       "packages/feedback",
       "packages/brain",
       "packages/providers",
+      "packages/panel",
       "tools/ios-parity",
       "tools/trace-export",
       "apps/desktop",

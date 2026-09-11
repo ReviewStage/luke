@@ -3,9 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { dispatchRead } from "@sidecar/session";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { codexLocalPlugin } from "./index.js";
 
 const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";

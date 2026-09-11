@@ -17,9 +17,9 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import { composeNotebookMemory, type NotebookMemoryDependencies } from "./notebook-memory.js";
-import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const NOW = 1_800_000_000_000;
 

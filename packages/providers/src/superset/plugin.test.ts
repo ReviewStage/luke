@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SESSION_STATUS, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { type SupersetPluginOptions, supersetPlugin } from "./plugin.js";
 
 /** A Superset home with the CLI installed and a login on file, and no host state. */

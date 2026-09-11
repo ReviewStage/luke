@@ -34,10 +34,10 @@ import {
   recentConversationEntries,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import { ConversationThread } from "../conversation-thread.js";
 import { operatorOverBrain } from "../testing/index.js";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { CONVERSATION_DELETE_OUTCOME, deleteConversationFlow } from "./conversation-deletion.js";
 import { followBrainRequests } from "./publication.js";
 

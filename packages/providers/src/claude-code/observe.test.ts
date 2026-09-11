@@ -8,9 +8,8 @@ import {
   type SessionCompletionCause,
   type SessionStatus,
 } from "@sidecar/session";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { claudeCodePlugin } from "./index.js";
 import { CLAUDE_PROJECTS_DIRECTORY } from "./records.js";
 

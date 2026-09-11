@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { activeOrganizationId } from "./config.js";
 
 /**

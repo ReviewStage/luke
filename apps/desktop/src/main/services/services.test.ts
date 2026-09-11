@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
+import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
 import { test } from "vitest";
-import { temporaryDirectory } from "#testing/temporary-directory";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { UpdaterEngine, UpdaterEngineEvents } from "../update-service";
 import type { DesktopConfig } from "./desktop-config";

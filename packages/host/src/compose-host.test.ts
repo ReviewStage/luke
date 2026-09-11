@@ -8,13 +8,13 @@ import {
   gatewayOk,
 } from "@sidecar/gateway";
 import { ACTION_RESULT_STATUS, isRecord, lateRef } from "@sidecar/wire";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { composeHost } from "./compose-host.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
 import type { SecretCipher } from "./settings-store.js";
-import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const CIPHER: SecretCipher = {
   isAvailable: () => false,

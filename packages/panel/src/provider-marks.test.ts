@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
@@ -12,6 +11,7 @@ import {
 } from "@sidecar/session";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { test } from "vitest";
 import { type MarkId, ProviderMark } from "./provider-marks.js";
 
 /**

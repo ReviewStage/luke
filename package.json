@@ -21,7 +21,7 @@
     "prepare": "husky",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
-    "test": "pnpm test:harness && vitest run && pnpm --recursive --parallel --if-present run test:node",
+    "test": "pnpm test:harness && vitest run",
     "test:harness": "node --test scripts/*.test.mjs apps/ios/*.test.mjs tools/oxlint/anti-slop/*.test.mjs",
     "trace:export": "tsx tools/trace-export/src/cli.ts",
     "typecheck": "pnpm --recursive --if-present run typecheck"

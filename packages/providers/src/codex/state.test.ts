@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import { defaultSqliteModule, textFromRow } from "../shared/local-sqlite.js";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { rolloutPathForThread, threadRows } from "./state.js";
 
 const CODEX_STATE_DATABASE = "state_5.sqlite";

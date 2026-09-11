@@ -3,11 +3,10 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import { CLAUDE_HOOK_SPEC } from "../claude-code/hooks.js";
 import { CODEX_HOOK_SPEC } from "../codex/hooks.js";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import {
   type ObservationHookInstallation,
   type ObservationHookSpec,
