@@ -2,18 +2,30 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
+  EVE_CALLER,
   EVE_CANCEL_OUTCOME,
   EVE_SEND_OUTCOME,
+  type EveCaller,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 
 /**
  * The host's three calls into eve, against a fetch that answers as eve's
- * routes document: the request each makes, and how each answer reads.
+ * routes document: the request each makes, how each answer reads, and how
+ * each of the two callers — an account's bearer, the deployment for an
+ * account — identifies itself on the wire.
  */
 
 const ORIGIN = "https://luke.test";
 const AUTHORIZATION = "Bearer token-1";
+const ACCOUNT_CALLER: EveCaller = { kind: EVE_CALLER.ACCOUNT, authorization: AUTHORIZATION };
+const CRON_SECRET = "cron-secret-1";
+const ACCOUNT = "user-observed-1";
+const DEPLOYMENT_CALLER: EveCaller = {
+  kind: EVE_CALLER.DEPLOYMENT,
+  secret: CRON_SECRET,
+  account: ACCOUNT,
+};
 const CONVERSATION = "2b000000-0000-4000-8000-000000000001";
 const SESSION = "wrun_01M0000000000000000000001";
 
@@ -38,8 +50,8 @@ interface Answer {
   readonly body: EveAnswer;
 }
 
-/** A fetch answering the given answers in order and the last of them thereafter, recording each request and each wait. */
-function answeringEach(answers: readonly Answer[]) {
+/** A fetch answering the given answers in order and the last of them thereafter, recording each request and each wait, for the caller named. */
+function answeringEach(answers: readonly Answer[], caller: EveCaller = ACCOUNT_CALLER) {
   const seen: Seen[] = [];
   const waits: number[] = [];
   const call: typeof fetch = async (input, init) => {
@@ -56,7 +68,7 @@ function answeringEach(answers: readonly Answer[]) {
   };
   const sessions = eveSessions({
     origin: ORIGIN,
-    authorization: AUTHORIZATION,
+    caller,
     fetch: call,
     sleep: async (ms) => {
       waits.push(ms);
@@ -65,8 +77,8 @@ function answeringEach(answers: readonly Answer[]) {
   return { seen, waits, sessions };
 }
 
-function answering(status: number, body: EveAnswer) {
-  return answeringEach([{ status, body }]);
+function answering(status: number, body: EveAnswer, caller: EveCaller = ACCOUNT_CALLER) {
+  return answeringEach([{ status, body }], caller);
 }
 
 const NOT_ACTIVE: Answer = { status: 409, body: { ok: false, code: "session_not_active" } };
@@ -89,9 +101,32 @@ test("opening posts the first message under the conversation and turn headers wi
   assert.equal(request.url, `${ORIGIN}/eve/v1/session`);
   assert.equal(request.method, "POST");
   assert.equal(request.headers.get("authorization"), AUTHORIZATION);
+  assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), null);
   assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
   assert.equal(request.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
   assert.deepEqual(request.body, { message: "hello" });
+});
+
+test("the deployment calls under its own secret and names the account it acts for in the account header, on an opening and a follow-up alike", async () => {
+  const observation = { ...MESSAGE, turn: BRAIN_HOST_TURN.OBSERVATION };
+  const opened = answering(
+    202,
+    { ok: true, sessionId: SESSION, status: "accepted" },
+    DEPLOYMENT_CALLER,
+  );
+  assert.equal((await opened.sessions.open(observation)).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+  const followed = answeringEach([ACCEPTED_FOLLOW_UP], DEPLOYMENT_CALLER);
+  assert.equal(
+    (await followed.sessions.send(SESSION, observation)).outcome,
+    EVE_SEND_OUTCOME.ACCEPTED,
+  );
+  for (const seen of [opened.seen[0], followed.seen[0]]) {
+    assert.ok(seen);
+    assert.equal(seen.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+    assert.equal(seen.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
+    assert.equal(seen.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.OBSERVATION);
+    assert.equal(seen.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
+  }
 });
 
 test("a follow-up posts to the session's own route and reads the delivery eve names; anything outside the documented answers reads as failed with its status", async () => {

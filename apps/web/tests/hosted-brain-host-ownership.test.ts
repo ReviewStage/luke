@@ -18,7 +18,7 @@ import {
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "../server/hosted/brain-host/bounds";
-import { brainHostChannelInput } from "../server/hosted/brain-host/channel";
+import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
 import type { SessionOwnership } from "../server/hosted/brain-host/door";
 import {
@@ -99,6 +99,7 @@ function hostOverTestDatabase(): TestHost {
     writer: async () => writer,
     userInfo: async () => undefined,
     ownership,
+    deploymentSecret: () => undefined,
     openAi: () => undefined,
     scriptedModel: () => false,
     spend: unreached("spend"),
@@ -295,10 +296,14 @@ function forbidden(
  * walk turned the door's refusal into.
  */
 function channelAuth(accounts: readonly string[]) {
-  const channel = brainHostChannelInput(async ({ headers }) => {
-    const sub = headers.get("authorization")?.replace("Bearer ", "");
-    return sub !== undefined && accounts.includes(sub) ? { sub } : undefined;
-  }, ownership);
+  const channel = brainHostChannelInput(
+    async ({ headers }) => {
+      const sub = headers.get("authorization")?.replace("Bearer ", "");
+      return sub !== undefined && accounts.includes(sub) ? { sub } : undefined;
+    },
+    ownership,
+    { secret: undefined, admits: DEPLOYMENT_TURNS },
+  );
   return async (request: Request): Promise<DoorAnswer> => {
     const answer = await routeAuth(request, channel.auth);
     if (!(answer instanceof Response)) return { admitted: answer.principalId };

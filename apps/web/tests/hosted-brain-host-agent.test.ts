@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import agent from "../agent/agent";
 import { ACTION_TOOL, BRAIN_TOOL, BRAIN_TURN_TRIGGER, brainToolCatalog } from "../server/core";
-import { brainHostChannelInput } from "../server/hosted/brain-host/channel";
+import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import { hostedTurnPolicy } from "../server/hosted/brain-host/tools";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 
@@ -19,10 +19,14 @@ test("the agent runs none of eve's default tools and sessions have no lifetime o
 });
 
 test("follow-ups queue behind a turn under way, and the account bearer is checked before the development principal", () => {
-  const channel = brainHostChannelInput(async () => undefined, {
-    sessionOwner: async () => undefined,
-    ownsConversation: async () => false,
-  });
+  const channel = brainHostChannelInput(
+    async () => undefined,
+    {
+      sessionOwner: async () => undefined,
+      ownsConversation: async () => false,
+    },
+    { secret: undefined, admits: DEPLOYMENT_TURNS },
+  );
   assert.equal(channel.turnPolicy, "queue");
   assert.equal(Array.isArray(channel.auth), false);
 });

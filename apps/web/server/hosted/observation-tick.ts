@@ -1,5 +1,10 @@
-import { timingSafeEqual } from "node:crypto";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import {
+  bearerMatchesSecret,
+  errorResponse,
+  HOSTED_API_ERROR,
+  HOSTED_HTTP_STATUS,
+  jsonResponse,
+} from "./http.js";
 import type { SpeechPushOutcome } from "./speech-push.js";
 import type { SpeechSweepOutcome } from "./store/speech.js";
 
@@ -139,13 +144,6 @@ function passWithin(
   });
 }
 
-function bearerMatches(request: Request, secret: string): boolean {
-  const authorization = request.headers.get("authorization")?.trim() ?? "";
-  const offered = Buffer.from(authorization);
-  const wanted = Buffer.from(`Bearer ${secret}`);
-  return offered.length === wanted.length && timingSafeEqual(offered, wanted);
-}
-
 export async function handleObservationTick(options: ObservationTickOptions): Promise<Response> {
   const { request } = options;
   if (request.method !== "GET") {
@@ -159,7 +157,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
   if (!secret || !options.encryptionSecret?.trim()) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
-  if (!bearerMatches(request, secret)) {
+  if (!bearerMatchesSecret(request, secret)) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
 

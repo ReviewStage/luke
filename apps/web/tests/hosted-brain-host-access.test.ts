@@ -4,17 +4,23 @@ import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
 import {
+  actedForAccount,
   conversationIdOf,
+  deploymentActor,
   requestAttributes,
   sessionAuthFor,
   turnKindOf,
 } from "../server/hosted/brain-host/auth";
 import {
   BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_AUTHENTICATOR,
+  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
   BRAIN_HOST_HEADER,
+  BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "../server/hosted/brain-host/bounds";
+import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import {
   admitConversation,
   claimRuntimeSession,
@@ -346,4 +352,173 @@ test("a conversation runs in one session: the recorded one is admitted, another 
     ).ok,
     true,
   );
+});
+
+/** The deployment acting for an account: admitted for its turns on a message and refused, under its own secret, for everything else. */
+
+const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT = { secret: CRON_SECRET, admits: DEPLOYMENT_TURNS };
+
+/** A request under the deployment's secret naming the account, on the message route, for the kind of turn given. */
+function scheduled(
+  account: string | undefined,
+  turn: string | undefined,
+  path = "/eve/v1/session",
+  method = "POST",
+): Request {
+  return request(
+    path,
+    CRON_SECRET,
+    {
+      ...(account !== undefined ? { [BRAIN_HOST_HEADER.ACCOUNT]: account } : undefined),
+      ...(turn !== undefined ? { [BRAIN_HOST_HEADER.TURN]: turn } : undefined),
+      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
+    },
+    method,
+  );
+}
+
+/** The refusal word the door answered a request with; a request the door admitted fails the test. */
+async function refusal(run: () => ReturnType<AuthFn<Request>>): Promise<string> {
+  try {
+    await run();
+  } catch (error) {
+    assert.ok(error instanceof ForbiddenError);
+    // SAFETY: eve's own refusal body, whose `error` field is the message the door threw.
+    const body = (await error.response.json()) as { error: string };
+    return body.error;
+  }
+  assert.fail("the door admitted what it should have refused");
+}
+
+test("the deployment is a principal of its own type acting for the named account, minted only for a message naming a turn kind its table admits", async () => {
+  const actor = deploymentActor(DEPLOYMENT);
+  const opening = await actor(scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION));
+  assert.ok(opening);
+  assert.equal(opening.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.equal(opening.principalType, BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT);
+  assert.equal(opening.authenticator, BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT);
+  assert.deepEqual(opening.attributes, {
+    [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: CONVERSATION_ID,
+    [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.OBSERVATION,
+    [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: "user-a",
+  });
+  assert.equal(actedForAccount(opening), "user-a");
+  const followUp = await actor(
+    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}`),
+  );
+  assert.equal(actedForAccount(followUp ?? null), "user-a");
+
+  assert.equal(await actor(request("/eve/v1/session", "user-a")), null);
+  assert.equal(
+    await deploymentActor({ ...DEPLOYMENT, secret: undefined })(
+      scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION),
+    ),
+    null,
+  );
+  assert.equal(
+    await refusal(() => actor(scheduled(undefined, BRAIN_HOST_TURN.OBSERVATION))),
+    BRAIN_HOST_REFUSAL.NO_ACCOUNT,
+  );
+  assert.equal(
+    await refusal(() => actor(scheduled("not an account", BRAIN_HOST_TURN.OBSERVATION))),
+    BRAIN_HOST_REFUSAL.NO_ACCOUNT,
+  );
+  for (const forbidden of [
+    scheduled("user-a", BRAIN_HOST_TURN.TYPED),
+    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN),
+    scheduled("user-a", undefined),
+    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}/cancel`),
+    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
+    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, "/eve/v1/info", "GET"),
+  ]) {
+    assert.equal(await refusal(() => actor(forbidden)), BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT);
+  }
+});
+
+test("the account a principal acts for is its own for a person and the named one for the deployment, and a request's account header reaches no person's attributes", () => {
+  assert.equal(actedForAccount(principal("user-a")), "user-a");
+  assert.equal(actedForAccount(null), undefined);
+  const deployment: SessionAuthContext = {
+    principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+    principalType: BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    authenticator: BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    attributes: {},
+  };
+  assert.equal(actedForAccount(deployment), undefined);
+  const laidOver = sessionAuthFor(
+    principal("user-a"),
+    request("/eve/v1/session", "user-a", { [BRAIN_HOST_HEADER.ACCOUNT]: "user-b" }),
+  );
+  assert.ok(laidOver);
+  assert.equal(laidOver.attributes[BRAIN_HOST_ATTRIBUTE.ACCOUNT], undefined);
+  assert.equal(actedForAccount(laidOver), "user-a");
+});
+
+test("at the door the deployment is admitted for the named account's own conversation and session, and refused for another account's", async () => {
+  const auth = ownedAuth(
+    [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
+    ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
+  );
+  const opened = await auth(scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION));
+  assert.equal(opened?.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.equal(actedForAccount(opened ?? null), "user-a");
+  const followed = await auth(
+    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}`),
+  );
+  assert.equal(actedForAccount(followed ?? null), "user-a");
+  assert.equal(
+    await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.OBSERVATION))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  // The authenticator's own refusal reaches the caller through the door with its reason, not as nobody signed in.
+  assert.equal(
+    await refusal(() => auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED))),
+    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-b", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}`)),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+});
+
+test("a session the deployment opened for an account admits that account's own bearer as the same initiator, and another account not at all", async () => {
+  const userA = await database.createUser();
+  const userB = await database.createUser();
+  const id = await ownedConversation(userA);
+  const deployment: SessionAuthContext = {
+    principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+    principalType: BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    authenticator: BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    attributes: { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: id, [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: userA },
+  };
+  const opened = await database.run(
+    admitConversation({ current: deployment, initiator: deployment }, CLAIMING),
+  );
+  assert.equal(opened.ok, true);
+  if (!opened.ok) return;
+  assert.deepEqual(opened.target, { userId: userA, conversationId: id });
+  const byOwner = await database.run(
+    admitConversation({ current: principal(userA), initiator: deployment }, CLAIMING),
+  );
+  assert.equal(byOwner.ok, true);
+  const byOther = await database.run(
+    admitConversation({ current: principal(userB), initiator: deployment }, CLAIMING),
+  );
+  assert.deepEqual(byOther, { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
+  const forOther = await database.run(
+    admitConversation(
+      {
+        current: {
+          ...deployment,
+          attributes: { ...deployment.attributes, [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: userB },
+        },
+        initiator: deployment,
+      },
+      CLAIMING,
+    ),
+  );
+  assert.deepEqual(forOther, { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
 });
