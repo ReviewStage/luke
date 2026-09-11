@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CREATED_WORKSPACE_OPEN_WINDOW_MS,
   CreatedWorkspaceOpenTracker,
@@ -8,6 +7,7 @@ import {
   type Session,
   type SessionProvider,
 } from "@sidecar/session";
+import { test } from "vitest";
 
 const conductor: SessionProvider = { id: "conductor", displayName: "Conductor" };
 const cursor: SessionProvider = { id: "cursor", displayName: "Cursor" };

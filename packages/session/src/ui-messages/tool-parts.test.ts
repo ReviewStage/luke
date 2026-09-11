@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { isSettledToolPartState, isToolPartState, TOOL_PART_STATE } from "./tool-parts.js";
 
 test("the stored tool states are the SDK's four, and the approval states are outside the set", () => {

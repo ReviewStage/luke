@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   isCloudAgentProviderId,
@@ -8,6 +7,7 @@ import {
   PROVIDER_ID_LIST,
   PROVIDER_IDENTITY_BY_ID,
 } from "@sidecar/session";
+import { test } from "vitest";
 
 test("provider identities exhaust the ordered provider ids", () => {
   assert.deepEqual(Object.keys(PROVIDER_IDENTITY_BY_ID), PROVIDER_ID_LIST);

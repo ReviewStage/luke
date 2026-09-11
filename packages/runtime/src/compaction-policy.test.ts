@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { COMPACTION_RESERVE, reserveTokens, shouldCompact } from "./compaction-policy.js";
 
 test("the reserve is 20,000 tokens capped at a quarter of the window, and the threshold is the window less it", () => {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import {
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   type AdvertisedAction,
@@ -10,6 +9,7 @@ import {
   SESSION_STATUS,
   type Session,
 } from "@sidecar/session";
+import { test } from "vitest";
 
 const TEST_NOW = Date.parse("2026-08-16T12:00:00.000Z");
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { agentLaneWidth, LANE, LaneScheduler, laneConfiguration } from "./lanes.js";
 
 function deferred<T = void>() {

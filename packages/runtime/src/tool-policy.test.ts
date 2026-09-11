@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { TOOL_EFFECT, TOOL_EXECUTION, type ToolDescriptor } from "./registry.js";
 import {
   CHILD_DEPTH_CAP,

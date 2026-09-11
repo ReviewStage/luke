@@ -527,12 +527,12 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
 
   packages/host:
     dependencies:
@@ -644,12 +644,12 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
 
   packages/memory:
     dependencies:
@@ -750,12 +750,12 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
 
   packages/session:
     dependencies:
@@ -769,12 +769,12 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)
       zod:
         specifier: 4.5.4
         version: 4.5.4
