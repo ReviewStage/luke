@@ -55,8 +55,9 @@ function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>
  * @deprecated The span is run to the promise `ModelAdapter#respond` answers
  * here, a strangler shim on the `Effect.runPromise` allowlist in
  * `docs/adr/0001-effect.md`: the turn that calls this adapter still holds a
- * promise, not a fiber. It goes with `BrainTransport#send`'s `runCall` once
- * P5-14b moves a turn onto the brain's own runtime.
+ * promise, not a fiber. It goes with `BrainTransport#send`'s `runCall` in
+ * P12-04: it can stop answering a promise only when the `ModelAdapter` it
+ * wraps does.
  */
 export function tracedModelAdapter(
   adapter: ModelAdapter,

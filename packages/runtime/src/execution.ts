@@ -667,9 +667,9 @@ export interface AgentRuntimeEffect {
 /**
  * The same seam as the hosts still holding a promise read it.
  *
- * @deprecated Read `AgentRuntimeEffect` instead; P7-08b deletes this shape
- * with `promiseAgentRuntime` once `BrainAgent`'s own methods are effects and
- * every turn is a fiber the host forked.
+ * @deprecated Read `AgentRuntimeEffect` instead; P12-02 deletes this shape
+ * with `promiseAgentRuntime` and the turn runner that holds it, once a turn
+ * is a fiber.
  */
 export interface AgentRuntime
   extends Omit<
@@ -741,8 +741,8 @@ const runOn = (
  * that steers or cancels before it awaits reaches a run already going.
  *
  * @deprecated The strangler shim on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`; P7-08b deletes it once `BrainAgent`'s own
- * methods are effects and the host holds every run as a fiber it forked.
+ * `docs/adr/0001-effect.md`; P12-02 deletes it with the turn runner that
+ * holds it, once a turn is a fiber.
  */
 export function promiseAgentRuntime(
   runtime: AgentRuntimeEffect,

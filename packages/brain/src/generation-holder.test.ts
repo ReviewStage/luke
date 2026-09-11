@@ -91,6 +91,21 @@ test("the successor stands the moment the decision is taken, and a result of the
   assert.notEqual(holder.standing(), replaced);
 });
 
+test("no turn passes between the decision and the fence", async () => {
+  const holder = new GenerationHolder();
+  const seenInsideBuild: (string | undefined)[] = [];
+  const adopted = holder.adopt("gen-1", () => {
+    queueMicrotask(() => seenInsideBuild.push(holder.standing()?.id));
+    return generation("gen-1");
+  });
+  // The successor stands on the statement after the decision, with nothing
+  // awaited: a microtask queued while the decision was being taken already
+  // reads it, so no turn of the event loop passes with the fence down.
+  assert.equal(holder.standing(), adopted.generation);
+  await Promise.resolve();
+  assert.deepEqual(seenInsideBuild, ["gen-1"]);
+});
+
 test("retiring a generation fires its signal and then lets go of its context, once however often it is retired", async () => {
   const order: string[] = [];
   const retiring = generation("gen-1", order);

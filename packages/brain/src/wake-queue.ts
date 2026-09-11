@@ -1,6 +1,6 @@
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
-import { Effect } from "effect";
-import { makeWakeEventQueue, type WakeEventQueue } from "./effect/wake-queue.js";
+import { MutableRef } from "effect";
+import { sameObservation } from "./observation-inbox.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
@@ -25,26 +25,29 @@ export interface WakeQueueOptions {
 }
 
 /**
- * Where the wakes themselves stand is `../effect/wake-queue.ts`'s `Queue`;
- * this class is the synchronous facade every caller here still holds, and
- * `Effect.runSync` is the bridge, safe because every operation that module
- * exposes is one that never suspends. It is a named strangler shim —
- * `docs/adr/0001-effect.md` carries it — deleted in P5-14b once the turn
- * runner and its callers hold a fiber of their own instead of this class.
+ * Where the wakes stand is a `MutableRef` over the list itself: every
+ * operation this class performs — count, append, drain, prepend, drop — is
+ * decided and applied in one uninterrupted step of the calling turn, with
+ * nothing to wait on, so the storage is stated synchronously rather than as
+ * an effect that could only be run here. What the queue guarantees is
+ * unchanged: the same observation delivered twice is one entry, past the
+ * capacity the oldest goes, and a requeue prepends unbounded because those
+ * events are still news.
  */
 export class WakeQueue {
   readonly #options: WakeQueueOptions;
-  readonly #queue: WakeEventQueue;
+  readonly #events: MutableRef.MutableRef<readonly BrainWakeEvent[]> = MutableRef.make<
+    readonly BrainWakeEvent[]
+  >([]);
   #timer: ScheduledTimer | undefined;
 
   constructor(options: WakeQueueOptions) {
     this.#options = options;
-    this.#queue = Effect.runSync(makeWakeEventQueue(options.capacity));
   }
 
   /** How many wakes are waiting for their turn to open. */
   size(): number {
-    return Effect.runSync(this.#queue.size);
+    return MutableRef.get(this.#events).length;
   }
 
   /**
@@ -56,14 +59,24 @@ export class WakeQueue {
    */
   push(events: readonly BrainWakeEvent[]): void {
     if (events.length === 0) return;
-    Effect.runSync(this.#queue.push(events));
+    const held = [...MutableRef.get(this.#events)];
+    for (const event of events) {
+      if (!held.some((entry) => sameObservation(entry, event))) held.push(event);
+    }
+    const capacity = this.#options.capacity;
+    MutableRef.set(
+      this.#events,
+      held.length > capacity ? held.slice(held.length - capacity) : held,
+    );
     this.#arm(this.#options.coalesceMs);
   }
 
   /** Drains every pending wake for a turn the host is opening anyway, and disarms the window. */
   take(): readonly BrainWakeEvent[] {
     this.#disarm();
-    return Effect.runSync(this.#queue.take);
+    const held = MutableRef.get(this.#events);
+    MutableRef.set(this.#events, []);
+    return held;
   }
 
   /**
@@ -72,7 +85,9 @@ export class WakeQueue {
    * once a quiet has passed, at the coalescing window's length at least.
    */
   requeue(events: readonly BrainWakeEvent[], delayMs: number): void {
-    Effect.runSync(this.#queue.requeueFront(events));
+    if (events.length > 0) {
+      MutableRef.set(this.#events, [...events, ...MutableRef.get(this.#events)]);
+    }
     this.#arm(delayMs);
   }
 
@@ -84,7 +99,7 @@ export class WakeQueue {
   /** Drops every pending wake and disarms the window: the memory they described is gone. */
   clear(): void {
     this.#disarm();
-    Effect.runSync(this.#queue.clear);
+    MutableRef.set(this.#events, []);
   }
 
   #arm(delayMs: number): void {
