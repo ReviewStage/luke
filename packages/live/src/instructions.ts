@@ -89,19 +89,31 @@ export function sessionInstructions(scene: LiveScene): string {
 /**
  * The introduction's opening, sent as one `session.instructions.append` with
  * a null delegation once `session.started` arrives, which is the guide's way
- * to have the model speak before the caller has: the greeting, its language,
- * and the instruction to greet at once and then listen. The voice service
- * sends it from the trusted side, so an accountless caller can open a bounded
- * introduction and nothing else. The detected sessions it may mention arrive
- * as a developer message in the session's `input`, never inside this text.
+ * to have the model speak before the caller has: the exact welcome text, its
+ * language, and the instruction to greet at once and then listen. The voice
+ * service sends it from the trusted side, so an accountless caller can open a
+ * bounded introduction and nothing else. The detected sessions it may mention
+ * arrive as a developer message in the session's `input`, never inside this
+ * text, which is why the welcome is fixed and only what follows it varies.
  */
 export function greetingInstruction(): string {
   return [
-    "Greet the developer now, in English, without waiting for them to speak. Say that you are",
-    "Luke, that you have just been installed and live at the top of their screen by the notch,",
-    "and that when one of their coding agents needs them, hits an error, or finishes, you will",
-    "say so. If a developer message above lists agents already running, mention one or two by",
-    "their titles as things you can already see. Keep it to two or three short sentences, then",
-    "pause and listen.",
+    "Greet the developer now, in English, without waiting for them to speak. Open with exactly",
+    "these words: \"Hi, I'm Luke. I've just moved in at the top of your screen, by the notch.\"",
+    "Then say that when one of their coding agents needs them, hits an error, or finishes, you",
+    "will say so. If a developer message above lists agents already running, mention one or two",
+    "by their titles as things you can already see. Keep it to two or three short sentences in",
+    "all, then pause and listen.",
   ].join(" ");
+}
+
+/**
+ * The cue that follows the greeting's acknowledgment, sent as one
+ * `session.commentary.append` with a null delegation. It is the guide's own
+ * sentence for a greeting that has to follow application instructions, kept
+ * word for word: the instructions carry what to say, and this asks only that
+ * the model begin saying it.
+ */
+export function greetingCue(): string {
+  return "Begin the conversation now, following the instructions provided.";
 }

@@ -1184,8 +1184,11 @@ Canonical commands:
   voice service (`VOICE_SERVICE_PATH.INTRODUCTION`), which holds the project
   key and the session's trusted sideband itself, keeps nothing about the
   caller but a hashed network address for its own daily caps (per caller and
-  global both), and sends the greeting as the one `session.instructions.append`
-  on `session.started`; the takeover is a peer of that session and nothing
+  global both), and greets the way the Live conversations guide sets out: one
+  `session.instructions.append` on `session.started`, its acknowledgment
+  awaited under a bounded wait and a refusal written down by its kind alone,
+  and then the one `session.commentary.append` that cues the model to begin;
+  the takeover is a peer of that session and nothing
   more, the same `LiveCall` the conversation runs on, permitted only the
   microphone switch and the hang-up and shown only captions, and the
   connection the session was created over is what the main process holds

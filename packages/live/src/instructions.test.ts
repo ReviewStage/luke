@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { APPEND_TOKEN_BOUND, chunkForAppend } from "./chunks.js";
-import { greetingInstruction, LIVE_SCENE, sessionInstructions } from "./instructions.js";
+import { greetingCue, greetingInstruction, LIVE_SCENE, sessionInstructions } from "./instructions.js";
 import { estimatedTokens } from "./tokens.js";
 
 /** The API's bound on `instructions`, in tokens. */
@@ -43,4 +43,12 @@ test("the greeting is one append's worth of instruction", () => {
   assert.ok(estimatedTokens(greeting) <= APPEND_TOKEN_BOUND);
   assert.equal(chunkForAppend(greeting).length, 1);
   assert.equal(greeting.includes("\n"), false);
+});
+
+test("the cue that follows it is one append's worth of commentary", () => {
+  const cue = greetingCue();
+
+  assert.ok(estimatedTokens(cue) <= APPEND_TOKEN_BOUND);
+  assert.equal(chunkForAppend(cue).length, 1);
+  assert.equal(cue.includes("\n"), false);
 });

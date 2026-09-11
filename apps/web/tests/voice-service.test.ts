@@ -12,6 +12,7 @@ import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/
 import { onTestFinished, test } from "vitest";
 import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
+  greetingCue,
   greetingInstruction,
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -27,6 +28,7 @@ import {
   SEED_ROLE,
   sessionInstructions,
 } from "../server/live";
+import { VOICE_ROUTE } from "../server/voice/frames";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { SOCKET_CLOSE_CODE, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
 import {
@@ -548,6 +550,141 @@ test("the introduction is created without an account, greeted exactly once after
   assert.equal(context.accounts.reports.length, 0);
   assert.deepEqual(context.record.usage, []);
   assert.deepEqual(context.record.closes, []);
+});
+
+/** The greeting entries of a run's log, in the order they were written. */
+const GREETING_EVENTS: readonly LogEntry["event"][] = [
+  LOG_EVENT.GREETING_SENT,
+  LOG_EVENT.GREETING_ACKNOWLEDGED,
+  LOG_EVENT.GREETING_REFUSED,
+  LOG_EVENT.GREETING_UNACKNOWLEDGED,
+  LOG_EVENT.GREETING_CUED,
+];
+
+function greetingLog(context: Stand): LogEntry[] {
+  return context.log.filter((entry) => GREETING_EVENTS.includes(entry.event));
+}
+
+/** One `session.instructions.appended` about the command the id names. */
+function appended(clientEventId: string): string {
+  return JSON.stringify({
+    type: LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
+    event_id: "appended-1",
+    client_event_id: clientEventId,
+    start_ms: 0,
+    end_ms: 40,
+  });
+}
+
+/** An introduction through to its greeting: the session started, and the append the service sent of its own. */
+async function greetedIntroduction(context: Stand) {
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, createFrame([developerMessage("Running: api on main.")]));
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  const created = sessionCreatedFrameFromWire(record(await desktop.next()));
+  assert.ok(created);
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_STARTED,
+      event_id: "started-1",
+      session: { id: created.sessionId },
+    }),
+  );
+  const greeting = record(await upstream.next());
+  assert.equal(greeting.type, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+  assert.equal(greeting.content, greetingInstruction());
+  const eventId = greeting.event_id;
+  assert.ok(isWireString(eventId));
+  return { desktop, upstream, eventId };
+}
+
+test("the greeting's acknowledgment is what the cue follows, and the cue goes up exactly once", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { upstream, eventId } = await greetedIntroduction(context);
+
+  assert.equal(await upstream.arrives(), false);
+  await sendText(upstream.socket, appended(eventId));
+  const cue = record(await upstream.next());
+  assert.equal(cue.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(cue.delegation_id, null);
+  assert.equal(cue.content, greetingCue());
+  assert.equal(isWireString(cue.event_id), true);
+  assert.notEqual(cue.event_id, eventId);
+
+  await sendText(upstream.socket, appended(eventId));
+  assert.equal(await upstream.arrives(), false);
+  assert.deepEqual(greetingLog(context), [
+    { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.INTRODUCTION },
+    { event: LOG_EVENT.GREETING_ACKNOWLEDGED, route: VOICE_ROUTE.INTRODUCTION },
+    { event: LOG_EVENT.GREETING_CUED, route: VOICE_ROUTE.INTRODUCTION },
+  ]);
+});
+
+test("an acknowledgment of some other command leaves the greeting waiting", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { upstream, eventId } = await greetedIntroduction(context);
+
+  await sendText(upstream.socket, appended("some-other-command"));
+  assert.equal(await upstream.arrives(), false);
+  assert.deepEqual(greetingLog(context), [
+    { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.INTRODUCTION },
+  ]);
+
+  await sendText(upstream.socket, appended(eventId));
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+});
+
+test("an error naming the greeting is written down by its kind, and nothing is cued", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { upstream, eventId } = await greetedIntroduction(context);
+
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.ERROR,
+      event_id: "error-1",
+      error: {
+        type: "invalid_request_error",
+        code: "unsupported_content",
+        message: "What the greeting said is the one thing the log never keeps.",
+        client_event_id: eventId,
+      },
+    }),
+  );
+
+  assert.equal(await upstream.arrives(), false);
+  assert.deepEqual(greetingLog(context), [
+    { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.INTRODUCTION },
+    {
+      event: LOG_EVENT.GREETING_REFUSED,
+      route: VOICE_ROUTE.INTRODUCTION,
+      errorType: "invalid_request_error",
+      errorCode: "unsupported_content",
+    },
+  ]);
+});
+
+test("a greeting neither acknowledged nor refused inside the wait cues nothing, then or later", async () => {
+  const context = await stand({ greetingTimeoutMs: 100 });
+  onTestFinished(() => context.stop());
+  const { upstream, eventId } = await greetedIntroduction(context);
+
+  assert.equal(await upstream.arrives(400), false);
+  assert.deepEqual(greetingLog(context), [
+    { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.INTRODUCTION },
+    { event: LOG_EVENT.GREETING_UNACKNOWLEDGED, route: VOICE_ROUTE.INTRODUCTION },
+  ]);
+
+  // The wait is over, so a late acknowledgment settles nothing a second time.
+  await sendText(upstream.socket, appended(eventId));
+  assert.equal(await upstream.arrives(), false);
 });
 
 test("an introduction seed beyond one bounded developer message is refused before any session is spent", async () => {

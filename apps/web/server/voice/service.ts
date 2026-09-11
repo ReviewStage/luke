@@ -19,11 +19,14 @@ import {
   VOICE_SERVICE_HEADER,
 } from "../core.js";
 import {
+  commentaryAppend,
   decodeLivePayload,
+  greetingCue,
   greetingInstruction,
   instructionsAppend,
   LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
+  type LiveClientEvent,
   liveSessionConfig,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
@@ -33,7 +36,13 @@ import type { VoiceAccounts } from "./accounts.js";
 import { frameText, routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
-import { RELAY_DEFAULTS, relaySession, SOCKET_CLOSE_CODE } from "./relay.js";
+import {
+  OPENING_OUTCOME,
+  type OpeningSettled,
+  RELAY_DEFAULTS,
+  relaySession,
+  SOCKET_CLOSE_CODE,
+} from "./relay.js";
 import type { VoiceSessionRecord } from "./session-record.js";
 
 /**
@@ -51,8 +60,10 @@ import type { VoiceSessionRecord } from "./session-record.js";
  * takes a fresh install with no account under the same durable daily meter
  * the introduction mint spends, so the ceiling is the deployment's and not one
  * function instance's, spent only for an admitted opening frame, and on that
- * route the sideband is the service's alone: it sends the greeting
- * once the session starts and shows the caller only captions and status.
+ * route the sideband is the service's alone: once the session starts it
+ * sends the greeting, waits for the acknowledgment that says the model took
+ * it, cues the model to begin, and shows the caller only captions and
+ * status.
  *
  * A connection is one function invocation, and the platform closes it at the
  * function's maximum duration while the WebRTC session between the desktop
@@ -113,6 +124,8 @@ export interface VoiceServiceOptions {
   fetch?: CloudFetch;
   log?: Log;
   closeTimeoutMs?: number;
+  /** How long the greeting's acknowledgment is waited on before the cue is abandoned. */
+  greetingTimeoutMs?: number;
   attachTimeoutMs?: number;
   createTimeoutMs?: number;
   firstFrameTimeoutMs?: number;
@@ -327,6 +340,7 @@ export class VoiceService {
       desktop,
       upstream: sideband,
       closeTimeoutMs: this.#options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS,
+      openingTimeoutMs: this.#options.greetingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS,
       onSessionStarted:
         route === VOICE_ROUTE.INTRODUCTION
           ? () => {
@@ -337,6 +351,10 @@ export class VoiceService {
                 content: greetingInstruction(),
               });
             }
+          : undefined,
+      onOpeningSettled:
+        route === VOICE_ROUTE.INTRODUCTION
+          ? (settled) => this.#greetingSettled(route, settled)
           : undefined,
       onUsageUpdated:
         accountId === undefined
@@ -357,6 +375,38 @@ export class VoiceService {
             },
     });
     this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
+  }
+
+  /**
+   * What follows the greeting's append, in the order the Live conversations
+   * guide fixes: the acknowledgment is what licenses the cue, because the
+   * greeting depends on application instructions and a cue sent ahead of
+   * them would ask the model to begin a greeting it has not been given. A
+   * refusal is written down by its kind alone, and a wait that runs out
+   * leaves the introduction to the caller's own first word rather than
+   * cueing a greeting the session may never have taken.
+   */
+  #greetingSettled(route: VoiceRoute, settled: OpeningSettled): LiveClientEvent | undefined {
+    if (settled.outcome === OPENING_OUTCOME.REFUSED) {
+      this.#log({
+        event: LOG_EVENT.GREETING_REFUSED,
+        route,
+        errorType: settled.errorType,
+        errorCode: settled.errorCode,
+      });
+      return undefined;
+    }
+    if (settled.outcome === OPENING_OUTCOME.UNACKNOWLEDGED) {
+      this.#log({ event: LOG_EVENT.GREETING_UNACKNOWLEDGED, route });
+      return undefined;
+    }
+    this.#log({ event: LOG_EVENT.GREETING_ACKNOWLEDGED, route });
+    this.#log({ event: LOG_EVENT.GREETING_CUED, route });
+    return commentaryAppend({
+      eventId: randomUUID(),
+      delegationId: null,
+      content: greetingCue(),
+    });
   }
 
   /**
