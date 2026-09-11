@@ -200,8 +200,9 @@ test("a release while the press's session is still opening leaves it to open mut
   await f.orchestrator.endTalk();
   call.started();
   await pressed;
+  // The release's mute still goes once the session stands: the press's device rode the offer.
   assert.equal(call.unmutes, 0);
-  assert.equal(call.mutes, 0);
+  assert.equal(call.mutes, 1);
   assert.equal(call.status, LIVE_STATUS.MUTED);
 });
 
@@ -503,7 +504,7 @@ test("a stop while a press's session is still opening leaves it muted", async ()
   call.started();
   await pressed;
   assert.equal(call.unmutes, 0);
-  assert.equal(call.mutes, 0);
+  assert.equal(call.mutes, 1);
   assert.equal(call.status, LIVE_STATUS.MUTED);
 });
 

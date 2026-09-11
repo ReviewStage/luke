@@ -495,6 +495,59 @@ test("a release while the press's device is being attached takes it back off the
   assert.equal(f.local.length, 1);
 });
 
+test("a press landing while the release's mute is still in flight waits for it, then opens a fresh device", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: true });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  const first = f.call.unmute();
+  await drainMicrotasks();
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+  await first;
+  const muting = f.call.mute();
+  await drainMicrotasks();
+  const second = f.call.unmute();
+  await drainMicrotasks();
+  // Nothing of the press goes until the release has let the device go.
+  assert.deepEqual(f.sentTypes(), [
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
+  ]);
+  assert.equal(f.microphoneOpens(), 1);
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+  assert.equal(await muting, true);
+  await drainMicrotasks();
+  assert.equal(f.track.stopped, true);
+  assert.equal(f.microphoneOpens(), 2);
+  const fresh = f.tracks[1];
+  assert.ok(fresh);
+  assert.deepEqual(f.peer.replaced, [null, fresh]);
+  assert.deepEqual(f.sentTypes().at(-1), LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE);
+  f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+  assert.equal(await second, true);
+  assert.equal(f.call.listening, true);
+  assert.equal(fresh.enabled, true);
+});
+
+test("a press's device released before the session stood is let go of by the mute the release owes it", async () => {
+  const f = fixture();
+  const opening = f.call.open({ byPress: true });
+  await drainMicrotasks();
+  f.peer.gathered();
+  await drainMicrotasks();
+  f.started();
+  await opening;
+  assert.equal(f.track.stopped, false);
+  assert.equal(await f.call.mute(), true);
+  assert.deepEqual(f.sentTypes(), []);
+  assert.deepEqual(f.peer.replaced, [null]);
+  assert.equal(f.track.stopped, true);
+  assert.equal(f.local.at(-1), undefined);
+});
+
 test("a session opened for Luke's own speech carries no device: a trackless line and no microphone open", async () => {
   const f = fixture();
   const opening = f.call.open({ byPress: false });

@@ -160,7 +160,10 @@ export class LiveVoiceOrchestrator {
       if (!this.#pressHeld) return;
     }
     const call = await this.#ensureSession({ byPress: true });
-    if (call && this.#pressHeld) await call.unmute();
+    // A key let go of during the opening leaves the session muted, and the
+    // mute is still sent: the press's device rode the offer, and only the
+    // release takes it back.
+    if (call) await (this.#pressHeld ? call.unmute() : call.mute());
     // The press is answered once the session hears the developer; between the
     // offer and the unmute the session passes through muted, which is not the
     // exchange ending.

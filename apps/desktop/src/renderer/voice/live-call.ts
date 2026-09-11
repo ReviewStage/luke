@@ -122,6 +122,8 @@ export class LiveCall implements LiveVoiceCall {
   #captionTick: ScheduledTimer | undefined;
   /** Counts the mutes, so an unmute still opening its device learns the key came up while it waited. */
   #muteEpoch = 0;
+  /** The mute under way, so a press landing before its release has settled waits for the device to be let go of first. */
+  #muting: Promise<boolean> | undefined;
   #ids = 0;
 
   constructor(options: LiveCallOptions) {
@@ -189,6 +191,7 @@ export class LiveCall implements LiveVoiceCall {
    * to release.
    */
   async unmute(): Promise<boolean> {
+    while (this.#muting) await this.#muting;
     const peer = this.#peer;
     if (!peer || !this.#started || this.#ended) return false;
     if (!peer.microphoneStream) {
@@ -239,10 +242,18 @@ export class LiveCall implements LiveVoiceCall {
    * the key being up is the developer's decision and the device is theirs.
    * The answer stays the session's own word on the switch.
    */
-  async mute(): Promise<boolean> {
+  mute(): Promise<boolean> {
+    if (this.#muting) return this.#muting;
     const peer = this.#peer;
-    if (!peer || !this.#started || this.#ended) return false;
+    if (!peer || !this.#started || this.#ended) return Promise.resolve(false);
     this.#muteEpoch += 1;
+    this.#muting = this.#muteAndRelease(peer).finally(() => {
+      this.#muting = undefined;
+    });
+    return this.#muting;
+  }
+
+  async #muteAndRelease(peer: LivePeer): Promise<boolean> {
     const unmuting = this.#pendingSwitch !== undefined;
     const acknowledged = this.#micLive || unmuting ? await this.#switchMicrophone(muteEvent) : true;
     await this.#releaseDevice(peer);
