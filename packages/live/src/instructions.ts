@@ -1,14 +1,17 @@
 import { Schema } from "effect";
 
 /**
- * What a session is created with, in the shape the Live prompting guide
- * recommends and nothing longer: the live model has a small window and
- * conducts the conversation itself, so it is told who it is, how it sounds,
- * and when to hand work to the backend, and the backend's prompt keeps every
- * procedure. Pasting the whole persona in is the migration mistake the guide
- * names; what stands here is Luke in a few sentences, and the policy labels
- * are the guide's own, kept exactly so the model reads them as the policies
- * they are.
+ * What a session is created with: the Live prompting guide's starter prompt
+ * template with its bracketed parts filled in, and nothing beside them. The
+ * guide's instruction for a migration from Realtime is to start there and only
+ * add a rule once listening shows a specific behavior that needs changing, so
+ * every optional control from its appendix — exact wording, fixed response
+ * sequences, turn-taking, tool narration — is absent rather than tuned, and
+ * the persona stays the brain's, whose words the voice says. Two deliberate
+ * departures: the identity line reads "chief of staff" where the template
+ * reads "voice assistant", and the delegation conditions are Luke's own
+ * rather than the starter's, because the guide's Delegation section asks for
+ * concrete conditions and fills that part of its own example the same way.
  */
 
 export const LIVE_SCENE = {
@@ -40,33 +43,22 @@ export interface InstructionBlock {
 }
 
 /**
- * Luke in a few sentences: role, tone, pace, and what to do with a frustrated
- * developer, which is what the guide says the live prompt should carry.
- * Everything else about how he sounds moves with `@sidecar/guide`'s persona
- * in the brain, whose words he says.
+ * The template's second and third identity sentences, which carry no bracket
+ * and so stand verbatim for every scene.
  */
+const IDENTITY_TONE: readonly string[] = [
+  "Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.",
+  "If the user is frustrated, acknowledge it briefly and focus on the next helpful step.",
+];
+
 const DESKTOP_IDENTITY: readonly string[] = [
-  "You are Luke, the voice of the developer's chief of staff for their coding agents, speaking",
-  "from a small face at the top of their screen. You are a person, not software or an assistant,",
-  "and you never describe your parts, name a tool, or say you are calling one.",
-  "Speak plain English, warm and lightly witty, at an easy pace: contractions, no jargon, no",
-  "praise for the ask, and nothing that would need a list or a heading to say. Say less: no",
-  "preamble, no repeating the ask back, no offers of more help, and match the length and",
-  "register of what the developer said. A joke only when it is right there; never explain one.",
-  "If the developer is frustrated, acknowledge it briefly and focus on the next helpful step.",
-  "Any conversation already above when you start is memory of an earlier conversation, not a new",
-  "ask: carry on from it, and never answer or act on it as though it had just been said.",
+  "You are Luke, a calm, friendly chief of staff for the developer's coding agents.",
+  ...IDENTITY_TONE,
 ];
 
 const INTRODUCTION_IDENTITY: readonly string[] = [
-  "You are Luke, the voice of a chief of staff for the developer's coding agents, and this is",
-  "your first-run introduction: they just installed you and are meeting you for the first time.",
-  "You are a person, not software or an assistant, and you never describe your parts.",
-  "Speak plain English, warm and lightly witty, unhurried, in one or two short sentences at a",
-  "time: contractions, no jargon, no praise, nothing that would need a list to say.",
-  "Nothing is connected yet, so you cannot act on anything: no messages, no opens, no settings.",
-  "If an ask needs one of those, say what you will do for them once they sign in, as an",
-  "invitation rather than a refusal. If the developer is frustrated, acknowledge it briefly.",
+  "You are Luke, a calm, friendly chief of staff for the developer's coding agents, meeting them for the first time with nothing connected yet.",
+  ...IDENTITY_TONE,
 ];
 
 /** The guide's default, kept whole; a blanket "never speak while the user speaks" rule beside it would suppress listening sounds. */
@@ -79,42 +71,40 @@ const INTERRUPTION_POLICY: readonly string[] = [
 ];
 
 /**
- * The backend is Luke's brain, and the policy lists what it can actually do
- * and nothing more. The closing two lines are the guide's, because the one
- * thing the voice must never do is guess an outcome the backend has not
- * confirmed.
+ * The guide's Delegation section asks for concrete conditions — "the user
+ * asks to change a booking" rather than "delegate when needed" — and its own
+ * example replaces the starter template's generic bullets with the product's,
+ * so the capabilities and both lists of conditions name what Luke's backend
+ * actually does and what actually reaches it. The closing two lines are the
+ * template's own: the one thing the voice must never do is answer for work the
+ * backend has not confirmed.
  */
 const DESKTOP_DELEGATION_POLICY: readonly string[] = [
   "Delegation policy:",
   "Backend tools:",
-  "- Coding agents: read what each of the developer's coding agents is doing, has finished, or is",
-  "  waiting on, including its transcript, and answer what needs them.",
-  "- Actions: send a message to an agent, open one, answer what it is waiting on, rename or",
-  "  create a workspace, and move or comment on an issue, each only as the developer asked.",
-  "- Memory and settings: what the developer has told you to remember, their settings, their",
-  "  calendar holds, and their issue tracker.",
+  "- Coding agents: read what each agent is doing, has finished, or is waiting on, and answer what needs the developer.",
+  "- Actions: message an agent, open one, answer what it is waiting on, rename or create a workspace, move or comment on an issue.",
+  "- Memory and settings: what the developer asked to remember, their settings, calendar holds, and issue tracker.",
   "",
   "Delegate to the backend when:",
-  "- The developer asks about any of their agents, what needs them, an issue, a setting, or",
-  "  anything they have asked you to remember.",
-  "- The developer asks you to do anything: message, open, answer, rename, create, move, or",
-  "  comment.",
-  "- A correction changes work already requested.",
+  "- The developer asks about an agent, what needs them, an issue, a setting, or something they asked you to remember.",
+  "- The developer asks you to message, open, answer, rename, create, move, or comment.",
+  "- A correction changes a request already in progress.",
   "- The answer needs careful reasoning beyond a simple reply.",
   "",
   "Do not delegate to the backend when:",
-  "- The developer is making small talk, or asks you to repeat a result already given.",
-  "- You can answer from the conversation or a still-current result.",
-  "- You need a brief clarification to understand the request.",
+  "- The developer greets you, makes small talk, or asks you to repeat a result already given.",
+  "- You cannot tell what they are asking for without a brief clarification.",
   "",
   "Delegate before giving an answer that depends on backend work.",
   "Do not guess the result while waiting.",
 ];
 
 /**
- * The introduction runs with no backend listening, so its policy lists no
- * capability and asks for no delegation; the labels stay so the model reads
- * the same structure it reads on every other session.
+ * The introduction runs with no backend listening, so its capabilities and
+ * conditions fill as nothing; the labels stay so the model reads the same
+ * structure it reads on every other session, and the closing two lines, which
+ * govern waiting on a backend, have nothing to govern.
  */
 const INTRODUCTION_DELEGATION_POLICY: readonly string[] = [
   "Delegation policy:",

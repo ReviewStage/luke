@@ -14,6 +14,9 @@ import { estimatedTokens } from "./tokens.js";
 /** The API's bound on `instructions`, in tokens. */
 const INSTRUCTIONS_TOKEN_BOUND = 16_384;
 
+/** The guide's template carries three identity sentences, one per line, and a scene fills the bracket in the first. */
+const IDENTITY_LINES = 3;
+
 const SECTION_ORDER = [
   INSTRUCTION_SECTION.IDENTITY,
   INSTRUCTION_SECTION.BACKCHANNEL_POLICY,
@@ -30,6 +33,14 @@ for (const scene of Object.values(LIVE_SCENE)) {
       SECTION_ORDER,
     );
     for (const block of blocks) assert.ok(block.lines.length > 0);
+  });
+
+  test(`the ${scene} scene's identity block is the template's three sentences and no more`, () => {
+    const identity = sessionInstructionBlocks(scene).find(
+      (block) => block.section === INSTRUCTION_SECTION.IDENTITY,
+    );
+
+    assert.equal(identity?.lines.length, IDENTITY_LINES);
   });
 
   test(`the ${scene} scene's instructions are the blocks joined, well under the API's bound`, () => {
