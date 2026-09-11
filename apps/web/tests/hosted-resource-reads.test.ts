@@ -950,7 +950,10 @@ test("a row the catalog cannot read refuses the page whole, naming the row, whet
     unreadableRow: { conversationId: main, seq: 5 },
   });
 
-  await database.db.delete(messages).where(eq(messages.seq, 5));
+  // Scoped to this test's conversation: on CI every store suite shares one database, and an unscoped delete of seq 5 took a neighbour's row twice today.
+  await database.db
+    .delete(messages)
+    .where(and(eq(messages.conversationId, main), eq(messages.seq, 5)));
   await insertMessage(userId, main, 5, {
     role: MESSAGE_ROLE.ASSISTANT,
     metadata: BRAIN_REPLY,
