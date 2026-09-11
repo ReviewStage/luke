@@ -312,6 +312,7 @@ design decision stated as such:
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
+| `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P5-14 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
 The two permanent entries are not unfinished work. A `GATEWAY_ERROR` code and
