@@ -6,16 +6,16 @@ import {
   observationPass,
   personalFact,
   providerKey,
-  rosterDiff,
+  rosterConsumed,
   rosterSnapshot,
   user,
   workspaceFile,
 } from "../server/db/schema";
 import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
 import { payloadKeyRing } from "../server/hosted/encryption";
-import { MAXIMUM_PENDING_ROSTER_DIFFS } from "../server/hosted/store";
+import { CONSUMED_ROSTER } from "../server/hosted/store";
 import { userSeal } from "../server/hosted/store/database";
-import { readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
+import { keepConsumedRoster, readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 
 /** Synthetic fixtures: no real title, branch, or transcript anywhere. */
@@ -117,7 +117,7 @@ test("the roster snapshot is one sealed row per user, replaced whole, and its in
   assert.equal(await database.store.roster.observedAt(userId), NOW + 1);
 });
 
-test("a pass advances the snapshot and its diff together, diffs wait sealed until consumed once, and the pending bound drops the oldest", async () => {
+test("a pass advances the snapshot only over the one it read against, and the opener's bookmark over the roster is sealed, absent until kept, and kept only over the instant the read began from", async () => {
   const userId = await database.createUser();
   const { roster } = database.store;
   assert.equal(
@@ -125,17 +125,13 @@ test("a pass advances the snapshot and its diff together, diffs wait sealed unti
       userId,
       { body: JSON.stringify({ first: true }), observedAt: NOW },
       undefined,
-      undefined,
     ),
     true,
   );
-  assert.deepEqual(await roster.pendingDiffs(userId), []);
-
   assert.equal(
     await roster.advance(
       userId,
       { body: JSON.stringify({ second: true }), observedAt: NOW + 1 },
-      { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
       NOW,
     ),
     true,
@@ -145,56 +141,59 @@ test("a pass advances the snapshot and its diff together, diffs wait sealed unti
     await roster.advance(
       userId,
       { body: JSON.stringify({ stale: true }), observedAt: NOW + 2 },
-      {
-        id: "diff-stale",
-        observedAt: NOW + 2,
-        previousObservedAt: NOW,
-        payload: "the same change",
-      },
       NOW,
     ),
     false,
   );
-  assert.equal(
-    await roster.advance(userId, { body: "{}", observedAt: NOW + 2 }, undefined, undefined),
-    false,
-  );
+  assert.equal(await roster.advance(userId, { body: "{}", observedAt: NOW + 2 }, undefined), false);
   assert.equal((await roster.read(userId))?.observedAt, NOW + 1);
-  assert.deepEqual(await roster.pendingDiffs(userId), [
-    { id: "diff-1", observedAt: NOW + 1, previousObservedAt: NOW, payload: "a session appeared" },
-  ]);
 
-  assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 2), true);
-  assert.equal(await roster.consumeDiff(userId, "diff-1", NOW + 3), false);
-  assert.equal(await roster.consumeDiff(userId, "diff-missing", NOW + 3), false);
-  assert.deepEqual(await roster.pendingDiffs(userId), []);
+  assert.deepEqual(await roster.consumed(userId), { state: CONSUMED_ROSTER.ABSENT });
+  const heard = { body: JSON.stringify({ heard: 1 }), observedAt: NOW + 1 };
+  // A first bookmark lands only where none stands; one over a wrong instant does not.
+  assert.equal(await database.run(roster.keepConsumed(userId, heard, NOW)), false);
+  assert.deepEqual(await roster.consumed(userId), { state: CONSUMED_ROSTER.ABSENT });
+  assert.equal(await database.run(roster.keepConsumed(userId, heard, undefined)), true);
+  assert.deepEqual(await roster.consumed(userId), {
+    state: CONSUMED_ROSTER.STANDING,
+    roster: heard,
+  });
+  const later = { body: JSON.stringify({ heard: 2 }), observedAt: NOW + 5 };
+  assert.equal(await database.run(roster.keepConsumed(userId, later, NOW)), false);
+  assert.equal(await database.run(roster.keepConsumed(userId, later, undefined)), false);
+  assert.deepEqual(await roster.consumed(userId), {
+    state: CONSUMED_ROSTER.STANDING,
+    roster: heard,
+  });
+  assert.equal(await database.run(roster.keepConsumed(userId, later, NOW + 1)), true);
+  assert.deepEqual(await roster.consumed(userId), {
+    state: CONSUMED_ROSTER.STANDING,
+    roster: later,
+  });
 
-  for (let index = 0; index < MAXIMUM_PENDING_ROSTER_DIFFS + 3; index += 1) {
-    await roster.advance(
-      userId,
-      { body: "{}", observedAt: NOW + 10 + index },
-      {
-        id: `diff-${index + 10}`,
-        observedAt: NOW + 10 + index,
-        previousObservedAt: NOW + 9 + index,
-        payload: `change ${index}`,
-      },
-      index === 0 ? NOW + 1 : NOW + 9 + index,
-    );
-  }
-  const pending = await roster.pendingDiffs(userId);
-  assert.equal(pending.length, MAXIMUM_PENDING_ROSTER_DIFFS);
-  assert.equal(pending[0]?.id, "diff-13");
-  assert.equal(pending.at(-1)?.id, `diff-${MAXIMUM_PENDING_ROSTER_DIFFS + 12}`);
-  const rows = await database.db.select().from(rosterDiff).where(eq(rosterDiff.userId, userId));
-  assert.equal(
-    rows.length,
-    MAXIMUM_PENDING_ROSTER_DIFFS,
-    "the consumed diff was dropped with the oldest",
-  );
+  const [row] = await database.db
+    .select()
+    .from(rosterConsumed)
+    .where(eq(rosterConsumed.userId, userId));
+  assert.ok(row);
+  assert.notEqual(row.sealedBody, later.body);
+  assert.equal(row.observedAt, NOW + 5);
 
+  // A bookmark sealed under another account stands but cannot be opened here: answered as such, with the instant a replacement must be kept over.
   const other = await database.createUser();
-  assert.deepEqual(await roster.pendingDiffs(other), []);
+  assert.deepEqual(await roster.consumed(other), { state: CONSUMED_ROSTER.ABSENT });
+  await database.run(
+    keepConsumedRoster(
+      userSeal(payloadKeyRing(TEST_PAYLOAD_SECRET), userId),
+      other,
+      { body: JSON.stringify({ heard: 3 }), observedAt: NOW + 7 },
+      undefined,
+    ),
+  );
+  assert.deepEqual(await roster.consumed(other), {
+    state: CONSUMED_ROSTER.UNREADABLE,
+    observedAt: NOW + 7,
+  });
 });
 
 test("a pass record moves the attempt every time, the whole read only on success, and forgetting reaches the keyless and the unseen it is told of and no account beside them", async () => {
@@ -243,13 +242,11 @@ test("a pass record moves the attempt every time, the whole read only on success
   // told of: what another test file's account looks like on a shared Postgres.
   const bystander = await database.createUser();
   for (const id of [userId, keyed, unseen, bystander]) {
-    await roster.advance(
-      id,
-      { body: "{}", observedAt: NOW },
-      { id: "diff-1", observedAt: NOW, previousObservedAt: NOW - 1, payload: "x" },
-      undefined,
-    );
+    await roster.advance(id, { body: "{}", observedAt: NOW }, undefined);
     await roster.recordPass(id, { attemptedAt: NOW });
+    await database.run(
+      roster.keepConsumed(id, { body: JSON.stringify({ heard: id }), observedAt: NOW }, undefined),
+    );
   }
   await roster.forgetIneligible({
     providerIds: ["conductor"],
@@ -258,12 +255,12 @@ test("a pass record moves the attempt every time, the whole read only on success
   });
   for (const gone of [userId, unseen]) {
     assert.equal(await roster.read(gone), undefined);
-    assert.deepEqual(await roster.pendingDiffs(gone), []);
+    assert.deepEqual(await roster.consumed(gone), { state: CONSUMED_ROSTER.ABSENT });
     assert.equal(await roster.pass(gone), undefined);
   }
   for (const standing of [keyed, bystander]) {
     assert.equal((await roster.read(standing))?.observedAt, NOW);
-    assert.equal((await roster.pendingDiffs(standing)).length, 1);
+    assert.equal((await roster.consumed(standing)).state, CONSUMED_ROSTER.STANDING);
     assert.equal((await roster.pass(standing))?.attemptedAt, NOW);
   }
 });
@@ -274,18 +271,27 @@ test("deleting the user row cascades through every notebook, fact, and roster ta
   for (const id of [userId, other]) {
     await database.store.facts.replace(id, [{ id: "f-1", words: "a fact" }], NOW);
     await database.store.workspace.write(id, "USER.md", "# user", NOW);
-    await database.store.roster.advance(
-      id,
-      { body: "{}", observedAt: NOW },
-      { id: "diff-1", observedAt: NOW, previousObservedAt: NOW - 1, payload: "x" },
-      undefined,
-    );
+    await database.store.roster.advance(id, { body: "{}", observedAt: NOW }, undefined);
     await database.store.roster.recordPass(id, { attemptedAt: NOW });
+    await database.run(
+      database.store.roster.keepConsumed(
+        id,
+        { body: JSON.stringify({ heard: id }), observedAt: NOW },
+        undefined,
+      ),
+    );
   }
 
   await database.db.delete(user).where(eq(user.id, userId));
 
-  for (const table of [personalFact, workspaceFile, rosterSnapshot, rosterDiff, observationPass]) {
+  // roster_diff stands unwritten and unread until its drop lands; nothing seeds it, so nothing here can prove it.
+  for (const table of [
+    personalFact,
+    workspaceFile,
+    rosterSnapshot,
+    rosterConsumed,
+    observationPass,
+  ]) {
     const gone = await database.db
       .select({ count: sql<number>`count(*)::int` })
       .from(table)

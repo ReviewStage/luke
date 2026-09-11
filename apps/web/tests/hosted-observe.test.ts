@@ -168,7 +168,7 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
   assert.ok(api.requests.length > 0);
   assert.equal(body.sessions[0].status, SESSION_STATUS.WAITING);
   assert.equal(body.observedAt, TEST_TIME + 1_000);
-  assert.deepEqual(store.diffs.get("user-1") ?? [], []);
+  assert.equal(store.advances.at(-1)?.observedAt, TEST_TIME + 1_000);
 });
 
 test("a fresh read runs the pass again, stores it, and answers the new roster", async () => {
@@ -199,7 +199,7 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
   assert.equal(body.sessions[0].status, SESSION_STATUS.WAITING);
   assert.equal(body.observedAt, TEST_TIME + 1_000);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 1_000);
-  assert.equal(store.diffs.get("user-1")?.length, 1);
+  assert.equal(store.advances.length, 2);
 });
 
 // --- Provider error leaves the previous snapshot standing ---

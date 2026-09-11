@@ -1,4 +1,4 @@
-import { pbkdf2Sync, randomUUID } from "node:crypto";
+import { pbkdf2Sync } from "node:crypto";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "../core.js";
 import { type ActionRoster, actionRosterFor } from "./action-execute.js";
 import {
@@ -14,7 +14,7 @@ import {
   OBSERVED_ROSTER_VERSION,
   type ObservedRoster,
 } from "./observed-roster.js";
-import { encodeRosterDiff, rosterDiff, rosterDiffIsEmpty } from "./roster-diff.js";
+import { rosterDiff, rosterDiffIsEmpty } from "./roster-diff.js";
 import type { HostedStore } from "./store/index.js";
 import { readApiKeyFor } from "./vault-keys.js";
 import type { VaultKeyRow } from "./vault-route.js";
@@ -207,14 +207,6 @@ export async function observeAndSnapshot(
     landed = await store.roster.advance(
       userId,
       { body: encodeObservedRoster(roster), observedAt: now },
-      changed && diff && previous
-        ? {
-            id: randomUUID(),
-            observedAt: now,
-            previousObservedAt: previous.observedAt,
-            payload: encodeRosterDiff(diff),
-          }
-        : undefined,
       previous?.observedAt,
     );
     if (landed) await store.roster.recordPass(userId, { attemptedAt: now });

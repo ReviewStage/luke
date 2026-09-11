@@ -10,6 +10,7 @@ import {
   cloudProviderIdSchema,
   type ObservedRoster,
   parseStoredJson,
+  rosterProvider,
   sessionStatusSchema,
 } from "./observed-roster.js";
 
@@ -242,4 +243,77 @@ const rosterDiffSchema: Schema<RosterDiff> = s.record({
 /** Reads a stored diff, or nothing for a payload that is not one this build wrote. */
 export function decodeRosterDiff(payload: string): RosterDiff | undefined {
   return rosterDiffSchema.parse(parseStoredJson(payload));
+}
+
+/**
+ * The roster the brain has now heard, after a visit carried some of the
+ * change from `previous` to `next` and not the rest: `next` for every
+ * session the visit carried, and `previous` for every session it did not,
+ * so an uncarried appearance is still absent, an uncarried vanishing still
+ * present, and an uncarried transition still at its earlier state, and the
+ * next visit derives each of them again. The caller names the uncarried
+ * sessions as exactly those whose wakes it held back, so a change no wake
+ * is derived from — a workspace coming or going, a field the wake ignores —
+ * counts as carried and settles rather than deriving again on every visit.
+ * Projects and the key fingerprint follow `next`.
+ */
+export function rosterCarrying(
+  previous: ObservedRoster,
+  next: ObservedRoster,
+  carried: (providerId: CloudAgentProviderId, providerSessionId: string) => boolean,
+): ObservedRoster {
+  const providerIds = [
+    ...next.providers.map((provider) => provider.providerId),
+    ...previous.providers
+      .map((provider) => provider.providerId)
+      .filter((id) => rosterProvider(next, id) === undefined),
+  ];
+  return {
+    version: next.version,
+    providers: providerIds.flatMap((providerId) => {
+      const before = rosterProvider(previous, providerId);
+      const after = rosterProvider(next, providerId);
+      const standing = after ?? before;
+      if (standing === undefined) return [];
+      const observations: ProviderSessionObservation[] = [];
+      for (const observation of after?.observations ?? []) {
+        if (carried(providerId, observation.providerSessionId)) {
+          observations.push(observation);
+          continue;
+        }
+        const was = before?.observations.find(
+          (earlier) => earlier.providerSessionId === observation.providerSessionId,
+        );
+        if (was) observations.push(was);
+      }
+      for (const was of before?.observations ?? []) {
+        const stillThere = after?.observations.some(
+          (observation) => observation.providerSessionId === was.providerSessionId,
+        );
+        if (!stillThere && !carried(providerId, was.providerSessionId)) observations.push(was);
+      }
+      return [{ ...standing, observations }];
+    }),
+  };
+}
+
+/**
+ * The earlier roster made comparable to the later one before a diff: a
+ * provider observed under the same key on both sides is kept as it was,
+ * and one whose key was replaced, added, or removed is taken from `next`
+ * as it stands, so the diff names no change for it. Two rosters under
+ * different keys are two accounts' rosters and their difference is not
+ * news; the pass refuses the same comparison and records no change, and
+ * the bookmark that derives from this settles on the new key at once.
+ */
+export function rosterComparable(previous: ObservedRoster, next: ObservedRoster): ObservedRoster {
+  const kept = previous.providers.flatMap((provider) => {
+    const later = rosterProvider(next, provider.providerId);
+    if (later === undefined) return [];
+    return [later.keyFingerprint === provider.keyFingerprint ? provider : later];
+  });
+  const added = next.providers.filter(
+    (provider) => rosterProvider(previous, provider.providerId) === undefined,
+  );
+  return { version: next.version, providers: [...kept, ...added] };
 }

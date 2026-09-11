@@ -22,26 +22,6 @@ export interface RosterSnapshotRecord {
  * serialized it, waiting for the brain host to consume. The payload is
  * sealed; the two instants stand clear so a consumer can order and date it.
  */
-export interface RosterDiffInsert {
-  readonly id: string;
-  readonly observedAt: number;
-  readonly previousObservedAt: number;
-  readonly payload: string;
-}
-
-export interface RosterDiffRecord extends RosterDiffInsert {
-  readonly consumedAt?: number;
-}
-
-/**
- * How many diffs may wait unconsumed per user. The snapshot is the truth
- * the diffs were read from, so the oldest waiting diff goes when the bound
- * is passed rather than the table growing a row a minute for a user whose
- * brain host is not yet reading them.
- */
-export const MAXIMUM_PENDING_ROSTER_DIFFS = 20;
-
-/** How the last pass over one user's providers went. */
 export interface ObservationPassRecord {
   readonly attemptedAt: number;
   /** When the whole roster was last read, or absent for a user never yet read whole. */
@@ -160,104 +140,130 @@ const lockObservationPass = (userId: string) =>
     (sql) => sql`select user_id from observation_pass where user_id = ${userId} for update`,
   );
 
-const RosterDiffWriteSchema = Schema.Struct({
-  userId: Schema.String,
-  id: Schema.String,
-  observedAt: Schema.Number,
-  previousObservedAt: Schema.Number,
-  sealedPayload: Schema.String,
+const ConsumedRosterRowSchema = Schema.Struct({
+  sealedBody: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_body")),
+  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
 });
 
-const RosterDiffIdRowSchema = Schema.Struct({ id: Schema.String });
-
-const insertDiffRow = SqlSchema.findAll({
-  Request: RosterDiffWriteSchema,
-  Result: RosterDiffIdRowSchema,
-  execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into roster_diff (user_id, id, observed_at, previous_observed_at, sealed_payload)
-        values (${write.userId}, ${write.id}, ${write.observedAt}, ${write.previousObservedAt}, ${write.sealedPayload})
-        on conflict (user_id, id) do nothing
-        returning id
-      `,
-    ),
-});
-
-const deleteConsumedDiffs = SqlSchema.void({
+const findConsumedRoster = SqlSchema.findOne({
   Request: Schema.String,
+  Result: ConsumedRosterRowSchema,
   execute: (userId) =>
     statement(
-      (sql) => sql`delete from roster_diff where user_id = ${userId} and consumed_at is not null`,
+      (sql) => sql`select sealed_body, observed_at from roster_consumed where user_id = ${userId}`,
     ),
 });
 
-const findKeptDiffIds = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: RosterDiffIdRowSchema,
-  execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select id from roster_diff
-        where user_id = ${userId} and consumed_at is null
-        order by observed_at desc, id desc
-        limit ${MAXIMUM_PENDING_ROSTER_DIFFS}
-      `,
-    ),
-});
+/** How the opener's bookmark stands: none yet, one this build cannot open, or one opened whole. */
+export const CONSUMED_ROSTER = {
+  ABSENT: "absent",
+  UNREADABLE: "unreadable",
+  STANDING: "standing",
+} as const;
 
-const pruneDiffsBeyondBound = (userId: string, keptIds: readonly string[]) =>
-  statement(
-    (sql) => sql`
-      delete from roster_diff
-      where user_id = ${userId} and consumed_at is null and not (${sql.in("id", keptIds)})
-    `,
-  );
+export type ConsumedRosterRead =
+  | { readonly state: typeof CONSUMED_ROSTER.ABSENT }
+  /** A row stands that this seal cannot open; its instant is what a replacement must be kept over. */
+  | { readonly state: typeof CONSUMED_ROSTER.UNREADABLE; readonly observedAt: number }
+  | { readonly state: typeof CONSUMED_ROSTER.STANDING; readonly roster: RosterSnapshotRecord };
 
 /**
- * Records one diff and holds the user's pending diffs to the bound, oldest
- * going first; a consumed diff has been read and is dropped on the next
- * insert rather than kept. An id already recorded is one diff.
+ * The roster as of the last change the opener handed the brain. A row that
+ * stands but cannot be opened is answered as such rather than as absent,
+ * because the two call for different writes: an absent bookmark is first
+ * kept where none stands, while an unreadable one must be replaced over its
+ * own instant, or the replacement loses to the row it meant to replace and
+ * every later visit adopts in silence.
  */
-function insertRosterDiff(
+export function readConsumedRoster(
   seal: UserSeal,
   userId: string,
-  diff: RosterDiffInsert,
-): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const inserted = yield* insertDiffRow({
-      userId,
-      id: diff.id,
-      observedAt: diff.observedAt,
-      previousObservedAt: diff.previousObservedAt,
-      sealedPayload: seal.seal(diff.payload),
-    });
-    yield* deleteConsumedDiffs(userId);
-    const kept = yield* findKeptDiffIds(userId);
-    yield* pruneDiffsBeyondBound(
-      userId,
-      kept.map((row) => row.id),
-    );
-    return inserted.length > 0;
+): Effect.Effect<ConsumedRosterRead, RosterFailure, SqlClient.SqlClient> {
+  return Effect.map(findConsumedRoster(userId), (row) => {
+    if (Option.isNone(row)) return { state: CONSUMED_ROSTER.ABSENT };
+    try {
+      return {
+        state: CONSUMED_ROSTER.STANDING,
+        roster: { body: seal.open(row.value.sealedBody), observedAt: row.value.observedAt },
+      };
+    } catch {
+      return { state: CONSUMED_ROSTER.UNREADABLE, observedAt: row.value.observedAt };
+    }
   });
 }
 
+const ConsumedRosterWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  sealedBody: Schema.String,
+  observedAt: Schema.Number,
+});
+
+const KeptRowSchema = Schema.Struct({
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+});
+
+/** A first bookmark: lands only where none stands. */
+const insertConsumedRoster = SqlSchema.findAll({
+  Request: ConsumedRosterWriteSchema,
+  Result: KeptRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into roster_consumed (user_id, sealed_body, observed_at)
+        values (${write.userId}, ${write.sealedBody}, ${write.observedAt})
+        on conflict (user_id) do nothing
+        returning user_id
+      `,
+    ),
+});
+
+/** A later bookmark: lands only over the one observed at `from`. */
+const updateConsumedRoster = SqlSchema.findAll({
+  Request: Schema.Struct({ ...ConsumedRosterWriteSchema.fields, from: Schema.Number }),
+  Result: KeptRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        update roster_consumed
+        set sealed_body = ${write.sealedBody}, observed_at = ${write.observedAt}
+        where user_id = ${write.userId} and observed_at = ${write.from}
+        returning user_id
+      `,
+    ),
+});
+
 /**
- * Replaces the snapshot and records the diff the pass read against the one
- * it replaced, in one transaction, so no reader finds a new snapshot with
- * no diff behind it or a diff ahead of the snapshot it describes. The write
- * is a compare-and-set on the instant of the snapshot the pass read: under
- * the user's pass row lock it checks that the snapshot standing is still
- * the one the diff was taken against, and answers false without writing
- * when another pass — the schedule, a fresh read, a seeding action — landed
- * first, so one transition is recorded once however many passes saw it. A
- * pass that found nothing changed hands no diff and only the snapshot moves.
+ * Moves the brain's bookmark over the roster, and only over the one the
+ * read began from: a compare-and-set on the consumed roster's instant, so a
+ * tick that ran long cannot put a later tick's bookmark back, and a first
+ * bookmark lands only where none stands. Answers whether it landed; a keep
+ * that did not leaves the change to re-derive on the next visit, which is
+ * the direction this bookmark fails in.
+ */
+export function keepConsumedRoster(
+  seal: UserSeal,
+  userId: string,
+  roster: RosterSnapshotRecord,
+  from: number | undefined,
+): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
+  const write = { userId, sealedBody: seal.seal(roster.body), observedAt: roster.observedAt };
+  return Effect.map(
+    from === undefined ? insertConsumedRoster(write) : updateConsumedRoster({ ...write, from }),
+    (rows) => rows.length > 0,
+  );
+}
+
+/**
+ * Replaces the snapshot, in one transaction under the user's pass row lock,
+ * only while the snapshot standing is still the one the pass read against:
+ * a compare-and-set on the observed-at instant, so one transition is
+ * recorded once however many passes saw it. The change itself is not
+ * recorded here; the opener derives it against the consumed roster.
  */
 export function advanceRosterSnapshot(
   seal: UserSeal,
   userId: string,
   snapshot: RosterSnapshotRecord,
-  diff: RosterDiffInsert | undefined,
   previousObservedAt: number | undefined,
 ): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -267,87 +273,10 @@ export function advanceRosterSnapshot(
         const standing = yield* rosterSnapshotObservedAt(userId);
         if (standing !== previousObservedAt) return false;
         yield* writeRosterSnapshot(seal, userId, snapshot);
-        if (diff !== undefined) yield* insertRosterDiff(seal, userId, diff);
         return true;
       }),
     ),
   );
-}
-
-const RosterDiffRowSchema = Schema.Struct({
-  id: Schema.String,
-  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
-  previousObservedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(
-    Schema.fromKey("previous_observed_at"),
-  ),
-  sealedPayload: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_payload")),
-});
-
-const findPendingDiffs = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: RosterDiffRowSchema,
-  execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select id, observed_at, previous_observed_at, sealed_payload
-        from roster_diff
-        where user_id = ${userId} and consumed_at is null
-        order by observed_at asc, id asc
-      `,
-    ),
-});
-
-/** The diffs still waiting to be consumed, oldest first; a row the ring cannot open is dropped, not the list. */
-export function listPendingRosterDiffs(
-  seal: UserSeal,
-  userId: string,
-): Effect.Effect<readonly RosterDiffRecord[], RosterFailure, SqlClient.SqlClient> {
-  return Effect.map(findPendingDiffs(userId), (rows) =>
-    rows.flatMap((row) => {
-      let payload: string;
-      try {
-        payload = seal.open(row.sealedPayload);
-      } catch {
-        return [];
-      }
-      return [
-        {
-          id: row.id,
-          observedAt: row.observedAt,
-          previousObservedAt: row.previousObservedAt,
-          payload,
-        },
-      ];
-    }),
-  );
-}
-
-const ConsumeDiffSchema = Schema.Struct({
-  userId: Schema.String,
-  id: Schema.String,
-  now: Schema.Number,
-});
-
-const consumeDiffRow = SqlSchema.findAll({
-  Request: ConsumeDiffSchema,
-  Result: RosterDiffIdRowSchema,
-  execute: (write) =>
-    statement(
-      (sql) => sql`
-        update roster_diff set consumed_at = ${write.now}
-        where user_id = ${write.userId} and id = ${write.id} and consumed_at is null
-        returning id
-      `,
-    ),
-});
-
-/** Marks one diff read; only a diff still pending can be, and only once. */
-export function consumeRosterDiff(
-  userId: string,
-  id: string,
-  now: number,
-): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
-  return Effect.map(consumeDiffRow({ userId, id, now }), (rows) => rows.length > 0);
 }
 
 const ObservationPassRowSchema = Schema.Struct({
@@ -452,6 +381,7 @@ export function forgetObservationIneligible(
       Effect.gen(function* () {
         yield* sql`delete from roster_snapshot where ${ineligibleWhere(sql, eligibility)}`;
         yield* sql`delete from roster_diff where ${ineligibleWhere(sql, eligibility)}`;
+        yield* sql`delete from roster_consumed where ${ineligibleWhere(sql, eligibility)}`;
         yield* sql`delete from observation_pass where ${ineligibleWhere(sql, eligibility)}`;
       }),
     ),

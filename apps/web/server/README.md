@@ -1090,47 +1090,62 @@ key. The adapter retries a 429 on a doubling wait (500 ms, then 1, 2, 4
 seconds, or the provider's own `Retry-After` up to 8 seconds) out of one
 20-second budget per pass; past it the pass is rate limited and ends. A pass
 every provider answered whole replaces the account's `roster_snapshot` — the
-observations as reported, advertisements and projects included, sealed — and
-records the diff against the snapshot it replaced in `roster_diff`, sealed,
-where up to 20 wait for the brain host to consume; a pass any provider
-refused, rate limited, or failed leaves the previous snapshot standing and is
-recorded as failed in `observation_pass`. Nothing in the pass decides
-anything: no model runs in it, no notification leaves, and the diff is
-written and left. Message cursors are not recorded by the pass, because
+observations as reported, advertisements and projects included, sealed —
+only while the snapshot standing is still the one it read against; a pass any
+provider refused, rate limited, or failed leaves the previous snapshot
+standing and is recorded as failed in `observation_pass`. Nothing in the
+pass decides anything: no model runs in it, no notification leaves, and the
+change it found is not written down at all; the opener derives it. Message cursors are not recorded by the pass, because
 observation never reads a chat's messages; the opener's reads, next, write
 them.
 
-The opener (`server/hosted/brain-host/opener.ts`) is what the diffs are
-written for. It runs for each account right after that account's pass,
-inside the same 25-second share of the tick, so the tick's order is: forget
-the ineligible, purge, sweep the briefings on offer, then per batch of four
+The opener (`server/hosted/brain-host/opener.ts`) is what the snapshot is
+kept for. It runs for each account right after that account's pass, inside
+the same 25-second share of the tick, so the tick's order is: forget the
+ineligible, purge, sweep the briefings on offer, then per batch of four
 accounts the pass and then the opening, each account under one deadline, and
 a batch started only while a whole deadline still fits the budget; an
-opening that outruns it is counted failed and what it did not consume waits
-for the next minute. It reads the account's pending diffs oldest first,
-groups every change they name by the session it happened to, and hands eve
-one message per observed conversation — a row of kind `observed`, keyed by
-the provider and the session's id and opened on the first diff that names
-it — carrying all of that session's news as the same `[observed events]`
-item the desktop's brain opens its observation turns with, each live chat's
-transcript since the cursor kept for it read through the provider's own
-`transcriptSince` and riding on the session's first wake. The message goes
-to the eve session the conversation's row records, or opens one where none
-runs or eve has retired it, under `x-luke-turn: observation`, and the turn
-itself is eve's: the relay records it under eve's own identity as eve starts
-it, the received message is the observation message, and `roster_diff` is
-its origin. No queued `turns` row is written for it — under eve the queued
-delivery is the queue, and a row minted ahead of eve's turn could never be
-the turn eve folds it into. Once eve has taken every message of the pass,
-one transaction keeps each cursor the pass read past and marks each diff it
-carried consumed; a message eve refuses ends the pass before that
-transaction, so the cursors and the diffs stand and the next tick opens the
-same news again. Nothing is recorded that eve has not accepted. The pass is
-per account by construction and opens at most eight conversations of an
-account a tick, taking whole diffs while their sessions fit and leaving the
-rest pending; the one diff wider than the bound is cut to it, the sessions
-past it not woken for that diff, since the snapshot is the truth the diff was
-read from.
+opening that outruns it is counted failed and what it did not carry waits
+for the next minute. It keeps a bookmark of its own beside the snapshot,
+`roster_consumed`: the roster as of the last change it handed the brain, one
+sealed row per account of the same shape as the snapshot. Each visit it
+diffs the snapshot the pass just wrote against that bookmark, groups every
+change by the session it happened to, and hands eve one message per observed
+conversation — a row of kind `observed`, keyed by the provider and the
+session's id and opened on the first change that names it — carrying all of
+that session's news as the same `[observed events]` item the desktop's brain
+opens its observation turns with, each live chat's transcript since the
+cursor kept for it read through the provider's own `transcriptSince` and
+riding on the session's first wake. The message goes to the eve session the
+conversation's row records, or opens one where none runs or eve has retired
+it, under `x-luke-turn: observation`, and the turn itself is eve's: the relay
+records it under eve's own identity as eve starts it, the received message
+is the observation message, and `roster_diff` is its origin. No queued
+`turns` row is written for it — under eve the queued delivery is the queue,
+and a row minted ahead of eve's turn could never be the turn eve folds it
+into. Once eve has taken every message of the visit, one transaction keeps
+each cursor the visit read past and moves the bookmark, each a
+compare-and-set over the instant the read began from, so a visit that ran
+long into the next tick cannot put a later one's bookmark back; a message
+eve refuses ends the visit before that transaction, so the cursors and the
+bookmark stand and the next visit derives the same change again, wider by
+whatever moved since. Nothing is recorded that eve has not accepted, and
+nothing is dropped for having waited: there is no queue of changes to
+bound, since the change is re-derived from two rosters on every visit. The
+visit is per account by construction and opens at most eight conversations
+of an account a tick, oldest changes first; past the bound the bookmark
+carries the sessions it woke and keeps the earlier roster for the rest, so
+each of them derives again next tick. A first visit finds no bookmark and
+adopts the snapshot whole, waking nothing, as the first pass records no
+change against nothing. The snapshot itself moves when the pass writes it,
+never when eve accepts: it is the roster every reader draws — the brain's
+standing context, the voice session's seed, the pass's own previous — and a
+snapshot that waited on eve would seed the voice with a roster as old as
+eve's outage; that is why the bookmark is a second roster rather than a
+later time to move the first. The one thing re-deriving nets away is a
+session that appeared, did something, and vanished between two visits,
+which is mentioned to nobody; that happens only where a visit could not
+hand its change over, where the earlier design dropped the change entirely.
 
 The opener's other inbox is the queued `turns` rows the speech sweep writes
 when a hold lifts, one per conversation per release, each saying the
