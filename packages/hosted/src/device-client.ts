@@ -1,9 +1,12 @@
-import type { CloudFetch, UnparsedWireValue, WireRecord } from "@sidecar/wire";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { type CloudFetch, effectSchema, type WireRecord } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Effect, type Schema as EffectSchema, type Layer } from "effect";
 import {
-  type AccountCall,
+  type AccountCallEffects,
   accountBearer,
+  accountCall,
   type CallCredential,
-  createAccountCall,
   fixedBearer,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
@@ -45,6 +48,9 @@ export interface DepartingCredential {
   accessToken: string;
 }
 
+const deviceRegisterAnswerEffect = effectSchema(deviceRegisterAnswerSchema);
+const deviceForgetAnswerEffect = effectSchema(deviceForgetAnswerSchema);
+
 /**
  * Each request as the record that travels, field by field. Built twice per
  * call — once from the caller's request for the schema to read, and again
@@ -79,11 +85,13 @@ function forgetRecord(request: DeviceForgetRequest): WireRecord {
  */
 export class HostedDeviceClient {
   readonly #options: HostedDeviceClientOptions;
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedDeviceClientOptions) {
     this.#options = options;
     this.#call = this.#callOn(accountBearer(options));
+    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
   }
 
   register(request: DeviceRegisterRequest): Promise<DeviceRegisterAnswer | undefined> {
@@ -91,7 +99,7 @@ export class HostedDeviceClient {
     if (admitted === undefined) return Promise.resolve(undefined);
     return this.#ask(
       { method: DEVICE_METHOD.REGISTER, body: registerRecord(admitted) },
-      (payload) => deviceRegisterAnswerSchema.parse(payload),
+      deviceRegisterAnswerEffect,
     );
   }
 
@@ -108,32 +116,36 @@ export class HostedDeviceClient {
     if (admitted === undefined) return Promise.resolve(undefined);
     return this.#ask(
       { method: DEVICE_METHOD.FORGET, body: forgetRecord(admitted) },
-      (payload) => deviceForgetAnswerSchema.parse(payload),
+      deviceForgetAnswerEffect,
       departing,
     );
   }
 
-  #ask<Answer>(
+  #ask<Answer, Encoded>(
     request: DeviceRequest,
-    read: (payload: UnparsedWireValue) => Answer | undefined,
+    answer: EffectSchema.Schema<Answer, Encoded>,
     departing?: DepartingCredential,
   ): Promise<Answer | undefined> {
     const call = departing ? this.#callOn(fixedBearer(departing.accessToken)) : this.#call;
-    return call.ask(
-      {
-        method: request.method,
-        path: HOSTED_SERVICE_PATH.DEVICES,
-        body: JSON.stringify(request.body),
-      },
-      read,
+    return Effect.runPromise(
+      Effect.provide(
+        call.ask(
+          {
+            method: request.method,
+            path: HOSTED_SERVICE_PATH.DEVICES,
+            body: JSON.stringify(request.body),
+          },
+          answer,
+        ),
+        this.#client,
+      ),
     );
   }
 
-  #callOn(credential: CallCredential): AccountCall {
-    return createAccountCall({
+  #callOn(credential: CallCredential): AccountCallEffects {
+    return accountCall({
       baseUrl: this.#options.serviceBaseUrl,
       credential,
-      fetch: this.#options.fetch,
       requestTimeoutMs: this.#options.requestTimeoutMs,
     });
   }

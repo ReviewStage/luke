@@ -121,6 +121,20 @@ the run, and the interruption it raises is the network fault that signal's
 reason names. It is deleted with `CloudFetch` in P12-04, at which point
 `accountCall` is what every client here holds.
 
+`vault-client.ts`, `device-client.ts`, and `action-client.ts` hold `accountCall`
+directly rather than `createAccountCall`: each builds the `HttpClient` layer
+once, from its own `fetch` option or the global one, and each Promise-returning
+method provides that layer to the effect it built and runs it with
+`Effect.runPromise`, so a caller of these three classes still awaits a promise
+and the Effect face never crosses their boundary. `device-client.ts` and
+`vault-client.ts` read their answers with `ask` against `effectSchema` of the
+facade schema each still declares its shape in; `action-client.ts` keeps
+reading its answer by hand off the `send`ed response, unchanged, because what
+it distinguishes is the status a fault or a refusal left the call in rather
+than a validated body. `changes-client.ts`, `roster-client.ts`, and
+`conversation-client.ts` still hold `createAccountCall` and its reader-taking
+`ask`, until they convert too.
+
 ## The live contract is a socket's opening frames
 
 `live-contract.ts` is the desktop's contract with the hosted voice service:
