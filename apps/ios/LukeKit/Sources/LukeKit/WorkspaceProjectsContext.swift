@@ -1,7 +1,7 @@
 import Foundation
 
 /// Renders where a spoken creation ask may land, the way the desktop's
-/// `workspaceProjectContextText` in `@sidecar/realtime` does: each project
+/// `workspaceProjectContextText` in `@sidecar/brain` does: each project
 /// with the identity a tool call names it by, what it takes, and the agent
 /// choices its provider's creation endpoint documents. The list is what a
 /// creation ask is validated against on the phone, so an empty one is said in

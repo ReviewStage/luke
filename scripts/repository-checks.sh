@@ -48,8 +48,6 @@ required_files=(
     packages/live/CLAUDE.md
     packages/providers/AGENTS.md
     packages/providers/CLAUDE.md
-    packages/realtime/AGENTS.md
-    packages/realtime/CLAUDE.md
     packages/surface/AGENTS.md
     packages/surface/CLAUDE.md
     .conductor/settings.toml

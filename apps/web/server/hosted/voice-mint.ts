@@ -6,6 +6,7 @@ import {
   isRecord,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
+  REALTIME_DEFAULTS,
   type RealtimeConnection,
   type RealtimeSessionOptions,
   type RealtimeVoice,
@@ -120,16 +121,15 @@ export async function mintRealtimeConnection(
   }
 
   const payload: unknown = await response.json().catch(() => undefined);
-  // The resolved model rides along as the fallback, like the desktop's own
-  // minter: a payload that omits its model still labels the credential with
-  // the model it was actually minted for.
+  // A payload that omits its model still labels the credential with the model
+  // it was actually minted for.
   const credential =
     payload === undefined
       ? undefined
       : realtimeCredentialFromResponse(
           // SAFETY: response.json returns a runtime value; realtimeCredentialFromResponse validates the wire contract.
           payload as UnparsedWireValue,
-          options.model,
+          options.model ?? REALTIME_DEFAULTS.MODEL,
         );
   const now = options.now ?? Date.now;
   if (!credential || !realtimeCredentialIsUsable(credential, now())) {

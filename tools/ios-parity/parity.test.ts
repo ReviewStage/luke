@@ -18,7 +18,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REALTIME_TOOL, remoteRealtimeToolDefinitions } from "@sidecar/actions";
+import {
+  REALTIME_TOOL,
+  REALTIME_VOICE,
+  REALTIME_VOICE_SPEED,
+  remoteRealtimeToolDefinitions,
+} from "@sidecar/actions";
 import {
   PRODUCT_ACCOUNT_ACTION,
   PRODUCT_EVENT,
@@ -37,7 +42,6 @@ import {
   PUSH_ENVIRONMENT,
   VAULT_KEY_MAX_LENGTH,
 } from "@sidecar/hosted";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   CONVERSATION_MESSAGE_AUTHOR,

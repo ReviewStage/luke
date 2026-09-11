@@ -2,8 +2,8 @@ import Foundation
 
 /// Pre-connect audio buffer for push-to-talk. Holds PCM16 mono samples captured
 /// while the WebSocket is still opening so words said before the channel is ready
-/// are not lost. Matches the shape of `PressAudioBuffer` in `@sidecar/realtime`:
-/// same 24 kHz sample rate, same 30-second ceiling, same oldest-trimmed overflow rule.
+/// are not lost: a 24 kHz sample rate, a 30-second ceiling, and an oldest-trimmed
+/// overflow rule, matching the audio input format the phone's mint document names.
 public struct PressAudioBuffer: Sendable {
     /// Sample rate that pairs with the realtime session config's audio input format.
     public static let sampleRate: Int = 24_000

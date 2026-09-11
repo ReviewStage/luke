@@ -134,6 +134,7 @@ export {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
   type RealtimeCredential,
+  realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
 } from "./realtime-contract.js";
 export {

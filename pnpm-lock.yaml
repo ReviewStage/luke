@@ -214,9 +214,6 @@ importers:
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../../packages/realtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -445,9 +442,6 @@ importers:
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../brain
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -729,34 +723,6 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  packages/realtime:
-    dependencies:
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../actions
-      '@sidecar/guide':
-        specifier: workspace:*
-        version: link:../guide
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../hosted
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.12
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
   packages/runtime:
     dependencies:
       '@sidecar/wire':
@@ -797,6 +763,9 @@ importers:
 
   packages/settings:
     dependencies:
+      '@sidecar/actions':
+        specifier: workspace:*
+        version: link:../actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
@@ -812,9 +781,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -923,9 +889,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../../packages/realtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -951,9 +914,6 @@ importers:
       '@sidecar/devtrace':
         specifier: workspace:*
         version: link:../../packages/devtrace
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../../packages/realtime
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../../packages/wire

@@ -12,7 +12,6 @@
   "dependencies": {
     "@sidecar/brain": "workspace:*",
     "@sidecar/devtrace": "workspace:*",
-    "@sidecar/realtime": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {

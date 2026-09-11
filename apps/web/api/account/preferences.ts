@@ -1,6 +1,6 @@
-import { isRealtimeVoiceSpeed } from "@sidecar/realtime";
 import { accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
+import { isRealtimeVoiceSpeed } from "../../server/core.js";
 import { getDatabase } from "../../server/db/index.js";
 import { accountPreference, accountWorkspacePreference } from "../../server/db/schema.js";
 import {
