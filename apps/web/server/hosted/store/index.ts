@@ -13,17 +13,6 @@ import {
 } from "../../core.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import {
-  type BriefingInsert,
-  type BriefingRecord,
-  type BriefingState,
-  claimBriefing,
-  expireBriefings,
-  insertBriefing,
-  listBriefings,
-  markBriefingPushed,
-  markBriefingSpoken,
-} from "./briefings.js";
-import {
   appendConversationLines,
   conversationClearedAt,
   listConversationLines,
@@ -76,6 +65,7 @@ import {
   clearMainConversation,
   purgeClearedConversations,
 } from "./soft-delete.js";
+import { openSpeechOffers, type SpeechOffer } from "./speech.js";
 import { type StandingConversation, standingConversations } from "./standing-conversations.js";
 import {
   listCompactionBoundaries,
@@ -244,13 +234,9 @@ export interface HostedStore {
     /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for. */
     forgetIneligible(eligibility: ObservationEligibility): Promise<void>;
   };
-  briefings: {
-    insert(userId: string, insert: BriefingInsert): Promise<boolean>;
-    claim(userId: string, id: string, deviceId: string, now: number): Promise<boolean>;
-    markSpoken(userId: string, id: string, deviceId: string, now: number): Promise<boolean>;
-    markPushed(userId: string, id: string, now: number): Promise<boolean>;
-    expire(userId: string, now: number): Promise<readonly string[]>;
-    list(userId: string, state?: BriefingState): Promise<readonly BriefingRecord[]>;
+  speech: {
+    /** The account's briefings not yet spoken, pushed, or expired, oldest offer first, each as it stands now; transitions are written through the `speech` module over the store writer. */
+    open(userId: string, limit?: number): Promise<readonly SpeechOffer[]>;
   };
 }
 
@@ -352,18 +338,12 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
       recordPass: (userId, attempt) => recordObservationPass(db, userId, attempt),
       forgetIneligible: (eligibility) => forgetObservationIneligible(db, eligibility),
     },
-    briefings: {
-      insert: (userId, insert) => insertBriefing(db, sealFor(userId), userId, insert),
-      claim: (userId, id, deviceId, now) => claimBriefing(db, userId, id, deviceId, now),
-      markSpoken: (userId, id, deviceId, now) => markBriefingSpoken(db, userId, id, deviceId, now),
-      markPushed: (userId, id, now) => markBriefingPushed(db, userId, id, now),
-      expire: (userId, now) => expireBriefings(db, userId, now),
-      list: (userId, state) => listBriefings(db, sealFor(userId), userId, state),
+    speech: {
+      open: (userId, limit) => openSpeechOffers(db, { userId, limit }),
     },
   };
 }
 
-export { BRIEFING_STATE } from "./briefings.js";
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
 export {
   findMessageByClientId,
@@ -386,6 +366,17 @@ export {
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
 export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
+export {
+  claimSpeech,
+  markSpeechPushed,
+  markSpeechSpoken,
+  offerSpeech,
+  openSpeechOffers,
+  SPEECH_OFFER,
+  SPEECH_REFUSAL,
+  SPEECH_STATE,
+  type SpeechStore,
+} from "./speech.js";
 export type { StandingConversation } from "./standing-conversations.js";
 
 export {

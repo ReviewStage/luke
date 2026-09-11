@@ -19,6 +19,9 @@ import {
 import {
   type CommentaryAppend,
   type ConversationTarget,
+  claimSpeech,
+  offerSpeech,
+  SPEECH_OFFER,
   STORE_WRITE_EFFECT,
   storeWriter,
   VOICE_WRITE_REFUSAL,
@@ -55,6 +58,9 @@ const TOOLS: ToolSet = {
 
 const store = await storeWriter({ db: database.db, tools: TOOLS, now: () => new Date(NOW) });
 const record = voiceSessionRecord(database.db, () => NOW);
+const speech = { db: database.db, writer: store };
+/** The installation the fixture sessions belong to, which is the device a briefing must be claimed by before its speech is marked. */
+const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 
 let liveSessions = 0;
 let eventIds = 0;
@@ -76,6 +82,10 @@ async function target(): Promise<VoiceTarget> {
   liveSessions += 1;
   const liveSessionId = `sess_fixture_${liveSessions}`;
   await record.register({ userId, sessionId: liveSessionId });
+  await database.db
+    .update(voiceSessions)
+    .set({ deviceId: DEVICE_ID })
+    .where(eq(voiceSessions.liveSessionId, liveSessionId));
   return { userId, liveSessionId, conversation: { userId, conversationId: row.id } };
 }
 
@@ -146,8 +156,23 @@ async function segments(liveSessionId: string) {
     .orderBy(asc(voiceTranscriptSegments.seq));
 }
 
-/** The briefing message a `speech.spoken` hangs on: an announce written by the store writer's own path. */
+/** The briefing message a `speech.spoken` hangs on: an announce written by the store writer's own path, on offer and claimed by the fixture device. */
 async function briefing(conversation: ConversationTarget): Promise<string> {
+  const messageId = await announced(conversation);
+  await claim(conversation, messageId);
+  return messageId;
+}
+
+async function claim(conversation: ConversationTarget, messageId: string): Promise<void> {
+  assert.equal((await offerSpeech(speech, conversation.userId, messageId, NOW)).ok, true);
+  assert.equal(
+    (await claimSpeech(speech, conversation.userId, messageId, DEVICE_ID, NOW)).ok,
+    true,
+  );
+}
+
+/** An assistant message of the brain's, as the relay leaves one, offered to nobody yet. */
+async function announced(conversation: ConversationTarget): Promise<string> {
   const enqueued = await store.enqueueTurn(conversation, { origin: "roster_diff" });
   assert.ok(enqueued.ok);
   const written = await store.recordCompaction(conversation, {
@@ -291,7 +316,12 @@ test("speech.spoken is written once, on the first output delta at or after the a
   });
   // A delta that begins before the appended commentary ends is not its speech.
   await voice.consume(live, said("The fixture", 3800, 4100));
-  assert.deepEqual(await speechEvents(live.conversation), []);
+  assert.equal(
+    (await speechEvents(live.conversation)).some(
+      (event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+    ),
+    false,
+  );
   // The first delta beginning at or after the end is.
   await voice.consume(live, said(" session is waiting", 4000, 5200));
   await voice.consume(live, said(" on a permission prompt.", 5200, 6400));
@@ -300,9 +330,15 @@ test("speech.spoken is written once, on the first output delta at or after the a
   const voiceSessionId = await sessionRowId(live.liveSessionId);
   assert.deepEqual(spoken, [
     {
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      messageId,
+      payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
+    },
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, messageId, payload: null },
+    {
       kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
       messageId,
-      payload: { voice_session_id: voiceSessionId, at_ms: 4000 },
+      payload: { voiceSessionId, atMs: 4000 },
     },
   ]);
   // Every delta was still a segment, whatever it said about the append.
@@ -330,22 +366,73 @@ test("one delta past the ends of two acknowledged appends marks both briefings",
     })
     .returning({ id: messages.id });
   assert.ok(row);
+  await claim(live.conversation, row.id);
   const voice = writer();
   voice.noteAppend(live, { clientEventId: "append-a", messageId: first });
   voice.noteAppend(live, { clientEventId: "append-b", messageId: row.id });
   await voice.consume(live, appended("append-a", 0, 1000));
   await voice.consume(live, appended("append-b", 1000, 2000));
   assert.deepEqual(await voice.consume(live, said("Both said.", 2000, 3000)), WRITTEN);
-  assert.deepEqual(
-    (await speechEvents(live.conversation)).map((event) => [event.kind, event.messageId]),
-    [
-      [CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, first],
-      [CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, row.id],
-    ],
-  );
+  const spokenOf = async () =>
+    (await speechEvents(live.conversation))
+      .filter((event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN)
+      .map((event) => event.messageId);
+  assert.deepEqual(await spokenOf(), [first, row.id]);
   // Neither is marked a second time.
   await voice.consume(live, said("And more.", 3000, 4000));
-  assert.equal((await speechEvents(live.conversation)).length, 2);
+  assert.deepEqual(await spokenOf(), [first, row.id]);
+});
+
+test("a briefing this session's device did not claim is not marked spoken by its voice: unclaimed, another device's, or a session with no device", async () => {
+  const live = await target();
+  const unclaimed = await announced(live.conversation);
+  assert.equal((await offerSpeech(speech, live.userId, unclaimed, NOW)).ok, true);
+  const voice = writer();
+  voice.noteAppend(live, { clientEventId: "append-u", messageId: unclaimed });
+  await voice.consume(live, appended("append-u", 0, 1000));
+  assert.deepEqual(await voice.consume(live, said("Said anyway.", 1000, 2000)), {
+    ok: false,
+    refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
+  });
+
+  const other = await target();
+  const theirs = await briefing(other.conversation);
+  await database.db
+    .update(voiceSessions)
+    .set({ deviceId: "7d2f3f25-ab1c-4d3e-9f4a-1b2c3d4e5f61" })
+    .where(eq(voiceSessions.liveSessionId, other.liveSessionId));
+  const otherVoice = writer();
+  otherVoice.noteAppend(other, { clientEventId: "append-o", messageId: theirs });
+  await otherVoice.consume(other, appended("append-o", 0, 1000));
+  assert.deepEqual(await otherVoice.consume(other, said("Not mine.", 1000, 2000)), {
+    ok: false,
+    refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
+  });
+
+  const deviceless = await target();
+  const claimed = await briefing(deviceless.conversation);
+  await database.db
+    .update(voiceSessions)
+    .set({ deviceId: null })
+    .where(eq(voiceSessions.liveSessionId, deviceless.liveSessionId));
+  const noDevice = writer();
+  noDevice.noteAppend(deviceless, { clientEventId: "append-n", messageId: claimed });
+  await noDevice.consume(deviceless, appended("append-n", 0, 1000));
+  assert.deepEqual(await noDevice.consume(deviceless, said("Nobody's.", 1000, 2000)), {
+    ok: false,
+    refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
+  });
+
+  for (const conversation of [live.conversation, other.conversation, deviceless.conversation]) {
+    assert.equal(
+      (await speechEvents(conversation)).some(
+        (event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+      ),
+      false,
+    );
+  }
+  // Every delta was still a segment.
+  assert.equal((await segments(live.liveSessionId)).length, 1);
 });
 
 test("an append whose message is gone is refused at the speech, not the segment", async () => {

@@ -28,6 +28,76 @@ export function isSpeechEventKind(kind: ConversationEventKind): kind is SpeechEv
   return kind !== CONVERSATION_EVENT_KIND.RATING;
 }
 
+/**
+ * What `speech.offered` carries: the instant, in epoch milliseconds, past
+ * which the offer stands for nothing. A briefing is about what just changed,
+ * so one nobody said in time is marked unspoken rather than kept on offer,
+ * and every reader of the offer — a claim, a push, the expiry sweep — takes
+ * the bound from the offer itself rather than from a clock of its own.
+ */
+export const SPEECH_OFFERED_EVENT_PAYLOAD_FIELDS = {
+  expiresAt: s.wholeNumber({ minimum: 0 }),
+} satisfies SchemaFields;
+
+export type SpeechOfferedEventPayload = RecordOf<typeof SPEECH_OFFERED_EVENT_PAYLOAD_FIELDS>;
+
+export const SPEECH_OFFERED_EVENT_PAYLOAD: Schema<SpeechOfferedEventPayload> = s.record(
+  SPEECH_OFFERED_EVENT_PAYLOAD_FIELDS,
+);
+
+/**
+ * What `speech.held` carries: the instant, in epoch milliseconds, the quiet
+ * a device reported ends. While the hold stands nothing is pushed and
+ * nothing is expired; when it lifts, the offer is not spoken stale but
+ * re-decided, so the instant here is read only to know when the hold is
+ * over, never to schedule speech.
+ */
+export const SPEECH_HELD_EVENT_PAYLOAD_FIELDS = {
+  quietUntil: s.wholeNumber({ minimum: 0 }),
+} satisfies SchemaFields;
+
+export type SpeechHeldEventPayload = RecordOf<typeof SPEECH_HELD_EVENT_PAYLOAD_FIELDS>;
+
+export const SPEECH_HELD_EVENT_PAYLOAD: Schema<SpeechHeldEventPayload> = s.record(
+  SPEECH_HELD_EVENT_PAYLOAD_FIELDS,
+);
+
+/**
+ * What `speech.spoken` carries where the voice said it: the voice session,
+ * and where on that session's own clock the speech began. The device that
+ * spoke is the event row's own column.
+ */
+export const SPEECH_SPOKEN_EVENT_PAYLOAD_FIELDS = {
+  voiceSessionId: s.text(),
+  atMs: s.wholeNumber({ minimum: 0 }),
+} satisfies SchemaFields;
+
+export type SpeechSpokenEventPayload = RecordOf<typeof SPEECH_SPOKEN_EVENT_PAYLOAD_FIELDS>;
+
+export const SPEECH_SPOKEN_EVENT_PAYLOAD: Schema<SpeechSpokenEventPayload> = s.record(
+  SPEECH_SPOKEN_EVENT_PAYLOAD_FIELDS,
+);
+
+/** Why an offer ended unspoken. */
+export const SPEECH_EXPIRY_REASON = {
+  /** The offer's own expiry passed with nobody having said it. */
+  DUE: "due",
+  /** A hold over it lifted; the brain re-decides against the roster as it then is rather than speaking it stale. */
+  HOLD_RELEASED: "hold_released",
+} as const;
+
+export type SpeechExpiryReason = (typeof SPEECH_EXPIRY_REASON)[keyof typeof SPEECH_EXPIRY_REASON];
+
+export const SPEECH_EXPIRED_EVENT_PAYLOAD_FIELDS = {
+  reason: s.enumOf(Object.values(SPEECH_EXPIRY_REASON)),
+} satisfies SchemaFields;
+
+export type SpeechExpiredEventPayload = RecordOf<typeof SPEECH_EXPIRED_EVENT_PAYLOAD_FIELDS>;
+
+export const SPEECH_EXPIRED_EVENT_PAYLOAD: Schema<SpeechExpiredEventPayload> = s.record(
+  SPEECH_EXPIRED_EVENT_PAYLOAD_FIELDS,
+);
+
 /** The developer's verdict on one of Luke's messages. */
 export const MESSAGE_RATING = {
   UP: "up",

@@ -1,10 +1,5 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import {
-  CONVERSATION_EVENT_KIND,
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  type SpokenAskMetadata,
-} from "../../core.js";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, type SpokenAskMetadata } from "../../core.js";
 import {
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
@@ -13,6 +8,7 @@ import {
 } from "../../db/voice-schema.js";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../../live.js";
 import type { HostedStoreDatabase } from "./database.js";
+import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
@@ -24,8 +20,10 @@ import {
  * The voice writer: what a GPT Live session's event stream leaves in the
  * record. It writes the tables the plan gives the voice and no other — the
  * timed segments of what was actually said, by whom, in milliseconds on the
- * session's own clock; the `speech.spoken` event that says a briefing was
- * heard rather than merely offered; and the one thing a voice session says
+ * session's own clock; the `speech.spoken` transition that says a briefing
+ * was heard rather than merely offered, taken through the speech module as
+ * the device the session belongs to, so only a briefing that device claimed
+ * is marked; and the one thing a voice session says
  * that is a message, the developer's own spoken ask, cut from the transcript
  * where a delegation places it. The `voice_sessions` row itself is another
  * writer's: the voice service creates it when it creates the session and
@@ -68,6 +66,8 @@ export const VOICE_WRITE_REFUSAL = {
   NO_CONVERSATION: STORE_WRITE_REFUSAL.NO_CONVERSATION,
   NO_MESSAGE: STORE_WRITE_REFUSAL.NO_MESSAGE,
   MESSAGE_REFUSED: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
+  /** The briefing was not this session's device's to say: nobody claimed it, another device did, or it had already ended. */
+  NOT_CLAIMANT: SPEECH_REFUSAL.NOT_CLAIMANT,
 } as const;
 
 type VoiceWriteRefusal = (typeof VOICE_WRITE_REFUSAL)[keyof typeof VOICE_WRITE_REFUSAL];
@@ -146,13 +146,13 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
    * about to take a position in the session's sequence, so two deltas of one
    * session take theirs in turn.
    */
-  async function sessionId(
+  async function session(
     tx: HostedStoreDatabase,
     target: VoiceTarget,
     lock: boolean,
-  ): Promise<string | undefined> {
+  ): Promise<{ id: string; deviceId: string | null } | undefined> {
     const query = tx
-      .select({ id: voiceSessions.id })
+      .select({ id: voiceSessions.id, deviceId: voiceSessions.deviceId })
       .from(voiceSessions)
       .where(
         and(
@@ -161,67 +161,83 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
         ),
       );
     const [row] = await (lock ? query.for("update") : query);
-    return row?.id;
+    return row;
   }
 
-  /** One segment, at the next position of the session's own sequence; the primary key is the backstop. Answers the row's id. */
+  async function sessionId(
+    tx: HostedStoreDatabase,
+    target: VoiceTarget,
+    lock: boolean,
+  ): Promise<string | undefined> {
+    return (await session(tx, target, lock))?.id;
+  }
+
+  /** One segment, at the next position of the session's own sequence; the primary key is the backstop. Answers the session row. */
   async function appendSegment(
     target: VoiceTarget,
     delta: SegmentDelta,
-  ): Promise<string | undefined> {
+  ): Promise<{ id: string; deviceId: string | null } | undefined> {
     return db.transaction(async (tx) => {
-      const voiceSessionId = await sessionId(tx, target, true);
-      if (voiceSessionId === undefined) return undefined;
+      const voiceSession = await session(tx, target, true);
+      if (voiceSession === undefined) return undefined;
       const [last] = await tx
         .select({ seq: sql<number>`coalesce(max(${voiceTranscriptSegments.seq}), 0)::int` })
         .from(voiceTranscriptSegments)
-        .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId));
+        .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSession.id));
       await tx.insert(voiceTranscriptSegments).values({
-        voiceSessionId,
+        voiceSessionId: voiceSession.id,
         seq: (last?.seq ?? 0) + 1,
         role: SEGMENT_ROLE_OF_DELTA[delta.type],
         text: delta.delta,
         startMs: delta.start_ms,
         endMs: delta.end_ms,
       });
-      return voiceSessionId;
+      return voiceSession;
     });
   }
 
   /**
    * A briefing is known to have been said when the session's own voice
    * follows the append: the first output delta that begins at or after the
-   * appended commentary's end writes `speech.spoken` on the briefing's
-   * message, once, and the append is forgotten. Every append the delta has
-   * reached is marked by it, since two briefings appended back to back may
-   * both be answered by one delta and a second would otherwise wait for
-   * speech that never comes.
+   * appended commentary's end marks the briefing spoken, once, as the device
+   * the session belongs to — the speech module admits the mark only from the
+   * device that claimed the offer, so a session with no device, or one whose
+   * device did not claim, marks nothing — and the append is forgotten.
+   * Every append the delta has reached is marked by it, since two briefings
+   * appended back to back may both be answered by one delta and a second
+   * would otherwise wait for speech that never comes.
    */
   async function markSpoken(
     target: VoiceTarget,
     delta: SegmentDelta,
-    voiceSessionId: string,
+    voiceSession: { id: string; deviceId: string | null },
   ): Promise<VoiceWriteResult | undefined> {
     const appends = appendsOf(target.liveSessionId);
     let outcome: VoiceWriteResult | undefined;
     for (const [clientEventId, append] of appends) {
       if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
       appends.delete(clientEventId);
-      const written = await store.recordEvent(append.conversation, {
-        messageId: append.messageId,
-        kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+      if (voiceSession.deviceId === null) {
+        outcome = { ok: false, refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT };
+        continue;
+      }
+      const marked = await markSpeechSpoken(
+        { db, writer: store },
+        target.userId,
+        append.messageId,
+        voiceSession.deviceId,
         // Which session said it, and when on that session's clock.
-        payload: { voice_session_id: voiceSessionId, at_ms: delta.start_ms },
-      });
-      if (written.ok) {
+        { voiceSessionId: voiceSession.id, atMs: delta.start_ms },
+      );
+      if (marked.ok) {
         outcome ??= WRITTEN;
       } else {
         outcome = {
           ok: false,
           refusal:
-            written.refusal === STORE_WRITE_REFUSAL.NO_MESSAGE
+            marked.refusal === SPEECH_REFUSAL.NOT_FOUND
               ? VOICE_WRITE_REFUSAL.NO_MESSAGE
-              : VOICE_WRITE_REFUSAL.NO_CONVERSATION,
+              : VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
         };
       }
     }
@@ -300,9 +316,9 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
         case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
           return (await appendSegment(target, event)) === undefined ? NO_SESSION : WRITTEN;
         case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA: {
-          const voiceSessionId = await appendSegment(target, event);
-          if (voiceSessionId === undefined) return NO_SESSION;
-          return (await markSpoken(target, event, voiceSessionId)) ?? WRITTEN;
+          const voiceSession = await appendSegment(target, event);
+          if (voiceSession === undefined) return NO_SESSION;
+          return (await markSpoken(target, event, voiceSession)) ?? WRITTEN;
         }
         case LIVE_SERVER_EVENT.COMMENTARY_APPENDED:
           return placeAppend(target, event);

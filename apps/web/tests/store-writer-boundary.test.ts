@@ -28,7 +28,12 @@ const WRITER = "server/hosted/store/writer.ts";
 /** The read module: the cursor reads and the rating's authorship and latest-rating reads select from the three tables and insert into none. */
 const READER = "server/hosted/store/message-reads.ts";
 
-const TABLE_IMPORTERS: ReadonlySet<string> = new Set([WRITER, READER]);
+/** The speech module: folds a briefing's standing from the events on its message and writes every transition through the writer. */
+const SPEECH_READER = "server/hosted/store/speech.ts";
+
+const SPEECH_READ_TABLES: ReadonlySet<string> = new Set(["messages", "events"]);
+
+const TABLE_IMPORTERS: ReadonlySet<string> = new Set([WRITER, READER, SPEECH_READER]);
 
 const WRITE_STATEMENT = /\.(insert|update|delete)\(\s*(messages|turns|events)\s*\)/;
 
@@ -82,7 +87,7 @@ function importedTables(source: string): readonly string[] {
   return tables;
 }
 
-test("the writer and the reader are the two server modules that import the messages, turns, or events table, only the writer writes them, and the schema is imported whole by the two that build queries over it", async () => {
+test("the writer and the two readers are the server modules that import the messages, turns, or events table, only the writer writes them, and the schema is imported whole by the two that build queries over it", async () => {
   const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
   const importers = new Map<string, readonly string[]>();
   const namespaceImporters = new Set<string>();
@@ -98,7 +103,10 @@ test("the writer and the reader are the two server modules that import the messa
   assert.deepEqual(new Set(importers.keys()), TABLE_IMPORTERS);
   assert.deepEqual(new Set(importers.get(WRITER)), WRITTEN_TABLES);
   assert.deepEqual(new Set(importers.get(READER)), WRITTEN_TABLES);
-  const reader = await readFile(path.join(repositoryRoot, READER), "utf8");
-  assert.equal(WRITE_STATEMENT.test(reader), false);
+  assert.deepEqual(new Set(importers.get(SPEECH_READER)), SPEECH_READ_TABLES);
+  for (const reader of [READER, SPEECH_READER]) {
+    const source = await readFile(path.join(repositoryRoot, reader), "utf8");
+    assert.equal(WRITE_STATEMENT.test(source), false, reader);
+  }
   assert.deepEqual(namespaceImporters, SCHEMA_NAMESPACE_IMPORTERS);
 });

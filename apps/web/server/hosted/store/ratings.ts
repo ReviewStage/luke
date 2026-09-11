@@ -72,5 +72,9 @@ export async function rateMessage(
       return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
       throw new Error("a rating was refused as a claim, which only a speech.claimed event can be");
+    case STORE_WRITE_REFUSAL.SUPERSEDED:
+      throw new Error(
+        "a rating was refused as superseded, and a rating names nothing that excludes it",
+      );
   }
 }

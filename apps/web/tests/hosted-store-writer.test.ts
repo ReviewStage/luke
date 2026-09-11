@@ -1161,12 +1161,14 @@ test("events about a message are numbered by the conversation's own event sequen
   const offered = await writer.recordEvent(target, {
     messageId: reply.id,
     kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+    unless: [],
   });
   const claimed = await writer.recordEvent(target, {
     messageId: reply.id,
     kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
     deviceId: "device-1",
     payload: { at: NOW },
+    unless: [],
   });
   assert.equal(offered.ok && offered.seq, 1);
   assert.equal(claimed.ok && claimed.seq, 2);
@@ -1194,6 +1196,7 @@ test("events about a message are numbered by the conversation's own event sequen
   const noMessage = await writer.recordEvent(target, {
     messageId: randomUUID(),
     kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+    unless: [],
   });
   assert.deepEqual(noMessage, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE });
 
@@ -1201,6 +1204,7 @@ test("events about a message are numbered by the conversation's own event sequen
   const elsewhere = await writer.recordEvent(other, {
     messageId: reply.id,
     kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+    unless: [],
   });
   assert.deepEqual(elsewhere, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE });
 
@@ -1208,7 +1212,30 @@ test("events about a message are numbered by the conversation's own event sequen
     messageId: reply.id,
     kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
     deviceId: "device-2",
+    unless: [],
   });
   assert.deepEqual(secondClaim, { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED });
-  assert.deepEqual(await counters(target), { message: 3, event: 3 });
+
+  // A write naming kinds that exclude it is refused while one of them stands, and lands otherwise.
+  const superseded = await writer.recordEvent(target, {
+    messageId: reply.id,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
+    unless: [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
+  });
+  assert.deepEqual(superseded, { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED });
+  const claimedAgain = await writer.recordEvent(target, {
+    messageId: reply.id,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+    deviceId: "device-2",
+    unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
+  });
+  assert.deepEqual(claimedAgain, { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED });
+  const spoken = await writer.recordEvent(target, {
+    messageId: reply.id,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+    deviceId: "device-1",
+    unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
+  });
+  assert.equal(spoken.ok && spoken.seq, 3);
+  assert.deepEqual(await counters(target), { message: 3, event: 4 });
 });
