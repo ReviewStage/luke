@@ -13,21 +13,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The one CI job. It is Linux only: a macOS runner bills at ten times the
+  # rate and the packaged app is proven where it is built, by
+  # `./scripts/verify.sh` at the developer's hand before a UI change is opened
+  # and by the release workflow before anything ships. The Postgres steps sit
+  # in the same job rather than a second runner because they are the one place
+  # the generated migrations and the store tests meet a real Postgres (the
+  # portable check runs them on PGlite), and a second runner's setup costs more
+  # than the two minutes they take.
   portable:
     name: TypeScript checks
     runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: ./.github/actions/setup
-      - run: ./scripts/check.sh
-
-  # The store tests run on PGlite inside the portable job above; this job is
-  # the one place the generated migrations and the same tests meet a real
-  # Postgres, so a statement PGlite accepts and Postgres refuses is caught
-  # before a deployment's `db:migrate` finds it.
-  postgres:
-    name: Postgres migrations and store
-    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -48,6 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
+      - run: ./scripts/check.sh
       - run: pnpm --filter @luke/web db:migrate
       - run: pnpm --filter @luke/web test:store
       # The eve end-to-end eval writes through the real writer, so it runs where a Postgres stands.
@@ -55,60 +53,3 @@ jobs:
         env:
           DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
           PROVIDER_KEY_ENCRYPTION_SECRET: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
-  # Packages the app and captures the fixture frames. The portable job above is
-  # the one place the full check runs: repeating it on a macOS runner costs
-  # minutes and reports nothing the Linux run did not.
-  macos:
-    name: macOS app and evidence
-    runs-on: macos-15
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: ./.github/actions/setup
-      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
-        with:
-          xcode-version: "16.2"
-      # The Electron binary and electron-builder's DMG tooling are downloaded
-      # per install unless their caches survive the runner; both are pinned by
-      # the lockfile, so its hash is the whole key.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: |
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-      # The helpers are rebuilt only when their sources, the scripts that
-      # compile them, or the toolchain change: build-native.mjs keeps a stamp
-      # of those beside each output and skips one whose stamp still matches.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: apps/desktop/.build/native
-          key: native-helpers-${{ runner.os }}-xcode16.2-${{ hashFiles('apps/desktop/native/**', 'apps/desktop/scripts/build-native.mjs', 'apps/desktop/scripts/package-config.mjs', 'apps/desktop/scripts/package-layout.mjs', 'apps/desktop/scripts/app-icon.mjs', 'design/brand/icon/**') }}
-      - run: ./scripts/evidence.sh
-      - name: Preserve visual evidence
-        id: visual-evidence
-        if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
-        with:
-          name: app-visual-evidence-${{ github.event.pull_request.number || github.run_id }}
-          path: artifacts/evidence/
-          if-no-files-found: error
-          retention-days: 90
-      - name: Link evidence from the pull request description
-        if: >-
-          always() &&
-          !cancelled() &&
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          steps.visual-evidence.outputs.artifact-url != ''
-        env:
-          ARTIFACT_URL: ${{ steps.visual-evidence.outputs.artifact-url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node scripts/update-pr-evidence.mjs
