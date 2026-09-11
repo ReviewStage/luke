@@ -1,4 +1,24 @@
 export {
+  HOST_CONCERN,
+  HOST_START_ORDER,
+  type HostConcern,
+  hostAssemblyLayer,
+  hostLayer,
+  hostLayerFromSeams,
+} from "../compose-host.js";
+export { DuplicateGatewayMethod, foldMethods } from "../composer.js";
+export { composerLayer, layersInOrder, mergedMethods } from "./composer.js";
+export {
+  type HostAssembly,
+  HostAssemblyTag,
+  type HostDrain,
+  HostDrainError,
+  HostTag,
+  hostDrain,
+  hostStandingLayer,
+  type StandingHost,
+} from "./host.js";
+export {
   HostKernelTag,
   HostService,
   hostKernelLayer,

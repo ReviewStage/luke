@@ -101,9 +101,10 @@ export interface GatewayService {
    * built on rather than attaching to one already built — answers the same
    * methods over the same readers.
    *
-   * @deprecated A strangler shim: P7-01 hands the host the server's layers and
-   * its services as `Context` tags, and P7-02 composes the host as a `Layer`,
-   * at which point a transport is provided the layers directly.
+   * @deprecated A strangler shim beside `GatewayServer`'s: P7-02 composed the
+   * host as a `Layer` and left both standing; they go together when P6-04
+   * moves the in-process transports onto the layers and P8-04 the desktop's
+   * host service, at which point a transport is provided the layers directly.
    */
   readonly serverOptions: GatewayServerOptions;
   readonly nodes: NodeRegistry;

@@ -17,10 +17,11 @@ out of by the variable's own name, the cipher, the store worker, the id source,
 and the reporter, whose `Logger` writes where a reported line goes so an
 `Effect.log*` and a `report(line)` land in one sink. A composition states the
 seams it reaches and cannot build without them. `hostSeamLayers` stands every
-tag up from the one `HostSeams` object the desktop builds today and
-`createHostKernel` is the adaptor beside it, both named shims the migration's
-last host PR deletes; the clock seam stays the injected reading for as long as
-a test drives a `FakeClock`.
+tag up from the one `HostSeams` object the desktop builds today,
+`createHostKernel` is the adaptor beside it, and `hostLayerFromSeams` and
+`composeHost`'s `start()`/`stop()` face are the same shim one level up, each
+a named shim the migration's last host PR deletes; the clock seam stays the
+injected reading for as long as a test drives a `FakeClock`.
 
 ## It draws nothing, and imports no Electron
 
@@ -34,11 +35,24 @@ and resolving this Mac's EventKit helper bundle stayed in
 
 ## One composition, nine concerns
 
-`composeHost` constructs, links, merges, and starts; it holds no state of a
-concern's own. Each concern is a composer — settings, account, devices,
+The host is one `Layer` (`hostLayer`, behind `@sidecar/host/effect`) over the
+kernel: `hostAssemblyLayer` constructs, links, and merges, holding no state of
+a concern's own and beginning nothing, and `hostStandingLayer` over it starts
+every concern in the launch's order (`HOST_START_ORDER`), arms the loops after
+the last of them, and registers the drain last of all. Each concern is a
+composer — settings, account, devices,
 conversation, issues, observation, calendars, brain, live — that owns its own mutable
 state, its own timers, and the Gateway methods of its domain, and answers
-`start()` and `stop()` for exactly what it began. The devices composer answers
+`start()` and `stop()` for exactly what it began; `composerLayer` is that
+composer as a scoped layer whose build runs `start` and whose scope closing
+runs `stop`, so the scope a composer was built in is its lifetime and nothing
+else stops it. The stop is registered before the start runs rather than as
+the release of a successful acquire, because a composer's `stop` is written
+to give back what a partial or failed `start` allocated. The layers
+are built one after another in one sequential scope (`layersInOrder`), never
+merged, because `Layer.merge` builds its sides concurrently and closes them in
+parallel, and a start that fails releases what began — the failed composer
+included — at once, in reverse, leaving nothing for the close. The devices composer answers
 no method at all: it is this installation's device row on the service,
 registered when the account gate opens, kept warm by the change-signal poll,
 and forgotten at sign-out on the departing account's own token. Each poll
@@ -57,10 +71,10 @@ of Luke's messages as the service's rating event, written only for a message
 the picture holds and Luke authored, taken into the picture from the answer
 so the verdict shows before the next poll, and counted as the verdict and the
 message's kind read from the held row; nothing of the local store is read
-for it. The merge folds their
-method tables into one and refuses a method two of them claim, so which
-concern answers a method is checked at construction rather than left to the
-fold's order. `client.bootstrap` is the one method no composer owns: it reads
+for it. The assembly folds their
+method tables into one (`mergedMethods`) and a method two of them claim fails
+the build with `DuplicateGatewayMethod`, so which concern answers a method is
+checked before anything starts rather than left to the fold's order. `client.bootstrap` is the one method no composer owns: it reads
 six of them, and giving it to any would hand that composer references to the
 other five. The service the merge composes is itself read late: on the
 kernel's own layer it is a `Deferred` set once — a second write answers `false`
@@ -80,11 +94,23 @@ argument, in the order the composers are built.
 
 ## One drain, in one place
 
-`Host.stop()` is the whole quit, in the coordinator's fixed order:
-admissions closed, everything under way cancelled, a bounded wait for it to
-settle, whatever did not settle written down as unresolved for the next
-launch's recovery, and only then the store closed. A caller that ran the
-steps itself would be a second order for the same quit; a shutdown never
+The quit is the closing of the one scope `hostLayer` was built in, and the
+scope's finalizers are its order: the drain first, registered last of all
+(`hostDrain`: admissions closed, everything under way cancelled, a bounded
+wait for it to settle, whatever did not settle written down as unresolved for
+the next launch's recovery), then the loops disarmed, then every composer's
+stop in the reverse of its start, and only then the store closed. A stop
+that fails strands none of its siblings and surfaces in the close's own
+`Cause`. The drain runs once whichever door asks for it — `Host.stop()` under
+the caller's own deadline, or the scope closing with the defaults — and every
+later ask is answered with that outcome, so the admissions close and the runs
+are cancelled once however many times the quit arrives. `Host.stop()` is
+that close bounded: it interrupts a standup still under way, so no composer
+after the one starting begins and nothing is armed behind the quit, then
+drains, closes the scope, waits a fixed time for the close, and reports what
+did not close rather than waiting on it, leaving it to the exit. A caller that ran the
+steps itself would be a second order for the same quit, and there is none to
+run; a shutdown never
 fabricates a completion for work it cut off. The live voice session's
 graceful close rides inside the same drain (`lifecycle.ts`): it begins with
 the cancellations and is waited for beside them under the one deadline, so a
