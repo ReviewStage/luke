@@ -1,6 +1,5 @@
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
-import { getDatabase } from "../db/index.js";
 import { oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "../hosted/bearer.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { recordVoiceSeconds, spendHostedMeter, spendIntroductionMeter } from "../hosted/quota.js";
@@ -43,7 +42,7 @@ export function voiceFunctionServer() {
     apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,
-    record: voiceSessionRecord(getDatabase()),
+    record: voiceSessionRecord(runWeb),
   });
   return service.server;
 }

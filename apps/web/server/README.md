@@ -143,8 +143,10 @@ same way, and `roster-snapshot.ts` too but for its one exported
 the Drizzle handle to prove a sealed row does not open under another user's
 seal. Outside `server/hosted/store/`, `server/hosted/device-store.ts` and the
 provider-key vault's `server/hosted/vault-key-store.ts` are on the same client;
-`server/hosted/quota.ts`, `speech-push.ts` (partly), and
-`server/voice/session-record.ts` are still through Drizzle, and
+`server/hosted/speech-push.ts` reads the account's devices through it too,
+beside the speech module's own reads, and `server/voice/session-record.ts` is
+on it whole, its four methods each one statement over the live session row.
+`server/hosted/quota.ts` is still through Drizzle, and
 `brain-host/production.ts` still holds a `HostedStoreDatabase` accessor it
 forwards into `quota.ts` and into `hostedStore()` for `readRosterSnapshot`'s
 sake, though the rest of `brain-host/` runs no query of its own any more.

@@ -1,5 +1,7 @@
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
-import { desc, inArray } from "drizzle-orm";
+import { Effect, type ParseResult, Schema } from "effect";
 import {
   BRIEFING_PUSH_PAYLOAD_KEY,
   DEVICE_PLATFORM,
@@ -8,7 +10,6 @@ import {
   isPushEnvironment,
   type PushEnvironment,
 } from "../core.js";
-import { devices } from "../db/devices-schema.js";
 import {
   APNS_DELIVERY,
   APNS_INTERRUPTION_LEVEL,
@@ -17,7 +18,6 @@ import {
 } from "./apns.js";
 import { briefingWordsOf } from "./briefing-words.js";
 import {
-  type HostedStoreDatabase,
   markSpeechPushed,
   openSpeechOffers,
   quietUntilByAccount,
@@ -182,17 +182,8 @@ export interface SpeechPushOutcome {
   readonly waiting: number;
 }
 
-/**
- * The push pass's store: the speech module's own runner and writer, and the
- * Drizzle handle its own two reads — the account's devices and the
- * announcement's row — are still on.
- */
-interface SpeechPushStore extends SpeechStore {
-  readonly db: HostedStoreDatabase;
-}
-
 export interface SpeechPushSeams {
-  readonly store: SpeechPushStore;
+  readonly store: SpeechStore;
   /** The tool registry the announcement's row is read back under. */
   readonly tools: ToolSet;
   /** One notification to Apple, answered as the sender classifies the reply. */
@@ -215,14 +206,41 @@ export interface SpeechPushOptions {
   readonly clock?: (() => number) | undefined;
 }
 
-interface DeviceRow {
-  readonly id: string;
-  readonly userId: string;
-  readonly platform: string;
-  readonly activeUntil: Date | null;
-  readonly pushToken: string | null;
-  readonly pushEnvironment: string | null;
-}
+/** How a read here fails: the driver's own refusal, or a row the schema refused. */
+type DeviceReadFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const DeviceRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  platform: Schema.String,
+  activeUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("active_until"),
+  ),
+  pushToken: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("push_token"),
+  ),
+  pushEnvironment: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("push_environment"),
+  ),
+});
+
+const findDevicesByAccount = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: DeviceRowSchema,
+  execute: (userIds) =>
+    statement(
+      (sql) => sql`
+        select id, user_id, platform, active_until, push_token, push_environment
+        from devices
+        where user_id in ${sql.in(userIds)}
+        order by last_seen_at desc, id
+      `,
+    ),
+});
 
 /** Whether a speaking device of the account reports itself active, and the one device a push would address, most recently seen first. */
 interface AccountDevices {
@@ -230,41 +248,30 @@ interface AccountDevices {
   readonly target: PushableDevice | undefined;
 }
 
-async function devicesByAccount(
-  store: SpeechPushStore,
+function devicesByAccount(
   userIds: readonly string[],
   now: number,
-): Promise<Map<string, AccountDevices>> {
-  const byAccount = new Map<string, AccountDevices>();
-  if (userIds.length === 0) return byAccount;
-  const rows: readonly DeviceRow[] = await store.db
-    .select({
-      id: devices.id,
-      userId: devices.userId,
-      platform: devices.platform,
-      activeUntil: devices.activeUntil,
-      pushToken: devices.pushToken,
-      pushEnvironment: devices.pushEnvironment,
-    })
-    .from(devices)
-    .where(inArray(devices.userId, [...userIds]))
-    .orderBy(desc(devices.lastSeenAt), devices.id);
-  for (const row of rows) {
-    const held = byAccount.get(row.userId) ?? { active: false, target: undefined };
-    const active =
-      held.active ||
-      (isDevicePlatform(row.platform) &&
-        SPEAKING_PLATFORMS.has(row.platform) &&
-        row.activeUntil !== null &&
-        row.activeUntil.getTime() > now);
-    const target =
-      held.target ??
-      (row.pushToken !== null && isPushEnvironment(row.pushEnvironment)
-        ? { deviceId: row.id, token: row.pushToken, environment: row.pushEnvironment }
-        : undefined);
-    byAccount.set(row.userId, { active, target });
-  }
-  return byAccount;
+): Effect.Effect<Map<string, AccountDevices>, DeviceReadFailure, SqlClient.SqlClient> {
+  if (userIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(findDevicesByAccount([...userIds]), (rows) => {
+    const byAccount = new Map<string, AccountDevices>();
+    for (const row of rows) {
+      const held = byAccount.get(row.userId) ?? { active: false, target: undefined };
+      const active =
+        held.active ||
+        (isDevicePlatform(row.platform) &&
+          SPEAKING_PLATFORMS.has(row.platform) &&
+          row.activeUntil !== null &&
+          row.activeUntil.getTime() > now);
+      const target =
+        held.target ??
+        (row.pushToken !== null && isPushEnvironment(row.pushEnvironment)
+          ? { deviceId: row.id, token: row.pushToken, environment: row.pushEnvironment }
+          : undefined);
+      byAccount.set(row.userId, { active, target });
+    }
+    return byAccount;
+  });
 }
 
 /**
@@ -289,10 +296,8 @@ export async function pushSpeech(
       limit,
     }),
   );
-  const reported = await devicesByAccount(
-    seams.store,
-    [...new Set(offers.map((offer) => offer.userId))],
-    now,
+  const reported = await seams.store.run(
+    devicesByAccount([...new Set(offers.map((offer) => offer.userId))], now),
   );
   for (const offer of offers) {
     const account = reported.get(offer.userId) ?? { active: false, target: undefined };

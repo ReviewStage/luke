@@ -38,7 +38,6 @@ import {
 } from "../server/hosted/speech-push";
 import {
   claimSpeech,
-  type HostedStoreDatabase,
   markSpeechPushed,
   type OpenSpeechOffersQuery,
   offerSpeech,
@@ -69,9 +68,8 @@ const BRIEFING = "One fixture agent finished and another is waiting on you.";
 const SESSION = { providerId: "conductor", providerSessionId: "s-push-fixture" } as const;
 
 let clock = NOW;
-/** The sweep's store and the push pass's in one: the push's own two reads are still Drizzle's. */
-const store: SpeechSweepStore & { readonly db: HostedStoreDatabase } = {
-  db: database.db,
+/** The sweep's store and the push pass's in one. */
+const store: SpeechSweepStore = {
   run: database.run,
   writer: await storeWriter({
     run: database.run,

@@ -58,7 +58,7 @@ const TOOLS: ToolSet = {
 };
 
 const store = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
-const record = voiceSessionRecord(database.db, () => NOW);
+const record = voiceSessionRecord(database.run, () => NOW);
 const speech = { run: database.run, writer: store };
 /** The installation the fixture sessions belong to, which is the device a briefing must be claimed by before its speech is marked. */
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
