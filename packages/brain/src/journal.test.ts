@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { it, test } from "@effect/vitest";
+import { it } from "@effect/vitest";
 import { ACTION_TOOL, refusedActionOutput } from "@sidecar/actions";
 import { ACTION_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import { Effect } from "effect";
@@ -11,7 +11,6 @@ import {
   ask,
   edge,
   failedAnswer,
-  harness,
   heldPerformer,
   message,
   messageAction,
@@ -78,45 +77,51 @@ it.effect(
     }),
 );
 
-test("a performer that throws after dispatch leaves an unknown action, kept through a later model failure and a restart", async () => {
-  const h = harness({
-    actions: performerWith(() => Promise.reject(new Error("socket closed after send"))).actions,
-  });
-  h.client.answers.push(answered([messageAction("call_1")]), failedAnswer("network"));
-  const record = await ask(h, "send it");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
-  assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
-  assert.equal(record?.performedActions, 0);
-  assert.equal(record?.unknownActions, 1);
+it.effect(
+  "a performer that throws after dispatch leaves an unknown action, kept through a later model failure and a restart",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness({
+        actions: performerWith(() => Promise.reject(new Error("socket closed after send"))).actions,
+      });
+      h.client.answers.push(answered([messageAction("call_1")]), failedAnswer("network"));
+      const record = yield* Effect.promise(() => ask(h, "send it"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+      assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
+      assert.equal(record?.performedActions, 0);
+      assert.equal(record?.unknownActions, 1);
 
-  const relaunched = harness({}, fakeBrainStateRepository(h.repository.state));
-  await relaunched.agent.ready();
-  assert.equal(relaunched.agent.requests()[0]?.unknownActions, 1);
+      const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
+      yield* Effect.promise(() => relaunched.agent.ready());
+      assert.equal(relaunched.agent.requests()[0]?.unknownActions, 1);
 
-  // A confirmed refusal, by contrast, is a refusal: nothing unknown about it.
-  const refusing = harness({
-    actions: performerWith(async () => refusedActionOutput("not observed")).actions,
-  });
-  refusing.client.answers.push(
-    answered([messageAction("call_1")]),
-    answered([message("Refused.")]),
-  );
-  const refused = await ask(refusing, "send it");
-  assert.equal(refused?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.equal(refused?.unknownActions, 0);
-  assert.equal(refused?.performedActions, 0);
-});
+      // A confirmed refusal, by contrast, is a refusal: nothing unknown about it.
+      const refusing = yield* effectHarness({
+        actions: performerWith(async () => refusedActionOutput("not observed")).actions,
+      });
+      refusing.client.answers.push(
+        answered([messageAction("call_1")]),
+        answered([message("Refused.")]),
+      );
+      const refused = yield* Effect.promise(() => ask(refusing, "send it"));
+      assert.equal(refused?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.equal(refused?.unknownActions, 0);
+      assert.equal(refused?.performedActions, 0);
+    }),
+);
 
-test("an interrupted run's started actions are counted unknown at the next launch", async () => {
-  const held = heldPerformer();
-  const h = harness({ actions: held.actions });
-  h.client.answers.push(answered([messageAction("call_1")]));
-  await submit(h, "send");
-  await settle();
-  const relaunched = harness({}, fakeBrainStateRepository(h.repository.state));
-  await relaunched.agent.ready();
-  const record = relaunched.agent.requests()[0];
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
-  assert.equal(record?.unknownActions, 1);
-  assert.equal(record?.performedActions, 0);
-});
+it.effect("an interrupted run's started actions are counted unknown at the next launch", () =>
+  Effect.gen(function* () {
+    const held = heldPerformer();
+    const h = yield* effectHarness({ actions: held.actions });
+    h.client.answers.push(answered([messageAction("call_1")]));
+    yield* Effect.promise(() => submit(h, "send"));
+    yield* Effect.promise(() => settle());
+    const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
+    yield* Effect.promise(() => relaunched.agent.ready());
+    const record = relaunched.agent.requests()[0];
+    assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+    assert.equal(record?.unknownActions, 1);
+    assert.equal(record?.performedActions, 0);
+  }),
+);
