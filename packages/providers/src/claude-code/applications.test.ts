@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import {
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -12,6 +11,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
 import { claudeDesktopApplications, claudeDesktopSessionLink } from "./applications.js";
 
 const TEST_ACCOUNT_DIRECTORY = "account-1";
@@ -19,7 +19,7 @@ const TEST_ORGANIZATION_DIRECTORY = "organization-1";
 
 async function temporarySessionsDirectory(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-desktop-"));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return path.join(directory, "claude-code-sessions");
@@ -265,7 +265,7 @@ test("a sub-agent inherits the app but not its parent's title", async (t) => {
 test("never follows a link out of the store", async (t) => {
   const sessionsDirectory = await temporarySessionsDirectory(t);
   const outside = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-desktop-outside-"));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(outside, { recursive: true, force: true });
   });
   await fs.mkdir(path.join(outside, "organization-x"), { recursive: true });

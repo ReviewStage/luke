@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { boundedInvocation, INVOCATION_FAILURE, invocationPath } from "./invocation.js";
 
 test("arguments are passed directly without shell interpretation", async () => {

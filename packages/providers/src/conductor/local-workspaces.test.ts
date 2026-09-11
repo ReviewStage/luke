@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test, { type TestContext } from "node:test";
 import {
   ACTION_RESULT_STATUS,
   dispatchAction,
@@ -12,6 +11,7 @@ import {
 } from "@sidecar/session";
 import { UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
 import { conductorCreateWorkspaceLink } from "./applications.js";
 import { conductorLocalWorkspacePlugin, conductorRepositories } from "./local-workspaces.js";
 
@@ -35,7 +35,7 @@ function parseConductorCreateLink(url: string) {
 
 async function temporaryDatabasePath(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-conductor-repos-"));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return path.join(directory, "conductor.db");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
+import { type TestContext, test } from "vitest";
 import { HOOK_EVENT } from "./hook-merge.js";
 import {
   type ObservedSpoolEvent,
@@ -125,7 +125,7 @@ function missingDirectoryError(): Error {
 
 async function temporarySpool(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-spool-watcher-"));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return directory;
@@ -152,7 +152,7 @@ function standWatcher(
     schedule: clock.schedule,
     cancel: clock.cancel,
   });
-  t.after(() => handle.close());
+  t.onTestFinished(() => handle.close());
   return { handle, batches };
 }
 

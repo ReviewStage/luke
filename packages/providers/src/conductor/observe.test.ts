@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   advertisedActionFor,
@@ -8,6 +7,7 @@ import {
 } from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
 import { HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   ERRORED_SESSION_UUID,
   fakeConductorApi,

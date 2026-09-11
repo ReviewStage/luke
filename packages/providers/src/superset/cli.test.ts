@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { ACTION_RESULT_STATUS, PROVIDER_ID, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/session";
 import { admittedForTest } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
 import { SupersetCli } from "./cli.js";
 import { isSupersetControlId, SUPERSET_CONTROL_ID } from "./vocabulary.js";
 import type { SupersetSessionContext } from "./wire.js";
 
 async function connectedHome(t: TestContext): Promise<string> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
-  t.after(async () => fs.rm(home, { recursive: true, force: true }));
+  t.onTestFinished(async () => fs.rm(home, { recursive: true, force: true }));
   await fs.mkdir(path.join(home, "bin"), { recursive: true });
   await Promise.all([
     fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-1"}'),
@@ -90,7 +90,7 @@ test("a logout the CLI refused or ignored is not reported as a disconnect", asyn
 
 test("a missing CLI login exposes no Superset actions", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
-  t.after(async () => fs.rm(home, { recursive: true, force: true }));
+  t.onTestFinished(async () => fs.rm(home, { recursive: true, force: true }));
   const cli = new SupersetCli({
     ...testCliOptions(home),
     run: async () => assert.fail("an unavailable CLI must not run"),
@@ -105,7 +105,7 @@ test("a missing CLI login exposes no Superset actions", async (t) => {
 
 test("organization selection is refreshed and switched by exact slug", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
-  t.after(async () => fs.rm(home, { recursive: true, force: true }));
+  t.onTestFinished(async () => fs.rm(home, { recursive: true, force: true }));
   await fs.mkdir(path.join(home, "bin"), { recursive: true });
   await fs.writeFile(path.join(home, "bin", "superset"), "#!/bin/sh\n");
   const organizations = [

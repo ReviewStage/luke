@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { unparsedWire } from "@sidecar/wire";
+import { test } from "vitest";
 import { isSupersetControlId, SUPERSET_CONTROL_ID, supersetFailureReason } from "./vocabulary.js";
 
 const FALLBACK = "Superset could not do that.";

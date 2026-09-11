@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { supersetPressedLink } from "./wire.js";
 
 test("a press mints a focus request only onto a bound terminal address", () => {
