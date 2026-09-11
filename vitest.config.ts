@@ -15,6 +15,7 @@ export default defineConfig({
       "tools/trace-export",
       "packages/providers",
       "apps/desktop",
+      "apps/web",
     ],
   },
 });

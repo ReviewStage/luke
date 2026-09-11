@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
+import { test } from "vitest";
 import type { DeviceHeartbeat, DeviceRegistration } from "../server/hosted/devices";
 import { handleDevices } from "../server/hosted/devices";
 import { HOSTED_API_ERROR } from "../server/hosted/http";

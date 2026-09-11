@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { test } from "vitest";
 import {
   FUNCTION_MAX_DURATION_SECONDS,
   functionConfigSource,

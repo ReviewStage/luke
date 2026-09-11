@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { getTableName } from "drizzle-orm";
+import { test } from "vitest";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { CLOUD_AGENT_PROVIDER_ID, type CloudFetch, type WireRecord } from "../server/core";
 import {
   executeConversationRead,

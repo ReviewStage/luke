@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -17,6 +16,7 @@ import {
   storedConversationMaximumAgeMs,
 } from "@sidecar/session";
 import { and, eq, getTableName, sql } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import {
   COMPACTION_SOURCE,
   CONTEXT_INPUT_KIND,
@@ -68,7 +68,7 @@ const NOW = 1_800_000_000_000;
 const THREAD_KEY = threadSessionKey("11111111-1111-4111-8111-111111111111");
 
 const opening = openHostedStoreTestDatabase();
-after(async () => {
+afterAll(async () => {
   await (await opening).close();
 });
 

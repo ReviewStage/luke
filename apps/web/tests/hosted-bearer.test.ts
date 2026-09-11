@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../server/hosted/bearer";
 
 function request(headers: Record<string, string> = {}): Request {

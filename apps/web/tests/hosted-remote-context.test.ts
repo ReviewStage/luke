@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { remoteSessionContextText } from "../server/hosted/remote-context";
 
 const NOW = 1_700_000_000_000;

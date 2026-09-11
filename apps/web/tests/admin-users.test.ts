@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import {
   ADMIN_USERS_LIMIT,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { type ProviderSessionObservation, SESSION_STATUS } from "@sidecar/session";
+import { test } from "vitest";
 import {
   decodeObservedRoster,
   encodeObservedRoster,

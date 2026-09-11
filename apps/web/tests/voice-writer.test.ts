@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import { type ToolSet, tool } from "ai";
 import { asc, eq } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
   CONVERSATION_EVENT_KIND,
@@ -43,7 +43,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 const TOOLS: ToolSet = {
   announce: tool({

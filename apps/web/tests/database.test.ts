@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { createDatabase, createPool, getDatabase, POOL_LIMITS } from "../server/db/index";
 
 const TEST_CONNECTION_STRING = "postgresql://user:secret@localhost:5432/luke";

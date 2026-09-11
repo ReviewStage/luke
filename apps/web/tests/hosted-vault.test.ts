@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
+import { test } from "vitest";
 import { decryptProviderKey, encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {

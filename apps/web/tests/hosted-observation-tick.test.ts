@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {

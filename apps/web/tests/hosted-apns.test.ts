@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createVerify, generateKeyPairSync } from "node:crypto";
-import test from "node:test";
 import { PUSH_ENVIRONMENT } from "@sidecar/hosted";
+import { test } from "vitest";
 import type { UnparsedWireValue } from "../server/core";
 import {
   APNS_DELIVERY,

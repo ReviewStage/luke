@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { hostedProjectsAnswerSchema } from "@sidecar/hosted";
+import { test } from "vitest";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { observeAndSnapshot } from "../server/hosted/observation-pass";

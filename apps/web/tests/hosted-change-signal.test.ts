@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import {
   changesAnswerSchema,
   DEVICE_PLATFORM,
@@ -18,6 +17,7 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import { eq, sql } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import {
   CONVERSATION_KIND,
   conversations,
@@ -38,7 +38,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  */
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import {
   BRAIN_OPENAI_DEFAULTS,
   BRAIN_RATE_LIMIT_COOLDOWN_MS,

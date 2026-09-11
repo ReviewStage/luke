@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { eq } from "drizzle-orm";
+import { test } from "vitest";
 import { hostedUsage, voiceSessionUsage } from "../server/db/usage-schema";
 import { recordVoiceSeconds, utcDayKey, VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

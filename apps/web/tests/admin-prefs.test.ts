@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { beforeEach, test } from "vitest";
 
 interface KeyValueStore {
   getItem(key: string): string | null;
@@ -34,7 +34,7 @@ const { ACCOUNTS_SORT, ADMINS_HIDDEN, SIGN_IN_CHOSEN, rememberedFlag } = await i
 );
 const { ACCOUNTS_SORT_KEY, SORT_DIRECTION } = await import("../src/admin/accounts-table/sort");
 
-test.beforeEach(() => {
+beforeEach(() => {
   stored.clear();
   refuses = false;
 });

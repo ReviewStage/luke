@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { SOCIAL_PROVIDER, socialProviderFromState } from "../src/sign-in-provider";
 
 test("the signed desktop state fixes the one provider the hosted flow may use", () => {

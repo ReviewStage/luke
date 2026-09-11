@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { handleAccountDelete } from "../server/hosted/account-delete";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 

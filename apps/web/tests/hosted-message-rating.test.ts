@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { conversationMessageRatingPath } from "@sidecar/hosted";
 import { MESSAGE_RATING, type WireBoundaryInput } from "@sidecar/wire";
+import { test } from "vitest";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { handleMessageRating, type MessageRatingOptions } from "../server/hosted/message-rating";
 import { RATING_REFUSAL, type RatingWriteResult } from "../server/hosted/store";
