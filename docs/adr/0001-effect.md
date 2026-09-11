@@ -290,18 +290,6 @@ that still hand in the one `HostSeams` environment cannot resolve an override
 differently from a composition that reads the provider. P12-05 deletes it with
 `createHostKernel`.
 
-`DeviceRegistration`'s `start` and `stop` in
-`packages/host/src/device-registration.ts` are on the same allowlist, for
-`ObservationLoop`'s reason one package up: the poll's cadence is a `Schedule`
-on a fiber forked into a `Scope` the registration makes at its start, but the
-devices composer that starts and stops it at the account gate's own edges is
-still a pair of promises, so the scope is made and closed there rather than
-built around them. `stop` closes it without awaiting the close, because what
-it has to guarantee is that no further beat starts, never that the fiber has
-ended; the beat's own generation check is what keeps a call still on the wire
-from installing anything after it. P7-09 deletes both once the devices
-composer is a `Layer` and the scope is the host's own.
-
 `shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
 allowlist: the coordinator's fixed quit order — admissions closed, the
 cancellation and the settling raced against one shared deadline, whatever a
@@ -704,7 +692,6 @@ design decision stated as such:
 | `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |
 | `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
-| `DeviceRegistration`'s `start`/`stop` over its own `Scope` | P7-04 | P7-09 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
