@@ -33,11 +33,21 @@ the Effect wrap is a sibling module.
 catalog in `pnpm-workspace.yaml` and nowhere else. Every workspace that reaches
 it declares `"effect": "catalog:"`, so one version resolves across the
 repository, which is what keeps a `Context.Tag` minted in one package the same
-service in another; `repository-checks.sh` refuses a literal version. Today
-that is `@sidecar/wire`'s development dependency alone, for the spike test at
-`packages/wire/src/effect-spike.test.ts`, which exercises `Schema.Struct`
-decoding, `Effect.gen`, `Layer`, and `Context.Tag` under the repository's own
-test runner.
+service in another; `repository-checks.sh` refuses a literal version in a
+workspace's own manifest, which is the only manifest this repository writes —
+an installed dependency naming `effect` as a peer states the range it was
+published with. Each companion package joins the same catalog at the newest
+release whose peer range accepts that `effect`: `@effect/platform` at `0.97.2`,
+which peers `^3.22.2`.
+
+`@sidecar/wire` is the one workspace reaching either today, and it declares
+both as dependencies rather than development ones, because the bridges under
+`packages/wire/src/effect/` are product code: `scope.ts` carries a disposable
+into a `Scope` and back, and `http.ts` offers an `HttpClient` over a
+`CloudFetch` and a `CloudFetch` over an `HttpClient`. The
+spike test at `packages/wire/src/effect-spike.test.ts`, which exercises
+`Schema.Struct` decoding, `Effect.gen`, `Layer`, and `Context.Tag` under the
+repository's own test runner, stands beside them.
 
 The spike compiled under both TypeScript lines the repository carries:
 `typescript@7.0.2` with `@types/node@26.2.0` (every package) and
@@ -113,6 +123,13 @@ identify. Everything between the edges returns an Effect and lets its caller
 decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
+
+One strangler shim is on that allowlist for as long as it lives.
+`cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
+promise, because that is what the `CloudFetch` seam its callers still hold
+answers, so the bridge is where the effect is run until every one of them takes
+a client instead. It is the migration's own scaffolding rather than a second
+runtime for the product to live on, and it goes in P12-04 with the seam.
 
 ## Strangler shims and their deletions
 

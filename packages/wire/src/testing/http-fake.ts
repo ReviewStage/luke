@@ -58,6 +58,9 @@ export function requestBody(body: BodyInit | null | undefined): string | undefin
 /**
  * A fetch that records every call, then answers through `respond`. The
  * per-provider route table is `respond`; this only keeps the log.
+ *
+ * @deprecated Superseded by `fakeCloudApi`'s `layer`, which records the same
+ * requests behind an `HttpClient`; deleted with `CloudFetch` in P12-04.
  */
 export function recordingFetch(
   respond: (request: RecordedRequest) => Response | Promise<Response>,
