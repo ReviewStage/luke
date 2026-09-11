@@ -41,3 +41,32 @@ export function recordedRuntimeSession(
     Option.isSome(row) ? (row.value.runtimeSessionId ?? undefined) : undefined,
   );
 }
+
+const OwnerRowSchema = Schema.Struct({
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+});
+
+const findConversationOwner = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: OwnerRowSchema,
+  execute: (conversationId) =>
+    Effect.flatMap(
+      SqlClient.SqlClient,
+      (sql) => sql`
+        select user_id
+        from conversations
+        where id = ${conversationId} and deleted_at is null
+      `,
+    ),
+});
+
+/** Whether a conversation stands and belongs to the account. */
+export function conversationOwnedBy(
+  userId: string,
+  conversationId: string,
+): Effect.Effect<boolean, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.map(
+    findConversationOwner(conversationId),
+    (found) => Option.isSome(found) && found.value.userId === userId,
+  );
+}

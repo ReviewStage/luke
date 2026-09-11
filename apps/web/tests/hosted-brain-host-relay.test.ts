@@ -41,6 +41,7 @@ import {
   STORE_WRITE_REFUSAL,
   storeWriter,
 } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
@@ -66,6 +67,7 @@ const writer = await storeWriter({
 const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,
+  asks: askRecord(database.run),
   offer: (target, turnId) =>
     offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
   now: () => NOW,
@@ -621,6 +623,7 @@ test("a turn whose answer the store refuses ends failed for persistence rather t
   const target = await conversation();
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
+    asks: askRecord(database.run),
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
@@ -645,6 +648,7 @@ test("a turn start whose write throws keeps nothing in relay state, so the start
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   let failures = 1;
   const failing = new StreamRelay({
+    asks: askRecord(database.run),
     writer: {
       consume: (to, event) => writer.consume(to, event),
       enqueueTurn: (to, enqueue) => {
@@ -675,6 +679,7 @@ test("a turn whose ask the store refuses writes no answer and ends failed for pe
   const target = await conversation();
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
+    asks: askRecord(database.run),
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED && event.message.role === MESSAGE_ROLE.USER
@@ -709,6 +714,7 @@ test("a turn end the store refuses keeps the turn in relay state, so the boundar
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   let refuseEnds = 1;
   const refusing = new StreamRelay({
+    asks: askRecord(database.run),
     writer: {
       consume: (to, event) => {
         if (event.kind === BRAIN_RUN_EVENT.TURN_ENDED && refuseEnds > 0) {
