@@ -12,19 +12,27 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# CI is Linux only: the packaged macOS app is proven where it is built, by
+# `./scripts/verify.sh` at the developer's hand before a UI change is opened
+# and by the release workflow before anything ships.
 jobs:
-  # The one CI job. It is Linux only: a macOS runner bills at ten times the
-  # rate and the packaged app is proven where it is built, by
-  # `./scripts/verify.sh` at the developer's hand before a UI change is opened
-  # and by the release workflow before anything ships. The Postgres steps sit
-  # in the same job rather than a second runner because they are the one place
-  # the generated migrations and the store tests meet a real Postgres (the
-  # portable check runs them on PGlite), and a second runner's setup costs more
-  # than the two minutes they take.
   portable:
     name: TypeScript checks
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+      - run: ./scripts/check.sh
+
+  # The store tests run on PGlite inside the portable job above; this job is
+  # the one place the generated migrations and the same tests meet a real
+  # Postgres, so a statement PGlite accepts and Postgres refuses is caught
+  # before a deployment's `db:migrate` finds it.
+  postgres:
+    name: Postgres migrations and store
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -39,22 +47,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+    env:
+      DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
+      LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      # The portable check runs the store tests on PGlite, so the Postgres
-      # address is scoped to the steps below: set on the job, vitest would
-      # reach the service before db:migrate has given it a schema.
-      - run: ./scripts/check.sh
       - run: pnpm --filter @luke/web db:migrate
-        env:
-          DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
       - run: pnpm --filter @luke/web test:store
-        env:
-          LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
       # The eve end-to-end eval writes through the real writer, so it runs where a Postgres stands.
       - run: pnpm --filter @luke/web test:agent
         env:
           DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
-          LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
           PROVIDER_KEY_ENCRYPTION_SECRET: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
