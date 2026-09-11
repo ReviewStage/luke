@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { BrainTurnRecord, ConversationReadEvent } from "@sidecar/hosted";
 import {
   CONVERSATION_VIEW_SOURCE,
@@ -12,6 +11,7 @@ import {
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import { CONVERSATION_EVENT_KIND, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   CONVERSATION_VIEW_BOUNDS,
   ConversationViewSync,

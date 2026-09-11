@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -27,6 +26,7 @@ import {
   TURN_STATUS,
   type WireValue,
 } from "@sidecar/wire";
+import { test } from "vitest";
 import { type ConversationReadsClient, composeConversation } from "./compose-conversation.js";
 
 const MAIN = "3c000000-0000-4000-8000-000000000001";
