@@ -13,10 +13,13 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@sidecar/brain": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
-    "@sidecar/wire": "workspace:*"
+    "@sidecar/wire": "workspace:*",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

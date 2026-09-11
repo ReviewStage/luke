@@ -131,7 +131,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Nine strangler shims are on that allowlist for as long as they live.
+Eleven strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -202,6 +202,20 @@ service read there. Every registration is synchronous, so the run is a
 `runSync` over a scope that closes at once, holding nothing; P7-01 and P7-02
 hand the layer to the host itself and delete the door.
 
+`AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is the tenth:
+its callers are the host's composers, which still hold a plain object with
+`record*` methods rather than a fiber, so each tapped line — the entry an
+Effect `Logger` formats and the `FileSystem` write that carries it to disk —
+is run on the writer's own `ManagedRuntime` here. It is deleted once the host
+composer that holds it is a `Layer` able to hold that runtime itself, in
+Phase 7's devtrace composer conversion.
+
+`tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is the
+eleventh, on the same terms as `runCall`: the traced `respond` still answers
+the `ModelAdapter` interface's promise, so the `Effect.withSpan` wrapping the
+wrapped adapter's call is run to that promise here. It goes together with
+`BrainTransport#send`'s `runCall` in P5-14.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -225,6 +239,8 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
+| `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
+| `tracedModelAdapter`'s traced `respond` | P6-05 | P5-14 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
