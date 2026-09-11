@@ -226,9 +226,11 @@ test("events read back in sequence after the cursor, and turns in the order they
     [2, 3],
   );
 
+  // A queued row is the opener's inbox and not the record, so the read's order is exercised over started rows.
   const laterTurn = await insertTurn(userId, main, {
-    status: TURN_STATUS.QUEUED,
+    status: TURN_STATUS.RUNNING,
     queuedAt: new Date(NOW.getTime() + 1000),
+    startedAt: new Date(NOW.getTime() + 1000),
   });
   const first = await database.store.turns.list(userId);
   assert.deepEqual(
@@ -265,8 +267,9 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
       userId,
       conversationId: main,
       origin: TURN_ORIGIN.ROSTER_DIFF,
-      status: TURN_STATUS.QUEUED,
+      status: TURN_STATUS.RUNNING,
       queuedAt: sql`'2026-09-10 12:00:00.000500+00'::timestamptz`,
+      startedAt: sql`'2026-09-10 12:00:00.000500+00'::timestamptz`,
     })
     .returning({ id: turns.id });
   assert.ok(precise);
@@ -278,14 +281,14 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
   await database.db
     .update(turns)
     .set({
-      status: TURN_STATUS.RUNNING,
-      startedAt: sql`'2026-09-10 12:00:00.000900+00'::timestamptz`,
+      status: TURN_STATUS.SETTLED,
+      settledAt: sql`'2026-09-10 12:00:00.000900+00'::timestamptz`,
     })
     .where(eq(turns.id, precise.id));
   const started = await database.store.turns.list(userId, { after: answered.cursor });
   assert.deepEqual(
     started.map((row) => [row.id, row.status]),
-    [[precise.id, TURN_STATUS.RUNNING]],
+    [[precise.id, TURN_STATUS.SETTLED]],
   );
 
   const tied = new Date(NOW.getTime() + 60_000);

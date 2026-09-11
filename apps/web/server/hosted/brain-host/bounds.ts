@@ -91,6 +91,8 @@ export const BRAIN_HOST_TURN = {
   TYPED: "typed",
   SPOKEN: "spoken",
   OBSERVATION: "observation",
+  /** A hold's release: the briefings a meeting or a pause held back, handed to the conversation that decided them for one re-decision. */
+  HOLD_RELEASE: "hold_release",
 } as const;
 
 export type BrainHostTurn = (typeof BRAIN_HOST_TURN)[keyof typeof BRAIN_HOST_TURN];
@@ -108,6 +110,10 @@ export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.OBSERVATION]: {
     origin: BRAIN_TURN_ORIGIN.OBSERVATION,
     trigger: BRAIN_TURN_TRIGGER.ROSTER,
+  },
+  [BRAIN_HOST_TURN.HOLD_RELEASE]: {
+    origin: BRAIN_TURN_ORIGIN.HOLD_RELEASE,
+    trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
   },
 } as const satisfies Record<
   BrainHostTurn,

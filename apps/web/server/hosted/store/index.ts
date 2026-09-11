@@ -259,12 +259,14 @@ export {
 export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
 export {
   claimSpeech,
+  heldBriefingsNamed,
   markSpeechPushed,
   markSpeechSpoken,
   type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
   quietUntilByAccount,
+  releasedBriefings,
   SPEECH_OFFER,
   SPEECH_REFUSAL,
   SPEECH_STATE,
@@ -289,5 +291,6 @@ export {
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriteResult,
+  type StoreWriter,
   storeWriter,
 } from "./writer.js";

@@ -106,14 +106,14 @@ interface ObservationTickAnswer {
   speech: SpeechSweepOutcome;
   /** What the push over the briefings still on offer did. */
   push: SpeechPushOutcome;
-  /** The observation turns the accounts' pending diffs were opened as. */
+  /** The turns the accounts' pending diffs and queued hold releases were opened as. */
   turns: TurnOpeningOutcome;
 }
 
 const FAILED_PASS: AccountPassOutcome = { complete: false, changed: false };
 
 /** An opening that threw or outran the deadline, counted as one failure: what it did not consume stands for the next tick. */
-const FAILED_OPENING: TurnOpeningOutcome = { observation: 0, failed: 1 };
+const FAILED_OPENING: TurnOpeningOutcome = { observation: 0, holdRelease: 0, failed: 1 };
 
 /** One account's pass and its opening as the tick counts them: each failed when it threw, and both cut short when the account outran its deadline. */
 interface AccountOutcome {
@@ -202,6 +202,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
       if (pass.changed) answer.changed += 1;
       answer.turns = {
         observation: answer.turns.observation + turns.observation,
+        holdRelease: answer.turns.holdRelease + turns.holdRelease,
         failed: answer.turns.failed + turns.failed,
       };
     }

@@ -14,6 +14,7 @@ import {
   type SchemaRead,
   type SchemaRefusal,
   type StoredUIMessage,
+  TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
   unparsedWire,
@@ -603,13 +604,22 @@ const changedAfterFragment = (sql: SqlClient.SqlClient, after: TurnCursorPositio
   ]);
 };
 
+/**
+ * A turn the record answers: one that has started, whatever it came to. A
+ * queued row is the opener's inbox and never the run's record — it says a
+ * turn is owed, not that one ran — so a device is never shown a turn with
+ * nothing in it that then goes; it meets the turn once the relay has moved
+ * it to running.
+ */
+const startedTurn = (sql: SqlClient.SqlClient) => sql`turns.status <> ${TURN_STATUS.QUEUED}`;
+
 /** The account's turns in the order they last changed, so a turn that settled since a device's last read is answered again with its new status; a page edge drops nothing, since the id breaks a tie. */
 export function listTurns(
   userId: string,
   cursor: TurnCursor = {},
 ): Effect.Effect<readonly StoredTurnRecord[], MessageReadFailure, SqlClient.SqlClient> {
   return statement((sql) => {
-    const conditions: Fragment[] = [sql`turns.user_id = ${userId}`];
+    const conditions: Fragment[] = [sql`turns.user_id = ${userId}`, startedTurn(sql)];
     if (cursor.after !== undefined) conditions.push(changedAfterFragment(sql, cursor.after));
     return sql`
       select ${sql.literal(TURN_COLUMNS)}, (${turnChangedAt(sql)})::text as changed_at
@@ -626,6 +636,47 @@ export function listTurns(
       ),
     ),
   );
+}
+
+const QueuedTurnRowSchema = Schema.Struct({
+  id: Schema.String,
+  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  queuedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("queued_at")),
+});
+
+/** A queued turn as the opener reads it: the row, the conversation it waits on, and when it was queued. */
+export type QueuedTurnRecord = typeof QueuedTurnRowSchema.Type;
+
+const findQueuedTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, origin: Schema.String, limit: Schema.Number }),
+  Result: QueuedTurnRowSchema,
+  execute: (options) =>
+    statement(
+      (sql) => sql`
+        select turns.id, turns.conversation_id, turns.queued_at
+        from turns
+        ${standingJoin(sql, "turns.conversation_id")}
+        where turns.user_id = ${options.userId}
+          and turns.origin = ${options.origin}
+          and turns.status = ${TURN_STATUS.QUEUED}
+        order by turns.queued_at asc, turns.id asc
+        limit ${options.limit}
+      `,
+    ),
+});
+
+/**
+ * The account's queued turns of one origin over its standing conversations,
+ * oldest first: the opener's inbox, read to be handed to eve and removed.
+ * A queued row of a stamped conversation is nobody's to run and is not
+ * listed.
+ */
+export function queuedTurns(
+  userId: string,
+  origin: TurnOrigin,
+  limit: number,
+): Effect.Effect<readonly QueuedTurnRecord[], MessageReadFailure, SqlClient.SqlClient> {
+  return findQueuedTurns({ userId, origin, limit });
 }
 
 /** The turn rows a page of messages names, whichever standing conversations they ran over, so the view can place each group under its turn. */
@@ -681,7 +732,7 @@ export function latestTurnPosition(
   notAfter?: TurnCursorPosition,
 ): Effect.Effect<TurnCursorPosition | undefined, MessageReadFailure, SqlClient.SqlClient> {
   return statement((sql) => {
-    const conditions: Fragment[] = [sql`turns.user_id = ${userId}`];
+    const conditions: Fragment[] = [sql`turns.user_id = ${userId}`, startedTurn(sql)];
     if (notAfter !== undefined) conditions.push(changedAtOrBeforeFragment(sql, notAfter));
     return sql`
       select turns.id as id, (${turnChangedAt(sql)})::text as changed_at

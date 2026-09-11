@@ -46,4 +46,5 @@ export const DEPLOYMENT_TURNS = {
   [BRAIN_HOST_TURN.TYPED]: false,
   [BRAIN_HOST_TURN.SPOKEN]: true,
   [BRAIN_HOST_TURN.OBSERVATION]: true,
+  [BRAIN_HOST_TURN.HOLD_RELEASE]: true,
 } as const satisfies Record<BrainHostTurn, boolean>;

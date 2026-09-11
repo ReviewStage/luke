@@ -11,7 +11,7 @@ import { hostedUserId } from "./hosted/bearer.js";
 import { EVE_CALLER, eveSessions } from "./hosted/brain-host/eve-sessions.js";
 import {
   NOTHING_OPENED,
-  openObservationTurns,
+  openAccountTurns,
   type ScheduledTurn,
 } from "./hosted/brain-host/opener.js";
 import { readHostedRoster } from "./hosted/brain-host/roster.js";
@@ -265,10 +265,11 @@ async function observationTickHandler(request: Request): Promise<Response> {
       const rows = await vaultRows(userId);
       const roster = await readHostedRoster(store, userId, rows, encryptionSecret);
       const readApiKey = readApiKeyFor(rows, encryptionSecret);
-      return openObservationTurns(
+      return openAccountTurns(
         {
           run: runWeb,
           store,
+          writer: await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET }),
           eve: eveSessions<ScheduledTurn>({
             origin: eveOrigin,
             caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },

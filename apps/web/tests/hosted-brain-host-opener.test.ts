@@ -6,12 +6,28 @@ import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
+  BRAIN_TOOL,
+  CONVERSATION_EVENT_KIND,
+  holdReleasedInputText,
+  MESSAGE_AUTHOR,
+  MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionIdentity,
+  SPEECH_EXPIRY_REASON,
+  TURN_ORIGIN,
+  TURN_STATUS,
 } from "../server/core";
 import { rosterDiff as rosterDiffTable } from "../server/db/roster-schema";
-import { CONVERSATION_KIND, conversations, providerCursors } from "../server/db/storage-schema";
+import {
+  CONVERSATION_KIND,
+  conversations,
+  events,
+  messages,
+  providerCursors,
+  turns,
+} from "../server/db/storage-schema";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -19,6 +35,8 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import {
+  openAccountTurns,
+  openHoldReleaseTurns,
   openObservationTurns,
   type ScheduledTurn,
   type TurnOpenerSeams,
@@ -29,9 +47,10 @@ import {
   type HostedTranscriptReads,
   keepTranscriptCursor,
 } from "../server/hosted/brain-host/transcript";
+import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import type { ObservedRoster } from "../server/hosted/observed-roster";
 import { encodeRosterDiff, rosterDiff } from "../server/hosted/roster-diff";
-import type { HostedStoreRun } from "../server/hosted/store";
+import { type HostedStoreRun, storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -47,6 +66,11 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
+const writer = await storeWriter({
+  run: database.run,
+  tools: CATALOG_TOOL_SET,
+  now: () => new Date(NOW),
+});
 
 const NOW = Date.parse("2026-09-11T09:00:00.000Z");
 const PROVIDER = "conductor";
@@ -190,6 +214,7 @@ function seams(
   return {
     run: database.run,
     store: database.store,
+    writer,
     eve: fakeEve().eve,
     transcripts: fakeTranscripts(),
     now: () => NOW + 5_000,
@@ -274,7 +299,11 @@ test("three diffs about one session in one pass become one turn: one eve message
 
   const outcome = await openObservationTurns(opener, userId);
 
-  assert.deepEqual(outcome, { observation: 1, failed: 0 } satisfies TurnOpeningOutcome);
+  assert.deepEqual(outcome, {
+    observation: 1,
+    holdRelease: 0,
+    failed: 0,
+  } satisfies TurnOpeningOutcome);
   assert.equal(handed.length, 1);
   const [turn] = handed;
   assert.ok(turn);
@@ -298,7 +327,7 @@ test("three diffs about one session in one pass become one turn: one eve message
   assert.equal(diffs.length, 3);
 
   const again = await openObservationTurns(opener, userId);
-  assert.deepEqual(again, { observation: 0, failed: 0 });
+  assert.deepEqual(again, { observation: 0, holdRelease: 0, failed: 0 });
   assert.equal(handed.length, 1);
 });
 
@@ -336,7 +365,7 @@ test("a conversation already running in an eve session is sent to, not reopened;
     seams({ eve: retired.eve, roster: rosterNow }),
     retiredUser,
   );
-  assert.deepEqual(outcome, { observation: 1, failed: 0 });
+  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
   assert.deepEqual(
     retired.handed.map((turn) => turn.kind),
     ["send", "open"],
@@ -355,7 +384,7 @@ test("a turn eve refuses leaves the cursor and the diffs standing, and nothing o
 
   const outcome = await openObservationTurns(opener, userId);
 
-  assert.deepEqual(outcome, { observation: 0, failed: 1 });
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 1 });
   assert.equal(refusing.handed.length, 1);
   assert.equal(await cursorOf(userId, identity("s-1")), undefined);
   assert.deepEqual((await pendingDiffIds(userId)).sort(), [...diffs].sort());
@@ -368,7 +397,7 @@ test("a turn eve refuses leaves the cursor and the diffs standing, and nothing o
     seams({ eve: throwing.eve, roster: opener.roster }),
     userId,
   );
-  assert.deepEqual(thrown, { observation: 0, failed: 1 });
+  assert.deepEqual(thrown, { observation: 0, holdRelease: 0, failed: 1 });
   assert.deepEqual((await pendingDiffIds(userId)).sort(), [...diffs].sort());
 });
 
@@ -433,7 +462,7 @@ test("a transcript read that throws costs the turn its delta and nothing else; t
     roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000),
   });
   const outcome = await openObservationTurns(opener, userId);
-  assert.deepEqual(outcome, { observation: 1, failed: 0 });
+  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
   assert.equal(
     eventsOf(
       handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.OBSERVATION, message: "" },
@@ -461,7 +490,7 @@ test("the bound is per account: two accounts under a bound of one each get their
     const outcome = await openObservationTurns(seams({ eve, roster: rosterNow }), userId, {
       limit: 1,
     });
-    assert.deepEqual(outcome, { observation: 1, failed: 0 });
+    assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
     assert.equal(handed.length, 1);
     assert.deepEqual(await pendingDiffIds(userId), []);
   }
@@ -484,7 +513,7 @@ test("within an account the bound takes whole diffs oldest first and leaves the 
       limit: 1,
     },
   );
-  assert.deepEqual(outcome, { observation: 1, failed: 0 });
+  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
   assert.deepEqual(
     bounded.handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
     [["s-2"]],
@@ -505,7 +534,7 @@ test("within an account the bound takes whole diffs oldest first and leaves the 
   const cutting = fakeEve();
   const cut = seams({ eve: cutting.eve, roster: rosterNow });
   const wideOutcome = await openObservationTurns(cut, wide, { limit: 2 });
-  assert.deepEqual(wideOutcome, { observation: 2, failed: 0 });
+  assert.deepEqual(wideOutcome, { observation: 2, holdRelease: 0, failed: 0 });
   assert.equal(cutting.handed.length, 2);
   assert.deepEqual(await pendingDiffIds(wide), []);
   assert.equal(cut.reports.length, 1);
@@ -530,7 +559,7 @@ test("a diff about a session the snapshot no longer holds still wakes its conver
     seams({ eve, transcripts, roster: hostedRosterFrom(gone, NOW + 1_000) }),
     userId,
   );
-  assert.deepEqual(outcome, { observation: 1, failed: 0 });
+  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
   const events = eventsOf(
     handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.OBSERVATION, message: "" },
   );
@@ -561,7 +590,11 @@ test("a bookmark is kept only over the one the read began from, so a pass that r
     transcripts: fakeTranscripts({ deltas: { "s-1": { text: "words", cursor: "cursor-slow" } } }),
     roster: rosterNow,
   });
-  assert.deepEqual(await openObservationTurns(slow, first), { observation: 1, failed: 0 });
+  assert.deepEqual(await openObservationTurns(slow, first), {
+    observation: 1,
+    holdRelease: 0,
+    failed: 0,
+  });
   assert.equal(await cursorOf(first, who), "cursor-later");
   assert.deepEqual(await pendingDiffIds(first), []);
 
@@ -595,4 +628,293 @@ test("a bookmark is kept only over the one the read began from, so a pass that r
     third,
   );
   assert.equal(await cursorOf(third, who), "cursor-1");
+});
+
+/** The hold-release drain. */
+
+interface Released {
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly queued: string[];
+}
+
+/** One held briefing as the opener reads it back: the briefing's words and when the brain decided it. */
+interface HeldBriefingRecord {
+  readonly briefing: string;
+  readonly decided_at: string;
+}
+
+function heldBriefingsOf(message: EveMessage<ScheduledTurn>): readonly HeldBriefingRecord[] {
+  const [, ...body] = message.message.split("\n");
+  // SAFETY: the words are the host's own JSON behind the marker, read here to assert on their shape.
+  const parsed = JSON.parse(body.join("\n")) as { held_briefings: HeldBriefingRecord[] };
+  return parsed.held_briefings;
+}
+
+/**
+ * An observed conversation whose one settled turn announced a briefing that a
+ * hold then released unspoken, with `rows` hold-release turns queued for it
+ * the way the sweep queues them. The release event and the announcing row
+ * are written as the sweep and the relay leave them.
+ */
+async function releasedConversation(
+  userId: string,
+  sessionId: string,
+  options: { rows: number; briefings?: number; releasedAt?: number; carried?: boolean } = {
+    rows: 1,
+  },
+): Promise<Released> {
+  const conversationId = await database.store.directory.observed(userId, identity(sessionId), NOW);
+  assert.ok(conversationId);
+  const target = { userId, conversationId };
+  const decided: { briefing: string; decidedAt: number }[] = [];
+  for (let index = 0; index < (options.briefings ?? 1); index += 1) {
+    const [turn] = await database.db
+      .insert(turns)
+      .values({
+        userId,
+        conversationId,
+        origin: TURN_ORIGIN.ROSTER_DIFF,
+        status: TURN_STATUS.SETTLED,
+        queuedAt: new Date(NOW - 60_000 + index),
+        settledAt: new Date(NOW - 60_000 + index),
+      })
+      .returning({ id: turns.id });
+    assert.ok(turn);
+    const [message] = await database.db
+      .insert(messages)
+      .values({
+        userId,
+        conversationId,
+        seq: index + 1,
+        turnId: turn.id,
+        clientId: turn.id,
+        role: MESSAGE_ROLE.ASSISTANT,
+        // SAFETY: a stored announce part in the SDK's own shape, as the relay writes one.
+        parts: [
+          {
+            type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
+            toolCallId: `call-${index}`,
+            state: "output-available",
+            input: { briefing: `Fixture briefing ${index + 1}.` },
+            output: { status: "accepted" },
+          },
+        ] as unknown as (typeof messages.$inferInsert)["parts"],
+        metadata: { author: MESSAGE_AUTHOR.BRAIN },
+        createdAt: new Date(NOW - 60_000 + index),
+        finishedAt: new Date(NOW - 60_000 + index),
+      })
+      .returning({ id: messages.id });
+    assert.ok(message);
+    await database.db.insert(events).values({
+      userId,
+      conversationId,
+      seq: index + 1,
+      messageId: message.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
+      payload: { reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED },
+      createdAt: new Date(options.releasedAt ?? NOW - 30_000),
+    });
+    decided.push({ briefing: `Fixture briefing ${index + 1}.`, decidedAt: NOW - 60_000 + index });
+  }
+  if (options.carried) {
+    // The re-decision eve already ran, as the relay records its opening words: every briefing so far is named there.
+    const words = await writer.recordUserMessage(target, {
+      clientId: `carried-${conversationId}`,
+      text: holdReleasedInputText(decided, NOW - 20_000),
+      metadata: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
+    });
+    assert.equal(words.ok, true);
+  }
+  const queued: string[] = [];
+  for (let index = 0; index < options.rows; index += 1) {
+    const row = await writer.enqueueTurn(target, { origin: TURN_ORIGIN.HOLD_RELEASE });
+    assert.equal(row.ok, true);
+    if (row.ok) queued.push(row.turnId);
+  }
+  return { userId, conversationId, queued };
+}
+
+async function queuedRows(conversationId: string): Promise<string[]> {
+  const rows = await database.db
+    .select({ id: turns.id })
+    .from(turns)
+    .where(and(eq(turns.conversationId, conversationId), eq(turns.status, TURN_STATUS.QUEUED)));
+  return rows.map((row) => row.id);
+}
+
+test("a conversation's queued hold releases become one hold_release message listing the briefings the hold released, and the rows go once eve has it", async () => {
+  const userId = await accountSeeing(roster([observation("s-1")]));
+  const released = await releasedConversation(userId, "s-1", { rows: 2, briefings: 2 });
+  const { eve, handed } = fakeEve();
+  const opener = seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) });
+
+  const outcome = await openHoldReleaseTurns(opener, userId);
+
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0 });
+  assert.equal(handed.length, 1);
+  const [turn] = handed;
+  assert.ok(turn);
+  assert.equal(turn.message.turn, BRAIN_HOST_TURN.HOLD_RELEASE);
+  assert.equal(turn.message.conversationId, released.conversationId);
+  assert.deepEqual(
+    heldBriefingsOf(turn.message).map((briefing) => briefing.briefing),
+    ["Fixture briefing 1.", "Fixture briefing 2."],
+  );
+  assert.deepEqual(await queuedRows(released.conversationId), []);
+  assert.equal(released.queued.length, 2);
+  assert.deepEqual(await openHoldReleaseTurns(opener, userId), {
+    observation: 0,
+    holdRelease: 0,
+    failed: 0,
+  });
+  assert.equal(handed.length, 1);
+});
+
+test("a hold-release row the relay has moved to running is the run's record and not the inbox: the drain hands eve nothing for it and leaves it standing", async () => {
+  const userId = await accountSeeing(roster([observation("s-1")]));
+  const released = await releasedConversation(userId, "s-1", { rows: 1 });
+  const [running] = released.queued;
+  assert.ok(running);
+  await database.db
+    .update(turns)
+    .set({ status: TURN_STATUS.RUNNING, startedAt: new Date(NOW - 1_000) })
+    .where(eq(turns.id, running));
+  const { eve, handed } = fakeEve();
+
+  const outcome = await openHoldReleaseTurns(
+    seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) }),
+    userId,
+  );
+
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 0 });
+  assert.deepEqual(handed, []);
+  const [row] = await database.db
+    .select({ status: turns.status })
+    .from(turns)
+    .where(eq(turns.id, running));
+  assert.deepEqual(row, { status: TURN_STATUS.RUNNING });
+});
+
+test("a hold release eve refuses leaves its rows queued; one whose briefings a hold-release message already names goes without a turn, said rather than sent", async () => {
+  const userId = await accountSeeing(roster([observation("s-1"), observation("s-2")]));
+  const refused = await releasedConversation(userId, "s-1", { rows: 1 });
+  const refusing = fakeEve(() => ({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }));
+  const rosterNow = hostedRosterFrom(roster([observation("s-1"), observation("s-2")]), NOW);
+  assert.deepEqual(
+    await openHoldReleaseTurns(seams({ eve: refusing.eve, roster: rosterNow }), userId),
+    { observation: 0, holdRelease: 0, failed: 1 },
+  );
+  assert.deepEqual(await queuedRows(refused.conversationId), refused.queued);
+
+  const stale = await releasedConversation(userId, "s-2", { rows: 1, carried: true });
+  const { eve, handed } = fakeEve();
+  const opener = seams({ eve, roster: rosterNow });
+  const outcome = await openHoldReleaseTurns(opener, userId, { limit: 8 });
+  assert.equal(outcome.holdRelease, 1);
+  assert.deepEqual(
+    handed.map((turn) => turn.message.conversationId),
+    [refused.conversationId],
+  );
+  assert.deepEqual(await queuedRows(stale.conversationId), []);
+  assert.equal(opener.reports.length, 1);
+});
+
+test("an account's opening takes the hold releases first and the observations under what remains of one bound", async () => {
+  const before = roster([observation("s-1"), observation("s-2")]);
+  const after = roster([
+    observation("s-1"),
+    observation("s-2", { status: SESSION_STATUS.WAITING }),
+  ]);
+  const userId = await accountSeeing(before);
+  await passed(userId, before, after, NOW + 1_000, NOW);
+  await releasedConversation(userId, "s-1", { rows: 1 });
+  const rosterNow = hostedRosterFrom(after, NOW + 1_000);
+
+  const bounded = fakeEve();
+  assert.deepEqual(
+    await openAccountTurns(seams({ eve: bounded.eve, roster: rosterNow }), userId, { limit: 1 }),
+    { observation: 0, holdRelease: 1, failed: 0 },
+  );
+  assert.deepEqual(
+    bounded.handed.map((turn) => turn.message.turn),
+    [BRAIN_HOST_TURN.HOLD_RELEASE],
+  );
+  assert.equal((await pendingDiffIds(userId)).length, 1);
+
+  const next = fakeEve();
+  assert.deepEqual(
+    await openAccountTurns(seams({ eve: next.eve, roster: rosterNow }), userId, { limit: 1 }),
+    { observation: 1, holdRelease: 0, failed: 0 },
+  );
+  assert.deepEqual(
+    next.handed.map((turn) => turn.message.turn),
+    [BRAIN_HOST_TURN.OBSERVATION],
+  );
+  assert.deepEqual(await pendingDiffIds(userId), []);
+});
+
+test("a re-decision carries every release no hold-release message has named, however many, and none a message already names", async () => {
+  const userId = await accountSeeing(roster([observation("s-1")]));
+  const released = await releasedConversation(userId, "s-1", { rows: 1, briefings: 12 });
+  // One more, released earlier and named by the re-decision that carried it.
+  const [earlier] = await database.db
+    .insert(messages)
+    .values({
+      userId,
+      conversationId: released.conversationId,
+      seq: 40,
+      clientId: "earlier-announcement",
+      role: MESSAGE_ROLE.ASSISTANT,
+      // SAFETY: a stored announce part in the SDK's own shape, as the relay writes one.
+      parts: [
+        {
+          type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
+          toolCallId: "call-earlier",
+          state: "output-available",
+          input: { briefing: "An earlier briefing." },
+          output: { status: "accepted" },
+        },
+      ] as unknown as (typeof messages.$inferInsert)["parts"],
+      metadata: { author: MESSAGE_AUTHOR.BRAIN },
+      createdAt: new Date(NOW - 120_000),
+      finishedAt: new Date(NOW - 120_000),
+    })
+    .returning({ id: messages.id });
+  assert.ok(earlier);
+  await database.db.insert(events).values({
+    userId,
+    conversationId: released.conversationId,
+    seq: 40,
+    messageId: earlier.id,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
+    payload: { reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED },
+    createdAt: new Date(NOW - 60_000),
+  });
+  const carried = await writer.recordUserMessage(
+    { userId, conversationId: released.conversationId },
+    {
+      clientId: "carried-earlier",
+      text: holdReleasedInputText(
+        [{ briefing: "An earlier briefing.", decidedAt: NOW - 120_000 }],
+        NOW - 50_000,
+      ),
+      metadata: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
+    },
+  );
+  assert.equal(carried.ok, true);
+  const { eve, handed } = fakeEve();
+  const opener = seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) });
+  const outcome = await openHoldReleaseTurns(opener, userId);
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0 });
+  // The read bound (64) is reported when met; thirteen rows sit well inside it, so a full page here would be a different failure and says so.
+  assert.deepEqual(opener.reports, []);
+  const listed = heldBriefingsOf(
+    handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.HOLD_RELEASE, message: "" },
+  );
+  assert.deepEqual(
+    listed.map((briefing) => briefing.briefing),
+    Array.from({ length: 12 }, (_, index) => `Fixture briefing ${index + 1}.`),
+  );
+  assert.deepEqual(await queuedRows(released.conversationId), []);
 });

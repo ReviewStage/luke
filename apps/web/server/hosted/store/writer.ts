@@ -273,6 +273,8 @@ export interface StoreWriter {
   consume(target: ConversationTarget, event: BrainRunEvent): Promise<StoreWriteResult>;
   /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Promise<TurnEnqueueResult>;
+  /** Removes a queued turn the opener has handed to eve; a row eve has started, or one a message names, is left standing. */
+  dequeueTurn(target: ConversationTarget, turnId: string): Promise<StoreWriteResult>;
   /** Writes the assistant message a compaction stands as; the stream's own compaction event carries too little to write it. */
   recordCompaction(
     target: ConversationTarget,
@@ -1226,6 +1228,49 @@ function enqueueTurn(context: WriterContext, enqueue: TurnEnqueue): Write<TurnEn
   });
 }
 
+/**
+ * A queued row is the opener's inbox, never the run's record: the turn eve
+ * runs for it is recorded by the relay under eve's own identity, with the
+ * origin the message named, so once eve has taken the message the queued
+ * row has done its work and goes. A row eve has since started is eve's turn
+ * and is not the opener's to remove, and a row a message names is a record
+ * whatever its status; both are left as they stand.
+ */
+const findMessageNamingTurn = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: RowIdSchema,
+  execute: (turnId) =>
+    statement((sql) => sql`select id from messages where turn_id = ${turnId} limit 1`),
+});
+
+const deleteQueuedTurn = SqlSchema.void({
+  Request: Schema.Struct({ turnId: Schema.String, conversationId: Schema.String }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        delete from turns
+        where id = ${request.turnId}
+          and conversation_id = ${request.conversationId}
+          and status = ${TURN_STATUS.QUEUED}
+      `,
+    ),
+});
+
+function dequeueTurn(context: WriterContext, turnId: string): Write<StoreWriteResult> {
+  return Effect.gen(function* () {
+    const standing = yield* turnRow(context, turnId);
+    if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
+    if (standing.value.status !== TURN_STATUS.QUEUED) {
+      return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+    }
+    if (Option.isSome(yield* findMessageNamingTurn(turnId))) {
+      return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+    }
+    yield* deleteQueuedTurn({ turnId, conversationId: context.target.conversationId });
+    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+  });
+}
+
 /** Whether a stored row is a compaction: an assistant row whose metadata names what it folded. */
 function isCompactionRow(row: MessageRow): boolean {
   return (
@@ -1410,6 +1455,8 @@ export async function storeWriter({
     consume: (target, event) => underConversation(target, (context) => consume(context, event)),
     enqueueTurn: (target, enqueue) =>
       underConversation(target, (context) => enqueueTurn(context, enqueue)),
+    dequeueTurn: (target, turnId) =>
+      underConversation(target, (context) => dequeueTurn(context, turnId)),
     recordCompaction: (target, compaction) =>
       underConversation(target, (context) => recordCompaction(context, compaction)),
     recordEvent: (target, event) =>

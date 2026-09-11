@@ -1,11 +1,13 @@
 import { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
 import type { BrainWakeEvent, SessionIdentity } from "../../core.js";
-import { wakeInputText } from "../../core.js";
+import { holdReleasedInputText, TURN_ORIGIN, wakeInputText } from "../../core.js";
 import { decodeRosterDiff } from "../roster-diff.js";
 import type { HostedStoreRun } from "../store/database.js";
-import type { ConversationTarget, HostedStore } from "../store/index.js";
+import type { ConversationTarget, HostedStore, StoreWriter } from "../store/index.js";
+import { type QueuedTurnRecord, queuedTurns } from "../store/message-reads.js";
 import { consumeRosterDiff } from "../store/roster-snapshot.js";
+import { releasedBriefings } from "../store/speech.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { EVE_SEND_OUTCOME, type EveSessions } from "./eve-sessions.js";
 import { recordedRuntimeSession } from "./recorded-session.js";
@@ -41,10 +43,29 @@ import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-e
  * the model is told to read as data. Nothing is recorded that eve has not
  * accepted.
  *
- * The pass is per account by construction: it reads one account's diffs,
- * opens that account's conversations, and never a bounded page across
- * accounts, so no account's burst can stand in another's way. Within an
- * account it opens at most `TURNS_PER_ACCOUNT` conversations a tick, taking
+ * The other thing the opener drains is the queued `turns` rows the speech
+ * sweep writes when a hold lifts: one per conversation per release, saying
+ * the briefings a meeting or a pause held back deserve a fresh decision
+ * against the roster as it now is. A queued row is the opener's inbox and
+ * never the run's record. The opener hands eve one `hold_release` message
+ * per conversation, listing every briefing released and named in no
+ * hold-release message of the conversation yet — the record's own contents
+ * as the boundary, since the message the relay writes for each re-decision
+ * names what it carried — and once eve has taken it removes the rows through
+ * the writer, so the turn eve runs is recorded by the relay under eve's
+ * identity with `hold_release` as its origin, the one row of the record that
+ * says why Luke spoke, and the inbox is empty. A row eve refuses stands for
+ * the next tick like a pending diff does. Nothing here keeps time: a
+ * hold-release message the relay has not written yet can only make the next
+ * drain list a release again, never lose one, and a turn eve took and never
+ * ran leaves its releases uncarried for the next release's drain to carry.
+ *
+ * The pass is per account by construction: it reads one account's diffs
+ * and one account's queued rows, opens that account's conversations, and
+ * never a bounded page across accounts, so no account's burst can stand in
+ * another's way. Within an account it opens at most `TURNS_PER_ACCOUNT`
+ * conversations a tick, the hold releases first since they are the older
+ * news, then the observations under what remains of the bound, taking
  * whole diffs oldest first while their sessions fit and leaving the rest
  * pending for the next minute; the one diff that alone names more sessions
  * than the bound is cut to the bound, oldest change first, and the sessions
@@ -53,17 +74,32 @@ import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-e
  */
 
 const TURN_OPENER = {
-  /** The most observed conversations one account is opened a turn for in one tick. */
+  /** The most conversations one account is opened a turn for in one tick, hold releases and observations together. */
   TURNS_PER_ACCOUNT: 8,
+  /** The most queued rows one account's inbox is read for in one tick; the rest wait, since their conversations would exceed the bound anyway. */
+  QUEUED_ROWS_READ: 50,
+  /**
+   * The most released briefings one hold-release turn is read for. Every
+   * release not yet carried is handed over in the one message, since a
+   * release left behind would wait for another hold's release to be carried
+   * and a re-decision owed now should not wait on one; the bound is a read
+   * bound against a runaway, said when met, and far past the briefings one
+   * hold could release.
+   */
+  RELEASED_BRIEFINGS_READ: 64,
 } as const;
 
 /** The kinds of turn the opener sends, which is what its eve client is admitted for and nothing wider. */
-export type ScheduledTurn = typeof BRAIN_HOST_TURN.OBSERVATION;
+export type ScheduledTurn =
+  | typeof BRAIN_HOST_TURN.OBSERVATION
+  | typeof BRAIN_HOST_TURN.HOLD_RELEASE;
 
 export interface TurnOpenerSeams {
   /** The runner the consuming transaction is answered through: the edge's own, over the same database. */
   readonly run: HostedStoreRun;
   readonly store: Pick<HostedStore, "roster" | "directory">;
+  /** The writer, for the one write the drain makes: removing a queued row eve has taken. */
+  readonly writer: Pick<StoreWriter, "dequeueTurn">;
   readonly eve: EveSessions<ScheduledTurn>;
   /** The roster as the pass just left it, which the wakes describe sessions from. */
   readonly roster: HostedRoster;
@@ -81,11 +117,21 @@ export interface TurnOpeningOptions {
 export interface TurnOpeningOutcome {
   /** Observation turns eve accepted, one per observed conversation. */
   readonly observation: number;
+  /** Hold-release turns eve accepted, one per conversation with rows queued. */
+  readonly holdRelease: number;
   /** Conversations the pass could not open a turn for: eve refused, or no conversation could stand for the session. */
   readonly failed: number;
 }
 
-export const NOTHING_OPENED: TurnOpeningOutcome = { observation: 0, failed: 0 };
+export const NOTHING_OPENED: TurnOpeningOutcome = { observation: 0, holdRelease: 0, failed: 0 };
+
+function summed(left: TurnOpeningOutcome, right: TurnOpeningOutcome): TurnOpeningOutcome {
+  return {
+    observation: left.observation + right.observation,
+    holdRelease: left.holdRelease + right.holdRelease,
+    failed: left.failed + right.failed,
+  };
+}
 
 interface PendingDiff extends DatedRosterDiff {
   readonly id: string;
@@ -153,20 +199,17 @@ function plan(diffs: readonly PendingDiff[], roster: HostedRoster, limit: number
 async function handToEve(
   seams: TurnOpenerSeams,
   target: ConversationTarget,
+  turn: ScheduledTurn,
   words: string,
 ): Promise<boolean> {
-  const message = {
-    conversationId: target.conversationId,
-    turn: BRAIN_HOST_TURN.OBSERVATION,
-    message: words,
-  };
+  const message = { conversationId: target.conversationId, turn, message: words };
   const recorded = await seams.run(recordedRuntimeSession(target));
   if (recorded !== undefined) {
     const sent = await seams.eve.send(recorded, message);
     if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
     if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
       seams.report(
-        `eve refused an observation turn on conversation ${target.conversationId} with status ${sent.status}.`,
+        `eve refused a ${turn} turn on conversation ${target.conversationId} with status ${sent.status}.`,
       );
       return false;
     }
@@ -203,6 +246,23 @@ async function withTranscript(
   };
 }
 
+/** Whether eve took the message, a send that throws counted as a refusal and said. */
+async function offered(
+  seams: TurnOpenerSeams,
+  target: ConversationTarget,
+  turn: ScheduledTurn,
+  words: string,
+): Promise<boolean> {
+  try {
+    return await handToEve(seams, target, turn, words);
+  } catch (error) {
+    seams.report(
+      `eve could not be reached for conversation ${target.conversationId}: ${String(error)}.`,
+    );
+    return false;
+  }
+}
+
 /** Opens the account's observation turns for the diffs pending now, as the module comment describes. */
 export async function openObservationTurns(
   seams: TurnOpenerSeams,
@@ -210,6 +270,7 @@ export async function openObservationTurns(
   options: TurnOpeningOptions = {},
 ): Promise<TurnOpeningOutcome> {
   const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
+  if (limit <= 0) return NOTHING_OPENED;
   const diffs = await pendingDiffs(seams.store, userId);
   if (diffs.length === 0) return NOTHING_OPENED;
   const planned = plan(diffs, seams.roster, limit);
@@ -236,17 +297,9 @@ export async function openObservationTurns(
     }
     const target: ConversationTarget = { userId, conversationId };
     const read = await withTranscript(seams, opening);
-    let accepted: boolean;
-    try {
-      accepted = await handToEve(seams, target, wakeInputText(read.events, seams.now()));
-    } catch (error) {
-      seams.report(
-        `eve could not be reached for conversation ${conversationId}: ${String(error)}.`,
-      );
-      accepted = false;
-    }
-    if (!accepted) {
-      return { observation, failed: failed + 1 };
+    const words = wakeInputText(read.events, seams.now());
+    if (!(await offered(seams, target, BRAIN_HOST_TURN.OBSERVATION, words))) {
+      return { observation, holdRelease: 0, failed: failed + 1 };
     }
     if (read.cursor !== undefined) {
       cursors.push({ identity: opening.identity, cursor: read.cursor, from: read.from });
@@ -269,5 +322,82 @@ export async function openObservationTurns(
       ),
     ),
   );
-  return { observation, failed };
+  return { observation, holdRelease: 0, failed };
+}
+
+/**
+ * Opens the account's hold-release turns for the queued rows standing now:
+ * one message per conversation carrying the briefings released since a
+ * little before its oldest row was queued, the rows removed once eve has
+ * the message. A conversation whose rows name no released briefing — an
+ * earlier turn already carried them — has nothing left to decide, and its
+ * rows go without a turn, said rather than sent as an empty ask.
+ */
+export async function openHoldReleaseTurns(
+  seams: TurnOpenerSeams,
+  userId: string,
+  options: TurnOpeningOptions = {},
+): Promise<TurnOpeningOutcome> {
+  const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
+  if (limit <= 0) return NOTHING_OPENED;
+  const rows = await seams.run(
+    queuedTurns(userId, TURN_ORIGIN.HOLD_RELEASE, TURN_OPENER.QUEUED_ROWS_READ),
+  );
+  const byConversation = new Map<string, QueuedTurnRecord[]>();
+  for (const row of rows) {
+    const held = byConversation.get(row.conversationId);
+    if (held) held.push(row);
+    else if (byConversation.size < limit) byConversation.set(row.conversationId, [row]);
+  }
+  let holdRelease = 0;
+  for (const [conversationId, queued] of byConversation) {
+    const target: ConversationTarget = { userId, conversationId };
+    const briefings = await seams.run(
+      releasedBriefings(target, { limit: TURN_OPENER.RELEASED_BRIEFINGS_READ }),
+    );
+    if (briefings.length >= TURN_OPENER.RELEASED_BRIEFINGS_READ) {
+      seams.report(
+        `Conversation ${conversationId} has at least ${TURN_OPENER.RELEASED_BRIEFINGS_READ} briefings released since its last re-decision; only that many are handed over.`,
+      );
+    }
+    if (briefings.length > 0) {
+      const words = holdReleasedInputText(
+        briefings.map((briefing) => ({
+          briefing: briefing.briefing,
+          decidedAt: briefing.decidedAt,
+        })),
+        seams.now(),
+      );
+      if (!(await offered(seams, target, BRAIN_HOST_TURN.HOLD_RELEASE, words))) {
+        return { observation: 0, holdRelease, failed: 1 };
+      }
+      holdRelease += 1;
+    } else {
+      seams.report(
+        `Conversation ${conversationId} queued a hold release with no released briefing left to decide; its rows go without a turn.`,
+      );
+    }
+    for (const row of queued) {
+      const removed = await seams.writer.dequeueTurn(target, row.id);
+      if (!removed.ok) {
+        seams.report(`The queued turn ${row.id} could not be removed: ${removed.refusal}.`);
+      }
+    }
+  }
+  return { observation: 0, holdRelease, failed: 0 };
+}
+
+/** One account's opening whole: the hold releases first, then the observations under what remains of the bound. */
+export async function openAccountTurns(
+  seams: TurnOpenerSeams,
+  userId: string,
+  options: TurnOpeningOptions = {},
+): Promise<TurnOpeningOutcome> {
+  const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
+  const released = await openHoldReleaseTurns(seams, userId, { limit });
+  if (released.failed > 0) return released;
+  const observed = await openObservationTurns(seams, userId, {
+    limit: Math.max(0, limit - released.holdRelease),
+  });
+  return summed(released, observed);
 }

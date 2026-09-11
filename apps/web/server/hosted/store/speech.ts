@@ -2,9 +2,16 @@ import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import {
+  BRAIN_INPUT_MARKER,
+  BRAIN_TOOL,
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
+  isRecord,
   isSpeechEventKind,
+  isWireString,
+  MESSAGE_AUTHOR,
+  MESSAGE_ROLE,
+  RECORD_EXTRA_KEYS,
   SPEECH_EXPIRY_REASON,
   SPEECH_HELD_EVENT_PAYLOAD,
   SPEECH_OFFERED_EVENT_PAYLOAD,
@@ -13,12 +20,20 @@ import {
   type SpeechHeldEventPayload,
   type SpeechOfferedEventPayload,
   type SpeechSpokenEventPayload,
+  s,
   TURN_ORIGIN,
+  toolPartType,
   unparsedWire,
+  type WireBoundaryInput,
   WireValueSchema,
 } from "../../core.js";
 import { EpochMillisColumnSchema, type HostedStoreRun } from "./database.js";
-import { ConversationEventKindSchema, STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
+import {
+  ConversationEventKindSchema,
+  type ConversationTarget,
+  STORE_WRITE_REFUSAL,
+  type StoreWriter,
+} from "./writer.js";
 
 /**
  * A briefing's delivery as events on the assistant message that announced
@@ -789,4 +804,293 @@ export async function sweepSpeech(
     }
   }
   return outcome;
+}
+
+/** One briefing a hold released unspoken: the words the announce call carried, and when the brain decided them. */
+export interface ReleasedBriefing {
+  readonly messageId: string;
+  readonly briefing: string;
+  /** Epoch milliseconds the announcing message was written. */
+  readonly decidedAt: number;
+  /** Epoch milliseconds the release ended the offer. */
+  readonly releasedAt: number;
+}
+
+export interface ReleasedBriefingsQuery {
+  /** The most uncarried releases answered, oldest first. */
+  readonly limit: number;
+}
+
+/** How many release events one page of the read takes before it looks for more. */
+const RELEASE_PAGE = 64;
+
+/**
+ * The most hold-release messages read, newest first, for what earlier
+ * re-decisions carried. Past it the oldest carried set falls out of view and
+ * its releases are listed again — a judgment made twice, never a release
+ * lost — which is the direction a bound here may fail in.
+ */
+const CARRIED_MESSAGES_READ = 256;
+
+/**
+ * A message's parts as this module reads them: only a part's type, its text
+ * where it is a text part, and its input where it is a tool part are looked
+ * at, so the column is held that far and no further; the vocabulary the
+ * parts belong to is the writer's, which admitted every row before it landed.
+ */
+const ReadPartsColumnSchema = Schema.Array(
+  Schema.Struct({
+    type: Schema.String,
+    text: Schema.optional(Schema.String),
+    input: Schema.optional(Schema.Unknown),
+  }),
+);
+
+type ReadParts = Schema.Schema.Type<typeof ReadPartsColumnSchema>;
+
+const UI_TEXT_PART = "text";
+
+/** The words an announce call carried, read off the message's own stored part; nothing for a message with no announce call. */
+function briefingOf(parts: ReadParts): string | undefined {
+  for (const part of parts) {
+    if (part.type !== toolPartType(BRAIN_TOOL.ANNOUNCE)) continue;
+    // SAFETY: a stored part's input is the JSON the writer admitted under the announce schema; the record read below is what holds it here.
+    const input = unparsedWire(part.input as WireBoundaryInput);
+    if (isRecord(input) && isWireString(input.briefing)) return input.briefing;
+  }
+  return undefined;
+}
+
+/**
+ * The briefings a hold-release turn's opening words named, as the brain's
+ * own input item spells them: the marker line, then the JSON the host
+ * wrote. A message this build cannot read as one names nothing.
+ */
+const heldBriefingsWords = s.record(
+  {
+    held_briefings: s.array(
+      s.record(
+        { briefing: s.text(), decided_at: s.text() },
+        { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+      ),
+    ),
+  },
+  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
+
+/** One briefing as a hold-release item names it: what it said and, in epoch milliseconds, when the brain decided it. */
+export interface NamedBriefing {
+  readonly briefing: string;
+  readonly decidedAt: number;
+}
+
+/** The end of the JSON object that starts at `start`, or nothing where no balanced object stands there. */
+function objectEnd(text: string, start: number): number | undefined {
+  let depth = 0;
+  let quoted = false;
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index];
+    if (quoted) {
+      if (character === "\\") index += 1;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === "{") depth += 1;
+    else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The briefings a received message's words name as held: every
+ * `[hold released]` item in the text, read back through the same record the
+ * host wrote it as. The text is eve's, which may fold two deliveries into
+ * one received message with a blank line between, so each marked item is
+ * read where it stands and an item this build cannot read names nothing.
+ * The one coupling to the words' format is this reader against
+ * `holdReleasedInputText`, and the round-trip test is what holds the two
+ * together: a wording change that broke the read would re-list every
+ * release, which is a judgment made twice and a briefing heard twice.
+ */
+export function heldBriefingsNamed(text: string): readonly NamedBriefing[] {
+  const named: NamedBriefing[] = [];
+  let from = 0;
+  while (from < text.length) {
+    const marker = text.indexOf(BRAIN_INPUT_MARKER.HOLD_RELEASED, from);
+    if (marker < 0) break;
+    const start = text.indexOf("{", marker);
+    if (start < 0) break;
+    const end = objectEnd(text, start);
+    if (end === undefined) break;
+    from = end;
+    let parsed: WireBoundaryInput;
+    try {
+      // SAFETY: the host's own JSON behind the marker; the record read that follows is what holds it to a shape.
+      parsed = JSON.parse(text.slice(start, end)) as WireBoundaryInput;
+    } catch {
+      continue;
+    }
+    const words = heldBriefingsWords.read(unparsedWire(parsed));
+    if (!words.ok) continue;
+    for (const held of words.value.held_briefings) {
+      const decidedAt = Date.parse(held.decided_at);
+      if (Number.isNaN(decidedAt)) continue;
+      named.push({ briefing: held.briefing, decidedAt });
+    }
+  }
+  return named;
+}
+
+/** One carried briefing's identity: when the brain decided it and what it said, which is what the words name it by. */
+function carriedKey(decidedAt: number, briefing: string): string {
+  return JSON.stringify([decidedAt, briefing]);
+}
+
+const CarriedMessagesRequestSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  marked: Schema.String,
+  limit: Schema.Int,
+});
+
+const findHoldReleaseMessages = SqlSchema.findAll({
+  Request: CarriedMessagesRequestSchema,
+  Result: Schema.Struct({ parts: ReadPartsColumnSchema }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select parts
+        from messages
+        where conversation_id = ${request.conversationId}
+          and user_id = ${request.userId}
+          and role = ${MESSAGE_ROLE.USER}
+          and metadata ->> 'author' = ${MESSAGE_AUTHOR.BRAIN}
+          and parts::text like ${request.marked}
+        order by seq desc
+        limit ${request.limit}
+      `,
+    ),
+});
+
+/**
+ * The briefings every hold-release item among the conversation's messages
+ * has named: what earlier re-decisions already carried. The messages are
+ * found by the brain's own authorship and the marker in their words, never
+ * by the source a message's metadata names: under eve a folded message
+ * carries the last delivery's kind, so which delivery produced a message is
+ * not a property of the message, while who wrote it is — and the authorship
+ * is what keeps a developer's own typed ask from ever counting as a carried
+ * set, whatever words it quotes.
+ */
+function carriedBriefings(
+  target: ConversationTarget,
+): Effect.Effect<ReadonlySet<string>, SpeechReadFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findHoldReleaseMessages({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      marked: `%${BRAIN_INPUT_MARKER.HOLD_RELEASED}%`,
+      limit: CARRIED_MESSAGES_READ,
+    }),
+    (rows) => {
+      const keys = new Set<string>();
+      for (const row of rows) {
+        for (const part of row.parts) {
+          if (part.type !== UI_TEXT_PART || part.text === undefined) continue;
+          for (const held of heldBriefingsNamed(part.text)) {
+            keys.add(carriedKey(held.decidedAt, held.briefing));
+          }
+        }
+      }
+      return keys;
+    },
+  );
+}
+
+const ReleasesRequestSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  afterSeq: Schema.Number,
+  limit: Schema.Int,
+});
+
+const ReleaseRowSchema = Schema.Struct({
+  seq: EpochMillisColumnSchema,
+  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+  parts: ReadPartsColumnSchema,
+  decidedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("decided_at")),
+  releasedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("released_at")),
+});
+
+const findReleases = SqlSchema.findAll({
+  Request: ReleasesRequestSchema,
+  Result: ReleaseRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select events.seq, messages.id as message_id, messages.parts,
+          messages.created_at as decided_at, events.created_at as released_at
+        from events
+        join messages on messages.id = events.message_id
+        where events.conversation_id = ${request.conversationId}
+          and events.user_id = ${request.userId}
+          and events.kind = ${CONVERSATION_EVENT_KIND.SPEECH_EXPIRED}
+          and events.payload ->> 'reason' = ${SPEECH_EXPIRY_REASON.HOLD_RELEASED}
+          and events.seq > ${request.afterSeq}
+        order by events.seq asc
+        limit ${request.limit}
+      `,
+    ),
+});
+
+/**
+ * The briefings of one conversation a hold released unspoken and no
+ * hold-release turn has yet carried, oldest release first: what the next
+ * `hold_release` turn opens with, so the brain decides each again against
+ * the roster as it then is. The boundary is the record's own contents and
+ * no clock's: a release is carried once a hold-release message of the
+ * conversation names it, by the instant the brain decided it and its words,
+ * so a message the relay has not yet written can only re-list a release,
+ * never lose one. Read from the events and the announcing messages — the
+ * release is the `speech.expired` event whose reason is the hold's, one per
+ * message since a settled offer takes no second transition — and never from
+ * the words of anything else.
+ */
+export function releasedBriefings(
+  target: ConversationTarget,
+  query: ReleasedBriefingsQuery,
+): Effect.Effect<readonly ReleasedBriefing[], SpeechReadFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const carried = yield* carriedBriefings(target);
+    const uncarried: ReleasedBriefing[] = [];
+    let afterSeq = 0;
+    while (uncarried.length < query.limit) {
+      const rows = yield* findReleases({
+        userId: target.userId,
+        conversationId: target.conversationId,
+        afterSeq,
+        limit: RELEASE_PAGE,
+      });
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        afterSeq = row.seq;
+        const briefing = briefingOf(row.parts);
+        if (briefing === undefined) continue;
+        if (carried.has(carriedKey(row.decidedAt.getTime(), briefing))) continue;
+        uncarried.push({
+          messageId: row.messageId,
+          briefing,
+          decidedAt: row.decidedAt.getTime(),
+          releasedAt: row.releasedAt.getTime(),
+        });
+        if (uncarried.length >= query.limit) break;
+      }
+      if (rows.length < RELEASE_PAGE) break;
+    }
+    return uncarried;
+  });
 }

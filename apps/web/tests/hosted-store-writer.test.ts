@@ -1239,3 +1239,47 @@ test("events about a message are numbered by the conversation's own event sequen
   assert.equal(spoken.ok && spoken.seq, 3);
   assert.deepEqual(await counters(target), { message: 3, event: 4 });
 });
+
+test("a queued turn the opener has handed to eve is removed; one eve has started, one a message names, and one that never stood are left as they are", async () => {
+  const target = await conversation();
+  const queued = await writer.enqueueTurn(target, { origin: TURN_ORIGIN.HOLD_RELEASE });
+  assert.equal(queued.ok, true);
+  if (!queued.ok) return;
+  assert.deepEqual(await writer.dequeueTurn(target, queued.turnId), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.WRITTEN,
+  });
+  assert.equal(await storedTurn(queued.turnId), undefined);
+  assert.deepEqual(await writer.dequeueTurn(target, queued.turnId), {
+    ok: false,
+    refusal: STORE_WRITE_REFUSAL.NO_TURN,
+  });
+
+  const stream = new Stream();
+  await writer.enqueueTurn(target, { turnId: stream.turnId, origin: TURN_ORIGIN.HOLD_RELEASE });
+  await writer.consume(
+    target,
+    stream.started(BRAIN_TURN_ORIGIN.HOLD_RELEASE, BRAIN_TURN_TRIGGER.HOLD_RELEASED),
+  );
+  assert.deepEqual(await writer.dequeueTurn(target, stream.turnId), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.IGNORED,
+  });
+  assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.RUNNING);
+
+  const named = await writer.enqueueTurn(target, { origin: TURN_ORIGIN.SPOKEN });
+  assert.equal(named.ok, true);
+  if (!named.ok) return;
+  const message = await writer.recordUserMessage(target, {
+    clientId: `ask-${named.turnId}`,
+    turnId: named.turnId,
+    text: "a fixture ask",
+    metadata: TYPED_ASK,
+  });
+  assert.equal(message.ok, true);
+  assert.deepEqual(await writer.dequeueTurn(target, named.turnId), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.IGNORED,
+  });
+  assert.equal((await storedTurn(named.turnId))?.status, TURN_STATUS.QUEUED);
+});
