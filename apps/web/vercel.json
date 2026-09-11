@@ -3,26 +3,6 @@
   "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
   "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json",
-  "functions": {
-    "api/brain/v2/respond.js": {
-      "maxDuration": 120
-    },
-    "api/brain/v2/count-tokens.js": {
-      "maxDuration": 120
-    },
-    "api/brain/v2/embed.js": {
-      "maxDuration": 60
-    },
-    "api/observation/tick.js": {
-      "maxDuration": 60
-    },
-    "api/voice/sessions.js": {
-      "maxDuration": 800
-    },
-    "api/voice/introduction.js": {
-      "maxDuration": 800
-    }
-  },
   "crons": [
     {
       "path": "/api/observation/tick",

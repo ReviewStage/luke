@@ -35,7 +35,7 @@ export const OBSERVATION_TICK = {
    * what keeps the account from heading the next tick's order.
    */
   PASS_DEADLINE_MS: 25_000,
-  /** The function duration `vercel.json` gives the tick; the budget leaves headroom under it. */
+  /** The function duration the tick's bundle declares; the budget leaves headroom under it. */
   MAX_DURATION_SECONDS: 60,
   /** The most accounts one tick lists; the least recently attempted come first, so nobody starves. */
   MAX_ACCOUNTS: 200,

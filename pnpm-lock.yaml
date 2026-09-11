@@ -208,6 +208,12 @@ importers:
       '@paper-design/shaders':
         specifier: 0.0.80
         version: 0.0.80
+      '@sidecar/actions':
+        specifier: workspace:*
+        version: link:../../packages/actions
+      '@sidecar/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../../packages/brain
@@ -217,6 +223,9 @@ importers:
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel
+      '@sidecar/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -290,6 +299,9 @@ importers:
       drizzle-kit:
         specifier: 0.31.10
         version: 0.31.10
+      esbuild:
+        specifier: 0.27.7
+        version: 0.27.7
       tsx:
         specifier: 'catalog:'
         version: 4.23.12

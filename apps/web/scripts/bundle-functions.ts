@@ -1,7 +1,12 @@
-import { readdir, readFile } from "node:fs/promises";
+import { appendFile, readdir, readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { join, relative } from "node:path";
 import { build } from "esbuild";
+import {
+  FUNCTION_MAX_DURATION_SECONDS,
+  functionConfigSource,
+  functionPath,
+} from "../server/function-durations.js";
 
 /**
  * Bundles every route under `server/routes/` into a plain ESM file under
@@ -72,6 +77,16 @@ if (undeclared.size > 0) {
 }
 
 for (const [file, output] of Object.entries(result.metafile.outputs)) {
+  const maxDuration = output.entryPoint
+    ? FUNCTION_MAX_DURATION_SECONDS.get(
+        functionPath(relative(ROUTES, join(WEB, output.entryPoint))),
+      )
+    : undefined;
+  if (maxDuration !== undefined) {
+    await appendFile(join(WEB, file), functionConfigSource(maxDuration));
+  }
   // biome-ignore lint/suspicious/noConsole: a build script's output is its log — what it wrote, and how much of it.
-  console.log(`bundled ${relative(WEB, file)} (${output.bytes} bytes)`);
+  console.log(
+    `bundled ${relative(WEB, file)} (${output.bytes} bytes${maxDuration === undefined ? "" : `, ${maxDuration}s`})`,
+  );
 }

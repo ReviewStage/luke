@@ -1,26 +1,36 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
-import { vercelFunctionFile } from "./vercel-function-file.js";
-
-/**
- * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the two voice functions carry the platform's longest generally
- * available duration, and each path the desktop opens is a function file
- * `vercel.json` names.
- */
-const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
-
-const vercel: { functions: Record<string, { maxDuration?: number }> } = JSON.parse(
-  readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
-);
+import {
+  FUNCTION_MAX_DURATION_SECONDS,
+  functionConfigSource,
+  functionPath,
+  VOICE_FUNCTION_MAX_DURATION_SECONDS,
+} from "../server/function-durations";
 
 test("both voice functions carry the 800 second maximum duration", () => {
   for (const path of Object.values(VOICE_SERVICE_PATH)) {
-    assert.equal(
-      vercel.functions[vercelFunctionFile(path)]?.maxDuration,
-      VOICE_FUNCTION_MAX_DURATION_SECONDS,
-    );
+    assert.equal(FUNCTION_MAX_DURATION_SECONDS.get(path), VOICE_FUNCTION_MAX_DURATION_SECONDS);
   }
+});
+
+test("every path given a duration is a route the bundle emits", () => {
+  for (const path of FUNCTION_MAX_DURATION_SECONDS.keys()) {
+    const source = fileURLToPath(
+      new URL(`../server/routes/${path.slice("/api/".length)}.ts`, import.meta.url),
+    );
+    assert.ok(existsSync(source), path);
+    assert.equal(functionPath(`${path.slice("/api/".length)}.ts`), path);
+  }
+});
+
+test("the config literal parses back to the duration it was written from", async () => {
+  const source = functionConfigSource(VOICE_FUNCTION_MAX_DURATION_SECONDS);
+  // SAFETY: the module is the one line `functionConfigSource` wrote, whose only export is `config`.
+  const module = (await import(`data:text/javascript,${encodeURIComponent(source)}`)) as {
+    config: { maxDuration: number };
+  };
+  assert.deepEqual(module.config, { maxDuration: VOICE_FUNCTION_MAX_DURATION_SECONDS });
 });
