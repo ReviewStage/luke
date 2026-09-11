@@ -179,10 +179,10 @@
       ]
     },
     "eve": {
-      "root": "agent",
+      "root": "eve",
       "framework": "eve",
-      "installCommand": "cd .. && pnpm install --frozen-lockfile --filter @luke/web...",
-      "buildCommand": "cd .. && EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY=agent/.vercel/output EVE_INTERNAL_HOST_BUILD_OUTPUT_DIRECTORY=.vercel/output pnpm exec eve build",
+      "installCommand": "cd .. && pnpm install --frozen-lockfile --filter @luke/web... --filter @luke/eve",
+      "buildCommand": "pnpm exec eve build",
       "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json"
     }
   },

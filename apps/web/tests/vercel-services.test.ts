@@ -61,7 +61,7 @@ const vercel = JSON.parse(
 test("the deployment is the web and eve services, and every build and routing key lives under a service", () => {
   assert.deepEqual(Object.keys(vercel.services), [SERVICE.WEB, SERVICE.EVE]);
   assert.equal(vercel.services[SERVICE.WEB].root, ".");
-  assert.equal(vercel.services[SERVICE.EVE].root, "agent");
+  assert.equal(vercel.services[SERVICE.EVE].root, "eve");
   for (const key of SERVICE_OWNED_KEYS) {
     assert.equal(
       key in vercel,
