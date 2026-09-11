@@ -445,3 +445,45 @@ message, so the route cannot write a user message per ask, and two client ids ca
 C2b derived that from eve's stream; C1's id module assumed it in a comment. Two paths to the same
 constraint is the strongest evidence available that the ask record has to exist somewhere, and
 that `turns` is not that somewhere.
+
+
+## 2026-09-11 — E8 widens the Gateway vocabulary, and draws conversation text outside the blocked subtree (orchestrator, from E8)
+
+E8 measured LUKE-139 at ~1,410 changed lines and split before opening: **(1)** the write path
+(the Gateway method, the hosted client's `rate()`, the host's sync fold, the composer method and
+the counted event, the desktop act and operator) at ~880 lines of which ~410 are tests;
+**(2)** the control itself on top of it. **Accepted at ~880 against a ~800 bound, with the
+production/test split required in the PR body** — the bound measures what a reviewer can hold,
+~470 production lines is inside it, and a third stack level on the desktop would buy a smaller
+number at the cost of two rebase cycles.
+
+**1. A new Gateway method: `conversation.rateMessage`.** CLAUDE.md: *"Widening the method
+vocabulary, the event set, or what a node may be asked is a product decision, not an
+implementation detail."* **Ruled authorized by the ticket rather than escalated**, because the
+only architecturally legal path from the renderer to the service is act → main → Gateway → host
+→ hosted client: the method implements an approved feature and widens nothing about what Luke may
+do. Conditions: named in the PR body as a vocabulary widening in `protocol.ts`, request and answer
+shapes declared **once as `@sidecar/wire` schemas in `protocol.ts`** as the live-session methods
+are, and **mutating and idempotency-keyed** like every other mutating method. Flagged to Dean the
+same hour; one method name is cheap to reverse.
+
+**2. The finding worth keeping: this is the first PR in the rework that draws conversation text
+outside the one blocked subtree.** The Conversation view is the single explicit exception to the
+session recording — its root carries the recording library's blocking class, which is the whole
+reason the conversation's words do not leave the machine. E8's thumbs-down **offers the feedback
+composer prefilled with the rated message and the ask before it**, and the feedback composer is
+**not** in that subtree. Typed field contents are withheld by the library's default, so a prefill
+that exists only as an input's value is probably safe; **text drawn anywhere outside an input — a
+quoted preview, a "you rated this" line, a tooltip — travels in a recording.**
+
+**Required: keep the rated text inside masked inputs, or give the offer's own subtree the blocking
+class, and say in the PR body which and why the other was not needed.** CLAUDE.md is explicit that
+what a recording may see is decided by what the panel draws, *"which makes drawing something new
+on the panel a decision about what leaves the machine."* This is that decision, and it is the
+first time this rework has faced it.
+
+**3. And the distinction E8 must not collapse:** C6's optional note (≤500 characters, travelling
+to the account's own devices on the events read) and the feedback composer's draft (reaching us
+only if the developer presses send) are **two different things**. The counted event carries
+`rating` and the message's kind as a bucket, and no note, no message id, and no free text can
+reach a property — structurally, since the allowlist builds its output from the allowlist.
