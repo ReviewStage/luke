@@ -345,6 +345,27 @@ nothing in a request can name one. Without `OPENAI_API_KEY` the routes answer
 503 like the rest of the hosted tier. The existing mint and device routes are
 untouched by these routes and keep their contracts for released clients.
 
+## The turn event stream
+
+`server/routes/brain/turns/events.ts` answers `GET /api/brain/turns/{id}/events`,
+the path's id handed over by a `routes` rewrite as the one `id` query parameter
+the way the rating route's is, as Server-Sent Events for the voice session that
+just asked the turn and wants to speak commentary while it runs. The logic is
+`server/hosted/turn-event-stream.ts`. Nothing is stored for it: the four events
+— a slow step began, every action settled, one sentence of the reply, the turn
+ended — are a projection over the turn row and the turn's journal, the
+assistant message the store writer opens under the turn's id and amends as each
+call is written ahead of its run, read again every quarter second, and the
+projection only grows while the turn runs, so each event keeps the number it
+was first told under. The frame's `id` is that number and `after` resumes from
+it, so a client attached mid-turn hears the rest and the end exactly once and
+one attached after the end hears the terminal events and closes at once. The
+turn has to be the caller's, refused before anything streams; another
+account's turn and none at all read alike as not found. The function carries a
+300-second duration and one attachment closes without an end at 270 seconds,
+for the client to attach again from its cursor, with a heartbeat frame every
+fifteen quiet seconds so the connection is known to stand.
+
 ## Provider key vault
 
 `server/routes/vault/key.ts` and `server/routes/vault/keys.ts` store, list, and delete the provider

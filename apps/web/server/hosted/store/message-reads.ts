@@ -248,6 +248,32 @@ export async function listRecentMessages(
   return readSelected(conversationId, [...selected].reverse(), tools);
 }
 
+/**
+ * The one message a writer's own client id names in a conversation, read back
+ * under the registry like a page: a turn's journal is the row whose client id
+ * is the turn's id. Answers an empty page where none stands.
+ */
+export async function readMessageByClientId(
+  db: HostedStoreDatabase,
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  clientId: string,
+): Promise<MessageListRead> {
+  const selected = await db
+    .select(MESSAGE_COLUMNS)
+    .from(messages)
+    .innerJoin(conversations, standingConversation(messages))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.userId, userId),
+        eq(messages.clientId, clientId),
+      ),
+    );
+  return readSelected(conversationId, selected, tools);
+}
+
 /** The row a writer's own client id names in a conversation, by its id alone; nothing where none stands. */
 export async function findMessageByClientId(
   db: HostedStoreDatabase,

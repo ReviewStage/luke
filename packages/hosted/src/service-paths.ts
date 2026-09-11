@@ -139,7 +139,16 @@ export const VOICE_SERVICE_PATH = {
   INTRODUCTION: "/api/voice/introduction",
 } as const;
 
-/** Rate one of Luke's stored messages (PUT): the one hosted path with a row's id inside it rather than in a body. */
+/** Rate one of Luke's stored messages (PUT): a hosted path with a row's id inside it rather than in a body. */
 export function conversationMessageRatingPath(messageId: string): string {
   return `/api/conversation/messages/${encodeURIComponent(messageId)}/rating`;
+}
+
+/**
+ * One turn's event stream (GET, Server-Sent Events): the run seams of a turn
+ * the caller owns as they happen, numbered inside the turn, ending with the
+ * turn's end. `turn-events-wire.ts` declares the events and the cursor.
+ */
+export function brainTurnEventsPath(turnId: string): string {
+  return `${HOSTED_SERVICE_PATH.BRAIN_TURNS}/${encodeURIComponent(turnId)}/events`;
 }

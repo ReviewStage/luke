@@ -45,6 +45,7 @@ import {
   listTurns,
   type MessageCursor,
   type MessageListRead,
+  readMessageByClientId,
   type SequenceCursor,
   type StoredEventRecord,
   type StoredRatingRecord,
@@ -131,6 +132,13 @@ export interface HostedStore {
       conversationId: string,
       tools: ToolSet,
       cursor?: MessageCursor,
+    ): Promise<MessageListRead>;
+    /** The one message a writer's client id names — a turn's journal under the turn's id — read back under the registry; an empty page where none stands. */
+    byClientId(
+      userId: string,
+      conversationId: string,
+      tools: ToolSet,
+      clientId: string,
     ): Promise<MessageListRead>;
   };
   events: {
@@ -279,6 +287,8 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     messages: {
       list: (userId, conversationId, tools, cursor) =>
         listMessages(db, userId, conversationId, tools, cursor),
+      byClientId: (userId, conversationId, tools, clientId) =>
+        readMessageByClientId(db, userId, conversationId, tools, clientId),
     },
     events: {
       list: (userId, conversationId, cursor) => listEvents(db, userId, conversationId, cursor),
