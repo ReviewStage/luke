@@ -1,3 +1,4 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   ACTION_KIND,
   type AdvertisedAction,
@@ -12,9 +13,11 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
-import { type AccountCall, accountBearer, createAccountCall } from "./account-call.js";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Effect, type Layer } from "effect";
+import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
-import { type ObserveAnswer, type ObservedSession, observeAnswerFromWire } from "./observe-wire.js";
+import { type ObserveAnswer, type ObservedSession, observeAnswerSchema } from "./observe-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 export interface HostedRosterClientOptions extends AccountToken {
@@ -32,22 +35,35 @@ export interface HostedRosterClientOptions extends AccountToken {
  * get resolves to nothing, and the caller keeps the roster it last drew.
  */
 export class HostedRosterClient {
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedRosterClientOptions) {
-    this.#call = createAccountCall({
+    this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
-      fetch: options.fetch,
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
   }
 
   observe(): Promise<ObserveAnswer | undefined> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.OBSERVE },
-      (payload) => observeAnswerFromWire(payload),
+    return this.#run(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.OBSERVE },
+        observeAnswerSchema,
+      ),
     );
+  }
+
+  /**
+   * @deprecated The promise face `observe` keeps while its caller still
+   * awaits a `Promise` rather than holding a runtime edge of its own; deleted
+   * with `CloudFetch` in P12-04, at which point the caller runs `#call.ask`
+   * on its own runtime instead.
+   */
+  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
+    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }
 

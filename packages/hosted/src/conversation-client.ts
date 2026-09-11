@@ -1,16 +1,20 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import type { UnreadableRow } from "@sidecar/session";
 import {
   type CloudFetch,
+  effectSchema,
   HTTP_METHOD,
   type UnparsedWireValue,
   unparsedWire,
   type WireRecord,
 } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Effect, type Layer } from "effect";
 import {
-  type AccountCall,
+  type AccountCallEffects,
   accountBearer,
+  accountCall,
   callAnswered,
-  createAccountCall,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
@@ -130,40 +134,49 @@ function pagePath(path: string, page: ReadPageQuery): string {
  * client only carries one ask and reads one answer.
  */
 export class HostedConversationClient {
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedConversationClientOptions) {
-    this.#call = createAccountCall({
+    this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
-      fetch: options.fetch,
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
   }
 
   messages(page: ReadPageQuery = {}): Promise<ConversationReadResult<ConversationMessagesAnswer>> {
-    return this.#read(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page, (payload) =>
-      conversationMessagesAnswerSchema.parse(payload),
+    return this.#run(
+      this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page, (payload) =>
+        conversationMessagesAnswerSchema.parse(payload),
+      ),
     );
   }
 
   events(page: ReadPageQuery = {}): Promise<ConversationReadResult<ConversationEventsAnswer>> {
-    return this.#read(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page, (payload) =>
-      conversationEventsAnswerSchema.parse(payload),
+    return this.#run(
+      this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page, (payload) =>
+        conversationEventsAnswerSchema.parse(payload),
+      ),
     );
   }
 
   turns(page: ReadPageQuery = {}): Promise<ConversationReadResult<BrainTurnsAnswer>> {
-    return this.#read(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
-      brainTurnsAnswerSchema.parse(payload),
+    return this.#run(
+      this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
+        brainTurnsAnswerSchema.parse(payload),
+      ),
     );
   }
 
   /** The soft delete of the account's main conversation; nothing on this Mac moves for it. */
   clear(): Promise<ConversationClearAnswer | undefined> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.CONVERSATION_CLEAR },
-      (payload) => conversationClearAnswerSchema.parse(payload),
+    return this.#run(
+      this.#call.ask(
+        { method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.CONVERSATION_CLEAR },
+        effectSchema(conversationClearAnswerSchema),
+      ),
     );
   }
 
@@ -176,52 +189,73 @@ export class HostedConversationClient {
    * its place in the conversation's event sequence, which is what lets the
    * caller show the verdict before the next read carries it back.
    */
-  async rate(
-    messageId: string,
-    request: HostedMessageRatingRequest,
-  ): Promise<ConversationRateResult> {
-    const admitted = hostedMessageRatingRequestSchema.parse(ratingRecord(request));
-    if (admitted === undefined) return RATE_UNANSWERED;
-    const answer = await this.#call.send({
-      method: HTTP_METHOD.PUT,
-      path: conversationMessageRatingPath(messageId),
-      body: JSON.stringify(admitted),
-    });
-    if (!callAnswered(answer)) return RATE_UNANSWERED;
-    const payload = await answer.response.json().catch(() => undefined);
-    if (payload === undefined) return RATE_UNANSWERED;
-    const wire = unparsedWire(payload);
-    if (answer.response.ok) {
-      const recorded = hostedMessageRatingAnswerSchema.parse(wire);
-      return recorded === undefined ? RATE_UNANSWERED : { ok: true, answer: recorded };
-    }
-    switch (hostedErrorSchema.parse(wire)) {
-      case HOSTED_API_ERROR.NOT_FOUND:
-        return { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_FOUND };
-      case HOSTED_API_ERROR.NOT_RATEABLE:
-        return { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_RATEABLE };
-      default:
-        return RATE_UNANSWERED;
-    }
+  rate(messageId: string, request: HostedMessageRatingRequest): Promise<ConversationRateResult> {
+    return this.#run(this.#rateEffect(messageId, request));
   }
 
-  async #read<Answer>(
+  #rateEffect(
+    messageId: string,
+    request: HostedMessageRatingRequest,
+  ): Effect.Effect<ConversationRateResult, never, HttpClient.HttpClient> {
+    const admitted = hostedMessageRatingRequestSchema.parse(ratingRecord(request));
+    if (admitted === undefined) return Effect.succeed(RATE_UNANSWERED);
+    const call = this.#call;
+    return Effect.gen(function* () {
+      const answer = yield* call.send({
+        method: HTTP_METHOD.PUT,
+        path: conversationMessageRatingPath(messageId),
+        body: JSON.stringify(admitted),
+      });
+      if (!callAnswered(answer)) return RATE_UNANSWERED;
+      const payload = yield* Effect.promise(() => answer.response.json().catch(() => undefined));
+      if (payload === undefined) return RATE_UNANSWERED;
+      const wire = unparsedWire(payload);
+      if (answer.response.ok) {
+        const recorded = hostedMessageRatingAnswerSchema.parse(wire);
+        return recorded === undefined ? RATE_UNANSWERED : { ok: true, answer: recorded };
+      }
+      switch (hostedErrorSchema.parse(wire)) {
+        case HOSTED_API_ERROR.NOT_FOUND:
+          return { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_FOUND };
+        case HOSTED_API_ERROR.NOT_RATEABLE:
+          return { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_RATEABLE };
+        default:
+          return RATE_UNANSWERED;
+      }
+    });
+  }
+
+  #readEffect<Answer>(
     path: string,
     page: ReadPageQuery,
     read: (payload: UnparsedWireValue) => Answer | undefined,
-  ): Promise<ConversationReadResult<Answer>> {
-    const answer = await this.#call.send({ method: HTTP_METHOD.GET, path: pagePath(path, page) });
-    if (!callAnswered(answer)) return UNANSWERED;
-    const payload = await answer.response.json().catch(() => undefined);
-    if (payload === undefined) return UNANSWERED;
-    const wire = unparsedWire(payload);
-    if (answer.response.ok) {
-      const value = read(wire);
-      return value === undefined ? UNANSWERED : { ok: true, answer: value };
-    }
-    const row = unreadableRowRefusalSchema.parse(wire);
-    return row === undefined
-      ? UNANSWERED
-      : { ok: false, failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW, row };
+  ): Effect.Effect<ConversationReadResult<Answer>, never, HttpClient.HttpClient> {
+    const call = this.#call;
+    return Effect.gen(function* () {
+      const answer = yield* call.send({ method: HTTP_METHOD.GET, path: pagePath(path, page) });
+      if (!callAnswered(answer)) return UNANSWERED;
+      const payload = yield* Effect.promise(() => answer.response.json().catch(() => undefined));
+      if (payload === undefined) return UNANSWERED;
+      const wire = unparsedWire(payload);
+      if (answer.response.ok) {
+        const value = read(wire);
+        return value === undefined ? UNANSWERED : { ok: true, answer: value };
+      }
+      const row = unreadableRowRefusalSchema.parse(wire);
+      return row === undefined
+        ? UNANSWERED
+        : { ok: false, failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW, row };
+    });
+  }
+
+  /**
+   * @deprecated The promise face `messages`, `events`, `turns`, `clear`, and
+   * `rate` keep while their caller still awaits a `Promise` rather than
+   * holding a runtime edge of its own; deleted with `CloudFetch` in P12-04,
+   * at which point the caller runs `#call.ask`/`#call.send` on its own
+   * runtime instead.
+   */
+  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
+    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }

@@ -35,12 +35,15 @@ schemas stay the facade's own `Schema<Value>`, each built by a local
 `fromEffect` that answers `read`/`parse`/`jsonSchema` from the Effect
 declaration underneath: unlike the readers above, these four are read with
 `.parse()` and `.read()` by callers elsewhere in this package and in
-`apps/web` (the device routes, the two clients, `rating-wire.ts`'s
-composition of `deviceWireIdSchema` into its own record), so their recorded
-goldens stay under `RecordedJsonSchemas` rather than moving to
-`RecordedEffectJsonSchemas` — the facade wrapper's own `jsonSchema()` already
-walks the same Effect AST `emitJsonSchema` does, so the bytes are identical
-either way. `service-wire.ts`, `vault-wire.ts`, `rating-wire.ts`,
+`apps/web` (the device routes, `device-client.ts`, `rating-wire.ts`'s
+composition of `deviceWireIdSchema` into its own record, and the `apps/web`
+test over `conversation-clear-wire.ts`'s own answer) — `conversation-client.ts`'s
+`clear` reads that answer through `effectSchema` and `accountCall`'s `ask`
+instead of the facade directly, which is why its recorded golden still stays
+under `RecordedJsonSchemas` rather than moving to `RecordedEffectJsonSchemas`:
+the facade wrapper's own `jsonSchema()` already walks the same Effect AST
+`emitJsonSchema` does, so the bytes are identical either way.
+`service-wire.ts`, `vault-wire.ts`, `rating-wire.ts`,
 `reads-wire.ts`, and `turn-events-wire.ts` go one step further than those
 four `fromEffect`-only modules: each export a still-facade sibling module or
 an outside caller reaches through `.read`/`.parse`/`.jsonSchema`
@@ -118,22 +121,27 @@ reason carried, so a caller reporting an end reports the word it always did.
 `layerFromCloudFetch` over the caller's own `fetch`, runs the effect, and is
 the one place a caller's `AbortSignal` is read at all — it joins the signal to
 the run, and the interruption it raises is the network fault that signal's
-reason names. It is deleted with `CloudFetch` in P12-04, at which point
-`accountCall` is what every client here holds.
-
-`vault-client.ts`, `device-client.ts`, and `action-client.ts` hold `accountCall`
-directly rather than `createAccountCall`: each builds the `HttpClient` layer
-once, from its own `fetch` option or the global one, and each Promise-returning
-method provides that layer to the effect it built and runs it with
-`Effect.runPromise`, so a caller of these three classes still awaits a promise
-and the Effect face never crosses their boundary. `device-client.ts` and
-`vault-client.ts` read their answers with `ask` against `effectSchema` of the
-facade schema each still declares its shape in; `action-client.ts` keeps
-reading its answer by hand off the `send`ed response, unchanged, because what
-it distinguishes is the status a fault or a refusal left the call in rather
-than a validated body. `changes-client.ts`, `roster-client.ts`, and
-`conversation-client.ts` still hold `createAccountCall` and its reader-taking
-`ask`, until they convert too.
+reason names. Every client in this package now holds `accountCall` directly
+instead: none of their methods takes a caller's own `AbortSignal`, so each
+builds the `HttpClient` layer once, from its own `fetch` option or the global
+one, and each Promise-returning method provides that layer to the effect it
+built and runs it with `Effect.runPromise`, so a caller of any of these six
+classes still awaits a promise and the Effect face never crosses their
+boundary. `device-client.ts` and `vault-client.ts` read their answers with
+`ask` against `effectSchema` of the facade schema each still declares its
+shape in; `action-client.ts` keeps reading its answer by hand off the
+`send`ed response, unchanged, because what it distinguishes is the status a
+fault or a refusal left the call in rather than a validated body.
+`changes-client.ts`'s `poll` and `conversation-client.ts`'s `clear` read the
+same way, through `ask` and `effectSchema(changesAnswerSchema)` /
+`effectSchema(conversationClearAnswerSchema)`, and `roster-client.ts`'s
+`observe` reads `observe-wire.ts`'s own `observeAnswerSchema` the same way,
+already an Effect schema rather than a facade one. `conversation-client.ts`'s
+per-resource reads and its rating still read the raw `Response` through
+`send`, because the unreadable-row refusal and the two rating refusals need
+the body under a status `ask` would already have discarded. `createAccountCall`
+itself is deleted with `CloudFetch` in P12-04, at which point `accountCall` is
+what every client in this package already holds.
 
 ## The live contract is a socket's opening frames
 

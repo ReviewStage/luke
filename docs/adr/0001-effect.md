@@ -166,6 +166,19 @@ promise, not a fiber, so the request effect built over `@sidecar/hosted`'s
 turn onto the brain's own runtime, at which point this request runs on it
 instead and `runCall` goes with it.
 
+`createAccountCall` in `packages/hosted/src/account-call.ts` is the sixth: it
+provides `layerFromCloudFetch` over the caller's own `fetch`, joins the
+caller's `AbortSignal` to the run, and answers the `Promise` its callers still
+hold. It goes in P12-04 with the `CloudFetch` seam. `HostedChangesClient`'s,
+`HostedRosterClient`'s, and `HostedConversationClient`'s own `#run` in
+`changes-client.ts`, `roster-client.ts`, and `conversation-client.ts` are the
+seventh, on the same terms: each of these three holds `accountCall` directly
+rather than `createAccountCall`, because none of their public methods takes a
+caller's own `AbortSignal`, so each keeps its own `layerFromCloudFetch` layer
+beside the call and runs the effect there to answer the `Promise` its own
+public methods still keep. They go in P12-04 too, once a caller of these
+clients runs the effect on its own runtime edge instead.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -185,6 +198,8 @@ design decision stated as such:
 | `ObservationLoop`'s `start`/`stop` over its own `Scope` | P2-04 | P7-10 |
 | `admit()` Promise door over `admitEffect()` | P4-01 | P12-02 |
 | `BrainTransport#send`'s internal `runCall` | P5-05 | P5-14 |
+| `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
+| `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
