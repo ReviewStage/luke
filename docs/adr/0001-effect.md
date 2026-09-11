@@ -290,6 +290,18 @@ that still hand in the one `HostSeams` environment cannot resolve an override
 differently from a composition that reads the provider. P12-05 deletes it with
 `createHostKernel`.
 
+`DeviceRegistration`'s `start` and `stop` in
+`packages/host/src/device-registration.ts` are on the same allowlist, for
+`ObservationLoop`'s reason one package up: the poll's cadence is a `Schedule`
+on a fiber forked into a `Scope` the registration makes at its start, but the
+devices composer that starts and stops it at the account gate's own edges is
+still a pair of promises, so the scope is made and closed there rather than
+built around them. `stop` closes it without awaiting the close, because what
+it has to guarantee is that no further beat starts, never that the fiber has
+ended; the beat's own generation check is what keeps a call still on the wire
+from installing anything after it. P7-09 deletes both once the devices
+composer is a `Layer` and the scope is the host's own.
+
 `shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
 allowlist: the coordinator's fixed quit order — admissions closed, the
 cancellation and the settling raced against one shared deadline, whatever a
@@ -395,8 +407,11 @@ is on the allowlist too, and the only one not shaped by `CloudFetch`: its two
 callers, `AccountSessionManager.refresh` and `LinearCredentials`'s own
 renewal, hold a Promise from a package this migration has not yet reached, so
 the join over the internal `Semaphore` and `Deferred` is run to a promise for
-them. P7-04 and P7-06 move each composer onto the host's own runtime; once
-both callers run on Effect themselves, this seam goes with them.
+them. P7-06 moves the Linear caller onto the host's own runtime. The account's
+does not go with P7-04: what holds `refreshOnce` there is the `AccountToken`
+a hosted client is handed and the composer's own `link`, both of which answer
+promises, so that caller runs the join as an Effect only once
+`AccountSessionManager.refresh` is one itself.
 
 `GoogleCalendarReader`'s `#run` in `packages/calendar/src/reader.ts` and
 `exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are on the same
@@ -663,7 +678,7 @@ design decision stated as such:
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08 |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
 | `LinearIssueTracker#post` | P4-03 | P12-04 |
-| `singleFlight`'s Promise-returning closure | P4-03 | P7-04, P7-06 |
+| `singleFlight`'s Promise-returning closure | P4-03 | P7-06, and the account's caller once `AccountSessionManager.refresh` answers an Effect |
 | `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | P7-06 |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
@@ -689,6 +704,7 @@ design decision stated as such:
 | `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |
 | `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
+| `DeviceRegistration`'s `start`/`stop` over its own `Scope` | P7-04 | P7-09 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

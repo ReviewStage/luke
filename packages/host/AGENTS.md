@@ -71,7 +71,12 @@ parallel, and a start that fails releases what began — the failed composer
 included — at once, in reverse, leaving nothing for the close. The devices composer answers
 no method at all: it is this installation's device row on the service,
 registered when the account gate opens, kept warm by the change-signal poll,
-and forgotten at sign-out on the departing account's own token. Each poll
+and forgotten at sign-out on the departing account's own token. The poll's
+cadence is a `Schedule` on a fiber forked into a `Scope` the registration
+makes at its start, so the sign-out's stop closes that scope and no handle is
+kept only to be handed back; `Effect.schedule` and not `Effect.repeat`,
+because the beat the start awaited is the first one and the cadence stands
+one interval on from it. Each poll
 restates two facts of this machine and decides nothing from them: the instant
 its presence holds until, from the idle time and lock state the client reads
 off the machine and hands in as the `machinePresence` seam, and the instant
@@ -102,8 +107,12 @@ The concerns depend on each other in both directions in six places — the
 account's capability gate starts the loops whose owners read that gate, the
 calendars hold the speech that reconciles against them, the live session
 hands a held briefing back to the brain that decided it — so those edges are
-`link()`'s, listed once in the merge and held in `@sidecar/wire`'s `LateRef`,
-which throws by name when read before `link()` has run. The desktop's own
+`link()`'s, listed once in the merge and held in `@sidecar/wire`'s `LateRef`
+where the concern is still built as a plain object, and in the kernel's own
+set-once `Deferred` (`lateService`) where it is built as an effect, as the
+account's is; either throws by name when read before `link()` has run, since
+what holds the link is a callback the session manager and the Gateway
+handlers answer synchronously. The desktop's own
 composition closes its cycles the same way, which is why the holder lives in
 the package below both rather than in either. Everything else is a constructor
 argument, in the order the composers are built.

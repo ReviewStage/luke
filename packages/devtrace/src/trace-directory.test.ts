@@ -1,22 +1,24 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
-import { agentTraceDirectoryFromEnvironment } from "./trace-directory.js";
+import { it } from "@effect/vitest";
+import { ConfigProvider, Effect, Option } from "effect";
+import { AGENT_TRACE_DIRECTORY_VARIABLE, agentTraceDirectory } from "./trace-directory.js";
 
-test("an environment naming LUKE_TRACE_DIR answers that directory", () => {
-  assert.equal(
-    agentTraceDirectoryFromEnvironment({ LUKE_TRACE_DIR: "/tmp/luke-trace", PATH: "/bin" }),
-    "/tmp/luke-trace",
-  );
-});
+const readUnder = (entries: readonly (readonly [string, string])[]) =>
+  Effect.withConfigProvider(agentTraceDirectory, ConfigProvider.fromMap(new Map(entries)));
 
-test("an environment with no LUKE_TRACE_DIR answers undefined, never a default", () => {
-  assert.equal(agentTraceDirectoryFromEnvironment({ PATH: "/bin" }), undefined);
-  assert.equal(agentTraceDirectoryFromEnvironment({}), undefined);
-});
+it.effect("a provider naming the trace directory answers that directory", () =>
+  Effect.gen(function* () {
+    const read = yield* readUnder([
+      [AGENT_TRACE_DIRECTORY_VARIABLE, "/tmp/luke-trace"],
+      ["PATH", "/bin"],
+    ]);
+    assert.deepEqual(read, Option.some("/tmp/luke-trace"));
+  }),
+);
 
-test("an environment variable present but undefined is absent, not empty", () => {
-  assert.equal(
-    agentTraceDirectoryFromEnvironment({ LUKE_TRACE_DIR: undefined, PATH: "/bin" }),
-    undefined,
-  );
-});
+it.effect("a provider holding no trace directory answers none, never a default", () =>
+  Effect.gen(function* () {
+    assert.deepEqual(yield* readUnder([["PATH", "/bin"]]), Option.none());
+    assert.deepEqual(yield* readUnder([]), Option.none());
+  }),
+);

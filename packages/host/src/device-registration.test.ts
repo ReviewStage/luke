@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
-import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
+import { Duration, Effect, type Runtime, TestClock } from "effect";
 import { test } from "vitest";
 import { DEVICE_POLL_INTERVAL_MS, type DevicePresenceReport } from "./device-presence.js";
 import {
@@ -61,7 +63,7 @@ function fakeClient(answers: {
 function registration(
   directory: string,
   client: DeviceRegistrationClient,
-  clock: FakeClock,
+  runtime: Runtime.Runtime<never>,
   mint: () => string = () => INSTALLATION_ID,
   presence: () => DevicePresenceReport = () => PRESENT,
   reported: string[] = [],
@@ -71,13 +73,23 @@ function registration(
     state: deviceStateFile(() => directory),
     mintInstallationId: mint,
     presence: async () => presence(),
-    schedule: clock.schedule,
-    cancel: clock.cancel,
     report: (message) => {
       reported.push(message);
     },
+    runtime,
   });
 }
+
+/**
+ * The clock moved to the cadence's next beat, and the calls that beat awaits
+ * let run: advancing the test clock resumes the fiber, and the beat's own
+ * awaits settle on the immediate queue rather than on it.
+ */
+const nextBeat = (): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
+    yield* Effect.promise(() => drainMicrotasks(20));
+  });
 
 function storedState(directory: string): DeviceState | undefined {
   const parsed: UnparsedWireValue = JSON.parse(
@@ -86,239 +98,273 @@ function storedState(directory: string): DeviceState | undefined {
   return isRecord(parsed) ? deviceStateFrom(parsed) : undefined;
 }
 
-test("a first start mints the installation id once, registers as a Mac, polls at once with the presence read, and keeps the row's id", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const clock = new FakeClock();
-  const { client, calls } = fakeClient({});
-  const subject = registration(directory, client, clock);
+it.effect(
+  "a first start mints the installation id once, registers as a Mac, polls at once with the presence read, and keeps the row's id",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      const runtime = yield* Effect.runtime<never>();
+      const { client, calls } = fakeClient({});
+      const subject = registration(directory, client, runtime);
 
-  await subject.start();
+      yield* Effect.promise(() => subject.start());
 
-  assert.deepEqual(calls, [
-    {
-      kind: "register",
-      body: { platform: DEVICE_PLATFORM.MACOS, installationId: INSTALLATION_ID.toLowerCase() },
-    },
-    { kind: "poll", body: { deviceId: DEVICE_ID, ...PRESENT } },
-  ]);
-  assert.deepEqual(storedState(directory), {
-    installationId: INSTALLATION_ID.toLowerCase(),
-    deviceId: DEVICE_ID,
-  });
-  assert.equal(subject.deviceId(), DEVICE_ID);
-  assert.equal(subject.standing, true);
-  assert.deepEqual(clock.delays, [DEVICE_POLL_INTERVAL_MS]);
-
-  await subject.start();
-  assert.equal(calls.length, 2);
-});
-
-test("the installation id outlives a sign-out and a relaunch, so a re-sign-in re-keys the one row", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const clock = new FakeClock();
-  const first = fakeClient({});
-  const subject = registration(directory, first.client, clock);
-  await subject.start();
-  await subject.stop({ forget: { accessToken: "leaving" } });
-
-  assert.deepEqual(first.calls.at(-1), {
-    kind: "forget",
-    body: { deviceId: DEVICE_ID },
-    departing: "leaving",
-  });
-  assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
-  assert.equal(subject.standing, false);
-  assert.equal(clock.armed(), 0);
-
-  const relaunched = fakeClient({ register: () => ({ deviceId: OTHER_DEVICE_ID }) });
-  const next = registration(directory, relaunched.client, clock, () => {
-    throw new Error("a stored installation id is never minted again");
-  });
-  await next.start();
-  assert.deepEqual(relaunched.calls[0]?.body, {
-    platform: DEVICE_PLATFORM.MACOS,
-    installationId: INSTALLATION_ID.toLowerCase(),
-  });
-  assert.equal(next.deviceId(), OTHER_DEVICE_ID);
-});
-
-test("a stop without a departing account disarms the beat and forgets nothing", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const clock = new FakeClock();
-  const { client, calls } = fakeClient({});
-  const subject = registration(directory, client, clock);
-  await subject.start();
-
-  await subject.stop({ forget: false });
-
-  assert.equal(clock.armed(), 0);
-  assert.deepEqual(
-    calls.map((call) => call.kind),
-    ["register", "poll"],
-  );
-  assert.equal(subject.deviceId(), DEVICE_ID);
-});
-
-test("each poll moves last seen and carries the presence read at that poll, and a row the service no longer holds is registered again", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const clock = new FakeClock();
-  const seen = [true, true, false];
-  const ids = [DEVICE_ID, OTHER_DEVICE_ID];
-  const reports: DevicePresenceReport[] = [
-    PRESENT,
-    PRESENT,
-    { activeUntil: null, quietUntil: 1_757_509_200_000 },
-  ];
-  const { client, calls } = fakeClient({
-    register: () => ({ deviceId: ids.shift() ?? OTHER_DEVICE_ID }),
-    poll: () => ({ seen: seen.shift() ?? true }),
-  });
-  const subject = registration(
-    directory,
-    client,
-    clock,
-    undefined,
-    () => reports.shift() ?? PRESENT,
-  );
-  await subject.start();
-
-  await clock.advance(clock.now + DEVICE_POLL_INTERVAL_MS);
-  assert.deepEqual(calls.at(-1), { kind: "poll", body: { deviceId: DEVICE_ID, ...PRESENT } });
-  assert.equal(clock.armed(), 1);
-
-  await clock.advance(clock.now + DEVICE_POLL_INTERVAL_MS);
-  assert.deepEqual(
-    calls.map((call) => call.kind),
-    ["register", "poll", "poll", "poll", "register", "poll"],
-  );
-  assert.deepEqual(calls[3]?.body, {
-    deviceId: DEVICE_ID,
-    activeUntil: null,
-    quietUntil: 1_757_509_200_000,
-  });
-  assert.deepEqual(calls[5]?.body, { deviceId: OTHER_DEVICE_ID, ...PRESENT });
-  assert.equal(subject.deviceId(), OTHER_DEVICE_ID);
-  assert.equal(clock.armed(), 1);
-});
-
-test("a registration that did not land is tried again by the next beat, and a late answer installs nothing", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const clock = new FakeClock();
-  let answer: { deviceId: string } | undefined;
-  const { client, calls } = fakeClient({ register: () => answer });
-  const subject = registration(directory, client, clock);
-
-  await subject.start();
-  assert.equal(subject.deviceId(), undefined);
-  assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
-
-  answer = { deviceId: DEVICE_ID };
-  await clock.advance(clock.now + DEVICE_POLL_INTERVAL_MS);
-  assert.deepEqual(
-    calls.map((call) => call.kind),
-    ["register", "register", "poll"],
-  );
-  assert.equal(subject.deviceId(), DEVICE_ID);
-  await subject.stop({ forget: false });
-
-  let release: (() => void) | undefined;
-  let polls = 0;
-  const slow: DeviceRegistrationClient = {
-    ...client,
-    poll: () => {
-      polls += 1;
-      if (polls === 1) return Promise.resolve({ seen: true, ...HEADS });
-      return new Promise((resolve) => {
-        release = () => resolve({ seen: false, ...HEADS });
+      assert.deepEqual(calls, [
+        {
+          kind: "register",
+          body: { platform: DEVICE_PLATFORM.MACOS, installationId: INSTALLATION_ID.toLowerCase() },
+        },
+        { kind: "poll", body: { deviceId: DEVICE_ID, ...PRESENT } },
+      ]);
+      assert.deepEqual(storedState(directory), {
+        installationId: INSTALLATION_ID.toLowerCase(),
+        deviceId: DEVICE_ID,
       });
-    },
-  };
-  const racing = registration(directory, slow, clock);
-  await racing.start();
-  const beat = clock.advance(clock.now + DEVICE_POLL_INTERVAL_MS);
-  await racing.stop({ forget: false });
-  release?.();
-  await beat;
-  assert.equal(
-    calls.filter((call) => call.kind === "register").length,
-    2,
-    "the stopped generation's unseen answer registers nothing",
-  );
-  assert.equal(clock.armed(), 0);
-});
+      assert.equal(subject.deviceId(), DEVICE_ID);
+      assert.equal(subject.standing, true);
 
-test("a beat that fails is reported and the next one is armed, so the loop never ends on an error", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const clock = new FakeClock();
-  const reported: string[] = [];
-  let failing = false;
-  const { client, calls } = fakeClient({});
-  const subject = registration(
-    directory,
-    client,
-    clock,
-    undefined,
-    () => {
-      if (failing) throw new Error("the calendar could not be read");
-      return PRESENT;
-    },
-    reported,
-  );
-  await subject.start();
-  assert.equal(reported.length, 0);
+      yield* Effect.promise(() => subject.start());
+      assert.equal(calls.length, 2);
 
-  failing = true;
-  await clock.advance(clock.now + DEVICE_POLL_INTERVAL_MS);
-  assert.equal(reported.length, 1);
-  assert.equal(clock.armed(), 1);
+      yield* nextBeat();
+      assert.deepEqual(
+        calls.map((call) => call.kind),
+        ["register", "poll", "poll"],
+      );
+      yield* Effect.promise(() => subject.stop({ forget: false }));
+    }),
+);
 
-  failing = false;
-  await clock.advance(clock.now + DEVICE_POLL_INTERVAL_MS);
-  assert.deepEqual(
-    calls.map((call) => call.kind),
-    ["register", "poll", "poll"],
-  );
-  assert.equal(clock.armed(), 1);
-  await subject.stop({ forget: false });
-});
+it.effect(
+  "the installation id outlives a sign-out and a relaunch, so a re-sign-in re-keys the one row",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      const runtime = yield* Effect.runtime<never>();
+      const first = fakeClient({});
+      const subject = registration(directory, first.client, runtime);
+      yield* Effect.promise(() => subject.start());
+      yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
 
-test("a registration still on the wire at sign-out lands before the next account registers", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const clock = new FakeClock();
-  let release: (() => void) | undefined;
-  const ids = [DEVICE_ID, OTHER_DEVICE_ID];
-  const { client, calls } = fakeClient({});
-  const gated: DeviceRegistrationClient = {
-    ...client,
-    register: (request) =>
-      new Promise((resolve) => {
-        calls.push({ kind: "register", body: request });
-        const deviceId = ids.shift() ?? OTHER_DEVICE_ID;
-        if (release === undefined) {
-          release = () => resolve({ deviceId });
-          return;
-        }
-        resolve({ deviceId });
-      }),
-  };
-  const subject = registration(directory, gated, clock);
-  const departing = subject.start();
-  await subject.stop({ forget: { accessToken: "leaving" } });
+      assert.deepEqual(first.calls.at(-1), {
+        kind: "forget",
+        body: { deviceId: DEVICE_ID },
+        departing: "leaving",
+      });
+      assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
+      assert.equal(subject.standing, false);
+      const settled = first.calls.length;
+      yield* nextBeat();
+      assert.equal(first.calls.length, settled, "a stopped registration keeps no cadence");
 
-  const arriving = subject.start();
-  await drainMicrotasks(20);
-  assert.equal(calls.length, 1, "the next registration waits for the one on the wire");
+      const relaunched = fakeClient({ register: () => ({ deviceId: OTHER_DEVICE_ID }) });
+      const next = registration(directory, relaunched.client, runtime, () => {
+        throw new Error("a stored installation id is never minted again");
+      });
+      yield* Effect.promise(() => next.start());
+      assert.deepEqual(relaunched.calls[0]?.body, {
+        platform: DEVICE_PLATFORM.MACOS,
+        installationId: INSTALLATION_ID.toLowerCase(),
+      });
+      assert.equal(next.deviceId(), OTHER_DEVICE_ID);
+      yield* Effect.promise(() => next.stop({ forget: false }));
+    }),
+);
 
-  release?.();
-  await departing;
-  await arriving;
-  assert.deepEqual(
-    calls.map((call) => call.kind),
-    ["register", "register", "poll"],
-  );
-  assert.equal(subject.deviceId(), OTHER_DEVICE_ID, "the row the new sign-in registered stands");
-  assert.equal(clock.armed(), 1);
-});
+it.effect("a stop without a departing account ends the cadence and forgets nothing", (t) =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.promise(() => temporaryDirectory(t));
+    const runtime = yield* Effect.runtime<never>();
+    const { client, calls } = fakeClient({});
+    const subject = registration(directory, client, runtime);
+    yield* Effect.promise(() => subject.start());
+
+    yield* Effect.promise(() => subject.stop({ forget: false }));
+
+    yield* nextBeat();
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ["register", "poll"],
+    );
+    assert.equal(subject.standing, false);
+    assert.equal(subject.deviceId(), DEVICE_ID);
+  }),
+);
+
+it.effect(
+  "each poll moves last seen and carries the presence read at that poll, and a row the service no longer holds is registered again",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      const runtime = yield* Effect.runtime<never>();
+      const seen = [true, true, false];
+      const ids = [DEVICE_ID, OTHER_DEVICE_ID];
+      const reports: DevicePresenceReport[] = [
+        PRESENT,
+        PRESENT,
+        { activeUntil: null, quietUntil: 1_757_509_200_000 },
+      ];
+      const { client, calls } = fakeClient({
+        register: () => ({ deviceId: ids.shift() ?? OTHER_DEVICE_ID }),
+        poll: () => ({ seen: seen.shift() ?? true }),
+      });
+      const subject = registration(
+        directory,
+        client,
+        runtime,
+        undefined,
+        () => reports.shift() ?? PRESENT,
+      );
+      yield* Effect.promise(() => subject.start());
+
+      yield* nextBeat();
+      assert.deepEqual(calls.at(-1), { kind: "poll", body: { deviceId: DEVICE_ID, ...PRESENT } });
+
+      yield* nextBeat();
+      assert.deepEqual(
+        calls.map((call) => call.kind),
+        ["register", "poll", "poll", "poll", "register", "poll"],
+      );
+      assert.deepEqual(calls[3]?.body, {
+        deviceId: DEVICE_ID,
+        activeUntil: null,
+        quietUntil: 1_757_509_200_000,
+      });
+      assert.deepEqual(calls[5]?.body, { deviceId: OTHER_DEVICE_ID, ...PRESENT });
+      assert.equal(subject.deviceId(), OTHER_DEVICE_ID);
+      yield* Effect.promise(() => subject.stop({ forget: false }));
+    }),
+);
+
+it.effect(
+  "a registration that did not land is tried again by the next beat, and a late answer installs nothing",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      const runtime = yield* Effect.runtime<never>();
+      let answer: { deviceId: string } | undefined;
+      const { client, calls } = fakeClient({ register: () => answer });
+      const subject = registration(directory, client, runtime);
+
+      yield* Effect.promise(() => subject.start());
+      assert.equal(subject.deviceId(), undefined);
+      assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
+
+      answer = { deviceId: DEVICE_ID };
+      yield* nextBeat();
+      assert.deepEqual(
+        calls.map((call) => call.kind),
+        ["register", "register", "poll"],
+      );
+      assert.equal(subject.deviceId(), DEVICE_ID);
+      yield* Effect.promise(() => subject.stop({ forget: false }));
+
+      let release: (() => void) | undefined;
+      let polls = 0;
+      const slow: DeviceRegistrationClient = {
+        ...client,
+        poll: () => {
+          polls += 1;
+          if (polls === 1) return Promise.resolve({ seen: true, ...HEADS });
+          return new Promise((resolve) => {
+            release = () => resolve({ seen: false, ...HEADS });
+          });
+        },
+      };
+      const racing = registration(directory, slow, runtime);
+      yield* Effect.promise(() => racing.start());
+      yield* nextBeat();
+      yield* Effect.promise(() => racing.stop({ forget: false }));
+      release?.();
+      yield* Effect.promise(() => drainMicrotasks(20));
+      assert.equal(
+        calls.filter((call) => call.kind === "register").length,
+        2,
+        "the stopped generation's unseen answer registers nothing",
+      );
+    }),
+);
+
+it.effect("a beat that fails is reported and the cadence keeps its own beat", (t) =>
+  Effect.gen(function* () {
+    const directory = yield* Effect.promise(() => temporaryDirectory(t));
+    const runtime = yield* Effect.runtime<never>();
+    const reported: string[] = [];
+    let failing = false;
+    const { client, calls } = fakeClient({});
+    const subject = registration(
+      directory,
+      client,
+      runtime,
+      undefined,
+      () => {
+        if (failing) throw new Error("the calendar could not be read");
+        return PRESENT;
+      },
+      reported,
+    );
+    yield* Effect.promise(() => subject.start());
+    assert.equal(reported.length, 0);
+
+    failing = true;
+    yield* nextBeat();
+    assert.equal(reported.length, 1);
+
+    failing = false;
+    yield* nextBeat();
+    assert.deepEqual(
+      calls.map((call) => call.kind),
+      ["register", "poll", "poll"],
+    );
+    yield* Effect.promise(() => subject.stop({ forget: false }));
+  }),
+);
+
+it.effect(
+  "a registration still on the wire at sign-out lands before the next account registers",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      const runtime = yield* Effect.runtime<never>();
+      let release: (() => void) | undefined;
+      const ids = [DEVICE_ID, OTHER_DEVICE_ID];
+      const { client, calls } = fakeClient({});
+      const gated: DeviceRegistrationClient = {
+        ...client,
+        register: (request) =>
+          new Promise((resolve) => {
+            calls.push({ kind: "register", body: request });
+            const deviceId = ids.shift() ?? OTHER_DEVICE_ID;
+            if (release === undefined) {
+              release = () => resolve({ deviceId });
+              return;
+            }
+            resolve({ deviceId });
+          }),
+      };
+      const subject = registration(directory, gated, runtime);
+      const departing = subject.start();
+      yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
+
+      const arriving = subject.start();
+      yield* Effect.promise(() => drainMicrotasks(20));
+      assert.equal(calls.length, 1, "the next registration waits for the one on the wire");
+
+      release?.();
+      yield* Effect.promise(() => departing);
+      yield* Effect.promise(() => arriving);
+      assert.deepEqual(
+        calls.map((call) => call.kind),
+        ["register", "register", "poll"],
+      );
+      assert.equal(
+        subject.deviceId(),
+        OTHER_DEVICE_ID,
+        "the row the new sign-in registered stands",
+      );
+      yield* Effect.promise(() => subject.stop({ forget: false }));
+    }),
+);
 
 test("a stored record is read only with a well-formed installation id", () => {
   assert.deepEqual(deviceStateFrom({ installationId: INSTALLATION_ID, deviceId: DEVICE_ID }), {

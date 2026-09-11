@@ -76,6 +76,13 @@ export function isHostedVoiceServiceAddress(address: string, origin = HOSTED_VOI
 }
 
 /**
+ * The variable a development build's own shell points the voice functions at,
+ * read by name out of whatever provider the caller loads it under, the same
+ * mechanism the account service's own override is read by.
+ */
+export const VOICE_SERVICE_ORIGIN_VARIABLE = "LUKE_VOICE_SERVICE_ORIGIN";
+
+/**
  * The origin a build connects to: the pinned one, or — only where the caller
  * says the build is unpackaged and hands an override it read from its own
  * environment, the same mechanism the account service's development override

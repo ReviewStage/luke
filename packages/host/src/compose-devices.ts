@@ -63,9 +63,6 @@ export function composeDevices(dependencies: DevicesDependencies): DevicesCompos
         quietUntil: await calendars.meetingQuietUntil(at),
       };
     },
-    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
-    // SAFETY: every timer handed back here was armed by the setTimeout beside it.
-    cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
     report,
   });
 

@@ -9,8 +9,8 @@ import {
   type DeviceRegisterRequest,
   isDeviceWireId,
 } from "@sidecar/hosted";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { text, type WireRecord } from "@sidecar/wire";
+import { Duration, Effect, Exit, Runtime, Schedule, Scope } from "effect";
 import { DEVICE_POLL_INTERVAL_MS, type DevicePresenceReport } from "./device-presence.js";
 import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
 
@@ -78,11 +78,11 @@ export interface DeviceRegistrationOptions {
   mintInstallationId: () => string;
   /** What this machine reports of itself on each poll, read at the poll and never held between them. */
   presence: () => Promise<DevicePresenceReport>;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
   pollIntervalMs?: number;
-  /** Hears a beat that failed; the next beat is armed either way. */
+  /** Hears a beat that failed; the cadence keeps its own beat either way. */
   report?: (message: string) => void;
+  /** The runtime the cadence is forked on, for a caller (a test today) that holds its own. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 /**
@@ -95,8 +95,9 @@ export interface DeviceRegistrationOptions {
  * so every registration that lands is followed by a poll at once rather than
  * a minute of the row reading absent. A poll answered unseen re-registers,
  * as does one after a registration that never landed. A beat that fails is
- * reported and the next one is armed all the same: the loop never ends on an
- * error, since nothing else would restart it. `stop` disarms the poll, and at a
+ * reported and the cadence keeps its own beat all the same: the loop never
+ * ends on an error, since nothing else would restart it. `stop` closes the
+ * scope the cadence was forked into, and at a
  * sign-out also asks the service to forget the row, on the token of the
  * account that is leaving. Every answer is checked against the generation
  * that asked, so a call still out when the account changed installs nothing.
@@ -106,9 +107,10 @@ export interface DeviceRegistrationOptions {
 export class DeviceRegistration {
   readonly #options: DeviceRegistrationOptions;
   readonly #intervalMs: number;
+  readonly #runtime: Runtime.Runtime<never>;
   #generation = 0;
-  #timer: ScheduledTimer | undefined;
-  #standing = false;
+  /** The scope the cadence's fiber is forked into, held for as long as a registration stands. */
+  #scope: Scope.CloseableScope | undefined;
   /**
    * The call under way, if any. A start waits for it before registering, so
    * a registration already on the wire at sign-out lands before the next
@@ -121,11 +123,12 @@ export class DeviceRegistration {
   constructor(options: DeviceRegistrationOptions) {
     this.#options = options;
     this.#intervalMs = options.pollIntervalMs ?? DEVICE_POLL_INTERVAL_MS;
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
   }
 
   /** Whether a registration stands: started, and not yet stopped. */
   get standing(): boolean {
-    return this.#standing;
+    return this.#scope !== undefined;
   }
 
   /** The row's id as the service last answered it, or nothing before a registration lands. */
@@ -134,19 +137,22 @@ export class DeviceRegistration {
   }
 
   async start(): Promise<void> {
-    if (this.#standing) return;
-    this.#standing = true;
+    if (this.#scope !== undefined) return;
+    const scope = Runtime.runSync(this.#runtime)(Scope.make());
+    this.#scope = scope;
     const generation = ++this.#generation;
     await this.#settle(() => this.#beat(generation));
+    this.#arm(scope, generation);
   }
 
   async stop(options: { forget: DepartingCredential | false }): Promise<void> {
-    this.#standing = false;
     this.#generation += 1;
-    if (this.#timer !== undefined) {
-      this.#options.cancel(this.#timer);
-      this.#timer = undefined;
-    }
+    const scope = this.#scope;
+    this.#scope = undefined;
+    // Closing is not awaited, for the same reason cancelling a timer never
+    // was: what it has to guarantee is that no further beat starts, never
+    // that the fiber has already ended.
+    if (scope !== undefined) Runtime.runFork(this.#runtime)(Scope.close(scope, Exit.void));
     if (options.forget === false) return;
     const deviceId = this.#options.state.read()?.deviceId;
     if (deviceId === undefined) return;
@@ -216,12 +222,26 @@ export class DeviceRegistration {
     if (deviceId !== undefined) await this.#poll(generation, deviceId);
   }
 
-  #arm(generation: number): void {
-    if (generation !== this.#generation) return;
-    this.#timer = this.#options.schedule(() => {
-      this.#timer = undefined;
-      void this.#settle(() => this.#beat(generation));
-    }, this.#intervalMs);
+  /**
+   * The beats after the one `start` awaited, as a fiber in the scope that
+   * registration stands in, so the scope closing is what ends the cadence.
+   * `Effect.schedule` and not `Effect.repeat`: the cadence's first beat is one
+   * interval on from the start's own, where a repeat would beat again at once.
+   * A stop that landed while the first beat was still out has taken the scope
+   * already, and arms nothing over it.
+   */
+  #arm(scope: Scope.CloseableScope, generation: number): void {
+    if (this.#scope !== scope) return;
+    const pass = Effect.promise(() => this.#settle(() => this.#beat(generation)));
+    Runtime.runSync(this.#runtime)(
+      Effect.provideService(
+        Effect.forkScoped(
+          Effect.schedule(pass, Schedule.spaced(Duration.millis(this.#intervalMs))),
+        ),
+        Scope.Scope,
+        scope,
+      ),
+    );
   }
 
   async #beat(generation: number): Promise<void> {
@@ -237,6 +257,5 @@ export class DeviceRegistration {
         `The device poll failed and will be tried again: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    this.#arm(generation);
   }
 }
