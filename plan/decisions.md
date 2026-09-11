@@ -2240,3 +2240,29 @@ the moment it writes it rather than trusting the assignment, because that rule c
 orchestrator once today already.
 
 **What unblocks behind it:** C2b-2b → C2b-3 → **C8 part b → LUKE-132 done → E5 → G1, G2, G3, G5.**
+
+
+## 2026-09-11 — Amendment: the watch reports presence too, and the error was mine (orchestrator, corrected by the LUKE-161 worker)
+
+**The entry above titled "Presence is not the same as being able to speak" says "the watch reports
+neither" presence nor quiet. That is false, and it is my sentence rather than a worker's.**
+
+D3 reported the **phone's** `activeUntil` write and separately flagged `PRIVACY.md`'s "the phone and
+the watch report neither". I wrote the corrected "true statement" from those two facts and **inferred
+the watch reported nothing because D3 had only mentioned the phone.** The LUKE-161 worker read the
+code instead:
+
+- `LukeWatchApp.swift` registers a `DeviceRegistrar(.watchOS)`.
+- `LukeWatchView.swift:53` hands its stored device id to a `ConversationStore`.
+- `WatchConversationView.swift` polls every **5 s** while the scene is active.
+- `ConversationStore.poll` sends `changes(deviceId:activeUntil:)` with a **30 s horizon** whenever a
+  device id stands.
+
+**The true statement, and it supersedes the earlier one:** the **Mac** reports presence **and** quiet;
+the **phone and the watch both** report presence from their Conversation screen in the foreground;
+**neither reports quiet**; and **only macOS presence delays a push** (`SPEAKING_PLATFORMS`).
+
+**Worth naming as a pattern, because it is now four for four.** Every false claim in this family was
+an **inference from a partial report rather than a reading of the code** — `PRIVACY.md`'s three, and
+now mine. The workers who caught each of them did the same thing every time: they opened the file.
+**A "true statement" assembled from two correct reports can still be false, and mine was.**
