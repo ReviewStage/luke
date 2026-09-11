@@ -910,6 +910,43 @@ test("both speakers' utterances reach the record after the gap and the settle ma
   );
 });
 
+test("an utterance that settled before its delegation is written again under the delegation, with its run, and the record decides what the second write means", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  sideband.input("Open the failing one.", 1000, 2200);
+  await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  assert.deepEqual(
+    f.record.developer.map((line) => [line.rowId, line.delegationId, line.runId]),
+    [[1, null, undefined]],
+  );
+  f.record.hold();
+  sideband.delegation("item_late", 5000);
+  await drainMicrotasks();
+  assert.equal(f.brain.asks.length, 1);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+    runId: "run-1",
+    sentence: "Opening it.",
+  });
+  await drainMicrotasks();
+  // Nothing is spoken while the delegated write is out: the ask is on record under its delegation first.
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  f.record.release(true);
+  await drainMicrotasks();
+  assert.deepEqual(
+    f.record.developer.map((line) => [line.rowId, line.delegationId, line.runId]),
+    [
+      [1, null, undefined],
+      [1, "item_late", "run-1"],
+    ],
+  );
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+  // The settle timer has nothing more to write for the row.
+  await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  assert.equal(f.record.developer.length, 2);
+});
+
 test("creating a session while one stands closes the standing one first", async () => {
   const f = fixture();
   const first = await f.open();

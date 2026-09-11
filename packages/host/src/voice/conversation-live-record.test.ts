@@ -20,6 +20,7 @@ function writer() {
 test("a developer utterance is main's spoken-ask line tied to its run, carrying none of the session's identifiers", async () => {
   const { record, written } = writer();
   const taken = await record.writeDeveloperUtterance({
+    rowId: 1,
     text: "  what needs me? ",
     voiceSessionId: "sess_1",
     delegationId: "item_1",
@@ -47,6 +48,7 @@ test("a developer utterance is main's spoken-ask line tied to its run, carrying 
 test("a developer utterance with no run carries no request id", async () => {
   const { record, written } = writer();
   await record.writeDeveloperUtterance({
+    rowId: 2,
     text: "hello",
     voiceSessionId: "sess_1",
     delegationId: null,
@@ -99,4 +101,42 @@ test("a blank utterance is refused rather than written as an empty line", async 
     false,
   );
   assert.deepEqual(written, []);
+});
+
+test("one utterance is one line: written undelegated when it settled, it is not written again under the delegation that arrived after, and the next session starts its rows afresh", async () => {
+  const { record, written } = writer();
+  const utterance = {
+    rowId: 7,
+    text: "Open the failing one.",
+    voiceSessionId: "sess_1",
+    askContext: undefined,
+    startMs: 1000,
+    endMs: 2200,
+    recordedAt: 42,
+  };
+  assert.equal(await record.writeDeveloperUtterance({ ...utterance, delegationId: null }), true);
+  assert.equal(
+    await record.writeDeveloperUtterance({
+      ...utterance,
+      delegationId: "item_late",
+      askContext: { sinceMs: 0, untilMs: 5000 },
+      runId: "run-1",
+    }),
+    true,
+  );
+  assert.equal(
+    await record.writeDeveloperUtterance({
+      ...utterance,
+      voiceSessionId: "sess_2",
+      delegationId: null,
+    }),
+    true,
+  );
+  assert.deepEqual(
+    written.map((line) => [line.entry.kind, line.entry.words]),
+    [
+      [CONVERSATION_ENTRY_KIND.ASK, "Open the failing one."],
+      [CONVERSATION_ENTRY_KIND.ASK, "Open the failing one."],
+    ],
+  );
 });

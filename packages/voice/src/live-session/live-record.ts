@@ -6,10 +6,20 @@ import type { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
  * Conversation table, or the hosted record where the brain's reply is the
  * assistant message and Luke's spoken words are transcript segments. The two
  * writes stay two calls for that reason — a developer's utterance and Luke's
- * are different kinds of record even where one table takes both.
+ * are different kinds of record even where one table takes both. A developer
+ * utterance is written when it settles, undelegated, and again under its
+ * delegation when the voice model delegates on it after; what each write
+ * means is the record's to decide, and the row id is how it tells them apart.
  */
 
 export interface DeveloperUtteranceRecord {
+  /**
+   * The ledger's row for the utterance, stable across its fragments. The same
+   * utterance may be written twice, once undelegated when it settles and once
+   * under the delegation that arrived after, and a record that keeps one line
+   * per utterance tells the second write from the first by this.
+   */
+  rowId: number;
   /** The grouped transcript of one developer utterance, exactly as the ledger concatenated it. */
   text: string;
   /** The session the words were spoken on, opaque, as the provider named it. */
