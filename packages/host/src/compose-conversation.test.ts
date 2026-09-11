@@ -221,6 +221,51 @@ test("an unreadable row is surfaced on the snapshot and never drawn as an empty 
   assert.equal(composer.snapshot().unreadable?.seq, 7);
 });
 
+test("a page this build's registry refuses is named on the snapshot like a row the service could not read, and paging stops at it", async () => {
+  const { composer, client, views, reports } = harness();
+  const answer = messagesAnswer("hello");
+  const [group] = answer.groups;
+  assert.ok(group);
+  const refused: ConversationMessagesAnswer = {
+    ...answer,
+    groups: [
+      {
+        ...group,
+        messages: [
+          ...group.messages,
+          {
+            message: {
+              id: "2b000000-0000-4000-8000-000000000002",
+              role: MESSAGE_ROLE.ASSISTANT,
+              metadata: { author: MESSAGE_AUTHOR.BRAIN },
+              parts: [
+                {
+                  type: "tool-tool_this_build_never_registered",
+                  toolCallId: "call_1",
+                  state: "output-available",
+                  input: {},
+                  output: {},
+                },
+              ],
+            },
+            seq: 2,
+            createdAt: NOW + 1,
+            tools: [],
+          },
+        ],
+      },
+    ],
+    hasMore: true,
+  };
+  client.messagesAnswer = ok(refused);
+  await composer.loop.refresh();
+  assert.deepEqual(composer.snapshot().unreadable, { conversationId: MAIN, seq: 2 });
+  assert.deepEqual(views().at(-1)?.unreadable, { conversationId: MAIN, seq: 2 });
+  // One read, not a walk: the cursor did not pass the row and no page after it was asked for.
+  assert.deepEqual(client.calls, ["messages:", "events:", "turns:"]);
+  assert.equal(reports.length, 1);
+});
+
 test("Clear carries the service's soft delete and reads again at once; a Clear the service did not take answers false", async () => {
   const { composer, client } = harness();
   await composer.loop.refresh();

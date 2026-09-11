@@ -14,7 +14,11 @@ import {
   type HostedConversationClient,
 } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
-import type { ConversationViewMessage, ConversationViewSnapshot } from "@sidecar/session";
+import type {
+  ConversationViewMessage,
+  ConversationViewSnapshot,
+  UnreadableRow,
+} from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import type { AccountComposer } from "./compose-account.js";
 import type { DevicesComposer } from "./compose-devices.js";
@@ -110,10 +114,16 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     kernel.emit(GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED, carried(snapshot()));
   }
 
-  /** Holds a page's rows to the vocabulary under the registry; nothing for a page a row of which the registry refuses. */
+  /**
+   * Holds a page's rows to the vocabulary under the registry. A row the
+   * registry refuses — a tool this build does not register, an input its
+   * schema will not admit — is named the way the service names one it could
+   * not read back, so the thread stands as last read and says so rather than
+   * stopping quietly at the last good page; the cursor does not pass the row.
+   */
   async function readPage(
     answer: ConversationMessagesAnswer,
-  ): Promise<ReadMessagesPage | undefined> {
+  ): Promise<{ readonly page: ReadMessagesPage } | { readonly unreadable: UnreadableRow }> {
     const groups: ReadTurnGroup[] = [];
     for (const group of answer.groups) {
       const read = await readStoredUIMessages(
@@ -121,10 +131,16 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         registry,
       );
       if (!read.ok) {
+        const [index] = read.path;
+        const refused = typeof index === "number" ? group.messages[index] : undefined;
+        const row: UnreadableRow = {
+          conversationId: group.conversationId,
+          seq: refused?.seq ?? group.messages[0]?.seq ?? 0,
+        };
         report(
           `a Conversation page could not be read under this build's registry: ${read.refusal} at ${read.path.join(".")}`,
         );
-        return undefined;
+        return { unreadable: row };
       }
       const messages: ConversationViewMessage[] = group.messages.map((message, index) => {
         const stored = read.value[index];
@@ -145,7 +161,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         messages,
       });
     }
-    return { conversations: answer.conversations, groups, next: answer.next };
+    return { page: { conversations: answer.conversations, groups, next: answer.next } };
   }
 
   /**
@@ -158,7 +174,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     generation: number,
     read: (after: string | undefined) => Promise<ConversationReadResult<Answer>>,
     cursor: () => string | undefined,
-    apply: (answer: Answer) => Promise<boolean>,
+    apply: (answer: Answer, epoch: number) => Promise<boolean>,
   ): Promise<void> {
     for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
       const epoch = sync.clearEpoch;
@@ -175,7 +191,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         }
         return;
       }
-      if (!(await apply(result.answer)) || !result.answer.hasMore) return;
+      if (!(await apply(result.answer, epoch)) || !result.answer.hasMore) return;
     }
   }
 
@@ -184,10 +200,14 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       generation,
       (after) => client.messages({ after }),
       () => sync.cursors().messages,
-      async (answer) => {
-        const page = await readPage(answer);
-        if (page === undefined || !loop.isCurrent(generation)) return false;
-        sync.applyMessages(page);
+      async (answer, epoch) => {
+        const read = await readPage(answer);
+        if (!loop.isCurrent(generation)) return false;
+        if ("unreadable" in read) {
+          if (sync.clearEpoch === epoch) sync.markUnreadable(read.unreadable);
+          return false;
+        }
+        sync.applyMessages(read.page);
         return true;
       },
     );
