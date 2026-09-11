@@ -5,6 +5,7 @@ export {
   fakeCloudApi,
   recordedRoutes,
 } from "./cloud-fake.js";
+export { runTest, TestReporter, testReporter } from "./effect.js";
 export {
   HTTP_STATUS,
   jsonResponse,
