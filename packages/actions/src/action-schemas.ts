@@ -4,6 +4,12 @@
  * beside a hand-written parser is two statements of one rule that drift a
  * field at a time; a `Schema` is one statement, so a field no admitter reads
  * is a field no model is offered.
+ *
+ * Every declaration here is a direct Effect `Schema`, read through
+ * `@sidecar/wire/effect`'s `readEither` and shown through its `emitJsonSchema`,
+ * rather than the `s.*` facade: a tool's request is the boundary
+ * `definitionOf` (in `actions.ts`) shows a model, so it declares the schema a
+ * model's own bytes are pinned to directly.
  */
 
 import {
@@ -24,13 +30,11 @@ import {
 import {
   isWireString,
   type JsonSchemaNode,
-  RECORD_EXTRA_KEYS,
   SCHEMA_REFUSAL,
-  type Schema,
-  type SchemaFields,
-  s,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { declareReader, describeWire } from "@sidecar/wire/effect";
+import { Schema } from "effect";
 import { SESSION_LIST_ALL, SESSION_LIST_VOICE } from "./action-kinds.js";
 
 /** An identifier travels in a URL segment or a request field, never as prose. */
@@ -84,8 +88,30 @@ const SESSION_LIST_SORT_DESCRIPTION =
   `Reorders the session list: ${SESSION_LIST_SORT.URGENCY} puts what needs the ` +
   `developer first, ${SESSION_LIST_SORT.RECENCY} puts what moved last first.`;
 
-const identifier = (description: string): Schema<string> =>
-  s.text({ max: maximumIdentifierLength, description });
+/**
+ * A text trimmed at both ends and refused for carrying nothing but
+ * whitespace, past `max` too: the request field shape every action here
+ * takes, with no combinator between the declaration and the AST it decodes.
+ */
+function boundedText(options: { max?: number; description?: string } = {}): Schema.Schema<string> {
+  const { max, description } = options;
+  const trimmed = Schema.transform(Schema.String, Schema.String, {
+    strict: true,
+    decode: (value: string) => value.trim(),
+    encode: (value: string) => value,
+  });
+  const nonBlank = trimmed.pipe(
+    Schema.filter((value) => value.length > 0, {
+      schemaId: Schema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+  );
+  const bounded = max === undefined ? nonBlank : nonBlank.pipe(Schema.maxLength(max));
+  return description === undefined ? bounded : describeWire(bounded, description);
+}
+
+const identifier = (description: string): Schema.Schema<string> =>
+  boundedText({ max: maximumIdentifierLength, description });
 
 /** The identity fields every session action names its target by. */
 export const SESSION_IDENTITY_FIELDS = {
@@ -100,19 +126,19 @@ export const ISSUE_IDENTITY_FIELDS = {
 } as const;
 
 /** The message, task, and comment bounds: refused rather than cut, one declaration each. */
-export const MESSAGE_TEXT = s.text({
+export const MESSAGE_TEXT = boundedText({
   max: maximumSessionMessageLength,
   description: "The message to send.",
 });
-export const OPENING_TASK = s.text({
+export const OPENING_TASK = boundedText({
   max: maximumSessionMessageLength,
   description: "An optional opening task.",
 });
-export const COMMENT_BODY = s.text({
+export const COMMENT_BODY = boundedText({
   max: maximumIssueCommentLength,
   description: "The comment to add.",
 });
-export const WORKSPACE_NAME = s.text({ max: maximumWorkspaceNameLength });
+export const WORKSPACE_NAME = boundedText({ max: maximumWorkspaceNameLength });
 
 /**
  * A spoken narrowing as it arrives: several values, or a lone string for a
@@ -120,166 +146,197 @@ export const WORKSPACE_NAME = s.text({ max: maximumWorkspaceNameLength });
  * emptied list is no narrowing at all. Its node is the enum the model is
  * shown; which of those values narrow to anything now is admission's question.
  */
-function filterValues(
+function filterValuesReader(
   values: readonly string[],
   description: string,
-): Schema<readonly string[] | undefined> {
+): Schema.Schema<readonly string[] | undefined, UnparsedWireValue> {
   const node: JsonSchemaNode = {
     type: "array",
     items: { type: "string", enum: values },
     description,
   };
-  return s.reader<readonly string[] | undefined>({
-    read: (value: UnparsedWireValue) => {
-      const entries = isWireString(value) ? [value] : value;
-      if (!Array.isArray(entries) || !entries.every((entry) => isWireString(entry))) {
-        return { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] };
-      }
-      const cleaned = entries.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
-      return { ok: true, value: cleaned.length > 0 ? cleaned : undefined };
-    },
-    jsonSchema: () => node,
-  });
+  return declareReader<readonly string[] | undefined>((value: UnparsedWireValue) => {
+    const entries = isWireString(value) ? [value] : value;
+    if (!Array.isArray(entries) || !entries.every((entry) => isWireString(entry))) {
+      return { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] };
+    }
+    const cleaned = entries.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+    return { ok: true, value: cleaned.length > 0 ? cleaned : undefined };
+  }, node);
 }
 
-const PANEL_QUERY = s.text({
+const PANEL_QUERY = boundedText({
   description: "Optional words to search the session list for; only rows saying every word stay.",
 });
 
-export const PANEL_SORT = s.enumOf(Object.values(SESSION_LIST_SORT), {
-  description: SESSION_LIST_SORT_DESCRIPTION,
-});
+/** An enum member set as the emitter shows it: one `enum` node, described once. */
+function enumLiteral<const Member extends string>(
+  members: readonly Member[],
+  description: string,
+): Schema.Schema<Member> {
+  return describeWire(Schema.Literal(...members), description);
+}
+
+export const PANEL_SORT = enumLiteral(
+  Object.values(SESSION_LIST_SORT),
+  SESSION_LIST_SORT_DESCRIPTION,
+);
 
 /** The tab, sort, and action enums, so the model reads the same value sets admission holds. */
-export const PANEL_TAB = s.enumOf(Object.values(APP_PANEL_TAB), {
-  description: "The tab to show. Defaults to sessions.",
-});
-export const FEEDBACK_KIND = s.enumOf(Object.values(FEEDBACK_COMPOSER_KIND), {
-  description: "The feedback type.",
-});
-export const UPDATE_ACTION = s.enumOf(Object.values(APP_UPDATE_ACTION), {
-  description: "The action to run, as the guide's Updates line offers it.",
-});
-const AGENT_KIND = s.text({ description: "The agent kind." });
-const OPTIONAL_MODEL = s.text({ description: "An optional model." }).optional();
-const OPTIONAL_EFFORT = s.text({ description: "An optional effort level." }).optional();
+export const PANEL_TAB = enumLiteral(
+  Object.values(APP_PANEL_TAB),
+  "The tab to show. Defaults to sessions.",
+);
+export const FEEDBACK_KIND = enumLiteral(
+  Object.values(FEEDBACK_COMPOSER_KIND),
+  "The feedback type.",
+);
+export const UPDATE_ACTION = enumLiteral(
+  Object.values(APP_UPDATE_ACTION),
+  "The action to run, as the guide's Updates line offers it.",
+);
+const AGENT_KIND = boundedText({ description: "The agent kind." });
+const MODEL_TEXT = boundedText({ description: "An optional model." });
+const EFFORT_TEXT = boundedText({ description: "An optional effort level." });
 
 /**
  * A request's field table. Extra keys are ignored rather than refused: a model
  * that adds a field admission does not read has not asked for something wider,
- * and the emitted node still declines to invite one.
+ * and the emitted node still declines to invite one. Declared with the field
+ * table's own concrete type — never erased here — so a caller that reads a
+ * particular request directly, rather than through a `ToolSpec`, still reads
+ * a typed record back; `actions.ts` erases it to the vocabulary `ToolSpec.request`
+ * itself is declared in only where it is stored beside every other tool's.
  */
-const record = <Fields extends SchemaFields>(fields: Fields) =>
-  s.record(fields, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
+function record<Fields extends Schema.Struct.Fields>(fields: Fields) {
+  return Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+}
+
+const optional = <A, I>(field: Schema.Schema<A, I>) => Schema.optionalWith(field, { exact: true });
 
 export const MESSAGE_REQUEST = record({ ...SESSION_IDENTITY_FIELDS, text: MESSAGE_TEXT });
 
 export const CONTROL_REQUEST = record({
   ...SESSION_IDENTITY_FIELDS,
-  control_id: s.text({ description: "The control ID." }),
+  control_id: boundedText({ description: "The control ID." }),
 });
 
 export const OPEN_REQUEST = record({
   ...SESSION_IDENTITY_FIELDS,
-  application: s
-    .text({
+  application: optional(
+    boundedText({
       description:
         "The app to open the session in, as its roster line's opens_in lists it — only " +
         "when the developer named one. Omitted, the session opens at its own address.",
-    })
-    .optional(),
+    }),
+  ),
 });
 
 export const REMOTE_OPEN_REQUEST = record({ ...SESSION_IDENTITY_FIELDS });
 
 export const CREATE_WORKSPACE_REQUEST = record({
-  provider_id: s
-    .text({ description: "The provider ID; omit it to create in the default provider." })
-    .optional(),
-  project_id: s
-    .text({ description: "The project ID; omit it to create in that provider's default project." })
-    .optional(),
-  target_id: s
-    .text({
+  provider_id: optional(
+    boundedText({ description: "The provider ID; omit it to create in the default provider." }),
+  ),
+  project_id: optional(
+    boundedText({
+      description: "The project ID; omit it to create in that provider's default project.",
+    }),
+  ),
+  target_id: optional(
+    boundedText({
       description:
         "The target ID of the host, exactly as the projects list gives it, and only for a " +
         "project whose line carries a target_id; a project listed without one takes none.",
-    })
-    .optional(),
-  agent: AGENT_KIND.optional(),
-  name: WORKSPACE_NAME.describe(
-    "The workspace's name: the developer's own when they chose one, otherwise a short, " +
-      "specific name composed from what the workspace is for, in a few words with no " +
-      "punctuation. Always supply one, except in a project listed as naming its own " +
-      "workspaces, which takes none.",
-  ).optional(),
-  task: OPENING_TASK.optional(),
-  model: OPTIONAL_MODEL,
-  effort: OPTIONAL_EFFORT,
+    }),
+  ),
+  agent: optional(AGENT_KIND),
+  name: optional(
+    describeWire(
+      WORKSPACE_NAME,
+      "The workspace's name: the developer's own when they chose one, otherwise a short, " +
+        "specific name composed from what the workspace is for, in a few words with no " +
+        "punctuation. Always supply one, except in a project listed as naming its own " +
+        "workspaces, which takes none.",
+    ),
+  ),
+  task: optional(OPENING_TASK),
+  model: optional(MODEL_TEXT),
+  effort: optional(EFFORT_TEXT),
 });
 
 export const ADD_AGENT_REQUEST = record({
   ...SESSION_IDENTITY_FIELDS,
   agent: AGENT_KIND,
-  name: WORKSPACE_NAME.describe("An optional agent name.").optional(),
-  task: OPENING_TASK.optional(),
-  model: OPTIONAL_MODEL,
-  effort: OPTIONAL_EFFORT,
+  name: optional(describeWire(WORKSPACE_NAME, "An optional agent name.")),
+  task: optional(OPENING_TASK),
+  model: optional(MODEL_TEXT),
+  effort: optional(EFFORT_TEXT),
 });
 
 export const RENAME_WORKSPACE_REQUEST = record({
   ...SESSION_IDENTITY_FIELDS,
-  name: WORKSPACE_NAME.describe("The workspace's new name, exactly as the developer chose it."),
+  name: describeWire(
+    WORKSPACE_NAME,
+    "The workspace's new name, exactly as the developer chose it.",
+  ),
 });
 
 export const RENAME_SESSION_REQUEST = record({
   ...SESSION_IDENTITY_FIELDS,
-  name: WORKSPACE_NAME.describe("The chat's new name, exactly as the developer chose it."),
+  name: describeWire(WORKSPACE_NAME, "The chat's new name, exactly as the developer chose it."),
 });
 
 export const ISSUE_STATE_REQUEST = record({
   ...ISSUE_IDENTITY_FIELDS,
-  state: s.text({ description: "The target state." }),
+  state: boundedText({ description: "The target state." }),
 });
 
 export const ISSUE_COMMENT_REQUEST = record({ ...ISSUE_IDENTITY_FIELDS, body: COMMENT_BODY });
 
 export const SETTING_REQUEST = record({
-  setting_id: s.text({ description: "The setting ID." }),
-  value: s.text({ description: "The new value." }),
-  effort: OPTIONAL_EFFORT.describe(
-    "An effort level, only when the developer named one and the setting's guide line lists " +
-      "efforts for the value; omit it everywhere else.",
+  setting_id: boundedText({ description: "The setting ID." }),
+  value: boundedText({ description: "The new value." }),
+  effort: optional(
+    describeWire(
+      EFFORT_TEXT,
+      "An effort level, only when the developer named one and the setting's guide line lists " +
+        "efforts for the value; omit it everywhere else.",
+    ),
   ),
 });
 
 /** The narrowing as it arrives on each surface; absent is no narrowing at all. */
-export const PANEL_FILTERS = filterValues(
+const PANEL_FILTERS_READER = filterValuesReader(
   SESSION_LIST_FILTER_VALUES,
   SESSION_LIST_FILTER_DESCRIPTION,
-).optional();
+);
 
-const REMOTE_PANEL_FILTERS = filterValues(
+/** Read standalone (admission reads `fields.filters` directly), so a missing key decodes at once. */
+export const PANEL_FILTERS: Schema.Schema<readonly string[] | undefined, UnparsedWireValue> =
+  Schema.UndefinedOr(PANEL_FILTERS_READER);
+
+const REMOTE_PANEL_FILTERS_READER = filterValuesReader(
   REMOTE_SESSION_LIST_FILTER_VALUES,
   REMOTE_SESSION_LIST_FILTER_DESCRIPTION,
-).optional();
+);
 
 export const PANEL_REQUEST = record({
-  tab: PANEL_TAB.optional(),
-  filters: PANEL_FILTERS,
-  sort: PANEL_SORT.optional(),
-  query: PANEL_QUERY.optional(),
+  tab: optional(PANEL_TAB),
+  filters: optional(PANEL_FILTERS_READER),
+  sort: optional(PANEL_SORT),
+  query: optional(PANEL_QUERY),
 });
 
 export const REMOTE_PANEL_REQUEST = record({
-  filters: REMOTE_PANEL_FILTERS,
-  sort: PANEL_SORT.optional(),
-  query: PANEL_QUERY.optional(),
+  filters: optional(REMOTE_PANEL_FILTERS_READER),
+  sort: optional(PANEL_SORT),
+  query: optional(PANEL_QUERY),
 });
 
 export const FEEDBACK_REQUEST = record({
   kind: FEEDBACK_KIND,
-  draft: s.text({ description: "An optional draft." }).optional(),
+  draft: optional(boundedText({ description: "An optional draft." })),
 });
 
 export const UPDATE_REQUEST = record({ action: UPDATE_ACTION });
@@ -287,14 +344,14 @@ export const UPDATE_REQUEST = record({ action: UPDATE_ACTION });
 export const REMEMBER_REQUEST = record({
   // The words are flattened and cut to their bound rather than refused past
   // it, which no text combinator says, so the bound stays `rememberedFactText`'s.
-  words: s.text({ description: "A concise durable fact about the developer." }),
-  replaces: s
-    .text({
+  words: boundedText({ description: "A concise durable fact about the developer." }),
+  replaces: optional(
+    boundedText({
       description: "The id of the remembered entry this one stands in for, when it changes one.",
-    })
-    .optional(),
+    }),
+  ),
 });
 
 export const FORGET_REQUEST = record({
-  id: s.text({ description: "The remembered entry's id." }),
+  id: boundedText({ description: "The remembered entry's id." }),
 });

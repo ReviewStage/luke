@@ -7,6 +7,7 @@ import {
   type AdmitContext,
   admit,
   refusedActionOutput,
+  requestSchema,
   type ToolSpec,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -48,7 +49,7 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
   return {
     name: spec.name,
     description: spec.description,
-    inputSchema: spec.request,
+    inputSchema: requestSchema(spec.request),
     kind: spec.kind,
     family: spec.family,
     async execute(input: WireRecord, context: ActionToolContext): Promise<ActionOutputEnvelope> {

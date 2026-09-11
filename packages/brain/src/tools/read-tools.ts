@@ -1,4 +1,4 @@
-import { SESSION_IDENTITY_FIELDS } from "@sidecar/actions";
+import { maximumIdentifierLength } from "@sidecar/actions";
 import type { SessionIdentity } from "@sidecar/session";
 import { RECORD_EXTRA_KEYS, s, type WireRecord } from "@sidecar/wire";
 import { BRAIN_TOOL } from "./names.js";
@@ -26,9 +26,13 @@ export type ReadToolModule = ToolModule<WireRecord, ReadToolContext>;
 
 const LIST_SESSIONS_INPUT = s.record({}, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
 
-const READ_TRANSCRIPT_INPUT = s.record(SESSION_IDENTITY_FIELDS, {
-  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
-});
+const READ_TRANSCRIPT_INPUT = s.record(
+  {
+    provider_id: s.text({ max: maximumIdentifierLength, description: "The session provider ID." }),
+    provider_session_id: s.text({ max: maximumIdentifierLength, description: "The session ID." }),
+  },
+  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
 
 const LIST_SESSIONS: ReadToolModule = {
   name: BRAIN_TOOL.LIST_SESSIONS,

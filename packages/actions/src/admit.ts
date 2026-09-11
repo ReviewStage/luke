@@ -57,7 +57,8 @@ import {
   type WireRecord,
   text as wireText,
 } from "@sidecar/wire";
-import { Cause, Data, Effect, Exit, Option } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Cause, Data, Effect, Either, Exit, Option, type Schema } from "effect";
 import {
   ACTION_KIND,
   type ActionKind,
@@ -326,12 +327,18 @@ function textArgument(fields: WireRecord, key: string): string | undefined {
   return wireText(fields[key]);
 }
 
+/** A field schema read the way the old `.parse()` did: the value, or nothing it refused. */
+function wireParse<A, I>(schema: Schema.Schema<A, I>, value: UnparsedWireValue): A | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
 function sessionFrom(
   fields: WireRecord,
   sessions: readonly Session[],
 ): { session: Session; identity: SessionIdentity } | Refusal {
-  const providerId = SESSION_IDENTITY_FIELDS.provider_id.parse(fields.provider_id);
-  const providerSessionId = SESSION_IDENTITY_FIELDS.provider_session_id.parse(
+  const providerId = wireParse(SESSION_IDENTITY_FIELDS.provider_id, fields.provider_id);
+  const providerSessionId = wireParse(
+    SESSION_IDENTITY_FIELDS.provider_session_id,
     fields.provider_session_id,
   );
   const session = sessions.find(
@@ -352,8 +359,8 @@ function issueFrom(
   fields: WireRecord,
   issues: readonly TrackedIssue[],
 ): { issue: TrackedIssue; identity: IssueIdentity } | Refusal {
-  const trackerId = ISSUE_IDENTITY_FIELDS.tracker_id.parse(fields.tracker_id);
-  const issueId = ISSUE_IDENTITY_FIELDS.issue_id.parse(fields.issue_id);
+  const trackerId = wireParse(ISSUE_IDENTITY_FIELDS.tracker_id, fields.tracker_id);
+  const issueId = wireParse(ISSUE_IDENTITY_FIELDS.issue_id, fields.issue_id);
   const issue = issues.find(
     (candidate) => candidate.trackerId === trackerId && candidate.identifier === issueId,
   );
@@ -547,7 +554,7 @@ const admitMessage: Admitter<typeof ACTION_KIND.MESSAGE> = (fields, _context, re
     if (!advertisedActionFor(found.session, ACTION_KIND.MESSAGE)) {
       return refuse(ACTION_REFUSAL.NO_MESSAGES);
     }
-    const text = MESSAGE_TEXT.parse(fields.text);
+    const text = wireParse(MESSAGE_TEXT, fields.text);
     if (!text) return refuse(ACTION_REFUSAL.MESSAGE_BOUND);
     return { kind: ACTION_KIND.MESSAGE, identity: found.identity, text };
   });
@@ -688,7 +695,7 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
     let name: string | undefined;
     if (fields.name !== undefined) {
       if (project.namesItself) return refuse(ACTION_REFUSAL.PROJECT_NAMES_ITSELF);
-      name = WORKSPACE_NAME.parse(fields.name);
+      name = wireParse(WORKSPACE_NAME, fields.name);
       if (!name) return refuse(ACTION_REFUSAL.WORKSPACE_NAME_BOUND);
     }
     // The task is held to the project's own word for it: a project that takes
@@ -699,7 +706,7 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
       if (project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
         return refuse(ACTION_REFUSAL.NO_TASK_TAKEN);
       }
-      task = OPENING_TASK.parse(fields.task);
+      task = wireParse(OPENING_TASK, fields.task);
       if (!task) return refuse(ACTION_REFUSAL.TASK_BOUND);
     } else if (project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
       return refuse(ACTION_REFUSAL.TASK_REQUIRED);
@@ -751,12 +758,12 @@ const admitAddAgent: Admitter<typeof ACTION_KIND.ADD_AGENT> = (fields, context, 
     if (agent === undefined) return refuse(ACTION_REFUSAL.NO_SESSION_AGENT);
     let name: string | undefined;
     if (fields.name !== undefined) {
-      name = WORKSPACE_NAME.parse(fields.name);
+      name = wireParse(WORKSPACE_NAME, fields.name);
       if (!name) return refuse(ACTION_REFUSAL.SESSION_NAME_BOUND);
     }
     let task: string | undefined;
     if (fields.task !== undefined) {
-      task = OPENING_TASK.parse(fields.task);
+      task = wireParse(OPENING_TASK, fields.task);
       if (!task) return refuse(ACTION_REFUSAL.TASK_BOUND);
     }
     // A model named for this one agent resolves within the asked-for kind alone:
@@ -809,7 +816,7 @@ const admitRenameWorkspace: Admitter<typeof ACTION_KIND.RENAME_WORKSPACE> = (
     if (!advertisedActionFor(found.session, ACTION_KIND.RENAME_WORKSPACE)) {
       return refuse(ACTION_REFUSAL.NO_WORKSPACE_RENAME);
     }
-    const name = WORKSPACE_NAME.parse(fields.name);
+    const name = wireParse(WORKSPACE_NAME, fields.name);
     if (!name) return refuse(ACTION_REFUSAL.WORKSPACE_NAME_BOUND);
     return { kind: ACTION_KIND.RENAME_WORKSPACE, identity: found.identity, name };
   });
@@ -821,7 +828,7 @@ const admitRenameSession: Admitter<typeof ACTION_KIND.RENAME_SESSION> = (fields,
     if (!advertisedActionFor(found.session, ACTION_KIND.RENAME_SESSION)) {
       return refuse(ACTION_REFUSAL.NO_SESSION_RENAME);
     }
-    const name = WORKSPACE_NAME.parse(fields.name);
+    const name = wireParse(WORKSPACE_NAME, fields.name);
     if (!name) return refuse(ACTION_REFUSAL.CHAT_NAME_BOUND);
     return { kind: ACTION_KIND.RENAME_SESSION, identity: found.identity, name };
   });
@@ -855,7 +862,7 @@ const admitIssueComment: Decider<typeof ACTION_KIND.ISSUE_COMMENT> = (fields, co
   const found = admittedIssue(fields, context);
   if ("status" in found) return found;
   if (!found.issue.canComment) return refuse(ACTION_REFUSAL.NO_COMMENTS);
-  const body = COMMENT_BODY.parse(fields.body);
+  const body = wireParse(COMMENT_BODY, fields.body);
   if (!body) return refuse(ACTION_REFUSAL.COMMENT_BOUND);
   return { kind: ACTION_KIND.ISSUE_COMMENT, identity: found.identity, body };
 };
@@ -897,10 +904,10 @@ const admitPanel: Admitter<typeof ACTION_KIND.PANEL> = (fields, _context, reads)
     const sessions = yield* reads.sessions;
     if (!sessions) return refuse(ACTION_REFUSAL.TURN_OVER);
     const askedTab = fields.tab ?? undefined;
-    const tab = askedTab === undefined ? APP_PANEL_TAB.SESSIONS : PANEL_TAB.parse(askedTab);
+    const tab = askedTab === undefined ? APP_PANEL_TAB.SESSIONS : wireParse(PANEL_TAB, askedTab);
     if (tab === undefined) return refuse(ACTION_REFUSAL.NO_TAB);
     const sortWord = textArgument(fields, "sort");
-    const sort = sortWord === undefined ? undefined : PANEL_SORT.parse(sortWord);
+    const sort = sortWord === undefined ? undefined : wireParse(PANEL_SORT, sortWord);
     if (sortWord !== undefined && sort === undefined) return refuse(ACTION_REFUSAL.NO_SORT);
     // A search is bounded by the hand's own control: the magnifier is only
     // offered beside a list with more than one session, and a spoken ask reaches
@@ -911,14 +918,14 @@ const admitPanel: Admitter<typeof ACTION_KIND.PANEL> = (fields, _context, reads)
     // refuse.
     const query = textArgument(fields, "query");
     if (query !== undefined && sessions.length < 2) return refuse(ACTION_REFUSAL.NO_SEARCH);
-    const asked = PANEL_FILTERS.read(fields.filters);
-    if (!asked.ok) return refuse(ACTION_REFUSAL.FILTERS_SHAPE);
+    const asked = readEither(PANEL_FILTERS)(fields.filters);
+    if (Either.isLeft(asked)) return refuse(ACTION_REFUSAL.FILTERS_SHAPE);
     const action: { kind: typeof ACTION_KIND.PANEL } & ActionPayloads[typeof ACTION_KIND.PANEL] = {
       kind: ACTION_KIND.PANEL,
       tab,
     };
-    if (asked.value !== undefined) {
-      const outcome = admittedFilters(asked.value, sessions);
+    if (asked.right !== undefined) {
+      const outcome = admittedFilters(asked.right, sessions);
       if ("status" in outcome) return outcome;
       action.filters = outcome.filters;
     }
@@ -928,7 +935,7 @@ const admitPanel: Admitter<typeof ACTION_KIND.PANEL> = (fields, _context, reads)
   });
 
 const admitFeedback: Decider<typeof ACTION_KIND.FEEDBACK> = (fields) => {
-  const composer = FEEDBACK_KIND.parse(fields.kind);
+  const composer = wireParse(FEEDBACK_KIND, fields.kind);
   if (composer === undefined) return refuse(ACTION_REFUSAL.NO_COMPOSER);
   // The draft is the developer's ask restated in their words, not a document,
   // so it is bounded like a typed one; a blank draft is no draft, and the
@@ -949,7 +956,7 @@ const admitUpdate: Decider<typeof ACTION_KIND.UPDATE> = (fields, context) => {
   // about updates — a fixture, a pure caller — advertises no action to run.
   const update = (context.guide ?? EMPTY_APP_GUIDE).update;
   if (!update) return refuse(ACTION_REFUSAL.NO_UPDATE_REPORT);
-  const action = UPDATE_ACTION.parse(fields.action);
+  const action = wireParse(UPDATE_ACTION, fields.action);
   if (action === undefined) return refuse(ACTION_REFUSAL.NO_UPDATE_ACTION);
   // One button, one action: only the press the row is actually drawing runs, so
   // the refusal is the row's own words plus what stands in the action's place.
