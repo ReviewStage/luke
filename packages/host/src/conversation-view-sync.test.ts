@@ -392,6 +392,63 @@ test("a Clear that opened a new main takes the observed crossing rows from befor
   assert.equal(sync.revision, settled);
 });
 
+test("a turn still running across a Clear keeps only the rows it wrote after the new main opened", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page(
+      [
+        {
+          turnId: turnId(21),
+          conversationId: OBSERVED,
+          source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
+          turn: {
+            id: turnId(21),
+            origin: TURN_ORIGIN.ROSTER_DIFF,
+            status: TURN_STATUS.RUNNING,
+            queuedAt: NOW,
+          },
+          messages: [
+            announcement(21, 1, NOW + 500, false),
+            announcement(22, 2, NOW + 20_000, false),
+          ],
+        },
+      ],
+      "c1",
+      [MAIN, OBSERVED],
+    ),
+  );
+  sync.applyClear(NOW + 10_000);
+  const [group] = sync.snapshot().groups;
+  assert.ok(group);
+  assert.deepEqual(
+    group.messages.map((message) => message.seq),
+    [2],
+  );
+  // A later page of the same turn merges its new rows and is held to the same window.
+  sync.applyMessages(
+    page(
+      [
+        {
+          turnId: turnId(21),
+          conversationId: OBSERVED,
+          source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
+          messages: [
+            announcement(21, 1, NOW + 500, false),
+            announcement(23, 3, NOW + 30_000, false),
+          ],
+        },
+      ],
+      "c2",
+      [NEW_MAIN, OBSERVED],
+      NOW + 10_000,
+    ),
+  );
+  assert.deepEqual(
+    sync.snapshot().groups[0]?.messages.map((message) => message.seq),
+    [2, 3],
+  );
+});
+
 test("a Clear the service confirmed empties the picture from the answer alone: main's groups go, and observed rows from before the new main opened go with them", () => {
   const sync = new ConversationViewSync();
   const observedGroup = (id: string, at: number): ReadTurnGroup => ({

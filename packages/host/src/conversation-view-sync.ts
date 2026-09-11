@@ -331,10 +331,11 @@ export class ConversationViewSync {
 
   /**
    * Moves the window's start forward to where a main opened, never back, and
-   * lets go of every group whose latest message predates it: the stamped
-   * main's own rows, and an observed conversation's crossing rows from before
-   * the current main, which belonged to the main a Clear stamped and which
-   * the service no longer sends. A device that drew them before the Clear
+   * lets go of every message that predates it, a group going with its last
+   * one: the stamped main's own rows, and an observed conversation's crossing
+   * rows from before the current main, which belonged to the main a Clear
+   * stamped and which the service no longer sends, even inside a turn still
+   * running across the Clear. A device that drew them before the Clear
    * drops them here, whether the instant arrived on a page or on the Clear's
    * own answer, and a page from before the Clear that lands after it is held
    * to the same start; the observed conversation itself still stands and
@@ -344,10 +345,14 @@ export class ConversationViewSync {
     if (openedAt !== undefined && openedAt > this.#windowStart) this.#windowStart = openedAt;
     let dropped = false;
     for (const [turnId, group] of this.#groups) {
-      const latest = Math.max(...[...group.messages.values()].map((message) => message.createdAt));
-      if (latest >= this.#windowStart) continue;
-      this.#groups.delete(turnId);
-      dropped = true;
+      // Row by row, as the service selects them: a turn still running across
+      // a Clear keeps only what it wrote after the new main opened.
+      for (const [seq, message] of group.messages) {
+        if (message.createdAt >= this.#windowStart) continue;
+        group.messages.delete(seq);
+        dropped = true;
+      }
+      if (group.messages.size === 0) this.#groups.delete(turnId);
     }
     return dropped;
   }
