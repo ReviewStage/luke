@@ -462,6 +462,15 @@ export async function stopAsk(seams: StopSeams, userId: string, id: string): Pro
   } else {
     turn = standing.turn;
   }
+  // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
+  // is answered as it stands: the route's cancel names eve's session and not its turn, so a
+  // second cancel could reach the turn queued after this one. Recording eve's turn id on the row
+  // (LUKE-180) is what scopes it; until then a stamp that stands is the one cancel this turn gets.
+  const answer = turn === standing.turn ? standing.answer : turnAnswer(id, turn);
+  if (TERMINAL_TURN_STATUSES.has(turn.status)) return { ok: true, answer };
+  if (turn.cancelRequestedAt) {
+    return { ok: true, answer: { ...answer, cancelRequestedAt: turn.cancelRequestedAt.getTime() } };
+  }
   const target = { userId, conversationId: turn.conversationId };
   const sessionId = await seams.run(recordedRuntimeSession(target));
   if (sessionId === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_RUNNING };
@@ -471,8 +480,7 @@ export async function stopAsk(seams: StopSeams, userId: string, id: string): Pro
   }
   const stamped = await seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
   if (!stamped.ok) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
-  const stampedAt = turn.cancelRequestedAt ?? at;
-  return { ok: true, answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() } };
+  return { ok: true, answer: { ...answer, cancelRequestedAt: at.getTime() } };
 }
 
 /** `POST /api/brain/turns/{id}/cancel`: the gate and the path's id, then `stopAsk` under the caller's own bearer. */

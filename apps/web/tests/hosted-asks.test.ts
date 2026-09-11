@@ -422,6 +422,51 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     [conversationId, sessionId, "turn_10", hostTurnId(sessionId, "turn_10")],
   ]);
   assert.deepEqual(cancels, [sessionId]);
+
+  // Both landed before both later reads: the start's honour stamped the turn, so the Stop's re-read
+  // finds the stamp standing and answers it without a cancel of its own, which unscoped could reach
+  // the turn queued next.
+  const honoured = await asks.record(write(userId, conversationId));
+  await asks.dispatchOnce(target, honoured.id, async () => ({
+    sessionId,
+    deliveryId: "delivery-h",
+  }));
+  const honouredTurn = hostTurnId(sessionId, "turn_11");
+  const honouredBeforeStamp = {
+    ...asks,
+    cancelRequested: async (askId: string, at: Date) => {
+      assert.equal(
+        (await writer.enqueueTurn(target, { turnId: honouredTurn, origin: TURN_ORIGIN.TYPED })).ok,
+        true,
+      );
+      await asks.bindDeliveries(target, ["delivery-h"], honouredTurn);
+      await writer.requestTurnCancel(target, { turnId: honouredTurn, at: new Date(NOW - 5) });
+      return asks.cancelRequested(askId, at);
+    },
+  };
+  const afterHonour = await stopAsk(
+    {
+      store: database.store,
+      run: database.run,
+      asks: honouredBeforeStamp,
+      writer,
+      eve,
+      now: () => NOW,
+    },
+    userId,
+    honoured.id,
+  );
+  assert.deepEqual(afterHonour.ok && afterHonour.answer.cancelRequestedAt, NOW - 5);
+  assert.deepEqual(cancels, [sessionId]);
+
+  // A second Stop on a running turn already stamped is a repeat: eve is not asked again.
+  const again = await stopAsk(
+    { store: database.store, run: database.run, asks, writer, eve, now: () => NOW + 1 },
+    userId,
+    waiting.id,
+  );
+  assert.deepEqual(again.ok && again.answer.cancelRequestedAt, NOW);
+  assert.deepEqual(cancels, [sessionId]);
 });
 
 test("over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in", async () => {
