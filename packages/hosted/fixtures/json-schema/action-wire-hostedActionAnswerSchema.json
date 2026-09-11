@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "result": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "rejected",
+        "unsupported"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "result"
+  ],
+  "additionalProperties": false
+}

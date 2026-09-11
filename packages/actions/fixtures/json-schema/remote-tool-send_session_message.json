@@ -1,0 +1,34 @@
+{
+  "type": "function",
+  "name": "send_session_message",
+  "description": "Send a message to an observed session.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session provider ID."
+      },
+      "provider_session_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session ID."
+      },
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000,
+        "description": "The message to send."
+      }
+    },
+    "required": [
+      "provider_id",
+      "provider_session_id",
+      "text"
+    ],
+    "additionalProperties": false
+  }
+}

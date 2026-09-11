@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "used": {
+      "type": "number",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "number",
+      "minimum": 0
+    },
+    "resetsAt": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "used",
+    "limit",
+    "resetsAt"
+  ],
+  "additionalProperties": false
+}

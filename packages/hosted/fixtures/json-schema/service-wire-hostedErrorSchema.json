@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string",
+      "enum": [
+        "invalid-token",
+        "invalid-request",
+        "quota-exhausted",
+        "unavailable",
+        "upstream-error",
+        "upstream-throttled",
+        "request-too-large",
+        "prompt-too-large",
+        "unknown-tool",
+        "unreadable-row",
+        "method-not-allowed",
+        "not-found",
+        "not-rateable"
+      ]
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "additionalProperties": false
+}

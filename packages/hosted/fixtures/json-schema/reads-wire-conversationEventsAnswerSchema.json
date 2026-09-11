@@ -1,0 +1,81 @@
+{
+  "type": "object",
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "conversationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "messageId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "speech.offered",
+              "speech.claimed",
+              "speech.spoken",
+              "speech.pushed",
+              "speech.expired",
+              "speech.held",
+              "rating"
+            ]
+          },
+          "deviceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "payload": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "conversationId",
+          "seq",
+          "messageId",
+          "kind",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    },
+    "next": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "hasMore": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "events",
+    "next",
+    "hasMore"
+  ],
+  "additionalProperties": false
+}

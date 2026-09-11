@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "sdp": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536
+    }
+  },
+  "required": [
+    "sdp"
+  ],
+  "additionalProperties": false
+}

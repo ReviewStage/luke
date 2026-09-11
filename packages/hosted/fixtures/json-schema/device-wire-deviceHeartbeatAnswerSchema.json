@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "seen": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "seen"
+  ],
+  "additionalProperties": false
+}

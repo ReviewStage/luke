@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "rating": {
+      "type": "string",
+      "enum": [
+        "up",
+        "down"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "deviceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    }
+  },
+  "required": [
+    "rating",
+    "deviceId"
+  ],
+  "additionalProperties": false
+}

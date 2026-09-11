@@ -1,0 +1,19 @@
+{
+  "type": "function",
+  "name": "forget_fact",
+  "description": "Silently forget an outdated or explicitly unwanted memory. Only an id from the remembered list can be named. Do not mention routine memory changes.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The remembered entry's id."
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  }
+}

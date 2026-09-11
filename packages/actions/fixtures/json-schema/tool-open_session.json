@@ -1,0 +1,32 @@
+{
+  "type": "function",
+  "name": "open_session",
+  "description": "Open one observed session where its provider keeps it — only when the developer asks to open, go to, or jump into that specific session. An ask to show, see, or list sessions or agents — \"show me the cloud agents\" — filters the panel through show_panel instead, never this. An ask to open one session per provider uses this tool once per matching provider in the same response, without filtering the panel first.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session provider ID."
+      },
+      "provider_session_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session ID."
+      },
+      "application": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The app to open the session in, as its roster line's opens_in lists it — only when the developer named one. Omitted, the session opens at its own address."
+      }
+    },
+    "required": [
+      "provider_id",
+      "provider_session_id"
+    ],
+    "additionalProperties": false
+  }
+}

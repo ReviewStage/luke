@@ -1,0 +1,56 @@
+{
+  "type": "object",
+  "properties": {
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "author": {
+            "type": "string",
+            "enum": [
+              "user",
+              "agent"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "author",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "lastMessageId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hasMore": {
+      "type": "boolean"
+    },
+    "firstOffset": {
+      "type": "number",
+      "minimum": 0
+    },
+    "hasOlder": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "messages",
+    "hasMore"
+  ],
+  "additionalProperties": false
+}

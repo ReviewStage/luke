@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sdpAnswer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536
+    }
+  },
+  "required": [
+    "sessionId",
+    "sdpAnswer"
+  ],
+  "additionalProperties": false
+}

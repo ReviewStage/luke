@@ -1,0 +1,105 @@
+{
+  "type": "object",
+  "properties": {
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "providerProjectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repository": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taskSupport": {
+            "type": "string",
+            "enum": [
+              "none",
+              "optional",
+              "required"
+            ]
+          },
+          "targetName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "namesItself": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "providerId",
+          "providerProjectId",
+          "repository",
+          "taskSupport"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "agentModels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          },
+          "efforts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "providerId",
+          "agent",
+          "models",
+          "efforts"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "projects"
+  ],
+  "additionalProperties": false
+}

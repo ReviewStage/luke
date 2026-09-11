@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "properties": {
+    "seen": {
+      "type": "boolean"
+    },
+    "messages": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "events": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "turns": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "rosterObservedAt": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "seen",
+    "messages",
+    "events"
+  ],
+  "additionalProperties": false
+}

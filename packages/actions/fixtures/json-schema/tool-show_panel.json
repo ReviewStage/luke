@@ -1,0 +1,54 @@
+{
+  "type": "function",
+  "name": "show_panel",
+  "description": "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list. An ask to show, see, or list sessions or agents of some kind — \"show me the Codex agents\", \"show me my local sessions\" — is this tool with a filter, not open_session.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "tab": {
+        "type": "string",
+        "enum": [
+          "sessions",
+          "conversation",
+          "settings"
+        ],
+        "description": "The tab to show. Defaults to sessions."
+      },
+      "filters": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "all",
+            "local",
+            "cloud",
+            "voice",
+            "claude-code",
+            "codex",
+            "conductor",
+            "omp",
+            "chatgpt",
+            "claude",
+            "superset"
+          ]
+        },
+        "description": "The values to narrow the session list to: all for every session, local or cloud for where work runs, voice for voice chats, an agent's provider_id, or an associated app's id. Values combine — local with an agent keeps that agent's local sessions — and all stands alone."
+      },
+      "sort": {
+        "type": "string",
+        "enum": [
+          "urgency",
+          "recency"
+        ],
+        "description": "Reorders the session list: urgency puts what needs the developer first, recency puts what moved last first."
+      },
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Optional words to search the session list for; only rows saying every word stay."
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "type": "object",
+  "properties": {
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "working",
+              "waiting",
+              "error",
+              "complete",
+              "unknown"
+            ]
+          },
+          "workspace": {
+            "type": "string",
+            "minLength": 1
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "change": {
+            "type": "string",
+            "minLength": 1
+          },
+          "link": {
+            "type": "string",
+            "minLength": 1
+          },
+          "error": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lastActivityAt": {
+            "type": "number"
+          },
+          "observedAt": {
+            "type": "number"
+          },
+          "canReceiveMessage": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "action",
+                    "archive",
+                    "stop"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          },
+          "spawnableAgents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "canRename": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "canRenameWorkspace": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "canReadConversation": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "providerId",
+          "sessionId",
+          "title",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "observedAt": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "sessions"
+  ],
+  "additionalProperties": false
+}

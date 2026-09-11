@@ -1,0 +1,34 @@
+{
+  "type": "function",
+  "name": "rename_session",
+  "description": "Rename one observed chat itself — not the workspace around it — to a name the developer just chose, in their own words. Only chats whose roster entry says they can be renamed take one; an ask that names the workspace renames the workspace instead.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session provider ID."
+      },
+      "provider_session_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session ID."
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "description": "The chat's new name, exactly as the developer chose it."
+      }
+    },
+    "required": [
+      "provider_id",
+      "provider_session_id",
+      "name"
+    ],
+    "additionalProperties": false
+  }
+}

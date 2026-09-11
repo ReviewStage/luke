@@ -1,0 +1,34 @@
+{
+  "type": "function",
+  "name": "comment_on_issue",
+  "description": "Add a comment to a tracked issue.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "tracker_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The tracker ID."
+      },
+      "issue_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The issue ID."
+      },
+      "body": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000,
+        "description": "The comment to add."
+      }
+    },
+    "required": [
+      "tracker_id",
+      "issue_id",
+      "body"
+    ],
+    "additionalProperties": false
+  }
+}
