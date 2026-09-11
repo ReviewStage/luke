@@ -987,3 +987,33 @@ one morning came from a list or a check that looked authoritative and was not.
 problem. C2b reproduced the CI condition with Postgres 16 in Docker and ran 18 files / 151 tests in
 parallel — the strongest green this rework has produced, and the standard now asked of C3, D3 and
 G4.
+
+
+## 2026-09-11 — `vercel.json` routes move under the web service, and the old place fails silently (orchestrator, from C2a #1018)
+
+C2a rebased across 21 commits with one conflict: **C7's turn event stream route**, which #1032 added
+to `vercel.json`'s top-level `routes`, carried into **`services.web.routes`** — the web service now
+carries seven routes. Two consequences, and the second is the one that would have bitten somebody
+who never read that PR.
+
+**1. A test that asserts on `vercel.json`'s routes must read the web service's.** #1032's own test
+read the top level, which does not exist in services mode, and had to be repointed.
+
+**2. In services mode Vercel *ignores* a top-level `routes` key rather than erroring.** So the
+failure shape for a future PR adding a route in the old place — out of habit, or by copying an older
+example — is: **every check passes and the route does not exist in production.** That is the worst
+shape available, and a note in a merged PR body reaches nobody.
+
+**Required of C2a: assert the structure.** `vercel.json` has no top-level `routes` key and every
+route lives under a service, so the old place fails locally in seconds with a message saying where
+routes go.
+
+**And the ordering, which neither orchestrator nor worker controls:** C2b-2b adds three routes
+(`/api/brain/ask`, the turn read, the cancel) and is blocked on the `asks` decision; C2a is blocked
+on Dean's Vercel framework-preset flip. **Whichever merges first dictates the other's shape.** Both
+workers, and the staged C3, D3, G4 and E5 briefs, now carry both shapes: under the web service if
+#1018 has landed, top level if not, with C2a's rebase carrying it across as it already did once.
+
+This is also an argument about timing rather than scope: **a `vercel.json` conflict per route-adding
+PR is the running cost of the services block not having landed**, which is a reason to land it as
+soon as the preset allows and not a reason to widen it.
