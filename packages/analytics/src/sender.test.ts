@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   HTTP_STATUS,
@@ -7,6 +6,7 @@ import {
   recordedRequest,
   recordingFetch,
 } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_CLIENT,

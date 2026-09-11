@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { REASONING_EFFORT } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,

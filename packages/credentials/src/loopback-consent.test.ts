@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import test from "node:test";
+import { test } from "vitest";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackAuthorization,

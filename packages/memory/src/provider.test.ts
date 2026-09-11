@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { TOOL_EFFECT } from "@sidecar/runtime";
 import {
   MEMORY_CAPTURE_OUTCOME,
@@ -12,6 +11,7 @@ import {
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import type { NotebookMemoryAccess } from "./notebook-memory.js";
 import {
   maximumMemoryQueryLength,

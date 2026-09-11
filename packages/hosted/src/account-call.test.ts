@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { HTTP_METHOD, type UnparsedWireValue } from "@sidecar/wire";
 import {
   HTTP_STATUS,
@@ -8,6 +7,7 @@ import {
   recordedRequest,
   recordingFetch,
 } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   accountBearer,
   CALL_FAULT,

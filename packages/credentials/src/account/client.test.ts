@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { JsonValue } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   ACCOUNT_FAILURE_ACTION,
   AccountClient,

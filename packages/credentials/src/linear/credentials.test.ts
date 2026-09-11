@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   HTTP_STATUS,
   jsonResponse,
@@ -7,6 +6,7 @@ import {
   recordingFetch,
   requestBody,
 } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import { LinearCredentials } from "./credentials.js";
 import type { LinearGrant } from "./oauth.js";
 

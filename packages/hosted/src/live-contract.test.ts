@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { LIVE_INPUT_BOUNDS, LIVE_VOICE } from "@sidecar/live";
 import { SCHEMA_REFUSAL, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,

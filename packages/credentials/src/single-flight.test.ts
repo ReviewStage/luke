@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { singleFlight } from "./single-flight.js";
 
 test("concurrent refresh asks share one in-flight run, so a rotated token is never spent twice", async () => {

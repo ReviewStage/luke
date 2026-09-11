@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { hostedConversationAnswerSchema } from "./conversation-wire.js";
 
 test("a conversation answer keeps only attributed, non-empty messages", () => {

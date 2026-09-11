@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { codeChallenge } from "./pkce.js";
 
 test("S256 matches RFC 7636's published verifier and challenge", () => {

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { ObservedWorkspaceProject as ListedProject, Session } from "@sidecar/session";
 import {
@@ -20,6 +19,7 @@ import {
   type WorkspaceAgentModels,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   ACTION_FAMILY,
   ACTION_REFUSAL,

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CONVERSATION_VIEW_ACTION_OUTCOME,
@@ -18,6 +17,7 @@ import {
   type UnparsedWireValue,
   type WireValue,
 } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   brainTurnsAnswerSchema,
   changesAnswerSchema,
