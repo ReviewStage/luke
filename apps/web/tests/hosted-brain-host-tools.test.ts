@@ -288,11 +288,7 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
   const turnId = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
 
   assert.equal(
-    await offerBriefing(
-      { db: database.db, run: database.run, writer, now: () => NOW },
-      target,
-      turnId,
-    ),
+    await offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
     false,
   );
 
@@ -314,11 +310,7 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
     input: { briefing: "One agent finished." },
   });
   assert.equal(
-    await offerBriefing(
-      { db: database.db, run: database.run, writer, now: () => NOW },
-      target,
-      turnId,
-    ),
+    await offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
     true,
   );
   const recorded = await database.db

@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import { Effect, Option, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
   type BrainTranscriptDelta,
@@ -9,8 +10,7 @@ import {
   type SessionProviderPlugin,
   type WireRecord,
 } from "../../core.js";
-import { providerCursors } from "../../db/storage-schema.js";
-import type { HostedStoreDatabase } from "../store/database.js";
+import type { HostedStoreRun } from "../store/database.js";
 import { BRAIN_HOST } from "./bounds.js";
 import { type HostedRoster, observedSession } from "./roster.js";
 
@@ -25,7 +25,8 @@ import { type HostedRoster, observedSession } from "./roster.js";
  */
 
 export interface TranscriptReadSeams {
-  readonly db: Pick<HostedStoreDatabase, "select" | "insert">;
+  /** The runner the cursor's own reads and writes are answered through. */
+  readonly run: HostedStoreRun;
   readonly userId: string;
   /** The roster as the snapshot holds it now, read again for every read. */
   readonly roster: () => Promise<HostedRoster>;
@@ -50,6 +51,54 @@ export interface HostedTranscriptReads {
   keep(identity: SessionIdentity, cursor: string): Promise<void>;
 }
 
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const CursorKeySchema = Schema.Struct({
+  userId: Schema.String,
+  providerId: Schema.String,
+  providerSessionId: Schema.String,
+});
+
+const CursorWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  providerId: Schema.String,
+  providerSessionId: Schema.String,
+  cursor: Schema.String,
+  updatedAt: Schema.DateFromSelf,
+});
+
+const CursorRowSchema = Schema.Struct({ cursor: Schema.String });
+
+const findCursor = SqlSchema.findOne({
+  Request: CursorKeySchema,
+  Result: CursorRowSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select cursor
+        from provider_cursors
+        where user_id = ${key.userId}
+          and provider_id = ${key.providerId}
+          and provider_session_id = ${key.providerSessionId}
+      `,
+    ),
+});
+
+const upsertCursor = SqlSchema.void({
+  Request: CursorWriteSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into provider_cursors (user_id, provider_id, provider_session_id, cursor, updated_at)
+        values (${write.userId}, ${write.providerId}, ${write.providerSessionId}, ${write.cursor}, ${write.updatedAt})
+        on conflict (user_id, provider_id, provider_session_id) do update
+          set cursor = excluded.cursor, updated_at = excluded.updated_at
+      `,
+    ),
+});
+
 const NOT_OBSERVED = {
   status: ACTION_RESULT_STATUS.REJECTED,
   reason: "No observed session matches that identity.",
@@ -61,38 +110,27 @@ const NOT_CLOUD = {
 } as const;
 
 export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscriptReads {
-  const cursorFor = async (identity: SessionIdentity): Promise<string | undefined> => {
-    const [row] = await seams.db
-      .select({ cursor: providerCursors.cursor })
-      .from(providerCursors)
-      .where(
-        and(
-          eq(providerCursors.userId, seams.userId),
-          eq(providerCursors.providerId, identity.providerId),
-          eq(providerCursors.providerSessionId, identity.providerSessionId),
-        ),
-      );
-    return row?.cursor;
-  };
-  const keepCursor = async (identity: SessionIdentity, cursor: string): Promise<void> => {
-    await seams.db
-      .insert(providerCursors)
-      .values({
+  const cursorFor = (identity: SessionIdentity): Promise<string | undefined> =>
+    seams.run(
+      Effect.map(
+        findCursor({
+          userId: seams.userId,
+          providerId: identity.providerId,
+          providerSessionId: identity.providerSessionId,
+        }),
+        (found) => Option.getOrUndefined(Option.map(found, (row) => row.cursor)),
+      ),
+    );
+  const keepCursor = (identity: SessionIdentity, cursor: string): Promise<void> =>
+    seams.run(
+      upsertCursor({
         userId: seams.userId,
         providerId: identity.providerId,
         providerSessionId: identity.providerSessionId,
         cursor,
         updatedAt: new Date(seams.now()),
-      })
-      .onConflictDoUpdate({
-        target: [
-          providerCursors.userId,
-          providerCursors.providerId,
-          providerCursors.providerSessionId,
-        ],
-        set: { cursor, updatedAt: new Date(seams.now()) },
-      });
-  };
+      }),
+    );
 
   return {
     async whole(identity) {

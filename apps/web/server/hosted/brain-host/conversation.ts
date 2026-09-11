@@ -1,7 +1,8 @@
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import { type CONVERSATION_KIND, conversations } from "../../db/storage-schema.js";
-import type { HostedStoreDatabase } from "../store/database.js";
+import { CONVERSATION_KIND } from "../../db/storage-schema.js";
 import type { ConversationTarget } from "../store/index.js";
 import { conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
@@ -38,8 +39,12 @@ export type ConversationAdmission =
   | AdmittedConversation
   | { readonly ok: false; readonly refusal: BrainHostRefusal };
 
-/** The store's slice the check reads. */
-export type ConversationDatabase = Pick<HostedStoreDatabase, "select" | "update">;
+/** How a read here fails: the driver's own refusal, or a row the schema refused. */
+type ConversationFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
 
 /** How a session stands to the conversation's record: it must be the recorded session, or it is the one claiming the record now. */
 export const SESSION_STANDING = {
@@ -49,67 +54,145 @@ export const SESSION_STANDING = {
 
 type SessionStanding = (typeof SESSION_STANDING)[keyof typeof SESSION_STANDING];
 
-export async function admitConversation(
-  db: ConversationDatabase,
+const ConversationRowSchema = Schema.Struct({
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  kind: Schema.Literal(...Object.values(CONVERSATION_KIND)),
+  runtimeSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("runtime_session_id"),
+  ),
+});
+
+const OwnerRowSchema = Schema.Struct({
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+});
+
+const RecordedSessionSchema = Schema.Struct({
+  runtimeSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("runtime_session_id"),
+  ),
+});
+
+const findConversation = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: ConversationRowSchema,
+  execute: (conversationId) =>
+    statement(
+      (sql) => sql`
+        select user_id, kind, runtime_session_id
+        from conversations
+        where id = ${conversationId} and deleted_at is null
+      `,
+    ),
+});
+
+const findRuntimeSessionOwner = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: OwnerRowSchema,
+  execute: (runtimeSessionId) =>
+    statement(
+      (sql) => sql`
+        select user_id
+        from conversations
+        where runtime_session_id = ${runtimeSessionId} and deleted_at is null
+      `,
+    ),
+});
+
+const findConversationOwner = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: OwnerRowSchema,
+  execute: (conversationId) =>
+    statement(
+      (sql) => sql`
+        select user_id
+        from conversations
+        where id = ${conversationId} and deleted_at is null
+      `,
+    ),
+});
+
+const ClaimSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  runtimeSessionId: Schema.String,
+  now: Schema.DateFromSelf,
+});
+
+const claimSession = SqlSchema.void({
+  Request: ClaimSchema,
+  execute: (claim) =>
+    statement(
+      (sql) => sql`
+        update conversations
+        set runtime_session_id = ${claim.runtimeSessionId}, last_activity_at = ${claim.now}
+        where id = ${claim.conversationId}
+          and user_id = ${claim.userId}
+          and deleted_at is null
+          and (runtime_session_id is null or runtime_session_id < ${claim.runtimeSessionId})
+      `,
+    ),
+});
+
+const findRecordedSession = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: RecordedSessionSchema,
+  execute: (conversationId) =>
+    statement(
+      (sql) => sql`
+        select runtime_session_id from conversations where id = ${conversationId}
+      `,
+    ),
+});
+
+export function admitConversation(
   auth: SessionAuth,
   session: { readonly id: string; readonly standing: SessionStanding },
-): Promise<ConversationAdmission> {
+): Effect.Effect<ConversationAdmission, ConversationFailure, SqlClient.SqlClient> {
   const current = auth.current;
-  if (!current) return { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_PRINCIPAL };
+  if (!current) return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NO_PRINCIPAL });
   const initiator = auth.initiator ?? current;
   if (initiator.principalId !== current.principalId) {
-    return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR };
+    return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
   }
   const conversationId = conversationIdOf(initiator);
-  if (!conversationId) return { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION };
-  const [row] = await db
-    .select({
-      userId: conversations.userId,
-      kind: conversations.kind,
-      runtimeSessionId: conversations.runtimeSessionId,
-    })
-    .from(conversations)
-    .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)));
-  if (!row) return { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION };
-  if (row.userId !== current.principalId) {
-    return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_OWNER };
-  }
-  if (session.standing === SESSION_STANDING.CURRENT && row.runtimeSessionId !== session.id) {
-    return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION };
-  }
-  return {
-    ok: true,
-    target: { userId: row.userId, conversationId },
-    kind: row.kind,
-    runtimeSessionId: row.runtimeSessionId ?? undefined,
-  };
+  if (!conversationId)
+    return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
+  return Effect.map(findConversation(conversationId), (found) => {
+    if (Option.isNone(found)) return { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION };
+    const row = found.value;
+    if (row.userId !== current.principalId) {
+      return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_OWNER };
+    }
+    if (session.standing === SESSION_STANDING.CURRENT && row.runtimeSessionId !== session.id) {
+      return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION };
+    }
+    return {
+      ok: true,
+      target: { userId: row.userId, conversationId },
+      kind: row.kind,
+      runtimeSessionId: row.runtimeSessionId ?? undefined,
+    };
+  });
 }
 
 /** The account whose standing conversation recorded this runtime session; nothing while none has. */
-export async function runtimeSessionOwner(
-  db: Pick<HostedStoreDatabase, "select">,
+export function runtimeSessionOwner(
   runtimeSessionId: string,
-): Promise<string | undefined> {
-  const [row] = await db
-    .select({ userId: conversations.userId })
-    .from(conversations)
-    .where(
-      and(eq(conversations.runtimeSessionId, runtimeSessionId), isNull(conversations.deletedAt)),
-    );
-  return row?.userId;
+): Effect.Effect<string | undefined, ConversationFailure, SqlClient.SqlClient> {
+  return Effect.map(findRuntimeSessionOwner(runtimeSessionId), (found) =>
+    Option.getOrUndefined(Option.map(found, (row) => row.userId)),
+  );
 }
 
 /** Whether a conversation stands and belongs to the account. */
-export async function conversationOwnedBy(
-  db: Pick<HostedStoreDatabase, "select">,
+export function conversationOwnedBy(
   userId: string,
   conversationId: string,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ userId: conversations.userId })
-    .from(conversations)
-    .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt)));
-  return row?.userId === userId;
+): Effect.Effect<boolean, ConversationFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findConversationOwner(conversationId),
+    (found) => Option.isSome(found) && found.value.userId === userId,
+  );
 }
 
 /**
@@ -118,29 +201,14 @@ export async function conversationOwnedBy(
  * replayed for a session the conversation has since rotated away from
  * changes nothing. Answers whether the row now records this session.
  */
-export async function claimRuntimeSession(
-  db: ConversationDatabase,
+export function claimRuntimeSession(
   target: ConversationTarget,
   runtimeSessionId: string,
   now: Date,
-): Promise<boolean> {
-  await db
-    .update(conversations)
-    .set({ runtimeSessionId, lastActivityAt: now })
-    .where(
-      and(
-        eq(conversations.id, target.conversationId),
-        eq(conversations.userId, target.userId),
-        isNull(conversations.deletedAt),
-        or(
-          isNull(conversations.runtimeSessionId),
-          lt(conversations.runtimeSessionId, runtimeSessionId),
-        ),
-      ),
-    );
-  const [row] = await db
-    .select({ runtimeSessionId: conversations.runtimeSessionId })
-    .from(conversations)
-    .where(eq(conversations.id, target.conversationId));
-  return row?.runtimeSessionId === runtimeSessionId;
+): Effect.Effect<boolean, ConversationFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    yield* claimSession({ ...target, runtimeSessionId, now });
+    const recorded = yield* findRecordedSession(target.conversationId);
+    return Option.isSome(recorded) && recorded.value.runtimeSessionId === runtimeSessionId;
+  });
 }
