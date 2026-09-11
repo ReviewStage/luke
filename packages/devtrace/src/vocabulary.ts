@@ -11,13 +11,7 @@
  */
 
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
-import {
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-  type WireValue,
-} from "@sidecar/wire";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 
 /**
  * Which kind of record one line of the trace carries. It is vocabulary rather
@@ -80,16 +74,10 @@ export type TraceLiveEvent = (typeof TRACE_LIVE_EVENT)[keyof typeof TRACE_LIVE_E
  * samples in. Neither reaches the renderer's channel, but a sideband trace
  * would see both, and the writer strips them by the same rule.
  */
-const REFLECTED_AUDIO_FIELD = {
-  [LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND]: "audio",
-  [LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA]: "delta",
-} as const;
-
-function reflectedAudioField(type: WireValue | undefined): string | undefined {
-  return isWireString(type) && Object.hasOwn(REFLECTED_AUDIO_FIELD, type)
-    ? REFLECTED_AUDIO_FIELD[type as keyof typeof REFLECTED_AUDIO_FIELD]
-    : undefined;
-}
+const REFLECTED_AUDIO_FIELD: ReadonlyMap<string, string> = new Map([
+  [LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, "audio"],
+  [LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, "delta"],
+]);
 
 /**
  * Strips the one payload a trace must not carry whole: audio. A reflected
@@ -101,7 +89,7 @@ function reflectedAudioField(type: WireValue | undefined): string | undefined {
  */
 export function sanitizedTraceEvent(event: WireRecord): WireRecord {
   const type = event.type;
-  const field = reflectedAudioField(type);
+  const field = isWireString(type) ? REFLECTED_AUDIO_FIELD.get(type) : undefined;
   if (type === undefined || field === undefined) return event;
   const audio = event[field];
   if (!isWireString(audio)) return event;

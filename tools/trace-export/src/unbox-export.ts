@@ -25,6 +25,7 @@ import {
 } from "@sidecar/live";
 import {
   isRecord,
+  isWireNumber,
   isWireString,
   recordFromJsonLine,
   text,
@@ -266,9 +267,7 @@ function applyDelegationCreated(state: ExportState, event: WireRecord, atMs: num
 
 function applyUsage(state: ExportState, event: WireRecord): void {
   const seconds = wireRecord(event.usage)?.seconds;
-  if (typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0) {
-    state.session.seconds = seconds;
-  }
+  if (isWireNumber(seconds) && seconds >= 0) state.session.seconds = seconds;
 }
 
 function applySessionClosed(state: ExportState, event: WireRecord): void {
