@@ -17,10 +17,15 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
+import { Either } from "effect";
 import { test } from "vitest";
 import { z } from "zod";
 import { isStoredToolPart, TOOL_PART_STATE } from "./tool-parts.js";
-import { readStoredUIMessages, type StoredUIMessage } from "./validate.js";
+import {
+  readStoredUIMessages,
+  readStoredUIMessagesEither,
+  type StoredUIMessage,
+} from "./validate.js";
 
 /** The shared fixtures beside the session vocabulary, plain JSON so another language's decoder reads the same files. */
 const FIXTURE_DIRECTORY = path.join(
@@ -311,5 +316,36 @@ test("what is not a list of rows, or not a row, is malformed", async () => {
       ),
     ),
     SCHEMA_REFUSAL.MALFORMED,
+  );
+});
+
+test("the Either entry point answers a right of the rows admitted", async () => {
+  const read = await readStoredUIMessagesEither([await fixture(FIXTURE.SPOKEN_ASK)], TOOLS);
+  assert.ok(Either.isRight(read));
+  const [ask] = read.right;
+  assert.equal(ask?.role, MESSAGE_ROLE.USER);
+});
+
+test("the Either entry point answers a left carrying the refusal and path", async () => {
+  const spokenAsk = await fixture(FIXTURE.SPOKEN_ASK);
+  const extra = withMetadata(spokenAsk, { ...wireRecord(spokenAsk.metadata), mood: "cheerful" });
+  const read = await readStoredUIMessagesEither([extra], TOOLS);
+  assert.ok(Either.isLeft(read));
+  assert.equal(read.left.refusal, SCHEMA_REFUSAL.MALFORMED);
+  assert.deepEqual(read.left.path, [0, "metadata"]);
+});
+
+test("the SchemaRead entry point is the Either entry point's result converted, not a second computation", async () => {
+  const message = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
+  const [either, schemaRead] = await Promise.all([
+    readStoredUIMessagesEither([message], TOOLS),
+    readStoredUIMessages([message], TOOLS),
+  ]);
+  assert.deepEqual(
+    schemaRead,
+    Either.match(either, {
+      onLeft: (error) => ({ ok: false, refusal: error.refusal, path: error.path }),
+      onRight: (value) => ({ ok: true, value }),
+    }),
   );
 });
