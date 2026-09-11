@@ -1,10 +1,10 @@
 import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import { Effect, Redacted } from "effect";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Redacted, Schema } from "effect";
 import { auth } from "./auth.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "./core.js";
 import { getDatabase } from "./db/index.js";
-import { devices, observationPass, providerKey, user } from "./db/schema.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
@@ -27,6 +27,7 @@ import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
 import { observeAndSnapshot } from "./hosted/observation-pass.js";
 import { handleObservationTick, type ObservationTickOptions } from "./hosted/observation-tick.js";
 import { handleObserve } from "./hosted/observe.js";
+import type { PosthogPerson } from "./hosted/posthog.js";
 import { handleProjects } from "./hosted/projects.js";
 import { pushSpeech, type SpeechPushOutcome } from "./hosted/speech-push.js";
 import {
@@ -35,6 +36,7 @@ import {
   storeWriter,
   sweepSpeech,
 } from "./hosted/store/index.js";
+import { readStoredVaultKeys } from "./hosted/vault-key-store.js";
 import { readApiKeyFor } from "./hosted/vault-keys.js";
 import { hostedEncryptionSecret, hostedVaultSeams } from "./hosted/vault-route.js";
 import { runWeb } from "./runtime.js";
@@ -67,6 +69,72 @@ const NOTHING_PUSHED: SpeechPushOutcome = {
   unreadable: 0,
   waiting: 0,
 };
+
+/** How a statement below fails: the driver's own refusal, or a row this build cannot decode. */
+type ObservationAppFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const PersonRowSchema = Schema.Struct({ name: Schema.String, email: Schema.String });
+
+const findPerson = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: PersonRowSchema,
+  execute: (userId) =>
+    statement((sql) => sql`select name, email from "user" where id = ${userId} limit 1`),
+});
+
+/** Reads the signed-in user's own name and email, for the events endpoint's PostHog person fields. */
+export function readPerson(
+  userId: string,
+): Effect.Effect<PosthogPerson | undefined, ObservationAppFailure, SqlClient.SqlClient> {
+  return Effect.map(findPerson(userId), Option.getOrUndefined);
+}
+
+const EligibleAccountRequestSchema = Schema.Struct({
+  limit: Schema.Number,
+  seenAfter: Schema.DateFromSelf,
+});
+
+const EligibleAccountRowSchema = Schema.Struct({
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+});
+
+const findEligibleAccounts = SqlSchema.findAll({
+  Request: EligibleAccountRequestSchema,
+  Result: EligibleAccountRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select provider_key.user_id as user_id
+        from provider_key
+        inner join devices on devices.user_id = provider_key.user_id
+        left join observation_pass on observation_pass.user_id = provider_key.user_id
+        where ${sql.in("provider_id", CLOUD_PROVIDER_IDS)}
+          and devices.last_seen_at >= ${request.seenAfter}
+        group by provider_key.user_id, observation_pass.attempted_at
+        order by observation_pass.attempted_at asc nulls first
+        limit ${request.limit}
+      `,
+    ),
+});
+
+/**
+ * Accounts holding a cloud provider key, seen since the instant, least
+ * recently attempted first and never attempted first of all — the tick's own
+ * ordering, carried by the left join's null landing before every attempted
+ * instant in `nulls first`.
+ */
+export function listEligibleAccounts(
+  limit: number,
+  seenAfter: number,
+): Effect.Effect<{ userId: string }[], ObservationAppFailure, SqlClient.SqlClient> {
+  return Effect.map(findEligibleAccounts({ limit, seenAfter: new Date(seenAfter) }), (rows) => [
+    ...rows,
+  ]);
+}
 
 const PATH = {
   SESSIONS_MESSAGES: "/api/sessions/messages",
@@ -155,14 +223,7 @@ async function eventsHandler(request: Request): Promise<Response> {
     resolveUserId: (incoming) => hostedUserId(incoming, (input) => auth.api.oauth2UserInfo(input)),
     // Read from the service's own user row rather than from the request, so
     // the desktop still sends nothing that names anybody.
-    readPerson: async (userId) => {
-      const rows = await getDatabase()
-        .select({ name: user.name, email: user.email })
-        .from(user)
-        .where(eq(user.id, userId))
-        .limit(1);
-      return rows[0];
-    },
+    readPerson: (userId) => runWeb(readPerson(userId)),
   };
   if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
   return handleEvents(options);
@@ -198,33 +259,13 @@ async function observationTickHandler(request: Request): Promise<Response> {
     environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
   const eveOrigin =
     process.env[OPENER_ENVIRONMENT.EVE_ORIGIN]?.trim() || new URL(request.url).origin;
-  const vaultRows = (userId: string) =>
-    database
-      .select({ providerId: providerKey.providerId, ciphertext: providerKey.ciphertext })
-      .from(providerKey)
-      .where(eq(providerKey.userId, userId));
+  const vaultRows = (userId: string) => runWeb(readStoredVaultKeys(userId));
 
   const options: ObservationTickOptions = {
     request,
     cronSecret,
     encryptionSecret,
-    listAccounts: async (limit, seenAfter) => {
-      const rows = await database
-        .select({ userId: providerKey.userId })
-        .from(providerKey)
-        .innerJoin(devices, eq(devices.userId, providerKey.userId))
-        .leftJoin(observationPass, eq(observationPass.userId, providerKey.userId))
-        .where(
-          and(
-            inArray(providerKey.providerId, CLOUD_PROVIDER_IDS),
-            gte(devices.lastSeenAt, new Date(seenAfter)),
-          ),
-        )
-        .groupBy(providerKey.userId, observationPass.attemptedAt)
-        .orderBy(sql`${observationPass.attemptedAt} asc nulls first`)
-        .limit(limit);
-      return rows.map((row) => ({ userId: row.userId }));
-    },
+    listAccounts: (limit, seenAfter) => runWeb(listEligibleAccounts(limit, seenAfter)),
     forgetIneligible: async (seenAfter) => {
       await store?.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter });
     },
