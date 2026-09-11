@@ -244,19 +244,50 @@ export function stopDevice(stream: MediaStream | undefined): void {
 }
 
 /**
- * The browser's silence: a destination node with nothing feeding it renders
- * zeros for as long as its context runs, and the track it yields is a live
- * audio track the sender encodes like any other. The context is resumed
- * rather than trusted to start, since a suspended one renders nothing and a
- * track that produces no frames is the stall this exists to prevent.
+ * The slice of the browser's audio graph the silence is built from, so a test
+ * can stand a fake in for the context without a browser.
  */
-export function createBrowserSilence(): LiveSilence {
-  const context = new AudioContext({ latencyHint: "interactive" });
+export interface LiveSilenceSource {
+  readonly offset: { value: number };
+  connect(destination: AudioNode): void;
+  start(): void;
+  stop(): void;
+  disconnect(): void;
+}
+
+export interface LiveSilenceContext {
+  createMediaStreamDestination(): MediaStreamAudioDestinationNode;
+  createConstantSource(): LiveSilenceSource;
+  resume(): Promise<void>;
+  close(): Promise<void>;
+}
+
+const createInteractiveContext = (): LiveSilenceContext =>
+  new AudioContext({ latencyHint: "interactive" });
+
+/**
+ * The browser's silence: a constant source at offset zero, connected into a
+ * destination node whose track the sender encodes like any other. The source
+ * is what makes the track carry anything at all: Chromium pulls a destination
+ * node only while an upstream node is connected into it, so one with nothing
+ * feeding it renders no frames and its track is, on the wire, no track. The
+ * context is resumed rather than trusted to start, since a suspended one
+ * renders nothing either.
+ */
+export function createBrowserSilence(
+  createContext: () => LiveSilenceContext = createInteractiveContext,
+): LiveSilence {
+  const context = createContext();
   const destination = context.createMediaStreamDestination();
+  const source = context.createConstantSource();
+  source.offset.value = 0;
+  source.connect(destination);
+  source.start();
   void context.resume().catch(() => undefined);
   const stream = destination.stream;
   const track = stream.getAudioTracks()[0];
   if (!track) {
+    source.stop();
     void context.close().catch(() => undefined);
     throw new Error("the destination node yielded no audio track");
   }
@@ -264,6 +295,8 @@ export function createBrowserSilence(): LiveSilence {
     track,
     stream,
     release: () => {
+      source.stop();
+      source.disconnect();
       track.stop();
       void context.close().catch(() => undefined);
     },
