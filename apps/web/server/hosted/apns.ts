@@ -183,7 +183,8 @@ export interface ApnsTransport {
   close(): Promise<void>;
 }
 
-const APNS_REQUEST_TIMEOUT_MS = 10_000;
+/** The longest one send waits on Apple before it is counted failed; a pass that budgets its sends adds one of these to its own bound. */
+export const APNS_REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * HTTP/2 over Node's own client, one connection per gateway host, kept open

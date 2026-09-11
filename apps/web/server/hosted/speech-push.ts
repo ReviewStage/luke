@@ -78,12 +78,13 @@ export const SPEECH_PUSH = {
   GRACE_MS: 2 * 60_000,
   /**
    * How long one pass may spend before leaving the rest of the offers for
-   * the next tick. A send to Apple may wait out its own timeout, and the
-   * pass runs ahead of the observation batches on a tick whose budget is
-   * theirs; this keeps a slow gateway from starting the observation already
-   * exhausted.
+   * the next tick. The pass runs after the sweep and ahead of the
+   * observation batches, all inside the tick's one budget, and a batch
+   * starts only while a whole pass deadline still fits, so this bound plus
+   * the one send that may still be waiting out its timeout when it is
+   * reached must leave that room: the tick's test states the arithmetic.
    */
-  BUDGET_MS: 15_000,
+  BUDGET_MS: 10_000,
 } as const;
 
 /** What the pass decided about one open offer, from its standing and its account's devices. */

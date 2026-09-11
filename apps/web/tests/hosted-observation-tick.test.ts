@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
+import { APNS_REQUEST_TIMEOUT_MS } from "../server/hosted/apns";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
   type AccountPassOutcome,
@@ -11,7 +12,7 @@ import {
   OBSERVATION_TICK_PATH,
   type ObservationTickOptions,
 } from "../server/hosted/observation-tick";
-import type { SpeechPushOutcome } from "../server/hosted/speech-push";
+import { SPEECH_PUSH, type SpeechPushOutcome } from "../server/hosted/speech-push";
 import type { SpeechSweepOutcome } from "../server/hosted/store";
 
 const CRON_SECRET = "cron-secret-1";
@@ -219,9 +220,13 @@ test("a pass that outruns its deadline is counted failed and the tick moves on",
   });
 });
 
-test("the budget leaves headroom under the function cap, and the cron entry names the tick", () => {
+test("the budget leaves headroom under the function cap, the push pass with one send still waiting leaves room for a first observation batch, and the cron entry names the tick", () => {
   assert.ok(OBSERVATION_TICK.BUDGET_MS < OBSERVATION_TICK.MAX_DURATION_SECONDS * 1000);
   assert.ok(OBSERVATION_TICK.PASS_DEADLINE_MS < OBSERVATION_TICK.BUDGET_MS);
+  assert.ok(
+    SPEECH_PUSH.BUDGET_MS + APNS_REQUEST_TIMEOUT_MS <
+      OBSERVATION_TICK.BUDGET_MS - OBSERVATION_TICK.PASS_DEADLINE_MS,
+  );
   // SAFETY: the file is this repository's own vercel.json, read for the cron entry checked below.
   const vercel = JSON.parse(
     readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
