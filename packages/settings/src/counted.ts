@@ -1,8 +1,8 @@
 import {
-  PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_SETTINGS_VIEW,
-  type ProductCredentialSource,
+  PRODUCT_VOICE_SESSION_SOURCE,
   type ProductSettingsView,
+  type ProductVoiceSessionSource,
 } from "@sidecar/analytics";
 import { SETTINGS_PAGE, type SettingsPage, VOICE_SOURCE, type VoiceSource } from "./schema.js";
 
@@ -16,9 +16,9 @@ import { SETTINGS_PAGE, type SettingsPage, VOICE_SOURCE, type VoiceSource } from
  */
 
 export const VOICE_SOURCE_COUNTED_AS = {
-  [VOICE_SOURCE.ACCOUNT]: PRODUCT_CREDENTIAL_SOURCE.ACCOUNT,
-  [VOICE_SOURCE.KEY]: PRODUCT_CREDENTIAL_SOURCE.KEY,
-} satisfies Record<VoiceSource, ProductCredentialSource>;
+  [VOICE_SOURCE.ACCOUNT]: PRODUCT_VOICE_SESSION_SOURCE.HOSTED,
+  [VOICE_SOURCE.KEY]: PRODUCT_VOICE_SESSION_SOURCE.KEYED,
+} satisfies Record<VoiceSource, ProductVoiceSessionSource>;
 
 export const SETTINGS_VIEW_COUNTED_AS = {
   [SETTINGS_PAGE.ROOT]: PRODUCT_SETTINGS_VIEW.ROOT,

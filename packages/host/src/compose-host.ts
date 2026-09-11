@@ -39,9 +39,6 @@ import { createGatewayService } from "./service.js";
  */
 const HOST_CLOSE_WAIT_MS = 5_000;
 
-/** The epoch the bootstrap still names for the retired Realtime receiver, which no longer exists to mint one. */
-const RETIRED_RECEIVER_EPOCH = 0;
-
 export interface Host {
   /** The one boundary a client reaches this host through. */
   readonly server: GatewayServer;
@@ -204,10 +201,6 @@ export function composeHost(options: HostSeams): Host {
         supersetInstalled,
         supersetConnected,
         sessionReplay: carried(replay),
-        // The retired Realtime path's receiver epoch, still a field of the
-        // bootstrap the desktop reads until the protocol retires it; no
-        // receiver stands, so the epoch never moves.
-        receiverEpoch: RETIRED_RECEIVER_EPOCH,
         voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
         agentTraceEnabled: account.agentTrace !== undefined,
       });

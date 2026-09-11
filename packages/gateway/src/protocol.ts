@@ -51,8 +51,6 @@ const GATEWAY_METHODS = {
   NODE_REGISTER: { name: "node.register", mutates: true },
   NODE_UNREGISTER: { name: "node.unregister", mutates: true },
   NODE_INVOKE: { name: "node.invoke", mutates: true },
-  DELIVERY_CLAIM: { name: "delivery.claim", mutates: true },
-  DELIVERY_ACKNOWLEDGE: { name: "delivery.acknowledge", mutates: true },
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: { name: "client.bootstrap", mutates: false },
   SETTINGS_SNAPSHOT: { name: "settings.snapshot", mutates: false },
@@ -94,15 +92,12 @@ const GATEWAY_METHODS = {
   SESSION_SEND_MESSAGE: { name: "session.sendMessage", mutates: true },
   SESSION_EXECUTE_CONTROL: { name: "session.executeControl", mutates: true },
   WORKSPACE_PROJECTS: { name: "workspace.projects", mutates: false },
-  SPEECH_SETTLE: { name: "speech.settle", mutates: true },
-  RECEIVER_REPORT: { name: "receiver.report", mutates: true },
-  VOICE_MINT_REALTIME_CREDENTIAL: { name: "voice.mintRealtimeCredential", mutates: true },
   VOICE_DIAGNOSTICS: { name: "voice.diagnostics", mutates: false },
   VOICE_CREATE_LIVE_SESSION: { name: "voice.createLiveSession", mutates: true },
   VOICE_END_LIVE_SESSION: { name: "voice.endLiveSession", mutates: true },
   VOICE_REPORT_LIVE_TRANSPORT: { name: "voice.reportLiveTransport", mutates: true },
   VOICE_REPORT_LIVE_ACTIVITY: { name: "voice.reportLiveActivity", mutates: true },
-  /** One tapped realtime event for the host's development trace; a no-op where no writer stands. */
+  /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: { name: "voice.recordTrace", mutates: true },
   GUIDE_REPORT: { name: "guide.report", mutates: true },
   ANALYTICS_RECORD: { name: "analytics.record", mutates: true },
@@ -119,15 +114,6 @@ export const GATEWAY_METHOD =
   ) as { readonly [K in keyof typeof GATEWAY_METHODS]: (typeof GATEWAY_METHODS)[K]["name"] };
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
-
-/** How a `receiver.report` names the moment it reports. */
-export const RECEIVER_REPORT_KIND = {
-  BEGIN: "begin",
-  READY: "ready",
-  RESET: "reset",
-} as const;
-
-export type ReceiverReportKind = (typeof RECEIVER_REPORT_KIND)[keyof typeof RECEIVER_REPORT_KIND];
 
 /**
  * The live voice session's vocabulary, declared beside the four methods and
@@ -286,8 +272,6 @@ export const GATEWAY_EVENT = {
   RUNS_CHANGED: "runs.changed",
   CONVERSATION_CHANGED: "conversation.changed",
   DIRECTORY_CHANGED: "directory.changed",
-  DELIVERY_OFFERED: "delivery.offered",
-  DELIVERIES_WITHDRAWN: "deliveries.withdrawn",
   CHILD_CHANGED: "child.changed",
   CONFIGURATION_CHANGED: "configuration.changed",
   OBSERVATION_CHANGED: "observation.changed",
@@ -300,8 +284,6 @@ export const GATEWAY_EVENT = {
   ANNOUNCEMENTS_HELD_CHANGED: "announcementsHeld.changed",
   SUPERSET_SIGN_IN_CHANGED: "supersetSignIn.changed",
   CALENDAR_ONBOARDING_CHANGED: "calendarOnboarding.changed",
-  SPEECH_OFFERED: "speech.offered",
-  SPEECH_WITHDRAWN: "speech.withdrawn",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
 } as const;

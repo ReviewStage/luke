@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
-import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "@sidecar/devtrace/vocabulary";
-import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import { TRACE_DIRECTION, TRACE_ENTRY_KIND, TRACE_LIVE_EVENT } from "@sidecar/devtrace/vocabulary";
+import { LIVE_DEFAULTS } from "@sidecar/live";
+import { isRecord, type WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import { unboxTraceFromLines } from "./unbox-export.js";
 
 function wireLine(at: string, direction: string, event: WireRecord): string {
   return JSON.stringify({ at, kind: TRACE_ENTRY_KIND.WIRE, direction, event });
+}
+
+function serverLine(at: string, event: WireRecord): string {
+  return wireLine(at, TRACE_DIRECTION.SERVER, event);
+}
+
+function clientLine(at: string, event: WireRecord): string {
+  return wireLine(at, TRACE_DIRECTION.CLIENT, event);
 }
 
 function generations(trace: WireRecord): readonly WireRecord[] {
@@ -24,129 +33,220 @@ function toolsOf(generation: WireRecord | undefined): readonly WireRecord[] {
   return Array.isArray(tools) ? tools.filter(isRecord) : [];
 }
 
-const SESSION_SYNC = wireLine("2026-08-25T10:00:00.000Z", TRACE_DIRECTION.CLIENT, {
-  type: "session.update",
-  session: {
-    instructions: "You are Luke.",
-    tools: [
-      {
-        type: "function",
-        name: "open_session",
-        description: "Opens a session.",
-        parameters: { type: "object", properties: { title: { type: "string" } } },
-      },
-    ],
-  },
+function rolesAndContent(
+  generation: WireRecord | undefined,
+): readonly (readonly [unknown, unknown])[] {
+  return messagesOf(generation).map((message) => [message.role, message.content] as const);
+}
+
+const STARTED = serverLine("2026-09-01T10:00:00.000Z", {
+  type: TRACE_LIVE_EVENT.SESSION_STARTED,
+  session: { id: "sess_1", model: "gpt-live-1-preview" },
 });
 
-const TYPED_ASK = wireLine("2026-08-25T10:00:01.000Z", TRACE_DIRECTION.CLIENT, {
-  type: "conversation.item.create",
-  item: {
-    type: "message",
-    role: "user",
-    content: [{ type: "input_text", text: "What is the checkout agent doing?" }],
-  },
+const ROSTER_NOTE = clientLine("2026-09-01T10:00:00.100Z", {
+  type: TRACE_LIVE_EVENT.THINKING_APPEND,
+  event_id: "evt_roster",
+  delegation_id: null,
+  content: "Two sessions are working.",
 });
 
-const RESPONSE_ASKED = wireLine("2026-08-25T10:00:01.200Z", TRACE_DIRECTION.CLIENT, {
-  type: "response.create",
+const ASK_FRAGMENTS = [
+  serverLine("2026-09-01T10:00:01.000Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: "What is the ",
+    start_ms: 1_000,
+    end_ms: 1_400,
+  }),
+  serverLine("2026-09-01T10:00:01.500Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: "checkout agent doing?",
+    start_ms: 1_400,
+    end_ms: 2_000,
+  }),
+];
+
+const DELEGATED = serverLine("2026-09-01T10:00:02.200Z", {
+  type: TRACE_LIVE_EVENT.DELEGATION_CREATED,
+  offset_ms: 2_200,
+  delegation: { id: "dlg_1", target: "client" },
 });
 
-const RESPONSE_DONE = wireLine("2026-08-25T10:00:03.200Z", TRACE_DIRECTION.SERVER, {
-  type: "response.done",
-  response: {
-    id: "resp_1",
-    usage: {
-      input_tokens: 900,
-      output_tokens: 40,
-      input_token_details: { cached_tokens: 512 },
-    },
-    output: [
-      {
-        type: "message",
-        role: "assistant",
-        content: [{ type: "output_audio", transcript: "It is waiting on you." }],
-      },
-    ],
-  },
+const COMMENTARY = clientLine("2026-09-01T10:00:04.200Z", {
+  type: TRACE_LIVE_EVENT.COMMENTARY_APPEND,
+  event_id: "evt_reply",
+  delegation_id: "dlg_1",
+  content: "It is waiting on you.",
 });
 
-test("a replied turn becomes one generation with the cumulative conversation", () => {
-  const trace = unboxTraceFromLines([SESSION_SYNC, TYPED_ASK, RESPONSE_ASKED, RESPONSE_DONE], {
-    name: "smoke",
-  });
+const REPLY_FRAGMENTS = [
+  serverLine("2026-09-01T10:00:05.000Z", {
+    type: TRACE_LIVE_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+    delta: "Checkout is ",
+    start_ms: 5_000,
+    end_ms: 5_400,
+  }),
+  serverLine("2026-09-01T10:00:05.500Z", {
+    type: TRACE_LIVE_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+    delta: "waiting on you.",
+    start_ms: 5_400,
+    end_ms: 6_000,
+  }),
+];
+
+const USAGE = serverLine("2026-09-01T10:00:30.000Z", {
+  type: TRACE_LIVE_EVENT.USAGE_UPDATED,
+  usage: { seconds: 30 },
+});
+
+const CLOSED = serverLine("2026-09-01T10:00:42.000Z", {
+  type: TRACE_LIVE_EVENT.SESSION_CLOSED,
+  reason: "close_requested",
+  usage: { seconds: 42 },
+});
+
+const EXCHANGE = [
+  STARTED,
+  ROSTER_NOTE,
+  ...ASK_FRAGMENTS,
+  DELEGATED,
+  COMMENTARY,
+  ...REPLY_FRAGMENTS,
+];
+
+test("a delegated exchange becomes one generation per boundary with the cumulative conversation", () => {
+  const trace = unboxTraceFromLines([...EXCHANGE, USAGE, CLOSED], { name: "smoke" });
   assert.equal(trace.trace_id, "smoke");
-  assert.equal(trace.timestamp, "2026-08-25T10:00:00.000Z");
-  assert.deepEqual(trace.total_tokens, { input: 900, output: 40 });
-  const [generation] = generations(trace);
-  assert.ok(generation);
-  assert.equal(generation.type, "generation");
-  assert.equal(generation.name, "resp_1");
-  assert.deepEqual(generation.metrics, {
+  assert.equal(trace.timestamp, "2026-09-01T10:00:00.000Z");
+  assert.deepEqual(trace.total_tokens, { input: 0, output: 0 });
+  assert.equal(trace.session_seconds, 42);
+  const [beforeDelegation, exchange, ...rest] = generations(trace);
+  assert.deepEqual(rest, []);
+  assert.equal(beforeDelegation?.type, "generation");
+  assert.equal(beforeDelegation?.name, "session");
+  assert.equal(beforeDelegation?.model, "gpt-live-1-preview");
+  assert.deepEqual(rolesAndContent(beforeDelegation), [
+    ["developer", "Two sessions are working."],
+    ["user", "What is the checkout agent doing?"],
+  ]);
+  assert.equal(exchange?.name, "dlg_1");
+  assert.deepEqual(exchange?.metrics, {
     latency: 2,
-    tokens: { input: 900, output: 40, cache_read: 512 },
+    tokens: { input: 0, output: 0 },
     cost: 0,
   });
-  const tools = toolsOf(generation);
-  assert.equal(tools.length, 1);
-  assert.equal(tools[0]?.name, "open_session");
-  assert.ok(isRecord(tools[0]?.inputSchema));
-  assert.deepEqual(
-    messagesOf(generation).map((message) => [message.role, message.content]),
-    [
-      ["system", "You are Luke."],
-      ["user", "What is the checkout agent doing?"],
-      ["assistant", "It is waiting on you."],
-    ],
-  );
+  assert.deepEqual(rolesAndContent(exchange), [
+    ["developer", "Two sessions are working."],
+    ["user", "What is the checkout agent doing?"],
+    ["assistant", "It is waiting on you."],
+    ["assistant", "Checkout is waiting on you."],
+  ]);
 });
 
-test("a tool call pairs with its output across two generations", () => {
-  const callDone = wireLine("2026-08-25T10:00:03.000Z", TRACE_DIRECTION.SERVER, {
-    type: "response.done",
-    response: {
-      id: "resp_call",
-      usage: { input_tokens: 10, output_tokens: 5 },
-      output: [
-        {
-          type: "function_call",
-          name: "open_session",
-          call_id: "call_1",
-          arguments: '{"title":"checkout"}',
-        },
-      ],
-    },
+test("a session that never reported a model shows the live default, and an instruction reads as the developer's", () => {
+  const stop = clientLine("2026-09-01T10:00:06.500Z", {
+    type: TRACE_LIVE_EVENT.INSTRUCTIONS_APPEND,
+    event_id: "evt_stop",
+    delegation_id: null,
+    content: "Stop speaking and wait.",
   });
-  const callOutput = wireLine("2026-08-25T10:00:03.500Z", TRACE_DIRECTION.CLIENT, {
-    type: "conversation.item.create",
-    item: { type: "function_call_output", call_id: "call_1", output: '{"status":"accepted"}' },
+  const [generation] = generations(unboxTraceFromLines([...REPLY_FRAGMENTS, stop]));
+  assert.equal(generation?.model, LIVE_DEFAULTS.MODEL);
+  assert.equal(generation?.name, "session");
+  assert.deepEqual(rolesAndContent(generation), [
+    ["assistant", "Checkout is waiting on you."],
+    ["developer", "Stop speaking and wait."],
+  ]);
+});
+
+test("two utterances a gap apart are two messages, and a late fragment joins the one its timing names", () => {
+  const first = serverLine("2026-09-01T10:00:01.000Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: "Hello.",
+    start_ms: 1_000,
+    end_ms: 1_500,
   });
-  const trace = unboxTraceFromLines([SESSION_SYNC, TYPED_ASK, callDone, callOutput, RESPONSE_DONE]);
+  const second = serverLine("2026-09-01T10:00:05.000Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: "Anything new?",
+    start_ms: 5_000,
+    end_ms: 5_800,
+  });
+  const late = serverLine("2026-09-01T10:00:05.100Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: " Luke.",
+    start_ms: 1_500,
+    end_ms: 1_900,
+  });
+  const [generation] = generations(unboxTraceFromLines([first, second, late]));
+  assert.deepEqual(rolesAndContent(generation), [
+    ["user", "Hello. Luke."],
+    ["user", "Anything new?"],
+  ]);
+});
+
+test("a second session continues the conversation and its seconds add to the first's", () => {
+  const secondStarted = serverLine("2026-09-01T11:00:00.000Z", {
+    type: TRACE_LIVE_EVENT.SESSION_STARTED,
+    session: { id: "sess_2" },
+  });
+  const greeting = serverLine("2026-09-01T11:00:01.000Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: "Back again.",
+    start_ms: 500,
+    end_ms: 1_000,
+  });
+  const secondClosed = serverLine("2026-09-01T11:00:10.000Z", {
+    type: TRACE_LIVE_EVENT.SESSION_CLOSED,
+    reason: "expired",
+    usage: { seconds: 10 },
+  });
+  const trace = unboxTraceFromLines([...EXCHANGE, CLOSED, secondStarted, greeting, secondClosed]);
+  assert.equal(trace.session_seconds, 52);
+  const last = generations(trace).at(-1);
+  assert.equal(messagesOf(last).length, 5);
+  assert.deepEqual(rolesAndContent(last).at(-1), ["user", "Back again."]);
+});
+
+test("a session that starts over one never closed settles the earlier one first", () => {
+  const restarted = serverLine("2026-09-01T10:01:00.000Z", {
+    type: TRACE_LIVE_EVENT.SESSION_STARTED,
+    session: { id: "sess_2" },
+  });
+  const trace = unboxTraceFromLines([...ASK_FRAGMENTS, USAGE, restarted, ...REPLY_FRAGMENTS]);
+  assert.equal(trace.session_seconds, 30);
   const [first, second] = generations(trace);
-  const callMessage = messagesOf(first).at(-1);
-  const calls: WireValue | undefined = callMessage?.tool_calls;
-  assert.ok(Array.isArray(calls));
-  const [call] = calls.filter(isRecord);
-  assert.deepEqual(call, {
-    type: "function",
-    id: "call_1",
-    function: { name: "open_session", arguments: '{"title":"checkout"}' },
-  });
-  const roles = messagesOf(second).map((message) => message.role);
-  assert.deepEqual(roles, ["system", "user", "assistant", "tool", "assistant"]);
-  const output = messagesOf(second).find((message) => message.role === "tool");
-  assert.equal(output?.tool_call_id, "call_1");
+  assert.deepEqual(rolesAndContent(first), [["user", "What is the checkout agent doing?"]]);
+  assert.deepEqual(rolesAndContent(second), [
+    ["user", "What is the checkout agent doing?"],
+    ["assistant", "Checkout is waiting on you."],
+  ]);
 });
 
-test("a spoken turn's transcription joins the conversation as the developer's words", () => {
-  const transcription = wireLine("2026-08-25T10:00:02.000Z", TRACE_DIRECTION.SERVER, {
-    type: "conversation.item.input_audio_transcription.completed",
-    transcript: "Read me the update.",
+test("a late fragment that only lengthens an earlier utterance still reaches a generation", () => {
+  const late = serverLine("2026-09-01T10:00:02.400Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: " Right now.",
+    start_ms: 2_000,
+    end_ms: 2_300,
   });
-  const trace = unboxTraceFromLines([SESSION_SYNC, transcription, RESPONSE_DONE]);
-  const [generation] = generations(trace);
-  const user = messagesOf(generation).find((message) => message.role === "user");
-  assert.equal(user?.content, "Read me the update.");
+  const trace = unboxTraceFromLines([...ASK_FRAGMENTS, DELEGATED, late]);
+  const [beforeDelegation, exchange] = generations(trace);
+  assert.deepEqual(rolesAndContent(beforeDelegation), [
+    ["user", "What is the checkout agent doing?"],
+  ]);
+  assert.equal(exchange?.name, "dlg_1");
+  assert.deepEqual(rolesAndContent(exchange), [
+    ["user", "What is the checkout agent doing? Right now."],
+  ]);
+});
+
+test("a trace cut before the close still shows what was said, and an empty segment draws nothing", () => {
+  const trace = unboxTraceFromLines([STARTED, DELEGATED, DELEGATED]);
+  assert.deepEqual(generations(trace), []);
+  const cut = unboxTraceFromLines([...ASK_FRAGMENTS]);
+  assert.equal(generations(cut).length, 1);
+  assert.equal(cut.session_seconds, 0);
 });
 
 test("a brain turn becomes its own generation, and junk lines cost only themselves", () => {

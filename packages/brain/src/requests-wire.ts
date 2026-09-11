@@ -12,7 +12,6 @@ import {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
-  type BrainRequestOrigin,
   type BrainRequestRecord,
   type BrainSubmissionRejection,
   brainRequestRecordFromWire,
@@ -79,34 +78,6 @@ export function brainRequestPending(snapshot: BrainRequestSnapshot): boolean {
 }
 
 /**
- * One ended run whose reply the main process offers the voice window to
- * speak. The words do not travel with the offer: the window claims the
- * delivery first, and the grant carries them, read from the live record at
- * that moment so a run the store has since let go of is never spoken.
- */
-export interface BrainReplyOffer {
-  runId: string;
-  deliveryId: string;
-  /** The receiver epoch the offer went to; the claim and the acknowledgement name it back. */
-  epoch: number;
-}
-
-function isReceiverEpoch(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isInteger(value) && value >= 0;
-}
-
-export function isBrainReplyOffer(value: UnparsedWireValue): value is BrainReplyOffer & WireRecord {
-  return (
-    isRecord(value) &&
-    isWireString(value.runId) &&
-    value.runId.length > 0 &&
-    isWireString(value.deliveryId) &&
-    value.deliveryId.length > 0 &&
-    isReceiverEpoch(value.epoch)
-  );
-}
-
-/**
  * What a wait on a spoken ask comes back with: the record as it then stands,
  * or nothing for a run the brain does not know, and whether the call that
  * asked has been granted the words. `speak` is true only for an ended run
@@ -118,15 +89,6 @@ export interface BrainAskWait {
   record: BrainRequestSnapshot | undefined;
   speak: boolean;
 }
-
-/**
- * The main process's answer to a claim: the words to say, once, with the
- * origin of the ask they answer — a typed ask's reply holds the composer's
- * caption, a spoken one's does not — or nothing.
- */
-export type BrainReplyClaimResult =
-  | { granted: true; words: string; origin: BrainRequestOrigin }
-  | { granted: false };
 
 /**
  * An app act the brain decided that only the renderer can perform — a settings

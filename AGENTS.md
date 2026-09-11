@@ -445,9 +445,9 @@ Canonical commands:
   the in-process transport, the text loopback transport, and the socket, and
   the method vocabulary is additive and named in `protocol.ts`
   (`client.bootstrap`, the `settings`, `credential`, `account`, `calendar`,
-  `tracker`, `superset`, `session`, `workspace`, `speech`, `receiver`,
-  `voice`, `guide`, `analytics`, `conversation.append`, and `onboarding`
-  methods, and the change events beside them; `voice.recordTrace` carries
+  `tracker`, `superset`, `session`, `workspace`, `voice`, `guide`,
+  `analytics`, `conversation.append`, and `onboarding` methods, and the
+  change events beside them; `voice.recordTrace` carries
   the renderer's tapped live events to the development trace writer the
   host owns, under the same gate, so an untraced run drops them at the
   host; and the live voice session's `voice.createLiveSession`,
@@ -456,18 +456,20 @@ Canonical commands:
   beside them, each mutating and idempotency-keyed so a retried SDP offer
   cannot create and bill a second session, their shapes declared once as
   `@sidecar/wire` schemas in `protocol.ts`, and answered by the host's live
-  composer, which owns the one session; the `speech` and `receiver` methods
-  and the `speech.offered` and `speech.withdrawn` events are the retired
-  Realtime path's, still named but answered by no handler — the server's
-  typed unknown-method refusal stands — and reached by no client of this
-  build). No credential or account secret travels in any answer or
+  composer, which owns the one session; the retired Realtime path's
+  methods and events — the credential mint, the speech settle, the receiver
+  report, the delivery claims, and the speech offers — are gone from the
+  table rather than kept as names no handler answers, so a client of an
+  earlier build meets the server's typed unknown-method refusal). No
+  credential or account secret travels in any answer or
   event, and no credential of any kind reaches the voice window: the host
   creates the session with the key it holds and answers the peer's SDP offer
   with the provider's SDP answer, the one thing the window is handed. The
-  spoken introduction, which runs before any account and still on the
-  Realtime API until its own change lands, is the one exception, and its
-  credential is the desktop's own bounded introduction mint, never the
-  host's. Widening the method vocabulary, the event set,
+  spoken introduction, which runs before any account, is the one session the
+  host does not create: the desktop's own main process opens it through the
+  accountless introduction endpoint of Luke's voice service, which holds the
+  key itself, so no credential reaches the desktop there either. Widening
+  the method vocabulary, the event set,
   or what a node may be asked is a product decision, not an implementation
   detail.
 - The host is what composes and owns the runtime, and it draws nothing. It is

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
+import { LIVE_SERVER_EVENT } from "@sidecar/live";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
@@ -75,13 +76,13 @@ test("raw audio handed straight to the writer still never reaches the file", asy
   const writer = new AgentTraceWriter({ directory });
   writer.recordWire({
     direction: TRACE_DIRECTION.CLIENT,
-    event: { type: "input_audio_buffer.append", audio: "AAAAAAA=" },
+    event: { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audio: "AAAAAAA=" },
   });
   await writer.settled();
   const [line] = (await readFile(writer.file, "utf8")).split("\n");
   const entry = recordFromJsonLine(line ?? "");
   assert.ok(isRecord(entry?.event));
-  assert.deepEqual(entry?.event, { type: "input_audio_buffer.append", audioBytes: 5 });
+  assert.deepEqual(entry?.event, { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audioBytes: 5 });
 });
 
 test("a writer that cannot write reports once and stays quiet after", async () => {

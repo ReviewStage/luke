@@ -464,8 +464,8 @@ test("a fresh client with no baseline adopts the host as it stands rather than r
     now: () => 0,
     createEventId: () => `event-${++ids}`,
   });
-  // The host spoke before this client existed: an offer to a renderer that is gone.
-  server.emit(GATEWAY_EVENT.SPEECH_OFFERED, { id: "old-offer" });
+  // The host spoke before this client existed: a session change for a renderer that is gone.
+  server.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, { phase: "closed" });
   server.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-runs");
   const transport = new InProcessTransport(server, OPERATOR);
   const heard: string[] = [];
@@ -479,7 +479,7 @@ test("a fresh client with no baseline adopts the host as it stands rather than r
   });
   client.onEvery((event) => heard.push(event.kind));
   // The first thing it hears is not the host's first event: no baseline, so
-  // the host is adopted, and the old offer is never delivered.
+  // the host is adopted, and the old change is never delivered.
   server.emit(GATEWAY_EVENT.RUNS_CHANGED, "current");
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -487,8 +487,8 @@ test("a fresh client with no baseline adopts the host as it stands rather than r
   assert.deepEqual(heard, []);
   assert.equal(client.lastSequence(), 3);
   // From here the stream is followed, and a later gap is replayed as before.
-  server.emit(GATEWAY_EVENT.SPEECH_OFFERED, { id: "new-offer" });
-  assert.deepEqual(heard, [GATEWAY_EVENT.SPEECH_OFFERED]);
+  server.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, { phase: "wanted" });
+  assert.deepEqual(heard, [GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED]);
 });
 
 test("an event of the new host arriving during adoption is held and delivered after it, whatever the old cursor said, and an adoption supersedes a reconnection still out", async () => {

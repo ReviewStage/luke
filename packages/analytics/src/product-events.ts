@@ -100,7 +100,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   CALENDAR_SOURCE: "calendar_source",
   SESSION_COUNT: "session_count",
   IMAGE_COUNT: "image_count",
-  CREDENTIAL_SOURCE: "credential_source",
+  SESSION_SOURCE: "session_source",
   SESSION_ACTION: "session_action",
   DIAGNOSTIC_KIND: "diagnostic_kind",
   ISSUE_ACTION: "issue_action",
@@ -122,16 +122,16 @@ export const PRODUCT_EVENT_PROPERTY = {
 export type ProductEventProperty =
   (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
 
-/** Which credential a spoken call ran on, never which credential it was. */
-export const PRODUCT_CREDENTIAL_SOURCE = {
-  ACCOUNT: "account",
-  KEY: "key",
+/** Which source opened a live voice session — Luke's hosted voice service, the developer's own key, or the introduction's accountless endpoint — never a credential or a session id. */
+export const PRODUCT_VOICE_SESSION_SOURCE = {
+  HOSTED: "hosted",
+  KEYED: "keyed",
   /** The one-time onboarding introduction's own bounded, accountless session. */
   INTRODUCTION: "introduction",
 } as const;
 
-export type ProductCredentialSource =
-  (typeof PRODUCT_CREDENTIAL_SOURCE)[keyof typeof PRODUCT_CREDENTIAL_SOURCE];
+export type ProductVoiceSessionSource =
+  (typeof PRODUCT_VOICE_SESSION_SOURCE)[keyof typeof PRODUCT_VOICE_SESSION_SOURCE];
 
 /** Which action a session took, never what it carried. */
 export const PRODUCT_SESSION_ACTION = {
@@ -397,7 +397,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: ProductCalendarSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
-  [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: ProductCredentialSource;
+  [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: ProductVoiceSessionSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: ProductSessionAction;
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: ProductIssueAction;
@@ -434,7 +434,7 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: PROVIDER_ID_LIST,
   [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: Object.values(ISSUE_TRACKER_ID),
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
-  [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: Object.values(PRODUCT_CREDENTIAL_SOURCE),
+  [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: Object.values(PRODUCT_VOICE_SESSION_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: Object.values(PRODUCT_SESSION_ACTION),
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: Object.values(PRODUCT_ISSUE_ACTION),
@@ -498,7 +498,7 @@ export const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.TRACKER_ID,
     PRODUCT_EVENT_PROPERTY.ISSUE_ACTION,
   ],
-  [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE],
+  [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE],
   [PRODUCT_EVENT.INTRODUCTION_COMPLETE]: [],
   [PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK]: [],
   [PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT]: [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
