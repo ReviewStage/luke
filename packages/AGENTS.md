@@ -203,9 +203,11 @@ work into a `Scope`, which is what cancels it, and `timersFromRuntime` answers
 the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so a caller
 still injected with those closures reads the clock the rest of the process
 reads, and `makePendingInputQueue` with `admitInput` and
-`queueDebounceSchedule` are the reply queue's Effect surface. Neither the
-barrel nor the vocabulary door names any of them, so the packages below the
-runtime resolve no `effect` either.
+`queueDebounceSchedule` are the reply queue's Effect surface. The vocabulary
+door names none of them, so a package that opens only it resolves no `effect`,
+while the barrel now does: `ObservationLoop` keeps its cadence on a `Schedule`
+forked into a `Scope` of its own rather than on an interval, so a caller that
+opens the barrel resolves `effect` behind it.
 
 A file ported from OpenClaw `b7528507` imports nothing from `effect`, so a
 later port of an upstream change stays a diff of that source; Effect reaches

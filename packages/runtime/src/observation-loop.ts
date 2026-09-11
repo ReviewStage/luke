@@ -1,19 +1,60 @@
+/**
+ * The cadence an observation keeps. What was a `setInterval` is a `Schedule`
+ * driven by a fiber forked into a `Scope` the loop owns, so the scope closing
+ * is what ends the loop and no handle is kept only to be handed back. The
+ * generation, the gate, and the coalescing are the loop's own and stay as they
+ * were: a caller reads `isCurrent` synchronously from inside its own pass.
+ *
+ * `start` and `stop` are the adaptor over that scope while the composers that
+ * arm these loops are still written in promises; P7-10 deletes them once every
+ * one of those composers is a `Layer` and the scope is the host's own.
+ */
+import { Duration, Effect, Exit, Runtime, Schedule, Scope } from "effect";
+import { scheduleRepeat } from "./effect/timers.js";
+
 export interface ObservationLoopOptions {
   gate: () => boolean;
   intervalMs: number;
   run: (generation: number) => Promise<void>;
   afterRun?: () => void;
+  /**
+   * Where a pass the cadence started reports its own failure. The interval
+   * before it kept running whatever a pass threw, so the schedule may not end
+   * on one either, and a rejection nobody wrote down would be the loop going
+   * quiet for the rest of the run.
+   */
+  report?: (message: string) => void;
+  /** The runtime the cadence is forked on, for a caller (a test today) that holds its own. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 export class ObservationLoop {
   readonly #options: ObservationLoopOptions;
+  readonly #runtime: Runtime.Runtime<never>;
+  readonly #report: (message: string) => void;
   #generation = 0;
   #running = false;
   #queued = false;
-  #timer: NodeJS.Timeout | undefined;
+  #scope: Scope.CloseableScope | undefined;
+
+  readonly #pass = Effect.suspend(() =>
+    this.#scope === undefined ? Effect.void : Effect.promise(() => this.#reportedPass()),
+  );
 
   constructor(options: ObservationLoopOptions) {
     this.#options = options;
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
+    this.#report = options.report ?? ((message) => void process.stderr.write(`${message}\n`));
+  }
+
+  async #reportedPass(): Promise<void> {
+    try {
+      await this.refresh();
+    } catch (error) {
+      this.#report(
+        `Observation pass failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   get generation(): number {
@@ -25,17 +66,31 @@ export class ObservationLoop {
   }
 
   start(): void {
-    if (this.#timer || !this.#options.gate()) return;
-    void this.refresh();
-    this.#timer = setInterval(() => void this.refresh(), this.#options.intervalMs);
-    this.#timer.unref();
+    if (this.#scope || !this.#options.gate()) return;
+    const runSync = Runtime.runSync(this.#runtime);
+    const scope = runSync(Scope.make());
+    this.#scope = scope;
+    runSync(
+      Effect.provideService(
+        scheduleRepeat(Schedule.spaced(Duration.millis(this.#options.intervalMs)), this.#pass),
+        Scope.Scope,
+        scope,
+      ),
+    );
   }
 
+  /**
+   * The scope is dropped before it is closed, so a pass the interruption has
+   * not reached yet finds the loop disarmed and runs nothing. Closing is not
+   * awaited, for the same reason cancelling a timer never was: what it has to
+   * guarantee is that no further pass starts, never that the fiber has ended.
+   */
   stop(): void {
     this.#generation += 1;
     this.#queued = false;
-    if (this.#timer) clearInterval(this.#timer);
-    this.#timer = undefined;
+    const scope = this.#scope;
+    this.#scope = undefined;
+    if (scope) Runtime.runFork(this.#runtime)(Scope.close(scope, Exit.void));
   }
 
   async refresh(): Promise<void> {
