@@ -6,7 +6,7 @@
   "description": "Turns a recorded development trace into the document the local unbox-ai viewer opens",
   "scripts": {
     "export": "tsx src/cli.ts",
-    "test": "tsx --test 'src/**/*.test.ts'",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -17,6 +17,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

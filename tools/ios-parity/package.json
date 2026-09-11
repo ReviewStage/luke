@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Diffs the iOS app's hand-transcribed Swift vocabularies against the TypeScript sets they mirror",
   "scripts": {
-    "test": "tsx --test parity.test.ts",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
