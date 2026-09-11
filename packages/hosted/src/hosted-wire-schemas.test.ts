@@ -1,6 +1,8 @@
 import {
-  type JsonSchemaSource,
   jsonSchemaGoldenRoot,
+  jsonSchemaOf,
+  type RecordedEffectJsonSchemas,
+  type RecordedJsonSchemaSource,
   type RecordedJsonSchemas,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,
@@ -38,12 +40,6 @@ const MODULE_SCHEMAS = {
     hostedActionAnswerSchema: actionWire.hostedActionAnswerSchema,
     hostedActionWorkspaceAnswerSchema: actionWire.hostedActionWorkspaceAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof actionWire>,
-  "brain-contract": {
-    hostedBrainCapabilitiesSchema: brainContract.hostedBrainCapabilitiesSchema,
-    hostedBrainEmbedRequestSchema: brainContract.hostedBrainEmbedRequestSchema,
-    hostedBrainEmbedAnswerSchema: brainContract.hostedBrainEmbedAnswerSchema,
-    hostedBrainCountTokensAnswerSchema: brainContract.hostedBrainCountTokensAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof brainContract>,
   "conversation-clear-wire": {
     conversationClearAnswerSchema: conversationClearWire.conversationClearAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof conversationClearWire>,
@@ -106,6 +102,16 @@ const MODULE_SCHEMAS = {
   } satisfies RecordedJsonSchemas<typeof vaultWire>,
 } as const;
 
+/** The brain contract, which declares its schemas as Effect's own rather than through the builder. */
+const EFFECT_MODULE_SCHEMAS = {
+  "brain-contract": {
+    hostedBrainCapabilitiesSchema: brainContract.hostedBrainCapabilitiesSchema,
+    hostedBrainEmbedRequestSchema: brainContract.hostedBrainEmbedRequestSchema,
+    hostedBrainEmbedAnswerSchema: brainContract.hostedBrainEmbedAnswerSchema,
+    hostedBrainCountTokensAnswerSchema: brainContract.hostedBrainCountTokensAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof brainContract>,
+} as const;
+
 /**
  * The two the contract builds rather than declares: a request schema is made
  * against the tool catalog the other side registered, which the node it emits
@@ -121,17 +127,23 @@ const BUILT_SCHEMAS = [
     "brain-contract-hostedBrainCountTokensRequestSchema",
     brainContract.hostedBrainCountTokensRequestSchema(FIXTURE_TOOL_CATALOG),
   ],
-] as const satisfies readonly (readonly [string, JsonSchemaSource])[];
+] as const satisfies readonly (readonly [string, RecordedJsonSchemaSource])[];
 
-const RECORDED: readonly (readonly [string, JsonSchemaSource])[] = [
-  ...Object.entries(MODULE_SCHEMAS).flatMap(([module, schemas]) =>
+const declaredSchemas = (
+  modules: Readonly<Record<string, Readonly<Record<string, RecordedJsonSchemaSource>>>>,
+): readonly (readonly [string, RecordedJsonSchemaSource])[] =>
+  Object.entries(modules).flatMap(([module, schemas]) =>
     Object.entries(schemas).map(([name, schema]) => [`${module}-${name}`, schema] as const),
-  ),
+  );
+
+const RECORDED: readonly (readonly [string, RecordedJsonSchemaSource])[] = [
+  ...declaredSchemas(MODULE_SCHEMAS),
+  ...declaredSchemas(EFFECT_MODULE_SCHEMAS),
   ...BUILT_SCHEMAS,
 ];
 
 test.for(RECORDED)("%s emits the recorded JSON Schema", async ([name, schema]) => {
-  await settleJsonSchemaGolden(ROOT, name, schema.jsonSchema());
+  await settleJsonSchemaGolden(ROOT, name, jsonSchemaOf(schema));
 });
 
 test("the recorded set is exactly the schemas the wire modules declare", async () => {

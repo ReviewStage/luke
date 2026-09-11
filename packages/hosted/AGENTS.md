@@ -11,7 +11,18 @@ credential contract (`realtime-contract.ts`, with the reader of a mint
 response into it), and depends only on lower wire/session vocabulary and `@sidecar/live`
 for the Live voice set and the
 `InitialItem` shape (that package imports nothing of this one, so the edge
-points down). The clients here are `vault-client.ts`, the desktop's side of
+points down). `brain-contract.ts` is the first module here to state its
+declarations as Effect `Schema`s directly rather than through wire's `s.*`
+facade: it reads through `readEither`, shows what `emitJsonSchema` walks out
+of the same AST, and keeps the reader `declareReader` states for the one
+field no combinator can declare, so the request bytes a model's tool call is
+measured against on the service are the same bytes the goldens under
+`fixtures/json-schema/` already held. Nothing a caller reads changed with it:
+the reads answer the same interfaces in the same words, and every other
+module here declares through the facade until its own conversion, which is
+why the golden test carries two recorded tables — `RecordedJsonSchemas` for
+the facade's modules and `RecordedEffectJsonSchemas` for a module that has
+moved — each exhaustive over its own kind. The clients here are `vault-client.ts`, the desktop's side of
 the three vault routes, `device-client.ts`, its side of the one devices
 path, `changes-client.ts`, its side of the change-signal poll that carries
 the device's presence and quiet instants, `roster-client.ts`, its read of the

@@ -62,7 +62,11 @@ nothing sorts the keys because their order is part of what is being held
 still. A module's recorded set is typed against the module itself, so a schema
 added beside one already recorded does not compile until it is recorded too,
 and Biome is kept off those fixture trees because its JSON formatting would
-rewrite the recorded bytes.
+rewrite the recorded bytes. A module that has moved off the facade records
+through `RecordedEffectJsonSchemas` instead, and `jsonSchemaOf` emits either
+kind: the two tables are separate because a module holds Effect schemas that
+show no node to any model — a fixed value set beside its `as const` object, a
+refusal declared as a tagged error — and those are not bytes a golden pins.
 
 Anything that carries identity — a `Context.Tag`, a schema brand — has exactly
 one copy across the whole install, which the `pnpm-workspace.yaml` catalog

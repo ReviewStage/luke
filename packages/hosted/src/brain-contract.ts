@@ -1,16 +1,15 @@
 import { REASONING_EFFORT, type ReasoningEffort } from "@sidecar/runtime/vocabulary";
 import {
   isWireString,
-  RECORD_EXTRA_KEYS,
+  type JsonSchemaNode,
   SCHEMA_REFUSAL,
-  type Schema,
   type SchemaPath,
   type SchemaRefusal,
-  s,
-  TEXT_ENDS,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { declareReader, readEither, wireRefusal } from "@sidecar/wire/effect";
+import { Either, Schema } from "effect";
 import {
   admitBrainInput,
   maximumHostedBrainInputItems,
@@ -107,36 +106,81 @@ export function hostedBrainBounds(): HostedBrainBounds {
   };
 }
 
-export const hostedBrainCapabilitiesSchema: Schema<HostedBrainCapabilities> = s.record(
-  {
-    contract: s.literal(HOSTED_BRAIN_CONTRACT_VERSION),
-    model: s.text({ ends: TEXT_ENDS.KEEP }),
-    operations: s.array(s.enumOf(HOSTED_BRAIN_OPERATION_NAMES), {
-      max: HOSTED_BRAIN_OPERATION_NAMES.length,
-    }),
-    tools: s.array(s.text({ ends: TEXT_ENDS.KEEP }), {
-      max: HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS,
-    }),
-    bounds: s.record(
-      {
-        promptChars: s.wholeNumber({ minimum: 1 }),
-        inputItems: s.wholeNumber({ minimum: 1 }),
-        requestBytes: s.wholeNumber({ minimum: 1 }),
-        maximumOutputTokens: s.wholeNumber({ minimum: 1 }),
-      },
-      { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-    ),
-    reasoningEfforts: s.array(s.enumOf(REASONING_EFFORT_NAMES), {
-      max: REASONING_EFFORT_NAMES.length,
-    }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+/**
+ * A text kept exactly as written, and refused when it carries nothing but
+ * whitespace. JSON Schema cannot say "not only whitespace", so the node shows
+ * `minLength: 1`, a bound necessary rather than sufficient; a bound the reader
+ * holds and the node omits would be drift in the direction that misleads a
+ * model.
+ */
+const writtenText = Schema.String.pipe(
+  Schema.filter((value) => value.trim().length > 0, {
+    schemaId: Schema.MinLengthSchemaId,
+    jsonSchema: { minLength: 1 },
+  }),
 );
+
+/** The same text under a bound, past which it is too large rather than cut. */
+const boundedText = (maximumChars: number) => writtenText.pipe(Schema.maxLength(maximumChars));
+
+/**
+ * An integer at or above its minimum. Below it is malformed rather than too
+ * large: a count of minus three is not a count that overflowed.
+ */
+const wholeNumber = (minimum: number) => Schema.Int.pipe(Schema.greaterThanOrEqualTo(minimum));
+
+/**
+ * A record that ignores a key a newer service added, which is what an answer
+ * does and a request never does. Each record states its own rule, because
+ * Effect hands a struct's parse options down to the structs inside it and a
+ * read is strict wherever nothing says otherwise. The emitted node says
+ * `additionalProperties: false` either way: that is the contract a model is
+ * held to, and tolerating a key on the way in never invites one.
+ */
+const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
+  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+const contract = Schema.Literal(HOSTED_BRAIN_CONTRACT_VERSION);
+
+export const hostedBrainCapabilitiesSchema = tolerantRecord({
+  contract,
+  model: writtenText,
+  operations: Schema.Array(Schema.Literal(...HOSTED_BRAIN_OPERATION_NAMES)).pipe(
+    Schema.maxItems(HOSTED_BRAIN_OPERATION_NAMES.length),
+  ),
+  tools: Schema.Array(writtenText).pipe(Schema.maxItems(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS)),
+  bounds: tolerantRecord({
+    promptChars: wholeNumber(1),
+    inputItems: wholeNumber(1),
+    requestBytes: wholeNumber(1),
+    maximumOutputTokens: wholeNumber(1),
+  }),
+  reasoningEfforts: Schema.Array(Schema.Literal(...REASONING_EFFORT_NAMES)).pipe(
+    Schema.maxItems(REASONING_EFFORT_NAMES.length),
+  ),
+});
+
+/**
+ * The value a declaration admitted, or nothing, for an answer whose caller
+ * never has to tell one refusal from another. What holds each declaration
+ * below to the interface above it is the read that answers in that
+ * interface's own words: a declaration that stopped decoding what its
+ * interface promises does not compile there, which is where the builder's
+ * `Schema<Value>` annotation used to say the same thing — Effect's `Schema`
+ * is invariant in its decoded type, so a struct cannot carry an interface it
+ * merely agrees with as an annotation.
+ */
+function admitted<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
 
 export function hostedBrainCapabilitiesFromWire(
   value: UnparsedWireValue,
 ): HostedBrainCapabilities | undefined {
-  return hostedBrainCapabilitiesSchema.parse(value);
+  return admitted(hostedBrainCapabilitiesSchema, value);
 }
 
 export interface HostedBrainRequestOptions {
@@ -222,52 +266,54 @@ function requestRefusal(refusal: SchemaRefusal, path: SchemaPath): HostedBrainRe
 }
 
 /** One request read for the whole contract: the schema's answer in this contract's words. */
-function hostedBrainRequestRead<Request>(
-  schema: Schema<Request>,
+function hostedBrainRequestRead<Request, Encoded>(
+  schema: Schema.Schema<Request, Encoded>,
   value: UnparsedWireValue,
 ): HostedBrainRequestRead<Request> {
-  const read = schema.read(value);
-  return read.ok
-    ? { ok: true, request: read.value }
-    : { ok: false, refusal: requestRefusal(read.refusal, read.path) };
+  return Either.match(readEither(schema)(value), {
+    onLeft: ({ refusal, path }) => ({ ok: false, refusal: requestRefusal(refusal, path) }),
+    onRight: (request) => ({ ok: true, request }),
+  });
 }
-
-const contractSchema = s.literal(HOSTED_BRAIN_CONTRACT_VERSION);
 
 /**
  * The prompt as sent: kept exactly as written, admitted empty, and refused
  * past its bound rather than cut, because the desktop composes it and the
  * service replays it.
  */
-const promptSchema = s.text({
-  max: HOSTED_BRAIN_PROMPT_BOUNDS.MAXIMUM_CHARS,
-  ends: TEXT_ENDS.KEEP,
-  allowEmpty: true,
-});
+const prompt = Schema.String.pipe(Schema.maxLength(HOSTED_BRAIN_PROMPT_BOUNDS.MAXIMUM_CHARS));
 
 /** Registered names only: each within its length, unique, and known to the catalog given. */
-function toolsSchema(catalog: ReadonlySet<string>): Schema<string[]> {
-  return s.refine(
-    s.array(
-      s.registered(
-        s.text({ max: HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS, ends: TEXT_ENDS.KEEP }),
-        catalog,
-      ),
-      { max: HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS },
+function toolNames(catalog: ReadonlySet<string>) {
+  return Schema.Array(
+    boundedText(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS).pipe(
+      Schema.filter((name) => catalog.has(name), wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED)),
     ),
-    (names) => new Set(names).size === names.length,
+  ).pipe(
+    Schema.maxItems(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS),
+    Schema.filter((names) => new Set(names).size === names.length),
   );
 }
 
-const optionsSchema = s.record({
-  maximumOutputTokens: s
-    .wholeNumber({ minimum: 1, maximum: HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS })
-    .optional(),
-  reasoningEffort: s.enumOf(REASONING_EFFORT_NAMES).optional(),
-  promptCacheKey: s
-    .text({ max: HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS, ends: TEXT_ENDS.KEEP })
-    .optional(),
+const options = Schema.Struct({
+  maximumOutputTokens: Schema.optionalWith(
+    wholeNumber(1).pipe(Schema.lessThanOrEqualTo(HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS)),
+    { exact: true },
+  ),
+  reasoningEffort: Schema.optionalWith(Schema.Literal(...REASONING_EFFORT_NAMES), { exact: true }),
+  promptCacheKey: Schema.optionalWith(
+    boundedText(HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS),
+    { exact: true },
+  ),
 });
+
+/** What the input array shows, since what it admits is the reader's own rule and not a node's. */
+const INPUT_NODE: JsonSchemaNode = {
+  type: "array",
+  description:
+    "Responses input items, admitted by this build's own allowlist rather than by this declaration.",
+  items: { type: "object", properties: {}, required: [], additionalProperties: false },
+};
 
 /**
  * The input array, which is the one field no combinator can declare: every
@@ -275,25 +321,17 @@ const optionsSchema = s.record({
  * rather than narrowed from what arrived, so the reader is the rule and the
  * node beside it only says so.
  */
-const inputSchema = s.reader<readonly WireRecord[]>({
-  read: (value) => {
-    const input = admitBrainInput(value);
-    return input === undefined
-      ? { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] }
-      : { ok: true, value: input };
-  },
-  jsonSchema: () => ({
-    type: "array",
-    description:
-      "Responses input items, admitted by this build's own allowlist rather than by this declaration.",
-    items: { type: "object", properties: {}, required: [], additionalProperties: false },
-  }),
-});
+const input = declareReader<readonly WireRecord[]>((value) => {
+  const items = admitBrainInput(value);
+  return items === undefined
+    ? { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] }
+    : { ok: true, value: items };
+}, INPUT_NODE);
 
 /** The texts to embed: each non-blank and within its bound, the batch within its count. */
-const textsSchema = s.array(
-  s.text({ max: HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS, ends: TEXT_ENDS.KEEP }),
-  { minimum: 1, max: HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS },
+const texts = Schema.Array(boundedText(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS)).pipe(
+  Schema.minItems(1),
+  Schema.maxItems(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS),
 );
 
 /**
@@ -302,33 +340,15 @@ const textsSchema = s.array(
  * request naming a tool the other side does not know is refused before it
  * costs anything. The same declaration runs on both ends.
  */
-export function hostedBrainRespondRequestSchema(
-  catalog: ReadonlySet<string>,
-): Schema<HostedBrainRespondRequest> {
-  return s.record({
-    contract: contractSchema,
-    prompt: promptSchema,
-    tools: toolsSchema(catalog),
-    options: optionsSchema,
-    input: inputSchema,
-  });
+export function hostedBrainRespondRequestSchema(catalog: ReadonlySet<string>) {
+  return Schema.Struct({ contract, prompt, tools: toolNames(catalog), options, input });
 }
 
-export function hostedBrainCountTokensRequestSchema(
-  catalog: ReadonlySet<string>,
-): Schema<HostedBrainCountTokensRequest> {
-  return s.record({
-    contract: contractSchema,
-    prompt: promptSchema,
-    tools: toolsSchema(catalog),
-    input: inputSchema,
-  });
+export function hostedBrainCountTokensRequestSchema(catalog: ReadonlySet<string>) {
+  return Schema.Struct({ contract, prompt, tools: toolNames(catalog), input });
 }
 
-export const hostedBrainEmbedRequestSchema: Schema<HostedBrainEmbedRequest> = s.record({
-  contract: contractSchema,
-  texts: textsSchema,
-});
+export const hostedBrainEmbedRequestSchema = Schema.Struct({ contract, texts });
 
 export function hostedBrainRespondRequestFromWire(
   value: UnparsedWireValue,
@@ -351,35 +371,30 @@ export function hostedBrainEmbedRequestFromWire(
 }
 
 /** The vectors are one width, and the width is the one the answer names. */
-export const hostedBrainEmbedAnswerSchema: Schema<HostedBrainEmbedAnswer> = s.refine(
-  s.record(
-    {
-      model: s.text({ ends: TEXT_ENDS.KEEP }),
-      dimensions: s.wholeNumber({ minimum: 1 }),
-      vectors: s.array(s.array(s.number(), { minimum: 1 })),
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-  (answer) => answer.vectors.every((vector) => vector.length === answer.dimensions),
+export const hostedBrainEmbedAnswerSchema = tolerantRecord({
+  model: writtenText,
+  dimensions: wholeNumber(1),
+  vectors: Schema.Array(Schema.Array(Schema.Number.pipe(Schema.finite())).pipe(Schema.minItems(1))),
+}).pipe(
+  Schema.filter((answer) => answer.vectors.every((vector) => vector.length === answer.dimensions)),
 );
 
 export function hostedBrainEmbedAnswerFromWire(
   value: UnparsedWireValue,
 ): HostedBrainEmbedAnswer | undefined {
-  return hostedBrainEmbedAnswerSchema.parse(value);
+  return admitted(hostedBrainEmbedAnswerSchema, value);
 }
 
 export interface HostedBrainCountTokensAnswer {
   inputTokens: number;
 }
 
-export const hostedBrainCountTokensAnswerSchema: Schema<HostedBrainCountTokensAnswer> = s.record(
-  { inputTokens: s.wholeNumber({ minimum: 0 }) },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+export const hostedBrainCountTokensAnswerSchema = tolerantRecord({
+  inputTokens: wholeNumber(0),
+});
 
 export function hostedBrainCountTokensAnswerFromWire(
   value: UnparsedWireValue,
 ): HostedBrainCountTokensAnswer | undefined {
-  return hostedBrainCountTokensAnswerSchema.parse(value);
+  return admitted(hostedBrainCountTokensAnswerSchema, value);
 }

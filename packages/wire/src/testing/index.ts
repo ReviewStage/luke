@@ -21,12 +21,16 @@ export {
   type ParsedJsonObject,
 } from "./json.js";
 export {
+  type EffectJsonSchemaExportName,
   type JsonSchemaExportName,
   type JsonSchemaGolden,
   type JsonSchemaGoldenTool,
   type JsonSchemaSource,
   jsonSchemaGoldenRoot,
+  jsonSchemaOf,
   matchJsonSchemaGolden,
+  type RecordedEffectJsonSchemas,
+  type RecordedJsonSchemaSource,
   type RecordedJsonSchemas,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,

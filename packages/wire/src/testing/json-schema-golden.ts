@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Schema } from "effect";
+import { emitJsonSchema } from "../effect/json-schema.js";
 import type { JsonSchemaNode } from "../schema.js";
 
 /**
@@ -39,10 +41,27 @@ export interface JsonSchemaSource {
 }
 
 /**
+ * A recorded node's source, either way it was declared: a `Schema` the
+ * builder answers for, or the Effect declaration a module states directly and
+ * wire's own emitter walks.
+ */
+export type RecordedJsonSchemaSource = JsonSchemaSource | Schema.Schema.Any;
+
+/** The node a source emits, whichever of the two it is. */
+export function jsonSchemaOf(source: RecordedJsonSchemaSource): JsonSchemaNode {
+  return Schema.isSchema(source) ? emitJsonSchema(source) : source.jsonSchema();
+}
+
+/**
  * Every export of a module that emits a JSON Schema. A recorded set declared
  * as `RecordedJsonSchemas<typeof module>` is exhaustive by construction: a
  * schema added to that module does not compile until it is recorded, which is
  * what keeps a rewrite of the emitter from quietly moving bytes nobody pinned.
+ * A module that declares its schemas as Effect's own states the same thing
+ * through `RecordedEffectJsonSchemas`; the two are separate because a module
+ * holds Effect schemas that show no node to any model — a fixed value set
+ * declared beside its `as const` object, a refusal declared as a tagged error
+ * — and those are not bytes a golden pins.
  */
 export type JsonSchemaExportName<Module> = {
   [Key in keyof Module]: Module[Key] extends JsonSchemaSource ? Key : never;
@@ -50,6 +69,14 @@ export type JsonSchemaExportName<Module> = {
 
 export type RecordedJsonSchemas<Module> = {
   readonly [Key in JsonSchemaExportName<Module>]: JsonSchemaSource;
+};
+
+export type EffectJsonSchemaExportName<Module> = {
+  [Key in keyof Module]: Module[Key] extends Schema.Schema.Any ? Key : never;
+}[keyof Module];
+
+export type RecordedEffectJsonSchemas<Module> = {
+  readonly [Key in EffectJsonSchemaExportName<Module>]: Schema.Schema.Any;
 };
 
 /** The `fixtures/json-schema` directory of the package a test file sits in. */
