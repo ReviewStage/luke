@@ -1095,7 +1095,12 @@ Beside the presence window stands `quiet_until`, the instant a meeting hold
 the device observes ends; both arrive on the change-signal poll
 (`server/routes/changes.ts`), which moves the row exactly as the heartbeat does; the Mac
 reports both on every poll, presence from its idle time and lock state and the
-quiet instant from its calendar hold, and the phone reports neither yet. A quiet instant holds speech
+quiet instant from its calendar hold, and the phone reports neither yet. A poll
+that runs before the Mac's calendars have been observed this run carries no
+quiet instant at all, because an absent field leaves the row's instant and
+`null` clears it: not yet knowing whether a meeting stands is not the same
+fact as knowing none does, and a relaunch mid-meeting must not clear the hold
+the service still rightly holds. A quiet instant holds speech
 and nothing more: a delivery reads it to wait, never to decide, reword, or
 act. The push token reaches the sender below in a later change.
 

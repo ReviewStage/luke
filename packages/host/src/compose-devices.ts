@@ -60,7 +60,7 @@ export function composeDevices(dependencies: DevicesDependencies): DevicesCompos
       const at = now();
       return {
         activeUntil: activeUntilFrom(kernel.options.machinePresence?.(), at),
-        quietUntil: (await calendars.meetingQuietUntil(at)) ?? null,
+        quietUntil: await calendars.meetingQuietUntil(at),
       };
     },
     schedule: (callback, delayMs) => setTimeout(callback, delayMs),

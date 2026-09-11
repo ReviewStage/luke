@@ -201,7 +201,12 @@ export class DeviceRegistration {
   async #poll(generation: number, deviceId: string): Promise<boolean | undefined> {
     const presence = await this.#options.presence();
     if (generation !== this.#generation) return undefined;
-    const answer = await this.#options.client.poll({ deviceId, ...presence });
+    // A quiet instant not yet known is left off the request: an absent field leaves the row's instant, where a sent value would claim to know it.
+    const answer = await this.#options.client.poll({
+      deviceId,
+      activeUntil: presence.activeUntil,
+      ...(presence.quietUntil !== undefined ? { quietUntil: presence.quietUntil } : undefined),
+    });
     return generation === this.#generation ? answer?.seen : undefined;
   }
 
