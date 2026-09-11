@@ -630,3 +630,46 @@ the same — the Conversation write precedes any offer, and what is guaranteed i
 authorization to speak per run, never that the words were heard. Carried into C8's and D3's notes,
 and into C5a's module comment beside the two races, because whoever gets it wrong will be reading
 that module and not this file.
+
+
+## 2026-09-11 — A malformed rating event is dropped whole, and the read-back fold is this design's most error-prone seam (orchestrator, from E8 #1027/#1029)
+
+**E8's trust asks landed at the narrowest possible scope:** the feedback form's **message textarea
+itself** carries the recording library's blocking class — one element, nothing wider — so the
+screenshot attachment and the rest of the feedback flow record exactly as before while the
+conversation's words rest on Luke's own posture rather than a vendor default. The draft is drawn
+nowhere but that field, and `PRIVACY.md` says both that the form may open prefilled with the rated
+message and the developer's ask, and that the field is blocked from recordings.
+
+**A pattern worth naming, now three for three.** E8 fixed a Medium where an events walk cut short
+could leave an older read-back mark standing over a newer fold. That is the same family as F4's
+`eventsCaughtUp` gate and D2b's window: **the fold between what the service already folded and
+what a client has read since is the most error-prone place in this design**, and all three
+presented as a rendering glitch rather than a bug. **C8 and D3 both fold read-back state; look
+here first.** The shape of E8's fix — the fold forgets read-back marks for any message a page
+re-answers — is the one to copy.
+
+**A four-way divergence, ruled: a malformed rating event is dropped whole.**
+
+E8 found that `ConversationThread.take` skips a rating event whose payload spells no verdict
+(`guard let … else { return }`), leaving any older mark standing, while the **service fold,
+`selectConversationView`, and the Mac** read it as "no rating" — and the phone's own test asserts
+the phone's behaviour. Two further facts settle it:
+
+- **The phone's doc comment contradicts the phone's code**: it says *"a payload the wire does not
+  spell a verdict in marks nothing."* A reader trusts the comment, which makes that the sharper
+  defect.
+- **The state is unreachable.** `RATING_EVENT_PAYLOAD_FIELDS.rating` is
+  `s.enumOf(MESSAGE_RATING)` with no `.optional()`, so the route cannot write a verdict-less
+  rating event, and there is no un-rating in this design — a later rating is a newer event, never
+  an edit.
+
+**Ruling: converge on the phone's behaviour, not the service's.** CLAUDE.md's posture for a record
+this build cannot read faithfully is already *"dropped whole rather than guessed at"*, and letting
+garbage **clear a verdict the developer really did set** is worse than letting a valid older
+verdict stand. **Sweep-ins, not PR reopenings** — two reviewed stacks must not be reopened for a
+state the wire cannot produce: the next iOS PR touching `ConversationThread.swift` fixes the
+comment and flips the test; the next service PR touching the rating fold matches it. The
+structural half: the phone should decode through the **typed `RatingEventPayload`** that already
+exists in `ConversationReads.swift` rather than hand-parsing a `JSONValue`, so "malformed" becomes
+a decode failure and the divergence cannot return.
