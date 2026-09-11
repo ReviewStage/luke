@@ -36,6 +36,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, STORE_WRITE_REFUSAL, storeWriter } from "../server/hosted/store";
+import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -77,17 +78,8 @@ async function conversation(
   return { userId, conversationId: row.id };
 }
 
-let eventOrdinal = 0;
-
-/** One eve event with the envelope eve stamps; every call mints a new event id, as a retry would. */
-function stamped<Event extends Omit<MessageStreamEvent, "meta">>(event: Event): MessageStreamEvent {
-  eventOrdinal += 1;
-  // SAFETY: the envelope is the one eve stamps; the union member is the event handed in.
-  return {
-    ...event,
-    meta: { id: `evt_${String(eventOrdinal).padStart(6, "0")}`, at: new Date(NOW).toISOString() },
-  } as MessageStreamEvent;
-}
+const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+  stampedEveEvent(event, NOW);
 
 /** The events of one turn, in the order eve emits them, for one tool call and one answer. */
 function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
