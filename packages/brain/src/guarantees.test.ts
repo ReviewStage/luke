@@ -9,7 +9,7 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
-import { Effect, Fiber } from "effect";
+import { Effect } from "effect";
 import { LOOK_SUBJECT } from "./agent.js";
 import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
@@ -33,6 +33,7 @@ import {
   FULL_TRANSCRIPT_CHARS,
   failedAnswer,
   functionOutputs,
+  gatedClient,
   heldPerformer,
   INSTRUCTION_IN_DATA,
   itemsOfType,
@@ -485,15 +486,20 @@ it.effect("a briefing leaves only from a turn that still stands", () =>
       ["abc needs you"],
     );
 
-    const other = yield* effectHarness();
-    other.client.answers.push(
+    const innerOther = new FakeClient();
+    const gatedOther = gatedClient(innerOther);
+    const other = yield* effectHarness({ client: gatedOther.client });
+    innerOther.answers.push(
       answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { briefing: "never spoken" })]),
       answered([message("")]),
     );
     yield* Effect.promise(() => other.agent.wake([edge(ABC)]));
-    const turning = yield* Effect.fork(advanceHarness(NOW + 3_000));
+    // Advances past the wake's own coalesce timer, which dispatches the turn
+    // into the gated client's held model call — the turn genuinely mid-flight,
+    // never a guess about which of two pending microtasks runs first.
+    yield* advanceHarness(NOW + 3_000);
     yield* Effect.promise(() => other.agent.stop());
-    yield* Fiber.join(turning);
+    gatedOther.open();
     yield* Effect.promise(() => settle());
     assert.deepEqual(
       other.deliveries,
