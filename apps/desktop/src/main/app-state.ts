@@ -111,7 +111,7 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
       installed: boot.supersetInstalled,
       connected: boot.supersetConnected,
     },
-    voice: { ...held.voice, epoch: boot.receiverEpoch },
+    voice: held.voice,
     conversation: {
       entries: boot.conversationLines,
       cleared: boot.conversationLines.length === 0,

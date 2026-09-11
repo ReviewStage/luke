@@ -38,18 +38,3 @@ export {
   sidebandOverSocket,
   socketOpened,
 } from "./live-socket.js";
-export {
-  environmentRealtimeSpeed,
-  environmentRealtimeVoice,
-  OPENAI_ENVIRONMENT,
-  OpenAiRealtimeCredentialMinter,
-  type OpenAiRealtimeCredentialOptions,
-  type OpenAiRealtimeMinterOptions,
-  openAiRealtimeCredentials,
-  unavailableRealtimeDiagnostics,
-} from "./openai-credentials.js";
-export {
-  type HostedRealtimeCredentialOptions,
-  hostedRealtimeCredentialMinter,
-  type RealtimeCredentialMinter,
-} from "./service-mint.js";

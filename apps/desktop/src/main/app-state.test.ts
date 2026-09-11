@@ -193,7 +193,6 @@ const BOOT: HostBootstrap = {
   supersetInstalled: true,
   supersetConnected: false,
   sessionReplay: { permitted: true, accountId: "person" },
-  receiverEpoch: 7,
   voiceAvailable: true,
   agentTraceEnabled: true,
 };
@@ -204,7 +203,6 @@ test("a host bootstrap lands in the document as the host answered it", () => {
   const held = app.snapshot();
   assert.equal(held.run.agentTraceEnabled, true);
   assert.equal(held.superset.installed, true);
-  assert.equal(held.voice.epoch, 7);
   assert.equal(held.sessions.settled, false);
   assert.equal(held.conversation.cleared, true);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });

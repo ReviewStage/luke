@@ -11,7 +11,6 @@ import {
   GATEWAY_METHOD,
   gatewayEventReader,
   type LiveTransportState,
-  RECEIVER_REPORT_KIND,
   type VoiceCreateLiveSessionResult,
   type VoiceLiveSessionChanged,
   voiceCreateLiveSessionResultSchema,
@@ -20,8 +19,6 @@ import {
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { LiveDiagnostics } from "@sidecar/live";
 import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
-import type { SpeechOffer, SpeechOutcome } from "@sidecar/realtime/speech";
-import { isSpeechOffer } from "@sidecar/realtime/speech";
 import {
   type ConversationEntry,
   isSessionWriteResult,
@@ -44,7 +41,6 @@ import {
   type ActionResult,
   isRecord,
   isWireBoolean,
-  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -73,7 +69,6 @@ export interface HostBootstrap {
   supersetInstalled: boolean;
   supersetConnected: boolean;
   sessionReplay: { permitted: boolean; accountId?: string };
-  receiverEpoch: number;
   voiceAvailable: boolean;
   agentTraceEnabled: boolean;
 }
@@ -151,11 +146,6 @@ export interface HostOperator {
   sendSessionMessage(identity: SessionIdentity, text: string): Promise<SessionWriteResult>;
   executeSessionControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
   workspaceProjects(): Promise<readonly ObservedWorkspaceProject[]>;
-  settleSpeech(id: string, outcome: SpeechOutcome): Promise<void>;
-  /** The host mints the receiver epoch a voice renderer will name; a client that cannot reach it gets none. */
-  beginReceiver(): Promise<number | undefined>;
-  readyReceiver(epoch: number): Promise<boolean>;
-  resetReceiver(): Promise<void>;
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Promise<LiveDiagnostics | undefined>;
   /** The peer's SDP offer, answered with the session the host created; a host that creates none answers nothing. */
@@ -189,8 +179,6 @@ export interface HostOperator {
   onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
   onSupersetSignInChanged(listener: (state: SupersetSignInSnapshot) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
-  onSpeechOffered(listener: (offer: SpeechOffer) => void): () => void;
-  onSpeechWithdrawn(listener: (id: string) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
 }
@@ -405,24 +393,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       answeredList<ObservedWorkspaceProject>(
         record(await client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS))?.projects,
       ),
-    settleSpeech: (id, outcome) => fire(client.call(GATEWAY_METHOD.SPEECH_SETTLE, { id, outcome })),
-    beginReceiver: async () => {
-      const answer = record(
-        await client.call(GATEWAY_METHOD.RECEIVER_REPORT, { kind: RECEIVER_REPORT_KIND.BEGIN }),
-      );
-      return isWireNumber(answer?.epoch) ? answer.epoch : undefined;
-    },
-    readyReceiver: async (epoch) => {
-      const answer = record(
-        await client.call(GATEWAY_METHOD.RECEIVER_REPORT, {
-          kind: RECEIVER_REPORT_KIND.READY,
-          epoch,
-        }),
-      );
-      return answer?.ready === true;
-    },
-    resetReceiver: () =>
-      fire(client.call(GATEWAY_METHOD.RECEIVER_REPORT, { kind: RECEIVER_REPORT_KIND.RESET })),
     liveDiagnostics: async () =>
       answered<LiveDiagnostics>(
         record(await client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS))?.diagnostics,
@@ -527,18 +497,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED,
         (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
-        listener,
-      ),
-    onSpeechOffered: (listener) =>
-      on(
-        GATEWAY_EVENT.SPEECH_OFFERED,
-        (payload) => (isSpeechOffer(payload) ? payload : undefined),
-        listener,
-      ),
-    onSpeechWithdrawn: (listener) =>
-      on(
-        GATEWAY_EVENT.SPEECH_WITHDRAWN,
-        (payload) => (isRecord(payload) && isWireString(payload.id) ? payload.id : undefined),
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>

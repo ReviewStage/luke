@@ -184,8 +184,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   useEffect(
     () =>
       window.sidecar.onVoiceCommand(({ command }) => {
-        if (command === VOICE_COMMAND.DISCARD_LISTENING) void orchestrator.stopSpeaking();
-        else if (command === VOICE_COMMAND.STOP_SPEAKING) void orchestrator.stopSpeaking();
+        if (command === VOICE_COMMAND.STOP_SPEAKING) void orchestrator.stopSpeaking();
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {
           void orchestrator.requestMicrophoneAccess();
         }

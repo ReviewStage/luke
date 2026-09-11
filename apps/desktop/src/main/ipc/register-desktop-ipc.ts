@@ -10,7 +10,7 @@ import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
-import { brainActRows, brainReports } from "./brain";
+import { brainActRows } from "./brain";
 import { sessionActRows } from "./session-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
@@ -40,7 +40,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const voiceRuntime = {
     panels,
     voiceWindow,
-    receiver: { markReady: (epoch: number) => operator.host.readyReceiver(epoch) },
     state,
     // The Conversation Clear is Delete conversation on main: the recoverable
     // reported to the panel as refused only when the store took nothing.
@@ -92,7 +91,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       recordProductEvent,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
-    ...brainActRows({ operator: operator.operator, isVoice: (s) => voiceWindow.owns(s) }),
+    ...brainActRows({ operator: operator.operator }),
     [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: () => operator.host.beginSupersetSignIn(),
     [ACT_KIND.SUPERSET_SUBMIT_CODE]: ({ code }) => operator.host.submitSupersetSignInCode(code),
     [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: ({ slug }) =>
@@ -146,16 +145,11 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
-    ...brainReports({ operator: operator.operator, isVoice: (s) => voiceWindow.owns(s) }),
     // The voice window's appends to the conversation, carried to the host's
     // store under this window's opaque reporter, and relayed back to every
     // other panel's Conversation by the host's change event.
     appendConversationLines: (context, entries) =>
       operator.host.appendConversation(entries, windows.reporterOf(context.sender)),
-    settleSpeech: (context, id, outcome) => {
-      if (!voiceWindow.owns(context.sender)) return;
-      void operator.host.settleSpeech(id, outcome);
-    },
     reportAppGuide: (_context, snapshot) => operator.reportGuide(snapshot),
     answerBrainAppAction: (_context, requestId, answer) =>
       native.answerAppAction(requestId, answer),

@@ -26,8 +26,6 @@ type LiveSessionActs = Pick<
 export interface VoiceRuntimeDependencies {
   panels: PanelManager;
   voiceWindow: VoiceWindowSurface;
-  /** Whether the voice window's renderer can receive yet, which only its own report under the current epoch decides; the host answers. */
-  receiver: { markReady: (epoch: number) => boolean | Promise<boolean> };
   /** Where the voice window's own reports are written; every panel is told from it. */
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
@@ -107,10 +105,7 @@ export function voiceRuntimeActRows(
 
 export function voiceRuntimeReports(
   dependencies: VoiceRuntimeDependencies,
-): Pick<
-  ReportHandlers,
-  "reportVoiceView" | "reportVoiceLevel" | "reportVoiceReady" | "setShortcutCapturing"
-> {
+): Pick<ReportHandlers, "reportVoiceView" | "reportVoiceLevel" | "setShortcutCapturing"> {
   const { panels, voiceWindow } = dependencies;
   return {
     // The voice window's snapshot: written to the document, from which every
@@ -136,14 +131,6 @@ export function voiceRuntimeReports(
     reportVoiceLevel(context, level) {
       if (!voiceWindow.owns(context.sender)) return;
       panels.broadcast(channels.onVoiceLevelChanged, level);
-    },
-    // The voice renderer saying it can receive. Only the renderer the window
-    // holds now may say so, and only for the epoch its own bootstrap named: a
-    // report from a panel, or from a renderer since reloaded or replaced, is
-    // refused rather than readying a receiver that is not there.
-    reportVoiceReady(context, epoch) {
-      if (!voiceWindow.owns(context.sender)) return false;
-      return dependencies.receiver.markReady(epoch);
     },
     setShortcutCapturing(context, capturing) {
       if (!panels.owns(context.sender)) return;

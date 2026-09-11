@@ -4,15 +4,13 @@ import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-wind
 
 export interface VoiceWindowOptions {
   runMode: RunMode;
-  /** Where the renderer's epochs begin and end: the host's receiver, reached through the client. */
-  receiver: { begin: () => void; reset: () => void };
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
   /**
    * The voice renderer died or hung and a fresh one is about to be stood up,
    * or the bound below has been reached and none will be. Nothing drawn
-   * depends on it; the receiver's reset is what reclaims anything offered.
+   * depends on it.
    */
   onGone: (reason: string) => void;
   /**
@@ -74,13 +72,6 @@ export class VoiceWindow {
     });
     this.#window = window;
     refuseForeignNavigation(window, this.#options.rendererUrl);
-    this.#options.receiver.begin();
-    // A reload — a developer's, or Chromium's own after a hang — is a new
-    // renderer behind the same handle, and the old one's readiness died with
-    // it; a same-document navigation changes no renderer and ends nothing.
-    window.webContents.on("did-start-navigation", (details) => {
-      if (details.isMainFrame && !details.isSameDocument) this.#options.receiver.begin();
-    });
     window.webContents.on("did-finish-load", () => {
       this.#reopens = 0;
     });
@@ -133,7 +124,6 @@ export class VoiceWindow {
     const window = this.#window;
     this.#window = undefined;
     if (window && !window.isDestroyed()) window.destroy();
-    this.#options.receiver.reset();
   }
 
   /** The quit's own close: nothing is stood back up after it. */

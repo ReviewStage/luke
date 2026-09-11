@@ -147,13 +147,8 @@ test("the live session acts carry the peer's offer verbatim, a transport state t
   assert.equal(parsedAct({ kind: ACT_KIND.VOICE_END_LIVE_SESSION, payload: {} }), undefined);
 });
 
-test("a voice command is one of the four commands and carries nothing else", () => {
-  for (const command of [
-    "discard-listening",
-    "stop-speaking",
-    "request-microphone-access",
-    "clear-conversation",
-  ]) {
+test("a voice command is one of the three commands and carries nothing else", () => {
+  for (const command of ["stop-speaking", "request-microphone-access", "clear-conversation"]) {
     assert.ok(parsedAct({ kind: ACT_KIND.VOICE_COMMAND, payload: { command } }));
   }
   // A typed ask is a brain submission, not a command to the voice window.

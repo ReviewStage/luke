@@ -567,7 +567,6 @@ export function App(): React.JSX.Element {
     askLuke,
     brainRequests,
     cancelBrainAsk,
-    discardListening,
     stopSpeaking,
     requestMicrophoneAccess,
     clearConversationLines,
@@ -788,26 +787,19 @@ export function App(): React.JSX.Element {
         return;
       }
       if (event.key !== "Escape") return;
-      // Discarding an open turn comes before any of it. Closing the panel
-      // or a sheet mid-sentence would strand the microphone open.
-      if (voiceView.voiceStatus === LIVE_STATUS.LISTENING) {
-        // The key may still be down. Forgetting the press as well as the latch
-        // means its release lands on a turn that is already gone rather than
-        // sending the one Escape just discarded.
-        discardListening();
-        return;
-      }
-      // Stopping Luke mid-sentence is the same shape one layer on: a reply
-      // being spoken is the most open thing there is, and Escape asks for
-      // quiet without opening a turn in its place. The session that knows
-      // whether a reply is playing lives in the voice window, so the panel
-      // predicts from the snapshot it was last handed. That snapshot can be
-      // one frame stale — a reply that ended, or began, since the last report
-      // — and the cost is the press doing what it would have done a frame
-      // earlier: a stop asked of a reply just over is a no-op there, and a
-      // fall-through past a reply just begun closes the layer below instead.
-      // Neither is worth a round trip on every Escape.
-      if (speaking) {
+      // Muting an open microphone comes before any of it. Closing the panel
+      // or a sheet mid-sentence would strand the microphone open, and the
+      // same stop asks Luke for quiet mid-sentence: a reply being spoken is
+      // the most open thing there is, and Escape ends it without opening a
+      // turn in its place. The session that knows whether a reply is playing
+      // lives in the voice window, so the panel predicts from the snapshot it
+      // was last handed. That snapshot can be one frame stale — a reply that
+      // ended, or began, since the last report — and the cost is the press
+      // doing what it would have done a frame earlier: a stop asked of a
+      // reply just over is a no-op there, and a fall-through past a reply
+      // just begun closes the layer below instead. Neither is worth a round
+      // trip on every Escape.
+      if (voiceView.voiceStatus === LIVE_STATUS.LISTENING || speaking) {
         stopSpeaking();
         return;
       }
@@ -853,7 +845,6 @@ export function App(): React.JSX.Element {
     changeTab,
     closeSettingsSearch,
     feedback.control.dismiss,
-    discardListening,
     openSettingsSearch,
     presentation,
     sessions.closeOptions,

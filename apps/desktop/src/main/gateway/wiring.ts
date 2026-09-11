@@ -27,7 +27,6 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { channels } from "#shared/bridge";
 import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";
 
@@ -42,8 +41,6 @@ export interface GatewayWiringDependencies {
   transport: GatewayTransport;
   createId: () => string;
   report: (message: string) => void;
-  /** Hands a payload to the voice window alone, the one receiver of offers and withdrawals. */
-  sendToVoice: <Payload>(channel: string, payload: Payload) => void;
   /** What the host says, written down once; the windows are told from it. */
   state: AppStateStore;
   /** This machine's native capabilities, performed here at the host's ask. */
@@ -90,7 +87,7 @@ function isCarriedAppAction(
 }
 
 export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWiring {
-  const { transport, state, sendToVoice, report } = dependencies;
+  const { transport, state, report } = dependencies;
   const client = new GatewayClient({
     transport,
     createId: dependencies.createId,
@@ -120,8 +117,6 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
   operator.onRunsChanged((runs) => {
     state.update({ brain: { runs } });
   });
-  operator.onDeliveryOffered((offer) => sendToVoice(channels.onBrainReplyOffered, offer));
-  operator.onDeliveriesWithdrawn((epoch) => sendToVoice(channels.onBrainRepliesWithdrawn, epoch));
   operator.onConversationChanged((change) => {
     if (change.sessionKey !== MAIN_SESSION_KEY) return;
     const entries = change.entries
