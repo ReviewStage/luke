@@ -2396,3 +2396,34 @@ impossible. **Deferred: a `vercel-build` script in `apps/web/package.json`** as 
 put the build command in two places, and C2a's own later reading showed the fallback already runs
 `build`, so what it would recover is only the `db:migrate && auth:seed` prefix — worth doing only if
 the repo-controlled preset does not hold.
+
+
+## 2026-09-11 — The device id a hosted briefing is claimed by: refuse on null, verify on write
+
+**Found by C8 while scoping LUKE-132 part b.** Claiming speech needs a device id — `claimSpeech`
+takes one and `markSpeechSpoken` refuses a session with none — but **`voice_sessions.device_id` is
+never written.** `register()` takes no device and the voice handshake carries none. So on the hosted
+path **no session can claim today**, and a briefing delivered there would have no speaker to
+attribute itself to.
+
+**Ruled, and buildable now.** Part b composes the claim from the row's `device_id` and **refuses to
+deliver while it is null**, naming the inertness in the PR body. A path that cannot prove which
+device is speaking does not speak. An honest inert path merges; a path that guesses a device does
+not.
+
+**Ruled, trust.** Whatever route carries the device id, **`register()` verifies the device row
+belongs to the authenticated account before storing it, and refuses the registration otherwise** —
+never store-and-ignore, never the client's word. A device id a caller can assert without proof lets
+one account's session claim speech as another account's device. This is the ownership rule already
+in force applied at one more door, not a new rule, which is why it is ruled here rather than
+escalated.
+
+**Open, and not ours.** *How* the device id reaches the handshake is the voice path, owned by the
+GPT-Live rollout. Two shapes: a **handshake header** the desktop's `HostedLiveSessionSource` sends,
+or a **field on the live-session create frame** (which changes their wire schema). Asked of their
+orchestrator with a recommendation for the header — the device id is a fact about *who is
+connecting* rather than about the session's content, it travels with the handshake that creates the
+row, it sits beside the authorization it must be checked against, and it leaves their schema
+untouched. The desktop half lands in **E5's attach** whichever shape wins.
+
+**No schema change either way:** the column exists; it is the writer that does not.
