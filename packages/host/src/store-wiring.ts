@@ -412,12 +412,12 @@ export function wireStore(dependencies: StoreWiringDependencies): StoreWiring {
         return { published: true };
       }
       try {
-        return await client().ask("conversations.delete", {
-          sessionKey,
-          now,
-          keepSessionId,
-          cutoffBefore: { value: cutoffBefore },
-        });
+        return await client().ask(
+          "conversations.delete",
+          keepSessionId === undefined
+            ? { sessionKey, now, cutoffBefore: { value: cutoffBefore } }
+            : { sessionKey, now, keepSessionId, cutoffBefore: { value: cutoffBefore } },
+        );
       } catch (error) {
         dependencies.report(
           `Could not delete the conversation's history: ${error instanceof Error ? error.message : String(error)}`,

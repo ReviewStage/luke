@@ -10,7 +10,7 @@ const PREFERENCES_ANSWER = {
 
 interface RecordedRequest {
   url: string | URL | Request;
-  init?: RequestInit;
+  init: RequestInit | undefined;
 }
 
 function service(answers: Array<() => Response>) {
