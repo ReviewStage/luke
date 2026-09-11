@@ -43,6 +43,14 @@ import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from 
  * its events — the parts of each step in order, the usage so far, the
  * sequence numbers told — is kept in the state the caller hands in, durable
  * across eve's steps where eve runs durably and a plain object in a test.
+ *
+ * A step is told the moment eve starts it, before any part of it, so the
+ * writer's journal carries the boundary the parts stand behind. eve emits a
+ * step's `reasoning.completed` after that step's `action.result`, so the
+ * journal, which appends in arrival order, holds the step's call before its
+ * reasoning while the turn runs; the answer the turn completes with orders
+ * every step as the model produced it — its reasoning, then its calls, then
+ * its words — and replaces the journal whole.
  */
 
 /** One part of the answer as a step produced it, kept until the turn completes and the message is told whole. */
@@ -59,6 +67,23 @@ type RelayPart =
 
 interface RelayStep {
   readonly parts: readonly RelayPart[];
+}
+
+/** eve numbers a turn's steps from zero; the stream numbers them from one. */
+function stepOf(stepIndex: number): number {
+  return stepIndex + 1;
+}
+
+/** The order a step's parts are told in the completed answer: the reasoning, then the calls, then the words. */
+const PART_KIND_ORDER = { reasoning: 0, tool: 1, text: 2 } as const satisfies Record<
+  RelayPart["kind"],
+  number
+>;
+
+function orderedParts(step: RelayStep): readonly RelayPart[] {
+  return [...step.parts].sort(
+    (left, right) => PART_KIND_ORDER[left.kind] - PART_KIND_ORDER[right.kind],
+  );
 }
 
 interface RelayTurnState {
@@ -224,6 +249,8 @@ export class StreamRelay {
         return this.#turnStarted(event.data.turnId, standing);
       case "message.received":
         return this.#received(event.data.turnId, event.data.message, standing);
+      case "step.started":
+        return this.#stepStarted(event.data.turnId, event.data.stepIndex, standing);
       case "actions.requested":
         for (const action of event.data.actions) {
           if (action.kind !== TOOL_CALL_KIND) continue;
@@ -375,6 +402,25 @@ export class StreamRelay {
     );
   }
 
+  /** A step opens once: a start eve re-emits finds its step held and tells nothing again. */
+  async #stepStarted(eveTurnId: string, stepIndex: number, standing: RelayStanding): Promise<void> {
+    const turn = standing.state.get().turns[eveTurnId];
+    if (!turn) return;
+    const key = String(stepIndex);
+    if (turn.steps[key] !== undefined) return;
+    const written = await this.#tell(eveTurnId, standing, {
+      kind: BRAIN_RUN_EVENT.STEP_STARTED,
+      step: stepOf(stepIndex),
+    });
+    if (!written) return;
+    standing.state.update((state) =>
+      withTurn(state, eveTurnId, (held) => ({
+        ...held,
+        steps: { ...held.steps, [key]: held.steps[key] ?? { parts: [] } },
+      })),
+    );
+  }
+
   async #toolCall(
     eveTurnId: string,
     stepIndex: number,
@@ -497,7 +543,8 @@ export class StreamRelay {
     if (status === BRAIN_REQUEST_STATUS.SUCCEEDED) {
       const builder = new AssistantMessageBuilder();
       for (const step of orderedSteps(turn)) {
-        for (const part of step.parts) {
+        builder.stepStart();
+        for (const part of orderedParts(step)) {
           switch (part.kind) {
             case "reasoning":
               builder.reasoning({ itemId: part.id, summary: part.text, item: { id: part.id } });

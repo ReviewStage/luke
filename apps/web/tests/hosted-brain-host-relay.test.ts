@@ -28,7 +28,7 @@ import {
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
 import {
   memoryRelayState,
   type RelayStanding,
@@ -81,6 +81,8 @@ async function conversation(
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
   stampedEveEvent(event, NOW);
 
+const STEP_START = "step-start";
+
 /** The events of one turn, in the order eve emits them, for one tool call and one answer. */
 function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
   return [
@@ -90,10 +92,6 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
       data: { turnId, sequence, message: "remember that I prefer short replies" },
     }),
     stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
-    stamped({
-      type: "reasoning.completed",
-      data: { turnId, sequence, stepIndex: 0, reasoning: "The developer states a preference." },
-    }),
     stamped({
       type: "actions.requested",
       data: {
@@ -124,6 +122,11 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
           output: { status: "accepted" },
         },
       },
+    }),
+    // eve emits a step's reasoning after that step's result (S0's spike).
+    stamped({
+      type: "reasoning.completed",
+      data: { turnId, sequence, stepIndex: 0, reasoning: "The developer states a preference." },
     }),
     stamped({
       type: "step.completed",
@@ -217,9 +220,11 @@ test("a typed ask lands as one turn and its messages through the writer: the wor
     author: MESSAGE_AUTHOR.DEVELOPER,
     channel: MESSAGE_CHANNEL.TYPED,
   });
+  // Each step behind its boundary, ordered as the model produced it —
+  // reasoning, then the call — although eve told the reasoning last.
   assert.deepEqual(
     answer.parts.map((part) => part.type),
-    ["reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, "text"],
+    [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
   );
   const toolPart = answer.parts.find((part) => isToolUIPart(part));
   assert.ok(toolPart);
@@ -240,6 +245,11 @@ test("a tool call's part stands on the journal before its result and settles aft
   const journal = before.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
   assert.ok(journal);
   assert.equal(journal.finishedAt, null);
+  // The step was told before the call it bounds, so the journal reads the boundary first.
+  assert.deepEqual(
+    journal.parts.map((part) => part.type),
+    [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`],
+  );
   const pending = journal.parts.find((part) => isToolUIPart(part));
   assert.ok(pending);
   assert.equal(pending.state, TOOL_PART_STATE.INPUT_AVAILABLE);
@@ -342,9 +352,10 @@ test("an observation turn over a roster diff lands the same way, with the roster
     author: MESSAGE_AUTHOR.BRAIN,
     source: OBSERVATION_SOURCE.ROSTER_LOOK,
   });
+  // The second step delivered nothing to announce, and stands as its boundary alone.
   assert.deepEqual(
     answer.parts.map((part) => part.type),
-    [`tool-${BRAIN_TOOL.ANNOUNCE}`],
+    [STEP_START, `tool-${BRAIN_TOOL.ANNOUNCE}`, STEP_START],
   );
   const offered = await database.db
     .select({ kind: events.kind, messageId: events.messageId })
@@ -400,6 +411,10 @@ test("events eve re-emits under new ids land on the rows the first attempt opene
   await play(events.slice(0, requested + 1), standing);
   await play(events.slice(0, completed), standing);
   await play(events.slice(0, completed), standing);
+  const replayedJournal = (await rows(target)).messageRows.find(
+    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+  );
+  assert.equal(replayedJournal?.parts.filter((part) => part.type === STEP_START).length, 2);
   await play(events.slice(completed), standing);
 
   const { turnRows, messageRows } = await rows(target);
@@ -415,8 +430,118 @@ test("events eve re-emits under new ids land on the rows the first attempt opene
   assert.ok(answer);
   assert.deepEqual(
     answer.parts.map((part) => part.type),
-    ["reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, "text"],
+    [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
   );
+});
+
+test("a reasoning item eve names no id for is journaled under the id the relay mints for its step, and the answer keeps that id", async () => {
+  const target = await conversation();
+  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+  const events = typedTurn("turn_0", 0);
+  const reasoned = events.findIndex((event) => event.type === "reasoning.completed");
+  await play(events.slice(0, reasoned + 1), standing);
+  const journal = (await rows(target)).messageRows.find(
+    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+  );
+  assert.ok(journal);
+  const minted = reasoningItemId(standing.sessionId, "turn_0", 0, 0);
+  const journaled = journal.parts.find((part) => part.type === "reasoning");
+  assert.ok(journaled && journaled.type === "reasoning");
+  assert.equal(journaled.id, minted);
+
+  await play(events.slice(reasoned + 1), standing);
+  const answer = (await rows(target)).messageRows.find(
+    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+  );
+  assert.ok(answer);
+  const kept = answer.parts.find((part) => part.type === "reasoning");
+  assert.ok(kept && kept.type === "reasoning");
+  assert.equal(kept.id, minted);
+});
+
+test("a step that produced nothing still stands as its boundary, told once however often eve starts it again", async () => {
+  const target = await conversation();
+  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+  const turnId = "turn_0";
+  await play(
+    [
+      stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
+      stamped({ type: "message.received", data: { turnId, sequence: 0, message: "hello" } }),
+      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
+      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
+      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 1, modelId: "m" } }),
+      stamped({
+        type: "message.completed",
+        data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop", message: "Hi." },
+      }),
+      stamped({ type: "turn.completed", data: { turnId, sequence: 0 } }),
+    ],
+    standing,
+  );
+  const answer = (await rows(target)).messageRows.find(
+    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+  );
+  assert.ok(answer);
+  assert.deepEqual(
+    answer.parts.map((part) => part.type),
+    [STEP_START, STEP_START, "text"],
+  );
+});
+
+test("a step eve re-runs whole after a failed attempt keeps the first attempt's reasoning under its ordinal and lands the second's beside it under the next; the stream replayed in its order adds nothing", async () => {
+  const target = await conversation();
+  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+  const turnId = "turn_0";
+  const step = (reasoning: string) => [
+    stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "reasoning.completed",
+      data: { turnId, sequence: 0, stepIndex: 0, reasoning },
+    }),
+  ];
+  const attempts = [
+    ...step("The first attempt's thought."),
+    ...step("The second attempt's thought."),
+  ];
+  const answered = [
+    stamped({
+      type: "message.completed",
+      data: { turnId, sequence: 0, stepIndex: 0, finishReason: "stop", message: "Hi." },
+    }),
+  ];
+  const minted = [0, 1].map((ordinal) => reasoningItemId(standing.sessionId, turnId, 0, ordinal));
+  const reasoningIds = async () => {
+    const journal = (await rows(target)).messageRows.find(
+      (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+    );
+    assert.ok(journal);
+    return journal.parts.flatMap((part) => (part.type === "reasoning" ? [part.id] : []));
+  };
+
+  await play(
+    [
+      stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
+      stamped({ type: "message.received", data: { turnId, sequence: 0, message: "hello" } }),
+      ...attempts,
+      ...answered,
+    ],
+    standing,
+  );
+  assert.deepEqual(await reasoningIds(), minted);
+
+  await play([...attempts, ...answered], standing);
+  assert.deepEqual(await reasoningIds(), minted);
+
+  await play([stamped({ type: "turn.completed", data: { turnId, sequence: 0 } })], standing);
+  const answer = (await rows(target)).messageRows.find(
+    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+  );
+  assert.ok(answer);
+  assert.deepEqual(
+    answer.parts.map((part) => part.type),
+    [STEP_START, "reasoning", "reasoning", "text"],
+  );
+  assert.deepEqual(await reasoningIds(), minted);
 });
 
 test("a turn whose request named no kind is not recorded, and the refusal is reported rather than thrown", async () => {
@@ -559,7 +684,12 @@ test("a turn whose ask the store refuses writes no answer and ends failed for pe
   // The journal of what the model did stands; the answer to the missing ask does not.
   assert.deepEqual(
     messageRows.map((row) => [row.role, row.parts.map((part) => part.type)]),
-    [[MESSAGE_ROLE.ASSISTANT, ["reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`]]],
+    [
+      [
+        MESSAGE_ROLE.ASSISTANT,
+        [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`, "reasoning", STEP_START],
+      ],
+    ],
   );
   assert.deepEqual(standing.state.get(), { turns: {} });
 });
