@@ -161,7 +161,6 @@ class FakeSideband implements LiveSideband {
 class FakeBrain implements LiveBrain {
   readonly asks: LiveBrainAsk[] = [];
   refuse: string | undefined;
-  rosterView = "roster: one session";
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
@@ -179,10 +178,6 @@ class FakeBrain implements LiveBrain {
     return () => {
       this.#listeners.delete(listener);
     };
-  }
-
-  standingRosterView(): string {
-    return this.rosterView;
   }
 
   fire(event: LiveBrainRunEvent): void {
@@ -341,7 +336,7 @@ function phases(changes: readonly VoiceLiveSessionChanged[]) {
   return changes.map((change) => change.phase);
 }
 
-test("a created session is seeded from the record and the roster, attached before the answer, and its phases are announced", async () => {
+test("a created session is seeded from the record alone, attached before the answer, and its phases are announced", async () => {
   const f = fixture();
   f.entries.push(
     { kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" },
@@ -351,7 +346,7 @@ test("a created session is seeded from the record and the roster, attached befor
   assert.deepEqual(created, { sessionId: "sess-1", sdpAnswer: "answer-for-offer" });
   assert.deepEqual(
     f.seeds[0]?.map((item) => item.role),
-    [SEED_ROLE.USER, SEED_ROLE.ASSISTANT, SEED_ROLE.DEVELOPER, SEED_ROLE.DEVELOPER],
+    [SEED_ROLE.USER, SEED_ROLE.ASSISTANT],
   );
   assert.equal(f.service.sessionStands(), true);
   assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED]);
@@ -856,22 +851,6 @@ test("a reply that finishes after its session closed opens a new one and is spok
     null,
   );
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-});
-
-test("a roster change while a session stands becomes one coalesced thinking append; an unchanged view is skipped", async () => {
-  const f = fixture();
-  const sideband = await f.open();
-  f.brain.rosterView = "roster: two sessions";
-  f.service.rosterChanged();
-  f.brain.rosterView = "roster: three sessions";
-  f.service.rosterChanged();
-  await f.clock.advance(f.clock.now + 2000);
-  const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-  assert.equal(thinking.length, 1);
-  assert.equal(thinking[0] && "delegation_id" in thinking[0] && thinking[0].delegation_id, null);
-  f.service.rosterChanged();
-  await f.clock.advance(f.clock.now + 2000);
-  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
 });
 
 test("a line is recorded at the instant its utterance began, so a Clear's cutoff refuses what was begun before it", async () => {

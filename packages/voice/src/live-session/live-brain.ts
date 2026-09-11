@@ -78,6 +78,4 @@ export interface LiveBrain {
   submitAsk(ask: LiveBrainAsk): Promise<LiveBrainSubmission>;
   /** Hears the run seams for every run the brain holds; the service reads the kinds it knows by name. */
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void;
-  /** The bounded, redacted roster view the brain's own standing context carries, as text. */
-  standingRosterView(): string;
 }

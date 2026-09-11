@@ -128,10 +128,7 @@ export function composeHost(options: HostSeams): Host {
     releaseDevice: (stored) => devices.release(stored),
     deviceId: () => devices.deviceId(),
   });
-  observation.link({
-    rosterLook: () => brain.wiring.rosterLook(),
-    rosterChanged: () => live.service.rosterChanged(),
-  });
+  observation.link({ rosterLook: () => brain.wiring.rosterLook() });
   calendars.link({
     reconcileSpeech: () => {
       void live.service.reconcile();

@@ -119,10 +119,6 @@ class FakeBrain implements LiveBrain {
     };
   }
 
-  standingRosterView(): string {
-    return "roster: one session";
-  }
-
   /** The run answers: every action settled, one sentence, and its end. */
   reply(runId: string, sentence: string): void {
     const events: LiveBrainRunEvent[] = [

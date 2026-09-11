@@ -85,10 +85,7 @@ export function composeLive(dependencies: LiveDependencies): LiveComposer {
     calendars.writeOnboarding({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
   }
 
-  const liveBrain = brainAgentLiveBrain({
-    agent: () => brain.wiring.current(),
-    rosterView: () => observation.roster().text,
-  });
+  const liveBrain = brainAgentLiveBrain({ agent: () => brain.wiring.current() });
   const service = new LiveSessionService<BrainDelivery>({
     source: () => account.voiceCapabilities.liveSessions,
     brain: liveBrain,

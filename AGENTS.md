@@ -1317,17 +1317,16 @@ Canonical commands:
   offer on so the briefing is spoken rather than held for a press, and the
   same session is the one the developer joins by holding it. There is no speak-only call and no second kind of
   session. What the
-  session is seeded with at creation is bounded: Luke's own Conversation
-  record (the 20 most recent lines, in their roles, each cut to its length
-  bound) and the same redacted roster view the brain's standing context
-  carries, as one developer message, the whole held under the documented
-  message and token bounds by dropping the oldest lines first; while a
-  session stands, a roster that moved reaches it as one coalesced thinking
-  append, unchanged views skipped. This replaces the older rule that the voice
-  never saw the roster: that rule guarded a voice that could act, and this one
-  can only delegate, so "that one" and "the Nukualofa session" resolve without
-  a round trip. The voice still knows no guide, no transcript, and no session
-  address; those reach only the brain. A developer's spoken words reach the
+  session is seeded with at creation is bounded, and it is one thing: Luke's
+  own Conversation record (the 20 most recent lines, in their roles, each cut
+  to its length bound), held under the documented message and token bounds by
+  dropping the oldest lines first, and nothing addressed to the model beside
+  them. The voice knows no roster: what is on the desk is the brain's, which
+  holds it already, so "that one" and "the Nukualofa session" resolve in the
+  brain's own turn rather than in the voice, and a roster that moves while a
+  session stands reaches it not at all. The voice knows no guide, no
+  transcript, and no session
+  address either; those reach only the brain. A developer's spoken words reach the
   brain as a delegation the host composes from both speakers' transcript
   since the previous one, submitted under the host's own submission id as a
   spoken ask through the same admission every ask uses; the reply streams

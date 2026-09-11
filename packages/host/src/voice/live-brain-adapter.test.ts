@@ -57,23 +57,22 @@ function fakeAgent(options: { reject?: boolean } = {}) {
 
 test("a spoken ask crosses under the spoken origin with the caller's submission id, and an acceptance names the run", async () => {
   const fake = fakeAgent();
-  const brain = brainAgentLiveBrain({ agent: () => fake.agent, rosterView: () => "roster" });
+  const brain = brainAgentLiveBrain({ agent: () => fake.agent });
   const result = await brain.submitAsk({ submissionId: "sub-1", question: "Developer: hi" });
   assert.deepEqual(result, { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-1" });
   assert.deepEqual(fake.submissions, [
     { submissionId: "sub-1", question: "Developer: hi", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
   ]);
-  assert.equal(brain.standingRosterView(), "roster");
 });
 
 test("a rejection carries the brain's standing refusal for its reason, and no agent at all the absent one", async () => {
   const fake = fakeAgent({ reject: true });
-  const brain = brainAgentLiveBrain({ agent: () => fake.agent, rosterView: () => "" });
+  const brain = brainAgentLiveBrain({ agent: () => fake.agent });
   assert.deepEqual(await brain.submitAsk({ submissionId: "s", question: "q" }), {
     outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
     refusal: BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.FULL],
   });
-  const absent = brainAgentLiveBrain({ agent: () => undefined, rosterView: () => "" });
+  const absent = brainAgentLiveBrain({ agent: () => undefined });
   assert.deepEqual(await absent.submitAsk({ submissionId: "s", question: "q" }), {
     outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
     refusal: BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT],
@@ -82,7 +81,7 @@ test("a rejection carries the brain's standing refusal for its reason, and no ag
 
 test("the run seams are read by name and translated; a kind this build does not know is dropped", async () => {
   const fake = fakeAgent();
-  const brain = brainAgentLiveBrain({ agent: () => fake.agent, rosterView: () => "" });
+  const brain = brainAgentLiveBrain({ agent: () => fake.agent });
   const heard: LiveBrainRunEvent[] = [];
   brain.onRunEvent((event) => heard.push(event));
   await brain.submitAsk({ submissionId: "s", question: "q" });
@@ -126,7 +125,7 @@ test("an agent rebuilt between asks is followed once each, and a listener let go
   const first = fakeAgent();
   const second = fakeAgent();
   let current = first;
-  const brain = brainAgentLiveBrain({ agent: () => current.agent, rosterView: () => "" });
+  const brain = brainAgentLiveBrain({ agent: () => current.agent });
   const heard: string[] = [];
   const stop = brain.onRunEvent((event) => heard.push(event.runId));
   await brain.submitAsk({ submissionId: "a", question: "q" });

@@ -9,7 +9,6 @@ import {
   chunkForAppend,
   commentaryAppend,
   conversationSeedItems,
-  type InitialItem,
   instructionsAppend,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
@@ -57,17 +56,16 @@ import {
   ProactiveQueue,
   type ProactiveRequest,
 } from "./proactive-queue.js";
-import { rosterAppendContent, rosterSeedItem, seedBudgetBesideRoster } from "./roster-context.js";
 
 /**
  * The one voice session and everything its trusted side owes it. It opens
  * when the peer offers itself for the talk key, or when Luke has something to
- * say and no session stands; it is seeded from Luke's own record and the
- * roster; it is fed every append the trusted side makes, each awaiting its
- * acknowledgment; it hands each delegation to the brain as a spoken ask, tells
- * the session at once that the ask is with Luke, and streams the reply back
- * as commentary once every action in the run has settled; it writes both
- * speakers' settled utterances into the record; and it closes gracefully on
+ * say and no session stands; it is seeded from Luke's own record alone; it is
+ * fed every append the trusted side makes, each awaiting its acknowledgment;
+ * it hands each delegation to the brain as a spoken ask, tells the session at
+ * once that the ask is with Luke, and streams the reply back as commentary
+ * once every action in the run has settled; it writes both speakers' settled
+ * utterances into the record; and it closes gracefully on
  * idle, on the peer's hang-up, and on the drain,
  * recording the usage the final event confirms. The peer owns the microphone
  * and the hang-up; the trusted side owns every append and the close
@@ -78,9 +76,6 @@ import { rosterAppendContent, rosterSeedItem, seedBudgetBesideRoster } from "./r
  * record only through `LiveRecord`, and the session only through the
  * `LiveSessionSource` and `LiveSideband` seams.
  */
-
-/** Rapid roster changes are combined into one append of the latest state. */
-const ROSTER_COALESCE_MS = 1_500;
 
 /** A run's end may precede its last sentence by a tick; the exchange is finalized once both have had their say. */
 const EXCHANGE_FINALIZE_MS = 250;
@@ -265,8 +260,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   readonly #options: LiveSessionServiceOptions<Delivery>;
   readonly #queue: ProactiveQueue<Delivery>;
   #standing: StandingSession | undefined;
-  #lastRosterView: string | undefined;
-  #rosterTimer: ScheduledTimer | undefined;
   #lastSessionSeconds: number | undefined;
   #usageConfirmed = false;
   #phase: LiveSessionPhase | undefined;
@@ -302,7 +295,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /**
    * Creates the one session for the peer's offer, seeded with the recent
-   * conversation and the roster, and attaches the sideband before the answer
+   * conversation and nothing else, and attaches the sideband before the answer
    * is returned, so no transcript precedes attachment. A session already
    * standing is closed gracefully first: there is one.
    */
@@ -312,15 +305,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (this.#standing) await this.endSession();
     const source = this.#options.source();
     if (!source) return undefined;
-    const view = this.#options.brain.standingRosterView();
-    const roster = rosterSeedItem(view);
-    const input: InitialItem[] = [
-      ...conversationSeedItems(this.#options.conversationEntries(), seedBudgetBesideRoster(roster)),
-      roster,
-    ];
+    const input = conversationSeedItems(this.#options.conversationEntries());
     const opened = await source.create({ sdpOffer, input });
     if (!opened) return undefined;
-    this.#lastRosterView = view;
     this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
     const sideband = await this.#attach(opened);
     if (!sideband) return undefined;
@@ -437,28 +424,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return true;
   }
 
-  /** The roster moved; rapid changes are combined and an unchanged view is skipped. */
-  rosterChanged(): void {
-    if (!this.sessionStands()) return;
-    if (this.#rosterTimer !== undefined) this.#options.cancel(this.#rosterTimer);
-    this.#rosterTimer = this.#options.schedule(() => {
-      this.#rosterTimer = undefined;
-      const session = this.#speakable();
-      if (!session) return;
-      const view = this.#options.brain.standingRosterView();
-      if (view === this.#lastRosterView) return;
-      this.#lastRosterView = view;
-      session.channel.enqueue(async () => {
-        await session.channel.send(thinkingAppend(this.#input(null, rosterAppendContent(view))));
-      });
-    }, ROSTER_COALESCE_MS);
-  }
-
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
   async stop(): Promise<void> {
     this.#stopRunEvents();
-    if (this.#rosterTimer !== undefined) this.#options.cancel(this.#rosterTimer);
-    this.#rosterTimer = undefined;
     this.#queue.clear();
     await this.endSession();
   }
