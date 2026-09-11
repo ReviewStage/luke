@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
+import { HostAssemblyTag, hostStandingLayer, layersInOrder } from "@sidecar/host/effect";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
+import { Effect, Exit, Layer, ManagedRuntime } from "effect";
 import { test } from "vitest";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { UpdaterEngine, UpdaterEngineEvents } from "../update-service";
 import type { DesktopConfig } from "./desktop-config";
-import { createHostService } from "./host-service";
-import { stopInReverse } from "./lifecycle";
+import { hostAssemblyLayerFor } from "./host-layer";
+import { desktopQuit, QUIT_STAGE } from "./quit";
 import type { DesktopService } from "./service";
+import { serviceLayer } from "./service-layer";
 import { createUpdateServiceHost } from "./update-service-host";
 
 /**
@@ -15,13 +18,16 @@ import { createUpdateServiceHost } from "./update-service-host";
  * outside an Electron process the `electron` module has no named exports, so
  * a file that imports one fails to instantiate. What is proven here is the
  * mechanism every service answers to — the order, the reverse, the
- * idempotence, and the handles — over the services that hold a handle
- * without a window: the host and the updater.
+ * idempotence, and the handles — over the layer the composition builds every
+ * one of them in, and over the two concerns that hold a handle without a
+ * window: the host and the updater.
  *
  * Every assertion about a handle depends on this file running without
  * `--test-force-exit`, which `pnpm test` does: a `stop` that left an
  * interval behind hangs the run rather than passing it.
  */
+
+const silent = (): void => undefined;
 
 function recordingService(name: string, order: string[]): DesktopService {
   return {
@@ -58,7 +64,7 @@ const CIPHER = {
 
 function fixtureConfig(
   stateRoot: string,
-  report: (message: string) => void = () => undefined,
+  report: (message: string) => void = silent,
 ): DesktopConfig {
   return {
     stateRoot,
@@ -85,15 +91,28 @@ function fixtureConfig(
   };
 }
 
+/**
+ * The launch as the entry runs it: one runtime over the layer, built once,
+ * and the close that is the whole quit.
+ */
+const standing = async <A, E>(
+  layer: Layer.Layer<A, E, never>,
+): Promise<{ readonly close: () => Promise<void> }> => {
+  const runtime = ManagedRuntime.make(layer);
+  await runtime.runPromise(Effect.void);
+  return { close: () => runtime.dispose() };
+};
+
 test("every service stops, in the reverse of the order it began in", async () => {
   const order: string[] = [];
-  const all = [
-    recordingService("keychain", order),
-    recordingService("host", order),
-    recordingService("windows", order),
-  ];
-  for (const service of all) await service.start();
-  await stopInReverse(all, () => undefined);
+  const built = await standing(
+    layersInOrder([
+      serviceLayer(recordingService("keychain", order), silent),
+      serviceLayer(recordingService("host", order), silent),
+      serviceLayer(recordingService("windows", order), silent),
+    ]),
+  );
+  await built.close();
   assert.deepEqual(order, [
     "start:keychain",
     "start:host",
@@ -107,79 +126,94 @@ test("every service stops, in the reverse of the order it began in", async () =>
 test("one service that cannot stop is reported and does not strand the rest", async () => {
   const order: string[] = [];
   const reports: string[] = [];
-  await stopInReverse(
-    [
-      recordingService("keychain", order),
-      {
-        name: "windows",
-        start: async () => undefined,
-        stop: async () => {
-          throw new Error("a window was already gone");
+  const report = (message: string): void => {
+    reports.push(message);
+  };
+  const built = await standing(
+    layersInOrder([
+      serviceLayer(recordingService("keychain", order), report),
+      serviceLayer(
+        {
+          name: "windows",
+          start: async () => undefined,
+          stop: async () => {
+            throw new Error("a window was already gone");
+          },
         },
-      },
-    ],
-    (message) => reports.push(message),
+        report,
+      ),
+    ]),
   );
-  assert.deepEqual(order, ["stop:keychain"]);
-  assert.deepEqual(reports, [
-    "the windows service did not stop cleanly: a window was already gone",
-  ]);
+  await built.close();
+  assert.deepEqual(order, ["start:keychain", "stop:keychain"]);
+  assert.equal(reports.length, 1);
 });
 
-test("a stop before any start resolves, and a second stop resolves too", async () => {
-  const all = [tickingService("first"), tickingService("second")];
-  await stopInReverse(all, () => undefined);
-  for (const service of all) await service.start();
-  await stopInReverse(all, () => undefined);
-  await stopInReverse(all, () => undefined);
+test("a start that fails gives back what began before it, and starts nothing after it", async () => {
+  const order: string[] = [];
+  const runtime = ManagedRuntime.make(
+    layersInOrder([
+      serviceLayer(recordingService("keychain", order), silent),
+      serviceLayer(
+        {
+          name: "operator",
+          start: async () => {
+            order.push("start:operator");
+            throw new Error("the host answered no bootstrap");
+          },
+          stop: async () => {
+            order.push("stop:operator");
+          },
+        },
+        silent,
+      ),
+      serviceLayer(recordingService("windows", order), silent),
+    ]),
+  );
+  const built = await runtime.runPromiseExit(Effect.void);
+  assert.equal(Exit.isFailure(built), true);
+  await runtime.dispose();
+  // The windows never began, the operator's own stop gave back what its
+  // failed start had allocated, and the keychain before it stopped last.
+  assert.deepEqual(order, ["start:keychain", "start:operator", "stop:operator", "stop:keychain"]);
 });
 
-test("the host service starts and stops leaving no handle, and says what the drain settled", async (t) => {
+test("a close before any start resolves, and a second close resolves too", async () => {
+  const unstarted = ManagedRuntime.make(
+    layersInOrder([serviceLayer(tickingService("first"), silent)]),
+  );
+  await unstarted.dispose();
+  const built = await standing(layersInOrder([serviceLayer(tickingService("second"), silent)]));
+  await built.close();
+  await built.close();
+});
+
+test("the host's assembly stands its server up before any composer starts", async (t) => {
+  const stateRoot = await temporaryDirectory(t);
+  const stood = await Effect.runPromise(
+    Effect.provide(
+      Effect.map(HostAssemblyTag, (assembly) => assembly.startOrder.length > 0),
+      hostAssemblyLayerFor({ config: fixtureConfig(stateRoot), cipher: CIPHER }),
+    ),
+  );
+  assert.equal(stood, true);
+});
+
+test("the host stands and drains leaving no handle, and a second close is not a second drain", async (t) => {
   const stateRoot = await temporaryDirectory(t);
   const reports: string[] = [];
-  const host = createHostService({
-    config: fixtureConfig(stateRoot, (message) => reports.push(message)),
-    cipher: CIPHER,
+  const config = fixtureConfig(stateRoot, (message) => {
+    reports.push(message);
   });
-  host.link({ attach: async () => undefined });
-  assert.equal(host.drainOwed(), false);
-  await host.start();
-  assert.equal(host.drainOwed(), true);
-  await host.stop();
-  assert.equal(host.drainOwed(), false);
-  // A second ask is not a second drain, and nothing is owed once one finished.
-  await host.stop();
-});
-
-test("the host's standup carries the operator's attach, and a failed attach fails the start", async (t) => {
-  const stateRoot = await temporaryDirectory(t);
-  const order: string[] = [];
-  const host = createHostService({
-    config: fixtureConfig(stateRoot),
-    cipher: CIPHER,
-  });
-  host.link({
-    attach: async () => {
-      order.push("attach");
-      throw new Error("the host answered no bootstrap");
-    },
-  });
-  await assert.rejects(() => host.start(), /the host answered no bootstrap/);
-  assert.deepEqual(order, ["attach"]);
-  // The drain is owed from before the start, so a launch that could not stand
-  // up still has a runtime to give back.
-  assert.equal(host.drainOwed(), true);
-  await host.stop();
-});
-
-test("the host service reads its links by name rather than answering nothing", async (t) => {
-  const stateRoot = await temporaryDirectory(t);
-  const host = createHostService({ config: fixtureConfig(stateRoot), cipher: CIPHER });
-  await assert.rejects(
-    () => host.start(),
-    /the host service's links is read before link\(\) has run/,
+  const built = await standing(
+    Layer.provide(hostStandingLayer, hostAssemblyLayerFor({ config, cipher: CIPHER })),
   );
-  await host.stop();
+  const stoodUp = reports.length;
+  // The drain says what it settled, once, however many asks arrive.
+  await built.close();
+  assert.equal(reports.length, stoodUp + 1);
+  await built.close();
+  assert.equal(reports.length, stoodUp + 1);
 });
 
 test("the updater's timers are handles the stop takes back, and a restart tears down first", async (t) => {
@@ -201,13 +235,15 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
   };
   const state = new AppStateStore(initialAppState(config, true));
   state.subscribe(() => snapshots.push(state.snapshot().update.status));
+  const quit = desktopQuit();
+  quit.closesThrough(async () => {
+    order.push("teardown");
+  });
   const updates = createUpdateServiceHost({
     config,
     recordProductEvent: () => undefined,
     engine,
-    beforeRestart: async () => {
-      order.push("teardown");
-    },
+    beforeRestart: quit.teardown,
     state,
   });
   await updates.start();
@@ -224,47 +260,43 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
   await updates.stop();
 });
 
-test("a launch suspended on one of its waits opens nothing once a quit has been asked for", async (t) => {
+test("a launch suspended on one of its waits opens nothing once a quit has been asked for", async () => {
   // The invariant, in the shape the composition wires: the signal a start
-  // re-checks is set the instant `stop` is asked for, so a start that resumes
-  // after the teardown has run opens nothing. Reading the drain's own state
+  // re-checks falls the instant the teardown is asked for, so a start that
+  // resumes after it has run opens nothing. Reading the runtime's own close
   // instead would flip the signal several awaited stops later, which is how a
   // resumed start came to re-open what the teardown had just given back.
-  const stateRoot = await temporaryDirectory(t);
-  const host = createHostService({ config: fixtureConfig(stateRoot), cipher: CIPHER });
-  host.link({ attach: async () => undefined });
-  await host.start();
-
-  let quitting = false;
+  const quit = desktopQuit();
   const opened: string[] = [];
-  let releaseSettings: (() => void) | undefined;
+  let releaseWindows: (() => void) | undefined;
+  let reachedStart: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    reachedStart = resolve;
+  });
   const windows: DesktopService = {
     name: "windows",
     start: async () => {
       await new Promise<void>((resolve) => {
-        releaseSettings = resolve;
+        releaseWindows = resolve;
+        reachedStart?.();
       });
-      if (!quitting) opened.push("window");
+      if (quit.launchStanding()) opened.push("window");
     },
     stop: async () => {
       opened.push("teardown");
     },
   };
-  const all = [host, windows];
-  const stop = () => {
-    quitting = true;
-    return stopInReverse(all, () => undefined);
-  };
+  const runtime = ManagedRuntime.make(layersInOrder([serviceLayer(windows, silent)]));
+  quit.closesThrough(() => runtime.dispose());
 
-  const launch = windows.start();
-  const quit = stop();
-  releaseSettings?.();
-  await Promise.all([launch, quit]);
+  const launch = runtime.runPromiseExit(Effect.void);
+  await started;
+  const torn = quit.teardown();
+  releaseWindows?.();
+  await Promise.all([launch, torn]);
   // The teardown ran and the launch, resuming after it, opened nothing.
   assert.deepEqual(opened, ["teardown"]);
-  // And by now the drain has finished, so its own state is back to owing
-  // nothing — a signal that says nothing about whether a quit was asked for.
-  assert.equal(host.drainOwed(), false);
+  assert.equal(quit.stage(), QUIT_STAGE.TORN_DOWN);
 });
 
 test("a quit arriving after the teardown finished is not held back, so an install is not aborted", async () => {
@@ -273,44 +305,45 @@ test("a quit arriving after the teardown finished is not held back, so an instal
   // installer. The updater runs the teardown itself and hands over only once
   // it has finished, so what the entry reads is whether one has finished.
   const order: string[] = [];
-  let stopped = false;
-  let stopping: Promise<void> | undefined;
-  const all = [
-    {
-      name: "host",
-      start: async () => undefined,
-      stop: async () => {
-        order.push("drain");
-      },
-    },
-  ];
-  const teardown = (): Promise<void> => {
-    if (!stopping) {
-      stopping = stopInReverse(all, () => undefined).finally(() => {
-        stopping = undefined;
-        stopped = true;
-      });
-    }
-    return stopping;
-  };
+  const quit = desktopQuit();
+  quit.beforeTeardown(() => order.push("refuse"));
+  quit.closesThrough(async () => {
+    order.push("close");
+  });
   // The entry's own rule, as `registerQuit` applies it.
   const beforeQuit = (): "held" | "through" => {
-    if (stopped) return "through";
-    void teardown();
+    if (quit.stage() === QUIT_STAGE.TORN_DOWN) return "through";
+    void quit.teardown();
     return "held";
   };
 
-  await teardown();
+  await quit.teardown();
   order.push("install");
   assert.equal(beforeQuit(), "through");
-  assert.deepEqual(order, ["drain", "install"]);
+  assert.deepEqual(order, ["refuse", "close", "install"]);
+  // And the one teardown is made once, however many asks arrive.
+  await quit.teardown();
+  assert.deepEqual(order, ["refuse", "close", "install"]);
+});
 
-  // And the explicit Quit, which arrives with nothing torn down yet, is held
-  // exactly once.
-  stopped = false;
-  assert.equal(beforeQuit(), "held");
-  await stopping;
-  assert.equal(beforeQuit(), "through");
+test("the quit stands until one is asked for, and the launch falls with the ask", async () => {
+  const quit = desktopQuit();
+  let release: (() => void) | undefined;
+  quit.closesThrough(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  assert.equal(quit.stage(), QUIT_STAGE.STANDING);
+  assert.equal(quit.launchStanding(), true);
+  const torn = quit.teardown();
+  assert.equal(quit.stage(), QUIT_STAGE.TEARING_DOWN);
+  assert.equal(quit.launchStanding(), false);
+  release?.();
+  await torn;
+  assert.equal(quit.stage(), QUIT_STAGE.TORN_DOWN);
+  assert.equal(quit.launchStanding(), false);
 });
 
 test("a wait guarded against the quit schedules nothing new once one is asked for", () => {

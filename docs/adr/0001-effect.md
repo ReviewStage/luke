@@ -111,7 +111,13 @@ compiles it.
 An Effect describes work; something has to run it, and the only places that may
 are the process's own edges, one runtime each:
 
-- `apps/desktop/src/main/main.ts`, one `ManagedRuntime` the quit disposes.
+- `apps/desktop/src/main/main.ts`, one `ManagedRuntime` the quit disposes. The
+  layer it is made from is the whole launch (`services/compose-desktop.ts`):
+  the host's assembly and standing layers and every desktop service's own
+  start, in one order, in one scope. Building it is the standup, and the
+  entry's `before-quit` is `runtime.disposeEffect` — forked as a daemon and
+  waited on under the entry's own bound, so a close that outran its wait is
+  left to the exit rather than holding the single-instance lock forever.
 - each `apps/web/api/**` function module, through the module-scope memoized
   runtime `apps/web/server/runtime.ts` holds, so a warm instance reuses it and
   a cold start builds it once. The hosted voice service is one of these: it
@@ -253,8 +259,10 @@ a host is the server's own layer options, which `GatewayService` hands out as
 the same shim wearing a smaller face, and the same two PRs delete it.
 
 `composeHost`'s `start()`/`stop()` in `packages/host/src/compose-host.ts` is
-on the same allowlist, as the face the desktop's host service still operates
-over `hostLayer`: the host is `hostStandingLayer` over `hostAssemblyLayer`,
+on the same allowlist. Nothing of the product operates it any more — P8-01
+took `hostAssemblyLayer` and `hostStandingLayer` onto the desktop's own
+runtime, so `compose-host.test.ts` is its one caller left — and the face it
+answers is this: the host is `hostStandingLayer` over `hostAssemblyLayer`,
 and the adaptor builds the assembly and a `Scope` of its own on a
 `ManagedRuntime` it makes, so the server stands before the start as it always
 has; `start` is `Layer.buildWithScope` of the standing layer into that scope,
@@ -262,9 +270,11 @@ forked as a fiber, and `stop` interrupts that fiber if it is still under way,
 runs the drain under the caller's deadline, and then closes the scope,
 bounded, forking the close as a daemon and reporting what did not close in
 time rather than waiting on it. `hostLayerFromSeams(options)` beside
-it is `hostKernelLayerFromSeams` one level up. P8-01 takes `hostLayer` on the
-desktop's own runtime, and P12-05 deletes the adaptor with `createHostKernel`.
-`settingsOverridesFromEnvironment` in
+it is `hostKernelLayerFromSeams` one level up, and the desktop reaches that
+shim still: `apps/desktop/src/main/services/host-layer.ts` builds the one
+`HostSeams` object this process answers for and provides
+`hostKernelLayerFromSeams` to the assembly, and P12-05 deletes the adaptor
+with `createHostKernel`. `settingsOverridesFromEnvironment` in
 `packages/host/src/effect/settings-overrides.ts` is that same shim at the
 settings store's own door and is on no allowlist, because it runs no effect:
 every override is a `Config` read of the variable's own name, and what each
