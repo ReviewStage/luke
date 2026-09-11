@@ -9,6 +9,8 @@ import {
 import {
   decodeRosterDiff,
   encodeRosterDiff,
+  rosterCarrying,
+  rosterComparable,
   rosterDiff,
   rosterDiffIsEmpty,
 } from "../server/hosted/roster-diff";
@@ -189,5 +191,112 @@ test("a diff and a roster round-trip through their stored encodings, and an unre
       }),
     ),
     undefined,
+  );
+});
+
+test("the roster the brain has heard after a partial visit follows the later snapshot for carried sessions and the earlier one for the rest, so every uncarried change derives again", () => {
+  const before = roster([
+    observation("stays"),
+    observation("moves", { status: SESSION_STATUS.WORKING }),
+    observation("goes"),
+    observation("goes-unheard"),
+  ]);
+  const after = roster([
+    observation("stays"),
+    observation("moves", { status: SESSION_STATUS.COMPLETE }),
+    observation("comes"),
+    observation("comes-unheard"),
+  ]);
+  const carried = new Set(["moves", "goes", "comes"]);
+  const heard = rosterCarrying(before, after, (_, sessionId) => carried.has(sessionId));
+
+  const sessions = new Map(
+    heard.providers.flatMap((provider) =>
+      provider.observations.map((one) => [one.providerSessionId, one.status] as const),
+    ),
+  );
+  assert.deepEqual([...sessions.keys()].sort(), ["comes", "goes-unheard", "moves", "stays"]);
+  assert.equal(sessions.get("moves"), SESSION_STATUS.COMPLETE);
+  // What derives again next time is exactly what was not carried: one appearance, one vanishing.
+  const again = rosterDiff(heard, after);
+  assert.deepEqual(
+    again.appeared.map((session) => session.providerSessionId),
+    ["comes-unheard"],
+  );
+  assert.deepEqual(
+    again.vanished.map((session) => session.providerSessionId),
+    ["goes-unheard"],
+  );
+  assert.deepEqual(again.statusChanged, []);
+  // Carrying everything is the later snapshot; carrying nothing is the earlier one, as a diff sees them.
+  assert.equal(
+    rosterDiffIsEmpty(
+      rosterDiff(
+        rosterCarrying(before, after, () => true),
+        after,
+      ),
+    ),
+    true,
+  );
+  assert.equal(
+    rosterDiffIsEmpty(
+      rosterDiff(
+        before,
+        rosterCarrying(before, after, () => false),
+      ),
+    ),
+    true,
+  );
+});
+
+test("two rosters under different keys are not compared: a rekeyed, added, or removed provider is taken as the later snapshot has it and names no change, while a provider under the same key still diffs", () => {
+  const before: ObservedRoster = {
+    version: 1,
+    providers: [
+      {
+        providerId: "conductor",
+        keyFingerprint: "old",
+        observations: [observation("a")],
+        projects: [],
+      },
+    ],
+  };
+  const after: ObservedRoster = {
+    version: 1,
+    providers: [
+      {
+        providerId: "conductor",
+        keyFingerprint: "new",
+        observations: [observation("b")],
+        projects: [],
+      },
+    ],
+  };
+  assert.equal(rosterDiffIsEmpty(rosterDiff(rosterComparable(before, after), after)), true);
+  assert.equal(rosterDiff(before, after).appeared.length, 1);
+
+  const sameKey: ObservedRoster = {
+    version: 1,
+    providers: [
+      {
+        providerId: "conductor",
+        keyFingerprint: "old",
+        observations: [observation("b")],
+        projects: [],
+      },
+    ],
+  };
+  assert.deepEqual(
+    rosterDiff(rosterComparable(before, sameKey), sameKey).appeared.map((s) => s.providerSessionId),
+    ["b"],
+  );
+  assert.equal(
+    rosterDiffIsEmpty(
+      rosterDiff(rosterComparable(before, { version: 1, providers: [] }), {
+        version: 1,
+        providers: [],
+      }),
+    ),
+    true,
   );
 });

@@ -2,11 +2,22 @@ import { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
 import type { BrainWakeEvent, SessionIdentity } from "../../core.js";
 import { holdReleasedInputText, TURN_ORIGIN, wakeInputText } from "../../core.js";
-import { decodeRosterDiff } from "../roster-diff.js";
+import {
+  decodeObservedRoster,
+  encodeObservedRoster,
+  type ObservedRoster,
+} from "../observed-roster.js";
+import {
+  type RosterDiff,
+  rosterCarrying,
+  rosterComparable,
+  rosterDiff,
+  rosterDiffIsEmpty,
+} from "../roster-diff.js";
 import type { HostedStoreRun } from "../store/database.js";
 import type { ConversationTarget, HostedStore, StoreWriter } from "../store/index.js";
 import { type QueuedTurnRecord, queuedTurns } from "../store/message-reads.js";
-import { consumeRosterDiff } from "../store/roster-snapshot.js";
+import { CONSUMED_ROSTER, type RosterSnapshotRecord } from "../store/roster-snapshot.js";
 import { releasedBriefings } from "../store/speech.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { EVE_SEND_OUTCOME, type EveSessions } from "./eve-sessions.js";
@@ -133,66 +144,121 @@ function summed(left: TurnOpeningOutcome, right: TurnOpeningOutcome): TurnOpenin
   };
 }
 
-interface PendingDiff extends DatedRosterDiff {
-  readonly id: string;
+/** What the opener derived this visit: the snapshot it read, the bookmark it read against, and the change between them. */
+interface DerivedChange {
+  readonly snapshot: RosterSnapshotRecord;
+  readonly current: ObservedRoster;
+  readonly consumed: ObservedRoster;
+  /** The bookmark's instant the read began from; absent where none stood yet. */
+  readonly from: number | undefined;
+  readonly diff: RosterDiff;
 }
 
-/** The news one observed conversation is opened with: its identity and every wake the taken diffs carry for it, oldest first. */
+/**
+ * The one function that reads the snapshot and the bookmark, settles every
+ * bookkeeping the bookmark owes — a first adoption, the replacement of one
+ * this build cannot read, a key change absorbed — and only then derives the
+ * change. The wakes take its result as their argument and cannot run without
+ * it, so no bound, emptiness, or refusal placed in front of the wakes can
+ * skip the bookkeeping: state advances unconditionally and output is what
+ * is bounded. The account's change is the snapshot the pass
+ * just wrote, diffed against the consumed roster. There is no queue of diffs
+ * to drain; a visit that could not hand its change over leaves the bookmark
+ * where it was, and the next visit derives the same change again, wider by
+ * whatever moved since, which is the coalescing wanted anyway. A first visit
+ * finds no bookmark and adopts the snapshot as it stands, waking nothing,
+ * exactly as the first pass records no change against nothing.
+ */
+async function settledChange(
+  seams: TurnOpenerSeams,
+  userId: string,
+): Promise<DerivedChange | undefined> {
+  // A snapshot this build cannot open is the pass's to replace on its next whole read; until then
+  // the visit wakes nothing from it and says so, rather than failing the account's whole opening.
+  let snapshot: RosterSnapshotRecord | undefined;
+  try {
+    snapshot = await seams.store.roster.read(userId);
+  } catch {
+    seams.report(
+      `The roster snapshot of account ${userId} cannot be opened; nothing is woken from it.`,
+    );
+    return undefined;
+  }
+  if (snapshot === undefined) return undefined;
+  const current = decodeObservedRoster(snapshot.body);
+  if (current === undefined) {
+    seams.report(
+      `The roster snapshot of account ${userId} cannot be read; nothing is woken from it.`,
+    );
+    return undefined;
+  }
+  const bookmark = await seams.store.roster.consumed(userId);
+  if (bookmark.state === CONSUMED_ROSTER.ABSENT) {
+    await seams.run(seams.store.roster.keepConsumed(userId, snapshot, undefined));
+    return undefined;
+  }
+  // A bookmark this build cannot open or read is replaced by the snapshot as it stands, over the
+  // bookmark's own instant: kept where none stands it would lose to the row it meant to replace,
+  // and every later visit would adopt in silence.
+  const replace = async (from: number): Promise<undefined> => {
+    seams.report(
+      `The roster bookmark of account ${userId} could not be read; it is replaced by the snapshot as it stands, and nothing is woken from it.`,
+    );
+    await seams.run(seams.store.roster.keepConsumed(userId, snapshot, from));
+    return undefined;
+  };
+  if (bookmark.state === CONSUMED_ROSTER.UNREADABLE) return replace(bookmark.observedAt);
+  const heard = decodeObservedRoster(bookmark.roster.body);
+  if (heard === undefined) return replace(bookmark.roster.observedAt);
+  // A provider whose key was replaced, added, or removed since the bookmark is another account's
+  // roster to compare against; it is taken from the snapshot as it stands, as the pass refuses the
+  // same comparison, so a key change wakes nothing and the bookmark settles on the new key at once.
+  const consumed = rosterComparable(heard, current);
+  const change: DerivedChange = {
+    snapshot,
+    current,
+    consumed,
+    from: bookmark.roster.observedAt,
+    diff: rosterDiff(consumed, current),
+  };
+  // Nothing to wake, but a provider taken from the snapshot still has to reach the bookmark, or the
+  // same adoption is made on every visit and the bookmark never settles on the new key.
+  if (
+    rosterDiffIsEmpty(change.diff) &&
+    encodeObservedRoster(consumed) !== encodeObservedRoster(heard)
+  ) {
+    await seams.run(seams.store.roster.keepConsumed(userId, snapshot, change.from));
+  }
+  return change;
+}
+
 interface Opening {
   readonly identity: SessionIdentity;
   readonly events: BrainWakeEvent[];
 }
 
-/** The pending diffs decoded and dated, oldest first; a payload this build cannot read is skipped, never guessed at. */
-async function pendingDiffs(
-  store: Pick<HostedStore, "roster">,
-  userId: string,
-): Promise<readonly PendingDiff[]> {
-  const pending = await store.roster.pendingDiffs(userId);
-  return pending.flatMap((record) => {
-    const diff = decodeRosterDiff(record.payload);
-    return diff ? [{ id: record.id, diff, observedAt: record.observedAt }] : [];
-  });
-}
-
 interface Plan {
-  /** The diffs this pass carries, to be consumed once eve has every message. */
-  readonly taken: readonly PendingDiff[];
   readonly openings: readonly Opening[];
-  /** Sessions the one over-wide diff named past the bound, not woken for it. */
-  readonly cut: number;
+  /** Sessions the change named past the bound, left at their earlier state in the bookmark so the next visit derives them again. */
+  readonly heldBack: readonly SessionIdentity[];
 }
 
-/**
- * Which diffs this pass carries and which conversations it opens: whole
- * diffs oldest first while the sessions they name fit under the bound, the
- * first diff always, and the sessions of that first diff cut to the bound
- * when it alone exceeds it.
- */
-function plan(diffs: readonly PendingDiff[], roster: HostedRoster, limit: number): Plan {
-  const taken: PendingDiff[] = [];
+/** One opening per session the change names, oldest change first; the sessions past the bound are held back by identity. */
+function plan(change: DatedRosterDiff, roster: HostedRoster, limit: number): Plan {
   const openings = new Map<string, Opening>();
-  let cut = 0;
-  for (const dated of diffs) {
-    const wakes = wakeEventsFromDiffs([dated], roster);
-    const fresh = new Set(
-      wakes.map((wake) => identityKey(wake.identity)).filter((key) => !openings.has(key)),
-    );
-    if (taken.length > 0 && openings.size + fresh.size > limit) break;
-    taken.push(dated);
-    for (const wake of wakes) {
-      const key = identityKey(wake.identity);
-      const held = openings.get(key);
-      if (held) {
-        held.events.push(wake);
-      } else if (openings.size < limit) {
-        openings.set(key, { identity: wake.identity, events: [wake] });
-      } else {
-        cut += 1;
-      }
+  const heldBack = new Map<string, SessionIdentity>();
+  for (const wake of wakeEventsFromDiffs([change], roster)) {
+    const key = identityKey(wake.identity);
+    const held = openings.get(key);
+    if (held) {
+      held.events.push(wake);
+    } else if (openings.size < limit) {
+      openings.set(key, { identity: wake.identity, events: [wake] });
+    } else {
+      heldBack.set(key, wake.identity);
     }
   }
-  return { taken, openings: [...openings.values()], cut };
+  return { openings: [...openings.values()], heldBack: [...heldBack.values()] };
 }
 
 /** Whether eve took the message: sent to the session the conversation runs in, or opened in a new one where none runs. */
@@ -269,16 +335,33 @@ export async function openObservationTurns(
   userId: string,
   options: TurnOpeningOptions = {},
 ): Promise<TurnOpeningOutcome> {
-  const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
-  if (limit <= 0) return NOTHING_OPENED;
-  const diffs = await pendingDiffs(seams.store, userId);
-  if (diffs.length === 0) return NOTHING_OPENED;
-  const planned = plan(diffs, seams.roster, limit);
-  if (planned.cut > 0) {
+  const change = await settledChange(seams, userId);
+  if (change === undefined) return NOTHING_OPENED;
+  return wakeFrom(seams, userId, change, options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT);
+}
+
+/** The wakes a settled change owes, under the bound; the change is required, so nothing here runs before the bookmark's own bookkeeping did. */
+async function wakeFrom(
+  seams: TurnOpenerSeams,
+  userId: string,
+  change: DerivedChange,
+  limit: number,
+): Promise<TurnOpeningOutcome> {
+  if (rosterDiffIsEmpty(change.diff) || limit <= 0) return NOTHING_OPENED;
+  const planned = plan(
+    { diff: change.diff, observedAt: change.snapshot.observedAt },
+    seams.roster,
+    limit,
+  );
+  if (planned.heldBack.length > 0) {
     seams.report(
-      `One roster diff of account ${userId} named ${planned.cut} more sessions than the opener wakes in one tick; their next change wakes them.`,
+      `The roster of account ${userId} changed for ${planned.heldBack.length} more sessions than the opener wakes in one tick; the next tick derives them again.`,
     );
   }
+  // The bookmark follows the snapshot for everything but the sessions held back: a change that woke
+  // nothing (a workspace coming or going, a session's fields no wake is derived from) settles on this
+  // visit rather than deriving again on every one.
+  const heldBack = new Set(planned.heldBack.map(identityKey));
   const cursors: { identity: SessionIdentity; cursor: string; from: string | undefined }[] = [];
   let observation = 0;
   let failed = 0;
@@ -306,6 +389,17 @@ export async function openObservationTurns(
     }
     observation += 1;
   }
+  const bookmark: RosterSnapshotRecord = {
+    body: encodeObservedRoster(
+      rosterCarrying(
+        change.consumed,
+        change.current,
+        (providerId, providerSessionId) =>
+          !heldBack.has(identityKey({ providerId, providerSessionId })),
+      ),
+    ),
+    observedAt: change.snapshot.observedAt,
+  };
   const now = new Date(seams.now());
   await seams.run(
     Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -315,7 +409,7 @@ export async function openObservationTurns(
             ...cursors.map(({ identity, cursor, from }) =>
               keepTranscriptCursor(userId, identity, cursor, from, now),
             ),
-            ...planned.taken.map((diff) => consumeRosterDiff(userId, diff.id, now.getTime())),
+            seams.store.roster.keepConsumed(userId, bookmark, change.from),
           ],
           { discard: true },
         ),
@@ -394,10 +488,12 @@ export async function openAccountTurns(
   options: TurnOpeningOptions = {},
 ): Promise<TurnOpeningOutcome> {
   const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
+  // The bookmark is settled before anything is woken, so neither the hold releases filling the bound
+  // nor eve refusing one can leave a first bookmark unplaced for a visit.
+  const change = await settledChange(seams, userId);
   const released = await openHoldReleaseTurns(seams, userId, { limit });
-  if (released.failed > 0) return released;
-  const observed = await openObservationTurns(seams, userId, {
-    limit: Math.max(0, limit - released.holdRelease),
-  });
+  // A refused hold release ends the visit's wakes, since eve is refusing.
+  if (released.failed > 0 || change === undefined) return released;
+  const observed = await wakeFrom(seams, userId, change, Math.max(0, limit - released.holdRelease));
   return summed(released, observed);
 }

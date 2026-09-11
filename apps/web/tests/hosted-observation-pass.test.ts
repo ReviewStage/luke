@@ -21,7 +21,6 @@ import {
   observeAndSnapshot,
   storedRoster,
 } from "../server/hosted/observation-pass";
-import { decodeRosterDiff } from "../server/hosted/roster-diff";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
 import { memoryObservationStore, UNOPENABLE_BODY } from "./support/observation-store";
 
@@ -63,7 +62,7 @@ test("only cloud providers with a stored key are observed", () => {
   );
 });
 
-test("a whole pass stores the roster with its projects, dated by the pass, and takes no diff against nothing", async () => {
+test("a whole pass stores the roster with its projects, dated by the pass", async () => {
   const store = memoryObservationStore();
   const outcome = await observeAndSnapshot({
     userId: "user-1",
@@ -88,11 +87,10 @@ test("a whole pass stores the roster with its projects, dated by the pass, and t
     provider?.projects.map((project) => project.providerProjectId),
     [LUKE_PROJECT.id],
   );
-  assert.deepEqual(await store.roster.pendingDiffs("user-1"), []);
   assert.deepEqual(store.passes.get("user-1"), { attemptedAt: TEST_TIME, observedAt: TEST_TIME });
 });
 
-test("a changed roster moves the snapshot and records the diff; an unchanged one moves only the snapshot", async () => {
+test("a changed roster moves the snapshot and says so; an unchanged one moves only the snapshot and says nothing changed", async () => {
   const store = memoryObservationStore();
   const pass = (status: string, now: number) =>
     observeAndSnapshot({
@@ -108,18 +106,14 @@ test("a changed roster moves the snapshot and records the diff; an unchanged one
   const same = await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME + 60_000);
   assert.equal(same.changed, false);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 60_000);
-  assert.deepEqual(await store.roster.pendingDiffs("user-1"), []);
 
   const changed = await pass(TEST_CONDUCTOR_STATUS.ERROR, TEST_TIME + 120_000);
   assert.equal(changed.changed, true);
-  const [diff] = await store.roster.pendingDiffs("user-1");
-  assert.ok(diff);
-  assert.equal(diff.observedAt, TEST_TIME + 120_000);
-  assert.equal(diff.previousObservedAt, TEST_TIME + 60_000);
-  const decoded = decodeRosterDiff(diff.payload);
-  assert.equal(decoded?.statusChanged[0]?.from, SESSION_STATUS.WORKING);
-  assert.equal(decoded?.statusChanged[0]?.to, SESSION_STATUS.ERROR);
-  assert.equal(decoded?.errorChanged.length, 1);
+  assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 120_000);
+  assert.deepEqual(
+    store.advances.map((advance) => advance.observedAt),
+    [TEST_TIME, TEST_TIME + 60_000, TEST_TIME + 120_000],
+  );
 });
 
 // The 429 cadence now runs on the fiber's own clock rather than an injected
@@ -162,7 +156,6 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
   assert.equal(outcome.observedAt, TEST_TIME);
   assert.equal(outcome.roster?.providers[0]?.observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME);
-  assert.deepEqual(await store.roster.pendingDiffs("user-1"), []);
   assert.deepEqual(store.passes.get("user-1"), {
     attemptedAt: TEST_TIME + 60_000,
     failure: CLOUD_OBSERVE_FAILURE.RATE_LIMITED,
@@ -291,7 +284,6 @@ test("two passes racing over one user record one transition once, and the later 
   assert.equal(late.changed, false);
   assert.equal(late.observedAt, TEST_TIME + 2_000);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 2_000);
-  assert.equal((await store.roster.pendingDiffs("user-1")).length, 1);
   // The losing pass leaves the winner's pass record standing rather than
   // backdating the account to the head of the schedule's order.
   assert.deepEqual(store.passes.get("user-1"), {
@@ -344,7 +336,7 @@ test("when the earlier-started pass wins, the later one closes its own unfinishe
   });
 });
 
-test("a snapshot observed under a key since replaced is another key's roster: not served, and replaced with no diff against it; the same key saved again keeps it", async () => {
+test("a snapshot observed under a key since replaced is another key's roster: not served, and replaced; the same key saved again keeps it", async () => {
   const store = memoryObservationStore();
   const first = await observeAndSnapshot({
     userId: "user-1",
@@ -384,11 +376,10 @@ test("a snapshot observed under a key since replaced is another key's roster: no
   });
   assert.equal(second.complete, true);
   assert.equal(second.changed, false);
-  assert.deepEqual(await store.roster.pendingDiffs("user-1"), []);
   assert.ok((await storedRoster(store, "user-1", replaced, SECRET))?.roster);
 });
 
-test("a snapshot this build cannot open or read is replaced by the next whole pass, with no diff against it", async () => {
+test("a snapshot this build cannot open or read is replaced by the next whole pass", async () => {
   for (const body of [UNOPENABLE_BODY, "not json", JSON.stringify({ version: 99 })]) {
     const store = memoryObservationStore();
     store.snapshots.set("user-1", { body, observedAt: TEST_TIME - 60_000 });
@@ -413,7 +404,6 @@ test("a snapshot this build cannot open or read is replaced by the next whole pa
       1,
       body,
     );
-    assert.deepEqual(await store.roster.pendingDiffs("user-1"), [], body);
   }
 });
 

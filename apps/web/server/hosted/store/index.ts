@@ -1,5 +1,7 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
-import { Effect, Option } from "effect";
+import { Effect, Option, type ParseResult } from "effect";
 import type { SessionIdentity } from "../../core.js";
 import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
@@ -25,14 +27,13 @@ import {
 import { standingObservedConversation } from "./observed-conversations.js";
 import {
   advanceRosterSnapshot,
-  consumeRosterDiff,
+  type ConsumedRosterRead,
   forgetObservationIneligible,
-  listPendingRosterDiffs,
+  keepConsumedRoster,
   type ObservationEligibility,
   type ObservationPassRecord,
-  type RosterDiffInsert,
-  type RosterDiffRecord,
   type RosterSnapshotRecord,
+  readConsumedRoster,
   readObservationPass,
   readRosterSnapshot,
   recordObservationPass,
@@ -157,18 +158,28 @@ export interface HostedStore {
     observedAt(userId: string): Promise<number | undefined>;
     write(userId: string, snapshot: RosterSnapshotRecord): Promise<void>;
     /**
-     * Replaces the snapshot and records the diff against the one it replaced,
-     * in one transaction, only while the snapshot standing is still the one
-     * observed at `previousObservedAt` (absent for none); answers whether it landed.
+     * Replaces the snapshot, in one transaction, only while the snapshot
+     * standing is still the one observed at `previousObservedAt` (absent for
+     * none); answers whether it landed. The change is not recorded: the
+     * opener derives it against the consumed roster.
      */
     advance(
       userId: string,
       snapshot: RosterSnapshotRecord,
-      diff: RosterDiffInsert | undefined,
       previousObservedAt: number | undefined,
     ): Promise<boolean>;
-    pendingDiffs(userId: string): Promise<readonly RosterDiffRecord[]>;
-    consumeDiff(userId: string, id: string, now: number): Promise<boolean>;
+    /** The roster as of the last change the opener handed the brain: absent before its first visit, unreadable where a row stands this build cannot open, or standing. */
+    consumed(userId: string): Promise<ConsumedRosterRead>;
+    /**
+     * Moves that bookmark, only over the one observed at `from` (absent for
+     * none), answered as an Effect so the opener composes it into the one
+     * transaction that also keeps its transcript cursors.
+     */
+    keepConsumed(
+      userId: string,
+      roster: RosterSnapshotRecord,
+      from: number | undefined,
+    ): Effect.Effect<boolean, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
     pass(userId: string): Promise<ObservationPassRecord | undefined>;
     recordPass(userId: string, attempt: { attemptedAt: number; failure?: string }): Promise<void>;
     /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for, or of the named ones alone. */
@@ -233,10 +244,11 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
       read: (userId) => readRosterSnapshot(db, sealFor(userId), userId),
       observedAt: (userId) => run(rosterSnapshotObservedAt(userId)),
       write: (userId, snapshot) => run(writeRosterSnapshot(sealFor(userId), userId, snapshot)),
-      advance: (userId, snapshot, diff, previousObservedAt) =>
-        run(advanceRosterSnapshot(sealFor(userId), userId, snapshot, diff, previousObservedAt)),
-      pendingDiffs: (userId) => run(listPendingRosterDiffs(sealFor(userId), userId)),
-      consumeDiff: (userId, id, now) => run(consumeRosterDiff(userId, id, now)),
+      advance: (userId, snapshot, previousObservedAt) =>
+        run(advanceRosterSnapshot(sealFor(userId), userId, snapshot, previousObservedAt)),
+      consumed: (userId) => run(readConsumedRoster(sealFor(userId), userId)),
+      keepConsumed: (userId, roster, from) =>
+        keepConsumedRoster(sealFor(userId), userId, roster, from),
       pass: (userId) => run(readObservationPass(userId)),
       recordPass: (userId, attempt) => run(recordObservationPass(userId, attempt)),
       forgetIneligible: (eligibility) => run(forgetObservationIneligible(eligibility)),
@@ -265,9 +277,8 @@ export {
   rateMessage,
 } from "./ratings.js";
 export {
-  MAXIMUM_PENDING_ROSTER_DIFFS,
+  CONSUMED_ROSTER,
   type ObservationPassRecord,
-  type RosterDiffRecord,
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
 export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";

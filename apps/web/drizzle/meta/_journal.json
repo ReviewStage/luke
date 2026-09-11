@@ -169,6 +169,13 @@
       "when": 1789145475866,
       "tag": "0024_c4_drop_prompts",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789151958395,
+      "tag": "0025_c3_roster_consumed",
+      "breakpoints": true
     }
   ]
 }

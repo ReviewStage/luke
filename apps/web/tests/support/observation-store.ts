@@ -1,23 +1,24 @@
+import { Effect } from "effect";
 import type { ObservationStore } from "../../server/hosted/observation-pass";
-import type {
-  ObservationPassRecord,
-  RosterDiffRecord,
-  RosterSnapshotRecord,
+import {
+  CONSUMED_ROSTER,
+  type ObservationPassRecord,
+  type RosterSnapshotRecord,
 } from "../../server/hosted/store";
-import { MAXIMUM_PENDING_ROSTER_DIFFS } from "../../server/hosted/store";
 
 /**
  * The roster slice of the hosted store held in memory, for the handler tests
  * that exercise what a pass reads and writes without a database: the
- * snapshot, the pending diffs under their bound, and the pass record. The
+ * snapshot, the opener's bookmark over it, and the pass record. The
  * store tests on PGlite are where the real tables are exercised.
  */
 export interface MemoryObservationStore extends ObservationStore {
   snapshots: Map<string, RosterSnapshotRecord>;
-  diffs: Map<string, RosterDiffRecord[]>;
+  /** The opener's bookmark over the snapshot, as the store keeps it. */
+  consumed: Map<string, RosterSnapshotRecord>;
   passes: Map<string, ObservationPassRecord>;
   /** Every `advance` this store took, in order, so a test can see what a pass wrote. */
-  advances: Array<{ userId: string; observedAt: number; diff: boolean }>;
+  advances: Array<{ userId: string; observedAt: number }>;
 }
 
 /** A body the fake's `read` refuses to open, standing in for a seal under a key the ring no longer holds. */
@@ -25,12 +26,12 @@ export const UNOPENABLE_BODY = "unopenable";
 
 export function memoryObservationStore(): MemoryObservationStore {
   const snapshots = new Map<string, RosterSnapshotRecord>();
-  const diffs = new Map<string, RosterDiffRecord[]>();
+  const consumed = new Map<string, RosterSnapshotRecord>();
   const passes = new Map<string, ObservationPassRecord>();
   const advances: MemoryObservationStore["advances"] = [];
   return {
     snapshots,
-    diffs,
+    consumed,
     passes,
     advances,
     roster: {
@@ -43,26 +44,26 @@ export function memoryObservationStore(): MemoryObservationStore {
       write: async (userId, snapshot) => {
         snapshots.set(userId, snapshot);
       },
-      advance: async (userId, snapshot, diff, previousObservedAt) => {
+      advance: async (userId, snapshot, previousObservedAt) => {
         if (snapshots.get(userId)?.observedAt !== previousObservedAt) return false;
         snapshots.set(userId, snapshot);
-        advances.push({ userId, observedAt: snapshot.observedAt, diff: diff !== undefined });
-        if (!diff) return true;
-        const pending = (diffs.get(userId) ?? []).filter((one) => one.consumedAt === undefined);
-        pending.push({ ...diff });
-        diffs.set(userId, pending.slice(-MAXIMUM_PENDING_ROSTER_DIFFS));
+        advances.push({ userId, observedAt: snapshot.observedAt });
         return true;
       },
-      pendingDiffs: async (userId) =>
-        (diffs.get(userId) ?? []).filter((one) => one.consumedAt === undefined),
-      consumeDiff: async (userId, id, now) => {
-        const held = diffs.get(userId) ?? [];
-        const index = held.findIndex((one) => one.id === id && one.consumedAt === undefined);
-        const pending = held[index];
-        if (!pending) return false;
-        held[index] = { ...pending, consumedAt: now };
-        return true;
+      consumed: async (userId) => {
+        const bookmark = consumed.get(userId);
+        if (bookmark === undefined) return { state: CONSUMED_ROSTER.ABSENT };
+        if (bookmark.body === UNOPENABLE_BODY) {
+          return { state: CONSUMED_ROSTER.UNREADABLE, observedAt: bookmark.observedAt };
+        }
+        return { state: CONSUMED_ROSTER.STANDING, roster: bookmark };
       },
+      keepConsumed: (userId, roster, from) =>
+        Effect.sync(() => {
+          if (consumed.get(userId)?.observedAt !== from) return false;
+          consumed.set(userId, roster);
+          return true;
+        }),
       pass: async (userId) => passes.get(userId),
       recordPass: async (userId, attempt) => {
         const held = passes.get(userId);

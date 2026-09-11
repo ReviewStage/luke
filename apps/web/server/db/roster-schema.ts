@@ -27,6 +27,22 @@ export const rosterSnapshot = pgTable("roster_snapshot", {
  * a later read cannot recover. The payload names titles and error lines, so
  * it is sealed.
  */
+/**
+ * The roster as of the last change the opener handed the brain, one sealed
+ * row per user beside the snapshot. The snapshot is what every reader draws
+ * and moves when a pass writes it; this is the brain's own bookmark over it,
+ * and moves only when eve has taken the turns a change opened, so an
+ * undrained change re-derives itself on the next visit rather than being
+ * dropped.
+ */
+export const rosterConsumed = pgTable("roster_consumed", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  sealedBody: text("sealed_body").notNull(),
+  observedAt: bigint("observed_at", { mode: "number" }).notNull(),
+});
+
 export const rosterDiff = pgTable(
   "roster_diff",
   {
