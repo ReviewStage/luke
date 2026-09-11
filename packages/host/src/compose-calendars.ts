@@ -33,6 +33,7 @@ import {
 } from "./apple-calendar.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import type { Composer, ComposerContext } from "./composer.js";
+import { quietUntilFrom } from "./device-presence.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateFile } from "./onboarding-state.js";
 import { reporterOf } from "./wire-helpers.js";
@@ -72,12 +73,13 @@ export interface CalendarsComposer extends Composer {
   observedCalendars: () => readonly ObservedAccountCalendars[];
   announcementsQuietNow: (at: number) => Promise<boolean>;
   /**
-   * When the meeting hold standing at `at` ends, or nothing while none
-   * stands: a meeting covering the instant, under the quiet-during-meetings
-   * setting. It is the fact the device row reports and nothing decided from
-   * it; the manual pause has no end and is no instant.
+   * When the meeting hold standing at `at` ends; `null` once the calendars
+   * have been observed and none stands; `undefined` before the first
+   * observation has resolved, when whether a hold stands is not yet known.
+   * It is the fact the device row reports and nothing decided from it; the
+   * manual pause has no end and is no instant.
    */
-  meetingQuietUntil: (at: number) => Promise<number | undefined>;
+  meetingQuietUntil: (at: number) => Promise<number | null | undefined>;
   /** Whether the calendar step of onboarding still stands over the panel. */
   gateOwed: () => boolean;
   gateOfferable: () => Promise<boolean>;
@@ -130,6 +132,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     now,
   });
 
+  /** The observed meetings; `undefined` until the first observation of this run has resolved. */
   let calendarMeetings: readonly MeetingInterval[] | undefined;
   let quietBoundaryTimer: NodeJS.Timeout | undefined;
   let observedCalendars: readonly ObservedAccountCalendars[] = [];
@@ -196,13 +199,12 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     return holding;
   }
 
-  async function meetingQuietUntil(at: number): Promise<number | undefined> {
-    if (calendarMeetings === undefined) return undefined;
-    const end = activeMeetingEnd(calendarMeetings, at);
-    if (end === undefined) return undefined;
-    return (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field))
-      ? end
-      : undefined;
+  async function meetingQuietUntil(at: number): Promise<number | null | undefined> {
+    return quietUntilFrom(
+      calendarMeetings,
+      await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field),
+      at,
+    );
   }
 
   async function refreshAnnouncementHold(): Promise<void> {
@@ -235,10 +237,10 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
       ]);
       if (!loop.isCurrent(generation)) return;
       const accounts = [...(observations ?? []), ...(appleObservation ? [appleObservation] : [])];
-      calendarMeetings =
-        observations === undefined && appleObservation === undefined
-          ? undefined
-          : accounts.flatMap((held) => [...held.meetings]);
+      // Both readers answer nothing for a calendar that is not connected, so
+      // a machine with none observed holds no meetings; only a run whose
+      // first observation has not resolved yet holds nothing at all.
+      calendarMeetings = accounts.flatMap((held) => [...held.meetings]);
       observedCalendars = accounts.map(({ accountId, calendars, failure, revoked }) => ({
         accountId,
         calendars,
