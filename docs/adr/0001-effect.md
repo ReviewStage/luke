@@ -226,15 +226,6 @@ runs them rather than the host's own. P7-03 deletes the runtime this class
 holds once that composer is a `Layer` and can hand the sender an edge to fork
 on instead.
 
-`providerRegistrations` in `packages/providers/src/registrations.ts` is on the
-same allowlist: the registry is `providersLayer`, one layer per registration
-merged so a repeated provider id fails the build, and the composers that hold
-it are still promises reading a record, so the layers are built and the
-`Providers` service read there. Every registration is synchronous, so the run
-is a `runSync` over a scope that closes at once, holding nothing; P7-05
-converts the observation composer that reads the record, hands the layer to
-the host itself, and deletes the door.
-
 `ServerBoundTransport#run` in `packages/gateway/src/transport.ts` is on the
 same allowlist, and it is what is left of the `GatewayServer` class P6-02
 introduced and P6-13 deleted. The server is its layers and there is no object
@@ -295,6 +286,18 @@ and this record face answer through, so the composer and the store's tests
 that still hand in the one `HostSeams` environment cannot resolve an override
 differently from a composition that reads the provider. P12-05 deletes it with
 `createHostKernel`.
+
+`startConversationMaintenance` in `packages/host/src/conversation-operations.ts`
+is on the same allowlist and for the same reason: the hourly pass is now
+`Effect.repeat` on a fiber forked into a `Scope` the function makes at its own
+call, rather than a `setInterval`, but the brain composer that starts and
+stops it (`packages/host/src/compose-brain.ts`) is still a pair of plain
+functions, so the scope is made and closed here instead of built around it.
+`Effect.repeat` rather than `Effect.schedule`: nothing here awaits a first
+pass separately, so the cadence's own first repetition is the launch's pass,
+exactly as the interval it replaces ran its callback once before arming.
+P7-08 deletes this once the brain composer is a `Layer` and the scope is the
+host's own.
 
 `shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
 allowlist: the coordinator's fixed quit order — admissions closed, the
@@ -663,8 +666,17 @@ folded into one snapshot, reached through this same face rather than a
 promise face of its own. These reads tolerate everything an absent or
 unreadable provider directory, or an unauthorized or unreachable credential,
 answers, so the face rethrows `Cause.squash` and a caller reads the failure or
-the defect it always did. P7-05 composes observation as effects and deletes
-it.
+the defect it always did. P7-05 turned out not to be its deletion: the host's
+observation composer never called a plugin's `observe()` or a transcript read
+directly — its roster is the hosted service's own `HostedRosterClient`
+snapshot, drawn in `snapshot-roster.ts`, and the local registrations it built
+were read only for their `plugin.provider` identity, to reset the local roster
+at a stop. Converting that composer to `providersLayer` (P7-05) therefore
+touches none of `runAdapterRead`'s actual callers, which are every one named
+above and stay inside `packages/providers` itself; the door goes only once
+each of those adapters' own plugins holds a fiber of its own to run its
+effects on rather than answering a `Promise` through this face, which is not
+yet scheduled on any row above.
 
 ## Strangler shims and their deletions
 
@@ -688,13 +700,13 @@ design decision stated as such:
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
-| `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
+| `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |
 | `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | P12-05 |
 | `gatewayTestHost`/`scopedGatewayService`, the suites' own scoped builds | P6-13 | P12-09 |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
-| `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |
+| `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | not yet — every caller stays inside `packages/providers`; P7-05 confirmed the host never called one directly |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08 |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
@@ -725,6 +737,7 @@ design decision stated as such:
 | `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |
 | `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
+| `startConversationMaintenance`'s own `Scope` | P7-05 | P7-08 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

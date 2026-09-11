@@ -1,5 +1,6 @@
 import type { ConversationRecord, SessionKey } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
+import { Duration, Effect, Exit, Runtime, Schedule, Scope } from "effect";
 import {
   type ConversationDeleteOutcome,
   deleteConversationFlow,
@@ -59,23 +60,49 @@ export function conversationOperations(
 }
 
 /** How often maintenance looks again between launches; a store crosses none of its bounds faster than this. */
-const CONVERSATION_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+export const CONVERSATION_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface ConversationMaintenanceDependencies {
   store: Pick<StoreWiring, "runMaintenance">;
   brain: Pick<BrainWiring, "busyConversations">;
+  /** The runtime the cadence is forked on, for a caller (a test today) that holds its own. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 /**
  * Maintenance runs at every live launch — interrupted archive publications
  * retried first — and then on its own hourly clock, keeping the
- * conversations with a run under way whatever their age. Answers the stop.
+ * conversations with a run under way whatever their age. Answers the stop,
+ * which closes the scope the cadence's fiber was forked into. `Effect.repeat`
+ * rather than `Effect.schedule`: the launch's own first pass is the cadence's
+ * first repetition rather than one a caller awaits separately, exactly as the
+ * `setInterval` this replaces ran its first pass at once. A pass that fails
+ * is dropped rather than let end the cadence, since nothing else would
+ * restart it before the next launch.
  */
 export function startConversationMaintenance(
   dependencies: ConversationMaintenanceDependencies,
 ): () => void {
-  const run = () => void dependencies.store.runMaintenance(dependencies.brain.busyConversations());
-  run();
-  const timer = setInterval(run, CONVERSATION_MAINTENANCE_INTERVAL_MS).unref();
-  return () => clearInterval(timer);
+  const runtime = dependencies.runtime ?? Runtime.defaultRuntime;
+  const pass = Effect.catchAllCause(
+    Effect.promise(() =>
+      dependencies.store
+        .runMaintenance(dependencies.brain.busyConversations())
+        .then(() => undefined),
+    ),
+    () => Effect.void,
+  );
+  const scope = Runtime.runSync(runtime)(Scope.make());
+  Runtime.runSync(runtime)(
+    Effect.provideService(
+      Effect.forkScoped(
+        Effect.repeat(pass, Schedule.spaced(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS))),
+      ),
+      Scope.Scope,
+      scope,
+    ),
+  );
+  return () => {
+    Runtime.runFork(runtime)(Scope.close(scope, Exit.void));
+  };
 }

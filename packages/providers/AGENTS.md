@@ -35,10 +35,12 @@ the registration object `registrations.ts` declares for it, and the
 claims the id its plugin publishes while its own layer builds, so two
 registrations naming one id fail the build with
 `DuplicateProviderRegistration` rather than one silently replacing the other
-at a lookup nobody watches. `providerRegistrations` is the strangler shim over
-it: the composers that hold the registry are still promises reading a record,
-so it builds the layers and reads the service there, and P7-01 and P7-02
-delete it once the host takes the layer itself.
+at a lookup nobody watches. `registrations.ts` exports `providerDeclarations`,
+the plain array every registration is declared into; P7-05 deleted
+`providerRegistrations`, the strangler shim that once built the layers itself
+and read a record back out of them, once the observation composer — its one
+caller — held the kernel as a tag and could build `providersLayer` inside its
+own effect instead.
 
 There are no base classes: a plugin is a value, and the shared mechanics are
 functions with one home each: `observationPass` for a file-backed pass,
@@ -112,8 +114,13 @@ promises: `runAdapterRead` in `shared/promise-face.ts` is the one
 `@deprecated` place those effects are run — `ObservationPass#runPromise`,
 `promiseTranscriptReads`, Codex's own `observe`, Conductor's `observe`, its
 actions' write, its conversation reads, its two local reads, and Superset's
-own host-state read — and P7-05 deletes it when observation is composed as
-effects. Every one of those reads is still a read: an adapter opens the
+own host-state read. P7-05 composed the host's own observation concern as an
+effect, but that composer never called a plugin's `observe()` or a
+transcript read directly — its roster comes from the hosted service's own
+snapshot, and the registrations it builds here are read only for their
+`plugin.provider` identity — so this face's deletion still waits on a caller
+inside this package holding a fiber of its own instead of it. Every one of
+those reads is still a read: an adapter opens the
 provider's files, its own credential-bound endpoint, or its own database,
 for reading alone, and a value test over a manifest of each on-disk home —
 its files, sizes, dates and hashes — pins that a pass and both transcript

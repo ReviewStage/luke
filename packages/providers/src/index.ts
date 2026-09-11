@@ -9,7 +9,8 @@ export { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
 export {
   type ProviderObservationSpool,
   type ProviderRegistration,
-  providerRegistrations,
+  type ProviderRegistrationOptions,
+  providerDeclarations,
 } from "./registrations.js";
 export {
   ADAPTER_DIAGNOSTIC_KIND,
