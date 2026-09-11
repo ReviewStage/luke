@@ -244,6 +244,58 @@ test("two retries of one client id in flight together dispatch once: the second 
   assert.deepEqual(eve.deliveries, []);
 });
 
+test("a Stop stamped on a waiting ask is carried the moment eve's start names its turn, once, scoped to that turn; a start that binds no stamped ask carries nothing", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const target = { userId, conversationId };
+  const sessionId = `wrun_${randomUUID()}`;
+  const stamped = await asks.record(write(userId, conversationId));
+  const quiet = await asks.record(write(userId, conversationId));
+  await asks.dispatchOnce(target, stamped.id, async () => ({
+    sessionId,
+    deliveryId: "delivery-s",
+  }));
+  await asks.dispatchOnce(target, quiet.id, async () => ({ sessionId, deliveryId: "delivery-q" }));
+  await asks.cancelRequested(stamped.id, new Date(NOW));
+
+  const stops: (readonly [string, string, string, string])[] = [];
+  const writer = await storeWriter({
+    run: database.run,
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  });
+  const relay = new StreamRelay({
+    writer,
+    asks,
+    stopTurn: async (stopped, session, eveTurnId, turnId) => {
+      stops.push([stopped.conversationId, session, eveTurnId, turnId]);
+    },
+    offer: async () => true,
+    now: () => NOW,
+    report: () => undefined,
+  });
+  const standing: RelayStanding = {
+    sessionId,
+    target,
+    turn: BRAIN_HOST_TURN.TYPED,
+    state: memoryRelayState(),
+  };
+  const start = (turn: string, deliveries: readonly string[]): MessageStreamEvent => {
+    const started = stampedEveEvent(
+      { type: "turn.started", data: { turnId: turn, sequence: 1 } },
+      NOW,
+    );
+    return { ...started, meta: { ...started.meta, deliveryIds: [...deliveries] } };
+  };
+
+  await relay.handle(start("turn_1", ["delivery-q"]), standing);
+  assert.deepEqual(stops, []);
+  await relay.handle(start("turn_2", ["delivery-s"]), standing);
+  assert.deepEqual(stops, [[conversationId, sessionId, "turn_2", hostTurnId(sessionId, "turn_2")]]);
+  await relay.handle(start("turn_2", ["delivery-s"]), standing);
+  assert.equal(stops.length, 1);
+});
+
 test("over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in", async () => {
   const userId = await database.createUser();
   const conversationId = await conversation(userId);
@@ -274,6 +326,7 @@ test("over the real record, a follow-up ask stands queued under its own id until
   const relay = new StreamRelay({
     writer,
     asks,
+    stopTurn: async () => undefined,
     offer: async () => true,
     now: () => NOW,
     report: () => undefined,

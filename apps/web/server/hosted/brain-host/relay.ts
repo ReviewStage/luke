@@ -144,6 +144,13 @@ export interface StreamRelaySeams {
   readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn">;
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
   readonly asks: AskDeliveryBinding;
+  /** Carries the Stop an ask took while it waited, the moment eve's start names the turn it ran in: eve's cancel scoped to that turn, and the row's stamp. */
+  readonly stopTurn: (
+    target: ConversationTarget,
+    sessionId: string,
+    eveTurnId: string,
+    turnId: string,
+  ) => Promise<void>;
   /** Puts a turn's briefing on offer, once its announce call is on the journal; answers whether the offer landed. */
   readonly offer: (target: ConversationTarget, turnId: string) => Promise<boolean>;
   readonly now: () => number;
@@ -383,7 +390,10 @@ export class StreamRelay {
       // eve folds the asks that waited into one turn and stamps their deliveries on its events,
       // so the start is where each ask learns the turn it ran in; a start emitted again names
       // the same deliveries and binds nothing new.
-      await this.#seams.asks.bindDeliveries(standing.target, deliveryIds, turnId);
+      const bound = await this.#seams.asks.bindDeliveries(standing.target, deliveryIds, turnId);
+      if (bound.some((ask) => ask.cancelRequestedAt !== undefined)) {
+        await this.#seams.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
+      }
       const written = await this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TURN_STARTED,
         origin,

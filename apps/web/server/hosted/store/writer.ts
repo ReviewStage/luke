@@ -161,6 +161,11 @@ const NO_CONVERSATION: Refused<typeof STORE_WRITE_REFUSAL.NO_CONVERSATION> = {
   refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION,
 };
 
+const NO_TURN: Refused<typeof STORE_WRITE_REFUSAL.NO_TURN> = {
+  ok: false,
+  refusal: STORE_WRITE_REFUSAL.NO_TURN,
+};
+
 export type StoreWriteResult =
   | { readonly ok: true; readonly effect: StoreWriteEffect }
   | Refused<
@@ -188,6 +193,16 @@ interface TurnEnqueue {
   readonly promptHash?: string;
   readonly toolSetHash?: string;
 }
+
+interface TurnCancelRequest {
+  readonly turnId: string;
+  readonly at: Date;
+}
+
+type TurnCancelResult =
+  | { readonly ok: true; readonly effect: StoreWriteEffect }
+  | typeof NO_CONVERSATION
+  | typeof NO_TURN;
 
 type TurnEnqueueResult =
   | { readonly ok: true; readonly turnId: string; readonly effect: StoreWriteEffect }
@@ -275,6 +290,11 @@ export interface StoreWriter {
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Promise<TurnEnqueueResult>;
   /** Removes a queued turn the opener has handed to eve; a row eve has started, or one a message names, is left standing. */
   dequeueTurn(target: ConversationTarget, turnId: string): Promise<StoreWriteResult>;
+  /** Stamps the instant a Stop was asked on a turn the conversation holds, once. */
+  requestTurnCancel(
+    target: ConversationTarget,
+    cancel: TurnCancelRequest,
+  ): Promise<TurnCancelResult>;
   /** Writes the assistant message a compaction stands as; the stream's own compaction event carries too little to write it. */
   recordCompaction(
     target: ConversationTarget,
@@ -1256,6 +1276,25 @@ const deleteQueuedTurn = SqlSchema.void({
     ),
 });
 
+const stampTurnCancel = SqlSchema.findAll({
+  Request: Schema.Struct({
+    turnId: Schema.String,
+    conversationId: Schema.String,
+    at: Schema.DateFromSelf,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (row) =>
+    statement(
+      (sql) => sql`
+        update turns
+        set cancel_requested_at = ${row.at}
+        where id = ${row.turnId} and conversation_id = ${row.conversationId}
+          and cancel_requested_at is null
+        returning id
+      `,
+    ),
+});
+
 function dequeueTurn(context: WriterContext, turnId: string): Write<StoreWriteResult> {
   return Effect.gen(function* () {
     const standing = yield* turnRow(context, turnId);
@@ -1268,6 +1307,30 @@ function dequeueTurn(context: WriterContext, turnId: string): Write<StoreWriteRe
     }
     yield* deleteQueuedTurn({ turnId, conversationId: context.target.conversationId });
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+  });
+}
+
+/**
+ * The Stop on a turn's row: the instant it was asked, written once, so the
+ * record says a Stop was asked whatever eve does with it. A second Stop finds
+ * the first instant standing and writes nothing; a turn the conversation does
+ * not hold is refused.
+ */
+function requestTurnCancel(
+  context: WriterContext,
+  cancel: TurnCancelRequest,
+): Write<TurnCancelResult> {
+  return Effect.gen(function* () {
+    if (Option.isNone(yield* turnRow(context, cancel.turnId))) return NO_TURN;
+    const stamped = yield* stampTurnCancel({
+      turnId: cancel.turnId,
+      conversationId: context.target.conversationId,
+      at: cancel.at,
+    });
+    return {
+      ok: true,
+      effect: stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
+    };
   });
 }
 
@@ -1457,6 +1520,8 @@ export async function storeWriter({
       underConversation(target, (context) => enqueueTurn(context, enqueue)),
     dequeueTurn: (target, turnId) =>
       underConversation(target, (context) => dequeueTurn(context, turnId)),
+    requestTurnCancel: (target, cancel) =>
+      underConversation(target, (context) => requestTurnCancel(context, cancel)),
     recordCompaction: (target, compaction) =>
       underConversation(target, (context) => recordCompaction(context, compaction)),
     recordEvent: (target, event) =>

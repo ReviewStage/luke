@@ -104,6 +104,7 @@ function hostOverTestDatabase(): TestHost {
     writer: async () => writer,
     userInfo: async () => undefined,
     ownership,
+    eveOrigin: () => undefined,
     deploymentSecret: () => undefined,
     openAi: () => undefined,
     scriptedModel: () => false,
