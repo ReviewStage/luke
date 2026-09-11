@@ -123,8 +123,12 @@ interface OpenSegment {
   name: string;
   delegatedAtMs: number | undefined;
   firstCommentaryAtMs: number | undefined;
-  /** How many messages the snapshot held when the segment opened, so an empty exchange draws no generation. */
-  messagesAtOpen: number;
+  /**
+   * The conversation as it stood when the segment opened, serialized, so an
+   * exchange that changed nothing draws no generation while one that only
+   * lengthened an earlier utterance with a late fragment still does.
+   */
+  snapshotAtOpen: string;
 }
 
 interface ExportState {
@@ -147,9 +151,9 @@ function newSession(): LiveSession {
 function openSegment(
   name: string,
   delegatedAtMs: number | undefined,
-  messagesAtOpen: number,
+  snapshotAtOpen: string,
 ): OpenSegment {
-  return { name, delegatedAtMs, firstCommentaryAtMs: undefined, messagesAtOpen };
+  return { name, delegatedAtMs, firstCommentaryAtMs: undefined, snapshotAtOpen };
 }
 
 /** The current session's conversation in session order. */
@@ -180,9 +184,10 @@ function conversationSnapshot(state: ExportState): readonly WireRecord[] {
  */
 function closeSegment(state: ExportState): void {
   const messages = conversationSnapshot(state);
+  const snapshot = JSON.stringify(messages);
   const segment = state.segment;
-  state.segment = openSegment(SESSION_GENERATION_NAME, undefined, messages.length);
-  if (messages.length === segment.messagesAtOpen) return;
+  state.segment = openSegment(SESSION_GENERATION_NAME, undefined, snapshot);
+  if (snapshot === segment.snapshotAtOpen) return;
   const latencyMs =
     segment.delegatedAtMs !== undefined &&
     segment.firstCommentaryAtMs !== undefined &&
@@ -256,7 +261,7 @@ function applyAppend(
 function applyDelegationCreated(state: ExportState, event: WireRecord, atMs: number | undefined) {
   closeSegment(state);
   const id = text(wireRecord(event.delegation)?.id);
-  state.segment = openSegment(id ?? SESSION_GENERATION_NAME, atMs, state.segment.messagesAtOpen);
+  state.segment = openSegment(id ?? SESSION_GENERATION_NAME, atMs, state.segment.snapshotAtOpen);
 }
 
 function applyUsage(state: ExportState, event: WireRecord): void {
@@ -397,7 +402,7 @@ export function unboxTraceFromLines(
     tools: [],
     settled: [],
     session: newSession(),
-    segment: openSegment(SESSION_GENERATION_NAME, undefined, 0),
+    segment: openSegment(SESSION_GENERATION_NAME, undefined, JSON.stringify([])),
     events: [],
     totalInput: 0,
     sessionSeconds: 0,

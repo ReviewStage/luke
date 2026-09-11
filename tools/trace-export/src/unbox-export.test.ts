@@ -223,6 +223,24 @@ test("a session that starts over one never closed settles the earlier one first"
   ]);
 });
 
+test("a late fragment that only lengthens an earlier utterance still reaches a generation", () => {
+  const late = serverLine("2026-09-01T10:00:02.400Z", {
+    type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
+    delta: " Right now.",
+    start_ms: 2_000,
+    end_ms: 2_300,
+  });
+  const trace = unboxTraceFromLines([...ASK_FRAGMENTS, DELEGATED, late]);
+  const [beforeDelegation, exchange] = generations(trace);
+  assert.deepEqual(rolesAndContent(beforeDelegation), [
+    ["user", "What is the checkout agent doing?"],
+  ]);
+  assert.equal(exchange?.name, "dlg_1");
+  assert.deepEqual(rolesAndContent(exchange), [
+    ["user", "What is the checkout agent doing? Right now."],
+  ]);
+});
+
 test("a trace cut before the close still shows what was said, and an empty segment draws nothing", () => {
   const trace = unboxTraceFromLines([STARTED, DELEGATED, DELEGATED]);
   assert.deepEqual(generations(trace), []);
