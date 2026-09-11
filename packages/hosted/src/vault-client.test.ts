@@ -1,117 +1,122 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
-import { test } from "vitest";
+import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { HostedVaultClient } from "./vault-client.js";
 
 const LIST_ANSWER = {
   keys: [{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: 1_800_000_000_000 }],
 };
 
-interface RecordedRequest {
-  url: string;
-  init: RequestInit;
-}
-
-function service(answers: Array<() => Response>) {
-  const requests: RecordedRequest[] = [];
-  let call = 0;
-  const fetchLike = async (url: string, init: RequestInit): Promise<Response> => {
-    requests.push({ url, init });
-    const answer = answers[Math.min(call, answers.length - 1)];
-    call += 1;
-    if (!answer) throw new Error("no scripted answer");
-    return answer();
-  };
-  return { requests, fetchLike };
-}
-
-function client(options: Partial<ConstructorParameters<typeof HostedVaultClient>[0]> = {}) {
+function client(
+  fetch: ReturnType<typeof fakeCloudApi>["fetch"],
+  options: Partial<ConstructorParameters<typeof HostedVaultClient>[0]> = {},
+) {
   return new HostedVaultClient({
     serviceBaseUrl: "https://tryluke.dev",
     readAccessToken: async () => "token-1",
     refreshAccount: async () => undefined,
+    fetch,
     ...options,
   });
 }
 
-test("stores a key as a bearer-authenticated POST and reads the confirmation", async () => {
-  const { requests, fetchLike } = service([
-    () => new Response(JSON.stringify({ stored: true }), { status: 200 }),
-  ]);
+it.effect("stores a key as a bearer-authenticated POST and reads the confirmation", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({ "POST /api/vault/key": { answer: () => ({ stored: true }) } });
 
-  const answer = await client({ fetch: fetchLike }).storeKey(
-    CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-    "key_1234abcd",
-  );
-  assert.deepEqual(answer, { stored: true });
+    const answer = yield* Effect.promise(() =>
+      client(api.fetch).storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234abcd"),
+    );
 
-  const [request] = requests;
-  assert.equal(request?.url, "https://tryluke.dev/api/vault/key");
-  assert.equal(request?.init.method, "POST");
-  const headers = new Headers(request?.init.headers);
-  assert.equal(headers.get("authorization"), "Bearer token-1");
-  assert.equal(headers.get("content-type"), "application/json");
-  assert.deepEqual(JSON.parse(String(request?.init.body)), {
-    providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-    key: "key_1234abcd",
-  });
-});
+    assert.deepEqual(answer, { stored: true });
+    assert.deepEqual(recordedRoutes(api.requests()), ["POST /api/vault/key"]);
+    assert.deepEqual(api.credentials(), ["token-1"]);
+    const [request] = api.requests();
+    assert.equal(request?.contentType, "application/json");
+    assert.deepEqual(JSON.parse(request?.body ?? "{}"), {
+      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+      key: "key_1234abcd",
+    });
+  }),
+);
 
-test("a key the service would refuse by shape never travels", async () => {
-  const { requests, fetchLike } = service([]);
-  const vault = client({ fetch: fetchLike });
+it.effect("a key the service would refuse by shape never travels", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({});
+    const vault = client(api.fetch);
 
-  assert.equal(await vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, ""), undefined);
-  assert.equal(
-    await vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key with spaces"),
-    undefined,
-  );
-  assert.equal(await vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "k".repeat(513)), undefined);
-  assert.equal(requests.length, 0);
-});
+    assert.equal(
+      yield* Effect.promise(() => vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "")),
+      undefined,
+    );
+    assert.equal(
+      yield* Effect.promise(() =>
+        vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key with spaces"),
+      ),
+      undefined,
+    );
+    assert.equal(
+      yield* Effect.promise(() =>
+        vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "k".repeat(513)),
+      ),
+      undefined,
+    );
+    assert.deepEqual(api.requests(), []);
+  }),
+);
 
-test("lists stored entries without a body and validates the answer", async () => {
-  const { requests, fetchLike } = service([
-    () => new Response(JSON.stringify(LIST_ANSWER), { status: 200 }),
-  ]);
+it.effect("lists stored entries without a body and validates the answer", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({ "GET /api/vault/keys": { answer: () => LIST_ANSWER } });
 
-  const keys = await client({ fetch: fetchLike }).listKeys();
-  assert.deepEqual(keys, LIST_ANSWER.keys);
+    const keys = yield* Effect.promise(() => client(api.fetch).listKeys());
 
-  const [request] = requests;
-  assert.equal(request?.url, "https://tryluke.dev/api/vault/keys");
-  assert.equal(request?.init.method, "GET");
-  assert.equal(request?.init.body, undefined);
-  assert.equal(new Headers(request?.init.headers).get("content-type"), null);
-});
+    assert.deepEqual(keys, LIST_ANSWER.keys);
+    assert.deepEqual(recordedRoutes(api.requests()), ["GET /api/vault/keys"]);
+    const [request] = api.requests();
+    assert.equal(request?.body, undefined);
+    assert.equal(request?.contentType, undefined);
+  }),
+);
 
-test("deletes one provider's key and reads whether one was removed", async () => {
-  const { requests, fetchLike } = service([
-    () => new Response(JSON.stringify({ deleted: true }), { status: 200 }),
-  ]);
+it.effect("deletes one provider's key and reads whether one was removed", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({ "DELETE /api/vault/key": { answer: () => ({ deleted: true }) } });
 
-  const answer = await client({ fetch: fetchLike }).deleteKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR);
-  assert.deepEqual(answer, { deleted: true });
+    const answer = yield* Effect.promise(() =>
+      client(api.fetch).deleteKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR),
+    );
 
-  const [request] = requests;
-  assert.equal(request?.url, "https://tryluke.dev/api/vault/key");
-  assert.equal(request?.init.method, "DELETE");
-  assert.deepEqual(JSON.parse(String(request?.init.body)), {
-    providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-  });
-});
+    assert.deepEqual(answer, { deleted: true });
+    assert.deepEqual(recordedRoutes(api.requests()), ["DELETE /api/vault/key"]);
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+    });
+  }),
+);
 
-test("a refusal and an answer the vault contract does not admit both read as no answer", async () => {
-  const refused = client({
-    fetch: async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
-  });
-  assert.equal(await refused.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234"), undefined);
+it.effect("a refusal and an answer the vault contract does not admit both read as no answer", () =>
+  Effect.gen(function* () {
+    const refused = fakeCloudApi({
+      "POST /api/vault/key": {
+        answer: () => ({ error: "unavailable" }),
+        status: HTTP_STATUS.SERVER_ERROR,
+      },
+    });
+    assert.equal(
+      yield* Effect.promise(() =>
+        client(refused.fetch).storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234"),
+      ),
+      undefined,
+    );
 
-  const malformed = client({
-    fetch: async () =>
-      new Response(JSON.stringify({ keys: [{ providerId: "openai", updatedAt: 1 }] }), {
-        status: 200,
-      }),
-  });
-  assert.equal(await malformed.listKeys(), undefined);
-});
+    const malformed = fakeCloudApi({
+      "GET /api/vault/keys": {
+        answer: () => ({ keys: [{ providerId: "openai", updatedAt: 1 }] }),
+      },
+    });
+    assert.equal(yield* Effect.promise(() => client(malformed.fetch).listKeys()), undefined);
+  }),
+);
