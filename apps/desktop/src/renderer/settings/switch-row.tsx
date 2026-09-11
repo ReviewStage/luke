@@ -18,7 +18,7 @@ export function SwitchRow({
   onChange,
 }: {
   label: string;
-  detail?: string;
+  detail?: string | undefined;
   checked: boolean;
   /** When the visible name is too short to stand as the control's own name. */
   ariaLabel?: string;

@@ -357,7 +357,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
 
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
-      const result = await act(ACT_KIND.CREDENTIAL_SET_API_KEY, { providerId, apiKey: undefined });
+      const result = await act(ACT_KIND.CREDENTIAL_SET_API_KEY, { providerId });
       // Delete and the field are on the row together once the panel has been
       // brought back around an entry, and a key that has been removed cannot be
       // replaced.

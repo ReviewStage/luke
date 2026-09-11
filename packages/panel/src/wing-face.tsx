@@ -11,7 +11,7 @@ void React;
  * why it costs neither an entry in the artwork table nor a paused animation.
  */
 interface WingFaceProps {
-  motion?: FaceMotion;
+  motion?: FaceMotion | undefined;
   /** Set for the motions that say something for as long as it stays true. */
   repeat?: boolean;
 }

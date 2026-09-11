@@ -29,7 +29,7 @@ export function SelectRow<Value extends string | number>({
   onChange,
 }: {
   label: string;
-  detail?: string;
+  detail?: string | undefined;
   value: Value;
   options: readonly { value: Value; label: string }[];
   parse: (raw: string) => Value | undefined;

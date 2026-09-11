@@ -8,9 +8,9 @@ void React;
 export interface SessionRowProps {
   providerId: string;
   cloud?: boolean;
-  realtimeVoice?: boolean;
+  realtimeVoice?: boolean | undefined;
   markName?: string;
-  model?: string;
+  model?: string | undefined;
   title: React.ReactNode;
   detail: React.ReactNode;
   detailTitle?: string;
@@ -18,7 +18,7 @@ export interface SessionRowProps {
   working?: boolean;
   complete?: boolean;
   place?: React.ReactNode;
-  placeTitle?: string;
+  placeTitle?: string | undefined;
   branch?: boolean;
   diff?: React.ReactNode;
   when: React.ReactNode;

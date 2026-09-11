@@ -46,7 +46,7 @@ export function Waveform({
   level?: number;
   speaking?: boolean;
   /** Whose turn the bars are drawing, which is what colours them. */
-  voice?: WaveformVoice;
+  voice?: WaveformVoice | undefined;
   voiceActive?: boolean;
   /** The measured voice's edges, reported only where an analyser is measured. */
   onVoiceActivity?: (active: boolean) => void;

@@ -338,7 +338,7 @@ interface PlayingGesture {
 /** What the face is doing, and what the drawing needs to know to do it. */
 export interface FacePlay {
   /** Absent while the face is still, which is most of the time. */
-  motion?: FaceMotion;
+  motion?: FaceMotion | undefined;
   /** Set while the motion is a rest, which is the only kind that repeats. */
   repeat: boolean;
   /** Which play this is, so that asking twice for one motion plays it twice. */

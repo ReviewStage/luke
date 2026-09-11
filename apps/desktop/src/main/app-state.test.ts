@@ -119,7 +119,7 @@ test("a touch re-announces the document without numbering it again", () => {
 
 test("a slice is replaced whole rather than merged field by field", () => {
   const app = store();
-  app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED, outputAudio: undefined } });
+  app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
   app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.DENIED } });
   assert.deepEqual(app.snapshot().audio, { microphoneStatus: MICROPHONE_STATUS.DENIED });
 });

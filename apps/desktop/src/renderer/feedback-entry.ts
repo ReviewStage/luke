@@ -32,7 +32,7 @@ export interface FeedbackEntry {
    */
   fromPanel: boolean;
   /** Why the last attempt was refused, if it was. */
-  rejection?: string;
+  rejection?: string | undefined;
 }
 
 /**
@@ -42,7 +42,7 @@ export interface FeedbackEntry {
  * and the entry must not go with it.
  */
 export interface FeedbackEntryControl {
-  entry?: FeedbackEntry;
+  entry?: FeedbackEntry | undefined;
   /** The line drawn after a send lands, in place of the composer it ended. */
   notice?: string;
   /** Opens the composer for a kind, or brings back the one already open. */
@@ -109,7 +109,7 @@ export interface FeedbackOpenAsk {
   kind: FeedbackKind;
   fromPanel: boolean;
   draft?: string;
-  signature?: FeedbackSignature;
+  signature?: FeedbackSignature | undefined;
 }
 
 /**

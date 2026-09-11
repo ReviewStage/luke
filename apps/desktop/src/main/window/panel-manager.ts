@@ -11,6 +11,7 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   app,
   BrowserWindow,
+  type BrowserWindowConstructorOptions,
   type Display,
   screen,
   systemPreferences,
@@ -590,7 +591,7 @@ export class PanelManager {
     this.#modes.set(displayId, this.initialMode);
     const layout = this.#layoutFor(display, this.initialMode);
 
-    const window = new BrowserWindow({
+    const windowOptions: BrowserWindowConstructorOptions = {
       x: layout.x,
       y: layout.y,
       width: layout.width,
@@ -611,12 +612,13 @@ export class PanelManager {
       alwaysOnTop: true,
       focusable: this.initialMode === "expanded" && this.#runMode.takesFocus,
       acceptFirstMouse: true,
-      type: process.platform === "darwin" ? "panel" : undefined,
       webPreferences: hardenedWebPreferences({
         preloadPath: this.#preloadPath,
         runMode: this.#runMode,
       }),
-    });
+    };
+    if (process.platform === "darwin") windowOptions.type = "panel";
+    const window = new BrowserWindow(windowOptions);
     this.#windows.set(displayId, window);
 
     this.#configure(window);
