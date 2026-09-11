@@ -61,23 +61,41 @@ depends on this package rather than being imported by it.
 `account-call.ts` is the request every caller to Luke's own service makes,
 here rather than beside any one of them because this is the lowest package
 they all reach. It owns what each of them used to restate: the base address
-trimmed once, the bearer header written once, the deadline joined with the
-caller's own cancellation, a fetch that threw read as a fault by the error's
-kind alone, and the one reading of a 401 — renew the credential, retry
-exactly once, only on a credential that changed, and only while it still
-answers for the same holder. It answers rather than throws, including when
-the credential itself could not be read: a caller that took work off a queue
-to send it has to be able to put it back. It holds no credential itself: a
-`CallCredential` is handed in (`accountBearer` for the signed-in account,
-`fixedBearer` for a key, `NO_CREDENTIAL` for an endpoint that takes no
-identity at all), so who may renew a credential and who may say which account
-it answers for stay their owners' to know. What a caller keeps is its own
-vocabulary and its own reading of a status: `ask` for a caller that wants a
-validated body or nothing, `send` for one that reads the status itself.
-Every caller in this package now makes that call, `device-client.ts`
-included, and so do the two hosted endpoints that reach a third party on a
-key the deployment fixed: a `fixedBearer` for OpenAI, and `NO_CREDENTIAL` for
-the analytics batch, whose project token travels in the document itself.
+trimmed once, the bearer header written once, the request carried by the
+ambient `HttpClient` under the call's own deadline, a client that could not
+carry it read as a fault by the error's kind alone, and the one reading of a
+401 — renew the credential, retry exactly once, only on a credential that
+changed, and only while it still answers for the same holder. Nothing else is
+retried: a rate limit, a server error, and a refusal are each the caller's to
+read, and no backoff stands behind any of them. It answers rather than fails,
+including when the credential itself could not be read: a caller that took
+work off a queue to send it has to be able to put it back. It holds no
+credential itself: a `CallCredential` is handed in (`accountBearer` for the
+signed-in account, `fixedBearer` for a key, `NO_CREDENTIAL` for an endpoint
+that takes no identity at all), so who may renew a credential and who may say
+which account it answers for stay their owners' to know. What a caller keeps
+is its own vocabulary and its own reading of a status: `ask` for a caller that
+wants a body the answer's own Effect schema admitted or nothing, `read` for
+one that still holds a `Schema<Value>` facade and hands its own reader over,
+and `send` for one that reads the status itself. Every caller in this package
+now makes that call, `device-client.ts` included, and so do the two hosted
+endpoints that reach a third party on a key the deployment fixed: a
+`fixedBearer` for OpenAI, and `NO_CREDENTIAL` for the analytics batch, whose
+project token travels in the document itself.
+
+`accountCall` is that call as effects over `@effect/platform`'s `HttpClient`
+tag, so what carries a request is a layer a caller provides and a test hands
+the same fake behind (`fakeCloudApi`'s own `layer`, or
+`layerFromCloudFetch` over a recorder for a route whose status moves between
+attempts). The deadline is the runtime's own timeout rather than an
+`AbortSignal.timeout`, and it ends a request under the name that signal's
+reason carried, so a caller reporting an end reports the word it always did.
+`createAccountCall` is the promise face the migration keeps: it provides
+`layerFromCloudFetch` over the caller's own `fetch`, runs the effect, and is
+the one place a caller's `AbortSignal` is read at all — it joins the signal to
+the run, and the interruption it raises is the network fault that signal's
+reason names. It is deleted with `CloudFetch` in P12-04, at which point
+`accountCall` is what every client here holds.
 
 ## The live contract is a socket's opening frames
 

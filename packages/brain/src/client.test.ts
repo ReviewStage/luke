@@ -94,14 +94,25 @@ test("a base URL is trimmed once, the credential is one bearer header, and a bod
   assert.equal(read.calls[0]?.contentType, null);
 });
 
-test("the run's own cancellation is joined with the per-request timeout, and neither alone ends the other", async () => {
+test("the run's own cancellation ends the request it was handed to", async () => {
   const cancellation = new AbortController();
-  const { calls, transport } = keyed([() => Response.json({})]);
-  await transport.send("/responses", HTTP_METHOD.POST, "{}", cancellation.signal);
-  const signal = calls[0]?.signal;
-  assert.ok(signal && !signal.aborted);
-  cancellation.abort();
-  assert.equal(signal.aborted, true);
+  const transport = keyedBrainTransport({
+    baseUrl: BASE,
+    apiKey: "sk-test",
+    fetch: () =>
+      new Promise<Response>((_settle, reject) => {
+        cancellation.abort();
+        cancellation.signal.addEventListener("abort", () => reject(cancellation.signal.reason));
+      }),
+    now: () => NOW,
+  });
+
+  const failure = await transport.send("/responses", HTTP_METHOD.POST, "{}", cancellation.signal);
+
+  assert.ok(!(failure instanceof Response));
+  assert.equal(failure.outcome, MODEL_RESPONSE_OUTCOME.FAILED);
+  assert.equal(failure.failure, MODEL_FAILURE.NETWORK);
+  assert.equal(failure.reason, "request did not complete: AbortError");
 });
 
 test("a fetch that throws is a network failure named by the error's kind alone, never by its words", async () => {

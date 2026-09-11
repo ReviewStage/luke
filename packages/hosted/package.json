@@ -12,6 +12,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/platform": "catalog:",
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
@@ -19,6 +20,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

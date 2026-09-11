@@ -1,5 +1,10 @@
 export { eventFromStream, streamFromEvent } from "./event.js";
-export { cloudFetchFromHttpClient, httpClientFromCloudFetch, layerFromCloudFetch } from "./http.js";
+export {
+  cloudFetchFromHttpClient,
+  httpClientFromCloudFetch,
+  layerFromCloudFetch,
+  webResponseFromClientResponse,
+} from "./http.js";
 export {
   declareReader,
   describeWire,
