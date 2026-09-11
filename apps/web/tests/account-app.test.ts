@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { HttpApp } from "@effect/platform";
 import { PROVIDER_ID } from "@sidecar/session";
-import type { WireBoundaryInput } from "@sidecar/wire";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import type { CloudFetch, WireBoundaryInput } from "@sidecar/wire";
+import { Effect, Redacted } from "effect";
+import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core.js";
 import { handleAccountDelete } from "../server/hosted/account-delete.js";
@@ -12,9 +14,8 @@ import {
   handleAccountPreferencesRead,
   handleAccountPreferencesWrite,
 } from "../server/hosted/account-preferences.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
-import { routeFromHttpApp } from "../server/route-effect.js";
-import { disposeWebRuntime } from "../server/runtime.js";
 import {
   type RecordedResponse,
   recordedGoldenNames,
@@ -26,21 +27,28 @@ import {
  * The account group carries the same answers `server/hosted/account-delete.ts`
  * and `server/hosted/account-preferences.ts` always gave, over the group
  * shape in `server/account-app.ts`. Each case answers twice, once through the
- * group and once by calling the promise-shaped handler the way the route
- * called it before the conversion, on a backing store built the same way for
- * both, and the two recordings are compared; the goldens beside them are the
- * bytes themselves, so a later change to the group cannot move them silently.
+ * group — with the deployment's environment handed in rather than read, the
+ * way `tests/support/brain-call.ts` hands it to the brain group — and once by
+ * calling the promise-shaped handler the way the route called it before the
+ * conversion, on a backing store built the same way for both, and the two
+ * recordings are compared; the goldens beside them are the bytes themselves,
+ * so a later change to the group cannot move them silently.
  */
 
 const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/account-route");
-
-/** The layer names a database and nothing here queries one, as in `web-runtime.test.ts`. */
-const PLACEHOLDER_DATABASE_URL = "postgresql://runtime:edge@127.0.0.1:5432/luke";
 
 const ORIGIN = "https://luke.test";
 const NOW = new Date("2026-09-08T12:00:00.000Z");
 const VALID_AUTHORIZATION = "Bearer token-1";
 const USER_ID = "user-1";
+
+const ENVIRONMENT: HostedEnvironmentValues = {
+  openAiKey: undefined,
+  brainModel: undefined,
+  posthogPersonalApiKey: Redacted.make("posthog-personal-key"),
+  posthogProjectId: "posthog-project-1",
+  posthogApiHost: undefined,
+};
 
 interface Backing {
   deleted: string[];
@@ -71,10 +79,20 @@ function deleteUser(state: Backing) {
   };
 }
 
+/** The promise-shaped handler's own analytics seam, unaffected by the group's move onto `HostedEnvironment`. */
 function forgetAnalytics(state: Backing) {
   return async (userId: string) => {
     if (state.forgetAnalyticsFails) throw new Error("processor unreachable");
     state.forgotten.push(userId);
+  };
+}
+
+/** The group's analytics transport: the same success or failure, reached through the injected `fetch` seam instead. */
+function forgetAnalyticsFetch(state: Backing): CloudFetch {
+  return async () => {
+    if (state.forgetAnalyticsFails) throw new Error("processor unreachable");
+    state.forgotten.push(USER_ID);
+    return new Response(null, { status: 200 });
   };
 }
 
@@ -94,10 +112,18 @@ function groupSeams(state: Backing): AccountAppSeams {
   return {
     resolveUserId,
     deleteUser: deleteUser(state),
-    forgetAnalytics: forgetAnalytics(state),
     readPreferences: readPreferences(state),
     writePreferences: writePreferences(state),
+    fetch: forgetAnalyticsFetch(state),
   };
+}
+
+/** The group's answer, with the deployment's environment handed in directly rather than read from `process.env`. */
+function groupAnswer(state: Backing, request: Request): Promise<Response> {
+  const handler = HttpApp.toWebHandler(
+    accountApp(groupSeams(state)).pipe(Effect.provideService(HostedEnvironment, ENVIRONMENT)),
+  );
+  return handler(request);
 }
 
 function deleteRequest(
@@ -145,11 +171,14 @@ const TRANSPORT_HEADER = { CONTENT_LENGTH: "content-length" } as const;
  * `HttpServerResponse.unsafeJson` states a body's length on the response the
  * platform hands back; `jsonResponse`'s plain `Response` leaves the wire
  * transport to state it instead, the way the promise-shaped handlers always
- * relied on Vercel's own runtime to. Both reach the same bytes on the wire,
- * so the byte-identity oracle drops the one header only the in-process object
- * states differently.
+ * relied on Vercel's own runtime to. The value is checked against the body it
+ * frames before it is dropped, so a byte the platform computed wrong would
+ * still fail, and both sides reach the same bytes on the actual wire.
  */
-function withoutTransportHeaders(recorded: RecordedResponse): RecordedResponse {
+async function answered(response: Response): Promise<RecordedResponse> {
+  const recorded = await recordedResponse(response);
+  const framed = recorded.headers.find(([name]) => name === TRANSPORT_HEADER.CONTENT_LENGTH);
+  if (framed) assert.equal(Number(framed[1]), new TextEncoder().encode(recorded.body).byteLength);
   return {
     ...recorded,
     headers: recorded.headers.filter(([name]) => name !== TRANSPORT_HEADER.CONTENT_LENGTH),
@@ -284,28 +313,13 @@ const EXCHANGES: readonly Exchange[] = [
   },
 ];
 
-beforeEach(() => {
-  vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
-});
-
-afterEach(async () => {
-  await disposeWebRuntime();
-  vi.unstubAllEnvs();
-});
-
 test("the group answers what the promise-shaped handler answered, byte for byte", async () => {
   for (const exchange of EXCHANGES) {
     const directState = exchange.state();
-    const direct = withoutTransportHeaders(
-      await recordedResponse(await exchange.direct(directState, exchange.request())),
-    );
+    const direct = await answered(await exchange.direct(directState, exchange.request()));
 
     const groupState = exchange.state();
-    const carried = withoutTransportHeaders(
-      await recordedResponse(
-        await routeFromHttpApp(accountApp(groupSeams(groupState))).fetch(exchange.request()),
-      ),
-    );
+    const carried = await answered(await groupAnswer(groupState, exchange.request()));
 
     assert.deepEqual(carried, direct);
     assert.deepEqual(groupState, directState);
@@ -315,10 +329,8 @@ test("the group answers what the promise-shaped handler answered, byte for byte"
 
 test("a path the group declares no route for is refused without reaching either endpoint", async () => {
   const state = backing();
-  const response = await routeFromHttpApp(accountApp(groupSeams(state))).fetch(
-    new Request(`${ORIGIN}/api/account/not-a-route`),
-  );
-  const carried = await recordedResponse(response);
+  const response = await groupAnswer(state, new Request(`${ORIGIN}/api/account/not-a-route`));
+  const carried = await answered(response);
 
   assert.deepEqual(state, backing());
   assert.equal(carried.status, HOSTED_HTTP_STATUS.NOT_FOUND);

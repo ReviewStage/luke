@@ -237,18 +237,20 @@ Each endpoint resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
 secret ever travels in an answer — and answers only the boolean or the
 snapshot the caller's own account carries. `server/hosted/account-seams.ts` is
-the one place that hands the group a real user table, a real preferences
-store, and a real analytics erasure, so both `api/account/delete.ts` and
-`api/account/preferences.ts` build the same group from the same wiring.
-`server/hosted/account-delete.ts` and `server/hosted/account-preferences.ts`
+the one place that hands the group a real user table and a real preferences
+store, so both `api/account/delete.ts` and `api/account/preferences.ts` build
+the same group from the same wiring; the analytics erasure key and project are
+read from `HostedEnvironment` instead, the way the brain group's own key and
+model override are, and only the deletion's own transport stays an injectable
+seam. `server/hosted/account-delete.ts` and `server/hosted/account-preferences.ts`
 keep the promise-shaped handlers they always answered with, now read only by
 their own tests and as the byte-identity oracle `tests/account-app.test.ts`
-checks the group against. `fixtures/account-route/` records what the group
-answers for a delete, a read, a write, a refused method, an invalid token, an
-invalid body, and a path outside the group, each compared with the
-`content-length` header dropped, since that header is the one byte a plain
-`Response` leaves to the wire transport and `HttpServerResponse.unsafeJson`
-states on the object instead — both reach the same bytes on the wire.
+checks the group against, with the environment handed in directly the way
+`tests/support/brain-call.ts` hands it to the brain group. `fixtures/account-route/`
+records what the group answers for a delete, a read, a write, a refused
+method, an invalid token, an invalid body, and a path outside the group, with
+`content-length` checked against the body it frames and then dropped before
+comparing, the way `tests/brain-app.test.ts` holds it.
 
 ## Signing in on a Preview deployment
 

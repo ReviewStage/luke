@@ -1,12 +1,13 @@
 import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
 import { accountPreferencesFromWire, RETIRED_ACCOUNT_PREFERENCE_FIELD } from "@sidecar/settings";
-import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
-import { Effect } from "effect";
+import { type CloudFetch, isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { Effect, Redacted } from "effect";
 import {
   type AccountPreferencesRow,
   type HostedAccountPreferences,
   phoneVoiceSpeed,
 } from "./hosted/account-preferences.js";
+import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -15,6 +16,7 @@ import {
   hostedMethod,
   hostedRefusalResponse,
 } from "./hosted/http-effect.js";
+import { forgetPosthogPerson } from "./hosted/posthog.js";
 
 /**
  * The account group: the signed-in desktop's own delete and preferences
@@ -42,10 +44,10 @@ export interface AccountAppSeams {
   resolveUserId: (request: Request) => Promise<string | undefined>;
   /** Deletes the user row; every dependent row cascades with it. */
   deleteUser: (userId: string) => Promise<void>;
-  /** Erases the analytics person for this account, where a deployment can. */
-  forgetAnalytics?: ((userId: string) => Promise<void>) | undefined;
   readPreferences: (userId: string) => Promise<AccountPreferencesRow | undefined>;
   writePreferences: (userId: string, preferences: HostedAccountPreferences) => Promise<Date>;
+  /** The analytics processor's own transport, overridden only in tests; the deployment's own `fetch` otherwise. */
+  fetch?: CloudFetch | undefined;
 }
 
 /** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
@@ -62,6 +64,37 @@ function resolvedUserId(
 }
 
 /**
+ * Without both halves of the analytics configuration there is no person to
+ * erase and nothing to erase it with, so the erasure is simply skipped.
+ */
+function forgetAnalytics(
+  seams: AccountAppSeams,
+  userId: string,
+): Effect.Effect<void, never, HostedEnvironment> {
+  return Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    if (!environment.posthogPersonalApiKey || !environment.posthogProjectId) return;
+    const personalApiKey = Redacted.value(environment.posthogPersonalApiKey);
+    const projectId = environment.posthogProjectId;
+    const host = environment.posthogApiHost;
+    yield* Effect.promise(async () => {
+      try {
+        await forgetPosthogPerson(userId, {
+          personalApiKey,
+          projectId,
+          ...(host ? { host } : undefined),
+          ...(seams.fetch ? { fetch: seams.fetch } : undefined),
+        });
+      } catch (error) {
+        process.stderr.write(
+          `Analytics erasure did not complete: ${error instanceof Error ? error.message : "unknown error"}\n`,
+        );
+      }
+    });
+  });
+}
+
+/**
  * POST: erases the signed-in desktop's account. The bearer token is the
  * whole authority, so nothing a caller sends can choose a different account
  * to erase. Where the deployment can, the analytics person is asked to be
@@ -69,22 +102,13 @@ function resolvedUserId(
  * refusal or an outage there must not hold up the delete, so it is logged as
  * a status and the delete proceeds.
  */
-function accountDeleteEndpoint(seams: AccountAppSeams): HttpApp.Default<HostedRefusal> {
+function accountDeleteEndpoint(
+  seams: AccountAppSeams,
+): HttpApp.Default<HostedRefusal, HostedEnvironment> {
   return Effect.gen(function* () {
     yield* hostedMethod(HTTP_METHOD.POST);
     const userId = yield* resolvedUserId(seams);
-    const forgetAnalytics = seams.forgetAnalytics;
-    if (forgetAnalytics) {
-      yield* Effect.promise(async () => {
-        try {
-          await forgetAnalytics(userId);
-        } catch (error) {
-          process.stderr.write(
-            `Analytics erasure did not complete: ${error instanceof Error ? error.message : "unknown error"}\n`,
-          );
-        }
-      });
-    }
+    yield* forgetAnalytics(seams, userId);
     yield* Effect.promise(() => seams.deleteUser(userId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
   });
@@ -159,7 +183,7 @@ function accountPreferencesEndpoint(seams: AccountAppSeams): HttpApp.Default<Hos
  * vocabulary's own refusal for a method the matched path does not answer or a
  * path the group declares no route for.
  */
-export function accountApp(seams: AccountAppSeams): HttpApp.Default {
+export function accountApp(seams: AccountAppSeams): HttpApp.Default<never, HostedEnvironment> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(ACCOUNT_PATH.DELETE, accountDeleteEndpoint(seams)),
     HttpRouter.all(ACCOUNT_PATH.PREFERENCES, accountPreferencesEndpoint(seams)),

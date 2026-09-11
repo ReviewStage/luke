@@ -28,6 +28,9 @@ export function brainAnswer(call: BrainCall): Promise<Response> {
       Effect.provideService(HostedEnvironment, {
         openAiKey: apiKey === undefined ? undefined : Redacted.make(apiKey),
         brainModel: present(call.model),
+        posthogPersonalApiKey: undefined,
+        posthogProjectId: undefined,
+        posthogApiHost: undefined,
       }),
     ),
   );

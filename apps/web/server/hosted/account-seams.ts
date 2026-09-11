@@ -5,15 +5,15 @@ import { isRealtimeVoiceSpeed } from "../core.js";
 import { getDatabase } from "../db/index.js";
 import { accountPreference, accountWorkspacePreference, user } from "../db/schema.js";
 import type { HostedAccountPreferences } from "./account-preferences.js";
-import { forgetPosthogPerson, POSTHOG_ENVIRONMENT, type PosthogForgetOptions } from "./posthog.js";
 import { resolveHostedUserId } from "./vault-route.js";
 
 /**
- * The account group's seams over this deployment's real database and
- * environment. `server/account-app.ts` describes the two endpoints; this is
- * the one place that hands them a real user table, a real preferences store,
- * and a real analytics erasure, so both `api/account/**` functions build the
- * group from the same wiring.
+ * The account group's seams over this deployment's real database. The
+ * analytics erasure key and project are read from `HostedEnvironment`
+ * instead, once with the services rather than at each invocation.
+ * `server/account-app.ts` describes the two endpoints; this is the one place
+ * that hands them a real user table and a real preferences store, so both
+ * `api/account/**` functions build the group from the same wiring.
  */
 
 function rowPreferences(
@@ -115,27 +115,13 @@ function workspacePreferenceRows(
   return [...rows.values()];
 }
 
-/** Without both halves of the analytics configuration there is no person to erase and nothing to erase it with. */
-function forgetAnalyticsSeam(): ((userId: string) => Promise<void>) | undefined {
-  const personalApiKey = process.env[POSTHOG_ENVIRONMENT.PERSONAL_API_KEY];
-  const projectId = process.env[POSTHOG_ENVIRONMENT.PROJECT_ID];
-  if (!personalApiKey || !projectId) return undefined;
-  const host = process.env[POSTHOG_ENVIRONMENT.API_HOST];
-  return (userId: string) => {
-    const forget: PosthogForgetOptions = { personalApiKey, projectId };
-    if (host) forget.host = host;
-    return forgetPosthogPerson(userId, forget);
-  };
-}
-
-/** This deployment's account group, over its real database, environment, and auth session. */
+/** This deployment's account group, over its real database and auth session. The analytics erasure key and project are read from `HostedEnvironment`, not here. */
 export function accountAppSeams(): AccountAppSeams {
   return {
     resolveUserId: resolveHostedUserId,
     deleteUser: async (userId) => {
       await getDatabase().delete(user).where(eq(user.id, userId));
     },
-    forgetAnalytics: forgetAnalyticsSeam(),
     readPreferences: async (userId) => {
       const database = getDatabase();
       return database.transaction(async (transaction) => {
