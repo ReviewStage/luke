@@ -1801,3 +1801,38 @@ that drift in a single edit.
 **C3's lane, complete pending one ruling:** three PRs, twelve changed or added tests in (c) alone,
 eleven mutations each failing a named test, every open question closed. Order when the ruling lands:
 (a), then (b) retargeted, then (c).
+
+
+## 2026-09-11 — The migration-namespace rule proved itself inside the hour, and #1081 moved the ground under three PRs (orchestrator)
+
+**The rule earned its place, and I am the one it caught.** At ~10:00 I told C4 that `0021` was free,
+verified against main and every open PR. **At ~10:29 G4 merged `dc9ff94d` carrying
+`0021_g4_drop_v1_conversation_tables.sql`.** C4's prebuilt B+ commit carries
+`0021_c4_prompts_sealed_per_user`. Two files, one number, and the second to merge is a broken deploy
+rather than a merge conflict.
+
+**C4 takes `0022`, and is told to re-verify rather than trust the message** — the same instruction
+the rule already carried, now with a worked example: *"I was right about 0021 when I said it and
+wrong within the hour, which is the whole reason that rule exists."* **A verified fact about a shared
+namespace has a shelf life measured in merges, not minutes.**
+
+**And #1081 landed on main: the storage migrations now run on an Effect migrator, with Drizzle's
+history adopted.** It changed `server/db/migrate.ts`, added `server/db/effect-migrator.ts`, and
+touched `tests/storage-schema.test.ts` and `tests/support/hosted-store-database.ts`.
+
+**That reaches three of this rework's PRs, none of which caused it:**
+
+- **C4 (#1045)** — its migration runs under a changed runner, its store tests sit on a moved
+  harness, and **G4's schema-equality assertion lives in a file #1081 also edited.**
+- **C3 (#1070, #1079)** — its PGlite and Postgres store tests use that harness.
+- **C2b-2b (held)** — the same, plus its `hosted-standing-main.test.ts` addition to the `test:store`
+  list.
+
+All three told, with the instruction to read those four files on main rather than assume a prepared
+rebase still applies. **None of it changes what they are waiting for, and all of it is cheaper found
+now than at the moment a ruling lands and three PRs rebase at once.**
+
+The wider point, since this is the second cross-workstream collision this morning after the
+`vercel.json` route shape: **a lane that is "finished and waiting" is not static.** Its
+correctness is relative to a main that moves — sixty-plus commits today — and keeping prepared work
+true is orchestration rather than bookkeeping.
