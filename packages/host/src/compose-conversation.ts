@@ -1,14 +1,22 @@
+import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import { catalogToolSet } from "@sidecar/brain/tool-set";
 import {
+  CONVERSATION_RATE_STATUS,
+  type ConversationRateMessageResult,
+  type ConversationRateStatus,
   carried,
+  conversationRateMessageParamsSchema,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   gatewayOk,
+  invalid,
 } from "@sidecar/gateway";
 import {
+  CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
   type ConversationMessagesAnswer,
+  type ConversationRateRefusal,
   type ConversationReadResult,
   type HostedChangesClient,
   type HostedConversationClient,
@@ -20,8 +28,10 @@ import type {
   UnreadableRow,
 } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
+import { unparsedWire } from "@sidecar/wire";
 import type { AccountComposer } from "./compose-account.js";
 import type { DevicesComposer } from "./compose-devices.js";
+import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import {
   ConversationViewSync,
@@ -56,10 +66,10 @@ export interface ConversationComposer extends Composer {
   reset: () => void;
 }
 
-/** The service's side of the reads and Clear, as the composer asks it: the client's calls and nothing of its construction. */
+/** The service's side of the reads, Clear, and the rating write, as the composer asks it: the client's calls and nothing of its construction. */
 export type ConversationReadsClient = Pick<
   HostedConversationClient,
-  "messages" | "events" | "turns" | "clear"
+  "messages" | "events" | "turns" | "clear" | "rate"
 >;
 
 /** The change signal's one call, the same client the devices composer restates presence through. */
@@ -67,10 +77,22 @@ export type ConversationHeadsClient = Pick<HostedChangesClient, "poll">;
 
 export interface ConversationDependencies {
   kernel: Pick<HostKernel, "report" | "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  settings: Pick<SettingsComposer, "recordProductEvent">;
   account: Pick<AccountComposer, "capabilitiesActive">;
   devices: Pick<DevicesComposer, "deviceId">;
   heads: ConversationHeadsClient;
   client: ConversationReadsClient;
+}
+
+/** How the service's refusal of a rating reaches the control, one answer per refusal so none is read as another. */
+const RATE_REFUSAL_STATUS = {
+  [CONVERSATION_RATE_REFUSAL.UNANSWERED]: CONVERSATION_RATE_STATUS.UNAVAILABLE,
+  [CONVERSATION_RATE_REFUSAL.NOT_FOUND]: CONVERSATION_RATE_STATUS.NOT_FOUND,
+  [CONVERSATION_RATE_REFUSAL.NOT_RATEABLE]: CONVERSATION_RATE_STATUS.NOT_RATEABLE,
+} as const satisfies Record<ConversationRateRefusal, ConversationRateStatus>;
+
+function rateAnswer(status: ConversationRateStatus) {
+  return gatewayOk(carried<ConversationRateMessageResult>({ status }));
 }
 
 /**
@@ -91,9 +113,19 @@ export interface ConversationDependencies {
  * registry the service read the rows back under — and the one refusal a read
  * answers with a body, an unreadable row, is surfaced on the snapshot and
  * never drawn as an empty page.
+ *
+ * The other write the tab has is the developer's thumb on one of Luke's
+ * messages. It is carried to the service as a rating event on that message,
+ * only for a message this device holds and Luke authored — the set the
+ * service accepts, so a refusal is a row the thread has moved past rather
+ * than a control that should not have been drawn — and the answered event is
+ * taken into the picture at once, so the verdict shows before the next poll
+ * reads it back. The count that follows names the verdict and whether the
+ * message was a briefing or a reply, read from the held message rather than
+ * from the caller, and never the message or its id.
  */
 export function composeConversation(dependencies: ConversationDependencies): ConversationComposer {
-  const { kernel, account, devices, heads, client } = dependencies;
+  const { kernel, settings, account, devices, heads, client } = dependencies;
   const { runMode, report } = kernel;
 
   const registry = catalogToolSet();
@@ -151,6 +183,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
           seq: message.seq,
           createdAt: message.createdAt,
           tools: message.tools,
+          ...(message.rating !== undefined ? { rating: message.rating } : undefined),
         };
       });
       groups.push({
@@ -218,7 +251,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       (after) => client.events({ after }),
       () => sync.cursors().events,
       async (answer) => {
-        sync.applyEvents(answer.events, answer.next);
+        sync.applyEvents(answer.events, answer.next, answer.hasMore);
         return true;
       },
     );
@@ -300,6 +333,29 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       publish();
       await pollAfter();
       return gatewayOk({ cleared: true });
+    },
+    [GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE]: async (params) => {
+      const read = conversationRateMessageParamsSchema.read(unparsedWire(params));
+      if (!read.ok) return invalid("a rating names one message and one verdict");
+      const { messageId, rating } = read.value;
+      // A rating names the device it came from, so before this installation's
+      // row is registered there is nothing to send one as.
+      const deviceId = devices.deviceId();
+      if (!gate() || deviceId === undefined)
+        return rateAnswer(CONVERSATION_RATE_STATUS.UNAVAILABLE);
+      const target = sync.rateable(messageId);
+      if (target === undefined) return rateAnswer(CONVERSATION_RATE_STATUS.NOT_FOUND);
+      const written = await client.rate(messageId, { rating, deviceId });
+      if (!written.ok) return rateAnswer(RATE_REFUSAL_STATUS[written.refusal]);
+      sync.recordRating(messageId, written.answer.seq, { rating });
+      publish();
+      settings.recordProductEvent(PRODUCT_EVENT.CONVERSATION_RATED, {
+        rating,
+        message_kind: target.announcement
+          ? PRODUCT_RATED_MESSAGE_KIND.ANNOUNCEMENT
+          : PRODUCT_RATED_MESSAGE_KIND.REPLY,
+      });
+      return rateAnswer(CONVERSATION_RATE_STATUS.RATED);
     },
   };
 

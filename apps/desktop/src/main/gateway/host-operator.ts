@@ -6,7 +6,10 @@ import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snap
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import {
+  CONVERSATION_RATE_STATUS,
+  type ConversationRateMessageResult,
   carried,
+  conversationRateMessageResultSchema,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   gatewayEventReader,
@@ -44,6 +47,7 @@ import {
   isRecord,
   isWireBoolean,
   isWireString,
+  type MessageRating,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
@@ -168,6 +172,11 @@ export interface HostOperator {
   appendConversation(entries: readonly ConversationEntry[], reporter: string): Promise<boolean>;
   /** The Conversation tab's Clear: the service's soft delete of the account's main conversation, answered as whether it landed. */
   clearConversation(): Promise<boolean>;
+  /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
+  rateConversationMessage(
+    messageId: string,
+    rating: MessageRating,
+  ): Promise<ConversationRateMessageResult>;
   onboardingState(): Promise<{ calendarOnboardingOwed: boolean } | undefined>;
   skipCalendarOnboarding(): Promise<void>;
   completeCalendarOnboarding(): Promise<void>;
@@ -442,6 +451,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     clearConversation: async () => {
       const answer = record(await client.call(GATEWAY_METHOD.CONVERSATION_CLEAR));
       return answer?.cleared === true;
+    },
+    rateConversationMessage: async (messageId, rating) => {
+      const answer = await client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, {
+        messageId,
+        rating,
+      });
+      return (
+        (answer.ok ? conversationRateMessageResultSchema.parse(answer.result) : undefined) ?? {
+          status: CONVERSATION_RATE_STATUS.UNAVAILABLE,
+        }
+      );
     },
     onboardingState: async () => {
       const answer = record(await client.call(GATEWAY_METHOD.ONBOARDING_STATE));

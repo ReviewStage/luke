@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import {
+  CONVERSATION_RATE_STATUS,
+  carried,
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
@@ -10,10 +13,13 @@ import {
   type BrainTurnsAnswer,
   type ChangesAnswer,
   type ChangesRequest,
+  CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
   type ConversationEventsAnswer,
   type ConversationMessagesAnswer,
+  type ConversationRateResult,
   type ConversationReadResult,
+  type HostedMessageRatingRequest,
   type ReadPageQuery,
 } from "@sidecar/hosted";
 import { CONVERSATION_VIEW_SOURCE, type ConversationViewSnapshot } from "@sidecar/session";
@@ -21,6 +27,7 @@ import {
   isRecord,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
+  MESSAGE_RATING,
   MESSAGE_ROLE,
   TURN_ORIGIN,
   TURN_STATUS,
@@ -36,6 +43,9 @@ import {
 const MAIN = "3c000000-0000-4000-8000-000000000001";
 const TURN = "1a000000-0000-4000-8000-000000000001";
 const DEVICE = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+const ASK = "2b000000-0000-4000-8000-000000000001";
+const REPLY = "2b000000-0000-4000-8000-000000000002";
+const RATING_EVENT = "4d000000-0000-4000-8000-000000000001";
 const NOW = 1_757_505_600_000;
 
 const EMPTY_EVENTS: ConversationEventsAnswer = { events: [], next: "events-head", hasMore: false };
@@ -53,7 +63,7 @@ function messagesAnswer(text: string, next = "messages-head"): ConversationMessa
         messages: [
           {
             message: {
-              id: "2b000000-0000-4000-8000-000000000001",
+              id: ASK,
               role: MESSAGE_ROLE.USER,
               metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
               parts: [{ type: "text", text }],
@@ -61,6 +71,18 @@ function messagesAnswer(text: string, next = "messages-head"): ConversationMessa
             seq: 1,
             createdAt: NOW,
             tools: [],
+          },
+          {
+            message: {
+              id: REPLY,
+              role: MESSAGE_ROLE.ASSISTANT,
+              metadata: { author: MESSAGE_AUTHOR.BRAIN },
+              parts: [{ type: "text", text: "Hello back.", state: "done" }],
+            },
+            seq: 2,
+            createdAt: NOW,
+            tools: [],
+            rating: { rating: MESSAGE_RATING.UP },
           },
         ],
       },
@@ -81,6 +103,9 @@ interface FakeClient extends ConversationReadsClient, ConversationHeadsClient {
   /** A gate a messages read waits at before answering, so a test can hold a poll open. */
   messagesGate: Promise<void>;
   clearAnswer: { opened: string; openedAt: number; cleared: number } | undefined;
+  rateAnswer: ConversationRateResult;
+  /** Every rating request as it left, so a test can read what traveled. */
+  readonly rated: { messageId: string; request: HostedMessageRatingRequest }[];
 }
 
 function fakeClient(): FakeClient {
@@ -90,6 +115,13 @@ function fakeClient(): FakeClient {
     messagesAnswer: ok(messagesAnswer("hello")),
     messagesGate: Promise.resolve(),
     clearAnswer: { opened: "3c000000-0000-4000-8000-000000000009", openedAt: NOW + 1, cleared: 1 },
+    rateAnswer: { ok: true, answer: { id: RATING_EVENT, seq: 4 } },
+    rated: [],
+    rate: async (messageId, request) => {
+      client.calls.push(`rate:${messageId}`);
+      client.rated.push({ messageId, request });
+      return client.rateAnswer;
+    },
     poll: async (request: ChangesRequest) => {
       client.calls.push(`changes:${request.deviceId}`);
       return client.changesAnswer;
@@ -120,11 +152,17 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
   const emitted: { kind: GatewayEventKind; payload: WireValue }[] = [];
   const reports: string[] = [];
   const client = fakeClient();
+  const counted: { name: string; properties: WireValue }[] = [];
   const composer = composeConversation({
     kernel: {
       runMode: { sendsNetwork: options.sendsNetwork ?? true },
       report: (message) => reports.push(message),
       emit: (kind, payload) => emitted.push({ kind, payload }),
+    },
+    settings: {
+      recordProductEvent: (name, properties) => {
+        counted.push({ name, properties: carried(properties) });
+      },
     },
     account: { capabilitiesActive: () => options.active ?? true },
     devices: { deviceId: () => options.deviceId },
@@ -139,7 +177,7 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
         // SAFETY: the composer carries its own snapshot; the test reads it back as the domain type.
         return event.payload as unknown as ConversationViewSnapshot;
       });
-  return { composer, client, emitted, reports, views };
+  return { composer, client, emitted, reports, views, counted };
 }
 
 async function clear(composer: ReturnType<typeof composeConversation>) {
@@ -248,7 +286,7 @@ test("a page this build's registry refuses is named on the snapshot like a row t
                 },
               ],
             },
-            seq: 2,
+            seq: 3,
             createdAt: NOW + 1,
             tools: [],
           },
@@ -259,8 +297,8 @@ test("a page this build's registry refuses is named on the snapshot like a row t
   };
   client.messagesAnswer = ok(refused);
   await composer.loop.refresh();
-  assert.deepEqual(composer.snapshot().unreadable, { conversationId: MAIN, seq: 2 });
-  assert.deepEqual(views().at(-1)?.unreadable, { conversationId: MAIN, seq: 2 });
+  assert.deepEqual(composer.snapshot().unreadable, { conversationId: MAIN, seq: 3 });
+  assert.deepEqual(views().at(-1)?.unreadable, { conversationId: MAIN, seq: 3 });
   // One read, not a walk: the cursor did not pass the row and no page after it was asked for.
   assert.deepEqual(client.calls, ["messages:", "events:", "turns:"]);
   assert.equal(reports.length, 1);
@@ -393,4 +431,140 @@ test("a reset drops everything held and tells every client the thread is gone", 
   composer.reset();
   assert.equal(views().length, 2);
   assert.deepEqual(views().at(-1), { groups: [], settled: false });
+});
+
+async function rate(
+  composer: ReturnType<typeof composeConversation>,
+  params: WireValue,
+): Promise<WireValue | undefined> {
+  const handler = composer.methods[GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE];
+  assert.ok(handler);
+  const outcome = await handler(
+    // SAFETY: the test hands the handler the params a client would; the handler's own schema is the boundary.
+    params as Parameters<typeof handler>[0],
+    {
+      client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+      request: {
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        id: "rate-1",
+        method: GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE,
+        params: {},
+        idempotencyKey: "rate-1",
+      },
+    },
+  );
+  assert.ok(outcome.ok);
+  return outcome.result;
+}
+
+test("the rating a read carries on a message reaches the picture", async () => {
+  const { composer } = harness();
+  await composer.loop.refresh();
+  const [group] = composer.snapshot().groups;
+  assert.deepEqual(
+    group?.messages.map((message) => message.rating),
+    [undefined, { rating: MESSAGE_RATING.UP }],
+  );
+});
+
+test("a rating on one of Luke's messages travels to the service with this device's id, shows at once, and is counted by verdict and kind alone", async () => {
+  const { composer, client, views, counted } = harness({ deviceId: DEVICE });
+  client.changesAnswer = { seen: true, messages: "messages-head", events: "events-head" };
+  await composer.loop.refresh();
+  const published = views().length;
+  const answer = await rate(composer, { messageId: REPLY, rating: MESSAGE_RATING.DOWN });
+  assert.deepEqual(answer, { status: CONVERSATION_RATE_STATUS.RATED });
+  assert.deepEqual(client.rated, [
+    { messageId: REPLY, request: { rating: MESSAGE_RATING.DOWN, deviceId: DEVICE } },
+  ]);
+  // The verdict shows from the answer, before any poll reads it back.
+  assert.equal(views().length, published + 1);
+  const [group] = composer.snapshot().groups;
+  assert.deepEqual(group?.messages[1]?.rating, { rating: MESSAGE_RATING.DOWN });
+  assert.deepEqual(counted, [
+    {
+      name: PRODUCT_EVENT.CONVERSATION_RATED,
+      properties: {
+        rating: MESSAGE_RATING.DOWN,
+        message_kind: PRODUCT_RATED_MESSAGE_KIND.REPLY,
+      },
+    },
+  ]);
+});
+
+test("a rating is refused before it travels where the device has no row, the gate is closed, or the message is not one of Luke's this device holds", async () => {
+  const noDevice = harness();
+  await noDevice.composer.loop.refresh();
+  assert.deepEqual(await rate(noDevice.composer, { messageId: REPLY, rating: MESSAGE_RATING.UP }), {
+    status: CONVERSATION_RATE_STATUS.UNAVAILABLE,
+  });
+
+  const closed = harness({ deviceId: DEVICE, active: false });
+  assert.deepEqual(await rate(closed.composer, { messageId: REPLY, rating: MESSAGE_RATING.UP }), {
+    status: CONVERSATION_RATE_STATUS.UNAVAILABLE,
+  });
+
+  const held = harness({ deviceId: DEVICE });
+  await held.composer.loop.refresh();
+  // The developer's own ask, and a message this device never read.
+  assert.deepEqual(await rate(held.composer, { messageId: ASK, rating: MESSAGE_RATING.UP }), {
+    status: CONVERSATION_RATE_STATUS.NOT_FOUND,
+  });
+  assert.deepEqual(
+    await rate(held.composer, {
+      messageId: "2b000000-0000-4000-8000-000000000099",
+      rating: MESSAGE_RATING.UP,
+    }),
+    { status: CONVERSATION_RATE_STATUS.NOT_FOUND },
+  );
+  assert.deepEqual(
+    [noDevice, closed, held].flatMap((each) => each.client.rated),
+    [],
+  );
+  assert.deepEqual(
+    [noDevice, closed, held].flatMap((each) => each.counted),
+    [],
+  );
+});
+
+test("the service's refusals reach the control apart, leave the verdict as it was, and count nothing", async () => {
+  const { composer, client, counted } = harness({ deviceId: DEVICE });
+  await composer.loop.refresh();
+  const before = composer.snapshot();
+  client.rateAnswer = { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_RATEABLE };
+  assert.deepEqual(await rate(composer, { messageId: REPLY, rating: MESSAGE_RATING.DOWN }), {
+    status: CONVERSATION_RATE_STATUS.NOT_RATEABLE,
+  });
+  client.rateAnswer = { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_FOUND };
+  assert.deepEqual(await rate(composer, { messageId: REPLY, rating: MESSAGE_RATING.DOWN }), {
+    status: CONVERSATION_RATE_STATUS.NOT_FOUND,
+  });
+  client.rateAnswer = { ok: false, refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED };
+  assert.deepEqual(await rate(composer, { messageId: REPLY, rating: MESSAGE_RATING.DOWN }), {
+    status: CONVERSATION_RATE_STATUS.UNAVAILABLE,
+  });
+  assert.deepEqual(composer.snapshot(), before);
+  assert.deepEqual(counted, []);
+});
+
+test("a rating whose params are not one message and one verdict is refused as invalid before anything is read", async () => {
+  const { composer, client } = harness({ deviceId: DEVICE });
+  await composer.loop.refresh();
+  const handler = composer.methods[GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE];
+  assert.ok(handler);
+  const outcome = await handler(
+    { messageId: REPLY, rating: "sideways" },
+    {
+      client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+      request: {
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        id: "rate-2",
+        method: GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE,
+        params: {},
+        idempotencyKey: "rate-2",
+      },
+    },
+  );
+  assert.equal(outcome.ok, false);
+  assert.deepEqual(client.rated, []);
 });
