@@ -714,12 +714,14 @@ function IntroductionFlight({
       case INTRODUCTION_BEAT.CONNECT: {
         // Landed, the session opens: the offer with the titles goes to the
         // main process, the answer comes back, and `open` resolves on
-        // `session.started`. The microphone is unmuted at once — the guide's
-        // greeting pattern wants the input running from the start — and the
-        // greeting itself is the voice service's, sent on the same event.
+        // `session.started`. The device rides the offer as a press's would,
+        // since the developer's press on the microphone ask is what opened
+        // this, and is unmuted at once — the guide's greeting pattern wants
+        // the input running from the start — while the greeting itself is
+        // the voice service's, sent on the same event.
         let gone = false;
         const call = ensureCall();
-        void call.open().then(async (opened) => {
+        void call.open({ byPress: true }).then(async (opened) => {
           if (gone) return;
           if (!opened) {
             dispatch(INTRODUCTION_EVENT.VOICE_FAILED);

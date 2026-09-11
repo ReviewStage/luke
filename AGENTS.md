@@ -1075,14 +1075,20 @@ Canonical commands:
   which device the renderer asks the browser to open when a voice session
   opens, so a Bluetooth headset is not pulled onto its call codec while the
   Mac's own microphone can listen, and is listened to itself when a shut lid
-  would muffle the Mac's. The capture device is bound to the session: its
-  track rides the session's offer disabled, under the microphone permission
-  onboarding already granted, is enabled only on the session's own
-  acknowledgment of the talk key's unmute and disabled again on the stop
-  key's or a second press's mute, and is stopped when the session ends; a
-  session Luke opened for his own speech acquires it muted and hears nothing
-  until the talk key, and typed asks open none. An unreadable
-  route means the browser's default device, never a refusal to listen.
+  would muffle the Mac's. The capture device is bound to the talk key, not
+  the session: the key is held to talk, the press opens the device and puts
+  its track on the session's sending line disabled, the track is enabled
+  only on the session's own acknowledgment of that press's unmute, and the
+  release (or the stop key) sends the mute and then, whatever the session
+  answered, takes the track off the line and stops the device, so the
+  system's microphone indicator is lit exactly while the key is down. A
+  session Luke opens for his own speech carries no capture device at all,
+  only a sending line with no track that the next press fills, and typed asks
+  open none. The one place a press stands in for a release is the Electron
+  fallback, where the native talk-key helper could not start and the system
+  reports presses alone: there one press starts the hold and the next ends
+  it, and the shortcuts row says so. An unreadable route means the browser's
+  default device, never a refusal to listen.
 
 ### Updating
 
@@ -1263,10 +1269,11 @@ Canonical commands:
   signed-in launch rather than improvising a substitute; only the append
   settled spoken by the session's own output transcript settles it. When no
   session stands, a briefing or a beat asks the voice window for one, and the
-  window opens it muted: the microphone track rides the offer disabled under
-  the permission onboarding already granted, so nothing is heard until the
-  talk key, and the same session is the one the developer joins by pressing
-  it. There is no speak-only call and no second kind of session. What the
+  window opens it with no microphone: the offer carries a sending audio line
+  with no track and no capture device is opened, so nothing can be heard
+  until the talk key is held, and the same session is the one the developer
+  joins by holding it. There is no speak-only call and no second kind of
+  session. What the
   session is seeded with at creation is bounded: Luke's own Conversation
   record (the 20 most recent lines, in their roles, each cut to its length
   bound) and the same redacted roster view the brain's standing context

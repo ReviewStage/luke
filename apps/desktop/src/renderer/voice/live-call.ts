@@ -23,6 +23,7 @@ import type {
   LiveCaptionRow,
   LiveVoiceCall,
   LiveVoiceCallEvents,
+  LiveVoiceCallOpening,
 } from "@sidecar/voice/orchestrator";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { LiveCaptions } from "./live-captions";
@@ -31,6 +32,7 @@ import {
   type LivePeer,
   type LivePeerConnection,
   openLivePeer,
+  stopDevice,
   teardown,
 } from "./live-peer";
 
@@ -93,11 +95,13 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
 /**
  * The voice window's one session as a GPT Live peer. The renderer owns the
  * microphone switch and the hang-up and nothing else: it sends the mute,
- * unmute, and close events the data channel permissions allow it, flips the
- * track only on the acknowledgment, draws both speakers' captions from the
- * transcript deltas, reports its transport and its idle to the host, and
- * reads Luke as speaking from the remote track's playback level rather than
- * from transcript events. Every append is the host's, over its sideband.
+ * unmute, and close events the data channel permissions allow it, opens the
+ * capture device for the unmute and releases it after the mute so the device
+ * is open exactly while the talk key is held, flips the track only on the
+ * acknowledgment, draws both speakers' captions from the transcript deltas,
+ * reports its transport and its idle to the host, and reads Luke as speaking
+ * from the remote track's playback level rather than from transcript events.
+ * Every append is the host's, over its sideband.
  */
 export class LiveCall implements LiveVoiceCall {
   readonly #options: LiveCallOptions;
@@ -116,6 +120,10 @@ export class LiveCall implements LiveVoiceCall {
   #idleReported = false;
   #speakingHangover: ScheduledTimer | undefined;
   #captionTick: ScheduledTimer | undefined;
+  /** Counts the mutes, so an unmute still opening its device learns the key came up while it waited. */
+  #muteEpoch = 0;
+  /** The mute under way, so a press landing before its release has settled waits for the device to be let go of first. */
+  #muting: Promise<boolean> | undefined;
   #ids = 0;
 
   constructor(options: LiveCallOptions) {
@@ -142,23 +150,23 @@ export class LiveCall implements LiveVoiceCall {
     return this.standing && this.#micLive;
   }
 
-  async open(): Promise<boolean> {
+  async open(opening: LiveVoiceCallOpening): Promise<boolean> {
     if (this.#peer) return this.standing;
     this.#setStatus(LIVE_STATUS.CONNECTING);
-    const opening = await openLivePeer({
+    const opened = await openLivePeer({
       createPeerConnection: this.#options.createPeerConnection,
-      openMicrophone: this.#options.openMicrophone,
+      ...(opening.byPress ? { openMicrophone: this.#options.openMicrophone } : undefined),
       createSession: this.#options.acts.createSession,
       onRemoteStream: (stream) => this.#options.onRemoteStream(stream),
       schedule: this.#options.schedule,
       cancel: this.#options.cancel,
     });
-    if (opening.outcome !== LIVE_PEER_OUTCOME.OPENED) {
-      this.#options.events.onError(opening.message);
+    if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {
+      this.#options.events.onError(opened.message);
       this.#setStatus(LIVE_STATUS.FAILED);
       return false;
     }
-    const peer = opening.peer;
+    const peer = opened.peer;
     this.#peer = peer;
     this.#options.onLocalStream(peer.microphoneStream);
     peer.connection.onconnectionstatechange = () => this.#onTransport(peer);
@@ -175,22 +183,44 @@ export class LiveCall implements LiveVoiceCall {
     return true;
   }
 
+  /**
+   * The talk key's press: the device is opened here, at the press, when none
+   * stands, and put on the sending line before the switch goes. A key that
+   * came up while the device was still opening or attaching leaves it
+   * stopped and off the line, since the mute that release sent found nothing
+   * to release.
+   */
   async unmute(): Promise<boolean> {
+    while (this.#muting) await this.#muting;
     const peer = this.#peer;
     if (!peer || !this.#started || this.#ended) return false;
-    if (!peer.microphone) {
+    if (!peer.microphoneStream) {
+      const epoch = this.#muteEpoch;
+      let stream: MediaStream;
       try {
-        const stream = await this.#options.openMicrophone();
-        const track = stream.getAudioTracks()[0];
-        if (!track) return false;
-        track.enabled = false;
-        await peer.sender.replaceTrack(track);
-        peer.microphone = track;
-        peer.microphoneStream = stream;
-        this.#options.onLocalStream(stream);
+        stream = await this.#options.openMicrophone();
       } catch {
         return false;
       }
+      const track = stream.getAudioTracks()[0];
+      if (!track || epoch !== this.#muteEpoch || this.#ended) {
+        stopDevice(stream);
+        return false;
+      }
+      track.enabled = false;
+      try {
+        await peer.sender.replaceTrack(track);
+      } catch {
+        stopDevice(stream);
+        return false;
+      }
+      if (epoch !== this.#muteEpoch || this.#ended) {
+        await this.#takeOffLine(peer, stream);
+        return false;
+      }
+      peer.microphone = track;
+      peer.microphoneStream = stream;
+      this.#options.onLocalStream(stream);
     }
     if (this.#micLive) return true;
     const acknowledged = await this.#switchMicrophone(unmuteEvent);
@@ -203,22 +233,34 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   /**
-   * The stop: an unmute still waiting on its acknowledgment is given up
-   * first, and the mute goes whatever the track shows, since the server may
-   * still be about to honour the unmute it was asked for.
+   * The talk key's release, and the stop: an unmute still waiting on its
+   * acknowledgment is given up first, and the mute goes whatever the track
+   * shows, since the server may still be about to honour the unmute it was
+   * asked for. The device is released only once the mute is answered,
+   * acknowledged or not, so the model is not fed a vanishing track while the
+   * switch is still in flight; released it is, whatever the answer, because
+   * the key being up is the developer's decision and the device is theirs.
+   * The answer stays the session's own word on the switch.
    */
-  async mute(): Promise<boolean> {
+  mute(): Promise<boolean> {
+    if (this.#muting) return this.#muting;
     const peer = this.#peer;
-    if (!peer || !this.#started || this.#ended) return false;
+    if (!peer || !this.#started || this.#ended) return Promise.resolve(false);
+    this.#muteEpoch += 1;
+    this.#muting = this.#muteAndRelease(peer).finally(() => {
+      this.#muting = undefined;
+    });
+    return this.#muting;
+  }
+
+  async #muteAndRelease(peer: LivePeer): Promise<boolean> {
     const unmuting = this.#pendingSwitch !== undefined;
-    if (!this.#micLive && !unmuting) return true;
-    const acknowledged = await this.#switchMicrophone(muteEvent);
-    if (!acknowledged) return false;
-    if (peer.microphone) peer.microphone.enabled = false;
+    const acknowledged = this.#micLive || unmuting ? await this.#switchMicrophone(muteEvent) : true;
+    await this.#releaseDevice(peer);
     this.#micLive = false;
     this.#armIdle();
     this.#refreshStatus();
-    return true;
+    return acknowledged;
   }
 
   /**
@@ -465,6 +507,25 @@ export class LiveCall implements LiveVoiceCall {
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
     this.#setStatus(status);
+  }
+
+  /** Takes the device off the sending line and stops it, so the system's indicator goes out with the key. */
+  async #releaseDevice(peer: LivePeer): Promise<void> {
+    const stream = peer.microphoneStream;
+    if (!stream) return;
+    peer.microphone = undefined;
+    peer.microphoneStream = undefined;
+    await this.#takeOffLine(peer, stream);
+    this.#options.onLocalStream(undefined);
+  }
+
+  async #takeOffLine(peer: LivePeer, stream: MediaStream): Promise<void> {
+    try {
+      await peer.sender.replaceTrack(null);
+    } catch {
+      // A line already closed has nothing to take the track off; the device is stopped either way.
+    }
+    stopDevice(stream);
   }
 
   #nextId(): string {

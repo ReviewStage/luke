@@ -85,9 +85,11 @@ export interface LukeGuideInput {
    * registered. Labelled rather than drawn as keys: the guide is spoken and
    * read, and a chord said aloud is one thing to press. `removed` is the one
    * absence that is the developer's own choice — the shortcut was deleted —
-   * and the fact must say so rather than blame another app.
+   * and the fact must say so rather than blame another app. `held` is
+   * whether the key reports being let go of: the native helper does, and
+   * Electron's fallback presses to start and again to stop instead.
    */
-  hotkey: { hotkey?: string; removed?: boolean };
+  hotkey: { hotkey?: string; removed?: boolean; held?: boolean };
   /** The ask key labelled on the same terms, absent when none was registered. */
   askKey?: string;
   /** Whether the ask key's absence is a deleted shortcut, on the talk key's terms. */
@@ -115,13 +117,19 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
         "None is registered right now — another app may own the shortcut. The Settings tab's Keyboard shortcuts page shows its state.",
     };
   }
+  const hold =
+    hotkey.held === false
+      ? "press to start talking and press again, or press the stop key, to stop; the key " +
+        "cannot tell when it is let go of, so it works in pairs"
+      : "hold it to talk and let go to stop, and the microphone is open only while it is " +
+        "held; the stop key also closes it";
   return {
     label: "Talk key",
     detail:
-      `${hotkey.hotkey}, from any app: press to listen, and press the stop key, or this key ` +
-      "again, to mute. Luke keeps the conversation while it lasts, so the next press picks it " +
-      "up rather than starting over; a voice chosen in Settings is heard from the next " +
-      `conversation on. A different chord can be recorded, the default restored, or the shortcut removed, in ${SHORTCUTS_PAGE}.`,
+      `${hotkey.hotkey}, from any app: ${hold}. Luke keeps the conversation while it lasts, ` +
+      "so the next press picks it up rather than starting over; a voice chosen in Settings " +
+      "is heard from the next conversation on. A different chord can be recorded, the " +
+      `default restored, or the shortcut removed, in ${SHORTCUTS_PAGE}.`,
   };
 }
 
@@ -149,9 +157,9 @@ function askKeyFact(askKey: string | undefined, removed: boolean | undefined): A
 
 const MICROPHONE_DETAIL = {
   [MICROPHONE_STATUS.GRANTED]:
-    "Granted. The microphone is heard only from a talk key press until the stop key, or a " +
-    "second press, mutes it; muted, it sends nothing, and it closes with the conversation. " +
-    "Typing to Luke never unmutes it.",
+    "Granted. The microphone is open only while the talk key is held: the press opens it and " +
+    "letting go closes it, so nothing is captured between holds, and a conversation Luke " +
+    "opens to speak carries no microphone at all. Typing to Luke never opens it.",
   [MICROPHONE_STATUS.DENIED]:
     "Denied, so the talk key cannot capture. Typing to Luke still works: a typed ask opens no " +
     "capture device, and the reply is spoken either way. It can only be granted back in " +

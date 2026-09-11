@@ -2,6 +2,7 @@ export type {
   LiveCaptionRow,
   LiveVoiceCall,
   LiveVoiceCallEvents,
+  LiveVoiceCallOpening,
 } from "./live-voice-call.js";
 export {
   type LiveVoiceBridge,

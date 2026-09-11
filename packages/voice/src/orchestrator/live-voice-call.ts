@@ -10,6 +10,15 @@ import type { ConversationEntry } from "@sidecar/session";
  * playback. Nothing here appends to the model: every append is the host's,
  * over its trusted sideband, so the call can carry no authority to speak.
  */
+/**
+ * Who opened the session, which decides whether a capture device rides its
+ * offer: a press is the user action the WebRTC guide asks the microphone be
+ * requested from, and a session opened for Luke's own speech carries none.
+ */
+export interface LiveVoiceCallOpening {
+  byPress: boolean;
+}
+
 export interface LiveVoiceCall {
   readonly status: LiveStatus;
   /** The session the host created for this call, once its offer was answered; what the host's word about a session is matched against. */
@@ -20,13 +29,19 @@ export interface LiveVoiceCall {
   readonly listening: boolean;
   /**
    * Builds the peer, hands the offer to the host, and waits for the session
-   * to start; the microphone track rides the offer disabled. Answers whether
-   * a session stands at the end of it.
+   * to start; a press's microphone track rides the offer disabled, and any
+   * other opening carries no device. Answers whether a session stands at the
+   * end of it.
    */
-  open(): Promise<boolean>;
-  /** Asks the session to hear the microphone; the track enables on the acknowledgment. */
+  open(opening: LiveVoiceCallOpening): Promise<boolean>;
+  /** Opens the capture device if none stands and asks the session to hear it; the track enables on the acknowledgment. */
   unmute(): Promise<boolean>;
-  /** Asks the session to stop hearing the microphone; the track disables on the acknowledgment. */
+  /**
+   * Asks the session to stop hearing the microphone, then releases the
+   * capture device whatever the session answered: the key coming up is the
+   * developer's decision and the device is theirs. The answer stays the
+   * session's own word on the switch.
+   */
   mute(): Promise<boolean>;
   /** The graceful hang-up: `session.closed` registered, `session.close` sent, waited for under the guide's bound. */
   close(): Promise<void>;

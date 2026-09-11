@@ -56,25 +56,40 @@ state that arrives in its `app:state` snapshot and forwards its presses back as
 acts; it constructs no call of its own.
 
 The policy behind that hook is not the renderer's at all. Whether a session
-stands, what the talk key and the stop key do to its microphone, how the
-host's `voiceLiveSession.changed` is obeyed — wanted opens a session muted,
-closing hangs up, a session lost with the microphone live listens again on
-the next — and what view the panels draw are `LiveVoiceOrchestrator` in
-`@sidecar/voice`, which touches no DOM: what the hook supplies is the call
-it drives, and what it takes back is one view to report and the two streams
-only a browser can play or meter.
+stands, what the talk key and the stop key do to its microphone — the key is
+held to talk: `beginTalk` on the press opens a session if none stands and
+unmutes, `endTalk` on the release mutes, `stopSpeaking` mutes the same way,
+and a release or stop during the press's opening leaves the session muted —
+how the host's `voiceLiveSession.changed` is obeyed — wanted opens a session
+with no microphone, closing hangs up, a session lost while the key is still
+held listens again on the next — and what view the panels draw are
+`LiveVoiceOrchestrator` in `@sidecar/voice`, which touches no DOM: what the
+hook supplies is the call it drives, and what it takes back is one view to
+report and the two streams only a browser can play or meter. The hook
+subscribes both talk-key edges, `onVoiceHotkeyPress` and
+`onVoiceHotkeyRelease`, from main's native watcher; under the Electron
+fallback main alternates the two across presses, since that key reports no
+release.
 
 The voice window is a GPT Live peer and nothing more. `voice/live-peer.ts`
-builds the `RTCPeerConnection` in the WebRTC guide's order — the preferred
-microphone track added with `enabled` false, the `oai-events` data channel
-created before the offer, ICE gathered under a bound, the offer handed to
-the host through `ACT_KIND.VOICE_CREATE_LIVE_SESSION`, the host's SDP answer
-set — and never sends `session.start`, because the host's request is what
-started the session. `voice/live-call.ts` is a table of handlers keyed by
+builds the `RTCPeerConnection` in the WebRTC guide's order — the audio line
+first (for a session a press opened, the preferred microphone track added
+with `enabled` false; for one opened for Luke's own speech, a `sendrecv`
+transceiver with no track, so no capture device stands behind a session
+nobody pressed for), the `oai-events` data channel created before the offer,
+ICE gathered under a bound, the offer handed to the host through
+`ACT_KIND.VOICE_CREATE_LIVE_SESSION`, the host's SDP answer set — and never
+sends `session.start`, because the host's request is what started the
+session. `voice/live-call.ts` is a table of handlers keyed by
 `LIVE_SERVER_EVENT` over `parseLiveServerEvent`: it waits for
 `session.started`, sends only the mute, the unmute, and the close the data
-channel permissions allow it, flips the track only on the `muted` or
-`unmuted` acknowledgment, hangs up the way the conversations guide says
+channel permissions allow it, opens the capture device for an unmute when
+none stands and puts it on the line before the switch goes, flips the track
+only on the `muted` or `unmuted` acknowledgment, and after every mute —
+acknowledged, refused, or timed out, in that the key being up is the
+developer's decision — takes the track off the line with `replaceTrack(null)`
+and stops the device, so the microphone is open exactly while the talk key
+is held; it hangs up the way the conversations guide says
 (`session.closed` registered, `session.close` sent, everything held open
 under the bound), reports its transport and its one idle decision to the
 host, and reads Luke as speaking from the remote track's level, never from

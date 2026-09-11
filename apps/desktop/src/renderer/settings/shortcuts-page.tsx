@@ -269,12 +269,12 @@ export function ShortcutSection({
         title="Talk to Luke"
         anchor={SETTINGS_SEARCH_ROW.TALK_KEY}
         // What the key actually does, which depends on whether it can report
-        // being let go of. Describing a hold to someone whose key can only
-        // toggle would leave them holding it and wondering.
+        // being let go of. Describing a hold to someone whose key reports
+        // presses alone would leave them holding it and wondering.
         detail={
           shortcuts.voiceHotkeyHeld
-            ? "Hold to talk, let go to send."
-            : "Press to talk, again to send."
+            ? "Hold to talk; the microphone is open only while the key is down."
+            : "Press to start talking, again to stop. Luke's key helper could not start, so the key cannot tell when it is let go of."
         }
         {...(shownTalk ? { shown: shownTalk } : undefined)}
         chosen={shortcuts.voiceChosen}

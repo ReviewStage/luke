@@ -4,7 +4,12 @@ import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
-import type { LiveCaptionRow, LiveVoiceCall, LiveVoiceCallEvents } from "./live-voice-call.js";
+import type {
+  LiveCaptionRow,
+  LiveVoiceCall,
+  LiveVoiceCallEvents,
+  LiveVoiceCallOpening,
+} from "./live-voice-call.js";
 import {
   type LiveVoiceExchangeOpening,
   LiveVoiceOrchestrator,
@@ -19,6 +24,8 @@ class FakeCall implements LiveVoiceCall {
   status: LiveStatus = LIVE_STATUS.IDLE;
   sessionId: string | undefined;
   opens = 0;
+  /** Who the call was told opened it, so a briefing's session can be seen to carry no device. */
+  openings: LiveVoiceCallOpening[] = [];
   unmutes = 0;
   mutes = 0;
   closes = 0;
@@ -40,8 +47,9 @@ class FakeCall implements LiveVoiceCall {
     return this.status === LIVE_STATUS.LISTENING;
   }
 
-  open(): Promise<boolean> {
+  open(opening: LiveVoiceCallOpening): Promise<boolean> {
     this.opens += 1;
+    this.openings.push(opening);
     this.settle(LIVE_STATUS.CONNECTING);
     return new Promise<boolean>((resolve) => {
       this.#release = () => {
@@ -95,6 +103,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   const openings: (LiveVoiceExchangeOpening | undefined)[] = [];
   let microphoneGranted = true;
   let microphoneAsks = 0;
+  let microphoneAsk: (() => Promise<boolean>) | undefined;
   const orchestrator = new LiveVoiceOrchestrator({
     bridge: {
       reportView: (view, exchange) => {
@@ -103,7 +112,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
       },
       requestMicrophone: async () => {
         microphoneAsks += 1;
-        return microphoneGranted;
+        return microphoneAsk ? microphoneAsk() : microphoneGranted;
       },
       hostedUnavailableNote: async () => undefined,
     },
@@ -122,6 +131,10 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
     setMicrophone: (granted: boolean) => {
       microphoneGranted = granted;
     },
+    /** The system's dialog standing: the ask answers when the test says so. */
+    setMicrophoneAsk: (ask: () => Promise<boolean>) => {
+      microphoneAsk = ask;
+    },
     microphoneAsks: () => microphoneAsks,
     latest: () => calls[calls.length - 1],
   };
@@ -136,34 +149,88 @@ function row(
   return { rowId, entry: { kind, words }, settled };
 }
 
-test("the talk key opens a session when none stands and unmutes it once started; a second press mutes", async () => {
+test("the talk key's press opens a session by press when none stands and unmutes it once started; its release mutes once", async () => {
   const f = fixture();
   const pressed = f.orchestrator.beginTalk();
   const call = f.latest();
   assert.ok(call);
   assert.equal(call.opens, 1);
+  assert.deepEqual(call.openings, [{ byPress: true }]);
   assert.equal(call.unmutes, 0);
   call.started();
   await pressed;
   assert.equal(call.unmutes, 1);
+  assert.equal(call.mutes, 0);
   assert.equal(call.status, LIVE_STATUS.LISTENING);
-  await f.orchestrator.beginTalk();
+  await f.orchestrator.endTalk();
   assert.equal(call.mutes, 1);
   assert.equal(call.opens, 1);
   assert.equal(f.calls.length, 1);
-  // Pressed again against the muted session: no second session, one more unmute.
+  // A release with no press behind it does nothing.
+  await f.orchestrator.endTalk();
+  assert.equal(call.mutes, 1);
+  // The next hold against the standing session: no second session, one more unmute, one more mute.
   await f.orchestrator.beginTalk();
   assert.equal(f.calls.length, 1);
   assert.equal(call.unmutes, 2);
+  assert.equal(call.mutes, 1);
+  await f.orchestrator.endTalk();
+  assert.equal(call.mutes, 2);
 });
 
-test("the stop key mutes a standing session and does nothing against none", async () => {
+test("a second press while the developer is heard never mutes", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  f.latest()?.started();
+  await pressed;
+  await f.orchestrator.beginTalk();
+  await f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  assert.equal(call.mutes, 0);
+  assert.equal(call.status, LIVE_STATUS.LISTENING);
+});
+
+test("a release while the press's session is still opening leaves it to open muted", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  assert.equal(call.standing, false);
+  await f.orchestrator.endTalk();
+  call.started();
+  await pressed;
+  // The release's mute still goes once the session stands: the press's device rode the offer.
+  assert.equal(call.unmutes, 0);
+  assert.equal(call.mutes, 1);
+  assert.equal(call.status, LIVE_STATUS.MUTED);
+});
+
+test("a press during a session opened for Luke's speech unmutes it once started, and a release during the opening does not", async () => {
+  const f = fixture();
+  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  const call = f.latest();
+  assert.ok(call);
+  assert.deepEqual(call.openings, [{ byPress: false }]);
+  const pressed = f.orchestrator.beginTalk();
+  await drainMicrotasks();
+  assert.equal(f.calls.length, 1);
+  call.started();
+  await pressed;
+  assert.equal(call.unmutes, 1);
+  await f.orchestrator.endTalk();
+  assert.equal(call.mutes, 1);
+});
+
+test("the stop key mutes a standing session once, does nothing against none, and ends the hold so the release mutes nothing more", async () => {
   const f = fixture();
   assert.equal(await f.orchestrator.stopSpeaking(), false);
   const pressed = f.orchestrator.beginTalk();
   f.latest()?.started();
   await pressed;
   assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.equal(f.latest()?.mutes, 1);
+  await f.orchestrator.endTalk();
   assert.equal(f.latest()?.mutes, 1);
 });
 
@@ -184,13 +251,25 @@ test("a press without the microphone asks for it, and a refusal opens nothing", 
   assert.equal(f.latest()?.unmutes, 1);
 });
 
+test("a key let go of while the microphone dialog stands opens the session muted", async () => {
+  const f = fixture({ microphoneGranted: false });
+  let grant: ((granted: boolean) => void) | undefined;
+  f.setMicrophoneAsk(() => new Promise<boolean>((resolve) => (grant = resolve)));
+  const pressed = f.orchestrator.beginTalk();
+  await drainMicrotasks();
+  await f.orchestrator.endTalk();
+  grant?.(true);
+  await pressed;
+  assert.equal(f.calls.length, 0);
+});
+
 test("a press while voice is off opens nothing", async () => {
   const f = fixture({ voiceAvailable: false });
   await f.orchestrator.beginTalk();
   assert.equal(f.calls.length, 0);
 });
 
-test("wanted opens a session muted, closing hangs it up, and a lost session with the microphone live listens again on the next", async () => {
+test("wanted opens a session with no device, closing hangs it up, and a session lost mid-hold listens again on the next", async () => {
   const f = fixture();
   f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
   const first = f.latest();
@@ -205,9 +284,12 @@ test("wanted opens a session muted, closing hangs it up, and a lost session with
     sessionId: first.sessionId,
   });
   assert.equal(f.calls.length, 1);
-  // The developer joins, then the connection is lost under them: the peer's
-  // own end may land before the host's word, and the wanted right after it.
-  await first.unmute();
+  assert.deepEqual(first.openings, [{ byPress: false }]);
+  // The developer holds the key, then the connection is lost under them: the
+  // peer's own end may land before the host's word, and the wanted right
+  // after it.
+  await f.orchestrator.beginTalk();
+  assert.equal(first.unmutes, 1);
   const lost = first.sessionId;
   first.settle(LIVE_STATUS.IDLE);
   f.orchestrator.obeySessionChange({
@@ -219,6 +301,7 @@ test("wanted opens a session muted, closing hangs it up, and a lost session with
   const second = f.latest();
   assert.ok(second);
   assert.notEqual(second, first);
+  assert.deepEqual(second.openings, [{ byPress: false }]);
   second.started();
   await drainMicrotasks();
   assert.equal(second.unmutes, 1);
@@ -232,6 +315,34 @@ test("wanted opens a session muted, closing hangs it up, and a lost session with
   });
   await drainMicrotasks();
   assert.equal(second.closes, 1);
+});
+
+test("a session lost after the key was let go of does not listen again on the next", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const first = f.latest();
+  assert.ok(first);
+  first.started();
+  await pressed;
+  await f.orchestrator.endTalk();
+  assert.equal(first.mutes, 1);
+  // Lost before the mute's status landed: the last status the call reported was listening.
+  first.status = LIVE_STATUS.LISTENING;
+  first.events.onStatus(LIVE_STATUS.LISTENING);
+  const lost = first.sessionId;
+  first.settle(LIVE_STATUS.IDLE);
+  f.orchestrator.obeySessionChange({
+    phase: LIVE_SESSION_PHASE.CLOSED,
+    sessionId: lost,
+    reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+  });
+  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  const second = f.latest();
+  assert.ok(second);
+  assert.notEqual(second, first);
+  second.started();
+  await drainMicrotasks();
+  assert.equal(second.unmutes, 0);
 });
 
 test("a session closed by the host's own decision does not listen again on the next", async () => {
@@ -393,7 +504,7 @@ test("a stop while a press's session is still opening leaves it muted", async ()
   call.started();
   await pressed;
   assert.equal(call.unmutes, 0);
-  assert.equal(call.mutes, 0);
+  assert.equal(call.mutes, 1);
   assert.equal(call.status, LIVE_STATUS.MUTED);
 });
 
