@@ -2884,3 +2884,46 @@ the three states one layer along and makes the fix invisible.** The bug being fi
 hop; the fix must not add a second. A test asserting absence therefore asserts on the **serialised
 body**, since `JSON.stringify` makes `{ quietUntil: undefined }` and `{}` identical — which is correct,
 both meaning absent, and is also why the object is the wrong thing to assert on.
+
+
+## 2026-09-11 — The store is tested on Postgres 17 and 16; production runs 18.6
+
+**Found by C3 while chasing the missing-row flake, and it is the larger finding of the two.**
+
+| where | version |
+|---|---|
+| **production** — Neon project `luke` (`frosty-night-78924196`), `show server_version` | **18.6**, project `pg_version` 18 |
+| **CI** — `ci.yml`'s service image | **postgres:17** |
+| **every local reproduction today** | **16.12** |
+
+**Three major versions across the three places the store suite runs, and none of the testing versions
+is the one we ship.** CI has been proving the store against a database we do not run; no local run has
+ever touched the one we do.
+
+**Why it matters past the flake.** Anything that differs between 17 and 18 is **untested** — planner
+choices under contention, `SELECT … FOR UPDATE` interactions, sequence and identity handling, error
+codes, `timestamptz` edges. The store is the most concurrent part of this rework: CAS keeps, row locks,
+`max+1` allocation, `notInArray` sweeps, forward-only claims. **That is precisely the territory where a
+major version can differ and a passing test tells you nothing.**
+
+**It may also explain the flake rather than merely coexist with it.** A failure that reproduces only on
+CI, never locally, across a version gap, may be **a 17 behaviour production never exhibits.** Pinning
+CI to 18 could make it vanish — which would not be a fix, but would mean we had stopped testing
+something we do not ship.
+
+**One thing already fine, and worth recording so nobody re-audits it:** **preview deployments inherit
+the project's version, so migrations have run on 18 throughout.** C4's `0024` evidence — the plain
+`DROP` applied at 17:27:40Z against the preview branch reset from production — was on **18.6**. It is
+the **store test suite**, not the migration path, that has been on 17.
+
+**Filed as LUKE-175**: pin `ci.yml` to `postgres:18`, say in the store README that local reproduction is
+on 18, and **treat fallout as the point** — a test that fails on 18 is failing about the database we
+actually run, and pinning back to 17 to make it green would be the wrong move.
+
+**Held until the morning deliberately.** It is a shared-pipeline change: if 18 breaks tests, **every
+worker is blocked at once**, and there is no urgency — production has been on 18 since the project was
+created and nothing is newly wrong. It lands on a quiet queue with someone watching.
+
+**The general shape, which is the day's own lesson at the infrastructure level:** the version was a
+**status nobody had read** — three places each confident, none compared, and every green store run all
+day was true about something other than production.
