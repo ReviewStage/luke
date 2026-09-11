@@ -7,8 +7,8 @@ export function StatCard({
 }: {
   label: string;
   value: string;
-  hint?: string;
-  title?: string;
+  hint?: string | undefined;
+  title?: string | undefined;
   grouped?: boolean;
 }): React.JSX.Element {
   return (

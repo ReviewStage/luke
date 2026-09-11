@@ -52,11 +52,11 @@ export interface RelayOptions {
   desktop: WebSocket;
   upstream: WebSocket;
   /** Runs once, on the first `session.closed`; the relay waits for it before settling. */
-  onSessionClosed?: (closed: LiveSessionClosed) => Promise<void>;
+  onSessionClosed?: ((closed: LiveSessionClosed) => Promise<void>) | undefined;
   /** Runs on every `session.usage.updated`, with the seconds it named. */
-  onUsageUpdated?: (seconds: number) => void;
+  onUsageUpdated?: ((seconds: number) => void) | undefined;
   /** Asked once, on the first `session.started`, for an event to send upstream from the service's own side. */
-  onSessionStarted?: () => LiveClientEvent | undefined;
+  onSessionStarted?: (() => LiveClientEvent | undefined) | undefined;
   closeTimeoutMs?: number;
 }
 

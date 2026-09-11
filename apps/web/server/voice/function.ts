@@ -1,4 +1,5 @@
 import { auth } from "../auth.js";
+import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import { getDatabase } from "../db/index.js";
 import { oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "../hosted/bearer.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
@@ -23,9 +24,11 @@ const VOICE_FUNCTION_ENVIRONMENT = {
 
 const deploymentAccounts: VoiceAccounts = {
   resolveUserId: (authorization) =>
-    userIdForAuthorization(authorization, async (input) =>
-      oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
-    ),
+    userIdForAuthorization(authorization, async (input) => {
+      // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
+      const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+      return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+    }),
   spend: (userId) => spendHostedMeter(getDatabase(), { userId, now: Date.now() }),
   spendIntroduction: () => spendIntroductionMeter(getDatabase(), { now: Date.now() }),
   recordSeconds: (input) => recordVoiceSeconds(getDatabase(), { ...input, now: Date.now() }),

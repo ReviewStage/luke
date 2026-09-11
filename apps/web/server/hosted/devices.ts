@@ -66,7 +66,7 @@ export interface DeviceHeartbeat {
   /** `null` clears the presence on file, which is how a device reports it went idle. */
   activeUntil: Date | null | undefined;
   /** The instant a meeting hold the device observes ends; `null` clears it, absent leaves it. */
-  quietUntil?: Date | null;
+  quietUntil?: Date | null | undefined;
   push: DevicePushAddress | null | undefined;
 }
 

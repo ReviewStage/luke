@@ -23,11 +23,12 @@ interface VaultDeleteBody {
 }
 
 function storeRequest(body?: VaultStoreBody, headers: Record<string, string> = {}): Request {
-  return new Request("https://luke.test/api/vault/key", {
+  const init: RequestInit = {
     method: "POST",
     headers: { authorization: "Bearer token-1", "content-type": "application/json", ...headers },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return new Request("https://luke.test/api/vault/key", init);
 }
 
 function listRequest(headers: Record<string, string> = {}): Request {
@@ -38,11 +39,12 @@ function listRequest(headers: Record<string, string> = {}): Request {
 }
 
 function deleteRequest(body?: VaultDeleteBody, headers: Record<string, string> = {}): Request {
-  return new Request("https://luke.test/api/vault/key", {
+  const init: RequestInit = {
     method: "DELETE",
     headers: { authorization: "Bearer token-1", "content-type": "application/json", ...headers },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return new Request("https://luke.test/api/vault/key", init);
 }
 
 // --- Encryption round-trips ---

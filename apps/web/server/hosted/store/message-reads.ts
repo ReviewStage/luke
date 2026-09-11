@@ -270,7 +270,7 @@ export interface TurnCursorPosition {
 
 export interface TurnCursor {
   /** Turns past this position, the last row a device took; absent for every turn the account holds. */
-  readonly after?: TurnCursorPosition;
+  readonly after?: TurnCursorPosition | undefined;
   readonly limit?: number;
 }
 

@@ -51,11 +51,9 @@ const seams = deviceSeams(database.db);
 function changesRequest(body: WireValue | undefined, method = "POST", authorized = true): Request {
   const headers = new Headers({ "content-type": "application/json" });
   if (authorized) headers.set("authorization", "Bearer token-1");
-  return new Request("https://luke.test/api/changes", {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const init: RequestInit = { method, headers };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return new Request("https://luke.test/api/changes", init);
 }
 
 /** Positions in the one order the test compares them in: by conversation id. */

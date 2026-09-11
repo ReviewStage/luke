@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { auth } from "../auth.js";
+import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import { getDatabase } from "../db/index.js";
 import { providerKey } from "../db/schema.js";
 import type { Route } from "../route.js";
@@ -55,9 +56,11 @@ function storeFor(secret: string): HostedStore {
 
 /** The bearer resolved against the deployment's own account store, the same for every hosted route. */
 export function resolveHostedUserId(request: Request): Promise<string | undefined> {
-  return hostedUserId(request, async (input) =>
-    oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
-  );
+  return hostedUserId(request, async (input) => {
+    // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
+    const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+    return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+  });
 }
 
 const seams = {

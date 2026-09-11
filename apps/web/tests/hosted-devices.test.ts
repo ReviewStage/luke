@@ -14,11 +14,12 @@ const NOON = Date.parse("2026-09-09T12:00:00.000Z");
 type Body = Record<string, string | number | null>;
 
 function request(method: string, body?: Body): Request {
-  return new Request("https://luke.test/api/devices", {
+  const init: RequestInit = {
     method,
     headers: { authorization: "Bearer token-1", "content-type": "application/json" },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return new Request("https://luke.test/api/devices", init);
 }
 
 type Options = Parameters<typeof handleDevices>[0];

@@ -80,9 +80,9 @@ export interface RealtimeConnectionMintOptions {
   preferences: VoiceMintPreferences;
   /** Builds the session document this endpoint mints with. */
   clientSecretRequest: (options: RealtimeSessionOptions) => OpenAiPostBody;
-  fetch?: CloudFetch;
-  now?: () => number;
-  timeoutMs?: number;
+  fetch?: CloudFetch | undefined;
+  now?: (() => number) | undefined;
+  timeoutMs?: number | undefined;
 }
 
 export type RealtimeConnectionMint = { failure: Response } | { connection: RealtimeConnection };
@@ -152,12 +152,12 @@ export interface VoiceMintOptions {
   /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
   apiKey: string | undefined;
   /** A deployment-configured model override; the shared default otherwise. */
-  model?: string;
+  model?: string | undefined;
   resolveUserId: (request: Request) => Promise<string | undefined>;
   spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: CloudFetch;
-  now?: () => number;
-  timeoutMs?: number;
+  fetch?: CloudFetch | undefined;
+  now?: (() => number) | undefined;
+  timeoutMs?: number | undefined;
 }
 
 export async function handleVoiceMint(options: VoiceMintOptions): Promise<Response> {

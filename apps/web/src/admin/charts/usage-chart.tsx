@@ -50,6 +50,16 @@ export function UsageChart({
   }
 
   const partialDay = partialDayKey(daily, generatedAt);
+  // The clicked label is resolved against the drawn series itself, so only a
+  // day these bars actually state can open; an unset opener leaves recharts'
+  // own `onClick` prop absent rather than assigned `undefined`.
+  const barChartProps: Pick<React.ComponentProps<typeof BarChart>, "onClick"> = {};
+  if (onOpenDay) {
+    barChartProps.onClick = ({ activeLabel }) => {
+      const clicked = daily.find((point) => point.day === activeLabel);
+      if (clicked) onOpenDay(clicked.day);
+    };
+  }
   return (
     <div className="rounded-lg border border-border bg-card p-5">
       <ChartHeading label={label} trend={trend} />
@@ -57,19 +67,7 @@ export function UsageChart({
         config={USAGE_CHART}
         className={`aspect-auto h-48 w-full ${onOpenDay ? "cursor-pointer" : ""}`}
       >
-        <BarChart
-          data={[...daily]}
-          // The clicked label is resolved against the drawn series itself, so
-          // only a day these bars actually state can open.
-          onClick={
-            onOpenDay
-              ? ({ activeLabel }) => {
-                  const clicked = daily.find((point) => point.day === activeLabel);
-                  if (clicked) onOpenDay(clicked.day);
-                }
-              : undefined
-          }
-        >
+        <BarChart data={[...daily]} {...barChartProps}>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="day"

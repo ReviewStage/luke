@@ -35,8 +35,8 @@ export function RosterNote({
   truncatedTo,
   searched,
 }: {
-  truncatedTo?: number;
-  searched?: boolean;
+  truncatedTo?: number | undefined;
+  searched?: boolean | undefined;
 }): React.JSX.Element {
   return (
     <p className="mt-3 text-sm text-muted-foreground">
@@ -58,7 +58,7 @@ export function DayNote({
   truncatedTo,
   totalAccounts,
 }: {
-  truncatedTo?: number;
+  truncatedTo?: number | undefined;
   totalAccounts: number;
 }): React.JSX.Element {
   return (

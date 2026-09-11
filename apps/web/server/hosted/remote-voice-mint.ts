@@ -31,11 +31,11 @@ export interface RemoteVoiceMintOptions
     "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
   > {
   apiKey: string | undefined;
-  model?: string;
+  model?: string | undefined;
   spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: CloudFetch;
-  now?: () => number;
-  timeoutMs?: number;
+  fetch?: CloudFetch | undefined;
+  now?: (() => number) | undefined;
+  timeoutMs?: number | undefined;
 }
 
 const MOBILE_MINT_STRICT_FIELDS: readonly string[] = ["voice", "speed"];

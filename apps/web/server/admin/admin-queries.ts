@@ -326,7 +326,7 @@ export async function readAdminMetricsSource(
   input: {
     now: number;
     integrations: readonly AdminIntegration[];
-    analyticsConsoleUrl?: string;
+    analyticsConsoleUrl?: string | undefined;
     scope: AdminMetricsScope;
     windowDays: AdminMetricsWindow;
   },

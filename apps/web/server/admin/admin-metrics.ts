@@ -244,7 +244,7 @@ export interface AdminMetrics {
      * section cannot show actually live. Absent when the deployment names no
      * project, so the page states the absence rather than drawing a dead link.
      */
-    analyticsConsoleUrl?: string;
+    analyticsConsoleUrl?: string | undefined;
   };
   systemHealth: {
     database: AdminDatabaseHealth;
@@ -279,7 +279,7 @@ export interface AdminMetricsSource {
     quotaLimitedUserDaysToday: number;
     quotaLimitedUserDaysWindow: number;
     /** Read from the environment like the integrations, not from a table. */
-    analyticsConsoleUrl?: string;
+    analyticsConsoleUrl?: string | undefined;
   };
   systemHealth: {
     database: AdminDatabaseHealth;
