@@ -91,7 +91,18 @@ export function layerFromCloudFetch(fetch: CloudFetch): Layer.Layer<HttpClient.H
   return Layer.succeed(HttpClient.HttpClient, httpClientFromCloudFetch(fetch));
 }
 
-function webResponse(response: HttpClientResponse.HttpClientResponse): Effect.Effect<Response> {
+/**
+ * The web `Response` a client's answer carries, for a caller whose own
+ * vocabulary is still `fetch`'s. The body travels as the stream the answer
+ * streams rather than as bytes read here, so a caller reads it exactly once
+ * and after this effect has ended, which is where `fetch`'s own reader stands.
+ *
+ * @deprecated Part of the HTTP lane's strangler shim; deleted with
+ * `CloudFetch` in P12-04.
+ */
+export function webResponseFromClientResponse(
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<Response> {
   const init: ResponseInit = { status: response.status, headers: response.headers };
   if (bodilessStatuses.has(response.status)) return Effect.succeed(new Response(null, init));
   return Effect.map(
@@ -129,9 +140,14 @@ export function cloudFetchFromHttpClient(client: HttpClient.HttpClient): CloudFe
           : { body: HttpBody.raw(init.body) }),
       }),
     );
-    const exit = await Effect.runPromiseExit(Effect.flatMap(answer, webResponse), {
-      ...(init.signal === null || init.signal === undefined ? undefined : { signal: init.signal }),
-    });
+    const exit = await Effect.runPromiseExit(
+      Effect.flatMap(answer, webResponseFromClientResponse),
+      {
+        ...(init.signal === null || init.signal === undefined
+          ? undefined
+          : { signal: init.signal }),
+      },
+    );
     if (Exit.isSuccess(exit)) return exit.value;
     if (Cause.isInterruptedOnly(exit.cause) && init.signal?.aborted === true) {
       throw init.signal.reason;

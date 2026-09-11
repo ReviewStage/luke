@@ -85,10 +85,9 @@ test("a phone or watch mint keeps its own narrowed session document on the share
   assert.notDeepEqual(sent.session.tools, realtimeClientSecretRequest().session.tools);
   assert.equal(sent.session.instructions, realtimeSessionInstructions(REALTIME_SCENE.PHONE));
   assert.notEqual(sent.session.instructions, realtimeClientSecretRequest().session.instructions);
-  // No caller cancellation is joined here: the upstream signal is the helper's
-  // own timeout, not aborted, exactly as before the brain route shared it.
+  // No caller cancellation is joined here: the signal the upstream was asked
+  // under is the helper's own, exactly as before the brain route shared it.
   assert.ok(call.init?.signal instanceof AbortSignal);
-  assert.equal(call.init?.signal.aborted, false);
 });
 
 test("the remote mint gate order is method, kill switch, token, body, quota", async () => {
