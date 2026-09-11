@@ -27,6 +27,9 @@ export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
       Effect.provideService(HostedEnvironment, {
         openAiKey: undefined,
         brainModel: undefined,
+        posthogPersonalApiKey: undefined,
+        posthogProjectId: undefined,
+        posthogApiHost: undefined,
         providerKeyEncryptionSecret: secret === undefined ? undefined : Redacted.make(secret),
       }),
     ),
