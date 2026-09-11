@@ -2465,3 +2465,52 @@ the standing rule in `packages/AGENTS.md` rather than a new constraint.
 **Nothing was blocked while this was open**, because part b was built refusing on null from the
 start. That is the general shape worth keeping: when the open question is *how a value arrives*,
 build the refusal first and the arrival second.
+
+
+## 2026-09-11 — The wake path cannot outrun its drain, and one open question about what it drops
+
+**Asked of C3 before LUKE-127 was called done, and answered by construction.** Coalescing bounds
+duplicates rather than rate, so "can anything enqueue faster than the drain empties?" needed its own
+answer.
+
+**No, and for three reasons worth keeping:**
+
+1. **Production and consumption share the visit.** The pass writes at most one roster diff per
+   account visit (an unchanged pass writes none) and the opener runs in the same visit immediately
+   after it (`accountTurn`: observe, then `openTurns`). So while eve accepts, consumption ≥ production
+   **every visit** and the inbox cannot grow. N accounts slow both halves equally; **there is no
+   cross-account queue to fall behind**, which is the structural reason rather than a measured one.
+2. **`plan()` always takes the oldest diff**, cut to the bound only when that one diff alone is
+   wider.
+3. **Every hold-release row descends from a turn the drain itself bounded.** The sweep queues one row
+   per conversation per lift (a `Set` dedupes within a sweep), a row exists only because a briefing
+   was announced into a hold, and `announce` is offered only in observation and `hold_release` turns —
+   both opened by this same opener under `TURNS_PER_ACCOUNT = 8` per visit. So steady-state production
+   can **equal** 8 conversations per visit and never exceed it. A burst after a long hold across C
+   conversations drains in **`ceil(C/8)` visits**, during which observations take the remainder of the
+   bound (possibly zero) and diffs pile at ≤ 1 per visit, then clear.
+
+**No rate ticket.**
+
+**The degraded mode, and the question it raises.** eve refusing — or an account outrunning its 25 s
+share — makes consumption zero while diffs still arrive at ≤ 1 per visit. Storage is bounded at
+`MAXIMUM_PENDING_ROSTER_DIFFS = 20`, oldest dropped, **the snapshot being the truth**. C3 states the
+cost precisely: *the wake of a session whose last change sat in the dropped diff and that never
+changes again.* A **permanently missed wake** — bounded, rare, and silent.
+
+**Put back to C3 because CLAUDE.md rules this case for the desktop and rules it the other way:**
+
+> The two cursors are two on purpose: a throttled or failed inference leaves every entry standing
+> for the next turn, a crash between capture and run loses nothing and reads nothing twice.
+
+**eve refusing is a failed inference.** On the desktop the entry stands; on the hosted path the diff
+is dropped and the snapshot has already moved past it. So: **is the snapshot advanced when the diff
+is written, or when it is consumed?** If only on consumption, an undrained diff **re-derives itself**
+on the next pass — wider, against the older snapshot, which is the coalescing already wanted — and
+overflow becomes **self-healing instead of lossy**, with at most one pending diff per account.
+
+Asked rather than directed. There may be a good reason for one snapshot: the diff may carry what the
+snapshot cannot re-derive, re-deriving may cost a read deliberately avoided, or the two-cursor shape
+may not map onto a roster as it maps onto a transcript. **A deliberate difference with a stated cause
+is fine and is what G5 needs to write the sentence correctly; an undocumented one is not.** Answered
+in the LUKE-127 wrap; a follow-up ticket if it is worth changing, never a reopened PR.
