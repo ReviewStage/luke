@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { test } from "vitest";
 import { conversationLiveRecord } from "./live-record.js";
 
 function writer() {

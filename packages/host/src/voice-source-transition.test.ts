@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -22,6 +21,7 @@ import { MAIN_SESSION_KEY, REASONING_EFFORT } from "@sidecar/runtime/vocabulary"
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { scriptedOpenSocket } from "@sidecar/voice/testing";
+import { test } from "vitest";
 import { BrainHost } from "./brain/host.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { runModeFor, sentryReportingEnabled } from "./run-mode.js";
 
 test("a live launch observes, talks, animates, focuses, and may send", () => {

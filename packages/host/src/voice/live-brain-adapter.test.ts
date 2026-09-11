@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { BRAIN_RUN_EVENT, type BrainRunEvent, type BrainRunEventBody } from "@sidecar/brain";
 import {
   BRAIN_ASK_REFUSAL,
@@ -11,6 +10,7 @@ import {
 } from "@sidecar/brain/requests";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { Emitter } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,

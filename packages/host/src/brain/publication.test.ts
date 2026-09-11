@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import {
   BRAIN_REQUEST_ORIGIN,
@@ -13,6 +12,7 @@ import {
   type ConversationEntry,
   maximumTypedAskLength,
 } from "@sidecar/session";
+import { test } from "vitest";
 import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
 

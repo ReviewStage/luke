@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { ObserveAnswer } from "@sidecar/hosted";
 import { CLOUD_AGENT_PROVIDER_ID, SESSION_STATUS, SessionRoster } from "@sidecar/session";
+import { test } from "vitest";
 import { drawSnapshotRoster } from "./snapshot-roster.js";
 
 const OBSERVED_AT = 1_800_000_000_000;

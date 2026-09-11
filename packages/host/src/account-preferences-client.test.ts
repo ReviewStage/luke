@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { AccountPreferences } from "@sidecar/settings";
+import { test } from "vitest";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 
 const PREFERENCES_ANSWER = {

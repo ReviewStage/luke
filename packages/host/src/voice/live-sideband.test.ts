@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import test from "node:test";
 import { LIVE_CLIENT_EVENT, LIVE_CLOSE_REASON, type LiveServerEvent } from "@sidecar/live";
 import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import { SOCKET_OPEN_FAULT, sidebandOverSocket, socketOpened } from "@sidecar/voice";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
+import { test } from "vitest";
 import { WebSocketServer } from "ws";
 import {
   closeGracefully,

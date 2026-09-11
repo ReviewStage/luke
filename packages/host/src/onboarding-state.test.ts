@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
-import { temporaryDirectory } from "@sidecar/runtime/testing";
+import { type TestContext, test } from "vitest";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { shouldRunIntroduction } from "./introduction-flow.js";
 import { ONBOARDING_STATE_FILE, onboardingStateFile } from "./onboarding-state.js";
+import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const SIGNED_IN_AT = "2026-08-24T00:00:00.000Z";
 const LATER = "2026-08-24T00:05:00.000Z";
 
-function fileIn(t: TestContext) {
-  const root = temporaryDirectory(t, "luke-onboarding-");
+async function fileIn(t: TestContext) {
+  const root = await temporaryDirectory(t, "luke-onboarding-");
   return { root, file: onboardingStateFile(() => root) };
 }
 
@@ -27,8 +27,8 @@ const MOMENTS = {
   calendarOnboardingSkippedAt: LATER,
 };
 
-test("the record round-trips every moment, and anything unreadable reads as no record", (t) => {
-  const { root, file } = fileIn(t);
+test("the record round-trips every moment, and anything unreadable reads as no record", async (t) => {
+  const { root, file } = await fileIn(t);
   assert.equal(file.read(), undefined);
   file.update(() => MOMENTS);
   assert.deepEqual(file.read(), MOMENTS);
@@ -45,8 +45,8 @@ test("the record round-trips every moment, and anything unreadable reads as no r
   assert.equal(file.read(), undefined);
 });
 
-test("a field that is not text is left off rather than kept as prose", (t) => {
-  const { root, file } = fileIn(t);
+test("a field that is not text is left off rather than kept as prose", async (t) => {
+  const { root, file } = await fileIn(t);
   fs.writeFileSync(
     path.join(root, ONBOARDING_STATE_FILE),
     JSON.stringify({
@@ -58,8 +58,8 @@ test("a field that is not text is left off rather than kept as prose", (t) => {
   assert.deepEqual(file.read(), { arrivalSpokenAt: LATER });
 });
 
-test("a record with no moment at all reads as no record", (t) => {
-  const { root, file } = fileIn(t);
+test("a record with no moment at all reads as no record", async (t) => {
+  const { root, file } = await fileIn(t);
   fs.writeFileSync(path.join(root, ONBOARDING_STATE_FILE), JSON.stringify({ other: "value" }));
   assert.equal(file.read(), undefined);
 });
@@ -79,8 +79,8 @@ test("a write that cannot land is reported, not thrown", () => {
   assert.equal(reported.length, 1);
 });
 
-test("an update merges over the record on disk, not over an older read", (t) => {
-  const { root, file } = fileIn(t);
+test("an update merges over the record on disk, not over an older read", async (t) => {
+  const { root, file } = await fileIn(t);
   const other = onboardingStateFile(() => root);
   file.update(() => ({ arrivalSignedInAt: SIGNED_IN_AT }));
   // The desktop process finishes the introduction while the Gateway holds an

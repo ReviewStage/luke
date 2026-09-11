@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -20,6 +19,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import { createSessionActionPerformer } from "./session-action-performer.js";
 import type { SettingsStore } from "./settings-store.js";

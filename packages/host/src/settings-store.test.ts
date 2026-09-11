@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
 import { LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
-import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   PROVIDER_ID,
   type ProviderId,
@@ -25,12 +23,14 @@ import {
 import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   apiKeyRejection,
   type SecretCipher,
   SettingsStore,
   type SettingsStoreOptions,
 } from "./settings-store.js";
+import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";
@@ -125,7 +125,7 @@ function storeIn(
 }
 
 test("a failed first load is retried before a later write", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({
@@ -236,7 +236,7 @@ test("every setting starts at its default, survives a reopen, and can be cleared
   for (const field of APP_SETTING_FIELDS) {
     const fallback = APP_SETTING_SCHEMA[field].guard(undefined).value;
     const sample = SAMPLE_VALUE[field];
-    const directory = temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "luke-settings-");
     const store = storeIn(directory);
 
     assert.deepEqual(await store.get(field), fallback, `${field} did not start at its default`);
@@ -272,7 +272,7 @@ test("every setting starts at its default, survives a reopen, and can be cleared
 
 test("every setting reads as its default when the file holds a shape it cannot be", async (t) => {
   for (const field of APP_SETTING_FIELDS) {
-    const directory = temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "luke-settings-");
     await fs.writeFile(
       path.join(directory, SETTINGS_FILE_NAME),
       JSON.stringify({ version: 2, apiKeys: {}, [field]: CORRUPT_VALUE }),
@@ -289,7 +289,7 @@ test("every setting reads as its default when the file holds a shape it cannot b
 
 test("no setting's write reaches the cipher, and none disturbs a stored key", async (t) => {
   for (const field of APP_SETTING_FIELDS) {
-    const directory = temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "luke-settings-");
     const cipher = countingCipher();
     const store = storeIn(directory, { cipher });
     await store.setApiKey(CONDUCTOR, TEST_API_KEY);
@@ -309,7 +309,7 @@ test("no setting's write reaches the cipher, and none disturbs a stored key", as
 });
 
 test("stores an API key encrypted, private to the owner, and never in a snapshot", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   const { settings, reason } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
@@ -326,7 +326,7 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
 });
 
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   const account = {
     accessToken: "access-token-secret",
@@ -351,7 +351,7 @@ test("round-trips an encrypted account without exposing either token in snapshot
 test("decrypts once and re-decrypts only after the key changes", async (t) => {
   // The observation timer reads the credential every few seconds, so decrypting
   // on each read would reach the OS keychain thousands of times a day.
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   let decryptions = 0;
   const cipher = testCipher();
   const store = storeIn(directory, {
@@ -377,7 +377,7 @@ test("decrypts once and re-decrypts only after the key changes", async (t) => {
 });
 
 test("reads a stored key back from a new store instance", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
 
   const reopened = storeIn(directory);
@@ -390,7 +390,7 @@ test("reads a stored key back from a new store instance", async (t) => {
 });
 
 test("clears a stored key", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
@@ -402,7 +402,7 @@ test("clears a stored key", async (t) => {
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a stored selection keeps only the filters this build recognizes", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({
@@ -421,7 +421,7 @@ test("a stored selection keeps only the filters this build recognizes", async (t
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a stored query of nothing but whitespace reads as unset rather than narrowing", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({ version: 2, apiKeys: {}, sessionSearchQuery: "   " }),
@@ -432,7 +432,7 @@ test("a stored query of nothing but whitespace reads as unset rather than narrow
 });
 
 test("a stored connection answers presence without touching any grant", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   assert.equal(await store.calendarConnectionStored(), false);
@@ -445,7 +445,7 @@ test("a stored connection answers presence without touching any grant", async (t
 });
 
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   assert.deepEqual(await store.readCalendarAccounts(), []);
@@ -471,7 +471,7 @@ test("a calendar account stores its grant encrypted and survives a reopen", asyn
 });
 
 test("accounts stand side by side, and reconnecting one keeps its choices", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await store.addCalendarAccount("work@example.com", "1//work-grant", ["work@example.com"]);
@@ -496,7 +496,7 @@ test("accounts stand side by side, and reconnecting one keeps its choices", asyn
 });
 
 test("selection changes one calendar on one account, and removal takes the grant with it", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
 
@@ -515,7 +515,7 @@ test("selection changes one calendar on one account, and removal takes the grant
 });
 
 test("the Apple Calendar connection stores only the choice and survives a reopen", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   assert.equal(await store.readAppleCalendarConnection(), undefined);
@@ -538,7 +538,7 @@ test("the Apple Calendar connection stores only the choice and survives a reopen
 });
 
 test("connecting Apple Calendar again keeps the held choices, and selection edits them", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.connectAppleCalendar(["default-calendar"]);
   // Asking to connect while connected is not a fresh mind about the choices.
@@ -559,13 +559,13 @@ test("connecting Apple Calendar again keeps the held choices, and selection edit
 });
 
 test("Apple Calendar is offered only where there is a Mac calendar to read", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const snapshot = await storeIn(directory).snapshot();
   assert.equal(appSettingsView(snapshot).appleCalendarAvailable, process.platform === "darwin");
 });
 
 test("a calendar account never disturbs a stored key, nor a key an account", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
@@ -578,7 +578,7 @@ test("a calendar account never disturbs a stored key, nor a key an account", asy
 });
 
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
   });
@@ -611,7 +611,7 @@ test("keeps each provider's key, environment fallback, and reported source separ
 test("keeps both keys when two providers are saved at once", async (t) => {
   // Each settings row carries its own busy flag, so a user with more than one
   // provider can start a second save before the first has landed.
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await Promise.all([
@@ -638,7 +638,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
 });
 
 test("reports nothing for a provider the registry does not name", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const unknown = "no-such-service" as CredentialProviderId;
@@ -648,7 +648,7 @@ test("reports nothing for a provider the registry does not name", async (t) => {
 });
 
 test("falls back to an API key from the environment", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_TOKEN]: `  ${TEST_API_KEY}  ` },
   });
@@ -660,7 +660,7 @@ test("falls back to an API key from the environment", async (t) => {
 });
 
 test("prefers a stored key over one from the environment", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment-key" },
   });
@@ -670,7 +670,7 @@ test("prefers a stored key over one from the environment", async (t) => {
 });
 
 test("rejects a key that cannot be sent as an authorization header", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   for (const candidate of ["short", "key with spaces", "k".repeat(513)]) {
@@ -700,7 +700,7 @@ test("holds a key only in the form its provider says it issues", () => {
 });
 
 test("refuses to store a key when encrypted storage is unavailable", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, { cipher: testCipher(false) });
 
   const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
@@ -710,7 +710,7 @@ test("refuses to store a key when encrypted storage is unavailable", async (t) =
 });
 
 test("asks the cipher nothing on a launch with no key to protect", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
@@ -723,7 +723,7 @@ test("asks the cipher nothing on a launch with no key to protect", async (t) => 
 });
 
 test("asks the cipher nothing to clear a key", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
@@ -735,7 +735,7 @@ test("asks the cipher nothing to clear a key", async (t) => {
 });
 
 test("asks once when a key is stored and reports that answer from then on", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
@@ -750,7 +750,7 @@ test("asks once when a key is stored and reports that answer from then on", asyn
 });
 
 test("decrypts a stored key without asking whether storage is available", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
@@ -763,7 +763,7 @@ test("decrypts a stored key without asking whether storage is available", async 
 });
 
 test("ignores a stored key that can no longer be decrypted", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
@@ -784,7 +784,7 @@ test("ignores a stored key that can no longer be decrypted", async (t) => {
 
 test("carries a key belonging to a provider this build does not know", async (t) => {
   // A file written by a newer build must not lose credentials to an older one.
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({ version: 2, apiKeys: { "later-cloud": sealed("later-cloud-key") } }),
@@ -805,7 +805,7 @@ test("decides the Dock icon from the file alone, never the keychain", async (t) 
   // The icon is drawn at launch from this answer, so a locked or slow
   // Keychain — which decrypting a stored key can wait on — must not be able to
   // delay it.
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({
@@ -822,7 +822,7 @@ test("decides the Dock icon from the file alone, never the keychain", async (t) 
 });
 
 test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
     environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
   });
@@ -841,7 +841,7 @@ test("prefers the chosen voice over the environment, and the environment over th
 });
 
 test("ignores a stored or environment voice this build does not offer", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({ version: 2, apiKeys: {}, voice: "baritone" }),
@@ -853,7 +853,7 @@ test("ignores a stored or environment voice this build does not offer", async (t
 });
 
 test("account preferences extraction excludes resolved defaults and local-only preferences", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
     environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
   });
@@ -868,7 +868,7 @@ test("account preferences extraction excludes resolved defaults and local-only p
 });
 
 test("applies account preferences to disk and restores them from a new store", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
@@ -897,7 +897,7 @@ test("applies account preferences to disk and restores them from a new store", a
 });
 
 test("merges hosted account preferences around concurrent local preference edits", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   const account = {
     accessToken: "access-token-secret",
@@ -935,7 +935,7 @@ test("merges hosted account preferences around concurrent local preference edits
 });
 
 test("keeps local account preference edits across a failed hosted write and restart", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const account = {
     accessToken: "access-token-secret",
     refreshToken: "refresh-token-secret",
@@ -966,7 +966,7 @@ test("keeps local account preference edits across a failed hosted write and rest
 });
 
 test("skips a guarded account preference apply after account sign-out", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   const account = {
     accessToken: "access-token-secret",
@@ -993,7 +993,7 @@ test("skips a guarded account preference apply after account sign-out", async (t
 });
 
 test("stores a deleted talk key as the none token and reads it back", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   const { settings, reason } = await store.set(
@@ -1017,7 +1017,7 @@ test("ignores a stored chord this build cannot register", async (t) => {
     APP_SETTING_SCHEMA.askHotkey.field,
     APP_SETTING_SCHEMA.stopHotkey.field,
   ]) {
-    const directory = temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "luke-settings-");
     await fs.writeFile(
       path.join(directory, SETTINGS_FILE_NAME),
       JSON.stringify({ version: 2, apiKeys: {}, [field]: "F13" }),
@@ -1032,7 +1032,7 @@ test("ignores a stored chord this build cannot register", async (t) => {
 });
 
 test("the three Luke keys survive each other's writes", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
@@ -1047,7 +1047,7 @@ test("the three Luke keys survive each other's writes", async (t) => {
 
 test("a stored key and a chosen preference survive each other's writes", async (t) => {
   for (const field of APP_SETTING_FIELDS) {
-    const directory = temporaryDirectory(t, "luke-settings-");
+    const directory = await temporaryDirectory(t, "luke-settings-");
     const store = storeIn(directory);
 
     await store.setApiKey(CONDUCTOR, TEST_API_KEY);
@@ -1061,7 +1061,7 @@ test("a stored key and a chosen preference survive each other's writes", async (
 });
 
 test("ignores a stored form this build does not draw", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({ version: 2, apiKeys: {}, formFactor: "hexagon" }),
@@ -1075,7 +1075,7 @@ test("ignores a stored form this build does not draw", async (t) => {
 });
 
 test("ignores a stored default provider this build does not know", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({ version: 2, apiKeys: {}, defaultWorkspaceProvider: "someone-else" }),
@@ -1092,7 +1092,7 @@ test("ignores a stored default provider this build does not know", async (t) => 
 });
 
 test("stores Superset workspace and agent defaults without touching credentials", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, "superset");
@@ -1113,7 +1113,7 @@ test("stores Superset workspace and agent defaults without touching credentials"
 });
 
 test("lets the first creation choose each provider's project until one is chosen", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   // Unset on purpose, the provider default's own terms: the default is always
@@ -1147,7 +1147,7 @@ test("lets the first creation choose each provider's project until one is chosen
 });
 
 test("keeps one provider's default project apart from another's", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
@@ -1165,7 +1165,7 @@ test("keeps one provider's default project apart from another's", async (t) => {
 });
 
 test("forgetting a default no provider offers survives the reload it was written for", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-gone");
@@ -1183,7 +1183,7 @@ test("forgetting a default no provider offers survives the reload it was written
 });
 
 test("a stale cleanup cannot clear a newer project default", async (t) => {
-  const store = storeIn(temporaryDirectory(t, "luke-settings-"));
+  const store = storeIn(await temporaryDirectory(t, "luke-settings-"));
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-old");
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-new");
 
@@ -1266,7 +1266,7 @@ test("every map-valued setting is written one entry at a time", () => {
 });
 
 test("overlapping default projects each survive the other's write", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   // Both start before either lands, the way two provider rows saved in quick
@@ -1285,7 +1285,7 @@ test("overlapping default projects each survive the other's write", async (t) =>
 });
 
 test("an overlapping clear forgets its own entry and no other", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
 
@@ -1302,7 +1302,7 @@ test("an overlapping clear forgets its own entry and no other", async (t) => {
 });
 
 test("ignores stored default projects this store cannot hold", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({
@@ -1326,7 +1326,7 @@ test("ignores stored default projects this store cannot hold", async (t) => {
 });
 
 test("ignores a stored pairing this build's table does not list", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({
@@ -1349,7 +1349,7 @@ test("ignores a stored pairing this build's table does not list", async (t) => {
 });
 
 test("recovers from a corrupt settings file", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), "{ not json");
   const store = storeIn(directory);
 
@@ -1363,7 +1363,7 @@ test("recovers from a corrupt settings file", async (t) => {
 });
 
 test("a voice reset forgets the voice, captions, and duck in one action", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
   await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
@@ -1381,7 +1381,7 @@ test("a voice reset forgets the voice, captions, and duck in one action", async 
 });
 
 test("a voice reset returns to the environment's voice where one stands behind the choice", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
     environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
   });
@@ -1396,7 +1396,7 @@ test("a voice reset returns to the environment's voice where one stands behind t
 });
 
 test("an appearance reset returns Luke's stances without touching the voice page", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
@@ -1415,7 +1415,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
 });
 
 test("a shortcuts reset forgets all three chords at once", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
   await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
@@ -1433,7 +1433,7 @@ test("a shortcuts reset forgets all three chords at once", async (t) => {
 });
 
 test("a workspaces reset forgets the provider and project defaults but never the agent pairing", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   const pairing = { agent: "claude", model: "sonnet" };
   await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
@@ -1457,7 +1457,7 @@ test("a workspaces reset forgets the provider and project defaults but never the
 });
 
 test("a reset of settings already at their defaults writes nothing", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
@@ -1470,7 +1470,7 @@ test("a reset of settings already at their defaults writes nothing", async (t) =
 });
 
 test("a reset never touches the cipher", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
   await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
@@ -1483,7 +1483,7 @@ test("a reset never touches the cipher", async (t) => {
 });
 
 test("a reset leaves a stored key standing", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
     JSON.stringify({
@@ -1521,7 +1521,7 @@ const TEST_ACCOUNT = {
 };
 
 test("with no key stored there is only one source to run on", async (t) => {
-  const store = storeIn(temporaryDirectory(t, "luke-settings-"));
+  const store = storeIn(await temporaryDirectory(t, "luke-settings-"));
   await store.setAccount(TEST_ACCOUNT);
 
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
@@ -1535,7 +1535,7 @@ test("with no key stored there is only one source to run on", async (t) => {
 });
 
 test("connecting the voice key chooses it, and the allowance can take it back", async (t) => {
-  const store = storeIn(temporaryDirectory(t, "luke-settings-"));
+  const store = storeIn(await temporaryDirectory(t, "luke-settings-"));
   await store.setAccount(TEST_ACCOUNT);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
 
@@ -1558,7 +1558,7 @@ test("connecting the voice key chooses it, and the allowance can take it back", 
 });
 
 test("a choice that would start spending a key is never made by fallback", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
@@ -1579,7 +1579,7 @@ test("a choice that would start spending a key is never made by fallback", async
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the chosen source survives a reopen, and a corrupt one reads as no choice", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
@@ -1599,7 +1599,7 @@ test("the chosen source survives a reopen, and a corrupt one reads as no choice"
 });
 
 test("pasting a key back while parked on the allowance is still choosing it", async (t) => {
-  const store = storeIn(temporaryDirectory(t, "luke-settings-"));
+  const store = storeIn(await temporaryDirectory(t, "luke-settings-"));
   await store.setAccount(TEST_ACCOUNT);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
   await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
@@ -1614,7 +1614,7 @@ test("pasting a key back while parked on the allowance is still choosing it", as
 });
 
 test("a grant is stored encrypted, and read back only in the main process", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   const { settings } = await store.setGrant(CONSENT_SERVICE, {
@@ -1646,7 +1646,7 @@ test("a grant is stored encrypted, and read back only in the main process", asyn
 });
 
 test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
   await store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 });
@@ -1662,7 +1662,7 @@ test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
 });
 
 test("a key left by a build that asked for one is dropped, never carried", async (t) => {
-  const directory = temporaryDirectory(t, "luke-settings-");
+  const directory = await temporaryDirectory(t, "luke-settings-");
   // What an installation upgraded from a build that pasted this service's key
   // would hold: a credential this build can never send anywhere.
   await fs.writeFile(

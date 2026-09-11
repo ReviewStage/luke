@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import test from "node:test";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
-import { drainMicrotasks, FakeClock, temporaryDirectory } from "@sidecar/runtime/testing";
+import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   DEVICE_HEARTBEAT_INTERVAL_MS,
   DEVICE_STATE_FILE,
@@ -14,6 +14,7 @@ import {
   deviceStateFile,
   deviceStateFrom,
 } from "./device-registration.js";
+import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const INSTALLATION_ID = "0F8FAD5B-D9CB-469F-A165-70867728950E";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -74,7 +75,7 @@ function storedState(directory: string): DeviceState | undefined {
 }
 
 test("a first start mints the installation id once, registers as a Mac, and keeps the row's id", async (t) => {
-  const directory = temporaryDirectory(t);
+  const directory = await temporaryDirectory(t);
   const clock = new FakeClock();
   const { client, calls } = fakeClient({});
   const subject = registration(directory, client, clock);
@@ -100,7 +101,7 @@ test("a first start mints the installation id once, registers as a Mac, and keep
 });
 
 test("the installation id outlives a sign-out and a relaunch, so a re-sign-in re-keys the one row", async (t) => {
-  const directory = temporaryDirectory(t);
+  const directory = await temporaryDirectory(t);
   const clock = new FakeClock();
   const first = fakeClient({});
   const subject = registration(directory, first.client, clock);
@@ -129,7 +130,7 @@ test("the installation id outlives a sign-out and a relaunch, so a re-sign-in re
 });
 
 test("a stop without a departing account disarms the beat and forgets nothing", async (t) => {
-  const directory = temporaryDirectory(t);
+  const directory = await temporaryDirectory(t);
   const clock = new FakeClock();
   const { client, calls } = fakeClient({});
   const subject = registration(directory, client, clock);
@@ -146,7 +147,7 @@ test("a stop without a departing account disarms the beat and forgets nothing", 
 });
 
 test("each beat moves last seen, and a row the service no longer holds is registered again", async (t) => {
-  const directory = temporaryDirectory(t);
+  const directory = await temporaryDirectory(t);
   const clock = new FakeClock();
   const seen = [true, false];
   const ids = [DEVICE_ID, OTHER_DEVICE_ID];
@@ -171,7 +172,7 @@ test("each beat moves last seen, and a row the service no longer holds is regist
 });
 
 test("a registration that did not land is tried again by the next beat, and a late answer installs nothing", async (t) => {
-  const directory = temporaryDirectory(t);
+  const directory = await temporaryDirectory(t);
   const clock = new FakeClock();
   let answer: { deviceId: string } | undefined;
   const { client, calls } = fakeClient({ register: () => answer });
@@ -213,7 +214,7 @@ test("a registration that did not land is tried again by the next beat, and a la
 });
 
 test("a registration still on the wire at sign-out lands before the next account registers", async (t) => {
-  const directory = temporaryDirectory(t);
+  const directory = await temporaryDirectory(t);
   const clock = new FakeClock();
   let release: (() => void) | undefined;
   const ids = [DEVICE_ID, OTHER_DEVICE_ID];
