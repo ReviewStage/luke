@@ -1502,3 +1502,33 @@ body.
 **And the tick question is answered by fitting inside the arithmetic rather than claiming a share of
 it:** the opener runs inside each account's 25 s pass, no fourth constant, D3's assertion untouched.
 D3's test now guards three consumers and refused to become a fourth's problem.
+
+
+## 2026-09-11 — Presence is not the same as being able to speak (orchestrator, from D3)
+
+**The bug, found by Bugbot on D3's rebased head and real:** the phone reports `activeUntil` on its
+foreground poll (`LukeKit`'s `ConversationStore.swift`), and **the phone cannot claim speech.** So
+the push rule read "a device is here, wait for them" about a device that was never going to say
+anything — and a developer holding the phone with the Mac idle **waited out the whole two-minute
+grace in silence.** The field was honest; the question asked of it was wrong.
+
+**Fix and the value set it introduces: `SPEAKING_PLATFORMS = { macos }`.** Presence counts only from
+platforms that can claim an offer and speak it. Tested: an active phone gets a push at once.
+
+**Required comment on the set, because `{ macos }` is a today-fact and not a permanent one:** the
+watch never speaks; the phone **does** hold voice calls but nothing on it claims a briefing today.
+The rule to write beside it is *"a platform joins this set when it can claim an offer and speak it,
+not when it can report presence"* — otherwise whoever adds iOS voice reads `{ macos }` as an
+oversight and widens it without bringing the claim path along.
+
+**And a second `PRIVACY.md` falsehood, found independently: its Devices paragraph says "The phone and
+the watch report neither"** — neither presence nor quiet — **which the iOS presence write already
+contradicts on main.** It went stale when the iOS Conversation screen began polling with
+`activeUntil`. **Folded into LUKE-161 rather than filed as a third ticket**, with the true statement
+noted for whoever writes it: the Mac reports presence and quiet, iOS reports `activeUntil` on its
+Conversation poll, the watch reports neither — and *"reports presence"* and *"can be spoken to"* are
+two different facts about a device that the file should not conflate.
+
+**D3 deliberately did not edit it**, which was right: a privacy document corrected in passing inside
+a push PR is worse than one corrected on purpose. **Two independent staleness findings in one
+morning is the argument for not letting that file wait for G5.**
