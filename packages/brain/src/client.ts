@@ -60,6 +60,12 @@ function errorName(cause: unknown): string | undefined {
  * `HttpClient`. The caller's cancellation is the run's own interruption
  * rather than a value in the request, so its end is read back here, named by
  * the reason their signal carried, exactly as an aborted fetch named it.
+ *
+ * @deprecated `BrainTransport#send` is a promise-facing strangler shim on the
+ * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: it runs the
+ * call effect here because every caller still holds a promise, not a fiber.
+ * P5-14 moves a turn onto the brain's own runtime, at which point this
+ * request runs there instead and `runCall` goes with it.
  */
 async function runCall(
   effect: Effect.Effect<CallAnswer, never, HttpClient.HttpClient>,
