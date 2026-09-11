@@ -915,3 +915,46 @@ Tested in both directions — not-active, not-active, accepted; and four not-act
 
 **Scope beyond C2b: every path that sends to eve inherits this**, including the ask handlers that
 C8's in-process call goes through. C2b-2b's send path carries it by construction.
+
+
+## 2026-09-11 — Gate finding 9: `test:store` files share one Postgres on CI, and PGlite hides it (orchestrator, from C5b)
+
+**The ninth gate tonight that did not say what it appeared to say, and the first that says the
+opposite.** Green locally means *less* than green on CI here, for a reason that has nothing to do
+with the change under test.
+
+**On CI every `test:store` file runs in parallel against ONE Postgres. PGlite gives each file its
+own.** So a test that writes or sweeps across accounts reaches into another file's fixtures. C5b
+lost three tests to it: its far-future "settle leftovers" sweep expired the **voice-writer** file's
+just-claimed offers — that file's fixture clock is a day earlier — and `markSpeechSpoken` then
+answered settled, which the voice writer maps to `not_claimant` at `voice-writer.test.ts:375`.
+**Nothing was wrong with the code under test, and the failing test was in a file C5b had never
+touched.**
+
+Worth recording that **my own hypothesis was wrong and the worker checked it before acting on it.**
+I guessed a rebase had dropped C5a's claim-first update to that test; `git diff a4f42ab4 HEAD --
+apps/web/tests/voice-writer.test.ts` was empty and the update was intact. A plausible story about a
+lost fix would have sent it editing the wrong file.
+
+**Two rules, now in every brief:**
+
+- **A `test:store` test scopes every write and every sweep to the accounts it created.** "Every
+  account" is a production posture that happens to compile in a test. C5b added
+  `SpeechSweepOptions.userIds` — the tick names none and sweeps all accounts, every test names its
+  own — and **deleted** the far-future settle helper rather than scoping it, which is right when
+  reaching everything was the helper's whole purpose.
+- **Reproduce the CI condition before believing a green run:** Postgres 16, a fresh database,
+  `db:migrate`, then the whole suite with all thirteen files in parallel. C5b's 128/128 that way is
+  worth more than any PGlite pass. **Every remaining PR that adds a `test:store` file inherits
+  this** — C2b-2b, C4, C8's a2, D3, and G4, which drops thirteen tables.
+
+**And the starvation finding beside it, from Bugbot on the same PR:** held offers are the oldest
+open rows, so they could starve the 500-row bound — **one account's long meeting could have
+silently stopped every other account's briefings from being considered at all.** The sweep now
+reads quiet accounts each under their own bound and the rest with quiet accounts excluded, with a
+starvation test that fails under the mutation dropping the exclusion.
+
+**One clause better than what I asked for:** `speech.held` is written once per hold and
+**re-held only when the quiet instant moves later** — idempotent on the *hold* rather than on the
+tick, so a meeting extended by ten minutes writes a second held event and a meeting merely still
+standing does not.
