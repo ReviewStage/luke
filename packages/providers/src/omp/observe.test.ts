@@ -10,6 +10,7 @@ import {
 } from "@sidecar/session";
 import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
+import { homeManifest } from "../testing/index.js";
 import { ompPlugin } from "./index.js";
 import { OMP_SESSIONS_DIRECTORY } from "./records.js";
 
@@ -404,4 +405,38 @@ test("observes nothing where OMP has never run", async (t) => {
 
   assert.deepEqual(await plugin.observe(), []);
   assert.deepEqual(plugin.latest(), []);
+});
+
+// "Never write provider transcripts or session-state files. Reading them is
+// what Luke is for; writing to them is never." The observation pass and both
+// transcript reads run over a home holding a recorded session, and every
+// byte, size and date under it stands where it stood.
+test("observing and reading a transcript writes nothing under OMP's home", async (t) => {
+  const ompHome = await temporaryDirectory(t, "luke-omp-");
+  await writeSessionFile(ompHome, {
+    projectDirectoryName: "luke",
+    sessionId: SESSION_ID,
+    records: [
+      titleSlot("Fix the flaky test"),
+      sessionHeader("/Users/test/luke"),
+      userMessage("2026-08-20T11:58:30.000Z"),
+      assistantMessage("2026-08-20T11:59:00.000Z"),
+    ],
+  });
+  const plugin = ompPlugin({ ompHome, now: () => TEST_TIME });
+  const before = await homeManifest(ompHome);
+
+  await plugin.observe();
+  const read = await plugin.reads?.transcript?.(SESSION_ID);
+  const since = await plugin.reads?.transcriptSince?.(SESSION_ID);
+  // A read that found nothing would leave the home untouched for the wrong
+  // reason, so both reads answering is part of what is being pinned.
+  assert.equal(read?.status, "accepted");
+  assert.equal(since?.status, "accepted");
+  await plugin.reads?.transcriptSince?.(
+    SESSION_ID,
+    since?.status === "accepted" ? since.cursor : undefined,
+  );
+
+  assert.deepEqual(await homeManifest(ompHome), before);
 });

@@ -42,7 +42,6 @@ export interface ProjectsOptions
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
   now?: () => number;
-  sleep?: (ms: number) => Promise<void>;
 }
 
 /**

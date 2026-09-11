@@ -12,6 +12,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { type TestContext, test } from "vitest";
+import { homeManifest } from "../testing/index.js";
 import { conductorApplications } from "./applications.js";
 
 const TEST_CONDUCTOR_AGENT_TYPE = {
@@ -157,6 +158,24 @@ test("indexes supported provider session ids from Conductor records", async (t) 
 
   assert.equal(snapshot.has(PROVIDER_ID.CLAUDE_CODE, "codex-local"), false);
   assert.equal(snapshot.has(PROVIDER_ID.OMP, "omp-local"), false);
+});
+
+// "Never write provider transcripts or session-state files. Reading them is
+// what Luke is for; writing to them is never." The read opens Conductor's own
+// database read-only inside a scope that closes it, so the file stands byte
+// for byte.
+test("reading Conductor's own session index writes nothing under its database", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const directory = path.dirname(databasePath);
+  const database = createConductorDatabase(databasePath);
+  writeSession(database, "conductor-codex", "codex-local", TEST_CONDUCTOR_AGENT_TYPE.CODEX);
+  database.close();
+  const before = await homeManifest(directory);
+
+  const snapshot = await conductorApplications({ databasePath }).read();
+
+  assert.equal(snapshot.has(PROVIDER_ID.CODEX, "codex-local"), true);
+  assert.deepEqual(await homeManifest(directory), before);
 });
 
 test("a missing Conductor schema leaves provider observations intact", async (t) => {

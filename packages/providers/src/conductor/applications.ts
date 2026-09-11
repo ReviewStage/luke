@@ -9,6 +9,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { text, type UnparsedWireValue, wholeNumber, wireRecord } from "@sidecar/wire";
+import { Data, Effect, Option } from "effect";
 import {
   type HostClaims,
   hostClaims,
@@ -18,10 +19,11 @@ import {
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
+  scopedReadOnlyDatabase,
 } from "../shared/local-sqlite.js";
+import { runAdapterRead } from "../shared/promise-face.js";
 
 const CONDUCTOR_APPLICATION_SUPPORT_DIRECTORY = "com.conductor.app";
 const CONDUCTOR_DATABASE_FILE = "conductor.db";
@@ -326,54 +328,60 @@ export function conductorApplications(
   const databasePath = options.databasePath ?? defaultConductorDatabasePath();
   const sqlite = options.sqlite ?? defaultSqliteModule;
 
-  const read = async (): Promise<HostClaims> => {
-    const database = await openReadOnlyDatabase(sqlite, databasePath);
-    if (!database) return conductorClaims(new Map());
+  const readEffect: Effect.Effect<HostClaims> = Effect.scoped(
+    Effect.gen(function* () {
+      const database = yield* scopedReadOnlyDatabase(sqlite, databasePath);
+      if (Option.isNone(database)) return conductorClaims(new Map());
+      const rows = yield* queryRows(database.value);
 
-    let rows: UnparsedWireValue[];
-    try {
-      rows = queryRows(database);
-    } catch (error) {
-      if (error instanceof Error && canIgnoreSqliteError(error)) {
-        return conductorClaims(new Map());
+      const sessionsByProvider = new Map<string, Map<string, ConductorSessionContext>>();
+      for (const row of rows) {
+        const record = wireRecord(row);
+        if (!record) continue;
+        const type = agentType(record[CONDUCTOR_SESSION_FIELD.AGENT_TYPE]);
+        const providerSessionId = text(record[CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID]);
+        if (!type || !providerSessionId) continue;
+        const conductorSessionId = text(record[CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID]);
+        const title = chatTitle(record[CONDUCTOR_SESSION_FIELD.CHAT_TITLE]);
+        const workspaceId = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_ID]);
+        const workspaceName = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME]);
+        // Filed away only on a positive record: a hidden flag or workspace
+        // state the fallback query never read leaves the chat standing.
+        const filedAway =
+          (wholeNumber(record[CONDUCTOR_SESSION_FIELD.HIDDEN]) ?? 0) !== 0 ||
+          text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_STATE]) ===
+            CONDUCTOR_ARCHIVED_WORKSPACE_STATE;
+        const providerId = CONDUCTOR_AGENT_BY_TYPE[type].id;
+        const sessions = sessionsByProvider.get(providerId) ?? new Map();
+        sessions.set(providerSessionId, {
+          ...(conductorSessionId ? { conductorSessionId } : undefined),
+          ...(title ? { chatTitle: title } : undefined),
+          ...(workspaceId ? { workspaceId } : undefined),
+          ...(workspaceName ? { workspaceName } : undefined),
+          ...(filedAway ? { filedAway } : undefined),
+        });
+        sessionsByProvider.set(providerId, sessions);
       }
-      throw error;
-    } finally {
-      database.close();
-    }
+      return conductorClaims(sessionsByProvider);
+    }),
+  );
 
-    const sessionsByProvider = new Map<string, Map<string, ConductorSessionContext>>();
-    for (const row of rows) {
-      const record = wireRecord(row);
-      if (!record) continue;
-      const type = agentType(record[CONDUCTOR_SESSION_FIELD.AGENT_TYPE]);
-      const providerSessionId = text(record[CONDUCTOR_SESSION_FIELD.PROVIDER_SESSION_ID]);
-      if (!type || !providerSessionId) continue;
-      const conductorSessionId = text(record[CONDUCTOR_SESSION_FIELD.CONDUCTOR_SESSION_ID]);
-      const title = chatTitle(record[CONDUCTOR_SESSION_FIELD.CHAT_TITLE]);
-      const workspaceId = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_ID]);
-      const workspaceName = text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_NAME]);
-      // Filed away only on a positive record: a hidden flag or workspace
-      // state the fallback query never read leaves the chat standing.
-      const filedAway =
-        (wholeNumber(record[CONDUCTOR_SESSION_FIELD.HIDDEN]) ?? 0) !== 0 ||
-        text(record[CONDUCTOR_SESSION_FIELD.WORKSPACE_STATE]) ===
-          CONDUCTOR_ARCHIVED_WORKSPACE_STATE;
-      const providerId = CONDUCTOR_AGENT_BY_TYPE[type].id;
-      const sessions = sessionsByProvider.get(providerId) ?? new Map();
-      sessions.set(providerSessionId, {
-        ...(conductorSessionId ? { conductorSessionId } : undefined),
-        ...(title ? { chatTitle: title } : undefined),
-        ...(workspaceId ? { workspaceId } : undefined),
-        ...(workspaceName ? { workspaceName } : undefined),
-        ...(filedAway ? { filedAway } : undefined),
-      });
-      sessionsByProvider.set(providerId, sessions);
-    }
-    return conductorClaims(sessionsByProvider);
-  };
+  return { read: () => runAdapterRead(readEffect), empty: conductorClaims(new Map()) };
+}
 
-  return { read, empty: conductorClaims(new Map()) };
+/** What one query attempt threw, carried where nothing but this module reads it. */
+class SqliteQueryFailed extends Data.TaggedError("SqliteQueryFailed")<{
+  readonly cause: unknown;
+}> {}
+
+function tryQuery(
+  database: SqliteDatabase,
+  query: string,
+): Effect.Effect<readonly UnparsedWireValue[], SqliteQueryFailed> {
+  return Effect.try({
+    try: () => database.prepare(query).all(),
+    catch: (cause) => new SqliteQueryFailed({ cause }),
+  });
 }
 
 /**
@@ -381,13 +389,24 @@ export function conductorApplications(
  * titles must not cost the grouping, and losing the grouping must not cost
  * the annotation itself.
  */
-function queryRows(database: SqliteDatabase): UnparsedWireValue[] {
-  for (const query of [CONDUCTOR_SESSION_QUERY, CONDUCTOR_SESSION_QUERY_WITHOUT_TITLES]) {
-    try {
-      return database.prepare(query).all();
-    } catch (error) {
-      if (!(error instanceof Error && canIgnoreSqliteError(error))) throw error;
-    }
-  }
-  return database.prepare(CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES).all();
+function queryRows(database: SqliteDatabase): Effect.Effect<readonly UnparsedWireValue[]> {
+  const withoutWorkspaces = Effect.catchAll(
+    tryQuery(database, CONDUCTOR_SESSION_QUERY_WITHOUT_WORKSPACES),
+    (failure) =>
+      failure.cause instanceof Error && canIgnoreSqliteError(failure.cause)
+        ? Effect.succeed<readonly UnparsedWireValue[]>([])
+        : Effect.die(failure.cause),
+  );
+  const withoutTitles = Effect.catchAll(
+    tryQuery(database, CONDUCTOR_SESSION_QUERY_WITHOUT_TITLES),
+    (failure) =>
+      failure.cause instanceof Error && canIgnoreSqliteError(failure.cause)
+        ? withoutWorkspaces
+        : Effect.die(failure.cause),
+  );
+  return Effect.catchAll(tryQuery(database, CONDUCTOR_SESSION_QUERY), (failure) =>
+    failure.cause instanceof Error && canIgnoreSqliteError(failure.cause)
+      ? withoutTitles
+      : Effect.die(failure.cause),
+  );
 }

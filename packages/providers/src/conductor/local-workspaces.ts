@@ -7,15 +7,17 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
-import { text, UNKNOWN_ACTION_STATUS, wireRecord } from "@sidecar/wire";
+import { text, UNKNOWN_ACTION_STATUS, type UnparsedWireValue, wireRecord } from "@sidecar/wire";
+import { Data, Effect, Option } from "effect";
 import { repositoryLabel } from "../shared/cloud-wire.js";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
+  scopedReadOnlyDatabase,
 } from "../shared/local-sqlite.js";
+import { runAdapterRead } from "../shared/promise-face.js";
 import { conductorCreateWorkspaceLink, defaultConductorDatabasePath } from "./applications.js";
 
 /**
@@ -103,46 +105,67 @@ class ConductorRepositoryIndex implements ConductorRepositories {
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
 
-  async read(): Promise<readonly ConductorRepository[]> {
-    const database = await openReadOnlyDatabase(this.#sqlite, this.#databasePath);
-    if (!database) return [];
-    try {
-      return this.#queryRows(database)
-        .flatMap((row) => {
-          const record = wireRecord(row);
-          if (!record) return [];
-          const id = text(record[CONDUCTOR_REPO_FIELD.ID]);
-          const rootPath = text(record[CONDUCTOR_REPO_FIELD.ROOT_PATH]);
-          if (!id || !rootPath) return [];
-          return [
-            {
-              id,
-              rootPath,
-              repositoryLabel: repositoryLabel(
-                text(record[CONDUCTOR_REPO_FIELD.REMOTE_URL]),
-                text(record[CONDUCTOR_REPO_FIELD.NAME]),
-              ),
-            },
-          ];
-        })
-        .slice(0, CONDUCTOR_MAXIMUM_REPOSITORIES);
-    } catch (error) {
-      if (error instanceof Error && canIgnoreSqliteError(error)) return [];
-      throw error;
-    } finally {
-      database.close();
-    }
+  read(): Promise<readonly ConductorRepository[]> {
+    return runAdapterRead(
+      Effect.scoped(
+        Effect.gen(this, function* () {
+          const database = yield* scopedReadOnlyDatabase(this.#sqlite, this.#databasePath);
+          if (Option.isNone(database)) return [];
+          const rows = yield* queryRows(database.value);
+          return rows
+            .flatMap((row) => {
+              const record = wireRecord(row);
+              if (!record) return [];
+              const id = text(record[CONDUCTOR_REPO_FIELD.ID]);
+              const rootPath = text(record[CONDUCTOR_REPO_FIELD.ROOT_PATH]);
+              if (!id || !rootPath) return [];
+              return [
+                {
+                  id,
+                  rootPath,
+                  repositoryLabel: repositoryLabel(
+                    text(record[CONDUCTOR_REPO_FIELD.REMOTE_URL]),
+                    text(record[CONDUCTOR_REPO_FIELD.NAME]),
+                  ),
+                },
+              ];
+            })
+            .slice(0, CONDUCTOR_MAXIMUM_REPOSITORIES);
+        }),
+      ),
+    );
   }
+}
 
-  /** The fuller read first, then the schema that predates the hidden flag. */
-  #queryRows(database: SqliteDatabase) {
-    try {
-      return database.prepare(CONDUCTOR_REPOSITORY_QUERY).all();
-    } catch (error) {
-      if (!(error instanceof Error && canIgnoreSqliteError(error))) throw error;
-      return database.prepare(CONDUCTOR_REPOSITORY_QUERY_WITHOUT_HIDDEN).all();
-    }
-  }
+/** What one query attempt threw, carried where nothing but this module reads it. */
+class SqliteQueryFailed extends Data.TaggedError("SqliteQueryFailed")<{
+  readonly cause: unknown;
+}> {}
+
+function tryQuery(
+  database: SqliteDatabase,
+  query: string,
+): Effect.Effect<readonly UnparsedWireValue[], SqliteQueryFailed> {
+  return Effect.try({
+    try: () => database.prepare(query).all(),
+    catch: (cause) => new SqliteQueryFailed({ cause }),
+  });
+}
+
+/** The fuller read first, then the schema that predates the hidden flag. */
+function queryRows(database: SqliteDatabase): Effect.Effect<readonly UnparsedWireValue[]> {
+  const fallback = Effect.catchAll(
+    tryQuery(database, CONDUCTOR_REPOSITORY_QUERY_WITHOUT_HIDDEN),
+    (failure) =>
+      failure.cause instanceof Error && canIgnoreSqliteError(failure.cause)
+        ? Effect.succeed<readonly UnparsedWireValue[]>([])
+        : Effect.die(failure.cause),
+  );
+  return Effect.catchAll(tryQuery(database, CONDUCTOR_REPOSITORY_QUERY), (failure) =>
+    failure.cause instanceof Error && canIgnoreSqliteError(failure.cause)
+      ? fallback
+      : Effect.die(failure.cause),
+  );
 }
 
 /** The repositories Conductor's own index holds, read read-only. */

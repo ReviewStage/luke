@@ -6,7 +6,7 @@ import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
 /**
  * What one invocation supplies to a cloud plugin: the caller's own decrypted
  * key behind the same read-at-action-time seam the desktop uses, and the
- * fetch, clock, and sleep seams tests inject. The refresh debounce is always
+ * fetch and clock seams tests inject. The refresh debounce is always
  * bypassed — every server-side plugin lives for exactly one pass, so a
  * debounced pass could only ever answer with nothing.
  */
@@ -14,8 +14,6 @@ export interface CloudAdapterSeams {
   readApiKey: () => Promise<string | undefined>;
   fetch?: CloudFetch;
   now?: () => number;
-  /** How a 429's backoff wait is spent; injected in tests so a forced 429 costs no wall clock. */
-  sleep?: (ms: number) => Promise<void>;
   /**
    * The roster the plugin's transcript reads answer for, when the host holds
    * one the plugin did not read itself: the brain host reads a chat against
@@ -32,7 +30,6 @@ function baseOptions(seams: CloudAdapterSeams) {
     minimumRefreshIntervalMs: 0,
     ...(seams.fetch ? { fetch: seams.fetch } : undefined),
     ...(seams.now ? { now: seams.now } : undefined),
-    ...(seams.sleep ? { sleep: seams.sleep } : undefined),
     ...(seams.reported ? { reported: seams.reported } : undefined),
   };
 }

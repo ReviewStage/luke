@@ -6,6 +6,9 @@
  * mean the observed state was read under something that no longer stands, and
  * the rest mean the read simply did not happen this time.
  */
+
+import { Cause, Effect, Option } from "effect";
+
 export const ADAPTER_FAILURE = {
   /** The credential or login was rejected: observed state clears. */
   UNAUTHORIZED: "unauthorized",
@@ -66,4 +69,21 @@ export async function tolerateItemFailure<Result>(
     if (error instanceof AdapterFailure && endsPass(error.failure)) throw error;
     return undefined;
   }
+}
+
+/**
+ * The effect face of {@link tolerateItemFailure}: every failure the item's own
+ * effect can raise, typed or a defect alike, is swallowed unless it is the
+ * whole pass's, so a bug in one item's own parsing costs that item and never
+ * the roster the way a rejected credential or a spent backoff budget does.
+ */
+export function tolerateItemFailureEffect<Result>(
+  item: Effect.Effect<Result, AdapterFailure>,
+): Effect.Effect<Result | undefined, AdapterFailure> {
+  return Effect.catchAllCause(item, (cause) => {
+    const failure = Cause.failureOption(cause);
+    if (Option.isSome(failure) && endsPass(failure.value.failure))
+      return Effect.fail(failure.value);
+    return Effect.succeed(undefined);
+  });
 }

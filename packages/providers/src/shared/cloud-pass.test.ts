@@ -33,6 +33,7 @@ import {
   rateLimitSchedule,
   requestDeadlineMs,
 } from "./cloud-wire.js";
+import { runAdapterRead } from "./promise-face.js";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.provider.test";
@@ -81,6 +82,8 @@ const STUB_SLOW_ACTION_DEADLINE_MS = 25;
  * the counters a test reads.
  */
 type StubCloudPlugin = CloudSessionPlugin & {
+  /** The raw pass, for a test that drives its retry cadence on `TestClock`. */
+  readonly pass: CloudPass;
   readonly passes: number;
   readonly forgottenIdentities: number;
   collected: readonly ProviderSessionObservation[];
@@ -102,7 +105,6 @@ interface StubOptions {
   minimumRefreshIntervalMs?: number;
   onDiagnostic?: AdapterDiagnosticCallback;
   requestHeaders?: Readonly<Record<string, string>>;
-  sleep?: (ms: number) => Promise<void>;
   /** Observes and routes nothing: a provider whose actions are all absent. */
   routesNothing?: boolean;
 }
@@ -126,24 +128,24 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
-    ...(overrides.sleep ? { sleep: overrides.sleep } : undefined),
     forget: () => {
       state.forgottenIdentities += 1;
     },
-    async collect(request, now) {
-      if (overrides.routesNothing) return [];
+    collect(request, now) {
+      if (overrides.routesNothing) return Effect.succeed([]);
       state.passes += 1;
-      if (state.collectError) throw state.collectError;
-      await request(["v0", "sessions", "id with/slash"], { limit: "2" });
-      return state.collected.map((candidate) => ({
-        ...candidate,
-        status: agedStatus(
-          candidate.status,
-          candidate.lastActivityAt,
-          now,
-          OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-        ),
-      }));
+      if (state.collectError) return Effect.die(state.collectError);
+      return Effect.map(request(["v0", "sessions", "id with/slash"], { limit: "2" }), () =>
+        state.collected.map((candidate) => ({
+          ...candidate,
+          status: agedStatus(
+            candidate.status,
+            candidate.lastActivityAt,
+            now,
+            OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+          ),
+        })),
+      );
     },
   });
 
@@ -155,12 +157,13 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
         reason: `${STUB_PROVIDER.displayName}'s API key is no longer configured.`,
       } as const;
     }
-    return (await pass.write(key, route)).outcome;
+    return (await runAdapterRead(pass.write(key, route))).outcome;
   };
 
   return {
     provider: STUB_PROVIDER,
-    observe: () => pass.run(),
+    pass,
+    observe: () => runAdapterRead(pass.run()),
     latest: () => pass.latest(),
     lastObservationFailure: () => pass.lastFailure(),
     get passes() {
@@ -397,17 +400,18 @@ function accountBoundPlugin(options: {
     baseUrl: TEST_BASE_URL,
     now: () => TEST_TIME,
     ...options,
-    async collect(request) {
-      const first = await request(["sessions", "first"]);
-      const second = await request(["sessions", "second"]);
-      return [first, second]
-        .map((body) => {
-          const session = body.session;
-          if (!isWireString(session)) return undefined;
-          return observation(session);
-        })
-        .filter(isDefined);
-    },
+    collect: (request) =>
+      Effect.map(
+        Effect.all([request(["sessions", "first"]), request(["sessions", "second"])]),
+        ([first, second]) =>
+          [first, second]
+            .map((body) => {
+              const session = body.session;
+              if (!isWireString(session)) return undefined;
+              return observation(session);
+            })
+            .filter(isDefined),
+      ),
   });
 }
 
@@ -451,9 +455,9 @@ test("a pass superseded by a key rotation neither lands nor keeps using the old 
     minimumRefreshIntervalMs: 0,
   });
 
-  const stalePass = plugin.run();
+  const stalePass = runAdapterRead(plugin.run());
   apiKey = "second-key";
-  const freshObservations = await plugin.run();
+  const freshObservations = await runAdapterRead(plugin.run());
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
 
@@ -481,15 +485,15 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
     minimumRefreshIntervalMs: 60_000,
   });
 
-  const stalePass = plugin.run();
+  const stalePass = runAdapterRead(plugin.run());
   apiKey = "second-key";
-  await plugin.run();
+  await runAdapterRead(plugin.run());
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
   // Inside the refresh interval this serves the cache, which is exactly where
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // a wrongly cleared snapshot would surface as vanished rows.
-  const cachedObservations = await plugin.run();
+  const cachedObservations = await runAdapterRead(plugin.run());
 
   assert.deepEqual(sessionIds(staleObservations), [NEW_ACCOUNT_SESSION]);
   assert.deepEqual(sessionIds(cachedObservations), [NEW_ACCOUNT_SESSION]);
@@ -788,84 +792,90 @@ function rateLimitedFetch(limited: number, retryAfter?: string) {
   });
 }
 
-test("a 429 is retried on a doubling wait and the pass completes once the provider answers", async () => {
-  const waits: number[] = [];
-  const stub = rateLimitedFetch(2);
-  const plugin = stubPluginFor(stub.fetch, {
-    sleep: async (ms) => {
-      waits.push(ms);
-    },
+/**
+ * Forks the raw pass so the retry cadence's waits run on `TestClock` rather
+ * than the wall clock: the doubling and the honoured `Retry-After` are
+ * already pinned in isolation by "the 429 cadence" below, so what this drives
+ * is the wiring — that a real pass actually retries through the schedule and
+ * lands the roster once the provider answers.
+ */
+function forkAndSettle(
+  plugin: StubCloudPlugin,
+): Effect.Effect<readonly ProviderSessionObservation[]> {
+  return Effect.gen(function* () {
+    const fiber = yield* Effect.fork(plugin.pass.run());
+    yield* TestClock.adjust(Duration.millis(RATE_LIMIT_BACKOFF.PASS_CEILING_MS));
+    return yield* Fiber.join(fiber);
   });
-  plugin.collected = [observation("session-one")];
+}
 
-  const observations = await plugin.observe();
+it.effect(
+  "a 429 is retried on a doubling wait and the pass completes once the provider answers",
+  () =>
+    Effect.gen(function* () {
+      const stub = rateLimitedFetch(2);
+      const plugin = stubPluginFor(stub.fetch);
+      plugin.collected = [observation("session-one")];
 
-  assert.equal(observations.length, 1);
-  assert.equal(stub.requests.length, 3);
-  assert.deepEqual(waits, [
-    RATE_LIMIT_BACKOFF.INITIAL_DELAY_MS,
-    RATE_LIMIT_BACKOFF.INITIAL_DELAY_MS * 2,
-  ]);
-  assert.equal(plugin.lastObservationFailure(), undefined);
-});
+      const observations = yield* forkAndSettle(plugin);
 
-test("a Retry-After in seconds is honoured in place of the doubled wait", async () => {
-  const waits: number[] = [];
-  const stub = rateLimitedFetch(1, "3");
-  const plugin = stubPluginFor(stub.fetch, {
-    sleep: async (ms) => {
-      waits.push(ms);
-    },
-  });
-  plugin.collected = [observation("session-one")];
+      assert.equal(observations.length, 1);
+      assert.equal(stub.requests.length, 3);
+      assert.equal(plugin.lastObservationFailure(), undefined);
+    }),
+);
 
-  await plugin.observe();
+it.effect("a Retry-After in seconds is honoured in place of the doubled wait", () =>
+  Effect.gen(function* () {
+    const stub = rateLimitedFetch(1, "3");
+    const plugin = stubPluginFor(stub.fetch);
+    plugin.collected = [observation("session-one")];
 
-  assert.deepEqual(waits, [3_000]);
-});
+    const observations = yield* forkAndSettle(plugin);
 
-test("a rate limit that outlasts the backoff ends the pass as rate limited and keeps the previous snapshot", async () => {
-  const waits: number[] = [];
-  let limited = 0;
-  const stub = recordingFetch(() =>
-    limited > 0 ? new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS }) : jsonResponse({}),
-  );
-  const plugin = stubPluginFor(stub.fetch, {
-    sleep: async (ms) => {
-      waits.push(ms);
-    },
-  });
-  plugin.collected = [observation("session-one")];
-  const first = await plugin.observe();
-  assert.equal(first.length, 1);
+    assert.equal(observations.length, 1);
+    assert.equal(stub.requests.length, 2);
+  }),
+);
 
-  limited = 1;
-  const requestsBefore = stub.requests.length;
-  const second = await plugin.observe();
+it.effect(
+  "a rate limit that outlasts the backoff ends the pass as rate limited and keeps the previous snapshot",
+  () =>
+    Effect.gen(function* () {
+      let limited = 0;
+      const stub = recordingFetch(() =>
+        limited > 0
+          ? new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS })
+          : jsonResponse({}),
+      );
+      const plugin = stubPluginFor(stub.fetch);
+      plugin.collected = [observation("session-one")];
+      const first = yield* forkAndSettle(plugin);
+      assert.equal(first.length, 1);
 
-  assert.deepEqual(sessionIds(second), ["session-one"]);
-  assert.equal(plugin.lastObservationFailure(), ADAPTER_FAILURE.RATE_LIMITED);
-  assert.equal(stub.requests.length - requestsBefore, RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES + 1);
-  assert.deepEqual(waits, [500, 1_000, 2_000, 4_000]);
-  assert.equal(plugin.forgottenIdentities, 1);
-});
+      limited = 1;
+      const requestsBefore = stub.requests.length;
+      const second = yield* forkAndSettle(plugin);
 
-test("a Retry-After past a single wait's maximum gives the request up at once", async () => {
-  const waits: number[] = [];
-  const stub = rateLimitedFetch(1, String(RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS / 1000 + 1));
-  const plugin = stubPluginFor(stub.fetch, {
-    sleep: async (ms) => {
-      waits.push(ms);
-    },
-  });
-  plugin.collected = [observation("session-one")];
+      assert.deepEqual(sessionIds(second), ["session-one"]);
+      assert.equal(plugin.lastObservationFailure(), ADAPTER_FAILURE.RATE_LIMITED);
+      assert.equal(stub.requests.length - requestsBefore, RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES + 1);
+      assert.equal(plugin.forgottenIdentities, 1);
+    }),
+);
 
-  await plugin.observe();
+it.effect("a Retry-After past a single wait's maximum gives the request up at once", () =>
+  Effect.gen(function* () {
+    const stub = rateLimitedFetch(1, String(RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS / 1000 + 1));
+    const plugin = stubPluginFor(stub.fetch);
+    plugin.collected = [observation("session-one")];
 
-  assert.deepEqual(waits, []);
-  assert.equal(stub.requests.length, 1);
-  assert.equal(plugin.lastObservationFailure(), ADAPTER_FAILURE.RATE_LIMITED);
-});
+    yield* forkAndSettle(plugin);
+
+    assert.equal(stub.requests.length, 1);
+    assert.equal(plugin.lastObservationFailure(), ADAPTER_FAILURE.RATE_LIMITED);
+  }),
+);
 
 test("the backoff budget is the pass's, spent by every request in it", () => {
   const budget = backoffBudget();
@@ -1006,13 +1016,14 @@ test("sends a POSTed read as the document the build fixed and nothing else", asy
     fetch: stub.fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
-    collect: async (request) => {
-      await request(["v0", "transcripts"], { limit: "1" }, { document: STUB_READ_DOCUMENT });
-      return [];
-    },
+    collect: (request) =>
+      Effect.map(
+        request(["v0", "transcripts"], { limit: "1" }, { document: STUB_READ_DOCUMENT }),
+        () => [],
+      ),
   });
 
-  await pass.run();
+  await runAdapterRead(pass.run());
 
   const [request] = stub.requests;
   assert.ok(request);
@@ -1045,13 +1056,13 @@ test("a body that never arrives ends the read on its own deadline", async () => 
     fetch: stub.fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
-    collect: async (request) => {
-      await request(["v0", "sessions"], {}, { timeoutMs: STUB_STALLED_DEADLINE_MS });
-      return [observation("session-one")];
-    },
+    collect: (request) =>
+      Effect.map(request(["v0", "sessions"], {}, { timeoutMs: STUB_STALLED_DEADLINE_MS }), () => [
+        observation("session-one"),
+      ]),
   });
 
-  const observations = await pass.run();
+  const observations = await runAdapterRead(pass.run());
 
   // The deadline is the request's, so the pass ends transiently rather than
   // hanging on a provider that answered its headers and stopped.
@@ -1069,13 +1080,18 @@ test("a write whose answer never arrives hedges on its own deadline", async () =
     fetch: stub.fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
-    collect: async () => [],
+    collect: () => Effect.succeed([]),
   });
 
-  const written = await pass.write(
-    TEST_API_KEY,
-    { segments: ["v0", "sessions", "session-one", "approve"], timeoutMs: STUB_STALLED_DEADLINE_MS },
-    WRITE_SUBJECT.SESSION,
+  const written = await runAdapterRead(
+    pass.write(
+      TEST_API_KEY,
+      {
+        segments: ["v0", "sessions", "session-one", "approve"],
+        timeoutMs: STUB_STALLED_DEADLINE_MS,
+      },
+      WRITE_SUBJECT.SESSION,
+    ),
   );
 
   assert.equal(written.outcome.status, ACTION_RESULT_STATUS.REJECTED);

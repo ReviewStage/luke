@@ -12,6 +12,7 @@ import {
 import { UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
+import { homeManifest } from "../testing/index.js";
 import { conductorCreateWorkspaceLink } from "./applications.js";
 import { conductorLocalWorkspacePlugin, conductorRepositories } from "./local-workspaces.js";
 
@@ -146,6 +147,32 @@ test("the repository reader reports open repositories with a root path", async (
   assert.equal(repositories[0]?.rootPath, "/Users/dev/repos/luke");
   // The label comes from the remote's last segment, git suffix stripped.
   assert.equal(repositories[0]?.repositoryLabel, "luke");
+});
+
+// "Never write provider transcripts or session-state files. Reading them is
+// what Luke is for; writing to them is never." The read opens Conductor's own
+// database read-only inside a scope that closes it, so the file stands byte
+// for byte.
+test("reading the repository index writes nothing under Conductor's database", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const directory = path.dirname(databasePath);
+  const database = createReposDatabase(databasePath);
+  writeRepo(database, {
+    id: "repo-luke",
+    name: "luke",
+    remoteUrl: "https://github.com/ReviewStage/luke.git",
+    rootPath: "/Users/dev/repos/luke",
+  });
+  database.close();
+  const before = await homeManifest(directory);
+
+  const repositories = await conductorRepositories({ databasePath }).read();
+
+  assert.deepEqual(
+    repositories.map((repository) => repository.id),
+    ["repo-luke"],
+  );
+  assert.deepEqual(await homeManifest(directory), before);
 });
 
 test("the repository reader falls back for a schema without the hidden flag", async (t) => {

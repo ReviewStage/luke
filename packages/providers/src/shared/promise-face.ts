@@ -12,7 +12,9 @@ import { Cause, Effect, Exit } from "effect";
  *
  * @deprecated P7-05 composes observation as effects and deletes this face.
  */
-export async function runAdapterRead<Value>(read: Effect.Effect<Value>): Promise<Value> {
+export async function runAdapterRead<Value, Failure>(
+  read: Effect.Effect<Value, Failure>,
+): Promise<Value> {
   const exit = await Effect.runPromiseExit(read);
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
   return exit.value;

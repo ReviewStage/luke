@@ -22,7 +22,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { httpClientFromCloudFetch } from "@sidecar/wire/effect";
-import { Cause, Duration, Effect, Exit, Option, Schedule } from "effect";
+import { Cause, Duration, Effect, Option } from "effect";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,
@@ -108,7 +108,7 @@ type CredentialBoundRead = (
   query: Readonly<Record<string, string>> | undefined,
   options: Readonly<{ timeoutMs?: number; document?: string }> | undefined,
   apply: (body: WireRecord) => void,
-) => Promise<void>;
+) => Effect.Effect<void, AdapterFailure>;
 
 export interface CloudPassInput {
   provider: SessionProvider;
@@ -119,8 +119,6 @@ export interface CloudPassInput {
   baseUrl?: string;
   fetch?: CloudFetch;
   now?: () => number;
-  /** How a 429's wait is spent; injected in tests, a timer otherwise. */
-  sleep?: (ms: number) => Promise<void>;
   minimumRefreshIntervalMs?: number;
   /**
    * The headers every request carries besides the credential, for a provider
@@ -143,7 +141,10 @@ export interface CloudPassInput {
    */
   forget?(): void;
   /** Runs one authenticated pass. Duplicate session ids are dropped here. */
-  collect(request: CloudRequest, now: number): Promise<readonly ProviderSessionObservation[]>;
+  collect(
+    request: CloudRequest,
+    now: number,
+  ): Effect.Effect<readonly ProviderSessionObservation[], AdapterFailure>;
 }
 
 /**
@@ -163,7 +164,7 @@ export interface CloudSessionPlugin extends SessionProviderPlugin {
  * and reaches its provider through nothing but these.
  */
 export interface CloudPass {
-  run(): Promise<readonly ProviderSessionObservation[]>;
+  run(): Effect.Effect<readonly ProviderSessionObservation[]>;
   latest(): readonly ProviderSessionObservation[];
   /**
    * How the latest `run` ended, or nothing for one that read the whole roster.
@@ -172,8 +173,12 @@ export interface CloudPass {
    * ask this to tell a roster read whole from one merely still standing.
    */
   lastFailure(): AdapterFailureKind | undefined;
-  /** One authenticated write; answers what became of it, never throws. */
-  write(apiKey: string, route: CloudWriteRoute, subject?: WriteSubject): Promise<CloudWriteOutcome>;
+  /** One authenticated write; answers what became of it, never fails. */
+  write(
+    apiKey: string,
+    route: CloudWriteRoute,
+    subject?: WriteSubject,
+  ): Effect.Effect<CloudWriteOutcome>;
   credentialBoundRead: CredentialBoundRead;
   /** The credential as the caller's own action should present it, read afresh. */
   readApiKey(): Promise<string | undefined>;
@@ -181,26 +186,6 @@ export interface CloudPass {
 }
 
 const defaultFetch: CloudFetch = (url, init) => fetch(url, init);
-
-/**
- * The 429 cadence with its waits handed to a caller's own `sleep` seam
- * instead of taken on the clock: the schedule still decides every delay and
- * when to stop, and only the waiting moves. The step that ends the cadence
- * decides no delay, so it hands the seam nothing.
- *
- * @deprecated Stands while {@link CloudPassInput.sleep} does; a test on
- * `it.effect` drives `TestClock` over the cadence itself instead. Deleted
- * with the seam in P6-11a/b.
- */
-function cadenceSpendingSleep(
-  cadence: Schedule.Schedule<number | undefined, RateLimitedRead>,
-  spend: (ms: number) => Promise<void>,
-): Schedule.Schedule<number | undefined, RateLimitedRead> {
-  return Schedule.tapOutput(
-    Schedule.modifyDelay(cadence, () => Duration.zero),
-    (delay) => (delay === undefined ? Effect.void : Effect.promise(() => spend(delay))),
-  );
-}
 
 function resolveBaseUrl(input: CloudPassInput): string {
   const fromEnvironment = input.baseUrlEnvironmentVariable
@@ -235,16 +220,15 @@ type Answered = WireRecord | AdapterFailure;
 const readBody = HttpClientResponse.schemaBodyJson(WireValueSchema);
 
 /**
- * @deprecated The promise face of the shared cloud machinery. Its requests are
- * effects over the ambient `HttpClient`, run here because an adapter's
- * `collect` and every caller of a provider write still hold a promise; P6-11a
- * and P6-11b move the adapters onto the effects and delete this face.
+ * The shared half of every cloud provider: credential handling, its own
+ * refresh cadence, the failure rules that decide whether a snapshot survives,
+ * bounded read-only requests over an `HttpClient` built from the adapter's own
+ * `CloudFetch`, and the one authenticated write.
  */
 export function cloudPass(input: CloudPassInput): CloudPass {
   const provider = input.provider;
   const baseUrl = resolveBaseUrl(input);
   const client = httpClientFromCloudFetch(input.fetch ?? defaultFetch);
-  const spendWaitOn = input.sleep;
   const now = input.now ?? Date.now;
   const { minimumRefreshIntervalMs } = resolveOptions(
     input,
@@ -266,21 +250,9 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   let lastFailure: AdapterFailureKind | undefined;
   let collectPass = 0;
 
-  /**
-   * Runs one request effect against the client this pass was built over. The
-   * failure a caller reads is the `AdapterFailure` the effect raised rather
-   * than the fiber's own wrapping of it, so every rule written against
-   * `instanceof AdapterFailure` reads what it always did.
-   */
-  const run = async <Answer>(
-    effect: Effect.Effect<Answer, AdapterFailure, HttpClient.HttpClient>,
-  ): Promise<Answer> => {
-    const exit = await Effect.runPromiseExit(
-      Effect.provideService(effect, HttpClient.HttpClient, client),
-    );
-    if (Exit.isSuccess(exit)) return exit.value;
-    throw Cause.squash(exit.cause);
-  };
+  const provideClient = <Answer, Error>(
+    effect: Effect.Effect<Answer, Error, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer, Error> => Effect.provideService(effect, HttpClient.HttpClient, client);
 
   /**
    * One observer must never abort the shared refresh pass, so a settings read
@@ -428,7 +400,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       const cadence = rateLimitSchedule(budget, now);
       const answered: Answered = yield* Effect.retry(
         readOnce(apiKey, segments, query, document, timeoutMs),
-        spendWaitOn === undefined ? cadence : cadenceSpendingSleep(cadence, spendWaitOn),
+        cadence,
       ).pipe(
         Effect.catchTag("RateLimitedRead", () =>
           Effect.fail(new AdapterFailure(ADAPTER_FAILURE.RATE_LIMITED, `${name} is rate limiting`)),
@@ -438,14 +410,15 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       return answered;
     });
 
-  const assertPassCurrent = (pass: number): void => {
-    if (pass !== collectPass) {
-      throw new AdapterFailure(
-        ADAPTER_FAILURE.TRANSIENT,
-        `${provider.displayName} pass was superseded`,
-      );
-    }
-  };
+  const assertPassCurrent = (pass: number): Effect.Effect<void, AdapterFailure> =>
+    pass === collectPass
+      ? Effect.void
+      : Effect.fail(
+          new AdapterFailure(
+            ADAPTER_FAILURE.TRANSIENT,
+            `${provider.displayName} pass was superseded`,
+          ),
+        );
 
   /**
    * Binds one pass's requests to the credential it started with. A superseded
@@ -455,12 +428,13 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    */
   const requestForPass = (pass: number, apiKey: string): CloudRequest => {
     const budget = backoffBudget();
-    return async (segments, query, options) => {
-      assertPassCurrent(pass);
-      const body = await run(requestJson(apiKey, budget, segments, query, options));
-      assertPassCurrent(pass);
-      return body;
-    };
+    return (segments, query, options) =>
+      Effect.gen(function* () {
+        yield* assertPassCurrent(pass);
+        const body = yield* provideClient(requestJson(apiKey, budget, segments, query, options));
+        yield* assertPassCurrent(pass);
+        return body;
+      });
   };
 
   /**
@@ -586,61 +560,70 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         }),
     );
 
-  return {
-    async run() {
-      const apiKey = await readApiKey();
-      if (!apiKey) {
-        credential = undefined;
-        forgetObservedState();
-        lastFailure = ADAPTER_FAILURE.UNAVAILABLE;
-        return observations;
-      }
+  const run: Effect.Effect<readonly ProviderSessionObservation[]> = Effect.gen(function* () {
+    const apiKey = yield* Effect.promise(readApiKey);
+    if (!apiKey) {
+      credential = undefined;
+      forgetObservedState();
+      lastFailure = ADAPTER_FAILURE.UNAVAILABLE;
+      return observations;
+    }
 
-      const attemptedAt = now();
-      if (apiKey === credential) {
-        // A network provider refreshes on its own cadence instead of on every
-        // tick of the shared observation timer.
-        if (attemptedAt - lastAttemptAt < minimumRefreshIntervalMs) return observations;
-      } else {
-        credential = apiKey;
-        forgetObservedState();
-      }
-      lastAttemptAt = attemptedAt;
+    const attemptedAt = now();
+    if (apiKey === credential) {
+      // A network provider refreshes on its own cadence instead of on every
+      // tick of the shared observation timer.
+      if (attemptedAt - lastAttemptAt < minimumRefreshIntervalMs) return observations;
+    } else {
+      credential = apiKey;
+      forgetObservedState();
+    }
+    lastAttemptAt = attemptedAt;
 
-      // Observers can overlap: a settings save refreshes this adapter while a
-      // timer-driven pass is still in flight with the key it replaced. Only
-      // the newest pass may write, or sessions read as one credential would be
-      // served as another's until the next refresh.
-      const pass = ++collectPass;
-      try {
-        const collected = await input.collect(requestForPass(pass, apiKey), attemptedAt);
+    // Observers can overlap: a settings save refreshes this adapter while a
+    // timer-driven pass is still in flight with the key it replaced. Only
+    // the newest pass may write, or sessions read as one credential would be
+    // served as another's until the next refresh.
+    const pass = ++collectPass;
+    return yield* Effect.catchAllCause(
+      Effect.map(input.collect(requestForPass(pass, apiKey), attemptedAt), (collected) => {
         if (pass === collectPass) {
           observations = cloudObservations(collected);
           lastFailure = undefined;
         }
-      } catch (error) {
+        return observations;
+      }),
+      (cause) => {
         // A rejected credential clears observed state; a transient network or
         // server failure, or a rate limit that outlasted its backoff, keeps
         // the previous snapshot until the next attempt. A superseded pass
         // reports on a credential that no longer stands, so its rejection
         // says nothing about the current one.
-        if (pass !== collectPass) return observations;
-        if (error instanceof AdapterFailure) {
-          if (clearsObservedState(error.failure)) forgetObservedState();
-          lastFailure = error.failure;
-          return observations;
+        if (pass !== collectPass) return Effect.succeed(observations);
+        const failure = Cause.failureOption(cause);
+        if (Option.isSome(failure)) {
+          if (clearsObservedState(failure.value.failure)) forgetObservedState();
+          lastFailure = failure.value.failure;
+          return Effect.succeed(observations);
         }
         // Anything else is a bug in this pass — a TypeError thrown by an
         // adapter's parsing is not a network blip, and must not keep serving
         // the stale snapshot with no log, counter, or hook.
+        const squashed = Cause.squash(cause);
         input.onDiagnostic?.(
           ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE,
-          error instanceof Error ? error : new Error(String(error)),
+          squashed instanceof Error ? squashed : new Error(String(squashed)),
         );
-        throw error;
-      }
-      return observations;
-    },
+        // SAFETY: `failureOption` answered `None` above, so this cause carries
+        // no typed `AdapterFailure` — only a defect or an interruption — and
+        // rethrowing it can never join the typed failure channel below.
+        return Effect.failCause(cause as Cause.Cause<never>);
+      },
+    );
+  });
+
+  return {
+    run: () => run,
 
     latest: () => observations,
 
@@ -653,29 +636,36 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     },
 
     write: (apiKey, route, subject = WRITE_SUBJECT.SESSION) =>
-      run(writeOnce(apiKey, route, subject)),
+      provideClient(writeOnce(apiKey, route, subject)),
 
-    async credentialBoundRead(segments, query, options, apply) {
-      // A read on a pass that has not run — the hosted brain reads a chat
-      // against the roster its stored snapshot holds — takes the credential
-      // the way a pass would, so the read is bound to it from here on.
-      if (credential === undefined) credential = await readApiKey();
-      const epoch = credentialEpoch;
-      const apiKey = credential;
-      if (!apiKey) {
-        throw new AdapterFailure(
-          ADAPTER_FAILURE.TRANSIENT,
-          `${provider.displayName} has no credential to read with`,
+    credentialBoundRead: (segments, query, options, apply) =>
+      Effect.gen(function* () {
+        // A read on a pass that has not run — the hosted brain reads a chat
+        // against the roster its stored snapshot holds — takes the credential
+        // the way a pass would, so the read is bound to it from here on.
+        if (credential === undefined) credential = yield* Effect.promise(readApiKey);
+        const epoch = credentialEpoch;
+        const apiKey = credential;
+        if (!apiKey) {
+          return yield* Effect.fail(
+            new AdapterFailure(
+              ADAPTER_FAILURE.TRANSIENT,
+              `${provider.displayName} has no credential to read with`,
+            ),
+          );
+        }
+        const body = yield* provideClient(
+          requestJson(apiKey, backoffBudget(), segments, query, options),
         );
-      }
-      const body = await run(requestJson(apiKey, backoffBudget(), segments, query, options));
-      if (epoch !== credentialEpoch) {
-        throw new AdapterFailure(
-          ADAPTER_FAILURE.TRANSIENT,
-          `${provider.displayName} read outlived its credential`,
-        );
-      }
-      apply(body);
-    },
+        if (epoch !== credentialEpoch) {
+          return yield* Effect.fail(
+            new AdapterFailure(
+              ADAPTER_FAILURE.TRANSIENT,
+              `${provider.displayName} read outlived its credential`,
+            ),
+          );
+        }
+        apply(body);
+      }),
   };
 }
