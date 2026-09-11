@@ -1,3 +1,9 @@
+import * as Headers from "@effect/platform/Headers";
+import * as HttpBody from "@effect/platform/HttpBody";
+import * as HttpClient from "@effect/platform/HttpClient";
+import type * as HttpClientError from "@effect/platform/HttpClientError";
+import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
+import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
   ACTION_RESULT_STATUS,
   type ProviderActionResult,
@@ -9,13 +15,14 @@ import {
 import {
   type CloudFetch,
   HTTP_STATUS,
-  isRecord,
   resolveOptions,
   unparsedWire,
-  type WireBoundaryInput,
   type WireRecord,
+  WireValueSchema,
   wireRecord,
 } from "@sidecar/wire";
+import { httpClientFromCloudFetch } from "@sidecar/wire/effect";
+import { Cause, Duration, Effect, Exit, Option, Schedule } from "effect";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,
@@ -33,7 +40,8 @@ import {
   CLOUD_ADAPTER_DEFAULTS,
   type CloudRequest,
   type CloudWriteRoute,
-  rateLimitDelayMs,
+  RateLimitedRead,
+  rateLimitSchedule,
   requestDeadlineMs,
 } from "./cloud-wire.js";
 
@@ -60,6 +68,18 @@ const DEFAULT_REQUEST_HEADERS = {
  * it something else is asking for its own client rather than an option here.
  */
 const READ_DOCUMENT_FIELD = "query";
+
+/** The content type a serialized read document or write body names. */
+const JSON_CONTENT_TYPE = "application/json";
+
+/**
+ * The range `fetch` called `ok`, restated because what a client's answer hands
+ * back is a status rather than a `Response`.
+ */
+const OK_STATUS = {
+  FIRST: 200,
+  PAST: 300,
+} as const;
 
 /** What a write acts on, as a refusal should name it. */
 export const WRITE_SUBJECT = {
@@ -162,8 +182,25 @@ export interface CloudPass {
 
 const defaultFetch: CloudFetch = (url, init) => fetch(url, init);
 
-const defaultSleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * The 429 cadence with its waits handed to a caller's own `sleep` seam
+ * instead of taken on the clock: the schedule still decides every delay and
+ * when to stop, and only the waiting moves. The step that ends the cadence
+ * decides no delay, so it hands the seam nothing.
+ *
+ * @deprecated Stands while {@link CloudPassInput.sleep} does; a test on
+ * `it.effect` drives `TestClock` over the cadence itself instead. Deleted
+ * with the seam in P6-11a/b.
+ */
+function cadenceSpendingSleep(
+  cadence: Schedule.Schedule<number | undefined, RateLimitedRead>,
+  spend: (ms: number) => Promise<void>,
+): Schedule.Schedule<number | undefined, RateLimitedRead> {
+  return Schedule.tapOutput(
+    Schedule.modifyDelay(cadence, () => Duration.zero),
+    (delay) => (delay === undefined ? Effect.void : Effect.promise(() => spend(delay))),
+  );
+}
 
 function resolveBaseUrl(input: CloudPassInput): string {
   const fromEnvironment = input.baseUrlEnvironmentVariable
@@ -192,11 +229,22 @@ function cloudObservations(
   return [...unique.values()];
 }
 
+/** What one read answered with: the record it carried, or why it did not. */
+type Answered = WireRecord | AdapterFailure;
+
+const readBody = HttpClientResponse.schemaBodyJson(WireValueSchema);
+
+/**
+ * @deprecated The promise face of the shared cloud machinery. Its requests are
+ * effects over the ambient `HttpClient`, run here because an adapter's
+ * `collect` and every caller of a provider write still hold a promise; P6-11a
+ * and P6-11b move the adapters onto the effects and delete this face.
+ */
 export function cloudPass(input: CloudPassInput): CloudPass {
   const provider = input.provider;
   const baseUrl = resolveBaseUrl(input);
-  const performFetch = input.fetch ?? defaultFetch;
-  const sleep = input.sleep ?? defaultSleep;
+  const client = httpClientFromCloudFetch(input.fetch ?? defaultFetch);
+  const spendWaitOn = input.sleep;
   const now = input.now ?? Date.now;
   const { minimumRefreshIntervalMs } = resolveOptions(
     input,
@@ -217,6 +265,22 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   let lastAttemptAt = Number.NEGATIVE_INFINITY;
   let lastFailure: AdapterFailureKind | undefined;
   let collectPass = 0;
+
+  /**
+   * Runs one request effect against the client this pass was built over. The
+   * failure a caller reads is the `AdapterFailure` the effect raised rather
+   * than the fiber's own wrapping of it, so every rule written against
+   * `instanceof AdapterFailure` reads what it always did.
+   */
+  const run = async <Answer>(
+    effect: Effect.Effect<Answer, AdapterFailure, HttpClient.HttpClient>,
+  ): Promise<Answer> => {
+    const exit = await Effect.runPromiseExit(
+      Effect.provideService(effect, HttpClient.HttpClient, client),
+    );
+    if (Exit.isSuccess(exit)) return exit.value;
+    throw Cause.squash(exit.cause);
+  };
 
   /**
    * One observer must never abort the shared refresh pass, so a settings read
@@ -249,95 +313,130 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     return composed.href;
   };
 
-  const readOnce = async (
+  const sent = (
+    apiKey: string,
+    address: string,
+    document: string | undefined,
+  ): HttpClientRequest.HttpClientRequest =>
+    HttpClientRequest.make(document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST)(address, {
+      headers: {
+        ...requestHeaders,
+        ...authorizationHeaders(apiKey),
+      },
+      ...(document === undefined
+        ? undefined
+        : {
+            body: HttpBody.raw(JSON.stringify({ [READ_DOCUMENT_FIELD]: document }), {
+              contentType: JSON_CONTENT_TYPE,
+            }),
+          }),
+    });
+
+  /**
+   * What one answered read became: the record it carried, or the failure its
+   * status or its body decided. A failure rides back as a value rather than in
+   * the error channel because the cadence above reacts to a rate limit and to
+   * nothing else.
+   */
+  const readAnswer = (response: HttpClientResponse.HttpClientResponse): Effect.Effect<Answered> => {
+    const name = provider.displayName;
+    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
+      return Effect.succeed(
+        new AdapterFailure(ADAPTER_FAILURE.UNAUTHORIZED, `${name} rejected the configured API key`),
+      );
+    }
+    if (response.status < OK_STATUS.FIRST || response.status >= OK_STATUS.PAST) {
+      return Effect.succeed(
+        new AdapterFailure(
+          ADAPTER_FAILURE.TRANSIENT,
+          `${name} responded with status ${response.status}`,
+        ),
+      );
+    }
+    return Effect.catchAll(
+      Effect.map(readBody(response), (body) => {
+        const record = wireRecord(unparsedWire(body));
+        return (
+          record ??
+          new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} returned an unexpected response`)
+        );
+      }),
+      () =>
+        Effect.succeed(
+          new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} returned an unreadable response`),
+        ),
+    );
+  };
+
+  /**
+   * One attempt, read to whatever the answer turned out to be. The deadline
+   * covers the reading as well as the request, because a body that never
+   * arrives is a request that never ended: a provider that sends its headers
+   * and then stalls its body has to end the same way an unanswered request
+   * does. A client that could not carry the request at all, and the deadline
+   * itself, are the same transient failure an aborted request was, and a rate
+   * limit is the one thing that reaches the error channel, because it is the
+   * one thing the cadence retries.
+   */
+  const readOnce = (
     apiKey: string,
     segments: readonly string[],
     query: Readonly<Record<string, string>>,
     document: string | undefined,
     timeoutMs: number,
-  ): Promise<Response> => {
-    try {
-      return await performFetch(url(segments, query), {
-        method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
-        headers: {
-          ...requestHeaders,
-          ...authorizationHeaders(apiKey),
-          ...(document === undefined ? undefined : { "Content-Type": "application/json" }),
-        },
-        ...(document === undefined
-          ? undefined
-          : { body: JSON.stringify({ [READ_DOCUMENT_FIELD]: document }) }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch {
-      throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${provider.displayName} request failed`);
-    }
+  ): Effect.Effect<Answered, RateLimitedRead, HttpClient.HttpClient> => {
+    const transient = () =>
+      new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${provider.displayName} request failed`);
+    return Effect.flatMap(
+      Effect.either(HttpClient.execute(sent(apiKey, url(segments, query), document))),
+      (answer): Effect.Effect<Answered, RateLimitedRead> => {
+        if (answer._tag === "Left") return Effect.succeed(transient());
+        if (answer.right.status === HTTP_STATUS.TOO_MANY_REQUESTS) {
+          return Effect.fail(
+            new RateLimitedRead({
+              retryAfter: Option.getOrNull(Headers.get(answer.right.headers, "retry-after")),
+            }),
+          );
+        }
+        return readAnswer(answer.right);
+      },
+    ).pipe(
+      Effect.timeout(Duration.millis(timeoutMs)),
+      Effect.catchTag("TimeoutException", () => Effect.succeed(transient())),
+    );
   };
 
-  const requestJson = async (
+  const requestJson = (
     apiKey: string,
     budget: BackoffBudget,
     segments: readonly string[],
     query: Readonly<Record<string, string>> = {},
     options: Readonly<{ timeoutMs?: number; document?: string }> = {},
-  ): Promise<WireRecord> => {
-    const name = provider.displayName;
-    const timeoutMs = requestDeadlineMs(options.timeoutMs);
-    // A read document rides as a POST because that is how its endpoint is
-    // documented, not because it writes: the body carries the document and
-    // nothing else, so the request can still express nothing but a read.
-    const document = options.document;
-    let response = await readOnce(apiKey, segments, query, document, timeoutMs);
-    // A 429 is retried on a doubling wait out of the pass's one budget. Once
-    // that is spent the pass is rate limited rather than merely failed: every
-    // further read would meet the same door, so the roster stops here whole
-    // as it was rather than continuing as a partial one.
-    for (let attempt = 0; response.status === HTTP_STATUS.TOO_MANY_REQUESTS; attempt += 1) {
-      const delay = rateLimitDelayMs({
-        attempt,
-        retryAfter: response.headers.get("retry-after"),
-        budget,
-        now: now(),
-      });
-      if (delay === undefined) {
-        throw new AdapterFailure(ADAPTER_FAILURE.RATE_LIMITED, `${name} is rate limiting`);
-      }
-      budget.spentMs += delay;
-      await sleep(delay);
-      response = await readOnce(apiKey, segments, query, document, timeoutMs);
-    }
-
-    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
-      throw new AdapterFailure(
-        ADAPTER_FAILURE.UNAUTHORIZED,
-        `${name} rejected the configured API key`,
+  ): Effect.Effect<WireRecord, AdapterFailure, HttpClient.HttpClient> =>
+    Effect.gen(function* () {
+      const name = provider.displayName;
+      const timeoutMs = requestDeadlineMs(options.timeoutMs);
+      // A read document rides as a POST because that is how its endpoint is
+      // documented, not because it writes: the body carries the document and
+      // nothing else, so the request can still express nothing but a read.
+      const document = options.document;
+      // A 429 is retried on the cadence the pass's one budget allows, each
+      // attempt under its own deadline. Once that cadence stops, the pass is
+      // rate limited rather than merely failed: every further read would meet
+      // the same door, so the roster stops here whole as it was rather than
+      // continuing as a partial one.
+      const cadence = rateLimitSchedule(budget, now);
+      const answered: Answered = yield* Effect.retry(
+        readOnce(apiKey, segments, query, document, timeoutMs),
+        spendWaitOn === undefined ? cadence : cadenceSpendingSleep(cadence, spendWaitOn),
+      ).pipe(
+        Effect.catchTag("RateLimitedRead", () =>
+          Effect.fail(new AdapterFailure(ADAPTER_FAILURE.RATE_LIMITED, `${name} is rate limiting`)),
+        ),
       );
-    }
-    if (!response.ok) {
-      throw new AdapterFailure(
-        ADAPTER_FAILURE.TRANSIENT,
-        `${name} responded with status ${response.status}`,
-      );
-    }
-
-    let body: WireBoundaryInput;
-    try {
-      body = await response.json();
-    } catch {
-      throw new AdapterFailure(
-        ADAPTER_FAILURE.TRANSIENT,
-        `${name} returned an unreadable response`,
-      );
-    }
-    const bodyRecord = wireRecord(unparsedWire(body));
-    if (!bodyRecord) {
-      throw new AdapterFailure(
-        ADAPTER_FAILURE.TRANSIENT,
-        `${name} returned an unexpected response`,
-      );
-    }
-    return bodyRecord;
-  };
+      if (answered instanceof AdapterFailure) return yield* Effect.fail(answered);
+      return answered;
+    });
 
   const assertPassCurrent = (pass: number): void => {
     if (pass !== collectPass) {
@@ -358,11 +457,134 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     const budget = backoffBudget();
     return async (segments, query, options) => {
       assertPassCurrent(pass);
-      const body = await requestJson(apiKey, budget, segments, query, options);
+      const body = await run(requestJson(apiKey, budget, segments, query, options));
       assertPassCurrent(pass);
       return body;
     };
   };
+
+  /**
+   * The one authenticated write. It shares the read path's timeout and its
+   * refusal to echo anything the provider said into an error a user sees, and
+   * it answers with what became of the request rather than failing: a write is
+   * a user's own action, so every outcome has to land back on the row it left.
+   * The subject is what the route acts on, so a refusal names the thing that
+   * actually went missing. What the provider answered with rides along for the
+   * adapter that needs it — a creation response names the thing it created —
+   * and travels no further.
+   */
+  const writeAttempt = (
+    apiKey: string,
+    route: CloudWriteRoute,
+    subject: WriteSubject,
+  ): Effect.Effect<CloudWriteOutcome, HttpClientError.HttpClientError, HttpClient.HttpClient> =>
+    Effect.gen(function* () {
+      const name = provider.displayName;
+      const requested = HttpClientRequest.post(url(route.segments, {}, route.action), {
+        // The same layering as a read: the provider's own headers first, the
+        // credential after them so no override can replace it.
+        headers: {
+          ...requestHeaders,
+          ...authorizationHeaders(apiKey),
+        },
+        // An endpoint that documents an empty request gets exactly that, not
+        // an empty JSON object it never asked for.
+        ...(route.body === undefined
+          ? undefined
+          : {
+              body: HttpBody.raw(JSON.stringify(route.body), { contentType: JSON_CONTENT_TYPE }),
+            }),
+      });
+      const response = yield* HttpClient.execute(requested);
+      if (response.status >= OK_STATUS.FIRST && response.status < OK_STATUS.PAST) {
+        // A write that landed changes what the session is doing, so the
+        // refresh that follows must actually ask: served from the cache inside
+        // the minimum interval, the row would keep offering what the provider
+        // has already taken.
+        lastAttemptAt = Number.NEGATIVE_INFINITY;
+        // An unreadable body is not a failed write: the provider already said
+        // yes, so only a follow-up that needed the body has anything to miss.
+        const body = yield* Effect.option(readBody(response));
+        const record = Option.isSome(body) ? wireRecord(unparsedWire(body.value)) : undefined;
+        return {
+          outcome: { status: ACTION_RESULT_STATUS.ACCEPTED },
+          ...(record === undefined ? undefined : { body: record }),
+        };
+      }
+      if (
+        response.status === HTTP_STATUS.UNAUTHORIZED ||
+        response.status === HTTP_STATUS.FORBIDDEN
+      ) {
+        return {
+          outcome: {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: `${name} rejected the configured API key.`,
+          },
+        };
+      }
+      if (response.status === HTTP_STATUS.NOT_FOUND) {
+        return {
+          outcome: {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: `${name} no longer has this ${subject}.`,
+          },
+        };
+      }
+      if (response.status === HTTP_STATUS.CONFLICT) {
+        return {
+          outcome: {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: `${name} says this ${subject} has moved on since Luke last looked.`,
+          },
+        };
+      }
+      // Any other status is an answer that says nothing certain about the
+      // action — a gateway that gave up may stand in front of a write that
+      // finished — so this hedges the way a failed request does, and the
+      // refresh that follows must actually ask rather than keep advertising
+      // what the provider may have already taken.
+      lastAttemptAt = Number.NEGATIVE_INFINITY;
+      return {
+        outcome: {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
+        },
+      };
+    });
+
+  /**
+   * The write under the route's own deadline, which covers reading the answer
+   * as well as sending it: a provider that sends its headers and then stalls
+   * its body must not hold an action open for ever. A request that could not
+   * be carried and one the deadline cut short end the same way, because
+   * neither can say which side of the wire failed: a connection that never
+   * opened sent nothing, but a deadline or a reset while the answer was coming
+   * back leaves a request the provider may have already acted on. So the
+   * refusal hedges rather than claims, and the refresh that follows must
+   * actually ask, so a write that did land is reconciled against the provider
+   * instead of the cache still advertising it.
+   */
+  const writeOnce = (
+    apiKey: string,
+    route: CloudWriteRoute,
+    subject: WriteSubject,
+  ): Effect.Effect<CloudWriteOutcome, never, HttpClient.HttpClient> =>
+    Effect.catchAll(
+      Effect.timeout(
+        writeAttempt(apiKey, route, subject),
+        Duration.millis(requestDeadlineMs(route.timeoutMs)),
+      ),
+      () =>
+        Effect.sync(() => {
+          lastAttemptAt = Number.NEGATIVE_INFINITY;
+          return {
+            outcome: {
+              status: ACTION_RESULT_STATUS.REJECTED,
+              reason: `${provider.displayName} did not answer, so the request may not have landed.`,
+            },
+          };
+        }),
+    );
 
   return {
     async run() {
@@ -430,105 +652,8 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       input.onDiagnostic?.(kind, error);
     },
 
-    /**
-     * The one authenticated write. It shares the read path's timeout and its
-     * refusal to echo anything the provider said into an error a user sees,
-     * and it answers with what became of the request rather than throwing: a
-     * write is a user's own action, so every outcome has to land back on the row
-     * it left. The subject is what the route acts on, so a refusal names the
-     * thing that actually went missing. What the provider answered with rides
-     * along for the adapter that needs it — a creation response names the
-     * thing it created — and travels no further.
-     */
-    async write(apiKey, route, subject = WRITE_SUBJECT.SESSION) {
-      const name = provider.displayName;
-      let response: Response;
-      try {
-        response = await performFetch(url(route.segments, {}, route.action), {
-          method: HTTP_METHOD.POST,
-          // The same layering as a read: the provider's own headers first, the
-          // credential after them so no override can replace it.
-          headers: {
-            ...requestHeaders,
-            ...authorizationHeaders(apiKey),
-            // An endpoint that documents an empty request gets exactly that,
-            // not an empty JSON object it never asked for.
-            ...(route.body === undefined ? undefined : { "Content-Type": "application/json" }),
-          },
-          ...(route.body === undefined ? undefined : { body: JSON.stringify(route.body) }),
-          signal: AbortSignal.timeout(requestDeadlineMs(route.timeoutMs)),
-        });
-      } catch {
-        // A thrown fetch cannot say which side of the wire failed: a
-        // connection that never opened sent nothing, but a timeout or a reset
-        // while the answer was coming back leaves a request the provider may
-        // have already acted on. So the refusal hedges rather than claims, and
-        // the refresh that follows must actually ask, so a write that did land
-        // is reconciled against the provider instead of the cache still
-        // advertising it.
-        lastAttemptAt = Number.NEGATIVE_INFINITY;
-        return {
-          outcome: {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: `${name} did not answer, so the request may not have landed.`,
-          },
-        };
-      }
-
-      if (response.ok) {
-        // A write that landed changes what the session is doing, so the
-        // refresh that follows must actually ask: served from the cache inside
-        // the minimum interval, the row would keep offering what the provider
-        // has already taken.
-        lastAttemptAt = Number.NEGATIVE_INFINITY;
-        // An unreadable body is not a failed write: the provider already said
-        // yes, so only a follow-up that needed the body has anything to miss.
-        const body = await response.json().catch(() => undefined);
-        return {
-          outcome: { status: ACTION_RESULT_STATUS.ACCEPTED },
-          ...(isRecord(body) ? { body } : undefined),
-        };
-      }
-      if (
-        response.status === HTTP_STATUS.UNAUTHORIZED ||
-        response.status === HTTP_STATUS.FORBIDDEN
-      ) {
-        return {
-          outcome: {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: `${name} rejected the configured API key.`,
-          },
-        };
-      }
-      if (response.status === HTTP_STATUS.NOT_FOUND) {
-        return {
-          outcome: {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: `${name} no longer has this ${subject}.`,
-          },
-        };
-      }
-      if (response.status === HTTP_STATUS.CONFLICT) {
-        return {
-          outcome: {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: `${name} says this ${subject} has moved on since Luke last looked.`,
-          },
-        };
-      }
-      // Any other status is an answer that says nothing certain about the action
-      // — a gateway that gave up may stand in front of a write that finished —
-      // so this hedges the way a thrown fetch does, and the refresh that
-      // follows must actually ask rather than keep advertising what the
-      // provider may have already taken.
-      lastAttemptAt = Number.NEGATIVE_INFINITY;
-      return {
-        outcome: {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
-        },
-      };
-    },
+    write: (apiKey, route, subject = WRITE_SUBJECT.SESSION) =>
+      run(writeOnce(apiKey, route, subject)),
 
     async credentialBoundRead(segments, query, options, apply) {
       // A read on a pass that has not run — the hosted brain reads a chat
@@ -543,7 +668,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
           `${provider.displayName} has no credential to read with`,
         );
       }
-      const body = await requestJson(apiKey, backoffBudget(), segments, query, options);
+      const body = await run(requestJson(apiKey, backoffBudget(), segments, query, options));
       if (epoch !== credentialEpoch) {
         throw new AdapterFailure(
           ADAPTER_FAILURE.TRANSIENT,

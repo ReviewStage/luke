@@ -1,4 +1,7 @@
-import fs from "node:fs";
+import path from "node:path";
+import type { PlatformError } from "@effect/platform/Error";
+import * as FileSystem from "@effect/platform/FileSystem";
+import { Chunk, Duration, Effect, Option, Schedule, Stream } from "effect";
 import { type ObservedHookEvent, readObservationHookEvent } from "./hook-merge.js";
 
 /**
@@ -33,173 +36,91 @@ const DEFAULT_DEBOUNCE_MS = 500;
  */
 const DEFAULT_REARM_INTERVAL_MS = 5000;
 
-type Timer = ReturnType<typeof setTimeout>;
-
-/** The narrow slice of `fs.watch` the watcher relies on, so a test can stand in. */
-export interface SpoolWatchHandle {
-  on(event: "error", listener: (error: Error) => void): void;
-  close(): void;
-}
-
 /**
- * The listener's file name is a string or nothing: `fs.watch` hands back a
- * `Buffer` only under the buffer encoding, which this watcher never asks for.
+ * A batch is bounded by its window and never by a count, so the grouping is
+ * given a size no window of file names can reach rather than a cap that would
+ * cut one in half.
  */
-export type SpoolWatch = (
-  directory: string,
-  options: { persistent: false },
-  listener: (eventType: string, fileName: string | null) => void,
-) => SpoolWatchHandle;
+const SPOOL_BATCH_LIMIT = Number.MAX_SAFE_INTEGER;
 
 /** One hook event as the spool reported it, named by the session it belongs to. */
 export interface ObservedSpoolEvent<Event extends string> extends ObservedHookEvent<Event> {
   providerSessionId: string;
 }
 
-export interface ObservationSpoolWatcherOptions<Event extends string> {
+export interface ObservationSpoolOptions<Event extends string> {
   spoolDirectory: string;
   /** The tokens the hook may write; a file holding anything else is dropped. */
   events: readonly Event[];
-  onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
-  watch?: SpoolWatch;
-  schedule?: (callback: () => void, delayMs: number) => Timer;
-  cancel?: (timer: Timer) => void;
 }
 
-export interface ObservationSpoolWatcher {
-  close(): void;
-}
-
-function spoolSessionId(fileName: string | null): string | undefined {
-  if (fileName === null) return undefined;
+function spoolSessionId(fileName: string): string | undefined {
   return SPOOL_FILE_NAME_PATTERN.exec(fileName)?.[1];
 }
 
-class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
-  readonly #spoolDirectory: string;
-  readonly #events: readonly Event[];
-  readonly #onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
-  readonly #watch: SpoolWatch;
-  readonly #schedule: (callback: () => void, delayMs: number) => Timer;
-  readonly #cancel: (timer: Timer) => void;
-
-  readonly #pendingIds = new Set<string>();
-  #debounceTimer: Timer | undefined;
-  #rearmTimer: Timer | undefined;
-  #handle: SpoolWatchHandle | undefined;
-  #reads: Promise<void> = Promise.resolve();
-  #closed = false;
-
-  constructor(options: ObservationSpoolWatcherOptions<Event>) {
-    this.#spoolDirectory = options.spoolDirectory;
-    this.#events = options.events;
-    this.#onEvents = options.onEvents;
-    this.#watch = options.watch ?? fs.watch;
-    this.#schedule = options.schedule ?? setTimeout;
-    this.#cancel = options.cancel ?? clearTimeout;
-    this.#arm();
-  }
-
-  close(): void {
-    this.#closed = true;
-    if (this.#debounceTimer !== undefined) this.#cancel(this.#debounceTimer);
-    this.#debounceTimer = undefined;
-    if (this.#rearmTimer !== undefined) this.#cancel(this.#rearmTimer);
-    this.#rearmTimer = undefined;
-    this.#pendingIds.clear();
-    this.#dropHandle();
-  }
-
-  /**
-   * Any failure to stand — a spool directory not created yet, a watch the
-   * platform refused — is answered the same way: try again later. The watch
-   * is a sharpening, so no failure of it is worth surfacing past the spool
-   * read the adapters make anyway.
-   */
-  #arm(): void {
-    if (this.#closed) return;
-    let handle: SpoolWatchHandle;
-    try {
-      handle = this.#watch(this.#spoolDirectory, { persistent: false }, (_eventType, fileName) => {
-        if (handle !== this.#handle) return;
-        this.#collect(fileName);
-      });
-    } catch {
-      this.#scheduleRearm();
-      return;
-    }
-    this.#handle = handle;
-    handle.on("error", () => {
-      if (handle !== this.#handle) return;
-      this.#dropHandle();
-      this.#scheduleRearm();
-    });
-  }
-
-  #dropHandle(): void {
-    const handle = this.#handle;
-    this.#handle = undefined;
-    handle?.close();
-  }
-
-  #scheduleRearm(): void {
-    if (this.#closed || this.#rearmTimer !== undefined) return;
-    this.#rearmTimer = this.#schedule(() => {
-      this.#rearmTimer = undefined;
-      this.#arm();
-    }, DEFAULT_REARM_INTERVAL_MS);
-  }
-
-  /**
-   * The batch window opens at the first id and is not extended by later ones,
-   * so a spool that never falls quiet still reports on the beat.
-   */
-  #collect(fileName: string | null): void {
-    if (this.#closed) return;
-    const providerSessionId = spoolSessionId(fileName);
-    if (providerSessionId === undefined) return;
-    this.#pendingIds.add(providerSessionId);
-    if (this.#debounceTimer !== undefined) return;
-    this.#debounceTimer = this.#schedule(() => {
-      this.#debounceTimer = undefined;
-      const ids = [...this.#pendingIds];
-      this.#pendingIds.clear();
-      this.#reads = this.#reads.then(() => this.#report(ids)).catch(() => undefined);
-    }, DEFAULT_DEBOUNCE_MS);
-  }
-
-  /**
-   * Reads run one batch after another so two batches can never reach the
-   * listener out of order. A file that cannot be read — gone again already,
-   * or unreadable for any reason — is dropped: the spool is a refinement of
-   * state the adapters still read for themselves. A listener that throws
-   * loses only its own batch; the chain recovers so the next batch is still
-   * delivered, because a watcher that stalled on one bad callback would
-   * silently stop sharpening anything after it.
-   */
-  async #report(ids: readonly string[]): Promise<void> {
-    const observed: ObservedSpoolEvent<Event>[] = [];
-    for (const providerSessionId of ids) {
-      const event = await readObservationHookEvent(
-        this.#events,
-        this.#spoolDirectory,
-        providerSessionId,
-      ).catch(() => undefined);
-      if (event) observed.push({ providerSessionId, ...event });
-    }
-    if (this.#closed || observed.length === 0) return;
-    this.#onEvents(observed);
-  }
+/**
+ * Every session id the spool's own watch names, one element per event. The
+ * watch fails when it cannot stand at all — a spool directory hook
+ * installation has not created yet — and when the platform's watcher ends in
+ * an error of its own; both are the same answer, tried again later, because
+ * the watch is a sharpening and no failure of it is worth surfacing past the
+ * spool read the adapters make anyway.
+ */
+function watchedSessionIds(
+  spoolDirectory: string,
+): Stream.Stream<string, PlatformError, FileSystem.FileSystem> {
+  return Stream.unwrap(
+    Effect.map(FileSystem.FileSystem, (fileSystem) =>
+      Stream.filterMap(fileSystem.watch(spoolDirectory), (event) =>
+        Option.fromNullable(spoolSessionId(path.basename(event.path))),
+      ),
+    ),
+  );
 }
 
 /**
- * Stands a watch on one provider's spool and reports each batch of hook
- * events it sees, until closed. A directory that does not exist yet, or a
- * watch that fails later, is retried on a fixed interval rather than
- * reported: the watcher is additive to the adapters' own spool reads.
+ * Reads one batch of ids back out of the spool. A file that cannot be read —
+ * gone again already, or unreadable for any reason — is dropped: the spool is
+ * a refinement of state the adapters still read for themselves. An id the
+ * same window named twice is read once.
  */
-export function watchObservationSpool<Event extends string>(
-  options: ObservationSpoolWatcherOptions<Event>,
-): ObservationSpoolWatcher {
-  return new SpoolWatcher(options);
+function readBatch<Event extends string>(
+  options: ObservationSpoolOptions<Event>,
+  ids: readonly string[],
+): Effect.Effect<readonly ObservedSpoolEvent<Event>[]> {
+  return Effect.map(
+    Effect.forEach([...new Set(ids)], (providerSessionId) =>
+      Effect.map(
+        Effect.option(
+          Effect.tryPromise(() =>
+            readObservationHookEvent(options.events, options.spoolDirectory, providerSessionId),
+          ),
+        ),
+        (read) =>
+          read._tag === "Some" && read.value !== undefined
+            ? [{ providerSessionId, ...read.value }]
+            : [],
+      ),
+    ),
+    (batches) => batches.flat(),
+  );
+}
+
+/**
+ * Each batch of hook events the spool reports, until the stream's own scope
+ * closes. The window is the beat rather than any one id's own: ids are
+ * grouped by the window they land in and no later id extends it, so a spool
+ * that never falls quiet still reports on the beat, and a window that named
+ * nothing readable reports nothing at all. Reads run one batch after another,
+ * so two batches can never reach a reader out of order.
+ */
+export function observationSpoolEvents<Event extends string>(
+  options: ObservationSpoolOptions<Event>,
+): Stream.Stream<readonly ObservedSpoolEvent<Event>[], PlatformError, FileSystem.FileSystem> {
+  return watchedSessionIds(options.spoolDirectory).pipe(
+    Stream.retry(Schedule.spaced(Duration.millis(DEFAULT_REARM_INTERVAL_MS))),
+    Stream.groupedWithin(SPOOL_BATCH_LIMIT, Duration.millis(DEFAULT_DEBOUNCE_MS)),
+    Stream.mapEffect((ids) => readBatch(options, Chunk.toReadonlyArray(ids))),
+    Stream.filter((batch) => batch.length > 0),
+  );
 }

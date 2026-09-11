@@ -359,6 +359,25 @@ answers in the same turn the caller's own `await` resumes in, exactly as the
 hand-rolled `Map` did. It goes in P5-14 once this class runs on a fiber of its
 own rather than answering a caller's `Promise`.
 
+`cloudPass` in `packages/providers/src/shared/cloud-pass.ts` is on the
+allowlist for the shared cloud machinery: its reads and its one write are
+effects over an `HttpClient` built from the caller's own `CloudFetch`, and the
+429 cadence is a `Schedule` stepped on the fiber's clock, but an adapter's
+`collect` still hands back a promise and every caller of a provider write
+still holds one, so each request is run where the promise face answers.
+`Cause.squash` is what the run rethrows, so the `AdapterFailure` a caller
+already branches on is the failure it reads rather than the fiber's wrapping
+of it. P6-11a and P6-11b move the adapters onto the effects and delete the
+face.
+
+`openReadOnlyDatabase` in the same package's `local-sqlite.ts` is the
+smallest of them: the open is an `acquireRelease` in a `Scope` that closes the
+handle, and this face runs it for the adapters that still close the handle
+themselves in a `finally`. P6-11a and P6-11b move each adapter's read into a
+scope. The hook spool has no such face at all: `observationSpoolEvents` is a
+`Stream` and P6-12 runs it where the hook wiring lives, so nothing in that
+package forks a fiber of its own.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -382,6 +401,8 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
+| `cloudPass`'s Promise face over its request effects | P6-10 | P6-11a, P6-11b |
+| `openReadOnlyDatabase` Promise door over `scopedReadOnlyDatabase` | P6-10 | P6-11a, P6-11b |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P5-14 |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |

@@ -28,15 +28,13 @@ export {
   openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
+  scopedReadOnlyDatabase,
   textFromRow,
 } from "./shared/local-sqlite.js";
 export {
-  type ObservationSpoolWatcher,
-  type ObservationSpoolWatcherOptions,
+  type ObservationSpoolOptions,
   type ObservedSpoolEvent,
-  type SpoolWatch,
-  type SpoolWatchHandle,
-  watchObservationSpool,
+  observationSpoolEvents,
 } from "./shared/spool-watcher.js";
 export {
   type WorkspaceHostEnrichment,
