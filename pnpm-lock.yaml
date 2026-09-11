@@ -15,6 +15,9 @@ catalogs:
     ai:
       specifier: 7.0.97
       version: 7.0.97
+    effect:
+      specifier: 3.22.2
+      version: 3.22.2
     react:
       specifier: 19.2.8
       version: 19.2.8
@@ -868,6 +871,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
