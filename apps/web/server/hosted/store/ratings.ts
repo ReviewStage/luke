@@ -4,7 +4,7 @@ import {
   MESSAGE_ROLE,
   unparsedWire,
 } from "../../core.js";
-import type { HostedStoreDatabase } from "./database.js";
+import type { HostedStoreRun } from "./database.js";
 import { messageAuthorship } from "./message-reads.js";
 import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
 
@@ -24,6 +24,11 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * this rated down" that joined back to one would be noise where the rating
  * exists to be signal. Only an assistant row that is not a compaction is
  * Luke's words, whichever of Luke's parts wrote it.
+ *
+ * `messageAuthorship` is the one read here on `@effect/sql`; the event it
+ * clears the way for is still written through the store writer's own
+ * Drizzle transaction, so this function reaches it through the same `run`
+ * seam every other converted read answers its promise through.
  */
 
 export const RATING_REFUSAL = {
@@ -40,17 +45,17 @@ export type RatingWriteResult =
   | { readonly ok: false; readonly refusal: RatingRefusal };
 
 export interface RatingStore {
-  readonly db: HostedStoreDatabase;
+  readonly run: HostedStoreRun;
   readonly writer: StoreWriter;
 }
 
 export async function rateMessage(
-  { db, writer }: RatingStore,
+  { run, writer }: RatingStore,
   userId: string,
   messageId: string,
   rating: HostedMessageRatingRequest,
 ): Promise<RatingWriteResult> {
-  const authorship = await messageAuthorship(db, userId, messageId);
+  const authorship = await run(messageAuthorship(userId, messageId));
   if (authorship === undefined) return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
   if (authorship.role !== MESSAGE_ROLE.ASSISTANT || authorship.compaction) {
     return { ok: false, refusal: RATING_REFUSAL.NOT_LUKES };

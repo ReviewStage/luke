@@ -34,11 +34,8 @@ export async function offerBriefing(
   target: ConversationTarget,
   turnId: string,
 ): Promise<boolean> {
-  const journal = await findMessageByClientId(
-    seams.db,
-    target.userId,
-    target.conversationId,
-    turnId,
+  const journal = await seams.run(
+    findMessageByClientId(target.userId, target.conversationId, turnId),
   );
   if (!journal) return false;
   const offered = await offerSpeech(

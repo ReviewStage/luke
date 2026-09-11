@@ -8,7 +8,7 @@ import {
   standingContextText,
   workspaceProjectContextText,
 } from "../../core.js";
-import type { HostedStoreDatabase } from "../store/database.js";
+import type { HostedStoreRun } from "../store/database.js";
 import { type ConversationTarget, listRecentMessages } from "../store/index.js";
 import { BRAIN_HOST } from "./bounds.js";
 import type { HostedWorkspaceDefaults } from "./defaults.js";
@@ -98,11 +98,11 @@ export function hostedStandingContext(input: StandingContextInput): string {
  * each line is bounded again when rendered.
  */
 export async function readRecentMessages(
-  db: HostedStoreDatabase,
+  run: HostedStoreRun,
   target: ConversationTarget,
   tools: ToolSet,
   limit: number,
 ): Promise<readonly StoredUIMessage[]> {
-  const read = await listRecentMessages(db, target.userId, target.conversationId, tools, limit);
+  const read = await run(listRecentMessages(target.userId, target.conversationId, tools, limit));
   return read.ok ? read.value.map((record) => record.message) : [];
 }

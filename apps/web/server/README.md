@@ -123,17 +123,18 @@ trip there would land on the cold start of every function, including the ones
 that never query. `pg` connects on its first query instead. The hosted store is
 moving onto the client a module at a time, so the two stand side by side over
 the one database: `server/hosted/store/workspace-files.ts`,
-`standing-conversations.ts`, `soft-delete.ts`, the store writer, the voice
-writer, and the speech module read and write through this client, as does
-`roster-snapshot.ts` but for its one exported `readRosterSnapshot`, which
-`hosted-store.test.ts` still calls directly with the Drizzle handle to prove a
-sealed row does not open under another user's seal — every other module still
-through Drizzle — and each is handed its edge's own runner to answer the
-promises the routes hold — `runWeb` in a function, the store tests' runtime in
-a test. The writers take that runner directly rather than through the store's
-context, because a route composes them apart from the store; the conversation
-row lock every write runs under is the client's own transaction. What the layer
-does need at build
+`standing-conversations.ts`, `soft-delete.ts`, `facts.ts`, `message-reads.ts`,
+the store writer, the voice writer, and the speech module read and write
+through this client, `ratings.ts` reaches `message-reads.ts`'s one read the
+same way, and `roster-snapshot.ts` too but for its one exported
+`readRosterSnapshot`, which `hosted-store.test.ts` still calls directly with
+the Drizzle handle to prove a sealed row does not open under another user's
+seal — every other module still through Drizzle — and each is handed its
+edge's own runner to answer the promises the routes hold — `runWeb` in a
+function, the store tests' runtime in a test. The writers take that runner
+directly rather than through the store's context, because a route composes
+them apart from the store; the conversation row lock every write runs under
+is the client's own transaction. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 

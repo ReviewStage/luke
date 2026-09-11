@@ -171,18 +171,18 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
   return {
     messages: {
       list: (userId, conversationId, tools, cursor) =>
-        listMessages(db, userId, conversationId, tools, cursor),
+        run(listMessages(userId, conversationId, tools, cursor)),
       byClientId: (userId, conversationId, tools, clientId) =>
-        readMessageByClientId(db, userId, conversationId, tools, clientId),
+        run(readMessageByClientId(userId, conversationId, tools, clientId)),
     },
     events: {
-      list: (userId, conversationId, cursor) => listEvents(db, userId, conversationId, cursor),
-      forMessages: (userId, messageIds) => eventsForMessages(db, userId, messageIds),
+      list: (userId, conversationId, cursor) => run(listEvents(userId, conversationId, cursor)),
+      forMessages: (userId, messageIds) => run(eventsForMessages(userId, messageIds)),
     },
     turns: {
-      list: (userId, cursor) => listTurns(db, userId, cursor),
-      named: (userId, turnIds) => turnsNamed(db, userId, turnIds),
-      latest: (userId, notAfter) => latestTurnPosition(db, userId, notAfter),
+      list: (userId, cursor) => run(listTurns(userId, cursor)),
+      named: (userId, turnIds) => run(turnsNamed(userId, turnIds)),
+      latest: (userId, notAfter) => run(latestTurnPosition(userId, notAfter)),
     },
     directory: {
       standing: (userId) => run(standingConversations(userId)),
@@ -194,11 +194,11 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
       purgeCleared: (now) => run(purgeClearedConversations(now)),
     },
     ratings: {
-      latest: (userId, messageId) => latestMessageRating(db, userId, messageId),
+      latest: (userId, messageId) => run(latestMessageRating(userId, messageId)),
     },
     facts: {
-      list: (userId) => listFacts(db, sealFor(userId), userId),
-      replace: (userId, facts, now) => replaceFacts(db, sealFor(userId), userId, facts, now),
+      list: (userId) => run(listFacts(sealFor(userId), userId)),
+      replace: (userId, facts, now) => run(replaceFacts(sealFor(userId), userId, facts, now)),
     },
     workspace: {
       read: (userId, path) =>

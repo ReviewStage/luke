@@ -600,19 +600,19 @@ test("the recent exchange reads back the newest finished messages, oldest first,
   const requested = events.findIndex((event) => event.type === "actions.requested");
   await play(events.slice(0, requested + 1), standing);
 
-  const recent = await readRecentMessages(database.db, target, tools, 10);
+  const recent = await readRecentMessages(database.run, target, tools, 10);
   assert.deepEqual(
     recent.map((message) => message.role),
     [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT, MESSAGE_ROLE.USER],
   );
-  const newest = await readRecentMessages(database.db, target, tools, 1);
+  const newest = await readRecentMessages(database.run, target, tools, 1);
   assert.deepEqual(
     newest.map((message) => message.role),
     [MESSAGE_ROLE.USER],
   );
 
   await play(events.slice(requested + 1), standing);
-  const settled = await readRecentMessages(database.db, target, tools, 10);
+  const settled = await readRecentMessages(database.run, target, tools, 10);
   assert.equal(settled.length, 4);
   assert.equal(settled.at(-1)?.role, MESSAGE_ROLE.ASSISTANT);
 });

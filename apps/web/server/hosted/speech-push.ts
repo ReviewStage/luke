@@ -278,12 +278,8 @@ async function briefingWordsOf(
   tools: ToolSet,
   offer: SpeechOffer,
 ): Promise<string | undefined> {
-  const read = await readMessageById(
-    store.db,
-    offer.userId,
-    offer.conversationId,
-    tools,
-    offer.messageId,
+  const read = await store.run(
+    readMessageById(offer.userId, offer.conversationId, tools, offer.messageId),
   );
   if (!read.ok) return undefined;
   const message = read.value[0]?.message;
