@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ACTION_OUTPUT_STATUS,
-  REALTIME_TOOL,
+  ACTION_TOOL,
   refusedActionOutput,
   unknownActionOutput,
 } from "@sidecar/actions";
@@ -128,7 +128,7 @@ const readAbc = call("read_1", BRAIN_TOOL.READ_TRANSCRIPT, {
 });
 
 const messageAbc = (callId: string) =>
-  call(callId, REALTIME_TOOL.SEND_SESSION_MESSAGE, {
+  call(callId, ACTION_TOOL.SEND_SESSION_MESSAGE, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
     text: "run the tests",
@@ -139,7 +139,7 @@ const STORED_TOOLS: ToolSet = {
   [BRAIN_TOOL.READ_TRANSCRIPT]: tool({
     inputSchema: z.object({ provider_id: z.string(), provider_session_id: z.string() }),
   }),
-  [REALTIME_TOOL.SEND_SESSION_MESSAGE]: tool({
+  [ACTION_TOOL.SEND_SESSION_MESSAGE]: tool({
     inputSchema: z.object({
       provider_id: z.string(),
       provider_session_id: z.string(),
@@ -368,7 +368,7 @@ test("two provider writes are one slow step, and the reply streams only after bo
     [TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE, TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE],
   );
   const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  const sent = toolPartType(REALTIME_TOOL.SEND_SESSION_MESSAGE);
+  const sent = toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE);
   assert.deepEqual(
     answer?.message.parts.map((part) => part.type),
     [UI_PART_TYPE.TEXT, sent, sent, UI_PART_TYPE.TEXT],
@@ -609,7 +609,7 @@ test("a refused call settles as an error carrying the refusal's own reason, and 
   });
   const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
   assert.deepEqual(answer?.message.parts[0], {
-    type: toolPartType(REALTIME_TOOL.SEND_SESSION_MESSAGE),
+    type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
     toolCallId: "send_x",
     state: TOOL_PART_STATE.OUTPUT_ERROR,
     input: {
@@ -638,7 +638,7 @@ test("an action dispatched whose effect is uncertain settles as an answer carryi
   });
   const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
   assert.deepEqual(answer?.message.parts[0], {
-    type: toolPartType(REALTIME_TOOL.SEND_SESSION_MESSAGE),
+    type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
     toolCallId: "send_u",
     state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
     input: {
@@ -961,16 +961,16 @@ test("the assistant message gathers reasoning, text, and tool parts in order, se
 test("the slow steps are the whole-transcript read and the performer's writes, only when the policy offers them", () => {
   const full = resolveTurnToolPolicy(brainToolCatalog(), {}, BRAIN_TURN_TRIGGER.ASK);
   assert.equal(slowStepOf(full, BRAIN_TOOL.READ_TRANSCRIPT), SLOW_STEP_KIND.TRANSCRIPT_READ);
-  assert.equal(slowStepOf(full, REALTIME_TOOL.SEND_SESSION_MESSAGE), SLOW_STEP_KIND.PROVIDER_WRITE);
+  assert.equal(slowStepOf(full, ACTION_TOOL.SEND_SESSION_MESSAGE), SLOW_STEP_KIND.PROVIDER_WRITE);
   assert.equal(slowStepOf(full, BRAIN_TOOL.LIST_SESSIONS), undefined);
   assert.equal(slowStepOf(full, BRAIN_TOOL.WRITE_WORKSPACE_FILE), undefined);
   assert.equal(slowStepOf(full, "no_such_tool"), undefined);
   const noActions = resolveTurnToolPolicy(
     brainToolCatalog(),
-    { agent: { deny: [REALTIME_TOOL.SEND_SESSION_MESSAGE] } },
+    { agent: { deny: [ACTION_TOOL.SEND_SESSION_MESSAGE] } },
     BRAIN_TURN_TRIGGER.ASK,
   );
-  assert.equal(slowStepOf(noActions, REALTIME_TOOL.SEND_SESSION_MESSAGE), undefined);
+  assert.equal(slowStepOf(noActions, ACTION_TOOL.SEND_SESSION_MESSAGE), undefined);
 });
 
 test("a reply splits into its sentences at sentence ends and line breaks, trimmed, none empty", () => {

@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  REALTIME_TOOL,
+  ACTION_TOOL,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
   remoteRealtimeToolDefinitions,
@@ -196,10 +196,10 @@ test("VoiceToolName is the remote tool set the mint declares", () => {
   );
 });
 
-test("every VoiceToolName is a REALTIME_TOOL", () => {
+test("every VoiceToolName is a ACTION_TOOL", () => {
   assertSubset(
     swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
-    Object.values(REALTIME_TOOL),
+    Object.values(ACTION_TOOL),
     "a tool renamed in the actions table leaves the phone naming a tool that does not exist",
   );
 });

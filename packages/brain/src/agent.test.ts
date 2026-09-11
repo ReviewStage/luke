@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ACTION_KIND,
+  ACTION_TOOL,
   type ActionOutputEnvelope,
   acceptedActionOutput,
-  REALTIME_TOOL,
   refusedActionOutput,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -143,7 +143,7 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ASK);
   assert.equal(h.traces[0]?.origin, RUN_ORIGIN.USER);
   assert.equal(h.traces[0]?.outputText, "Sent.");
-  assert.ok(h.traces[0]?.tools.includes(REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(h.traces[0]?.tools.includes(ACTION_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(!h.traces[0]?.tools.includes(BRAIN_TOOL.ANNOUNCE));
   assert.deepEqual(h.client.actionsOffered, [true, true]);
   // The action arrived attributed to the developer's ask, live while the turn

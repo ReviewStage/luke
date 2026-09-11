@@ -3,9 +3,9 @@ import {
   ACTION_KIND,
   ACTION_OUTPUT,
   ACTION_OUTPUT_STATUS,
+  ACTION_TOOL,
   acceptedActionOutput,
-  REALTIME_TOOL,
-  realtimeToolFamily,
+  actionToolFamily,
   refusedActionOutput,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -212,7 +212,7 @@ export function failedAnswer(reason: string): BrainClientAnswer {
 
 /** Whether a request was offered any action at all, read off the toolset, as the adapters see it: a name the actions table holds, the notebook's two writes included. */
 export function actionsOffered(options: BrainRespondOptions): boolean {
-  return options.tools.some((tool) => realtimeToolFamily(tool.name) !== undefined);
+  return options.tools.some((tool) => actionToolFamily(tool.name) !== undefined);
 }
 
 export const CHECKPOINT = {
@@ -525,17 +525,17 @@ export function childCompletion(fields: {
  * validate against the roster.
  */
 export const OBSERVATION_ACTIONS: readonly WireRecord[] = [
-  call("action_message", REALTIME_TOOL.SEND_SESSION_MESSAGE, {
+  call("action_message", ACTION_TOOL.SEND_SESSION_MESSAGE, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
     text: "run the tests",
   }),
-  call("action_open", REALTIME_TOOL.OPEN_SESSION, {
+  call("action_open", ACTION_TOOL.OPEN_SESSION, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
   }),
-  call("action_remember", REALTIME_TOOL.REMEMBER_FACT, { words: "the developer likes tests" }),
-  call("action_setting", REALTIME_TOOL.CHANGE_APP_SETTING, {
+  call("action_remember", ACTION_TOOL.REMEMBER_FACT, { words: "the developer likes tests" }),
+  call("action_setting", ACTION_TOOL.CHANGE_APP_SETTING, {
     setting_id: "voice_captions",
     value: "on",
   }),
@@ -573,13 +573,13 @@ export function assertNoActionReached(h: Harness): void {
   assert.ok(h.client.actionsOffered.every((offered) => !offered));
   for (const trace of h.traces) {
     assert.ok(trace.tools.includes(BRAIN_TOOL.ANNOUNCE));
-    assert.ok(!trace.tools.includes(REALTIME_TOOL.SEND_SESSION_MESSAGE));
+    assert.ok(!trace.tools.includes(ACTION_TOOL.SEND_SESSION_MESSAGE));
   }
 }
 
 /** A message act on the observed session `ABC`, under the call id given. */
 export function messageAction(callId: string, words = "run the tests"): WireRecord {
-  return call(callId, REALTIME_TOOL.SEND_SESSION_MESSAGE, {
+  return call(callId, ACTION_TOOL.SEND_SESSION_MESSAGE, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
     text: words,

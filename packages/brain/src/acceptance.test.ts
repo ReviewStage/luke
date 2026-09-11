@@ -5,9 +5,9 @@ import path from "node:path";
 import test from "node:test";
 import {
   ACTION_KIND,
+  ACTION_TOOL,
   type ActionOutputEnvelope,
   acceptedActionOutput,
-  REALTIME_TOOL,
 } from "@sidecar/actions";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
@@ -126,7 +126,7 @@ function actionCall(callId: string): WireRecord {
   return {
     type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
     call_id: callId,
-    name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+    name: ACTION_TOOL.SEND_SESSION_MESSAGE,
     arguments: JSON.stringify({
       provider_id: ABC.providerId,
       provider_session_id: ABC.providerSessionId,
@@ -621,7 +621,7 @@ class ScriptedRuntime implements AgentRuntime {
 test("a runtime that is not Responses drives the same host: actions journaled through the executor, checkpoint stored under its own stamp, refusals still the host's", async () => {
   const repository = fakeBrainStateRepository();
   const runtime = new ScriptedRuntime([
-    REALTIME_TOOL.SEND_SESSION_MESSAGE,
+    ACTION_TOOL.SEND_SESSION_MESSAGE,
     "read_transcript",
     "not_a_tool",
   ]);
@@ -636,7 +636,7 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   assert.equal(stored?.checkpointFormat, "scripted@3:scripted-turns/1");
   assert.ok(stored?.items.every((item) => "scripted" in item));
   assert.equal(stored?.journal.length, 1);
-  assert.equal(stored?.journal[0]?.name, REALTIME_TOOL.SEND_SESSION_MESSAGE);
+  assert.equal(stored?.journal[0]?.name, ACTION_TOOL.SEND_SESSION_MESSAGE);
   // The host refused the unknown tool itself; the runtime learned it from the result.
   const outputs = (stored?.items ?? []).filter(
     (item) => item.scripted === CONTEXT_INPUT_KIND.TOOL_RESULT,
@@ -647,7 +647,7 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   // An observation turn runs over the same runtime, with the roster's deltas
   // read by the host and the action the policy allows carried through the same
   // executor, journaled while it ran and let go of once the turn committed.
-  const observing = new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]);
+  const observing = new ScriptedRuntime([ACTION_TOOL.SEND_SESSION_MESSAGE]);
   const o = host(() => observing, model, repository);
   await o.agent.ready();
   o.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, hookEvent: "Stop", atMs: NOW }]);
@@ -664,7 +664,7 @@ test("a runtime that is not Responses drives the same host: actions journaled th
 test("the Responses runtime refuses a valid checkpoint of the scripted runtime: turns are refused as incompatible, and the checkpoint, requests, and journal stay whole", async () => {
   const repository = fakeBrainStateRepository();
   const scripted = host(
-    () => new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]),
+    () => new ScriptedRuntime([ACTION_TOOL.SEND_SESSION_MESSAGE]),
     KEYED.model(fakeUpstream([])),
     repository,
   );

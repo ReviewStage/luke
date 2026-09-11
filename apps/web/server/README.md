@@ -126,10 +126,12 @@ from production lands on the protected preview like any other request, so the
 browser needs that deployment's access cookie already; without it the dashboard
 reports the intercepted API call rather than the metrics.
 
-## Hosted voice
+## Legacy voice mint
 
-`server/routes/voice/mint.ts` runs Luke's voice on the deployment's own OpenAI key for a
-signed-in desktop. It is an exact-path file, so Vercel's zero-config `api/`
+`server/routes/voice/mint.ts` mints a Realtime client secret on the deployment's own
+OpenAI key for an installed desktop that predates the live session; a current
+desktop opens its voice through the hosted voice service below and never calls
+it. It is an exact-path file, so Vercel's zero-config `api/`
 detection routes it without a `routes` entry; only the bracketed auth
 catch-all needs one. The logic lives in `server/hosted/` behind injected
 seams, and each request is resolved to a user through the auth service's own

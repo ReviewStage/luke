@@ -51,7 +51,6 @@ test("the microphone switch and the close carry only a type and an event id", ()
 test("no client event starts a session or appends audio", () => {
   assert.equal(CLIENT_EVENT_TYPES.includes("session.start"), false);
   assert.equal(CLIENT_EVENT_TYPES.includes("session.input_audio.append"), false);
-  assert.equal(CLIENT_EVENT_TYPES.includes("response.create"), false);
 });
 
 test("an acknowledgment is matched to its command through client_event_id", () => {

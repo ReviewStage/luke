@@ -185,7 +185,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       id: SETTINGS_SEARCH_ROW.TALK_KEY,
       label: "Talk to Luke",
       page: SETTINGS_VIEW.SHORTCUTS,
-      haystack: ["Talk to Luke", SHORTCUT_WORDS, "talk speak hold microphone push to talk"],
+      haystack: ["Talk to Luke", SHORTCUT_WORDS, "talk speak hold microphone hold to talk"],
     },
     {
       id: SETTINGS_SEARCH_ROW.ASK_KEY,

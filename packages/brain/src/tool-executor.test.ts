@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACTION_KIND, REALTIME_TOOL } from "@sidecar/actions";
+import { ACTION_KIND, ACTION_TOOL } from "@sidecar/actions";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import { CHILD_SPAWN_REFUSAL, TOOL_EFFECT, TOOL_POLICY_LAYER } from "@sidecar/runtime";
 import {
@@ -188,7 +188,7 @@ test("the refusal names the policy's own answer: the turn layer for announce in 
 
   const configured = resolveTurnToolPolicy(
     CATALOG,
-    { agent: { deny: [BRAIN_TOOL.ANNOUNCE, REALTIME_TOOL.SEND_SESSION_MESSAGE] } },
+    { agent: { deny: [BRAIN_TOOL.ANNOUNCE, ACTION_TOOL.SEND_SESSION_MESSAGE] } },
     BRAIN_TURN_TRIGGER.ASK,
   );
   // A configured deny is not the turn's: the model is told the policy, not to reply in text.
@@ -197,7 +197,7 @@ test("the refusal names the policy's own answer: the turn layer for announce in 
     REFUSAL_REASON.NOT_ALLOWED,
   );
   assert.equal(
-    refusalForPolicy(configured, REALTIME_TOOL.SEND_SESSION_MESSAGE)?.reason,
+    refusalForPolicy(configured, ACTION_TOOL.SEND_SESSION_MESSAGE)?.reason,
     REFUSAL_REASON.NOT_ALLOWED,
   );
 
@@ -209,7 +209,7 @@ test("the refusal names the policy's own answer: the turn layer for announce in 
 
 test("an effect is journaled by what the catalog says the tool is: every action and the workspace write, never a read or the briefing", () => {
   const wake = resolveTurnToolPolicy(CATALOG, {}, BRAIN_TURN_TRIGGER.WAKE);
-  assert.ok(journaledEffect(wake, REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(journaledEffect(wake, ACTION_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(journaledEffect(wake, BRAIN_TOOL.WRITE_WORKSPACE_FILE));
   assert.ok(!journaledEffect(wake, BRAIN_TOOL.READ_WORKSPACE_FILE));
   assert.ok(!journaledEffect(wake, BRAIN_TOOL.READ_TRANSCRIPT));
@@ -217,7 +217,7 @@ test("an effect is journaled by what the catalog says the tool is: every action 
   assert.ok(!journaledEffect(wake, "not_a_tool"));
   // A tool the policy removed is refused, not journaled.
   const noActions = resolveTurnToolPolicy(CATALOG, { agent: { deny: ["group:actions"] } });
-  assert.ok(!journaledEffect(noActions, REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(!journaledEffect(noActions, ACTION_TOOL.SEND_SESSION_MESSAGE));
 });
 
 const NOW = 1_800_000_000_000;
@@ -418,11 +418,11 @@ test("a memory read is dispatched to the provider's module under the turn's stan
     memory.contexts.map((context) => [context.runId, context.origin, context.scope]),
     [["run-1", RUN_ORIGIN.OBSERVATION, memory.definition.scope]],
   );
-  const written = await h.execute(call(REALTIME_TOOL.REMEMBER_FACT, { words: "likes tea" }));
+  const written = await h.execute(call(ACTION_TOOL.REMEMBER_FACT, { words: "likes tea" }));
   assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(
     h.journal.entries().map((entry) => entry.name),
-    [REALTIME_TOOL.REMEMBER_FACT],
+    [ACTION_TOOL.REMEMBER_FACT],
     "the write went through the journal",
   );
   assert.deepEqual(h.checkpoints, [1], "checkpointed before the effect ran");
@@ -432,7 +432,7 @@ test("a memory read is dispatched to the provider's module under the turn's stan
     "the write reached the carrier as an admitted action, never as a call",
   );
   // The same call id again is answered from the journal, not performed twice.
-  const again = await h.execute(call(REALTIME_TOOL.REMEMBER_FACT, { words: "likes tea" }));
+  const again = await h.execute(call(ACTION_TOOL.REMEMBER_FACT, { words: "likes tea" }));
   assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(h.performed.length, 1);
 

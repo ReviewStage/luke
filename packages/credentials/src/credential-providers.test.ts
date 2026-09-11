@@ -126,7 +126,7 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   // what it is for, so it carries no acronym of its own.
   assert.equal(openai.displayName, "OpenAI");
   assert.deepEqual(openai.environmentVariables, []);
-  // Realtime is what a spoken turn runs on, and an account that cannot reach it
+  // GPT Live is what a spoken turn runs on, and an account that cannot reach it
   // fails at the first word rather than at the paste.
   assert.ok(openai.hint);
   // No prefix: every kind OpenAI issues carries `sk-`, so a format would refuse

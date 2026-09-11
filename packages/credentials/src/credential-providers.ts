@@ -156,7 +156,7 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     hint: {
       lead: "Create a key on the OpenAI platform under",
       destination: "API keys",
-      trail: "Talking uses the Realtime API, which needs billing enabled.",
+      trail: "Talking uses the GPT Live API, which needs billing enabled.",
     },
     apiKeysUrl: "https://platform.openai.com/api-keys",
     // Deliberately no environment fallback, alone among the providers: an
@@ -166,8 +166,8 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     // by hand or not at all.
     environmentVariables: [],
     // No key format. Every kind OpenAI issues carries `sk-`, so a prefix would
-    // refuse nothing, and which of them can reach Realtime is something only
-    // OpenAI can answer — it answers it on the first mint.
+    // refuse nothing, and which of them can reach GPT Live is something only
+    // OpenAI can answer — it answers it on the first session.
   },
 };
 

@@ -22,7 +22,7 @@ boolean; `voice.endLiveSession` carries nothing; and `voiceLiveSession.changed`
 names a `LIVE_SESSION_PHASE`, the session id once a provider has named one,
 and the reason of a close. Every one of the four mutates, so a retried offer
 finds the first session rather than creating and billing a second, and no
-credential has a field to travel in. The Realtime path's methods and events
+credential has a field to travel in. The retired credential-mint path's methods and events
 (`voice.mintRealtimeCredential`, `speech.settle`, `receiver.report`, the
 delivery claims, `speech.offered`, `speech.withdrawn`, `delivery.offered`) are
 gone from the table rather than kept as names no handler answers: a retired

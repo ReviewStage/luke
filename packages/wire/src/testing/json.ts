@@ -12,7 +12,7 @@ export interface JsonObject {
 export type JsonValue = string | number | boolean | null | JsonObject | readonly JsonValue[];
 
 /**
- * A JSON object parsed from a realtime or transcript fixture line. It is the
+ * A JSON object parsed from a live-event or transcript fixture line. It is the
  * wire record itself rather than a copy of its shape: a fixture line stands in
  * for what a provider actually sent, and every consumer takes it as such.
  */

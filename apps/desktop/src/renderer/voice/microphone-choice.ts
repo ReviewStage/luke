@@ -3,12 +3,11 @@ import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/m
 /**
  * How every capture is processed, wherever it is opened from.
  *
- * Echo cancellation is deliberately off. Push-to-talk is half-duplex by
- * construction — a press interrupts the reply before the track enables, and
- * `speak` refuses a busy turn — so Luke is never audible while the microphone
- * is, and there is no echo to cancel. What the constraint would buy instead
- * is Chromium's system echo canceller, which on macOS runs the capture
- * through the OS's own voice processing — and the OS then ducks and thins
+ * Echo cancellation is deliberately off. The microphone is open only while
+ * the talk key is held, and the live session's own model handles a voice
+ * overlapping Luke's, so nothing here depends on the canceller. What the
+ * constraint would buy instead is Chromium's system echo canceller, which on
+ * macOS runs the capture through the OS's own voice processing — and the OS then ducks and thins
  * every other app's audio for as long as the device is open. That processing,
  * not the media duck (which only moves a volume and puts it back), is what
  * made music sound degraded whenever a conversation was up, so the capture

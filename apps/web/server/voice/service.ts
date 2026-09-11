@@ -166,7 +166,7 @@ export class VoiceService {
   readonly #upstream: LiveUpstream | undefined;
   readonly #sockets: WebSocketServer;
   readonly #http = http.createServer((request, response) => {
-    const path = new URL(request.url ?? "/", "http://voice-service").pathname;
+    const path = new URL(request.url ?? "/", "http://localhost").pathname;
     response.writeHead(routeForPath(path) ? UPGRADE_REQUIRED : UPGRADE_STATUS.NOT_FOUND).end();
   });
   /** Every session under way, so a close can wait for each to finalize. */
@@ -238,7 +238,7 @@ export class VoiceService {
 
   #upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
     socket.on("error", () => socket.destroy());
-    const path = new URL(request.url ?? "/", "http://voice-service").pathname;
+    const path = new URL(request.url ?? "/", "http://localhost").pathname;
     const decision = this.#admit(request, routeForPath(path));
     if ("status" in decision) {
       this.#log({ event: LOG_EVENT.UPGRADE_REFUSED, route: path, status: decision.status });

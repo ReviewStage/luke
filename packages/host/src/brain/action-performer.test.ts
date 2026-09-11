@@ -5,11 +5,11 @@ import {
   ACTION_OUTPUT,
   ACTION_OUTPUT_STATUS,
   ACTION_REFUSAL,
+  ACTION_TOOL,
   admit,
   type CarriedActionResult,
   type CarriedIssueAction,
   type CarriedSessionAction,
-  REALTIME_TOOL,
   type Refusal,
   type RememberedFact,
   type ValidatedAction,
@@ -64,20 +64,20 @@ function observationTurn(): BrainActionExecution {
 const LIVE = developerTurn();
 const IDENTITY = '"provider_id":"claude-code","provider_session_id":"session-a"';
 const MESSAGE_CALL = {
-  name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+  name: ACTION_TOOL.SEND_SESSION_MESSAGE,
   argumentsJson: `{${IDENTITY},"text":"go ahead"}`,
 };
 const REMEMBER_CALL = {
-  name: REALTIME_TOOL.REMEMBER_FACT,
+  name: ACTION_TOOL.REMEMBER_FACT,
   argumentsJson: '{"words":"prefers concise answers"}',
 };
 const SETTING_CALL = {
-  name: REALTIME_TOOL.CHANGE_APP_SETTING,
+  name: ACTION_TOOL.CHANGE_APP_SETTING,
   argumentsJson: '{"setting_id":"voice_captions","value":"on"}',
 };
 /** The one action whose admission reads the saved creation defaults as well as the roster. */
 const CREATE_CALL = {
-  name: REALTIME_TOOL.CREATE_WORKSPACE,
+  name: ACTION_TOOL.CREATE_WORKSPACE,
   argumentsJson: '{"provider_id":"conductor","project_id":"luke"}',
 };
 const LISTED_PROJECT: ObservedWorkspaceProject = {
@@ -106,7 +106,7 @@ const observed = normalizeSession(
   },
 );
 const CONTROL_CALL = {
-  name: REALTIME_TOOL.RUN_SESSION_CONTROL,
+  name: ACTION_TOOL.RUN_SESSION_CONTROL,
   argumentsJson: `{${IDENTITY},"control_id":"stop"}`,
 };
 
@@ -179,7 +179,7 @@ test("a session action reaches the performer only for a session the roster holds
   const landed = await performCall(
     actions,
     {
-      name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+      name: ACTION_TOOL.SEND_SESSION_MESSAGE,
       argumentsJson: `{${identity},"text":"go ahead"}`,
     },
     LIVE,
@@ -194,7 +194,7 @@ test("a session action reaches the performer only for a session the roster holds
   const stranger = await performCall(
     actions,
     {
-      name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+      name: ACTION_TOOL.SEND_SESSION_MESSAGE,
       argumentsJson: '{"provider_id":"claude-code","provider_session_id":"ghost","text":"hi"}',
     },
     LIVE,
@@ -327,7 +327,7 @@ test("an issue action is refused outright while no tracker is connected", async 
   const refused = await performCall(
     actions,
     {
-      name: REALTIME_TOOL.UPDATE_ISSUE_STATE,
+      name: ACTION_TOOL.UPDATE_ISSUE_STATE,
       argumentsJson: '{"tracker_id":"linear","issue_id":"LUKE-1","state":"Done"}',
     },
     LIVE,
@@ -342,7 +342,7 @@ test("memory actions are the main process's own, and the store's answer is the r
   const saved = await performCall(
     actions,
     {
-      name: REALTIME_TOOL.REMEMBER_FACT,
+      name: ACTION_TOOL.REMEMBER_FACT,
       argumentsJson: '{"words":"prefers concise answers"}',
     },
     LIVE,
@@ -355,7 +355,7 @@ test("memory actions are the main process's own, and the store's answer is the r
   const forgotten = await performCall(
     actions,
     {
-      name: REALTIME_TOOL.FORGET_FACT,
+      name: ACTION_TOOL.FORGET_FACT,
       argumentsJson: JSON.stringify({ id }),
     },
     LIVE,
@@ -384,12 +384,12 @@ test("two conversations remembering at once both land: each write is one whole r
   const [first, second] = await Promise.all([
     performCall(
       actions,
-      { name: REALTIME_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread one"}' },
+      { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread one"}' },
       LIVE,
     ),
     performCall(
       actions,
-      { name: REALTIME_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread two"}' },
+      { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread two"}' },
       LIVE,
     ),
   ]);
@@ -422,7 +422,7 @@ test("an app action is validated against the reported guide before a renderer ca
   const changed = await performCall(
     actions,
     {
-      name: REALTIME_TOOL.CHANGE_APP_SETTING,
+      name: ACTION_TOOL.CHANGE_APP_SETTING,
       argumentsJson: '{"setting_id":"voice_captions","value":"on"}',
     },
     LIVE,
@@ -434,7 +434,7 @@ test("an app action is validated against the reported guide before a renderer ca
   const unlisted = await performCall(
     actions,
     {
-      name: REALTIME_TOOL.CHANGE_APP_SETTING,
+      name: ACTION_TOOL.CHANGE_APP_SETTING,
       argumentsJson: '{"setting_id":"launch_codes","value":"on"}',
     },
     LIVE,
@@ -602,7 +602,7 @@ test("an issue act observes nothing: no pass runs for an action the roster canno
   });
   const refused = await performCall(
     actions,
-    { name: REALTIME_TOOL.COMMENT_ON_ISSUE, argumentsJson: "{}" },
+    { name: ACTION_TOOL.COMMENT_ON_ISSUE, argumentsJson: "{}" },
     LIVE,
   );
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);

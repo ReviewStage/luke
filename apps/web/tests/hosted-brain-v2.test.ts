@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  ACTION_TOOL,
   BRAIN_OPENAI_DEFAULTS,
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
@@ -17,7 +18,6 @@ import {
   isRecord,
   isWireString,
   maximumHostedBrainRequestBytes,
-  REALTIME_TOOL,
   type UnparsedWireValue,
   type WireRecord,
 } from "../server/core";
@@ -64,7 +64,7 @@ function respondBody(overrides: WireRecord = {}): WireRecord {
   return {
     contract: HOSTED_BRAIN_CONTRACT_VERSION,
     prompt: "You are Luke.",
-    tools: [REALTIME_TOOL.SEND_SESSION_MESSAGE, BRAIN_TOOL.READ_TRANSCRIPT],
+    tools: [ACTION_TOOL.SEND_SESSION_MESSAGE, BRAIN_TOOL.READ_TRANSCRIPT],
     options: {},
     input: INPUT,
     ...overrides,
@@ -185,10 +185,10 @@ test("a respond request runs the prepared prompt over the schemas its names sele
   assert.ok(Array.isArray(sent.tools));
   assert.deepEqual(
     sent.tools.map((tool) => (isRecord(tool) ? tool.name : undefined)),
-    [REALTIME_TOOL.SEND_SESSION_MESSAGE, BRAIN_TOOL.READ_TRANSCRIPT],
+    [ACTION_TOOL.SEND_SESSION_MESSAGE, BRAIN_TOOL.READ_TRANSCRIPT],
   );
   const selected = [...hostedBrainToolCatalog().values()].find(
-    (tool) => tool.name === REALTIME_TOOL.SEND_SESSION_MESSAGE,
+    (tool) => tool.name === ACTION_TOOL.SEND_SESSION_MESSAGE,
   );
   assert.deepEqual(sent.tools[0], selected);
   assert.deepEqual(sent.input, INPUT);

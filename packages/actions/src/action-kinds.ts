@@ -30,7 +30,7 @@ import type { WireRecord } from "@sidecar/wire";
  * arguments as the model wrote them. No call id — the id an answer travels
  * back under belongs to the transport, which extends this with one.
  */
-export interface RealtimeFunctionCall {
+export interface ActionFunctionCall {
   name: string;
   argumentsJson: string;
 }

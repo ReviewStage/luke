@@ -13,11 +13,7 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { ACTION_KIND } from "./action-kinds.js";
 import { actionNarration, sessionActionConversationEntry } from "./action-narration.js";
-import {
-  REALTIME_TOOL,
-  realtimeToolDefinitions,
-  remoteRealtimeToolDefinitions,
-} from "./actions.js";
+import { ACTION_TOOL, actionToolDefinitions, remoteRealtimeToolDefinitions } from "./actions.js";
 import { maximumRememberedFacts, type RememberedFact } from "./memory.js";
 import { withoutAdmission } from "./testing/admitted.js";
 import { itemEnum, objectProperties } from "./testing/json-schema.js";
@@ -69,7 +65,7 @@ const HELD = [{ id: "fact-one", words: "prefers CI updates" }];
 
 test("an automatic memory update may only replace an entry in context", async () => {
   const replacing = await appToolAction(
-    memoryCall(REALTIME_TOOL.REMEMBER_FACT, {
+    memoryCall(ACTION_TOOL.REMEMBER_FACT, {
       words: "  stop telling me\n about CI ",
       replaces: "fact-one",
     }),
@@ -84,7 +80,7 @@ test("an automatic memory update may only replace an entry in context", async ()
   });
 
   const invented = await appToolAction(
-    memoryCall(REALTIME_TOOL.REMEMBER_FACT, { words: "anything", replaces: "fact-invented" }),
+    memoryCall(ACTION_TOOL.REMEMBER_FACT, { words: "anything", replaces: "fact-invented" }),
     EMPTY_APP_GUIDE,
     [],
     HELD,
@@ -94,7 +90,7 @@ test("an automatic memory update may only replace an entry in context", async ()
 
 test("words that bound away to nothing are remembered as nothing", async () => {
   const empty = await appToolAction(
-    memoryCall(REALTIME_TOOL.REMEMBER_FACT, { words: "   " }),
+    memoryCall(ACTION_TOOL.REMEMBER_FACT, { words: "   " }),
     EMPTY_APP_GUIDE,
     [],
     [],
@@ -108,7 +104,7 @@ test("the cap refuses a new fact rather than evicting an old one", async () => {
     words: `something ${index}`,
   }));
   const refused = await appToolAction(
-    memoryCall(REALTIME_TOOL.REMEMBER_FACT, { words: "one more" }),
+    memoryCall(ACTION_TOOL.REMEMBER_FACT, { words: "one more" }),
     EMPTY_APP_GUIDE,
     [],
     full,
@@ -117,7 +113,7 @@ test("the cap refuses a new fact rather than evicting an old one", async () => {
 
   // A replacement retires one as it lands, so a full list still takes it.
   const replacing = await appToolAction(
-    memoryCall(REALTIME_TOOL.REMEMBER_FACT, { words: "one more", replaces: "fact-0" }),
+    memoryCall(ACTION_TOOL.REMEMBER_FACT, { words: "one more", replaces: "fact-0" }),
     EMPTY_APP_GUIDE,
     [],
     full,
@@ -129,7 +125,7 @@ test("forgetting can only name an entry that stands", async () => {
   assert.deepEqual(
     withoutAdmission(
       await appToolAction(
-        memoryCall(REALTIME_TOOL.FORGET_FACT, { id: "fact-one" }),
+        memoryCall(ACTION_TOOL.FORGET_FACT, { id: "fact-one" }),
         EMPTY_APP_GUIDE,
         [],
         HELD,
@@ -140,7 +136,7 @@ test("forgetting can only name an entry that stands", async () => {
   assert.equal(
     (
       await appToolAction(
-        memoryCall(REALTIME_TOOL.FORGET_FACT, { id: "fact-two" }),
+        memoryCall(ACTION_TOOL.FORGET_FACT, { id: "fact-two" }),
         EMPTY_APP_GUIDE,
         [],
         HELD,
@@ -157,31 +153,31 @@ test("the phone is handed the actions it carries, in the shape its own surface g
   assert.deepEqual(
     [...names],
     [
-      REALTIME_TOOL.SEND_SESSION_MESSAGE,
-      REALTIME_TOOL.RUN_SESSION_CONTROL,
-      REALTIME_TOOL.OPEN_SESSION,
-      REALTIME_TOOL.CREATE_WORKSPACE,
-      REALTIME_TOOL.ADD_WORKSPACE_AGENT,
-      REALTIME_TOOL.RENAME_WORKSPACE,
-      REALTIME_TOOL.RENAME_SESSION,
-      REALTIME_TOOL.SHOW_PANEL,
+      ACTION_TOOL.SEND_SESSION_MESSAGE,
+      ACTION_TOOL.RUN_SESSION_CONTROL,
+      ACTION_TOOL.OPEN_SESSION,
+      ACTION_TOOL.CREATE_WORKSPACE,
+      ACTION_TOOL.ADD_WORKSPACE_AGENT,
+      ACTION_TOOL.RENAME_WORKSPACE,
+      ACTION_TOOL.RENAME_SESSION,
+      ACTION_TOOL.SHOW_PANEL,
     ],
   );
   // No tracker, setting, composer, Updates row, or memory stands on the phone.
   for (const absent of [
-    REALTIME_TOOL.REMEMBER_FACT,
-    REALTIME_TOOL.FORGET_FACT,
-    REALTIME_TOOL.UPDATE_ISSUE_STATE,
-    REALTIME_TOOL.COMMENT_ON_ISSUE,
-    REALTIME_TOOL.CHANGE_APP_SETTING,
-    REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
-    REALTIME_TOOL.RUN_UPDATE_ACTION,
+    ACTION_TOOL.REMEMBER_FACT,
+    ACTION_TOOL.FORGET_FACT,
+    ACTION_TOOL.UPDATE_ISSUE_STATE,
+    ACTION_TOOL.COMMENT_ON_ISSUE,
+    ACTION_TOOL.CHANGE_APP_SETTING,
+    ACTION_TOOL.OPEN_FEEDBACK_COMPOSER,
+    ACTION_TOOL.RUN_UPDATE_ACTION,
   ]) {
     assert.ok(!names.includes(absent), `${absent} must not reach the phone`);
   }
 
   // An open on the phone lands on the app's own screen, so no app to open in is offered.
-  const open = remote.find((tool) => tool.name === REALTIME_TOOL.OPEN_SESSION);
+  const open = remote.find((tool) => tool.name === ACTION_TOOL.OPEN_SESSION);
   assert.ok(open);
   assert.deepEqual(Object.keys(objectProperties(open.parameters)), [
     "provider_id",
@@ -189,7 +185,7 @@ test("the phone is handed the actions it carries, in the shape its own surface g
   ]);
 
   // The phone's list narrows on provider and status, and has no tabs to show.
-  const panel = remote.find((tool) => tool.name === REALTIME_TOOL.SHOW_PANEL);
+  const panel = remote.find((tool) => tool.name === ACTION_TOOL.SHOW_PANEL);
   assert.ok(panel);
   assert.deepEqual(Object.keys(objectProperties(panel.parameters)), ["filters", "sort", "query"]);
   const values = itemEnum(objectProperties(panel.parameters).filters);
@@ -200,10 +196,9 @@ test("the phone is handed the actions it carries, in the shape its own surface g
   assert.ok(!values.includes("voice"));
 
   // Every other action keeps the desktop's own schema.
-  const desktop = new Map(realtimeToolDefinitions().map((tool) => [tool.name, tool]));
+  const desktop = new Map(actionToolDefinitions().map((tool) => [tool.name, tool]));
   for (const tool of remote) {
-    if (tool.name === REALTIME_TOOL.OPEN_SESSION || tool.name === REALTIME_TOOL.SHOW_PANEL)
-      continue;
+    if (tool.name === ACTION_TOOL.OPEN_SESSION || tool.name === ACTION_TOOL.SHOW_PANEL) continue;
     assert.deepEqual(tool, desktop.get(tool.name));
   }
 });

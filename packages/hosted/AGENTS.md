@@ -6,9 +6,9 @@ device, observe, conversation, projects, mint, act, live, the per-resource
 reads and their change signal (`reads-wire.ts`, whose answers are pinned by
 the synthetic fixtures under `fixtures/reads/` the Swift mirror reads
 against), and the service vocabulary they share — each a `Schema`
-declaration rather than a hand-written reader, and the realtime credential
-contract (`realtime-contract.ts`, with the reader of a mint response into
-it), and depends only on lower wire/session vocabulary and `@sidecar/live`
+declaration rather than a hand-written reader, and the phone's Realtime
+credential contract (`realtime-contract.ts`, with the reader of a mint
+response into it), and depends only on lower wire/session vocabulary and `@sidecar/live`
 for the Live voice set and the
 `InitialItem` shape (that package imports nothing of this one, so the edge
 points down). The clients here are `vault-client.ts`, the desktop's side of
@@ -20,10 +20,10 @@ control targets never travels), and `action-client.ts`, its side of the two
 session actions a row asks for; each sits in this package because it speaks
 nothing but hosted vocabulary and holds no credential of its own. Behavior that needs
 anything above this boundary belongs above it: the brain's hosted client lives
-in `@sidecar/brain`, the hosted credential minter in `@sidecar/voice`, the
+in `@sidecar/brain`, the hosted live session source in `@sidecar/voice`, the
 account preference client in `@sidecar/host` because the snapshot it carries is
-settings vocabulary, and realtime credential lifecycle depends on this package
-rather than being imported by it.
+settings vocabulary, and the phone's mint document in `@sidecar/actions`
+depends on this package rather than being imported by it.
 
 ## One call stands behind all of them
 
@@ -80,9 +80,9 @@ service added, the rule every wire module here keeps.
 upgrades stand on (`/api/voice/sessions` under an account bearer,
 `/api/voice/introduction` under none). The service authorizes and meters a
 session by direct calls into its own account code, so no internal route and
-no shared secret exist between two deployments. The Realtime mint paths and
-`realtime-contract.ts` stand beside it untouched for the installed desktops
-and the phone that still speak them.
+no shared secret exist between two deployments. The legacy mint paths and
+`realtime-contract.ts` stand beside it untouched for the phone, and for the
+installed desktops that predate the live session, until each has moved.
 
 A renamed wire field keeps its old name on the wire for one iOS release. The
 desktop and the service ship together, but an installed phone reads whatever
