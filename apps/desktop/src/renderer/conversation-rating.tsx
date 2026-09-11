@@ -2,7 +2,7 @@ import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CONVERSATION_RATE_STATUS, type ConversationRateStatus } from "@sidecar/gateway";
 import { ThumbsDownIcon, ThumbsUpIcon } from "@sidecar/panel";
 import { MESSAGE_RATING, type MessageRating } from "@sidecar/wire";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { act } from "./act";
 
@@ -20,8 +20,8 @@ import { act } from "./act";
  * only by the composer's own Send.
  */
 
-/** One of Luke's messages as the control names it: the row a thumb rates, its words, and the ask it answered, where the turn had one. */
-export interface RateableMessage {
+/** One of Luke's messages as the offered draft quotes it: the row a thumb rates, its words, and the ask it answered, where the turn had one. */
+export interface RatedMessageDraft {
   readonly messageId: string;
   readonly words: string;
   readonly ask?: string;
@@ -57,31 +57,28 @@ export const DRAFT_SPEAKER = {
   LUKE: "Luke said:",
 } as const;
 
+/** Cut on code points, so a quote never ends in half a character before its ellipsis. */
 function cutQuote(text: string): string {
-  const trimmed = text.trim();
-  return trimmed.length <= DRAFT_QUOTE_MAX_LENGTH
-    ? trimmed
-    : `${trimmed.slice(0, DRAFT_QUOTE_MAX_LENGTH - DRAFT_ELLIPSIS.length)}${DRAFT_ELLIPSIS}`;
+  const points = [...text.trim()];
+  return points.length <= DRAFT_QUOTE_MAX_LENGTH
+    ? points.join("")
+    : `${points.slice(0, DRAFT_QUOTE_MAX_LENGTH - DRAFT_ELLIPSIS.length).join("")}${DRAFT_ELLIPSIS}`;
 }
 
 /**
- * The lines the offered composer starts with: the developer's ask where the
- * turn had one, then the rated message, each in its speaker's name and cut
- * to the quote bound, and a blank line for the developer to write under.
- * Only words already on the screen enter it, and it is placed only in an
- * empty note — the composer keeps a draft in progress over it.
+ * What the offered composer starts with: the developer's ask where the turn
+ * had one, then the rated message, each in its speaker's name and cut to the
+ * quote bound, over a blank line for the developer to write under. Only
+ * words already on the screen enter it, and it is placed only in an empty
+ * note — the composer keeps a draft in progress over it.
  */
-export function ratingFeedbackDraftLines(rated: RateableMessage): readonly string[] {
+export function ratingFeedbackDraft(rated: RatedMessageDraft): string {
   return [
     ...(rated.ask === undefined ? [] : [`${DRAFT_SPEAKER.YOU} ${cutQuote(rated.ask)}`, ""]),
     `${DRAFT_SPEAKER.LUKE} ${cutQuote(rated.words)}`,
     "",
     "",
-  ];
-}
-
-export function ratingFeedbackDraft(rated: RateableMessage): string {
-  return ratingFeedbackDraftLines(rated).join("\n");
+  ].join("\n");
 }
 
 export function ConversationRatingControl({
@@ -89,7 +86,7 @@ export function ConversationRatingControl({
   rating,
   onOfferFeedback,
 }: {
-  rated: RateableMessage;
+  rated: RatedMessageDraft;
   /** The developer's latest verdict on the message, as the view holds it; absent where none was given. */
   rating: MessageRating | undefined;
   /** Opens the composer on the draft; absent where no composer can be offered, and a thumbs down offers nothing. */
@@ -97,29 +94,18 @@ export function ConversationRatingControl({
 }): React.JSX.Element {
   const [pending, setPending] = useState<MessageRating | undefined>(undefined);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  // A verdict that moved — this press landing, or another device's read back — is the refusal's answer.
+  useEffect(() => setRefusal(undefined), [rating]);
 
   const rate = (verdict: MessageRating) => {
     if (pending !== undefined) return;
     setPending(verdict);
     setRefusal(undefined);
     void act(ACT_KIND.CONVERSATION_RATE_MESSAGE, { messageId: rated.messageId, rating: verdict })
-      .then((result) => {
-        if (mounted.current) setRefusal(RATE_REFUSAL_COPY[result.status]);
-      })
+      .then((result) => setRefusal(RATE_REFUSAL_COPY[result.status]))
       // The act's own rejection carries the refusal sentence the build fixed.
-      .catch((refused: Error) => {
-        if (mounted.current) setRefusal(refused.message);
-      })
-      .finally(() => {
-        if (mounted.current) setPending(undefined);
-      });
+      .catch((refused: Error) => setRefusal(refused.message))
+      .finally(() => setPending(undefined));
   };
 
   const thumb = (verdict: MessageRating, Icon: () => React.JSX.Element) => (

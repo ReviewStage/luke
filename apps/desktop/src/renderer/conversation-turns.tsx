@@ -40,7 +40,7 @@ import {
 } from "@sidecar/wire";
 import { useState } from "react";
 import { ConversationCopyButton } from "./conversation-copy";
-import { ConversationRatingControl, type RateableMessage } from "./conversation-rating";
+import { ConversationRatingControl, type RatedMessageDraft } from "./conversation-rating";
 import {
   CONVERSATION_ENTRY_SPEAKER,
   type ConversationEntrySpeaker,
@@ -195,9 +195,9 @@ function BubbleRow({
         <span className="conversation-bubble">
           <MarkdownMessage words={words} className="conversation-words" />
           {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
-          {rating}
           {copy ? <ConversationCopyButton words={words} /> : null}
         </span>
+        {rating}
       </div>
       <RowStamp at={at} />
     </li>
@@ -633,11 +633,24 @@ interface RatingContext {
   readonly onOfferFeedback?: ((draft: string) => void) | undefined;
 }
 
-/** The last words of a message as drawn, kept so the rating control can be placed on them once the message is read through. */
-interface LastWords {
-  readonly index: number;
-  readonly words: string;
-  readonly redraw: (rating: React.JSX.Element | undefined) => React.JSX.Element;
+/** Whether a part draws Luke's words: a text part, or an announce call carrying its briefing. */
+function drawsWords(
+  part: StoredPart,
+  described: ReadonlyMap<string, ConversationViewToolPart>,
+): boolean {
+  if (isTextPart(part)) return true;
+  return (
+    isStoredToolPart(part) &&
+    described.get(part.toolCallId)?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE &&
+    announcedWords(part) !== undefined
+  );
+}
+
+/** What the rating's draft quotes of a message: its text parts whole, or the briefing of a message that has none. */
+function quotedWords(message: StoredUIMessage, lastWords: StoredPart | undefined): string {
+  const text = userWords(message);
+  if (text.length > 0 || lastWords === undefined || !isStoredToolPart(lastWords)) return text;
+  return announcedWords(lastWords) ?? "";
 }
 
 function ratingControl(
@@ -645,10 +658,10 @@ function ratingControl(
   words: string,
   context: RatingContext,
 ): React.JSX.Element {
-  const rated: RateableMessage = {
+  const rated: RatedMessageDraft = {
     messageId: view.message.id,
     words,
-    ...(context.ask !== undefined ? { ask: context.ask } : undefined),
+    ...(context.ask !== undefined && context.ask.length > 0 ? { ask: context.ask } : undefined),
   };
   return (
     <ConversationRatingControl
@@ -699,24 +712,28 @@ function messageRows(
   );
   const rows: DrawnRow[] = [];
   const draw = (element: React.JSX.Element) => rows.push({ element });
-  let lastWords: LastWords | undefined;
-  const drawWords = (words: string, redraw: LastWords["redraw"]) => {
-    draw(redraw(undefined));
-    lastWords = { index: rows.length - 1, words, redraw };
-  };
+  // The control stands on the message's last words, so one message takes one.
+  const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
+    drawsWords(part, described),
+  );
+  const control =
+    lastWordsAt === -1
+      ? undefined
+      : ratingControl(view, quotedWords(message, message.parts[lastWordsAt]), rating);
   message.parts.forEach((part: StoredPart, index) => {
     const key = `${message.id}:${index}`;
+    const placed = index === lastWordsAt ? control : undefined;
     if (isTextPart(part)) {
-      drawWords(part.text, (control) =>
+      draw(
         judgment === JUDGMENT.OWN ? (
-          <OwnWordsRow key={key} words={part.text} at={view.createdAt} rating={control} />
+          <OwnWordsRow key={key} words={part.text} at={view.createdAt} rating={placed} />
         ) : (
           <BubbleRow
             key={key}
             voice={VOICE.LUKE}
             words={part.text}
             at={view.createdAt}
-            rating={control}
+            rating={placed}
           />
         ),
       );
@@ -732,16 +749,16 @@ function messageRows(
       case CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE: {
         const words = announcedWords(part);
         if (words !== undefined) {
-          drawWords(words, (control) => (
+          draw(
             <BubbleRow
               key={key}
               voice={VOICE.LUKE}
               words={words}
               at={view.createdAt}
               unspoken={tool.unspoken}
-              rating={control}
-            />
-          ));
+              rating={placed}
+            />,
+          );
         }
         return;
       }
@@ -760,12 +777,6 @@ function messageRows(
         folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.DETAIL, part });
     }
   });
-  if (lastWords !== undefined) {
-    const placed: LastWords = lastWords;
-    rows[placed.index] = {
-      element: placed.redraw(ratingControl(view, placed.words, rating)),
-    };
-  }
   return { rows, folded };
 }
 

@@ -505,24 +505,18 @@ export const FIXTURE_INPUT: ConversationViewInput = {
     },
   ],
   // The developer's verdicts, as the record holds them: the first reply rated
-  // down, then up, and down again, so the newest word is what the thumbs show.
+  // up, then down, so the newest word is what the thumbs show.
   events: [
     {
       messageId: FIXTURE_RATED_MESSAGE,
       kind: CONVERSATION_EVENT_KIND.RATING,
       seq: 1,
-      rating: { rating: MESSAGE_RATING.DOWN },
-    },
-    {
-      messageId: FIXTURE_RATED_MESSAGE,
-      kind: CONVERSATION_EVENT_KIND.RATING,
-      seq: 2,
       rating: { rating: MESSAGE_RATING.UP },
     },
     {
       messageId: FIXTURE_RATED_MESSAGE,
       kind: CONVERSATION_EVENT_KIND.RATING,
-      seq: 3,
+      seq: 2,
       rating: { rating: MESSAGE_RATING.DOWN },
     },
   ],

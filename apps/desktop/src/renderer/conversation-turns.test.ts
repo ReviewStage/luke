@@ -18,7 +18,6 @@ import {
   DRAFT_SPEAKER,
   RATING_LABEL,
   ratingFeedbackDraft,
-  ratingFeedbackDraftLines,
 } from "./conversation-rating";
 import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
@@ -373,23 +372,8 @@ function pressed(markup: string, label: string): readonly boolean[] {
 
 test("each of Luke's messages carries one rating control on its last words, and the developer's ask and the brain's note carry none", () => {
   const groups = fixtureConversationTurns();
-  const lukes = groups
-    .flatMap((group) => group.messages)
-    .filter(
-      (view) =>
-        view.message.role === MESSAGE_ROLE.ASSISTANT &&
-        view.message.parts.some(
-          (part) =>
-            part.type === "text" ||
-            (isStoredToolPart(part) &&
-              view.tools.some(
-                (tool) =>
-                  tool.toolCallId === part.toolCallId &&
-                  tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE,
-              )),
-        ),
-    ).length;
-  assert.ok(lukes > 0);
+  // The fixture's messages of Luke's with words: four replies, one briefing, one on his own judgment.
+  const lukes = 6;
   const markup = render(groups, OPEN);
   assert.equal(ratingControls(markup), lukes);
   assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.UP]).length, lukes);
@@ -436,11 +420,11 @@ test("the thumbs show the message's newest rating, and a thumbs down stands the 
 });
 
 test("the offered draft quotes the ask the turn answered and then the rated message, each cut to the quote bound, over a blank line to write under", () => {
-  const short = ratingFeedbackDraftLines({
+  const short = ratingFeedbackDraft({
     messageId: FIXTURE_RATED_MESSAGE,
     words: "It is holding on a permission prompt.",
     ask: "Is the fixture session still waiting?",
-  });
+  }).split("\n");
   assert.deepEqual(short, [
     `${DRAFT_SPEAKER.YOU} Is the fixture session still waiting?`,
     "",
@@ -449,14 +433,14 @@ test("the offered draft quotes the ask the turn answered and then the rated mess
     "",
   ]);
   // A briefing answered no ask: only Luke's words are quoted.
-  const briefing = ratingFeedbackDraftLines({ messageId: FIXTURE_RATED_MESSAGE, words: "A word." });
-  assert.deepEqual(briefing, [`${DRAFT_SPEAKER.LUKE} A word.`, "", ""]);
+  const briefing = ratingFeedbackDraft({ messageId: FIXTURE_RATED_MESSAGE, words: "A word." });
+  assert.deepEqual(briefing.split("\n"), [`${DRAFT_SPEAKER.LUKE} A word.`, "", ""]);
   // A long reply is cut so the whole draft leaves room under the composer's bound.
-  const long = ratingFeedbackDraftLines({
+  const long = ratingFeedbackDraft({
     messageId: FIXTURE_RATED_MESSAGE,
     words: "x".repeat(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH),
     ask: "y".repeat(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH),
-  });
+  }).split("\n");
   assert.equal(long.length, short.length);
   assert.deepEqual(
     [long[0]?.length, long[2]?.length],

@@ -499,6 +499,15 @@ button.conversation-action-chip:focus-visible {
   vertical-align: middle;
 }
 
+/* Luke's rows stack: the bubble, then the thumbs under it. The thumbs stand
+   beside the bubble rather than inside it, so the copy control, anchored to
+   the bubble's own middle, still centres on the words and not on the words
+   and the thumbs together. */
+.conversation-entry[data-speaker="luke"] .conversation-message {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 /* The developer's verdict on one of Luke's messages: two thumbs under the
    words, quiet until chosen, the chosen one filled and in the text colour so
    a verdict already given reads at a glance. Each thumb keeps a 24px target
@@ -512,7 +521,14 @@ button.conversation-action-chip:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  padding: 0 6px 3px;
+  padding: 1px 6px 0;
+}
+
+.conversation-rating-thumb,
+.conversation-rating-offer {
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
 }
 
 .conversation-rating-thumb {
@@ -524,9 +540,6 @@ button.conversation-action-chip:focus-visible {
   border-radius: 8px;
   background: transparent;
   color: var(--text-tertiary);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
 }
 
 .conversation-rating-thumb svg {
@@ -561,9 +574,6 @@ button.conversation-action-chip:focus-visible {
   color: var(--text-secondary);
   font-size: 10.5px;
   font-weight: 620;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
 }
 
 .conversation-rating-offer:hover,
