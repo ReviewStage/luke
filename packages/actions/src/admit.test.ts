@@ -19,6 +19,7 @@ import {
   type WorkspaceAgentModels,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import {
   ACTION_FAMILY,
@@ -869,7 +870,7 @@ test("each action belongs to one family", async () => {
 });
 
 test("show_panel's filter enum carries the whole vocabulary its validator accepts", async () => {
-  const values = itemEnum(objectProperties(ACTIONS.SHOW_PANEL.request.jsonSchema()).filters);
+  const values = itemEnum(objectProperties(emitJsonSchema(ACTIONS.SHOW_PANEL.request)).filters);
 
   // The enum is what binds the model to real tokens instead of the
   // developer's own words for them — a value the validator accepts but the

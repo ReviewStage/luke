@@ -15,7 +15,14 @@
  * schema. Luke is another way to ask, never a wider one.
  */
 
-import type { JsonSchemaNode, Schema } from "@sidecar/wire";
+import {
+  type JsonSchemaNode,
+  s,
+  type UnparsedWireValue,
+  type Schema as WireSchema,
+} from "@sidecar/wire";
+import { emitJsonSchema, readEither, toSchemaRead } from "@sidecar/wire/effect";
+import { Schema } from "effect";
 import { ACTION_FAMILY, ACTION_KIND, type ActionFamily, type ActionKind } from "./action-kinds.js";
 import {
   ADD_AGENT_REQUEST,
@@ -44,14 +51,28 @@ export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> 
   readonly kind: Kind;
   readonly description: string;
   /** The action's own field vocabulary: what admission reads and what the model is shown. */
-  readonly request: Schema<unknown>;
+  readonly request: Schema.Schema<unknown, UnparsedWireValue>;
   /**
    * The same action as the phone offers it, where the phone's surface gives the
    * action a different shape: an open lands on the app's own screen rather than
    * a provider's address, and the list narrows on the axes its chips hold.
    * Absent, the phone is handed the desktop's.
    */
-  readonly remote?: { readonly description: string; readonly request: Schema<unknown> };
+  readonly remote?: {
+    readonly description: string;
+    readonly request: Schema.Schema<unknown, UnparsedWireValue>;
+  };
+}
+
+/**
+ * A request as `action-schemas.ts` declares it, over its own concrete field
+ * table, restated as the vocabulary every `ToolSpec.request` shares: Effect's
+ * `Schema` is invariant in its decoded type, so a concrete struct is never
+ * itself assignable there, and this is the one cast — through `Schema.make`
+ * over the same AST, never `as` — that states it.
+ */
+function erase<A, I>(request: Schema.Schema<A, I>): Schema.Schema<unknown, UnparsedWireValue> {
+  return Schema.make(request.ast);
 }
 
 /**
@@ -65,14 +86,14 @@ export const ACTIONS = {
     family: ACTION_FAMILY.SESSION,
     kind: ACTION_KIND.MESSAGE,
     description: "Send a message to an observed session.",
-    request: MESSAGE_REQUEST,
+    request: erase(MESSAGE_REQUEST),
   },
   RUN_SESSION_CONTROL: {
     name: "run_session_control",
     family: ACTION_FAMILY.SESSION,
     kind: ACTION_KIND.CONTROL,
     description: "Run a control advertised by an observed session.",
-    request: CONTROL_REQUEST,
+    request: erase(CONTROL_REQUEST),
   },
   OPEN_SESSION: {
     name: "open_session",
@@ -84,7 +105,7 @@ export const ACTIONS = {
       'sessions or agents — "show me the cloud agents" — filters the panel through ' +
       "show_panel instead, never this. An ask to open one session per provider uses this tool " +
       "once per matching provider in the same response, without filtering the panel first.",
-    request: OPEN_REQUEST,
+    request: erase(OPEN_REQUEST),
     remote: {
       description:
         "Open one observed session's own screen in this app, leaving this conversation — only " +
@@ -92,7 +113,7 @@ export const ACTIONS = {
         'show, see, or list sessions or agents — "show me the waiting sessions" — narrows the ' +
         "list through show_panel instead, never this. The phone shows one screen, so open one " +
         "session per response; asked for several, ask which.",
-      request: REMOTE_OPEN_REQUEST,
+      request: erase(REMOTE_OPEN_REQUEST),
     },
   },
   CREATE_WORKSPACE: {
@@ -100,14 +121,14 @@ export const ACTIONS = {
     family: ACTION_FAMILY.SESSION,
     kind: ACTION_KIND.CREATE_WORKSPACE,
     description: "Create a workspace for a new agent.",
-    request: CREATE_WORKSPACE_REQUEST,
+    request: erase(CREATE_WORKSPACE_REQUEST),
   },
   ADD_WORKSPACE_AGENT: {
     name: "add_workspace_agent",
     family: ACTION_FAMILY.SESSION,
     kind: ACTION_KIND.ADD_AGENT,
     description: "Add an agent to an observed workspace.",
-    request: ADD_AGENT_REQUEST,
+    request: erase(ADD_AGENT_REQUEST),
   },
   RENAME_WORKSPACE: {
     name: "rename_workspace",
@@ -117,7 +138,7 @@ export const ACTIONS = {
       "Rename the workspace one observed session runs in, to a name the developer just " +
       "chose — their own words, never a name composed for them. Only sessions whose roster " +
       "entry says the workspace can be renamed take one.",
-    request: RENAME_WORKSPACE_REQUEST,
+    request: erase(RENAME_WORKSPACE_REQUEST),
   },
   RENAME_SESSION: {
     name: "rename_session",
@@ -127,28 +148,28 @@ export const ACTIONS = {
       "Rename one observed chat itself — not the workspace around it — to a name the " +
       "developer just chose, in their own words. Only chats whose roster entry says they can " +
       "be renamed take one; an ask that names the workspace renames the workspace instead.",
-    request: RENAME_SESSION_REQUEST,
+    request: erase(RENAME_SESSION_REQUEST),
   },
   UPDATE_ISSUE_STATE: {
     name: "update_issue_state",
     family: ACTION_FAMILY.ISSUE,
     kind: ACTION_KIND.ISSUE_STATE,
     description: "Update a tracked issue's state.",
-    request: ISSUE_STATE_REQUEST,
+    request: erase(ISSUE_STATE_REQUEST),
   },
   COMMENT_ON_ISSUE: {
     name: "comment_on_issue",
     family: ACTION_FAMILY.ISSUE,
     kind: ACTION_KIND.ISSUE_COMMENT,
     description: "Add a comment to a tracked issue.",
-    request: ISSUE_COMMENT_REQUEST,
+    request: erase(ISSUE_COMMENT_REQUEST),
   },
   CHANGE_APP_SETTING: {
     name: "change_app_setting",
     family: ACTION_FAMILY.APP,
     kind: ACTION_KIND.SETTING,
     description: "Change a Luke setting.",
-    request: SETTING_REQUEST,
+    request: erase(SETTING_REQUEST),
   },
   SHOW_PANEL: {
     name: "show_panel",
@@ -158,13 +179,13 @@ export const ACTIONS = {
       "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list. " +
       'An ask to show, see, or list sessions or agents of some kind — "show me the Codex ' +
       'agents", "show me my local sessions" — is this tool with a filter, not open_session.',
-    request: PANEL_REQUEST,
+    request: erase(PANEL_REQUEST),
     remote: {
       description:
         "Show the session list — and narrow, search, or reorder it. An ask to show, see, or " +
         'list sessions of some kind — "show me the waiting sessions", "show me the Conductor ' +
         'agents" — is this tool with a filter, not open_session.',
-      request: REMOTE_PANEL_REQUEST,
+      request: erase(REMOTE_PANEL_REQUEST),
     },
   },
   OPEN_FEEDBACK_COMPOSER: {
@@ -172,7 +193,7 @@ export const ACTIONS = {
     family: ACTION_FAMILY.APP,
     kind: ACTION_KIND.FEEDBACK,
     description: "Open the feedback composer.",
-    request: FEEDBACK_REQUEST,
+    request: erase(FEEDBACK_REQUEST),
   },
   RUN_UPDATE_ACTION: {
     name: "run_update_action",
@@ -183,7 +204,7 @@ export const ACTIONS = {
       "release's page in the browser to download by hand, or restart into an update already " +
       "downloaded. Only the action the button currently offers runs — the app guide's Updates " +
       "line names it.",
-    request: UPDATE_REQUEST,
+    request: erase(UPDATE_REQUEST),
   },
   REMEMBER_FACT: {
     name: "remember_fact",
@@ -195,7 +216,7 @@ export const ACTIONS = {
       "save credentials; save sensitive facts only when explicitly asked. Do not mention routine " +
       "memory changes. Skip duplicates, and pass an existing id as replaces when updating a " +
       "contradiction.",
-    request: REMEMBER_REQUEST,
+    request: erase(REMEMBER_REQUEST),
   },
   FORGET_FACT: {
     name: "forget_fact",
@@ -204,7 +225,7 @@ export const ACTIONS = {
     description:
       "Silently forget an outdated or explicitly unwanted memory. Only an id from the remembered " +
       "list can be named. Do not mention routine memory changes.",
-    request: FORGET_REQUEST,
+    request: erase(FORGET_REQUEST),
   },
 } as const satisfies Record<string, ToolSpec<ActionFamily, ActionKind>>;
 
@@ -237,6 +258,23 @@ export function actionToolKind(name: string): ActionKind | undefined {
   return ACTS_BY_NAME.get(name)?.kind;
 }
 
+/**
+ * A tool's request as the `@sidecar/wire` facade still-held callers take: the
+ * brain's action tool modules and the desktop renderer's own re-parse of a
+ * stored call both read a call back through it. `read` runs `readEither`
+ * over the same schema {@link definitionOf} showed the model, and `jsonSchema`
+ * walks it with the same emitter, so the two never drift.
+ */
+export function requestSchema<Value, Encoded>(
+  request: Schema.Schema<Value, Encoded>,
+): WireSchema<Value> {
+  const read = readEither(request);
+  return s.reader({
+    read: (value) => toSchemaRead(read(value)),
+    jsonSchema: () => emitJsonSchema(request),
+  });
+}
+
 /** One function tool as a function-calling request carries it. */
 export interface ActionToolDefinition {
   type: "function";
@@ -254,7 +292,7 @@ function definitionOf(
     type: "function",
     name: spec.name,
     description: shape.description,
-    parameters: shape.request.jsonSchema(),
+    parameters: emitJsonSchema(shape.request),
   };
 }
 

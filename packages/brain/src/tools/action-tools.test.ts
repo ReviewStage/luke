@@ -9,6 +9,7 @@ import {
 } from "@sidecar/actions";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import { ACTION_TOOLS, type ActionToolContext, actionToolNamed } from "./action-tools.js";
 
@@ -61,7 +62,9 @@ test("every row of the actions table is a module, in the table's order, the note
     rows.map((spec) => [spec.name, spec.kind, spec.family]),
   );
   for (const [index, tool] of ACTION_TOOLS.entries()) {
-    assert.equal(tool.inputSchema, rows[index]?.request);
+    const request = rows[index]?.request;
+    assert.ok(request);
+    assert.deepEqual(tool.inputSchema.jsonSchema(), emitJsonSchema(request));
     assert.equal(actionToolNamed(tool.name), tool);
   }
   assert.equal(actionToolNamed("remember_fact")?.kind, ACTION_KIND.REMEMBER);

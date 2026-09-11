@@ -2,10 +2,17 @@ import {
   ACTION_KIND,
   ACTION_OUTPUT,
   ACTION_OUTPUT_STATUS,
-  ACTIONS,
   type ActionOutputEnvelope,
   type ActionTargetSnapshot,
+  ADD_AGENT_REQUEST,
   actionToolKind,
+  CONTROL_REQUEST,
+  CREATE_WORKSPACE_REQUEST,
+  MESSAGE_REQUEST,
+  OPEN_REQUEST,
+  RENAME_SESSION_REQUEST,
+  RENAME_WORKSPACE_REQUEST,
+  requestSchema,
   type SessionActionKind,
 } from "@sidecar/actions";
 import {
@@ -244,7 +251,7 @@ function composeRuns(
   const input = inputOf(part);
   switch (kind) {
     case ACTION_KIND.MESSAGE: {
-      const read = ACTIONS.SEND_SESSION_MESSAGE.request.read(input);
+      const read = requestSchema(MESSAGE_REQUEST).read(input);
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       return {
         runs: [
@@ -256,7 +263,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.CONTROL: {
-      const read = ACTIONS.RUN_SESSION_CONTROL.request.read(input);
+      const read = requestSchema(CONTROL_REQUEST).read(input);
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       const controlKind = target?.controlKind;
       const label = target?.controlLabel;
@@ -275,7 +282,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.OPEN: {
-      const read = ACTIONS.OPEN_SESSION.request.read(input);
+      const read = requestSchema(OPEN_REQUEST).read(input);
       const { identity, chip, providerId } = namedSession(
         read.ok ? read.value : undefined,
         target,
@@ -294,7 +301,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.CREATE_WORKSPACE: {
-      const read = ACTIONS.CREATE_WORKSPACE.request.read(input);
+      const read = requestSchema(CREATE_WORKSPACE_REQUEST).read(input);
       const created =
         envelope?.status === ACTION_OUTPUT_STATUS.ACCEPTED ? envelope.createdSession : undefined;
       const providerId = target?.providerId ?? (read.ok ? read.value.provider_id : undefined);
@@ -321,7 +328,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.ADD_AGENT: {
-      const read = ACTIONS.ADD_WORKSPACE_AGENT.request.read(input);
+      const read = requestSchema(ADD_AGENT_REQUEST).read(input);
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       return {
         runs: [
@@ -334,8 +341,10 @@ function composeRuns(
     case ACTION_KIND.RENAME_WORKSPACE:
     case ACTION_KIND.RENAME_SESSION: {
       const read = (
-        kind === ACTION_KIND.RENAME_WORKSPACE ? ACTIONS.RENAME_WORKSPACE : ACTIONS.RENAME_SESSION
-      ).request.read(input);
+        kind === ACTION_KIND.RENAME_WORKSPACE
+          ? requestSchema(RENAME_WORKSPACE_REQUEST)
+          : requestSchema(RENAME_SESSION_REQUEST)
+      ).read(input);
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       return {
         runs: [
