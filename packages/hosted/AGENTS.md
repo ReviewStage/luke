@@ -30,9 +30,12 @@ stored roster the observe path answers, beside the mapping of that wire's
 rows onto the session vocabulary's observations (advertisements as presence
 alone, since what a control targets never travels), `action-client.ts`,
 its side of the two session actions a row asks for, and
-`conversation-client.ts`, its side of the Conversation's per-resource reads
-and Clear, which holds no cursor or row either — what a device keeps of the
-Conversation is its caller's; each sits in this package because it speaks
+`conversation-client.ts`, its side of the Conversation's per-resource reads,
+Clear, and the rating write (`PUT` on `conversationMessageRatingPath`, the
+request held to `rating-wire.ts`'s schema before it travels and the two
+refusals the service names, not found and not rateable, answered apart from
+every other end), which holds no cursor or row either — what a device keeps
+of the Conversation is its caller's; each sits in this package because it speaks
 nothing but hosted vocabulary and holds no credential of its own. Behavior
 that needs
 anything above this boundary belongs above it: the brain's hosted client lives

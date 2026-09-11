@@ -24,6 +24,8 @@ const SCHEMAS = {
   voiceReportLiveActivityParamsSchema: protocol.voiceReportLiveActivityParamsSchema,
   voiceStopSpeakingResultSchema: protocol.voiceStopSpeakingResultSchema,
   voiceLiveSessionChangedSchema: protocol.voiceLiveSessionChangedSchema,
+  conversationRateMessageParamsSchema: protocol.conversationRateMessageParamsSchema,
+  conversationRateMessageResultSchema: protocol.conversationRateMessageResultSchema,
 } satisfies RecordedJsonSchemas<typeof protocol>;
 
 const RECORDED: readonly (readonly [string, JsonSchemaSource])[] = Object.entries(SCHEMAS);

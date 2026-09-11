@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CloudFetch, WireValue } from "@sidecar/wire";
+import { type CloudFetch, MESSAGE_RATING, type WireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import {
+  CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
   HostedConversationClient,
   type ReadPageQuery,
 } from "./conversation-client.js";
-import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { conversationMessageRatingPath, HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const FIXTURE_DIRECTORY = path.join(fileURLToPath(import.meta.url), "../../fixtures/reads");
@@ -147,4 +148,67 @@ test("Clear posts nothing but the bearer, and reads the main it opened", async (
     seen.map((request) => [request.method, new URL(request.url).pathname, request.body]),
     [["POST", HOSTED_SERVICE_PATH.CONVERSATION_CLEAR, undefined]],
   );
+});
+
+const RATED_MESSAGE = "2b000000-0000-4000-8000-000000000002";
+const RATING_EVENT = "4d000000-0000-4000-8000-000000000001";
+const DEVICE = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+
+test("a rating puts the verdict and the device to the message's own path under the bearer, and reads back the event it made", async () => {
+  const { client, seen } = harness((request) => {
+    const url = new URL(request.url);
+    if (url.pathname === conversationMessageRatingPath(RATED_MESSAGE)) {
+      return json(200, { id: RATING_EVENT, seq: 7 });
+    }
+    return json(404, { error: HOSTED_API_ERROR.NOT_FOUND });
+  });
+  const written = await client.rate(RATED_MESSAGE, {
+    rating: MESSAGE_RATING.DOWN,
+    deviceId: DEVICE,
+  });
+  assert.deepEqual(written, { ok: true, answer: { id: RATING_EVENT, seq: 7 } });
+  assert.equal(seen.length, 1);
+  const [request] = seen;
+  assert.equal(request?.method, "PUT");
+  assert.equal(request?.authorization, "Bearer token-1");
+  assert.deepEqual(JSON.parse(String(request?.body)), {
+    rating: MESSAGE_RATING.DOWN,
+    deviceId: DEVICE,
+  });
+});
+
+test("the service's two refusals of a rating are answered apart, and every other short answer is unanswered", async () => {
+  let status = 404;
+  let body: WireValue = { error: HOSTED_API_ERROR.NOT_FOUND };
+  const { client, seen } = harness(() => json(status, body));
+  const request = { rating: MESSAGE_RATING.UP, deviceId: DEVICE } as const;
+  assert.deepEqual(await client.rate(RATED_MESSAGE, request), {
+    ok: false,
+    refusal: CONVERSATION_RATE_REFUSAL.NOT_FOUND,
+  });
+  status = 403;
+  body = { error: HOSTED_API_ERROR.NOT_RATEABLE };
+  assert.deepEqual(await client.rate(RATED_MESSAGE, request), {
+    ok: false,
+    refusal: CONVERSATION_RATE_REFUSAL.NOT_RATEABLE,
+  });
+  status = 503;
+  body = { error: HOSTED_API_ERROR.UNAVAILABLE };
+  assert.deepEqual(await client.rate(RATED_MESSAGE, request), {
+    ok: false,
+    refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED,
+  });
+  status = 200;
+  body = { id: RATING_EVENT };
+  assert.deepEqual(await client.rate(RATED_MESSAGE, request), {
+    ok: false,
+    refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED,
+  });
+  assert.equal(seen.length, 4);
+  // A request the wire's own schema refuses never travels.
+  assert.deepEqual(await client.rate(RATED_MESSAGE, { rating: MESSAGE_RATING.UP, deviceId: "" }), {
+    ok: false,
+    refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED,
+  });
+  assert.equal(seen.length, 4);
 });

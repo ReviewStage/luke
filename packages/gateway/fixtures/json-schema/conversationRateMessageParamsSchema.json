@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "messageId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "rating": {
+      "type": "string",
+      "enum": [
+        "up",
+        "down"
+      ]
+    }
+  },
+  "required": [
+    "messageId",
+    "rating"
+  ],
+  "additionalProperties": false
+}

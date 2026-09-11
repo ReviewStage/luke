@@ -4,6 +4,7 @@ import {
   isWireBoolean,
   isWireNumber,
   isWireString,
+  RATING_EVENT_PAYLOAD_FIELDS,
   RECORD_EXTRA_KEYS,
   type RecordOf,
   s,
@@ -43,6 +44,8 @@ const GATEWAY_METHODS = {
   CONVERSATION_DELETE: { name: "conversation.delete", mutates: true },
   /** The Conversation tab's Clear as the service's soft delete of the account's main conversation. */
   CONVERSATION_CLEAR: { name: "conversation.clear", mutates: true },
+  /** The developer's thumb on one of Luke's messages, carried to the service as a rating event beside it. */
+  CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
   RUN_SUBMIT: { name: "run.submit", mutates: true },
   RUN_CANCEL: { name: "run.cancel", mutates: true },
   RUN_WAIT: { name: "run.wait", mutates: false },
@@ -211,6 +214,50 @@ export const voiceLiveSessionChangedSchema = s.record(VOICE_LIVE_SESSION_CHANGED
 });
 
 export type VoiceLiveSessionChanged = RecordOf<typeof VOICE_LIVE_SESSION_CHANGED>;
+
+const CONVERSATION_RATE_MESSAGE_PARAMS = {
+  /** The message as the view holds it, by its own id, admitted as written so it matches the row the host holds. */
+  messageId: s.text({ max: 512, ends: TEXT_ENDS.KEEP }),
+  /** The verdict under the stored event's own rule, so the method and the row cannot say different things. */
+  rating: RATING_EVENT_PAYLOAD_FIELDS.rating,
+} as const;
+
+/** `conversation.rateMessage`: which of Luke's messages, and the developer's verdict on it. */
+export const conversationRateMessageParamsSchema = s.record(CONVERSATION_RATE_MESSAGE_PARAMS);
+
+export type ConversationRateMessageParams = RecordOf<typeof CONVERSATION_RATE_MESSAGE_PARAMS>;
+
+/**
+ * How `conversation.rateMessage` ended. A rating is recorded or it is not,
+ * and a control that asked has three different things to say about a
+ * refusal: the service could not be asked at all, the message is not one the
+ * account still holds, or it stands but is not one of Luke's — which no
+ * control should have offered, so a client reads it as a row the thread has
+ * moved past rather than as a rating to retry.
+ */
+export const CONVERSATION_RATE_STATUS = {
+  RATED: "rated",
+  /** The run sends nothing, the account gate is closed, this device has no row on the service yet, or the call did not land. */
+  UNAVAILABLE: "unavailable",
+  /** No message by that id stands for the account on this device or on the service. */
+  NOT_FOUND: "not-found",
+  /** The message stands and is the account's, but only Luke's words take a rating. */
+  NOT_RATEABLE: "not-rateable",
+} as const;
+
+export type ConversationRateStatus =
+  (typeof CONVERSATION_RATE_STATUS)[keyof typeof CONVERSATION_RATE_STATUS];
+
+const CONVERSATION_RATE_MESSAGE_RESULT = {
+  status: s.enumOf(Object.values(CONVERSATION_RATE_STATUS)),
+} as const;
+
+/** What `conversation.rateMessage` answers: whether the rating was recorded, and if not, which of the three refusals stands. */
+export const conversationRateMessageResultSchema = s.record(CONVERSATION_RATE_MESSAGE_RESULT, {
+  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+});
+
+export type ConversationRateMessageResult = RecordOf<typeof CONVERSATION_RATE_MESSAGE_RESULT>;
 
 const GATEWAY_METHODS_BY_NAME: ReadonlyMap<string, GatewayMethodEntry> = new Map(
   Object.values(GATEWAY_METHODS).map((entry) => [entry.name, entry]),

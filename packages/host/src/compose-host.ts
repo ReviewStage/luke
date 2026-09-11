@@ -71,6 +71,7 @@ export function composeHost(options: HostSeams): Host {
   const devices = composeDevices({ kernel, account, calendars });
   const conversation = composeConversation({
     kernel,
+    settings,
     account,
     devices,
     // Both clients carry the account's own token, holder fence included, so

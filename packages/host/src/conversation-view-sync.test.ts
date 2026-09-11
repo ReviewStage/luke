@@ -10,7 +10,13 @@ import {
   MESSAGE_ROLE,
   TOOL_PART_STATE,
 } from "@sidecar/session";
-import { CONVERSATION_EVENT_KIND, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import {
+  CONVERSATION_EVENT_KIND,
+  MESSAGE_RATING,
+  type MessageRating,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@sidecar/wire";
 import { test } from "vitest";
 import {
   CONVERSATION_VIEW_BOUNDS,
@@ -216,7 +222,7 @@ test("a conversation the answer no longer lists takes its groups, turns, and eve
     ),
   );
   sync.applyTurns([turnRecord(turnId(1), TURN_STATUS.SETTLED, NOW)], "t1");
-  sync.applyEvents([speech(2, 1, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED)], "e1");
+  sync.applyEvents([speech(2, 1, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED)], "e1", false);
   assert.equal(sync.snapshot().groups.length, 2);
   const before = sync.revision;
 
@@ -309,17 +315,18 @@ test("the latest speech event on a message decides whether its announcement was 
   };
   assert.equal(heard(), true);
   // The expiry arrives after the page named the announcement as standing: nobody heard it.
-  sync.applyEvents([speech(1, 2, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED)], "e1");
+  sync.applyEvents([speech(1, 2, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED)], "e1", false);
   assert.equal(heard(), false);
   // An earlier event arriving late does not undo a later one; a later spoken does.
-  sync.applyEvents([speech(1, 1, CONVERSATION_EVENT_KIND.SPEECH_OFFERED)], "e2");
+  sync.applyEvents([speech(1, 1, CONVERSATION_EVENT_KIND.SPEECH_OFFERED)], "e2", false);
   assert.equal(heard(), false);
-  sync.applyEvents([speech(1, 3, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN)], "e3");
+  sync.applyEvents([speech(1, 3, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN)], "e3", false);
   assert.equal(heard(), true);
-  // A rating is not a speech event.
-  const before = sync.revision;
-  sync.applyEvents([speech(1, 4, CONVERSATION_EVENT_KIND.RATING)], "e4");
-  assert.equal(sync.revision, before);
+  // A rating is not a speech event: the mark stands, and one whose payload
+  // spells no verdict rates nothing.
+  sync.applyEvents([speech(1, 4, CONVERSATION_EVENT_KIND.RATING)], "e4", false);
+  assert.equal(heard(), true);
+  assert.equal(sync.snapshot().groups[0]?.messages[0]?.rating, undefined);
   assert.equal(sync.cursors().events, "e4");
 });
 
@@ -501,4 +508,198 @@ test("a Clear the service confirmed empties the picture from the answer alone: m
     [turnId(12)],
   );
   assert.equal(sync.cursors().messages, "c2");
+});
+
+function ratingEvent(
+  messageIdNumber: number,
+  seq: number,
+  rating: MessageRating | undefined,
+  conversationId = MAIN,
+): ConversationReadEvent {
+  return {
+    ...speech(messageIdNumber, seq, CONVERSATION_EVENT_KIND.RATING, conversationId),
+    deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    ...(rating === undefined ? undefined : { payload: { rating } }),
+  };
+}
+
+function rated(
+  message: ConversationViewMessage,
+  rating: MessageRating | undefined,
+): ConversationViewMessage {
+  const { rating: _folded, ...unrated } = message;
+  return rating === undefined ? unrated : { ...unrated, rating: { rating } };
+}
+
+function reply(id: number, seq: number, createdAt: number): ConversationViewMessage {
+  return {
+    message: {
+      id: messageId(id),
+      role: MESSAGE_ROLE.ASSISTANT,
+      metadata: { author: MESSAGE_AUTHOR.BRAIN },
+      parts: [{ type: "text", text: "A reply.", state: "done" }],
+    },
+    seq,
+    createdAt,
+    tools: [],
+  };
+}
+
+function ratingOf(sync: ConversationViewSync, id: number): MessageRating | undefined {
+  for (const group of sync.snapshot().groups) {
+    for (const message of group.messages) {
+      if (message.message.id === messageId(id)) return message.rating?.rating;
+    }
+  }
+  throw new Error(`message ${id} is not held`);
+}
+
+test("the rating a page folds onto a message stands until the events read has caught up, and is then amended by the newer event", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page([
+      mainGroup(turnId(1), [
+        ask(1, 1, "well?", NOW),
+        rated(reply(2, 2, NOW + 1), MESSAGE_RATING.UP),
+      ]),
+    ]),
+  );
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // A replay from the record's beginning: an older verdict, with more to come, stands behind the fold.
+  sync.applyEvents([ratingEvent(2, 1, MESSAGE_RATING.DOWN)], "e1", true);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // The replay ends: what it holds now carries everything the fold did.
+  sync.applyEvents([ratingEvent(2, 2, MESSAGE_RATING.UP)], "e2", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // A verdict given on another device since, read as a newer event, amends the fold.
+  const before = sync.revision;
+  sync.applyEvents([ratingEvent(2, 3, MESSAGE_RATING.DOWN)], "e3", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  assert.ok(sync.revision > before);
+  // An older event arriving late does not undo it.
+  sync.applyEvents([ratingEvent(2, 2, MESSAGE_RATING.UP)], "e4", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // The newest event's payload spells no verdict: the developer's last word is no rating.
+  sync.applyEvents([ratingEvent(2, 4, undefined)], "e5", false);
+  assert.equal(ratingOf(sync, 2), undefined);
+});
+
+test("a rating this device wrote shows at once, whatever the events read has reached, and the same event read back moves nothing", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(page([mainGroup(turnId(1), [ask(1, 1, "well?", NOW), reply(2, 2, NOW + 1)])]));
+  assert.equal(ratingOf(sync, 2), undefined);
+  const before = sync.revision;
+  sync.recordRating(messageId(2), 5, { rating: MESSAGE_RATING.DOWN });
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  assert.ok(sync.revision > before);
+  const shown = sync.revision;
+  // The events read is still replaying older events; the own write stands over them.
+  sync.applyEvents([ratingEvent(2, 3, MESSAGE_RATING.UP)], "e1", true);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // The write's own event, read back: nothing newer, nothing moved.
+  sync.applyEvents([ratingEvent(2, 5, MESSAGE_RATING.DOWN)], "e2", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  assert.equal(sync.revision, shown);
+  // A rating on a message this device does not hold lands nowhere.
+  sync.recordRating(messageId(9), 6, { rating: MESSAGE_RATING.UP });
+  assert.equal(sync.revision, shown);
+});
+
+test("only one of Luke's messages this device holds is rateable, named by whether it is a briefing", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page(
+      [
+        mainGroup(turnId(1), [ask(1, 1, "well?", NOW), reply(2, 2, NOW + 1)]),
+        {
+          turnId: turnId(2),
+          conversationId: OBSERVED,
+          source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
+          messages: [announcement(3, 1, NOW + 2, false)],
+        },
+      ],
+      "c1",
+      [MAIN, OBSERVED],
+    ),
+  );
+  assert.equal(sync.rateable(messageId(1)), undefined);
+  assert.deepEqual(sync.rateable(messageId(2)), { announcement: false });
+  assert.deepEqual(sync.rateable(messageId(3)), { announcement: true });
+  assert.equal(sync.rateable(messageId(4)), undefined);
+});
+
+test("a rating goes with the conversation it was about, and a reset forgets the events read had caught up", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [ask(1, 1, "well?", NOW), reply(2, 2, NOW + 1)])], "c1"),
+  );
+  sync.applyEvents([ratingEvent(2, 1, MESSAGE_RATING.DOWN)], "e1", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // A Clear: the new main lists no rows, and the old main's rating goes with its message.
+  sync.applyMessages(page([mainGroup(turnId(3), [reply(5, 1, NOW + 10)])], "c2", [NEW_MAIN]));
+  sync.applyMessages(
+    page([{ ...mainGroup(turnId(1), [reply(2, 2, NOW + 1)]), conversationId: NEW_MAIN }], "c3", [
+      NEW_MAIN,
+    ]),
+  );
+  assert.equal(ratingOf(sync, 2), undefined);
+
+  sync.reset();
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [rated(reply(2, 2, NOW + 1), MESSAGE_RATING.UP)])], "c4"),
+  );
+  // Replaying from the beginning again: an older event stands behind the fold until the replay ends.
+  sync.applyEvents([ratingEvent(2, 1, MESSAGE_RATING.DOWN)], "e1", true);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+});
+
+test("a message read again carries a fold newer than any mark read back, so a walk cut short cannot leave an older mark standing over it", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [ask(1, 1, "well?", NOW), reply(2, 2, NOW + 1)])], "c1"),
+  );
+  sync.applyEvents([], "e0", false);
+  // Another device rates twice between two polls; this poll's messages page
+  // folds the newer verdict, and its events walk is cut after the older one.
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [rated(reply(2, 2, NOW + 1), MESSAGE_RATING.DOWN)])], "c2"),
+  );
+  sync.applyEvents([ratingEvent(2, 5, MESSAGE_RATING.UP)], "e1", true);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // The next poll answers the row again with the same fold: the fold is the newer word.
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [rated(reply(2, 2, NOW + 1), MESSAGE_RATING.DOWN)])], "c3"),
+  );
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // The walk then delivers the newer event too, and the verdict stands.
+  sync.applyEvents([ratingEvent(2, 10, MESSAGE_RATING.DOWN)], "e2", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // An own write is never forgotten for a page: it is newer than the fold by construction.
+  sync.recordRating(messageId(2), 11, { rating: MESSAGE_RATING.UP });
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [rated(reply(2, 2, NOW + 1), MESSAGE_RATING.DOWN)])], "c4"),
+  );
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+});
+
+test("an event that supersedes this device's own write is newer than the fold too, and shows before the replay ends", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(page([mainGroup(turnId(1), [ask(1, 1, "well?", NOW), reply(2, 2, NOW + 1)])]));
+  sync.recordRating(messageId(2), 500, { rating: MESSAGE_RATING.UP });
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // Still replaying from the record's beginning when a newer verdict from another device arrives.
+  sync.applyEvents([ratingEvent(2, 501, MESSAGE_RATING.DOWN)], "e1", true);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+});
+
+test("the marks about a message the window or the group bound let go of go with it", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(page([mainGroup(turnId(1), [reply(2, 1, NOW)])], "c1"));
+  sync.applyEvents([ratingEvent(2, 1, MESSAGE_RATING.DOWN)], "e1", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // A Clear windows the row out; the same id answered again later starts from the fold alone.
+  sync.applyClear(NOW + 5);
+  assert.deepEqual(sync.snapshot().groups, []);
+  sync.applyMessages(page([mainGroup(turnId(1), [reply(2, 1, NOW + 6)])], "c2", [MAIN], NOW + 5));
+  assert.equal(ratingOf(sync, 2), undefined);
 });

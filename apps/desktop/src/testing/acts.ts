@@ -88,6 +88,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: { identity: IDENTITY, controlId: "cancel-run" },
   },
   [ACT_KIND.BRAIN_CANCEL_ASK]: { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } },
+  [ACT_KIND.CONVERSATION_RATE_MESSAGE]: {
+    kind: ACT_KIND.CONVERSATION_RATE_MESSAGE,
+    payload: { messageId: "2b000000-0000-4000-8000-000000000202", rating: "up" },
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "clear-conversation" },

@@ -40,8 +40,12 @@ Conversation as the service holds it: on its own five-second loop it asks the
 change signal where each resource stands, reads only what moved behind the
 cursors this device holds, folds the pages into one picture
 (`conversation-view-sync.ts`), tells every client when it moved, and answers
-the tab's Clear as the service's soft delete; nothing of the local store is
-read for it. The merge folds their
+the tab's two writes: Clear as the service's soft delete, and a thumb on one
+of Luke's messages as the service's rating event, written only for a message
+the picture holds and Luke authored, taken into the picture from the answer
+so the verdict shows before the next poll, and counted as the verdict and the
+message's kind read from the held row; nothing of the local store is read
+for it. The merge folds their
 method tables into one and refuses a method two of them claim, so which
 concern answers a method is checked at construction rather than left to the
 fold's order. `client.bootstrap` is the one method no composer owns: it reads

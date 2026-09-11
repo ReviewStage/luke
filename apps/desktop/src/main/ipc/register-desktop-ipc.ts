@@ -4,9 +4,9 @@ import { INTRODUCTION_PEEK_FRESH_MS } from "@sidecar/host";
 import { peekLocalSessions } from "@sidecar/providers";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACT, ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
-import { type ActRows, createActRouter } from "../act-router";
+import { ActRefused, type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
@@ -146,6 +146,17 @@ export function registerDesktopIpc(services: DesktopServices): void {
       if (!introduction) return;
       config.report(`Introduction abandoned: ${reason}`);
       void windows.endIntroduction(false);
+    },
+    // The thumb is a control of the Conversation tab, and a tab exists only on
+    // a panel; the hidden voice window and the introduction's takeover draw
+    // none, so they are refused before the host is reached. Everything else
+    // about the rating — whether the message stands, whether it is Luke's,
+    // what reaches the service — is the host's to decide.
+    [ACT_KIND.CONVERSATION_RATE_MESSAGE]: ({ messageId, rating }, sender) => {
+      if (!sender.panel || sender.introduction) {
+        throw new ActRefused(ACT[ACT_KIND.CONVERSATION_RATE_MESSAGE].refusal);
+      }
+      return operator.host.rateConversationMessage(messageId, rating);
     },
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
     [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),

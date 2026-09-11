@@ -10,6 +10,9 @@ import {
   feedbackSubmission,
 } from "@sidecar/feedback";
 import {
+  type ConversationRateMessageResult,
+  conversationRateMessageParamsSchema,
+  conversationRateMessageResultSchema,
   LIVE_SDP_MAX_CHARACTERS,
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,
@@ -121,6 +124,13 @@ export const ACT_KIND = {
   SESSION_SEND_MESSAGE: "session.sendMessage",
   SESSION_EXECUTE_CONTROL: "session.executeControl",
   BRAIN_CANCEL_ASK: "brain.cancelAsk",
+  /**
+   * The developer's thumb on one of Luke's messages in the Conversation tab,
+   * carried to the host, which writes it to the service as a rating event on
+   * that message and shows the verdict back through the view it publishes.
+   * The one write the tab makes about a message, and the panel's alone.
+   */
+  CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -510,6 +520,13 @@ export const ACT = {
       (value) => value === undefined || isBrainRequestSnapshot(value),
     ),
     refusal: "Could not reach Luke's runtime to cancel that.",
+  },
+  [ACT_KIND.CONVERSATION_RATE_MESSAGE]: {
+    payload: conversationRateMessageParamsSchema,
+    result: wireResult<ConversationRateMessageResult>(
+      (value) => conversationRateMessageResultSchema.read(value).ok,
+    ),
+    refusal: "Could not record that rating on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: s.record({

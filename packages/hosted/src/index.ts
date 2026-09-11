@@ -57,7 +57,10 @@ export {
   conversationClearAnswerSchema,
 } from "./conversation-clear-wire.js";
 export {
+  CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
+  type ConversationRateRefusal,
+  type ConversationRateResult,
   type ConversationReadResult,
   HostedConversationClient,
   type HostedConversationClientOptions,

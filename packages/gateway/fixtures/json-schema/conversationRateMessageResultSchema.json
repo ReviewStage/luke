@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "rated",
+        "unavailable",
+        "not-found",
+        "not-rateable"
+      ]
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "additionalProperties": false
+}
