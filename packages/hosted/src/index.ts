@@ -1,7 +1,10 @@
 export {
   type AccountCall,
+  type AccountCallEffects,
   accountBearer,
+  accountCall,
   CALL_FAULT,
+  type CallAnswer,
   type CallCredential,
   type CallFailure,
   callAnswered,
