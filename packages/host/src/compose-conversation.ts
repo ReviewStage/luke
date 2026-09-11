@@ -161,10 +161,16 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     apply: (answer: Answer) => Promise<boolean>,
   ): Promise<void> {
     for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
+      const epoch = sync.clearEpoch;
       const result = await read(cursor());
       if (!loop.isCurrent(generation)) return;
       if (!result.ok) {
-        if (result.failure === CONVERSATION_READ_FAILURE.UNREADABLE_ROW) {
+        // A refusal names a row of the thread as it stood when the read went
+        // out; a Clear taken meanwhile stamped that thread, and the notice is not written over the new one.
+        if (
+          result.failure === CONVERSATION_READ_FAILURE.UNREADABLE_ROW &&
+          sync.clearEpoch === epoch
+        ) {
           sync.markUnreadable(result.row);
         }
         return;

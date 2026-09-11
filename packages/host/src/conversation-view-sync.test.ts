@@ -423,6 +423,13 @@ test("a Clear the service confirmed empties the picture from the answer alone: m
   const cleared = sync.revision;
   sync.applyClear(NOW + 10_000);
   assert.equal(sync.revision, cleared);
+  // A row the last read could not read back was the stamped thread's; the Clear takes the notice with it.
+  sync.markUnreadable({ conversationId: MAIN, seq: 9 });
+  assert.equal(sync.snapshot().unreadable?.seq, 9);
+  const epoch = sync.clearEpoch;
+  sync.applyClear(NOW + 10_000);
+  assert.equal(sync.snapshot().unreadable, undefined);
+  assert.equal(sync.clearEpoch, epoch + 1);
   // A page a pass read before the Clear, landing after it, lists the stamped
   // main as it stood; the window does not move back for it, and its rows drop on arrival.
   sync.applyMessages(

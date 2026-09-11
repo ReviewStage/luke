@@ -304,6 +304,31 @@ test("a Clear the service took empties the picture even when the read after it d
   assert.deepEqual(views().at(-1)?.groups, []);
 });
 
+test("a refusal from a pass that read before the Clear is not written over the cleared thread", async () => {
+  const { composer, client } = harness();
+  await composer.loop.refresh();
+  let release: () => void = () => undefined;
+  client.messagesGate = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  // The pass out before the Clear comes back naming a row of the stamped main.
+  client.messagesAnswer = {
+    ok: false,
+    failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW,
+    row: { conversationId: MAIN, seq: 7 },
+  };
+  const held = composer.loop.refresh();
+  const clearing = clear(composer);
+  // The reads after the Clear answer nothing, so the only refusal is the stale one.
+  client.messagesAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
+  client.messagesGate = Promise.resolve();
+  release();
+  await held;
+  assert.equal(await clearing, true);
+  assert.equal(composer.snapshot().unreadable, undefined);
+  assert.deepEqual(composer.snapshot().groups, []);
+});
+
 test("a run that sends nothing polls nothing and is settled from the start, and a closed gate refuses Clear", async () => {
   const fixture = harness({ sendsNetwork: false });
   await fixture.composer.loop.refresh();

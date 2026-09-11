@@ -128,6 +128,8 @@ export class ConversationViewSync {
    * the stamped main back in.
    */
   #windowStart = 0;
+  /** Moves with every confirmed Clear, so a refusal from a pass that read before one is not written after it. */
+  #clearEpoch = 0;
   #settled = false;
   #unreadable: UnreadableRow | undefined;
   #revision = 0;
@@ -139,6 +141,11 @@ export class ConversationViewSync {
 
   cursors(): ConversationReadCursors {
     return this.#cursors;
+  }
+
+  /** How many Clears this picture has taken; a caller compares it across a read to tell a stale refusal from a current one. */
+  get clearEpoch(): number {
+    return this.#clearEpoch;
   }
 
   /**
@@ -231,7 +238,15 @@ export class ConversationViewSync {
    * the cursors; the screen does not wait on it landing.
    */
   applyClear(openedAt: number): void {
-    if (this.#openWindow(openedAt)) this.#revision += 1;
+    this.#clearEpoch += 1;
+    let moved = this.#openWindow(openedAt);
+    // A row the last read could not read back stood in the main the Clear
+    // stamped; the notice about it goes with the thread it was about.
+    if (this.#unreadable !== undefined) {
+      this.#unreadable = undefined;
+      moved = true;
+    }
+    if (moved) this.#revision += 1;
   }
 
   /** The service named a row it could not read back; the thread stands as last read and says so. */
