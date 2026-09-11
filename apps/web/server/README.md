@@ -191,7 +191,9 @@ authored here by hand because the authored services graph is authoritative and
 eve generates nothing beside it. Public routing is the top-level `rewrites`:
 `/eve/v1/*` enters the eve service and everything else the web service, and a
 service's own routes run only once a request has entered it. The project's
-environment variables reach both services alike.
+environment variables reach both services alike, and each service's own
+`ignoreCommand` is what skips its build, so a commit that changes nothing under
+`apps/web`, `packages`, or the workspace manifests deploys neither.
 
 ## Where a function runs an Effect
 
