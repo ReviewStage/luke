@@ -11,30 +11,36 @@ credential contract (`realtime-contract.ts`, with the reader of a mint
 response into it), and depends only on lower wire/session vocabulary and `@sidecar/live`
 for the Live voice set and the
 `InitialItem` shape (that package imports nothing of this one, so the edge
-points down). `brain-contract.ts` is the first module here to state its
+points down). `brain-contract.ts` was the first module here to state its
 declarations as Effect `Schema`s directly rather than through wire's `s.*`
-facade: it reads through `readEither`, shows what `emitJsonSchema` walks out
-of the same AST, and keeps the reader `declareReader` states for the one
-field no combinator can declare, so the request bytes a model's tool call is
-measured against on the service are the same bytes the goldens under
+facade, and `live-contract.ts`, `mint-wire.ts`, `observe-wire.ts`, and
+`projects-wire.ts` now do the same: each reads through `readEither`, shows
+what `emitJsonSchema` walks out of the same AST, and keeps the reader
+`declareReader` states for the rule no combinator can declare — a frame's one
+part read as its tuple in `live-contract.ts`, a credential's `wsUrl` read
+against the record it arrived in in `mint-wire.ts`, a row's dropped field or
+skipped array entry in `observe-wire.ts` and `projects-wire.ts` — so the
+bytes a model or a device is shown are the same bytes the goldens under
 `fixtures/json-schema/` already held. Nothing a caller reads changed with it:
-the reads answer the same interfaces in the same words, and every other
-module here declares through the facade until its own conversion, which is
-why the golden test carries two recorded tables — `RecordedJsonSchemas` for
-the facade's modules and `RecordedEffectJsonSchemas` for a module that has
-moved — each exhaustive over its own kind. `action-wire.ts`,
-`conversation-clear-wire.ts`, `conversation-wire.ts`, and `device-wire.ts`
-declare the same way, composing `Schema.Struct` directly rather than through
-the facade, but their exported schemas stay the facade's own
-`Schema<Value>`, each built by a local `fromEffect` that answers
-`read`/`parse`/`jsonSchema` from the Effect declaration underneath: unlike
-`brain-contract.ts`'s readers, these four are read with `.parse()` and
-`.read()` by callers elsewhere in this package and in `apps/web` (the device
-routes, the two clients, `rating-wire.ts`'s composition of
-`deviceWireIdSchema` into its own record), so their recorded goldens stay
-under `RecordedJsonSchemas` rather than moving to `RecordedEffectJsonSchemas`
-— the facade wrapper's own `jsonSchema()` already walks the same Effect AST
-`emitJsonSchema` does, so the bytes are identical either way. The clients here are `vault-client.ts`, the desktop's side of
+the reads answer the same interfaces in the same words, a caller that held a
+`Schema<Value>`'s `read`/`parse` now calls the module's own `*Read`/`*FromWire`
+function instead, and every module still on the facade declares through it
+until its own conversion, which is why the golden test carries two recorded
+tables — `RecordedJsonSchemas` for the facade's modules and
+`RecordedEffectJsonSchemas` for a module that has moved — each exhaustive over
+its own kind. `action-wire.ts`, `conversation-clear-wire.ts`,
+`conversation-wire.ts`, and `device-wire.ts` declare the same way, composing
+`Schema.Struct` directly rather than through the facade, but their exported
+schemas stay the facade's own `Schema<Value>`, each built by a local
+`fromEffect` that answers `read`/`parse`/`jsonSchema` from the Effect
+declaration underneath: unlike the readers above, these four are read with
+`.parse()` and `.read()` by callers elsewhere in this package and in
+`apps/web` (the device routes, the two clients, `rating-wire.ts`'s
+composition of `deviceWireIdSchema` into its own record), so their recorded
+goldens stay under `RecordedJsonSchemas` rather than moving to
+`RecordedEffectJsonSchemas` — the facade wrapper's own `jsonSchema()` already
+walks the same Effect AST `emitJsonSchema` does, so the bytes are identical
+either way. The clients here are `vault-client.ts`, the desktop's side of
 the three vault routes, `device-client.ts`, its side of the one devices
 path, `changes-client.ts`, its side of the change-signal poll that carries
 the device's presence and quiet instants, `roster-client.ts`, its read of the

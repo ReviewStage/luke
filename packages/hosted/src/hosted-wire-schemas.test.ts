@@ -56,24 +56,6 @@ const MODULE_SCHEMAS = {
     deviceForgetRequestSchema: deviceWire.deviceForgetRequestSchema,
     deviceForgetAnswerSchema: deviceWire.deviceForgetAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof deviceWire>,
-  "live-contract": {
-    sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
-    sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
-    sessionOpeningFrameSchema: liveContract.sessionOpeningFrameSchema,
-    sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
-    liveSessionCreatedSchema: liveContract.liveSessionCreatedSchema,
-    sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
-  } satisfies RecordedJsonSchemas<typeof liveContract>,
-  "mint-wire": {
-    hostedMintAnswerSchema: mintWire.hostedMintAnswerSchema,
-    remoteMintAnswerSchema: mintWire.remoteMintAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof mintWire>,
-  "observe-wire": {
-    observeAnswerSchema: observeWire.observeAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof observeWire>,
-  "projects-wire": {
-    hostedProjectsAnswerSchema: projectsWire.hostedProjectsAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof projectsWire>,
   "rating-wire": {
     hostedMessageRatingRequestSchema: ratingWire.hostedMessageRatingRequestSchema,
     hostedMessageRatingAnswerSchema: ratingWire.hostedMessageRatingAnswerSchema,
@@ -107,7 +89,7 @@ const MODULE_SCHEMAS = {
   } satisfies RecordedJsonSchemas<typeof vaultWire>,
 } as const;
 
-/** The brain contract, which declares its schemas as Effect's own rather than through the builder. */
+/** Modules that declare their schemas as Effect's own rather than through the builder. */
 const EFFECT_MODULE_SCHEMAS = {
   "brain-contract": {
     hostedBrainCapabilitiesSchema: brainContract.hostedBrainCapabilitiesSchema,
@@ -115,6 +97,24 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedBrainEmbedAnswerSchema: brainContract.hostedBrainEmbedAnswerSchema,
     hostedBrainCountTokensAnswerSchema: brainContract.hostedBrainCountTokensAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof brainContract>,
+  "live-contract": {
+    sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
+    sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
+    sessionOpeningFrameSchema: liveContract.sessionOpeningFrameSchema,
+    sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
+    liveSessionCreatedSchema: liveContract.liveSessionCreatedSchema,
+    sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
+  "mint-wire": {
+    hostedMintAnswerSchema: mintWire.hostedMintAnswerSchema,
+    remoteMintAnswerSchema: mintWire.remoteMintAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof mintWire>,
+  "observe-wire": {
+    observeAnswerSchema: observeWire.observeAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof observeWire>,
+  "projects-wire": {
+    hostedProjectsAnswerSchema: projectsWire.hostedProjectsAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof projectsWire>,
 } as const;
 
 /**

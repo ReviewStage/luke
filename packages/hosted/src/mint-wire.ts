@@ -1,4 +1,6 @@
-import { RECORD_EXTRA_KEYS, type Schema, s, type UnparsedWireValue } from "@sidecar/wire";
+import { effectSchema, type UnparsedWireValue } from "@sidecar/wire";
+import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
+import { Either, Schema } from "effect";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
@@ -37,28 +39,86 @@ export interface HostedMintAnswer {
 }
 
 /**
+ * A declaration handed the interface it decodes into, since Effect's `Schema`
+ * is invariant in its decoded type and a struct assembled from field tables
+ * only agrees with that interface rather than restating it. The same claim
+ * the facade's own `schemaOver` made over its assembled AST.
+ */
+function schemaAs<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
+  return Schema.make<Value, UnparsedWireValue>(schema.ast);
+}
+
+/** A record that ignores a key a newer service added, which is what an answer always does. */
+const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
+  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/**
+ * A key a `dropRefused` field left holding `undefined` is dropped entirely,
+ * exactly as an absent optional key is: a struct's decode still writes the
+ * key when it arrived, even holding nothing, so nothing downstream sees a
+ * `quota` it can ask `in` about unless one actually read.
+ */
+function omittingUndefinedKeys<Fields extends object, Encoded>(
+  schema: Schema.Schema<Fields, Encoded>,
+) {
+  return Schema.transform(schema, Schema.Unknown, {
+    strict: false,
+    decode: (value) =>
+      Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+    encode: (value) => value,
+  });
+}
+
+/** A trimmed text, refused when only whitespace remains. */
+const text: Schema.Schema<string, string> = Schema.transform(Schema.String, Schema.String, {
+  strict: true,
+  decode: (value) => value.trim(),
+  encode: (value) => value,
+}).pipe(Schema.minLength(1));
+
+/**
  * The `wsUrl` is the one field no per-field declaration can settle: it is
  * legal only for the model the same credential names, so it is read against
  * the record it arrived in.
  */
-const connectionSchema: Schema<RealtimeConnection> = s.refine(
-  s.record(
-    {
-      value: s.text(),
-      expiresAt: s.number(),
-      model: s.text(),
-      callsUrl: s.literal(HOSTED_CALLS_URL),
-      wsUrl: s.text(),
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const connectionSchema = tolerantRecord({
+  value: text,
+  expiresAt: Schema.Number.pipe(Schema.finite()),
+  model: text,
+  callsUrl: Schema.Literal(HOSTED_CALLS_URL),
+  wsUrl: text,
+}).pipe(
+  Schema.filter(
+    (connection) => connection.wsUrl === `${HOSTED_WS_BASE_URL}?model=${connection.model}`,
   ),
-  (connection) => connection.wsUrl === `${HOSTED_WS_BASE_URL}?model=${connection.model}`,
 );
+
+/** The value a schema admitted, or nothing, for a caller that only cares whether the value is admissible. */
+function admitted<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
+/** The value a `dropRefused` field admits: whatever the schema read, or nothing. */
+function droppedField<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+): Schema.Schema<Value | undefined, UnparsedWireValue> {
+  return declareReader<Value | undefined>(
+    (value) => ({ ok: true, value: admitted(schema, value) }),
+    emitJsonSchema(schema),
+  );
+}
+
+const quotaField = Schema.optionalWith(droppedField(effectSchema(hostedQuotaSchema)), {
+  exact: true,
+});
 
 /** What both mint answers carry: the credential, and the allowance it was spent against. */
 const MINT_FIELDS = {
   connection: connectionSchema,
-  quota: s.dropRefused(hostedQuotaSchema),
+  quota: quotaField,
 } as const;
 
 /**
@@ -66,20 +126,20 @@ const MINT_FIELDS = {
  * already expired is not a fact about its shape, so {@link hostedMintAnswerAt}
  * is where a moment in time meets it.
  */
-export const hostedMintAnswerSchema: Schema<HostedMintAnswer> = s.record(MINT_FIELDS, {
-  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
-});
+export const hostedMintAnswerSchema = schemaAs<HostedMintAnswer>(
+  omittingUndefinedKeys(tolerantRecord(MINT_FIELDS)),
+);
 
 /**
  * A mint answer read at a moment: anything without a usable, canonically
  * addressed credential is discarded rather than repaired, the same posture as
  * the OpenAI mint response reader.
  */
-function mintAnswerAt<Answer extends HostedMintAnswer>(
-  schema: Schema<Answer>,
+function mintAnswerAt<Answer extends HostedMintAnswer, Encoded>(
+  schema: Schema.Schema<Answer, Encoded>,
 ): (value: UnparsedWireValue, now: number) => Answer | undefined {
   return (value, now) => {
-    const answer = schema.parse(value);
+    const answer = admitted(schema, value);
     return answer && realtimeCredentialIsUsable(answer.connection, now) ? answer : undefined;
   };
 }
@@ -113,20 +173,15 @@ export interface RemoteMintAnswer extends HostedMintAnswer {
  * context with a sessions item. A malformed context is not repaired — the
  * phone has no fallback for context it cannot forward.
  */
-export const remoteMintAnswerSchema: Schema<RemoteMintAnswer> = s.record(
-  {
-    ...MINT_FIELDS,
-    context: s.record(
-      {
-        sessions: s.record(
-          { itemId: s.text(), text: s.text() },
-          { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-        ),
-      },
-      { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-    ),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+export const remoteMintAnswerSchema = schemaAs<RemoteMintAnswer>(
+  omittingUndefinedKeys(
+    tolerantRecord({
+      ...MINT_FIELDS,
+      context: tolerantRecord({
+        sessions: tolerantRecord({ itemId: text, text }),
+      }),
+    }),
+  ),
 );
 
 export const remoteMintAnswerAt = mintAnswerAt(remoteMintAnswerSchema);

@@ -14,8 +14,8 @@ import {
   type LiveSessionCreated,
   type SessionAttachFrame,
   type SessionCreateFrame,
-  sessionAttachedFrameSchema,
-  sessionCreatedFrameSchema,
+  sessionAttachedFrameFromWire,
+  sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
@@ -533,7 +533,7 @@ class ServiceLiveSessionSource {
       socket.close();
       return { outcome: REATTACH_ATTEMPT.FAILED };
     }
-    const attached = sessionAttachedFrameSchema.parse(answer);
+    const attached = sessionAttachedFrameFromWire(answer);
     if (attached?.sessionId === sessionId) return { outcome: REATTACH_ATTEMPT.ATTACHED, socket };
     socket.close();
     return { outcome: REATTACH_ATTEMPT.REFUSED };
@@ -598,7 +598,7 @@ class ServiceLiveSessionSource {
   }
 
   #readCreated(payload: WireRecord): LiveSessionCreated | undefined {
-    const created = sessionCreatedFrameSchema.parse(payload);
+    const created = sessionCreatedFrameFromWire(payload);
     if (created) {
       this.#quota = created.quota ?? this.#quota;
       return { sessionId: created.sessionId, sdpAnswer: created.sdpAnswer };
