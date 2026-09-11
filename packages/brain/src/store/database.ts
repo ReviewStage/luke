@@ -1,7 +1,6 @@
 import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
 import type { SqlClient } from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
-import type { UnparsedWireValue } from "@sidecar/wire";
 import { Cause, type Context, Effect, Exit, Layer, Scope } from "effect";
 import { migrateStoreSchemaSync } from "./migration.js";
 import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
@@ -133,20 +132,4 @@ export class StoreDatabase {
 /** An optional field as its column takes it: the value, or NULL for an absent one. */
 export function nullable(value: string | number | undefined): SQLInputValue {
   return value === undefined ? null : value;
-}
-
-/**
- * A column read as the wire value it is, admitted by `isKind` or read as
- * absent, so the envelope reader — not the table module — decides what is
- * admitted: a column of the wrong type reads as a missing field, which the
- * reader refuses.
- */
-export function column<Value extends string | number>(
-  value: SQLInputValue | undefined,
-  isKind: (value: UnparsedWireValue) => value is Value,
-): Value | null {
-  // SAFETY: these tables declare only TEXT and INTEGER columns, read as strings and numbers; a
-  // blob or bigint would be a schema violation, and the wire guard then refuses the field.
-  const wire = value as UnparsedWireValue;
-  return isKind(wire) ? wire : null;
 }
