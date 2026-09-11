@@ -2557,3 +2557,39 @@ than dropping.** It is a clear win over the unhealthy path rather than a pure wi
 one, and the ticket says so in those terms.
 
 **LUKE-127's PRs stand; nothing is reopened.**
+
+
+## 2026-09-11 — Amendment: one migration in the queue at a time, and the ids are on two scales
+
+**Two corrections to the migration invariant recorded earlier today.**
+
+**1. "Dequeue and renumber if another migration merges while you are queued" cannot be relied on.**
+If two migration PRs are both in the queue, **both readings were valid at enqueue time** — with main
+at `0021`, `0022 > 0021` and `0023 > 0021` are each true. The damage lands at **merge** time on
+whichever merges second: if `0023` lands first, `0022` is then at or below the highest applied and is
+**silently skipped in production** with every check green. Acting on that in time would require
+watching the queue continuously and dequeuing within seconds. **That is not a rule, it is a hope.**
+
+**Ruled: at most one migration PR in the merge queue at a time, and the orchestrator holds the
+slot.** A worker claims it, is answered taken or hold within the minute, enqueues; the other waits
+for the squash to land, re-reads the highest applied, renumbers if it is no longer above, and claims
+in turn. Non-migration PRs enqueue normally and ignore all of it.
+
+**Amended within the hour, because C2b's first claim exposed the flaw:** it claimed while still
+waiting on two bots and a preview. **A slot held by someone who cannot press enqueue is a
+reservation that idles**, and would cost a merge window if the other worker's verdicts completed
+first. So: **claim at the moment you are ready to enqueue, not before.** An earlier claim is
+first-in-line, which decides only a tie. The slot serializes merges; it is not a turn-taking queue.
+
+**2. The migrator's ids are offset from the file numbers**, and this is the more dangerous of the
+two. Observed on main: file `0021` is **journal idx 21, migrator id 22**; file `0023` would land as
+**migrator id 24**. So a check comparing a file number against a `migration_id` — or reading one
+scale and reasoning about the other — is **off by one, and wrong in exactly the direction that hides
+a skipped migration.**
+
+**Ruled: a slot claim states four numbers** — the file name, the migrator id it will land as, and the
+highest applied **as a migrator id**, each labelled with its scale. A claim is cheap; a strict
+inequality asserted between two different scales is not.
+
+**Added to LUKE-163**, because a test that gets the scale wrong would **pass on a skipped
+migration** — the one failure it exists to catch. That test is what retires the slot rule.
