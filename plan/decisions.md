@@ -308,3 +308,30 @@ the second one to merge is a broken deploy, not a merge conflict. So before clai
 read the highest on **main** and in every **open** PR, and say in the PR body which number you
 took. Added to the standing addendum every brief carries.
 
+
+## 2026-09-11 — Two more gates that do not say what they appear to say (orchestrator, from C2a)
+
+Added to the gate findings above, from C2a's #1018, because both will outlive that PR.
+
+**7. The Vercel preview is not a required check, so a deploy-shape PR can merge unverified.** The
+required checks are `TypeScript checks` and `macOS app and evidence` and nothing else. #1018's
+whole purpose is making the eve service deployable; it could read `CLEAN`, pass its merge group,
+and merge with that service never once built. **Ruling: C2a holds its enqueue until a preview has
+actually built the eve service.** And a subtler trap inside the same finding — the preview for
+#1018 came back **Ready** four minutes after the push, which looks like success and is not: with
+the project's framework preset unflipped, Vercel's documented rule (the Services framework *and*
+a `services` key, both) means it built the **old single-app shape with the services block
+ignored.** A green Ready on the wrong shape is worse than a red one.
+
+**8. Previews sit behind Deployment Protection, and no worker can read one.** Every path 302s to
+`vercel.com/sso-api`, and no worker — nor this orchestrator — holds a Vercel credential, so the
+build log is the only evidence and it needs dashboard access. Every remaining lane that wants to
+check a deployed route meets this wall, and the answer today is always "ask Dean to look."
+**Escalated: a Protection Bypass for Automation secret would turn a human lookup into a worker's
+own check.** That is Dean's to decide; it is recorded here because the cost is paid per PR.
+
+**And one fragility worth naming, not yet a ticket.** `scripts/oxlint.sh` downloads node 24.21
+from `nodejs.org` through nvm inside the **required** `TypeScript checks`, so a third party's
+connection reset fails the gate (`curl: (35) Recv failure`). It flaked once on #1018. Workers are
+told to rerun and not to look in their own diffs, and not to fix it inside an unrelated PR. If it
+recurs it becomes its own ticket rather than a tax every one of the remaining tickets pays.
