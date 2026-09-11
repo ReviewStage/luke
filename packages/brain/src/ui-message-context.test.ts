@@ -36,8 +36,8 @@ import {
   type UIMessagePart,
   type UITools,
 } from "ai";
+import { Schema } from "effect";
 import { test } from "vitest";
-import { z } from "zod";
 import { ResponsesContextEngine } from "./context-engine.js";
 import {
   type ContextRow,
@@ -64,8 +64,10 @@ const TOOL_NAME = "read_transcript";
 const TOOLS: ToolSet = {
   [TOOL_NAME]: tool({
     description: "Reads the tail of an observed session's transcript.",
-    inputSchema: z.object({ providerId: z.string(), providerSessionId: z.string() }),
-    outputSchema: z.object({ lines: z.array(z.string()) }),
+    inputSchema: Schema.standardSchemaV1(
+      Schema.Struct({ providerId: Schema.String, providerSessionId: Schema.String }),
+    ),
+    outputSchema: Schema.standardSchemaV1(Schema.Struct({ lines: Schema.Array(Schema.String) })),
   }),
 };
 
