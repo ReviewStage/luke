@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -8,6 +7,7 @@ import {
   MESSAGE_ROLE,
 } from "@sidecar/wire";
 import { asc, eq } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND, conversations, events, messages } from "../server/db/schema";
 import { RATING_REFUSAL, type RatingStore, rateMessage, storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -20,7 +20,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  */
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 const NOW = new Date("2026-09-11T09:00:00.000Z");
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";

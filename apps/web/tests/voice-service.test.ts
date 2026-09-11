@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   HOSTED_API_ERROR,
   hostedErrorSchema,
@@ -9,6 +8,7 @@ import {
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { onTestFinished, test } from "vitest";
 import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
   greetingInstruction,
@@ -159,9 +159,9 @@ async function openSession(context: Stand) {
   return { desktop, upstream: readSocket(attach.socket), attach, created };
 }
 
-test("a /sessions upgrade without a bearer is refused with 401 before any socket stands", async (t) => {
+test("a /sessions upgrade without a bearer is refused with 401 before any socket stands", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS));
   assert.deepEqual(refused, { status: UPGRADE_STATUS.UNAUTHORIZED });
@@ -172,9 +172,9 @@ test("a /sessions upgrade without a bearer is refused with 401 before any socket
   assert.equal(context.accounts.resolved.length, 0);
 });
 
-test("without a project key every upgrade is refused with 503 and nothing is resolved", async (t) => {
+test("without a project key every upgrade is refused with 503 and nothing is resolved", async () => {
   const context = await stand({ apiKey: "  " });
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   assert.deepEqual(
     await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER }),
     {
@@ -187,15 +187,15 @@ test("without a project key every upgrade is refused with 503 and nothing is res
   assert.equal(context.accounts.resolved.length, 0);
 });
 
-test("an unknown path is refused with 404", async (t) => {
+test("an unknown path is refused with 404", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   assert.deepEqual(await connect(context.url("/elsewhere")), { status: UPGRADE_STATUS.NOT_FOUND });
 });
 
-test("a spent allowance closes the socket behind one hosted error frame and spends no session", async (t) => {
+test("a spent allowance closes the socket behind one hosted error frame and spends no session", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   context.accounts.spendAnswer = { allowed: false, quota: FAKE_QUOTA };
 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
@@ -214,9 +214,9 @@ test("a spent allowance closes the socket behind one hosted error frame and spen
   assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
 });
 
-test("a bearer no account stands behind is refused as an invalid token and spends nothing", async (t) => {
+test("a bearer no account stands behind is refused as an invalid token and spends nothing", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
     authorization: "Bearer stale",
@@ -231,9 +231,9 @@ test("a bearer no account stands behind is refused as an invalid token and spend
   assert.equal(context.accounts.spent.length, 0);
 });
 
-test("a first frame that is not session.create is refused as an invalid request", async (t) => {
+test("a first frame that is not session.create is refused as an invalid request", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
@@ -246,9 +246,9 @@ test("a first frame that is not session.create is refused as an invalid request"
   assert.equal(context.accounts.resolved.length, 0);
 });
 
-test("a session is authorized, created, registered to its account, attached, and answered in that order", async (t) => {
+test("a session is authorized, created, registered to its account, attached, and answered in that order", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   const { attach, created } = await openSession(context);
 
@@ -293,9 +293,9 @@ test("a session is authorized, created, registered to its account, attached, and
   assert.equal(context.service.sessions(), 1);
 });
 
-test("frames pass through untouched in both directions, except reflected audio, which is dropped by type", async (t) => {
+test("frames pass through untouched in both directions, except reflected audio, which is dropped by type", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const { desktop, upstream, created } = await openSession(context);
 
   const toUpstream = [
@@ -358,9 +358,9 @@ test("frames pass through untouched in both directions, except reflected audio, 
   assert.deepEqual(context.record.closes, []);
 });
 
-test("session.closed is forwarded, its seconds reported exactly once, and both ends closed", async (t) => {
+test("session.closed is forwarded, its seconds reported exactly once, and both ends closed", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const { desktop, upstream, created } = await openSession(context);
 
   const closedEvent = JSON.stringify({
@@ -389,9 +389,9 @@ test("session.closed is forwarded, its seconds reported exactly once, and both e
   assert.equal(context.service.sessions(), 0);
 });
 
-test("a desktop that hangs up first has session.close sent for it and its seconds still recorded", async (t) => {
+test("a desktop that hangs up first has session.close sent for it and its seconds still recorded", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const { desktop, upstream, created } = await openSession(context);
 
   desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
@@ -414,9 +414,9 @@ test("a desktop that hangs up first has session.close sent for it and its second
   ]);
 });
 
-test("a sideband that never answers session.close is released at the timeout with usage unconfirmed", async (t) => {
+test("a sideband that never answers session.close is released at the timeout with usage unconfirmed", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const { desktop, upstream } = await openSession(context);
 
   desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
@@ -429,9 +429,9 @@ test("a sideband that never answers session.close is released at the timeout wit
   assert.equal(ended.finalization, "unconfirmed");
 });
 
-test("a sideband that closes first takes the desktop socket with it and reports nothing", async (t) => {
+test("a sideband that closes first takes the desktop socket with it and reports nothing", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const { desktop, upstream } = await openSession(context);
 
   upstream.socket.close(SOCKET_CLOSE_CODE.GOING_AWAY);
@@ -442,9 +442,9 @@ test("a sideband that closes first takes the desktop socket with it and reports 
   assert.deepEqual(context.record.closes, []);
 });
 
-test("a creation OpenAI refuses is answered as an upstream error and nothing is attached", async (t) => {
+test("a creation OpenAI refuses is answered as an upstream error and nothing is attached", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   context.openAi.createStatus = 500;
 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
@@ -458,9 +458,9 @@ test("a creation OpenAI refuses is answered as an upstream error and nothing is 
   assert.equal(context.openAi.attaches.length, 0);
 });
 
-test("the introduction is created without an account, greeted exactly once after session.started, and shown captions only", async (t) => {
+test("the introduction is created without an account, greeted exactly once after session.started, and shown captions only", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in opened);
@@ -549,9 +549,9 @@ test("the introduction is created without an account, greeted exactly once after
   assert.deepEqual(context.record.closes, []);
 });
 
-test("an introduction seed beyond one bounded developer message is refused before any session is spent", async (t) => {
+test("an introduction seed beyond one bounded developer message is refused before any session is spent", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   const tooMany = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in tooMany);
@@ -583,9 +583,9 @@ test("an introduction seed beyond one bounded developer message is refused befor
   assert.equal(context.openAi.creates.length, 0);
 });
 
-test("an introduction spends the shared ceiling only for an admitted frame, and is refused past it before any session is spent", async (t) => {
+test("an introduction spends the shared ceiling only for an admitted frame, and is refused past it before any session is spent", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   const empty = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in empty);
@@ -610,9 +610,9 @@ test("an introduction spends the shared ceiling only for an admitted frame, and 
   assert.equal(context.openAi.creates.length, 0);
 });
 
-test("an upgrade carrying a browser Origin is refused with 403 on both routes", async (t) => {
+test("an upgrade carrying a browser Origin is refused with 403 on both routes", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
 
   assert.deepEqual(
     await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION), { origin: "https://evil.test" }),
@@ -628,10 +628,10 @@ test("an upgrade carrying a browser Origin is refused with 403 on both routes", 
   assert.equal(context.accounts.resolved.length, 0);
 });
 
-test("closing the service closes every desktop socket and refuses new upgrades with 503", async (t) => {
+test("closing the service closes every desktop socket and refuses new upgrades with 503", async () => {
   const context = await stand();
   const { desktop, upstream } = await openSession(context);
-  t.after(() => context.openAi.close());
+  onTestFinished(() => context.openAi.close());
 
   const closing = context.service.close();
   assert.equal(await desktop.closed.then((end) => end.code), SOCKET_CLOSE_CODE.GOING_AWAY);
@@ -639,9 +639,9 @@ test("closing the service closes every desktop socket and refuses new upgrades w
   await closing;
 });
 
-test("a fresh connection re-attaches its account's session, answers session.attached, and pipes again without spending", async (t) => {
+test("a fresh connection re-attaches its account's session, answers session.attached, and pipes again without spending", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const first = await openSession(context);
   first.desktop.socket.terminate();
   assert.equal(record(await first.upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
@@ -668,9 +668,9 @@ test("a fresh connection re-attaches its account's session, answers session.atta
   assert.equal(await second.desktop.next(), caption);
 });
 
-test("seconds are recorded once across a re-attach, whichever connection sees session.closed", async (t) => {
+test("seconds are recorded once across a re-attach, whichever connection sees session.closed", async () => {
   const context = await stand({ closeTimeoutMs: 5_000 });
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const first = await openSession(context);
   first.desktop.socket.terminate();
   await first.upstream.next();
@@ -698,9 +698,9 @@ test("seconds are recorded once across a re-attach, whichever connection sees se
   assert.deepEqual(outcomes, [VOICE_SECONDS_OUTCOME.RECORDED, VOICE_SECONDS_OUTCOME.REPEATED]);
 });
 
-test("an attach to a session another account created, or one never created, is refused as the bearer's own failure", async (t) => {
+test("an attach to a session another account created, or one never created, is refused as the bearer's own failure", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const { created } = await openSession(context);
   await context.record.register({ userId: "user-2", sessionId: "live_theirs" });
 
@@ -732,9 +732,9 @@ test("an attach to a session another account created, or one never created, is r
   assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
 });
 
-test("the introduction never re-attaches", async (t) => {
+test("the introduction never re-attaches", async () => {
   const context = await stand();
-  t.after(() => context.stop());
+  onTestFinished(() => context.stop());
   const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in opened);
   await send(opened.reader.socket, {

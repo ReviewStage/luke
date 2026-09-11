@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { eq } from "drizzle-orm";
+import { test } from "vitest";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,

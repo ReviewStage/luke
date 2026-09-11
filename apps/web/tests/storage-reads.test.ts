@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -11,6 +10,7 @@ import {
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
   CONVERSATION_KIND,
@@ -36,7 +36,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  */
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 const NOW = new Date("2026-09-10T12:00:00.000Z");
 const UNIQUE_VIOLATION = "23505";

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test, { after } from "node:test";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { and, asc, eq } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
   ACTION_OUTPUT_STATUS,
@@ -73,7 +73,7 @@ type TurnFailure = NonNullable<BrainRequestRecord["failure"]>;
 const MODEL_FAILURE: TurnFailure = "model";
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 /** The envelope any call may answer with: its effect unknown. Every declared output schema admits it. */
 const UNKNOWN_OUTCOME = z.object({

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { ADMIN_TREND_DAYS, lastNDayKeys } from "../server/admin/admin-metrics";
 import {
   type AdminUserDetail,

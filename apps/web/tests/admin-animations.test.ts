@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS } from "@sidecar/surface";
+import { test } from "vitest";
 import {
   ANIMATION_ROSTER,
   ANIMATION_SWATCH,

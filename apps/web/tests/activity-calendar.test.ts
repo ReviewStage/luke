@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { calendarWeeks, lastWeeks, monthLabels } from "../src/activity-calendar";
 
 function series(firstDay: string, days: number): { day: string }[] {

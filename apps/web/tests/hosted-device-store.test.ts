@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
+import { test } from "vitest";
 import { devices } from "../server/db/devices-schema";
 import { deviceSeams } from "../server/hosted/device-store";
 

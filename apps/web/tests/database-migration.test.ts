@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { Client } from "pg";
+import { test } from "vitest";
 import { migrateWithLock } from "../server/db/migrate";
 
 type MigrationConnection = Pick<Client, "connect" | "query" | "end">;

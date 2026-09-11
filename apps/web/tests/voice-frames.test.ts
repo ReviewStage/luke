@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { test } from "vitest";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { isAdminRole, USER_ROLE } from "../server/admin/admin-access";
 
 test("only the admin role passes the gate; user, empty, and absent do not", () => {

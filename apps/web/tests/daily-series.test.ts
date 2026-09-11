@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { partialDayKey, seriesHasNoData } from "../src/daily-series";
 
 test("a zero-filled series reads as no data", () => {

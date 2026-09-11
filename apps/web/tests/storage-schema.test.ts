@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -10,6 +9,7 @@ import {
 } from "@sidecar/wire";
 import { and, eq, getTableName, type SQL, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
+import { afterAll, test } from "vitest";
 import { user } from "../server/db/auth-schema";
 import {
   CONVERSATION_KIND,
@@ -35,7 +35,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  */
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 const UNIQUE_VIOLATION = "23505";
 

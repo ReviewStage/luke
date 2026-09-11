@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/session";
+import { test } from "vitest";
 import {
   fakeConductorApi,
   LUKE_PROJECT,

@@ -16,8 +16,8 @@
     "db:migrate": "tsx server/db/migrate.ts",
     "dev": "vite",
     "preview": "vite preview",
-    "test": "tsx --test 'tests/**/*.test.ts'",
-    "test:store": "tsx --test tests/hosted-store.test.ts tests/hosted-payload-envelope.test.ts tests/storage-schema.test.ts tests/voice-schema.test.ts tests/hosted-store-writer.test.ts tests/storage-reads.test.ts tests/voice-writer.test.ts tests/storage-ratings.test.ts tests/hosted-resource-reads.test.ts tests/hosted-change-signal.test.ts",
+    "test": "vitest run",
+    "test:store": "vitest run tests/hosted-store.test.ts tests/hosted-payload-envelope.test.ts tests/storage-schema.test.ts tests/voice-schema.test.ts tests/hosted-store-writer.test.ts tests/storage-reads.test.ts tests/voice-writer.test.ts tests/storage-ratings.test.ts tests/hosted-resource-reads.test.ts tests/hosted-change-signal.test.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -63,6 +63,7 @@
     "tsx": "catalog:",
     "typescript": "catalog:web",
     "vite": "7.3.1",
+    "vitest": "catalog:",
     "zod": "4.5.4"
   }
 }

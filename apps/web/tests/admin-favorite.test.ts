@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "../server/admin/admin-favorite";
 import { ADMIN_ERROR, ADMIN_USER_ID_PARAM } from "../server/admin/http";

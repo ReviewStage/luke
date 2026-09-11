@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
 import { ACTION_KIND, ACTION_REFUSAL, type WireRecord } from "../server/core";
 import {

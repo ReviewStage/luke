@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import {
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
@@ -32,6 +31,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { eq, sql } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND, conversations, events, messages, turns } from "../server/db/schema";
 import {
   handleBrainTurns,
@@ -50,7 +50,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  */
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const SESSION = {

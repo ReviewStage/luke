@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { symmetricEncrypt } from "better-auth/crypto";
+import { test } from "vitest";
 import { authDeployment, LOCAL_AUTH_URL } from "../server/auth-deployment";
 import { authProxy, isTrustedProxyCallback, oauthProxyCallbackURL } from "../server/auth-proxy";
 
