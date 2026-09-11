@@ -9,6 +9,11 @@
  */
 
 export {
+  ChildCleanupSchema,
+  ChildContextModeSchema,
+  ChildRunStatusSchema,
+} from "./child-records.effect.js";
+export {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -60,6 +65,7 @@ export {
   type ModelUsage,
   REASONING_EFFORT,
   type ReasoningEffort,
+  ReasoningEffortSchema,
   type ReasoningSummary,
   RUN_END_REASON,
   RUNTIME_EVENT,
@@ -83,6 +89,7 @@ export {
   agentId,
   CONVERSATION_KIND,
   type ConversationKind,
+  ConversationKindSchema,
   childIdOf,
   childSessionKey,
   conversationKindOf,
@@ -96,6 +103,7 @@ export {
   observedSessionRefOf,
   RUN_ORIGIN,
   type RunOrigin,
+  RunOriginSchema,
   type SessionKey,
   sessionKey,
   threadSessionKey,
@@ -119,6 +127,7 @@ export {
   memoryToolNamed,
   sameMemoryScope,
 } from "./memory.js";
+export { ArchiveReasonSchema, CompactionSourceSchema } from "./storage.effect.js";
 export {
   ARCHIVE_ENCODING,
   ARCHIVE_REASON,

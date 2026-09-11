@@ -333,7 +333,22 @@ provider contract are Node-free, and
 the packages below the runtime import that door so the barrel's `node:fs`
 never reaches a renderer or a web function. Nothing is behind both
 doors: the barrel re-exports no vocabulary name, so every symbol has exactly
-one way in.
+one way in. Its fixed value sets carry the same `Schema.Literal` declarations
+`@sidecar/session`'s do: `execution.ts` and `identifiers.ts` are not OpenClaw
+ports, so each `is*` guard becomes that schema's own `Schema.is` right beside
+the `as const` set it derives from, the same as everywhere else, and `effect`
+itself is Node-free, so declaring it here costs the door nothing the rule
+above did not already pay for `@sidecar/runtime/effect`'s bridges. `child-records.ts`
+and `storage.ts` are OpenClaw ports, so neither gains an `effect` import or
+loses a line: each keeps its own hand-rolled `is*` guard exactly as it stood,
+which is still what the vocabulary door re-exports, and the schema beside its
+`as const` set lives in the sibling instead — `child-records.effect.ts`, and
+`storage.effect.ts` beside its wire codecs — importing the port's object
+rather than declaring a second one. The vocabulary door re-exports that
+schema from the sibling in a block of its own, so a schema this way in is the
+only thing that leaves through both the vocabulary door and the `effect`
+door; the guard itself still has exactly one way in, which is what
+`repository-checks.sh`'s barrel/vocabulary check keeps true.
 
 A barrel over modules that are all one vocabulary is written as `export *` per
 module (`@sidecar/session`), because a hand-listed re-export of a package whose
