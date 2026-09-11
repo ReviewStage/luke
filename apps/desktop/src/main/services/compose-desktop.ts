@@ -85,10 +85,23 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
   // answers it are the same document read twice, and a window's own write is
   // not raced against a broadcast: the version it is handed only ever rises.
   // Forked after the windows service has started, so nothing publishes to a
-  // window that is not yet there to receive it.
+  // window that is not yet there to receive it. A push that throws is
+  // reported rather than left to end the fiber: a `Stream.runForEach` that
+  // failed once would never resume, and every later write would then reach
+  // no window for the rest of the session.
   const stateBroadcast = Layer.scopedDiscard(
     Effect.forkScoped(
-      Stream.runForEach(state.changes, () => Effect.sync(() => windows.publishAppState())),
+      Stream.runForEach(state.changes, () =>
+        Effect.catchAllDefect(
+          Effect.sync(() => windows.publishAppState()),
+          (defect) =>
+            Effect.sync(() => {
+              report(
+                `the app-state push to windows failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+              );
+            }),
+        ),
+      ),
     ),
   );
   const throughWindows = layersInOrder([
