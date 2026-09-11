@@ -2829,3 +2829,36 @@ self-review's clean verdict is the weakest result in the set.
 `[...(observations ?? []), ...]` may make `calendarMeetings` an empty array while Google observations
 are merely unread — which would defeat LUKE-170's undefined-versus-null fix. To be read as part of
 LUKE-170 rather than claimed now.
+
+
+## 2026-09-11 — Wire: `quietUntil` on the device report carries three states
+
+**Ruled, from LUKE-170.** The device report's `quietUntil` is declared with two states and the system
+needs three. It becomes an **optional** field carrying `instant | null`:
+
+| state | meaning | the service does |
+|---|---|---|
+| **absent** | the calendar has not been observed yet this run | **leaves** the stored `quiet_until` |
+| **`null`** | observed, no meeting active | **clears** it |
+| **an instant** | a meeting covers now | holds until then |
+
+Declared **once** as a `@sidecar/wire` schema, per CLAUDE.md — never as two literals agreeing at the
+two ends.
+
+**Why this is a ruling rather than an escalation.** The service **already implements all three
+states**: `device-store.ts:139-141` treats `undefined` as *leave* and `null` as *write*. The behaviour
+exists; only the **type** failed to express it. This makes the contract say what the code already
+does.
+
+**Backward compatible in the direction that matters.** An older desktop that always sends `null`
+keeps exactly today's behaviour — it clears when there is no meeting, including when it does not yet
+know. That is the bug, but it is the bug already deployed, so **no existing client gets worse**. A
+newer desktop omits the field while it does not know, and the hold survives a relaunch mid-meeting.
+
+**The constraint that makes it real rather than nominal:** **absent** and **`null`** must survive the
+whole path distinctly — the schema's parse, the route's read, the store's write. **A default in the
+schema, a destructure with a default, or an object built with the key present-and-undefined collapses
+the three states one layer along and makes the fix invisible.** The bug being fixed *is* a flattening
+hop; the fix must not add a second. A test asserting absence therefore asserts on the **serialised
+body**, since `JSON.stringify` makes `{ quietUntil: undefined }` and `{}` identical — which is correct,
+both meaning absent, and is also why the object is the wrong thing to assert on.
