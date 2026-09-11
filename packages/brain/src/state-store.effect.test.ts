@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
 import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
 import { MODEL_RESPONSE_OUTCOME, type ModelAdapter } from "@sidecar/runtime/vocabulary";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { CONTEXT_OPENING, type Generation, generationFrom } from "./generation.js";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
@@ -101,16 +101,22 @@ describe("loadBrainState", () => {
 describe("writeBrainState", () => {
   it.effect("does not call the store until the effect is run", () =>
     Effect.gen(function* () {
-      const { store, repository } = openStore();
+      const { store } = openStore();
       const state = yield* loadBrainState(store);
       const lease = store.lease();
-      const savesBeforeConstruction = repository.saves;
+      const original = store.write.bind(store);
+      let invoked = false;
+      // SAFETY: the wrapper below takes exactly `write`'s own parameters and answers exactly its own return type.
+      store.write = ((...args: Parameters<typeof original>) => {
+        invoked = true;
+        return original(...args);
+      }) as typeof store.write;
 
       const effect = writeBrainState(store, lease, state.generationId, (mutable) => mutable);
-      assert.equal(repository.saves, savesBeforeConstruction);
+      assert.equal(invoked, false);
 
       yield* effect;
-      assert.equal(repository.saves, savesBeforeConstruction + 1);
+      assert.equal(invoked, true);
     }),
   );
 
@@ -199,16 +205,22 @@ describe("clearBrainState and resetBrainState", () => {
 describe("saveWorkingState, saveRecordState, saveWholeState, and saveCaptureState", () => {
   it.effect("saveWorkingState does not call the store until the effect is run", () =>
     Effect.gen(function* () {
-      const { store, repository } = openStore();
+      const { store } = openStore();
       const { generation, context } = yield* Effect.promise(() => openGeneration(store));
       const lease = store.lease();
-      const savesBeforeConstruction = repository.saves;
+      const original = store.saveWorking.bind(store);
+      let invoked = false;
+      // SAFETY: the wrapper below takes exactly `saveWorking`'s own parameters and answers exactly its own return type.
+      store.saveWorking = ((...args: Parameters<typeof original>) => {
+        invoked = true;
+        return original(...args);
+      }) as typeof store.saveWorking;
 
       const effect = saveWorkingState(store, lease, generation, { context });
-      assert.equal(repository.saves, savesBeforeConstruction);
+      assert.equal(invoked, false);
 
       yield* effect;
-      assert.equal(repository.saves, savesBeforeConstruction + 1);
+      assert.equal(invoked, true);
     }),
   );
 
@@ -291,16 +303,22 @@ describe("saveWorkingState, saveRecordState, saveWholeState, and saveCaptureStat
 });
 
 describe("flushBrainState", () => {
-  it.effect("settles once every write queued so far has landed", () =>
+  it.effect("settles once a write queued directly on the store has landed", () =>
     Effect.gen(function* () {
-      const { store } = openStore();
+      const { store, repository } = openStore();
       const state = yield* loadBrainState(store);
       const lease = store.lease();
-      void writeBrainState(store, lease, state.generationId, (mutable) => mutable);
+      const release = repository.hold();
+      // The store's own write, queued and left unawaited, exactly as a
+      // caller not going through the Effect wrapper still queues one.
+      void store.write(lease, state.generationId, (mutable) => mutable);
+      assert.equal(repository.saves, 0);
 
-      yield* flushBrainState(store);
+      const fiber = yield* Effect.fork(flushBrainState(store));
+      release(true);
+      yield* Fiber.join(fiber);
 
-      assert.equal(store.current()?.generationId, state.generationId);
+      assert.equal(repository.saves, 1);
     }),
   );
 });
