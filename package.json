@@ -17,6 +17,7 @@
     "lint:fix": "biome check --write .",
     "oxlint": "./scripts/oxlint.sh",
     "package": "pnpm --filter @luke/desktop package",
+    "package:dir": "pnpm --filter @luke/desktop package:dir",
     "prepare": "husky",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
