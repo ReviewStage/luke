@@ -17,10 +17,12 @@ export type HostedAccountPreferences = AccountPreferences & {
   [RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED]?: RealtimeVoiceSpeed;
 };
 
-type PhoneVoiceSpeed = { valid: true; value: RealtimeVoiceSpeed | undefined } | { valid: false };
+export type PhoneVoiceSpeed =
+  | { valid: true; value: RealtimeVoiceSpeed | undefined }
+  | { valid: false };
 
 /** The phone's pace out of the raw snapshot: absent or null is none, and anything but a pace the Realtime contract offers refuses the write. */
-function phoneVoiceSpeed(preferences: UnparsedWireValue): PhoneVoiceSpeed {
+export function phoneVoiceSpeed(preferences: UnparsedWireValue): PhoneVoiceSpeed {
   if (!isRecord(preferences)) return { valid: true, value: undefined };
   const raw = preferences[RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED];
   if (raw === undefined || raw === null) return { valid: true, value: undefined };

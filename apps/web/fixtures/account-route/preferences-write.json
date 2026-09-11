@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"preferences\":{\"voice\":\"marin\",\"defaultWorkspaceProvider\":\"conductor\",\"workspaceProjectDefaults\":{\"conductor\":\"project-1\"},\"workspaceAgentDefaults\":{\"conductor\":{\"agent\":\"codex\",\"model\":\"gpt-5.6-sol\",\"effort\":\"high\"}},\"voiceSpeed\":1.5},\"updatedAt\":1788868800000}"
+}
