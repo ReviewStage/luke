@@ -68,13 +68,12 @@ export interface ReadTurnGroup extends Omit<ConversationReadTurnGroup, "messages
 }
 
 /**
- * One of Luke's messages as a rating names it: the conversation it stands in,
- * and whether it is a briefing or a reply, which is what the count buckets
- * it as. Only an assistant message is one — the set the service accepts a
- * rating for, since a compaction summary never enters the view.
+ * One of Luke's messages as a rating names it: whether it is a briefing or a
+ * reply, which is what the count buckets it as. Only an assistant message is
+ * one — the set the service accepts a rating for, since a compaction summary
+ * never enters the view.
  */
 export interface RateableMessage {
-  readonly conversationId: string;
   readonly announcement: boolean;
 }
 
@@ -95,15 +94,15 @@ interface HeldSpeechEvent {
  * The latest rating event on a message. Its verdict is absent where the
  * payload did not read under the vocabulary: the event is still the
  * developer's last word by sequence, and an older verdict is not it. A mark
- * this device wrote itself is newer than anything held or folded and amends
- * at once; one read back from the events waits until the events read stands
- * at or past the fold.
+ * known newer than the fold — this device's own write, or an event that
+ * superseded one — amends at once; one read back from the events otherwise
+ * waits until the events read stands at or past the fold.
  */
 interface HeldRatingEvent {
   readonly conversationId: string;
   readonly seq: number;
   readonly rating: RatingEventPayload | undefined;
-  readonly own: boolean;
+  readonly newerThanFold: boolean;
 }
 
 interface HeldTurn {
@@ -218,6 +217,10 @@ export class ConversationViewSync {
       // A row still being written is answered on every read; one answered
       // unchanged moves nothing, so a long tool call does not redraw the thread every poll.
       for (const message of group.messages) {
+        // The page was read after every events page held so far, so the
+        // rating it folds onto the row is newer than any mark read back from
+        // the events; a walk cut short cannot leave an older one standing over it.
+        if (this.#forgetReadBackRating(message.message.id)) moved = true;
         if (isDeepStrictEqual(held.messages.get(message.seq), message)) continue;
         held.messages.set(message.seq, message);
         moved = true;
@@ -267,7 +270,7 @@ export class ConversationViewSync {
             event.payload === undefined
               ? undefined
               : RATING_EVENT_PAYLOAD.parse(unparsedWire(event.payload)),
-          own: false,
+          newerThanFold: false,
         })
       ) {
         moved = true;
@@ -275,8 +278,8 @@ export class ConversationViewSync {
     }
     if (!hasMore && !this.#eventsCaughtUp) {
       this.#eventsCaughtUp = true;
-      // The marks read back were standing behind the fold until now; an own write already showed.
-      if ([...this.#ratings.values()].some((held) => !held.own)) moved = true;
+      // The marks read back were standing behind the fold until now; one known newer already showed.
+      if ([...this.#ratings.values()].some((held) => !held.newerThanFold)) moved = true;
     }
     this.#cursors = { ...this.#cursors, events: next };
     if (moved) this.#revision += 1;
@@ -317,7 +320,7 @@ export class ConversationViewSync {
         conversationId: held.group.conversationId,
         seq,
         rating,
-        own: true,
+        newerThanFold: true,
       })
     ) {
       this.#revision += 1;
@@ -326,10 +329,10 @@ export class ConversationViewSync {
 
   /**
    * The message a rating would land on, where this device holds one of Luke's
-   * by that id: which conversation it stands in, and whether it is a
-   * briefing. Nothing for a message not held, and nothing for one that is
-   * not Luke's — the developer's own ask, the brain's note to itself — since
-   * the service would refuse those and no control is drawn on them.
+   * by that id: whether it is a briefing. Nothing for a message not held, and
+   * nothing for one that is not Luke's — the developer's own ask, the brain's
+   * note to itself — since the service would refuse those and no control is
+   * drawn on them.
    */
   rateable(messageId: string): RateableMessage | undefined {
     const held = this.#findMessage(messageId);
@@ -337,7 +340,6 @@ export class ConversationViewSync {
       return undefined;
     }
     return {
-      conversationId: held.group.conversationId,
       announcement: held.message.tools.some(
         (tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE,
       ),
@@ -423,7 +425,10 @@ export class ConversationViewSync {
     );
     const excess = placed.length - CONVERSATION_VIEW_BOUNDS.MAX_GROUPS;
     if (excess > 0) {
-      for (const { turnId } of placed.splice(0, excess)) this.#groups.delete(turnId);
+      for (const { turnId, held } of placed.splice(0, excess)) {
+        this.#groups.delete(turnId);
+        this.#forgetMarks([...held.messages.values()].map((message) => message.message.id));
+      }
     }
     return {
       groups: placed.map(({ group }) => group),
@@ -456,18 +461,42 @@ export class ConversationViewSync {
    */
   #withRating(message: ConversationViewMessage): ConversationViewMessage {
     const held = this.#ratings.get(message.message.id);
-    if (held === undefined || !(held.own || this.#eventsCaughtUp)) return message;
+    if (held === undefined || !(held.newerThanFold || this.#eventsCaughtUp)) return message;
     if (sameRating(held.rating, message.rating)) return message;
     const { rating: _folded, ...unrated } = message;
     return held.rating === undefined ? unrated : { ...unrated, rating: held.rating };
   }
 
-  /** Holds a rating event as the newest on its message where it is; answers whether anything moved. */
+  /**
+   * Holds a rating event as the newest on its message where it is; answers
+   * whether anything moved. An event that supersedes a mark known newer than
+   * the fold is newer than the fold itself, whatever the events read has
+   * reached, so it inherits that standing rather than falling behind the fold.
+   */
   #holdRating(messageId: string, event: HeldRatingEvent): boolean {
     const held = this.#ratings.get(messageId);
     if (held !== undefined && held.seq >= event.seq) return false;
-    this.#ratings.set(messageId, event);
+    this.#ratings.set(messageId, {
+      ...event,
+      newerThanFold: event.newerThanFold || held?.newerThanFold === true,
+    });
     return true;
+  }
+
+  /** Lets go of a mark read back from the events, keeping one known newer than the fold; answers whether a shown verdict went with it. */
+  #forgetReadBackRating(messageId: string): boolean {
+    const held = this.#ratings.get(messageId);
+    if (held === undefined || held.newerThanFold) return false;
+    this.#ratings.delete(messageId);
+    return this.#eventsCaughtUp;
+  }
+
+  /** The marks about messages this picture no longer holds go with them. */
+  #forgetMarks(messageIds: Iterable<string>): void {
+    for (const messageId of messageIds) {
+      this.#speech.delete(messageId);
+      this.#ratings.delete(messageId);
+    }
   }
 
   #findMessage(
@@ -502,6 +531,7 @@ export class ConversationViewSync {
       for (const [seq, message] of group.messages) {
         if (message.createdAt >= this.#windowStart) continue;
         group.messages.delete(seq);
+        this.#forgetMarks([message.message.id]);
         dropped = true;
       }
       if (group.messages.size === 0) this.#groups.delete(turnId);

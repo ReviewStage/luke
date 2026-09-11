@@ -605,7 +605,7 @@ test("a rating this device wrote shows at once, whatever the events read has rea
   assert.equal(sync.revision, shown);
 });
 
-test("only one of Luke's messages this device holds is rateable, named by its conversation and whether it is a briefing", () => {
+test("only one of Luke's messages this device holds is rateable, named by whether it is a briefing", () => {
   const sync = new ConversationViewSync();
   sync.applyMessages(
     page(
@@ -623,8 +623,8 @@ test("only one of Luke's messages this device holds is rateable, named by its co
     ),
   );
   assert.equal(sync.rateable(messageId(1)), undefined);
-  assert.deepEqual(sync.rateable(messageId(2)), { conversationId: MAIN, announcement: false });
-  assert.deepEqual(sync.rateable(messageId(3)), { conversationId: OBSERVED, announcement: true });
+  assert.deepEqual(sync.rateable(messageId(2)), { announcement: false });
+  assert.deepEqual(sync.rateable(messageId(3)), { announcement: true });
   assert.equal(sync.rateable(messageId(4)), undefined);
 });
 
@@ -651,4 +651,55 @@ test("a rating goes with the conversation it was about, and a reset forgets the 
   // Replaying from the beginning again: an older event stands behind the fold until the replay ends.
   sync.applyEvents([ratingEvent(2, 1, MESSAGE_RATING.DOWN)], "e1", true);
   assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+});
+
+test("a message read again carries a fold newer than any mark read back, so a walk cut short cannot leave an older mark standing over it", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [ask(1, 1, "well?", NOW), reply(2, 2, NOW + 1)])], "c1"),
+  );
+  sync.applyEvents([], "e0", false);
+  // Another device rates twice between two polls; this poll's messages page
+  // folds the newer verdict, and its events walk is cut after the older one.
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [rated(reply(2, 2, NOW + 1), MESSAGE_RATING.DOWN)])], "c2"),
+  );
+  sync.applyEvents([ratingEvent(2, 5, MESSAGE_RATING.UP)], "e1", true);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // The next poll answers the row again with the same fold: the fold is the newer word.
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [rated(reply(2, 2, NOW + 1), MESSAGE_RATING.DOWN)])], "c3"),
+  );
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // The walk then delivers the newer event too, and the verdict stands.
+  sync.applyEvents([ratingEvent(2, 10, MESSAGE_RATING.DOWN)], "e2", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // An own write is never forgotten for a page: it is newer than the fold by construction.
+  sync.recordRating(messageId(2), 11, { rating: MESSAGE_RATING.UP });
+  sync.applyMessages(
+    page([mainGroup(turnId(1), [rated(reply(2, 2, NOW + 1), MESSAGE_RATING.DOWN)])], "c4"),
+  );
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+});
+
+test("an event that supersedes this device's own write is newer than the fold too, and shows before the replay ends", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(page([mainGroup(turnId(1), [ask(1, 1, "well?", NOW), reply(2, 2, NOW + 1)])]));
+  sync.recordRating(messageId(2), 500, { rating: MESSAGE_RATING.UP });
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // Still replaying from the record's beginning when a newer verdict from another device arrives.
+  sync.applyEvents([ratingEvent(2, 501, MESSAGE_RATING.DOWN)], "e1", true);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+});
+
+test("the marks about a message the window or the group bound let go of go with it", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(page([mainGroup(turnId(1), [reply(2, 1, NOW)])], "c1"));
+  sync.applyEvents([ratingEvent(2, 1, MESSAGE_RATING.DOWN)], "e1", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // A Clear windows the row out; the same id answered again later starts from the fold alone.
+  sync.applyClear(NOW + 5);
+  assert.deepEqual(sync.snapshot().groups, []);
+  sync.applyMessages(page([mainGroup(turnId(1), [reply(2, 1, NOW + 6)])], "c2", [MAIN], NOW + 5));
+  assert.equal(ratingOf(sync, 2), undefined);
 });

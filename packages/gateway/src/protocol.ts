@@ -4,8 +4,7 @@ import {
   isWireBoolean,
   isWireNumber,
   isWireString,
-  MESSAGE_RATING,
-  type MessageRating,
+  RATING_EVENT_PAYLOAD_FIELDS,
   RECORD_EXTRA_KEYS,
   type RecordOf,
   s,
@@ -216,12 +215,11 @@ export const voiceLiveSessionChangedSchema = s.record(VOICE_LIVE_SESSION_CHANGED
 
 export type VoiceLiveSessionChanged = RecordOf<typeof VOICE_LIVE_SESSION_CHANGED>;
 
-const MESSAGE_RATINGS: readonly MessageRating[] = Object.values(MESSAGE_RATING);
-
 const CONVERSATION_RATE_MESSAGE_PARAMS = {
   /** The message as the view holds it, by its own id, admitted as written so it matches the row the host holds. */
   messageId: s.text({ max: 512, ends: TEXT_ENDS.KEEP }),
-  rating: s.enumOf(MESSAGE_RATINGS),
+  /** The verdict under the stored event's own rule, so the method and the row cannot say different things. */
+  rating: RATING_EVENT_PAYLOAD_FIELDS.rating,
 } as const;
 
 /** `conversation.rateMessage`: which of Luke's messages, and the developer's verdict on it. */
@@ -250,10 +248,9 @@ export const CONVERSATION_RATE_STATUS = {
 export type ConversationRateStatus =
   (typeof CONVERSATION_RATE_STATUS)[keyof typeof CONVERSATION_RATE_STATUS];
 
-const CONVERSATION_RATE_STATUSES: readonly ConversationRateStatus[] =
-  Object.values(CONVERSATION_RATE_STATUS);
-
-const CONVERSATION_RATE_MESSAGE_RESULT = { status: s.enumOf(CONVERSATION_RATE_STATUSES) } as const;
+const CONVERSATION_RATE_MESSAGE_RESULT = {
+  status: s.enumOf(Object.values(CONVERSATION_RATE_STATUS)),
+} as const;
 
 /** What `conversation.rateMessage` answers: whether the rating was recorded, and if not, which of the three refusals stands. */
 export const conversationRateMessageResultSchema = s.record(CONVERSATION_RATE_MESSAGE_RESULT, {

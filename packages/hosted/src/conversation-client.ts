@@ -103,7 +103,7 @@ const RATE_UNANSWERED: ConversationRateResult = {
   refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED,
 };
 
-/** The request as the record that travels, field by field, so nothing the schema did not name is sent. */
+/** The request as a record for the schema to read, field by field; what travels is the value the schema admitted. */
 function ratingRecord(request: HostedMessageRatingRequest): WireRecord {
   return {
     rating: request.rating,
@@ -185,7 +185,7 @@ export class HostedConversationClient {
     const answer = await this.#call.send({
       method: HTTP_METHOD.PUT,
       path: conversationMessageRatingPath(messageId),
-      body: JSON.stringify(ratingRecord(admitted)),
+      body: JSON.stringify(admitted),
     });
     if (!callAnswered(answer)) return RATE_UNANSWERED;
     const payload = await answer.response.json().catch(() => undefined);

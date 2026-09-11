@@ -433,13 +433,11 @@ test("a reset drops everything held and tells every client the thread is gone", 
   assert.deepEqual(views().at(-1), { groups: [], settled: false });
 });
 
-async function rate(
-  composer: ReturnType<typeof composeConversation>,
-  params: WireValue,
-): Promise<WireValue | undefined> {
+/** The method as a client would call it; a test reads the outcome for itself. */
+async function rateOutcome(composer: ReturnType<typeof composeConversation>, params: WireValue) {
   const handler = composer.methods[GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE];
   assert.ok(handler);
-  const outcome = await handler(
+  return handler(
     // SAFETY: the test hands the handler the params a client would; the handler's own schema is the boundary.
     params as Parameters<typeof handler>[0],
     {
@@ -453,6 +451,13 @@ async function rate(
       },
     },
   );
+}
+
+async function rate(
+  composer: ReturnType<typeof composeConversation>,
+  params: WireValue,
+): Promise<WireValue | undefined> {
+  const outcome = await rateOutcome(composer, params);
   assert.ok(outcome.ok);
   return outcome.result;
 }
@@ -550,21 +555,7 @@ test("the service's refusals reach the control apart, leave the verdict as it wa
 test("a rating whose params are not one message and one verdict is refused as invalid before anything is read", async () => {
   const { composer, client } = harness({ deviceId: DEVICE });
   await composer.loop.refresh();
-  const handler = composer.methods[GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE];
-  assert.ok(handler);
-  const outcome = await handler(
-    { messageId: REPLY, rating: "sideways" },
-    {
-      client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-      request: {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "rate-2",
-        method: GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE,
-        params: {},
-        idempotencyKey: "rate-2",
-      },
-    },
-  );
+  const outcome = await rateOutcome(composer, { messageId: REPLY, rating: "sideways" });
   assert.equal(outcome.ok, false);
   assert.deepEqual(client.rated, []);
 });
