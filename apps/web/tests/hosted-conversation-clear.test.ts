@@ -99,8 +99,9 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
     await body(await handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET")))),
   );
   assert.ok(after);
+  // The main the Clear opened is the view's window from the Clear's own instant.
   assert.deepEqual(after.conversations, [
-    { id: answer.opened, kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    { id: answer.opened, kind: CONVERSATION_VIEW_SOURCE.MAIN, openedAt: NOW },
   ]);
   assert.deepEqual(after.groups, []);
 });
