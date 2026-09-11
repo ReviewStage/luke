@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { type ResponsesInputItem, responsesModelAnswer, userMessageItem } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
 import {
@@ -8,6 +7,7 @@ import {
   type ModelRequestOptions,
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import { tracedModelAdapter } from "./brain-trace.js";
 import type { BrainRequestTraceRecord } from "./trace-writer.js";
 

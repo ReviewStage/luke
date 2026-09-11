@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { retryAttachWhileDetached } from "./attachment.js";
 
 /** A client stand-in: it announces changes in whether a host stands, never the standing state. */

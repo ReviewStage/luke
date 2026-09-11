@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { HOSTED_API_ERROR, VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import {
   developerSeedItem,
@@ -15,6 +14,7 @@ import {
   RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   type HostedLiveSessionOptions,
   HostedLiveSessionSource,

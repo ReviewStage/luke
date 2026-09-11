@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import { GatewayClient } from "./client.js";
 import { NodeRegistry } from "./nodes.js";
 import {

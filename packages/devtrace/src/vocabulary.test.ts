@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { isAgentWireTrace, sanitizedTraceEvent, TRACE_DIRECTION } from "./vocabulary.js";
 
 test("isAgentWireTrace accepts a tapped event and refuses anything else", () => {

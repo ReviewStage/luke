@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { closeEvent, LIVE_SERVER_EVENT, type LiveServerEvent, thinkingAppend } from "@sidecar/live";
+import { test } from "vitest";
 import { SOCKET_OPEN_FAULT, sidebandOverSocket, socketOpened } from "./live-socket.js";
 import { FakeLiveSocket } from "./testing.js";
 
