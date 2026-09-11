@@ -3,14 +3,9 @@ import type { Rectangle, ResolvedNotchGeometry } from "@sidecar/surface";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 export {
-  SUPERSET_SIGN_IN_STAGE,
-  type SupersetSignInSnapshot,
-} from "@sidecar/providers/superset/sign-in-stage";
-export {
   isWorkspaceProviderId,
   type SessionOpenResult,
   type SessionWriteResult,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,
 } from "@sidecar/session";
 export type { WindowMode } from "@sidecar/surface";

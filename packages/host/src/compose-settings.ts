@@ -61,7 +61,6 @@ interface SettingsLinks {
   applyVoiceCredential: () => Promise<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;
   reconcileSpeech: () => void;
-  refreshSupersetWorkspaceHost: () => Promise<void>;
   broadcastWorkspaceProjects: () => Promise<void>;
   refreshIssues: () => void;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
@@ -336,14 +335,8 @@ export const composeSettings = (): Effect.Effect<
       for (const field of changed) {
         await applyHostSettingSideEffect(field, result.settings);
       }
-      const workspaceAgentDefaultsChanged = changed.includes(
-        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-      );
-      if (workspaceAgentDefaultsChanged) {
-        await links.get().refreshSupersetWorkspaceHost();
-      }
       if (
-        workspaceAgentDefaultsChanged ||
+        changed.includes(APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
         changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
         changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
       ) {

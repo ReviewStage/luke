@@ -36,7 +36,6 @@ const seams = (overrides: Partial<HostSeams> = {}): HostSeams =>
       runMode: runModeFor({ capture: false, fixture: true }),
       appVersion: "0.0.0-test",
       packaged: false,
-      homeDirectory: "/home/test",
       environment: {},
       cipher: CIPHER,
       createWorker: () => {
@@ -73,7 +72,6 @@ describe("the seam tags", () => {
         hostKernelLayerFromSeams(
           seams({
             stateRoot: "/state",
-            homeDirectory: "/home/someone",
             appVersion: "1.2.3",
             createWorker: worker,
             createId: () => "minted",
@@ -87,7 +85,6 @@ describe("the seam tags", () => {
       assert.deepEqual(read.identity, {
         appVersion: "1.2.3",
         packaged: false,
-        homeDirectory: "/home/someone",
       });
       assert.equal(read.cipher, CIPHER);
       assert.equal(read.storeWorker.create, worker);

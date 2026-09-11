@@ -28,7 +28,6 @@ function hostSeamsFor(dependencies: HostSeamDependencies): HostSeams {
     runMode,
     appVersion: config.appVersion,
     packaged: config.packaged,
-    homeDirectory: config.homeDirectory,
     environment: config.environment,
     cipher,
     createWorker: () => {

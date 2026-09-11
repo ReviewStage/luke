@@ -226,21 +226,6 @@ function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
     });
   }
   facts.push({
-    label: "Superset",
-    detail:
-      "Superset workspaces on this Mac are recognized read-only from Superset's own host " +
-      "state; their chats open at their exact terminal in Superset — pressed, or asked of " +
-      "Luke — and an idle worktree workspace stands as its own row. When Superset's CLI is " +
-      "logged in, chat rows can send the developer's own message, rename the workspace, " +
-      "start another agent in it, or create a new Superset workspace by ask. Every Superset " +
-      "row offers Delete workspace once its work settled — an agentless idle row counts as " +
-      "settled — and Superset keeps no archive: " +
-      "deleting is permanent and takes the whole workspace with every chat in it, a row " +
-      "still working is never offered it, a single chat cannot be closed or removed on its " +
-      "own, and an ask to archive one means exactly this delete. Superset connects and " +
-      "disconnects by hand, from its row under Providers.",
-  });
-  facts.push({
     label: "Conductor",
     detail:
       "Conductor cloud connects with a key under Providers and creates workspaces in the " +
@@ -350,7 +335,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Apps beside a session",
       detail:
-        "A chat held by several apps — Conductor, ChatGPT, Superset — wears their marks on " +
+        "A chat held by several apps — Conductor, ChatGPT — wears their marks on " +
         "its row. A mark with an exact address opens the chat in that app, and an ask can " +
         "name which app it comes forward in.",
     },
@@ -417,8 +402,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Creating workspaces",
       detail:
-        "Where a connected provider documents a creation endpoint — Conductor and Superset " +
-        "today — an ask in conversation, spoken or typed, can create a new " +
+        "Where a connected provider documents a creation endpoint — Conductor today — an " +
+        "ask in conversation, spoken or typed, can create a new " +
         "workspace in a project that provider reports, with an opening task in the " +
         "developer's own words where the project takes one, named as the developer chose or, " +
         "when they chose none, by a short name Luke composes for the work, so a Conductor " +
@@ -426,8 +411,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "project listed as naming its own workspaces — Conductor's local create link — " +
         "takes no name at all. Only reported " +
         "projects can be named, a project that needs a task cannot be created without one, " +
-        "and a provider that reports none takes no ask; a new Superset workspace needs a " +
-        "host, an agent, and an opening task, so a task-less ask for one is refused. A bare " +
+        "and a provider that reports none takes no ask. A bare " +
         "ask for a new agent creates a new workspace — an ask naming an existing workspace " +
         "or session adds an agent beside it instead — and a workspace that lands opens on " +
         "screen by itself once it reports an address.",
@@ -454,7 +438,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Renaming workspaces and chats",
       detail:
-        "Where a provider documents it — a Conductor or Superset-managed workspace, or a " +
+        "Where a provider documents it — a Conductor workspace, or a " +
         "Conductor chat on its own — an ask can rename what is observed to a name in the " +
         "developer's own words. An ask naming the workspace renames the workspace, one " +
         "about the chat renames the chat, and a session whose roster entry allows neither " +
@@ -468,9 +452,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "was positively seen to settle: pressed, or asked of Luke, it files the work away, " +
         "and archiving a Conductor workspace files away every chat in it at once. A row " +
         "mid-turn offers no archive, a session whose roster entry lists no archive control " +
-        "takes no such ask, and local sessions are never archived. A Superset-managed " +
-        "workspace keeps no archive: an ask to archive one is taken as its Delete workspace " +
-        "control — permanent, never filed away.",
+        "takes no such ask, and local sessions are never archived.",
     },
     talkKeyFact(input.hotkey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },

@@ -21,7 +21,6 @@ import {
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import { INTRODUCTION_SEED_BOUNDS, type LiveDiagnostics } from "@sidecar/live";
-import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import {
   isSessionApplicationId,
   isSessionWriteResult,
@@ -46,8 +45,6 @@ import {
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import type { WindowMode } from "@sidecar/surface";
 import {
-  type ActionResult,
-  isActionResult,
   isRecord,
   isWireString,
   SCHEMA_REFUSAL,
@@ -102,12 +99,6 @@ export const ACT_KIND = {
   TRACKER_CANCEL_SIGN_IN: "tracker.cancelSignIn",
   TRACKER_REOPEN_SIGN_IN: "tracker.reopenSignIn",
   TRACKER_DISCONNECT: "tracker.disconnect",
-  SUPERSET_BEGIN_SIGN_IN: "superset.beginSignIn",
-  SUPERSET_SUBMIT_CODE: "superset.submitCode",
-  SUPERSET_CHOOSE_ORGANIZATION: "superset.chooseOrganization",
-  SUPERSET_REOPEN_SIGN_IN: "superset.reopenSignIn",
-  SUPERSET_CANCEL_SIGN_IN: "superset.cancelSignIn",
-  SUPERSET_DISCONNECT: "superset.disconnect",
   UPDATE_CHECK: "update.check",
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
@@ -321,7 +312,6 @@ const settingEntryPayload: ActSchema<SettingEntryPayload> = {
 const answersNothing = wireResult<void>();
 const answersSettings = wireResult<SettingsUpdateResult>();
 const answersAccount = wireResult<AccountSnapshot>();
-const answersSupersetSignIn = wireResult<SupersetSignInSnapshot | undefined>();
 const answersSessionOpen = wireResult<SessionOpenResult>();
 const answersSessionWrite = wireResult<SessionWriteResult>(isSessionWriteResult);
 
@@ -450,28 +440,6 @@ export const ACT = {
   [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
   [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: press("Could not reopen that sign-in on this system."),
   [ACT_KIND.TRACKER_DISCONNECT]: settingsPress("Could not disconnect Linear on this system."),
-  [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: {
-    payload: noPayload,
-    result: answersSupersetSignIn,
-    refusal: "Could not start signing in to Superset on this system.",
-  },
-  [ACT_KIND.SUPERSET_SUBMIT_CODE]: {
-    payload: s.record({ code: s.text({ max: 512 }) }),
-    result: answersSupersetSignIn,
-    refusal: "Could not send that code to Superset on this system.",
-  },
-  [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: {
-    payload: s.record({ slug: exactId }),
-    result: answersSupersetSignIn,
-    refusal: "Could not choose that organization on this system.",
-  },
-  [ACT_KIND.SUPERSET_REOPEN_SIGN_IN]: press("Could not reopen that sign-in on this system."),
-  [ACT_KIND.SUPERSET_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
-  [ACT_KIND.SUPERSET_DISCONNECT]: {
-    payload: noPayload,
-    result: wireResult<ActionResult>(isActionResult),
-    refusal: "Could not disconnect Superset on this system.",
-  },
   [ACT_KIND.UPDATE_CHECK]: {
     payload: noPayload,
     result: wireResult<UpdateSnapshot>(),

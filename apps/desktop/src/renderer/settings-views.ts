@@ -66,7 +66,6 @@ export function credentialSettingsPage(providerId: CredentialProviderId): Settin
 export const PANEL_STAND_DOWN = {
   KEY: "key",
   CONSENT: "consent",
-  SUPERSET: "superset",
   FEEDBACK: "feedback",
 } as const;
 
@@ -74,16 +73,12 @@ export const PANEL_STAND_DOWN = {
  * The two of those three the slot shape is drawn around, never both at once.
  * A note is not one of them: the composer is its own shape, at its own size.
  */
-export type SlotOccupant =
-  | typeof PANEL_STAND_DOWN.KEY
-  | typeof PANEL_STAND_DOWN.CONSENT
-  | typeof PANEL_STAND_DOWN.SUPERSET;
+export type SlotOccupant = typeof PANEL_STAND_DOWN.KEY | typeof PANEL_STAND_DOWN.CONSENT;
 
 /** What stood the panel down, and — for a key — whose row it was begun from. */
 export type StoodDown =
   | { kind: typeof PANEL_STAND_DOWN.KEY; providerId: CredentialProviderId }
   | { kind: typeof PANEL_STAND_DOWN.CONSENT }
-  | { kind: typeof PANEL_STAND_DOWN.SUPERSET }
   | { kind: typeof PANEL_STAND_DOWN.FEEDBACK };
 
 /**
@@ -101,7 +96,6 @@ export function standDownReturnPage(stood: StoodDown): SettingsView {
     case PANEL_STAND_DOWN.KEY:
       return credentialSettingsPage(stood.providerId);
     case PANEL_STAND_DOWN.CONSENT:
-    case PANEL_STAND_DOWN.SUPERSET:
       return SETTINGS_VIEW.CONNECTIONS;
     case PANEL_STAND_DOWN.FEEDBACK:
       return SETTINGS_VIEW.ROOT;

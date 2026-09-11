@@ -222,7 +222,6 @@ function connectionEntries(input: SettingsSearchInput): readonly SettingsSearchE
   const visibility: ConnectionVisibility = {
     settings: input.settings,
     accountDrawn: input.accountDrawn,
-    supersetInstalled: input.superset.installed,
     workspaceProjects: input.workspaceProviders
       .filter((provider) => provider.offersProjects)
       .map((provider) => ({ id: provider.id, name: provider.name })),

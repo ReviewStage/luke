@@ -1,11 +1,4 @@
-import path from "node:path";
-import {
-  PRODUCT_DIAGNOSTIC_KIND,
-  PRODUCT_EVENT,
-  PRODUCT_SUPERSET_ACTION,
-  type ProductDiagnosticKind,
-  productSessionCountBucket,
-} from "@sidecar/analytics";
+import { PRODUCT_EVENT, productSessionCountBucket } from "@sidecar/analytics";
 import type { BrainRoster } from "@sidecar/brain";
 import { sessionContextText } from "@sidecar/brain";
 import {
@@ -21,47 +14,27 @@ import {
   HostedRosterClient,
   HostedSessionMessagesClient,
 } from "@sidecar/hosted";
-import {
-  ADAPTER_DIAGNOSTIC_KIND,
-  type AdapterDiagnosticKind,
-  ObservationHookRegistry,
-  type ProviderRegistration,
-  providerDeclarations,
-  SUPERSET_SIGN_IN_STAGE,
-  SupersetSignIn,
-  supersetPlugin,
-  supersetPressedLink,
-  type WorkspaceHostEnrichment,
-} from "@sidecar/providers";
-import { builtProviders } from "@sidecar/providers/effect";
 import { ObservationLoop } from "@sidecar/runtime";
 import {
+  CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   CreatedWorkspaceOpenTracker,
   isProviderId,
   isSessionApplicationId,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
-  PROVIDER_ID_LIST,
-  type ProviderId,
+  PROVIDER_IDENTITY_BY_ID,
   rosterRelevantSessions,
   type Session,
   type SessionIdentity,
   SessionRoster,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   staleWorkspaceProjectDefaults,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
-import { Config, Effect, Option } from "effect";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { Effect, Option } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -69,7 +42,6 @@ import type { IssuesComposer } from "./compose-issues.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { Environment } from "./effect/seams.js";
 import {
   createSessionActionPerformer,
   type SessionActionPerformer,
@@ -83,14 +55,6 @@ import { drawSnapshotProjects, drawSnapshotRoster } from "./snapshot-roster.js";
  * roster twice and a slower one would show a chat's move a tick late.
  */
 const SESSION_REFRESH_INTERVAL_MS = 60_000;
-
-/** A development override for where the Superset CLI's own directory lives. */
-const SUPERSET_HOME_DIR_VARIABLE = "SUPERSET_HOME_DIR";
-
-const DIAGNOSTIC_COUNTED_AS = {
-  [ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE]: PRODUCT_DIAGNOSTIC_KIND.PASS_FAILURE,
-  [ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE]: PRODUCT_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE,
-} satisfies Record<AdapterDiagnosticKind, ProductDiagnosticKind>;
 
 function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity & WireRecord {
   return (
@@ -110,7 +74,6 @@ export interface ObservationComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
   readonly sessionActions: SessionActionPerformer;
-  readonly supersetCli: ReturnType<typeof supersetPlugin>["cli"];
   /** The brain's transcript reads, each through the service's documented read of the session's conversation. */
   readonly transcripts: SessionTranscriptReads;
   session: (identity: SessionIdentity) => Session | undefined;
@@ -121,7 +84,6 @@ export interface ObservationComposer extends Composer {
   offeredWorkspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
   broadcastWorkspaceProjects: () => Promise<void>;
-  readSupersetWorkspaceHost: () => Promise<WorkspaceHostEnrichment>;
   /** The sessions an action may name: the drawn roster less the voice's own. */
   actableSessions: () => readonly Session[];
   roster: () => BrainRoster;
@@ -141,18 +103,17 @@ export interface ObservationDependencies {
 }
 
 /**
- * The observation concern, over the kernel and environment it takes as tags
- * rather than as constructor arguments; its sibling concerns stay plain
- * arguments because the cycles between them forbid a tag on either side.
+ * The observation concern, over the kernel it takes as a tag rather than as a
+ * constructor argument; its sibling concerns stay plain arguments because the
+ * cycles between them forbid a tag on either side.
  */
 export const composeObservation = (
   dependencies: ObservationDependencies,
-): Effect.Effect<ObservationComposer, never, HostKernelTag | Environment> =>
+): Effect.Effect<ObservationComposer, never, HostKernelTag> =>
   Effect.gen(function* () {
     const { settings, account, issues, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
-    const environment = yield* Environment;
-    const { runMode, report, now, options } = kernel;
+    const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
     const late = yield* lateService<ObservationLinks>();
     const links = (): ObservationLinks => {
@@ -162,20 +123,6 @@ export const composeObservation = (
       }
       return standing.value;
     };
-
-    function reportAdapterDiagnostic(
-      providerId: ProviderId,
-      kind: AdapterDiagnosticKind,
-      error: Error,
-    ): void {
-      report(`Observation diagnostic (${providerId}, ${kind}): ${error.message}`);
-      const counted = DIAGNOSTIC_COUNTED_AS[kind];
-      if (!counted) return;
-      settings.recordProductEvent(PRODUCT_EVENT.SESSION_DIAGNOSTIC, {
-        provider_id: providerId,
-        diagnostic_kind: counted,
-      });
-    }
 
     const sessionRegistry = new SessionRoster();
     const rosterClient = new HostedRosterClient({
@@ -190,38 +137,6 @@ export const composeObservation = (
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       ...account.token,
     });
-    const supersetHomeDirectoryOverride = yield* Effect.orDie(
-      environment.load(Config.option(Config.string(SUPERSET_HOME_DIR_VARIABLE))),
-    );
-    const supersetHomeDirectory =
-      Option.getOrUndefined(supersetHomeDirectoryOverride) ??
-      path.join(options.homeDirectory, ".superset");
-    const superset = supersetPlugin({ homeDirectory: supersetHomeDirectory });
-    const supersetCli = superset.cli;
-    // The hook spool and every provider script live under the explicit state
-    // root, the same directory Luke always kept them in; nothing registers a
-    // hook or watches the spool any more, and the plugins here observe nothing
-    // and answer no read: they stand only for the slices the stop empties.
-    const observationHooks = new ObservationHookRegistry(() => kernel.stateRoot);
-    const providerRegistry = yield* Effect.orDie(
-      Effect.scoped(
-        builtProviders(
-          providerDeclarations({
-            readApiKey: (providerId) => settingsStore.readApiKey(providerId),
-            observationHookInstallation: (providerId) => observationHooks.installation(providerId),
-            onDiagnostic: reportAdapterDiagnostic,
-          }),
-        ),
-      ),
-    );
-    const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
-      (providerId) => {
-        const registration = providerRegistry.get(providerId);
-        if (registration === undefined) throw new Error(`no registration for ${providerId}`);
-        return registration;
-      },
-    );
-
     const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
     let unsubscribeSessions: (() => void) | undefined;
     let lastWorkspaceProjects: string | undefined;
@@ -230,19 +145,6 @@ export const composeObservation = (
     let workspaceProjectsBroadcastGeneration = 0;
     let rosterBroadcast = false;
     let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
-
-    const supersetSignIn = new SupersetSignIn({
-      cli: supersetCli,
-      openExternal: (url) => kernel.openExternalThroughNode(url),
-      onChange: (state) => {
-        kernel.emit(GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED, carried(state));
-        if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
-        void loop.refresh();
-        settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
-          superset_action: PRODUCT_SUPERSET_ACTION.SIGN_IN_COMPLETE,
-        });
-      },
-    });
 
     function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
       return heldWorkspaceProjects.some(
@@ -376,11 +278,9 @@ export const composeObservation = (
       for (const created of createdWorkspaceOpens.claim(sessions, now())) {
         const link = created.detail.link;
         if (!link) continue;
-        kernel
-          .openExternalThroughNode(supersetPressedLink(link, kernel.createId()))
-          .catch((error: Error) => {
-            report(`Created workspace could not be opened: ${error.message}`);
-          });
+        kernel.openExternalThroughNode(link).catch((error: Error) => {
+          report(`Created workspace could not be opened: ${error.message}`);
+        });
       }
     }
 
@@ -416,20 +316,6 @@ export const composeObservation = (
       refresh: () => loop.refresh(),
       recordProductEvent: settings.recordProductEvent,
     });
-
-    async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
-      try {
-        const agentDefault = (
-          await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)
-        )?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-        return await superset.refresh(agentDefault);
-      } catch (error) {
-        report(
-          `Superset observation failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return superset.emptyEnrichment;
-      }
-    }
 
     const loop = new ObservationLoop({
       gate: observationGate,
@@ -502,8 +388,10 @@ export const composeObservation = (
       workspaceProjectsBroadcastGeneration += 1;
       unsubscribeSessions?.();
       unsubscribeSessions = undefined;
-      for (const { plugin } of orderedRegistrations) {
-        sessionRegistry.replaceProvider(plugin.provider, []);
+      // The snapshot fills the roster one cloud provider at a time, so the stop
+      // empties it the same way.
+      for (const id of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
+        sessionRegistry.replaceProvider(PROVIDER_IDENTITY_BY_ID[id], []);
       }
       kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [], settled: true });
       kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: [] });
@@ -571,59 +459,12 @@ export const composeObservation = (
               : [],
           ),
         }),
-      [GATEWAY_METHOD.SUPERSET_STATUS]: async () => {
-        const [installed, connected] = await Promise.all([
-          supersetCli.installed(),
-          supersetCli.connected(),
-        ]);
-        return gatewayOk({ installed, connected });
-      },
-      [GATEWAY_METHOD.SUPERSET_BEGIN_SIGN_IN]: async () => {
-        settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
-          superset_action: PRODUCT_SUPERSET_ACTION.SIGN_IN_START,
-        });
-        return gatewayOk({ state: carried(await supersetSignIn.begin()) });
-      },
-      [GATEWAY_METHOD.SUPERSET_SUBMIT_CODE]: async (params) => {
-        if (!isWireString(params.code)) return invalid("code must be a string");
-        return gatewayOk({ state: carried(await supersetSignIn.submitCode(params.code)) });
-      },
-      [GATEWAY_METHOD.SUPERSET_CHOOSE_ORGANIZATION]: async (params) => {
-        if (!isWireString(params.slug)) return invalid("slug must be a string");
-        return gatewayOk({ state: carried(await supersetSignIn.chooseOrganization(params.slug)) });
-      },
-      [GATEWAY_METHOD.SUPERSET_REOPEN_SIGN_IN]: () => {
-        supersetSignIn.reopen();
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.SUPERSET_CANCEL_SIGN_IN]: () => {
-        supersetSignIn.cancel();
-        settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
-          superset_action: PRODUCT_SUPERSET_ACTION.SIGN_IN_CANCEL,
-        });
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.SUPERSET_DISCONNECT]: async () => {
-        if (!(await supersetCli.signOut())) {
-          return gatewayOk({
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: "Superset could not sign out.",
-          });
-        }
-        supersetSignIn.cancel();
-        void loop.refresh();
-        settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
-          superset_action: PRODUCT_SUPERSET_ACTION.DISCONNECT,
-        });
-        return gatewayOk({ status: ACTION_RESULT_STATUS.ACCEPTED });
-      },
     };
 
     return {
       methods,
       loop,
       sessionActions,
-      supersetCli,
       transcripts,
       session: (identity) => sessionRegistry.get(identity),
       observedSessionCount: () => actableSessions().length,
@@ -632,7 +473,6 @@ export const composeObservation = (
       offeredWorkspaceProjects,
       workspaceProjectOffered,
       broadcastWorkspaceProjects,
-      readSupersetWorkspaceHost,
       actableSessions,
       roster: () => {
         const at = now();
@@ -658,7 +498,6 @@ export const composeObservation = (
       stop: async () => {
         unsubscribeSessions?.();
         unsubscribeSessions = undefined;
-        supersetSignIn.shutdown();
       },
     };
   });

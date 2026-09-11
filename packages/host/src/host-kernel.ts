@@ -20,8 +20,6 @@ export interface HostSeams {
   runMode: RunMode;
   appVersion: string;
   packaged: boolean;
-  /** The user's home, for the Superset CLI's own directory. */
-  homeDirectory: string;
   /** The environment the host reads its development overrides from. */
   environment: NodeJS.ProcessEnv;
   cipher: SecretCipher;

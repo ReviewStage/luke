@@ -11,7 +11,6 @@ export function connectionVisibility(
   return {
     settings: settingsView(),
     accountDrawn: false,
-    supersetInstalled: false,
     workspaceProjects: [],
     ...overrides,
   };
@@ -27,7 +26,6 @@ export function everyConnectionOffered(): ConnectionVisibility {
       appleCalendarAvailable: true,
     }),
     accountDrawn: true,
-    supersetInstalled: true,
   });
 }
 
@@ -78,16 +76,6 @@ export function connectionInput(overrides: Partial<ConnectionInput> = {}): Conne
       onToggleCalendar: accepted,
     },
     linear: { held: false, connecting: false, onSignIn: () => undefined, onDisconnect: accepted },
-    superset: {
-      installed: true,
-      connected: true,
-      held: false,
-      connecting: false,
-      agents: [],
-      onConnect: () => undefined,
-      onDisconnect: accepted,
-      onDefaultAgentChange: accepted,
-    },
     workspaceProviders: [],
     writes: { setting: accepted, entry: accepted, reset: accepted },
     panelOpen: true,

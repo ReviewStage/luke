@@ -214,9 +214,6 @@ export const hostAssemblyLayer: Layer.Layer<
       reconcileSpeech: () => {
         void live.service.reconcile();
       },
-      refreshSupersetWorkspaceHost: async () => {
-        await observation.readSupersetWorkspaceHost();
-      },
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
       refreshIssues: issues.refresh,
       workspaceProjectOffered: observation.workspaceProjectOffered,
@@ -299,10 +296,8 @@ export const hostAssemblyLayer: Layer.Layer<
         return gatewayOk({ accepted: true });
       },
       [GATEWAY_METHOD.CLIENT_BOOTSTRAP]: async () => {
-        const [snapshot, supersetInstalled, supersetConnected, quiet, replay] = await Promise.all([
+        const [snapshot, quiet, replay] = await Promise.all([
           settings.store.snapshot(),
-          observation.supersetCli.installed(),
-          observation.supersetCli.connected(),
           account.capabilitiesActive()
             ? calendars.announcementsQuietNow(now())
             : Promise.resolve(false),
@@ -325,8 +320,6 @@ export const hostAssemblyLayer: Layer.Layer<
           ),
           calendars: carried(account.capabilitiesActive() ? calendars.observedCalendars() : []),
           calendarOnboardingOwed: calendars.gateOwed(),
-          supersetInstalled,
-          supersetConnected,
           sessionReplay: carried(replay),
           voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
           agentTraceEnabled: account.agentTrace !== undefined,

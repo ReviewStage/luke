@@ -1,25 +1,16 @@
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import type { AccountProvider } from "@sidecar/credentials/snapshot";
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
-import type { ObservedWorkspaceProject } from "@sidecar/session";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-services";
 import { ACT_KIND } from "#shared/messages/acts";
-import type { SupersetSignInSnapshot } from "#shared/messages/session";
-import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import { useAct } from "./act";
 import type { ConsentConnectEntry } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { PANEL_PRESENTATION } from "./panel-state";
-import type {
-  AppleCalendarControl,
-  CalendarControl,
-  LinearControl,
-  SupersetControl,
-} from "./settings/controls";
+import type { AppleCalendarControl, CalendarControl, LinearControl } from "./settings/controls";
 import {
   PANEL_STAND_DOWN,
   type SettingsView,
@@ -31,23 +22,14 @@ import { useStateWithRef } from "./use-state-with-ref";
 
 export interface UseConnectionsOptions {
   surface: PanelEntrySurface;
-  /** The three holds the presentation cluster reads without waiting a render. */
+  /** The two holds the presentation cluster reads without waiting a render. */
   credentialHeld: RefObject<boolean>;
   consentConnectHeld: RefObject<boolean>;
-  supersetSignInHeld: RefObject<boolean>;
   /** Where leaving the slot this connection stood down to comes back to. */
   standDownPage: RefObject<SettingsView>;
   /** Brings the panel forward around what a landed sign-in just unlocked. */
   expand: () => void;
   calendars: readonly ObservedAccountCalendars[];
-  superset: {
-    installed: boolean;
-    connected: boolean;
-    signIn: SupersetSignInSnapshot;
-    /** The stored default agent, which lives in the settings document. */
-    defaultAgent: string | undefined;
-  };
-  workspaceProjects: readonly ObservedWorkspaceProject[];
 }
 
 export interface Connections {
@@ -70,9 +52,6 @@ export interface Connections {
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   linear: LinearControl;
-  supersetControl: SupersetControl;
-  beginSupersetSignIn: () => void;
-  cancelSupersetSignIn: () => void;
   signInWait: AccountProvider | undefined;
   signInWaitNow: () => AccountProvider | undefined;
   signInFailure: string | undefined;
@@ -82,12 +61,12 @@ export interface Connections {
 
 /**
  * Every connection the panel offers, and the one slot they share. A key being
- * pasted, a consent page being waited on, a Superset login and an account
- * sign-in are four flows with one shape between them, so they are held
- * together: only here can one refuse to disturb another.
+ * pasted, a consent page being waited on, and an account sign-in are three
+ * flows with one shape between them, so they are held together: only here can
+ * one refuse to disturb another.
  */
 export function useConnections(options: UseConnectionsOptions): Connections {
-  const { act, tell, updateSettingEntry } = useAct();
+  const { act, tell } = useAct();
   /**
    * The bridge acts behind each consent service's wait: the documented
    * connect the slot's send runs, the main-process side a mid-wait cancel
@@ -120,21 +99,11 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       >,
     [act, tell],
   );
-  const {
-    surface,
-    credentialHeld,
-    consentConnectHeld,
-    supersetSignInHeld,
-    standDownPage,
-    expand,
-    calendars,
-    workspaceProjects,
-  } = options;
-  const { presentation: presentationOf, applyPresentation, cancelHover, restorePanel } = surface;
-  const supersetSignIn = options.superset.signIn;
+  const { surface, credentialHeld, consentConnectHeld, standDownPage, expand, calendars } = options;
+  const { presentation: presentationOf, applyPresentation, cancelHover } = surface;
   /**
-   * Which entry the slot shape is drawn around — a key being pasted or either
-   * sign-in being waited out. One shape, three occupants, never together.
+   * Which entry the slot shape is drawn around — a key being pasted or a
+   * consent page being waited out. One shape, two occupants, never together.
    */
   const slotOccupant = useRef<SlotOccupant>(PANEL_STAND_DOWN.KEY);
 
@@ -247,42 +216,6 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     if (waiting?.busy) consentActs[waiting.serviceId].cancel();
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
-
-  // The stage the slot draws is the document's throughout: the flow moves it
-  // as it goes — browser code, exchanging, the organization choice — and each
-  // stage reaches every window before the press's own reply returns.
-  const beginSupersetSignIn = useCallback(() => {
-    if (supersetSignInHeld.current) {
-      if (supersetSignIn.stage === SUPERSET_SIGN_IN_STAGE.FAILURE) {
-        tell(ACT_KIND.SUPERSET_BEGIN_SIGN_IN);
-      }
-      return;
-    }
-    if (credentialHeld.current || consentConnectHeld.current) return;
-    supersetSignInHeld.current = true;
-    slotOccupant.current = PANEL_STAND_DOWN.SUPERSET;
-    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
-    cancelHover();
-    applyPresentation(PANEL_PRESENTATION.SLOT);
-    tell(ACT_KIND.SUPERSET_BEGIN_SIGN_IN);
-  }, [
-    applyPresentation,
-    cancelHover,
-    consentConnectHeld,
-    credentialHeld,
-    standDownPage,
-    supersetSignIn.stage,
-    supersetSignInHeld,
-  ]);
-
-  const cancelSupersetSignIn = useCallback(() => {
-    if (!supersetSignInHeld.current) return;
-    tell(ACT_KIND.SUPERSET_CANCEL_SIGN_IN);
-    supersetSignInHeld.current = false;
-    if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
-  }, [presentationOf, restorePanel, supersetSignInHeld]);
-
-  const disconnectSuperset = useCallback(() => act(ACT_KIND.SUPERSET_DISCONNECT), []);
 
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
@@ -445,57 +378,12 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
   }, [expand, presentationOf, setSignInWait, signInWaitNow]);
 
-  const changeSupersetAgentDefault = useCallback(
-    (agent: string | undefined) =>
-      updateSettingEntry(
-        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        SUPERSET_WORKSPACE_PROVIDER_ID,
-        agent === undefined ? undefined : { agent },
-      ),
-    [],
-  );
-  // A Superset sign-in carried through to the end gives the panel back around
-  // the newly connected service. Only the wait's own slot is answered: a
-  // connection the document reports for any other reason has no slot standing
-  // to come back from.
-  useEffect(() => {
-    if (!supersetSignInHeld.current) return;
-    if (supersetSignIn.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
-    supersetSignInHeld.current = false;
-    if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
-  }, [supersetSignIn, presentationOf, restorePanel, supersetSignInHeld]);
-
   const reopenConsentPage = useCallback(() => {
     const waiting = consentConnect.latest()?.serviceId;
     if (!waiting) return;
     const acts = consentActs[waiting];
     if ("reopen" in acts) acts.reopen();
   }, [consentConnect.latest]);
-
-  const supersetAgents = useMemo(
-    () => [
-      ...new Set(
-        workspaceProjects
-          .filter((project) => project.providerId === SUPERSET_WORKSPACE_PROVIDER_ID)
-          .flatMap((project) => project.spawnableAgents ?? []),
-      ),
-    ],
-    [workspaceProjects],
-  );
-
-  const supersetControl: SupersetControl = {
-    installed: options.superset.installed,
-    connected: options.superset.connected,
-    held: credentialHeld.current || consentConnectHeld.current,
-    connecting: supersetSignInHeld.current,
-    onConnect: beginSupersetSignIn,
-    onDisconnect: disconnectSuperset,
-    agents: supersetAgents,
-    ...(options.superset.defaultAgent
-      ? { defaultAgent: options.superset.defaultAgent }
-      : undefined),
-    onDefaultAgentChange: changeSupersetAgentDefault,
-  };
 
   return {
     credentials,
@@ -532,9 +420,6 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
       onDisconnect: disconnectLinear,
     },
-    supersetControl,
-    beginSupersetSignIn,
-    cancelSupersetSignIn,
     signInWait,
     signInWaitNow,
     signInFailure,

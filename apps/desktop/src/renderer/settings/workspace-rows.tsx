@@ -10,7 +10,7 @@ import type { AppSettingsView } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
 import { APP_SETTING_ID } from "../luke-guide";
 import { defaultProjectRowId } from "../settings-anchors";
-import type { SupersetControl, WorkspaceProviderOption } from "./controls";
+import type { WorkspaceProviderOption } from "./controls";
 import { SelectRow } from "./select-row";
 import { useSettingWrite } from "./use-setting-write";
 import type { SettingsWrites } from "./writes";
@@ -216,34 +216,6 @@ export function WorkspaceProjectRow({
           providerId,
           next === PROVIDER_DEFAULT_VALUE ? undefined : next,
         )
-      }
-    />
-  );
-}
-
-/**
- * Which agent new Superset sessions run: the choice is the CLI's own list of
- * agents, so it means nothing until the login above it connects, and the first
- * option is no choice at all — an ambiguous ask is asked about, the same words
- * the Default project row uses for the same state.
- */
-export function SupersetAgentRow({ control }: { control: SupersetControl }): React.JSX.Element {
-  return (
-    <SelectRow
-      label="New Superset sessions run"
-      anchor={APP_SETTING_ID.SUPERSET_AGENT}
-      ariaLabel="Default agent for new Superset sessions"
-      changed={control.defaultAgent !== undefined}
-      value={control.defaultAgent ?? PROVIDER_DEFAULT_VALUE}
-      options={[
-        { value: PROVIDER_DEFAULT_VALUE, label: "Ask each time" },
-        ...control.agents.map((agent) => ({ value: agent, label: agent })),
-      ]}
-      parse={(raw) =>
-        raw === PROVIDER_DEFAULT_VALUE || control.agents.includes(raw) ? raw : undefined
-      }
-      onChange={(agent) =>
-        control.onDefaultAgentChange(agent === PROVIDER_DEFAULT_VALUE ? undefined : agent)
       }
     />
   );

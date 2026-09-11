@@ -27,8 +27,6 @@ export class RunMode extends Context.Tag("@sidecar/host/RunMode")<RunMode, RunMo
 export interface AppIdentityFacts {
   readonly appVersion: string;
   readonly packaged: boolean;
-  /** The user's home, for the Superset CLI's own directory. */
-  readonly homeDirectory: string;
 }
 
 export class AppIdentity extends Context.Tag("@sidecar/host/AppIdentity")<
@@ -134,7 +132,6 @@ export const hostSeamLayers = (options: HostSeams): Layer.Layer<HostSeamTags> =>
     Layer.succeed(AppIdentity, {
       appVersion: options.appVersion,
       packaged: options.packaged,
-      homeDirectory: options.homeDirectory,
     }),
     Layer.succeed(
       Environment,

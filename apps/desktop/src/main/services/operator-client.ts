@@ -4,7 +4,6 @@ import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
-import { SUPERSET_SIGN_IN_STAGE } from "@sidecar/providers/superset/sign-in-stage";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { type LateRef, lateRef } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
@@ -124,18 +123,6 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     }),
     gateway.host.onAnnouncementsHeldChanged((held) => {
       state.update({ announcements: { held } });
-    }),
-    // The stage is also what answers for the connection between two host
-    // reads: the bootstrap probes the CLI's own login configuration, and a
-    // sign-in carried through — or a sign-out — moves this first.
-    gateway.host.onSupersetSignInChanged((signIn) => {
-      state.update({
-        superset: {
-          ...state.snapshot().superset,
-          connected: signIn.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED,
-          signIn,
-        },
-      });
     }),
     gateway.host.onCalendarOnboardingChanged((calendarOwed) => {
       state.update({ onboarding: { calendarOwed } });

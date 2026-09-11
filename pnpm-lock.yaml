@@ -746,9 +746,6 @@ importers:
       '@sidecar/memory':
         specifier: workspace:*
         version: link:../memory
-      '@sidecar/providers':
-        specifier: workspace:*
-        version: link:../providers
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime

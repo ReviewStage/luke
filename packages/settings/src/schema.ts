@@ -564,16 +564,11 @@ export const APP_SETTING_SCHEMA = {
     // Drawn by `WorkspaceAgentRow`, whose options are a provider's own
     // documented model table rather than a set the build fixes here.
     rows: SETTING_ROWS.BESPOKE,
-    ids: [
-      APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
-      APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-      APP_SETTING_ID.SUPERSET_AGENT,
-    ],
+    ids: [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
     guide: (settings) => {
       // SAFETY: The field's own guard is what put these defaults in the store.
       const defaults = settings("workspaceAgentDefaults") as WorkspaceAgentDefaults | undefined;
       const chosen = defaults?.[PROVIDER_ID.CONDUCTOR];
-      const supersetAgent = defaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
       const chosenAgent = chosen
         ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find((entry) => entry.agent === chosen.agent)
         : undefined;
@@ -622,27 +617,13 @@ export const APP_SETTING_SCHEMA = {
               },
             ]
           : []),
-        {
-          id: APP_SETTING_ID.SUPERSET_AGENT,
-          label: "New Superset sessions run",
-          description:
-            "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
-          kind: APP_SETTING_KIND.CHOICE,
-          value: supersetAgent ?? ASK_EACH_TIME_CHOICE,
-          choices: [ASK_EACH_TIME_CHOICE, ...(supersetAgent ? [supersetAgent] : [])],
-          defaultValue: ASK_EACH_TIME_CHOICE,
-          adjustable: false,
-          manual: `${CONNECTIONS_PAGE}, under Superset`,
-        },
       ];
     },
-    // Three rows under three different conditions, so the field answers per
-    // id rather than as one row that is drawn or not.
+    // Two rows under one condition, answered per id so the field can hold
+    // a row drawn under another later.
     visibleById: {
       [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: conductorAgentRowDrawn,
       [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: conductorAgentRowDrawn,
-      [APP_SETTING_ID.SUPERSET_AGENT]: (view) =>
-        view.superset.connected && view.superset.agents.length > 0,
     },
     entry: {
       // Local Conductor is deliberately not a key: its creation link

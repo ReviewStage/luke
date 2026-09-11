@@ -70,7 +70,6 @@ export function settingsVisibility(
   return {
     voiceControlsDrawn: false,
     accountDrawn: false,
-    superset: { installed: false, connected: false, agents: [] },
     workspaceProviders: [],
     ...rest,
     settings: settingsView(settings),

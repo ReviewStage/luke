@@ -190,8 +190,6 @@ const BOOT: HostBootstrap = {
   workspaceProjects: [],
   calendars: [],
   calendarOnboardingOwed: false,
-  supersetInstalled: true,
-  supersetConnected: false,
   sessionReplay: { permitted: true, accountId: "person" },
   voiceAvailable: true,
   agentTraceEnabled: true,
@@ -202,7 +200,6 @@ test("a host bootstrap lands in the document as the host answered it", () => {
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   const held = app.snapshot();
   assert.equal(held.run.agentTraceEnabled, true);
-  assert.equal(held.superset.installed, true);
   assert.equal(held.sessions.settled, false);
   assert.deepEqual(held.conversation, { groups: [], settled: true });
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });

@@ -12,7 +12,7 @@ import type { DesktopConfig } from "./services/desktop-config";
  */
 export interface BootstrapApp {
   setName: (name: string) => void;
-  getPath: (name: "appData" | "home") => string;
+  getPath: (name: "appData") => string;
   setPath: (name: "userData" | "sessionData", directory: string) => void;
   getVersion: () => string;
   readonly isPackaged: boolean;
@@ -81,7 +81,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     runMode,
     appVersion: app.getVersion(),
     packaged: app.isPackaged,
-    homeDirectory: app.getPath("home"),
     environment,
     platform: process.platform,
     resourceDirectory: dependencies.resourceDirectory,

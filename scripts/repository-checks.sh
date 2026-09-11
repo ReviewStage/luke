@@ -248,21 +248,23 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# The brain's acts and reads leave this Mac through the service, never through
-# a provider adapter held here: the brain wiring under `packages/host/src/brain`
-# and the performer every admitted action passes through import nothing from
-# `@sidecar/providers`, so no path from a turn can reach a provider plugin, a
-# CLI, or a local file without the service's admission in between. The
-# observation composer still constructs the plugins for the seams outside the
-# brain, and is deleted with them.
-brain_provider_imports=$(grep -rEn 'from "@sidecar/providers(/[^"]*)?"' \
-    --include='*.ts' --exclude='*.test.ts' \
-    "$SIDECAR_REPO_ROOT"/packages/host/src/brain \
-    "$SIDECAR_REPO_ROOT"/packages/host/src/session-action-performer.ts \
-    "$SIDECAR_REPO_ROOT"/packages/host/src/session-row-actions.ts || true)
-if [[ -n "$brain_provider_imports" ]]; then
-    printf 'error: the brain path reaches a provider adapter outside the service:\n%s\n' \
-        "$brain_provider_imports" >&2
+# Everything this Mac observes, draws, and acts on arrives through the
+# service, never through a provider adapter held here: the host and the
+# desktop import nothing from `@sidecar/providers`, so no path from a turn, a
+# row, or a window can reach a provider plugin, a CLI, or a local file without
+# the service's admission in between. The web functions still compile the
+# Conductor cloud adapter out of that package by relative path, which is the
+# service's own read and not this Mac's. The one file excluded holds the
+# spoken introduction's keyless local peek, whose removal is a product
+# decision still open; it is the last import this fence tolerates.
+host_provider_imports=$(grep -rEn 'from "@sidecar/providers(/[^"]*)?"' \
+    --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
+    --exclude='register-desktop-ipc.ts' \
+    "$SIDECAR_REPO_ROOT"/packages/host/src \
+    "$SIDECAR_REPO_ROOT"/apps/desktop/src || true)
+if [[ -n "$host_provider_imports" ]]; then
+    printf 'error: this Mac reaches a provider adapter outside the service:\n%s\n' \
+        "$host_provider_imports" >&2
     exit 1
 fi
 
