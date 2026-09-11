@@ -1,6 +1,10 @@
 // The one consent trip every provider Luke asks consent of runs: the loopback,
 // the PKCE, and the landing page are all its, so no two of Luke's sign-ins can
 // drift into different servers, weaker verifiers, or differently dressed tabs.
+import * as HttpBody from "@effect/platform/HttpBody";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
+import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
   LOOPBACK_CONNECTION_SOURCE,
   type LoopbackConsent,
@@ -8,7 +12,9 @@ import {
   loopbackConsent,
   unofferedConsent,
 } from "@sidecar/credentials";
-import { isWireString, type UnparsedWireValue, unparsedWire, wireRecord } from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue, WireValueSchema, wireRecord } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Data, Duration, Effect } from "effect";
 
 /**
  * The sign-in behind the Google Calendar row: Google's OAuth flow for an
@@ -104,6 +110,42 @@ const CALLBACK_PATH = "/oauth/callback";
 
 const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 
+/**
+ * The range a status is answered ok in, restated because what is read here is
+ * a status rather than a `Response`.
+ */
+const OK_STATUS = { FIRST: 200, PAST: 300 } as const;
+
+function answeredOk(status: number): boolean {
+  return status >= OK_STATUS.FIRST && status < OK_STATUS.PAST;
+}
+
+/** Why the exchange did not produce a grant, named rather than a bare throw. */
+const EXCHANGE_FAULT = {
+  REFUSED: "refused",
+  NO_TOKEN: "no-token",
+  NETWORK: "network",
+} as const;
+
+type ExchangeFault = (typeof EXCHANGE_FAULT)[keyof typeof EXCHANGE_FAULT];
+
+/**
+ * The sentence a caller reads for each fault, kept exactly as the exchange
+ * always answered it: nothing here reads this build's own words, so the
+ * fault is what a caller reasons about and the sentence is what a person
+ * reads.
+ */
+const EXCHANGE_FAULT_REASON = {
+  [EXCHANGE_FAULT.REFUSED]: "Google refused the sign-in exchange.",
+  [EXCHANGE_FAULT.NO_TOKEN]: "Google answered the sign-in without a token.",
+  [EXCHANGE_FAULT.NETWORK]: "The sign-in exchange with Google did not complete.",
+} satisfies Record<ExchangeFault, string>;
+
+/** One exchange ended before a grant was read out of it. */
+class GoogleCalendarExchangeError extends Data.TaggedError("GoogleCalendarExchangeError")<{
+  readonly fault: ExchangeFault;
+}> {}
+
 /** The grant one finished sign-in produces. Storing it is the caller's act. */
 export interface GoogleCalendarGrant {
   refreshToken: string;
@@ -127,7 +169,7 @@ export interface GoogleCalendarSignInOptions {
 
 /** Reads the tokens Google answered the exchange with, trusting no shape. */
 function tokensFrom(payload: UnparsedWireValue): GoogleCalendarGrant | undefined {
-  const record = wireRecord(unparsedWire(payload));
+  const record = wireRecord(payload);
   if (!record) return undefined;
   const refreshToken = record.refresh_token;
   const accessToken = record.access_token;
@@ -137,15 +179,14 @@ function tokensFrom(payload: UnparsedWireValue): GoogleCalendarGrant | undefined
 }
 
 /**
- * Trades the code for a grant at Google's token endpoint. Google's desktop
- * client type expects the secret it documents as non-confidential, which is
- * why a run holding no secret is offered no sign-in at all.
+ * The exchange as an effect over the ambient `HttpClient`: the request the
+ * build fixes, a deadline that covers the read as well as the send, and a
+ * refusal named by its fault rather than a caught throw.
  */
-export async function exchangeGoogleCode(
+function exchangeEffect(
   config: GoogleCalendarSignInConfig,
   input: { code: string; redirectUri: string; codeVerifier: string },
-  fetchImplementation: typeof fetch = fetch,
-): Promise<GoogleCalendarSignInOutcome> {
+): Effect.Effect<GoogleCalendarGrant, GoogleCalendarExchangeError, HttpClient.HttpClient> {
   const body = new URLSearchParams({
     code: input.code,
     client_id: config.clientId,
@@ -153,21 +194,57 @@ export async function exchangeGoogleCode(
     redirect_uri: input.redirectUri,
     grant_type: "authorization_code",
     code_verifier: input.codeVerifier,
+  }).toString();
+  const request = HttpClientRequest.post(GOOGLE_TOKEN_URL, {
+    body: HttpBody.raw(body, { contentType: "application/x-www-form-urlencoded" }),
   });
-  try {
-    const response = await fetchImplementation(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) return { reason: "Google refused the sign-in exchange." };
-    const tokens = tokensFrom(await response.json());
-    if (!tokens) return { reason: "Google answered the sign-in without a token." };
+  const networkFault = () => new GoogleCalendarExchangeError({ fault: EXCHANGE_FAULT.NETWORK });
+
+  return Effect.gen(function* () {
+    const response = yield* HttpClient.execute(request).pipe(
+      Effect.catchAll(() => Effect.fail(networkFault())),
+    );
+    if (!answeredOk(response.status)) {
+      return yield* Effect.fail(new GoogleCalendarExchangeError({ fault: EXCHANGE_FAULT.REFUSED }));
+    }
+    const payload = yield* HttpClientResponse.schemaBodyJson(WireValueSchema)(response).pipe(
+      Effect.catchAll(() => Effect.fail(networkFault())),
+    );
+    const tokens = tokensFrom(payload);
+    if (!tokens)
+      return yield* Effect.fail(
+        new GoogleCalendarExchangeError({ fault: EXCHANGE_FAULT.NO_TOKEN }),
+      );
     return tokens;
-  } catch {
-    return { reason: "The sign-in exchange with Google did not complete." };
-  }
+  }).pipe(
+    Effect.timeoutFail({
+      duration: Duration.millis(TOKEN_REQUEST_TIMEOUT_MS),
+      onTimeout: networkFault,
+    }),
+  );
+}
+
+/**
+ * Trades the code for a grant at Google's token endpoint. Google's desktop
+ * client type expects the secret it documents as non-confidential, which is
+ * why a run holding no secret is offered no sign-in at all.
+ */
+export function exchangeGoogleCode(
+  config: GoogleCalendarSignInConfig,
+  input: { code: string; redirectUri: string; codeVerifier: string },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<GoogleCalendarSignInOutcome> {
+  return Effect.runPromise(
+    Effect.provide(
+      Effect.match(exchangeEffect(config, input), {
+        onFailure: (error): GoogleCalendarSignInOutcome => ({
+          reason: EXCHANGE_FAULT_REASON[error.fault],
+        }),
+        onSuccess: (grant): GoogleCalendarSignInOutcome => grant,
+      }),
+      layerFromCloudFetch((url, init) => fetchImplementation(url, init)),
+    ),
+  );
 }
 
 /**

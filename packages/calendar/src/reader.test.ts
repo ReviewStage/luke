@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
 import { test } from "vitest";
+import { CALENDAR_LOOKAHEAD_MS, MAXIMUM_MEETING_LENGTH_MS } from "./calendar.js";
 import { type CalendarAccountCredential, GoogleCalendarReader } from "./reader.js";
 
 const NOW = Date.UTC(2026, 7, 17, 12, 0, 0);
@@ -105,8 +106,15 @@ test("an account's pass lists its calendars and reads only their busy times", as
     requests.map((request) => request.url),
     [TOKEN_URL, CALENDAR_LIST_URL, FREEBUSY_URL],
   );
+  // The free/busy document the build fixes: the window's two instants and
+  // only the calendar ids this same pass's list reported, and nothing else.
   const read = JSON.parse(requests[2]?.body ?? "{}");
-  assert.deepEqual(read.items, [{ id: "work@example.com" }, { id: "team-calendar" }]);
+  assert.deepEqual(read, {
+    timeMin: new Date(NOW - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
+    timeMax: new Date(NOW + CALENDAR_LOOKAHEAD_MS).toISOString(),
+    items: [{ id: "work@example.com" }, { id: "team-calendar" }],
+  });
+  assert.equal(requests[2]?.contentType, "application/json");
   assert.equal(requests[2]?.authorization, "Bearer at-for-1//work-grant");
 });
 
