@@ -77,7 +77,7 @@ export interface WindowService extends DesktopService {
    * window asked.
    */
   windowFactsFor: (sender: WebContents) => AppWindowFacts;
-  /** Hands a payload to the voice window alone, the one receiver of offers and withdrawals. */
+  /** Hands a payload to the voice window alone, the one peer of the host's live session. */
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
   /**
    * The opaque name one window's writes travel to the host under. It names
@@ -153,18 +153,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
   });
   const introductionPlaying = () => state.snapshot().introduction.playing;
-  /**
-   * The hidden window that holds the live conversation. Its receiver epochs
-   * are the host's: each load asks the host to begin one, and a close or
-   * reload ends it there, so a claim the renderer makes names an epoch the
-   * host issued.
-   */
+  /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({
     runMode,
-    receiver: {
-      begin: () => void operator.host.beginReceiver(),
-      reset: () => void operator.host.resetReceiver(),
-    },
     preloadPath,
     rendererHtmlPath: voiceHtmlPath,
     rendererUrl: voiceUrl,
@@ -173,8 +164,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // The window that held the exchange is gone, so what every panel draws
       // in its place is an idle voice; the document says so by holding no
       // view at all.
-      const { epoch } = state.snapshot().voice;
-      state.update({ voice: { ...(epoch !== undefined ? { epoch } : undefined) } });
+      state.update({ voice: {} });
       panels.setVoiceExchange(false);
     },
     onGaveUp: (reason) => {

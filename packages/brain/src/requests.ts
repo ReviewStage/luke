@@ -359,12 +359,6 @@ export const BRAIN_ASK_REFUSAL = {
     "My memory was written by a different version of me, so I can't take that on until it's cleared or that version is back.",
 } as const satisfies Record<BrainSubmissionRejection, string>;
 
-/** What the voice says while a run is still going when its wait ran out. */
-export const BRAIN_ASK_PENDING_NOTE = "I'm still working on that. I'll tell you when it's done.";
-
-/** What the voice says of a spoken ask the developer stopped before its reply formed. */
-export const BRAIN_ASK_STOPPED_NOTE = "That ask was stopped before I finished it.";
-
 function actionsPhrase(count: number): string {
   return count === 1 ? "one thing you asked" : `${count} things you asked`;
 }

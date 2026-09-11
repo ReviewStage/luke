@@ -24,7 +24,6 @@
     "@sidecar/gateway": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/live": "workspace:*",
-    "@sidecar/realtime": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",

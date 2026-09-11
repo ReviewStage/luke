@@ -85,7 +85,6 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     }),
     createId: () => randomUUID(),
     report: config.report,
-    sendToVoice: (channel, payload) => links.get().sendToVoice(channel, payload),
     state,
     node: dependencies.node,
   });

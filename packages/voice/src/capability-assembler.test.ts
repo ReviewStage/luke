@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { LIVE_SESSION_OUTCOME } from "@sidecar/live";
-import { REALTIME_MINT_OUTCOME } from "@sidecar/realtime";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import {
   resolveVoiceCapability,
@@ -78,6 +77,7 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
       ...settingsFor({ source: VOICE_SOURCE.KEY }),
       readApiKey: async () => key,
     },
+    openSocket: scriptedOpenSocket([]).openSocket,
     credentialsUsable: () => true,
     fixtureRun: () => false,
     accountSignedIn: () => false,
@@ -87,12 +87,12 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
   });
 
   await assembler.apply();
-  assert.ok(assembler.realtimeCredentials);
+  assert.ok(assembler.liveSessions);
   assert.ok(assembler.brainModel);
 
   key = undefined;
   await assembler.apply();
-  assert.equal(assembler.realtimeCredentials, undefined);
+  assert.equal(assembler.liveSessions, undefined);
   assert.equal(assembler.brainModel, undefined);
 });
 
@@ -147,10 +147,10 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
 
   await assembler.apply();
   assert.equal(keyReads, 0);
-  assert.equal(assembler.realtimeCredentials, undefined);
+  assert.equal(assembler.liveSessions, undefined);
   assert.equal(
-    assembler.unavailableDiagnostics.lastOutcome,
-    REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE,
+    assembler.unavailableLiveDiagnostics.lastOutcome,
+    LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE,
   );
 });
 
@@ -167,13 +167,14 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
   });
 
   await assembler.apply();
-  assert.equal(assembler.realtimeCredentials, undefined);
-  assert.equal(assembler.unavailableDiagnostics.fixtureMode, false);
-  assert.equal(assembler.unavailableDiagnostics.lastOutcome, REALTIME_MINT_OUTCOME.NO_API_KEY);
+  assert.equal(assembler.liveSessions, undefined);
+  assert.equal(assembler.unavailableLiveDiagnostics.fixtureMode, false);
+  assert.equal(assembler.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_API_KEY);
 });
 
 test("the brain follows the voice source: hosted on an account, direct on a key, none in a fixture run", async () => {
   const seams = {
+    openSocket: scriptedOpenSocket([]).openSocket,
     credentialsUsable: () => true,
     fixtureRun: () => false,
     accountSignedIn: () => true,
@@ -187,7 +188,7 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
     settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT, key: "stored-but-unchosen" }),
   });
   await hosted.apply();
-  assert.ok(hosted.realtimeCredentials);
+  assert.ok(hosted.liveSessions);
   // The service names the model, and the stored key is never read for it.
   assert.ok(hosted.brainModel);
   assert.equal(hosted.brainModel?.model, undefined);
@@ -276,6 +277,6 @@ test("live sessions follow the voice source, and stand only where a socket seam 
     settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
   });
   await withoutSeam.apply();
-  assert.ok(withoutSeam.realtimeCredentials);
+  assert.ok(withoutSeam.brainModel);
   assert.equal(withoutSeam.liveSessions, undefined);
 });

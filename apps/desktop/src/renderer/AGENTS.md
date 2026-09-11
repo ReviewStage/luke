@@ -5,7 +5,7 @@
 The renderer reaches the main process through the preload bridge alone, so
 `#shared/bridge`, the domain modules under `#shared/messages/`, and the wire
 vocabularies the packages own (`@sidecar/settings/wire`,
-`@sidecar/brain/requests-wire`, `@sidecar/realtime/speech`) are the widest
+`@sidecar/brain/requests-wire`) are the widest
 doors it has. A `#main/` import compiles and
 bundles happily and then fails in the browser, and a `node:` import does the
 same. Neither is a mistake the type checker or esbuild can report, because

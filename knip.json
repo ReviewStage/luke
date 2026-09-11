@@ -12,7 +12,7 @@
     "swiftc",
     "electron"
   ],
-  "ignore": [".opencode/**"],
+  "ignore": [".opencode/**", "packages/realtime/src/speech-wire.ts"],
   "workspaces": {
     ".": {
       "entry": [

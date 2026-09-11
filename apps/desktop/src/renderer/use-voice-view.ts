@@ -178,7 +178,6 @@ export interface VoiceViewState {
   /** Cancels one run the developer no longer wants. */
   cancelBrainAsk: (runId: string) => void;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
-  discardListening: () => void;
   stopSpeaking: () => void;
   requestMicrophoneAccess: () => void;
   /** Clears the visible history, the next call's context, and the stored file. */
@@ -268,9 +267,6 @@ export function useVoiceView(): VoiceViewState {
   const cancelBrainAsk = useCallback((runId: string) => {
     void act(ACT_KIND.BRAIN_CANCEL_ASK, { runId }).catch(() => undefined);
   }, []);
-  const discardListening = useCallback(() => {
-    tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.DISCARD_LISTENING });
-  }, []);
   const stopSpeaking = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
   }, []);
@@ -297,7 +293,6 @@ export function useVoiceView(): VoiceViewState {
     askLuke,
     brainRequests,
     cancelBrainAsk,
-    discardListening,
     stopSpeaking,
     requestMicrophoneAccess,
     clearConversationLines,

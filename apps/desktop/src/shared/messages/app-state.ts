@@ -88,8 +88,6 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
-  /** The receiver epoch the host minted for this attachment; the voice window alone reads it. */
-  epoch?: number;
   /**
    * Where the host's one live session stands, as its last change event said:
    * the phase, and the id once the provider named one. The voice window acts

@@ -84,9 +84,6 @@ importers:
       '@sidecar/providers':
         specifier: workspace:*
         version: link:../../packages/providers
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../../packages/realtime
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -834,9 +831,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/realtime':
-        specifier: workspace:*
-        version: link:../realtime
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime

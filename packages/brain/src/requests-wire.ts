@@ -1,7 +1,6 @@
 import type { CarriedAppAction } from "@sidecar/actions";
 import { maximumTypedAskLength } from "@sidecar/session";
 import {
-  type ACTION_RESULT_STATUS,
   isRecord,
   isWireNumber,
   isWireString,
@@ -79,19 +78,6 @@ export function brainRequestPending(snapshot: BrainRequestSnapshot): boolean {
   );
 }
 
-/** The tool output's status when the run is still going: neither an answer nor a refusal. */
-export const BRAIN_ASK_PENDING_STATUS = "pending";
-
-/**
- * What the voice's `ask_brain` tool comes back with: the reply for the voice
- * to say, the honest note that the run is still going, or a bounded refusal
- * the voice can say instead.
- */
-export type BrainAskResult =
-  | { status: typeof ACTION_RESULT_STATUS.ACCEPTED; briefing: string; runId: string }
-  | { status: typeof BRAIN_ASK_PENDING_STATUS; note: string }
-  | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string };
-
 /**
  * One ended run whose reply the main process offers the voice window to
  * speak. The words do not travel with the offer: the window claims the
@@ -105,7 +91,7 @@ export interface BrainReplyOffer {
   epoch: number;
 }
 
-export function isReceiverEpoch(value: UnparsedWireValue): value is number {
+function isReceiverEpoch(value: UnparsedWireValue): value is number {
   return isWireNumber(value) && Number.isInteger(value) && value >= 0;
 }
 

@@ -5,9 +5,8 @@ import {
   openAiModelAdapter,
 } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { HOSTED_SERVICE_PATH, HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
+import { HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
 import type { LiveDiagnostics } from "@sidecar/live";
-import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
 import type { EmbeddingAdapter, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   APP_SETTING_SCHEMA,
@@ -23,8 +22,6 @@ import {
   unavailableLiveDiagnostics,
 } from "./live-session-source.js";
 import type { OpenSocket } from "./live-socket.js";
-import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
-import { hostedRealtimeCredentialMinter, type RealtimeCredentialMinter } from "./service-mint.js";
 
 export interface VoiceCapabilityInput {
   credentialsUsable: boolean;
@@ -120,9 +117,7 @@ export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
   #brainModel: ModelAdapter | undefined;
   #embeddingAdapter: EmbeddingAdapter | undefined;
-  #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #liveSessions: LiveSessionSource | undefined;
-  #unavailableDiagnostics: RealtimeDiagnostics;
   #unavailableLiveDiagnostics: LiveDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
   #applications = 0;
@@ -130,10 +125,6 @@ export class VoiceCapabilityAssembler {
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
-    this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
-      fixtureMode: options.fixtureRun(),
-      apiKeyConfigured: false,
-    });
     this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
       fixtureMode: options.fixtureRun(),
       apiKeyConfigured: false,
@@ -175,18 +166,10 @@ export class VoiceCapabilityAssembler {
     };
   }
 
-  get realtimeCredentials(): RealtimeCredentialMinter | undefined {
-    return this.#realtimeCredentials;
-  }
-
-  get unavailableDiagnostics(): RealtimeDiagnostics {
-    return this.#unavailableDiagnostics;
-  }
-
   /**
-   * Where a GPT Live session comes from under the same policy the Realtime
-   * mint follows: the developer's key straight to OpenAI, or the signed-in
-   * account through Luke's voice service. Nothing when neither stands, or
+   * Where a GPT Live session comes from under the same policy as the brain's
+   * model: the developer's key straight to OpenAI, or the signed-in account
+   * through Luke's voice service. Nothing when neither stands, or
    * when the host handed no socket seam.
    */
   get liveSessions(): LiveSessionSource | undefined {
@@ -242,7 +225,6 @@ export class VoiceCapabilityAssembler {
       : policy.useHosted
         ? new HostedModelAdapter(seams)
         : undefined;
-    const preferences = voice ? { voice } : {};
     this.#brainModel =
       builtBrainModel && this.#options.wrapBrainModel
         ? this.#options.wrapBrainModel(builtBrainModel)
@@ -256,15 +238,6 @@ export class VoiceCapabilityAssembler {
         : policy.useHosted
           ? new HostedEmbeddingAdapter(seams)
           : undefined;
-    this.#realtimeCredentials = apiKey
-      ? openAiRealtimeCredentials(apiKey, preferences)
-      : policy.useHosted
-        ? hostedRealtimeCredentialMinter({ ...seams, ...preferences })
-        : undefined;
-    this.#unavailableDiagnostics = unavailableRealtimeDiagnostics({
-      fixtureMode: this.#options.fixtureRun(),
-      apiKeyConfigured: apiKey !== undefined,
-    });
     const openSocket = this.#options.openSocket;
     this.#liveSessions = !openSocket
       ? undefined
@@ -289,29 +262,18 @@ export class VoiceCapabilityAssembler {
       apiKeyConfigured: apiKey !== undefined,
     });
     this.#voiceSource = policy.source;
-    if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);
     for (const listener of this.#applied) listener();
     return { latest: true, isCurrent };
   }
 
-  #warmHostedVoice(): void {
-    const fetcher = this.#options.fetch ?? fetch;
-    fetcher(`${this.#options.hostedServiceBaseUrl}${HOSTED_SERVICE_PATH.VOICE_MINT}`, {
-      method: "GET",
-      signal: AbortSignal.timeout(10_000),
-    }).catch(() => undefined);
-  }
-
   #report(apiKeyConfigured: boolean): void {
     const write = this.#options.report ?? ((message: string) => process.stderr.write(message));
-    if (this.#realtimeCredentials) {
-      const report = this.#realtimeCredentials.diagnostics();
+    if (this.#liveSessions) {
+      const report = this.#liveSessions.diagnostics();
       write(`Luke voice: enabled (${report.hosted ? "hosted, " : ""}${report.model})\n`);
     } else {
-      write(
-        `Luke voice: unavailable — ${realtimeMintExplanation(this.#unavailableDiagnostics.lastOutcome)}\n`,
-      );
+      write(`Luke voice: unavailable — ${this.#unavailableLiveDiagnostics.lastOutcome}\n`);
     }
     if (this.#brainModel) {
       write(`Luke brain: enabled (${this.#brainModel.model ?? "model chosen by the service"})\n`);

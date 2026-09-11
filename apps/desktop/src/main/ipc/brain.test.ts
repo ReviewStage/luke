@@ -35,9 +35,7 @@ function registered() {
   } as unknown as GatewayOperator;
   // SAFETY: only the brain rows are under test; the router dispatches on the
   // kind alone, so the kinds this fragment does not answer are never reached.
-  const router = createActRouter(
-    brainActRows({ operator, isVoice: (sender) => sender === voiceSender }) as ActRows,
-  );
+  const router = createActRouter(brainActRows({ operator }) as ActRows);
   const senderOf = (sender: WebContents): ActSender => ({
     sender,
     panel: sender === panelSender,

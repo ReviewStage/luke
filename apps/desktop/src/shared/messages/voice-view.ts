@@ -44,7 +44,6 @@ export interface VoiceView {
  * way, because the main process routes it to the voice window directly.
  */
 export const VOICE_COMMAND = {
-  DISCARD_LISTENING: "discard-listening",
   STOP_SPEAKING: "stop-speaking",
   REQUEST_MICROPHONE_ACCESS: "request-microphone-access",
   CLEAR_CONVERSATION: "clear-conversation",

@@ -7,31 +7,16 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@sidecar/analytics";
-import {
-  type BrainAppActionAnswer,
-  type BrainAppActionRequest,
-  type BrainReplyOffer,
-  isBrainReplyOffer,
-  isReceiverEpoch,
-} from "@sidecar/brain/requests-wire";
+import type { BrainAppActionAnswer, BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import { liveExchangeActive } from "@sidecar/live";
-import {
-  isSpeechOffer,
-  isSpeechOutcome,
-  isSpeechWithdrawal,
-  type SpeechOffer,
-  type SpeechOutcome,
-  type SpeechWithdrawal,
-} from "@sidecar/realtime/speech";
 import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
   isRecord,
   isUnitLevel,
   isWireBoolean,
-  isWireNumber,
   isWireString,
   type UnparsedWireValue,
 } from "@sidecar/wire";
@@ -121,30 +106,6 @@ export const BRIDGE = {
     args: oneBoolean,
   }),
   /**
-   * The voice window reporting the claimed reply it held done with — its reply
-   * ended or cut short, or shown where it could not be spoken — under the
-   * epoch it was granted to. The next owed reply is offered only after this.
-   */
-  ackBrainReply: entry({
-    kind: "send",
-    channel: "app:ack-brain-reply",
-    args: args<[string, string, number]>(
-      (v) => v.length === 3 && isWireString(v[0]) && isWireString(v[1]) && isReceiverEpoch(v[2]),
-    ),
-  }),
-  /**
-   * The voice window reporting it can receive: its bootstrap applied and its
-   * subscriptions standing, under the receiver epoch the bootstrap named. The
-   * main process accepts it only from the current voice renderer for the
-   * current epoch, and answers whether this report made the receiver ready.
-   */
-  reportVoiceReady: entry({
-    kind: "invoke",
-    channel: "app:report-voice-ready",
-    args: args<[number]>((v) => v.length === 1 && isWireNumber(v[0]) && Number.isInteger(v[0])),
-    result: result<boolean>(isWireBoolean),
-  }),
-  /**
    * The renderer's guide snapshot, pushed whenever it changes, so the main
    * process can validate an app act against the settings the panel actually
    * describes and hand the brain the same text.
@@ -165,20 +126,6 @@ export const BRIDGE = {
     args: args<[string, BrainAppActionAnswer]>(
       (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
     ),
-  }),
-  /**
-   * The mouth reporting what became of one speech offer, by the id the offer
-   * carried: spoken, refused, held, or stale. The arbiter offers the next turn
-   * only once this lands, and an id it no longer knows — withdrawn, or past
-   * its deadline — is ignored rather than acted on.
-   */
-  settleSpeech: entry({
-    kind: "invoke",
-    channel: "app:settle-speech",
-    args: args<[string, SpeechOutcome]>(
-      (v) => v.length === 2 && isWireString(v[0]) && isSpeechOutcome(v[1]),
-    ),
-    result: result<void>(),
   }),
   /**
    * The voice window's whole snapshot of the live conversation, reported on
@@ -315,25 +262,6 @@ export const BRIDGE = {
     result: result<void>((v) => v === undefined),
   }),
   /**
-   * One proactive turn the speech arbiter decided to voice now — a briefing
-   * or an onboarding beat — with its id and the deadline past which it is
-   * stale. At most one is outstanding: the next is offered only after the
-   * mouth settles this one.
-   */
-  onSpeechOffered: entry({
-    kind: "subscribe",
-    channel: "app:speech-offered",
-    args: noArgs,
-    result: result<SpeechOffer>(isSpeechOffer),
-  }),
-  /** The arbiter taking back an offer the mouth has not yet begun to speak. */
-  onSpeechWithdrawn: entry({
-    kind: "subscribe",
-    channel: "app:speech-withdrawn",
-    args: noArgs,
-    result: result<SpeechWithdrawal>(isSpeechWithdrawal),
-  }),
-  /**
    * The host's word on its one live session, relayed to the voice window as
    * the event it is: wanted asks the window to open a session muted for what
    * Luke has to say, closing asks it to hang up, and a repeated wanted is a
@@ -370,29 +298,6 @@ export const BRIDGE = {
     result: result<{ command: VoiceCommand }>(
       (value) => isRecord(value) && isVoiceCommand(value.command),
     ),
-  }),
-  /**
-   * One ended run whose reply the main process offers the voice window to
-   * speak. The words come with the grant, not the offer: the window claims
-   * through `claimBrainReply` before a word is said.
-   */
-  onBrainReplyOffered: entry({
-    kind: "subscribe",
-    channel: "app:brain-reply-offered",
-    args: noArgs,
-    result: result<BrainReplyOffer>(isBrainReplyOffer),
-  }),
-  /**
-   * The brain's generation ended — cleared, expired, or replaced — so every
-   * reply offered or granted from it is withdrawn: an offer in hand is
-   * dropped unclaimed, and words granted but not yet spoken are not spoken.
-   * Carries the receiver epoch it was sent under.
-   */
-  onBrainRepliesWithdrawn: entry({
-    kind: "subscribe",
-    channel: "app:brain-replies-withdrawn",
-    args: noArgs,
-    result: result<number>(isReceiverEpoch),
   }),
   /**
    * An app act the brain decided that only the renderer can perform, already

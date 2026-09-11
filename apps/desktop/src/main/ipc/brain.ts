@@ -5,7 +5,6 @@ import { REJECTED_SUBMISSION } from "@sidecar/host";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows, ActSender } from "../act-router";
-import type { ReportHandlers } from "../bridge-host";
 
 /**
  * Who a window is, as the client alone can tell: the composer's panel types,
@@ -18,8 +17,6 @@ import type { ReportHandlers } from "../bridge-host";
 export interface BrainActDependencies {
   /** The operator client every window's ask crosses to reach the host. */
   operator: GatewayOperator;
-  /** Whether the hidden voice window sent this report, which the reports below turn on. */
-  isVoice: (sender: Electron.WebContents) => boolean;
 }
 
 type BrainActKind = typeof ACT_KIND.BRAIN_SUBMIT_ASK | typeof ACT_KIND.BRAIN_CANCEL_ASK;
@@ -41,17 +38,5 @@ export function brainActRows(dependencies: BrainActDependencies): Pick<ActRows, 
       return operator.submit(submission, MAIN_SESSION_KEY);
     },
     [ACT_KIND.BRAIN_CANCEL_ASK]: ({ runId }) => operator.cancel(runId),
-  };
-}
-
-export function brainReports(
-  dependencies: BrainActDependencies,
-): Pick<ReportHandlers, "ackBrainReply"> {
-  const { operator, isVoice } = dependencies;
-  return {
-    ackBrainReply(context, runId, deliveryId, epoch) {
-      if (!isVoice(context.sender)) return;
-      void operator.acknowledge(runId, deliveryId, epoch);
-    },
   };
 }
