@@ -6,6 +6,12 @@ settings:
 
 catalogs:
   default:
+    '@effect-atom/atom':
+      specifier: 0.7.0
+      version: 0.7.0
+    '@effect-atom/atom-react':
+      specifier: 0.7.0
+      version: 0.7.0
     '@effect/platform':
       specifier: 0.97.2
       version: 0.97.2
@@ -88,6 +94,15 @@ importers:
         specifier: 6.8.9
         version: 6.8.9
     devDependencies:
+      '@effect-atom/atom':
+        specifier: 'catalog:'
+        version: 0.7.0(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2)
+      '@effect-atom/atom-react':
+        specifier: 'catalog:'
+        version: 0.7.0(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2)(react@19.2.8)(scheduler@0.27.0)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.2)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
       '@sentry/esbuild-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
@@ -160,6 +175,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
       electron:
         specifier: 43.3.0
         version: 43.3.0
@@ -1325,6 +1343,21 @@ packages:
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
+
+  '@effect-atom/atom-react@0.7.0':
+    resolution: {integrity: sha512-o7TEsAIvz5HZ2bULBNn2UYDv+y/BSneTnSELG51pPIWP4PYj6V2//zefOzCMlp/Rw4Vws2dm+eaqse23+FCfwA==}
+    peerDependencies:
+      effect: ^3.22.1
+      react: '>=18 <20'
+      scheduler: '*'
+
+  '@effect-atom/atom@0.7.0':
+    resolution: {integrity: sha512-+GkZ1k1e4lYjNwJUHN6n5SsULnFaHpYr0alDUmUvRy3qzuul925nM8tFqPy43srFHo4EVuCzRf1VkBzh6HDyjg==}
+    peerDependencies:
+      '@effect/experimental': ^0.61.1
+      '@effect/platform': ^0.97.1
+      '@effect/rpc': ^0.76.2
+      effect: ^3.22.1
 
   '@effect/cluster@0.60.2':
     resolution: {integrity: sha512-GEODN5kvFJ0L0XSkANcS8s6lfhjrrA8x/ezYUV/lXerqCHf5xo3ZTPUanGMHu5Byvikng0mZDcyNvke2sGjfSQ==}
@@ -6275,6 +6308,24 @@ snapshots:
       ajv-keywords: 3.5.2(ajv@6.15.0)
 
   '@drizzle-team/brocli@0.10.2': {}
+
+  '@effect-atom/atom-react@0.7.0(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2)(react@19.2.8)(scheduler@0.27.0)':
+    dependencies:
+      '@effect-atom/atom': 0.7.0(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2)
+      effect: 3.22.2
+      react: 19.2.8
+      scheduler: 0.27.0
+    transitivePeerDependencies:
+      - '@effect/experimental'
+      - '@effect/platform'
+      - '@effect/rpc'
+
+  '@effect-atom/atom@0.7.0(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2)':
+    dependencies:
+      '@effect/experimental': 0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2)
+      '@effect/platform': 0.97.2(effect@3.22.2)
+      '@effect/rpc': 0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2)
+      effect: 3.22.2
 
   '@effect/cluster@0.60.2(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/sql@0.52.1(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/workflow@0.19.1(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2))(effect@3.22.2)':
     dependencies:

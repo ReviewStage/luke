@@ -38,6 +38,9 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
+    "@effect-atom/atom": "catalog:",
+    "@effect-atom/atom-react": "catalog:",
+    "@effect/vitest": "catalog:",
     "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/actions": "workspace:*",
     "@sidecar/analytics": "workspace:*",
@@ -62,6 +65,7 @@
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
+    "effect": "catalog:",
     "electron": "43.3.0",
     "electron-builder": "26.8.1",
     "esbuild": "0.28.2",
