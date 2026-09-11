@@ -85,8 +85,8 @@ interface NotchWingsProps {
   housingWidth: number;
   /**
    * True while sign-in stands between Luke and anything to watch. The strip
-   * stays deliberately bare — no face, no marks — so the gate in the panel is
-   * the one thing introducing him.
+   * stays deliberately bare — no face, no marks, no meter — so the gate in
+   * the panel is the one thing introducing him.
    */
   accountGated: boolean;
 }
@@ -168,21 +168,24 @@ export function wingPlacement(input: {
   voiceOpening: boolean;
   accountGated: boolean;
 }): WingPlacement {
+  // The gate takes the whole strip for its label: nothing else is drawn
+  // beside the housing while sign-in stands, or the label and a meter would
+  // share the one seat the capsule's side has.
+  const gated = input.accountGated;
   // The developer's meter stands from the press, not from the handshake:
   // while the call is opening it already stands where it will stand once
   // live, so the key answers on the frame it lands rather than when the
   // network does. Both meters hold on the speaker's standing rather than the
   // level, which arrives a relay later and would blink a meter out for that
   // frame.
-  const developerMeter = input.speakers.listening || input.voiceOpening;
+  const developerMeter = !gated && (input.speakers.listening || input.voiceOpening);
   return {
-    lukeMeter: input.speakers.lukeSpeaking,
+    lukeMeter: !gated && input.speakers.lukeSpeaking,
     developerMeter,
-    // The gate takes the whole strip for its label, and the marks share
-    // their side with the developer's meter, which has it while the
-    // microphone is heard.
-    face: !input.accountGated,
-    marks: !input.accountGated && !developerMeter,
+    face: !gated,
+    // The marks share their side with the developer's meter, which has it
+    // while the microphone is heard.
+    marks: !gated && !developerMeter,
   };
 }
 

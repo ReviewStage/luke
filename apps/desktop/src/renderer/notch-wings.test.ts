@@ -164,14 +164,14 @@ test("a press still opening its call already has the developer's meter", () => {
   assert.equal(placement.lukeMeter, false);
 });
 
-test("the gate bares the strip of the face and the marks alone", () => {
-  const gated = wingPlacement({
-    speakers: { listening: true, lukeSpeaking: true },
-    voiceOpening: false,
-    accountGated: true,
-  });
-  assert.equal(gated.face, false);
-  assert.equal(gated.marks, false);
-  assert.equal(gated.lukeMeter, true);
-  assert.equal(gated.developerMeter, true);
+test("the gate bares the whole strip, meters included, whoever is heard", () => {
+  // The label takes the seat beside the housing a meter would sit in.
+  assert.deepEqual(
+    wingPlacement({
+      speakers: { listening: true, lukeSpeaking: true },
+      voiceOpening: true,
+      accountGated: true,
+    }),
+    { lukeMeter: false, developerMeter: false, face: false, marks: false },
+  );
 });
