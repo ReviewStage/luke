@@ -17,12 +17,12 @@
   "dependencies": {
     "@sidecar/runtime": "workspace:*",
     "@sidecar/wire": "workspace:*",
-    "ws": "8.21.3"
+    "ws": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "catalog:",
     "@types/ws": "8.18.1",
-    "tsx": "4.23.12",
-    "typescript": "7.0.2"
+    "tsx": "catalog:",
+    "typescript": "catalog:"
   }
 }

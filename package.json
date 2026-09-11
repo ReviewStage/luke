@@ -35,6 +35,6 @@
     "knip": "6.35.1",
     "lint-staged": "17.3.0",
     "oxlint": "1.79.0",
-    "tsx": "4.23.12"
+    "tsx": "catalog:"
   }
 }

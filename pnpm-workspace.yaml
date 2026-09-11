@@ -2,3 +2,17 @@ packages:
   - "apps/*"
   - "packages/*"
   - "tools/*"
+
+catalog:
+  typescript: 7.0.2
+  "@types/node": 26.2.0
+  tsx: 4.23.12
+  react: 19.2.8
+  react-dom: 19.2.8
+  ws: 8.21.3
+  ai: 7.0.97
+
+catalogs:
+  web:
+    typescript: 6.0.3
+    "@types/node": 22.20.1

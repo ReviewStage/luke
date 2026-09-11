@@ -482,4 +482,17 @@ if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$SIDECAR_REPO_ROOT/CHANGELOG
     exit 1
 fi
 
+# Effect's Context.Tag identity is per module instance: two resolved copies of
+# "effect" in the dependency tree mint two tags that fail their own equality
+# check. The catalog is what pins every package to the one resolved version, so
+# a literal version here is the one thing that can quietly reintroduce a second
+# copy.
+literal_effect_versions=$(grep -RnE '"effect": *"[^c]' --include=package.json \
+    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" || true)
+if [[ -n "$literal_effect_versions" ]]; then
+    printf 'error: "effect" must be declared as "catalog:", never a literal version:\n%s\n' \
+        "$literal_effect_versions" >&2
+    exit 1
+fi
+
 printf 'Repository contract checks passed.\n'
