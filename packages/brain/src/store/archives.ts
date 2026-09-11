@@ -6,11 +6,17 @@ import {
   CONVERSATION_KIND,
   type ConversationArchiveRecord,
   type ConversationKind,
-  conversationArchiveRecordFromWire,
-  conversationKindOf,
-  isConversationKind,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import {
+  archivePayload,
+  archiveRecord,
+  insertArchive,
+  listArchives as listArchiveRecords,
+  markArchivePublished,
+  pendingArchiveIds,
+  removeArchiveRow,
+} from "./archives-table.js";
 import { standingGeneration } from "./brain-envelope.js";
 import { archiveEncodingSuffix, encodeArchiveContent } from "./compression.js";
 import {
@@ -21,7 +27,7 @@ import {
   removeConversationRows,
   removeConversationRowsAtOrBefore,
 } from "./conversations-table.js";
-import { nullable, type StoreDatabase } from "./database.js";
+import type { StoreDatabase } from "./database.js";
 import { listTranscript } from "./transcript-table.js";
 
 /**
@@ -99,64 +105,9 @@ function hashBytes(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-type ArchiveRow = {
-  archive_id: string;
-  session_key: string;
-  kind: string;
-  name: string;
-  created_at: number;
-  deleted_at: number;
-  encoding: string;
-  sha256: string;
-  byte_length: number;
-  file_name: string;
-  published_at: number | null;
-  conversation_lines: number;
-  transcript_events: number;
-  previous_cutoff: number | null;
-};
-
-const ARCHIVE_COLUMNS = `archive_id, session_key, kind, name, created_at, deleted_at, encoding, sha256,
-  byte_length, file_name, published_at, conversation_lines, transcript_events, previous_cutoff`;
-
-function recordFromRow(row: ArchiveRow): ConversationArchiveRecord | undefined {
-  return conversationArchiveRecordFromWire({
-    archiveId: row.archive_id,
-    sessionKey: row.session_key,
-    kind: isConversationKind(row.kind) ? row.kind : conversationKindOf(row.session_key),
-    name: row.name,
-    createdAt: row.created_at,
-    deletedAt: row.deleted_at,
-    encoding: row.encoding,
-    sha256: row.sha256,
-    byteLength: row.byte_length,
-    fileName: row.file_name,
-    ...(row.published_at !== null ? { publishedAt: row.published_at } : undefined),
-    conversationLines: row.conversation_lines,
-    transcriptEvents: row.transcript_events,
-  });
-}
-
+/** The registry's own directory, most recently deleted first. */
 export function listArchives(database: StoreDatabase): readonly ConversationArchiveRecord[] {
-  // SAFETY: the columns selected are the ones the row type names, typed by the schema.
-  const rows = database
-    .prepare(
-      `SELECT ${ARCHIVE_COLUMNS} FROM conversation_archives ORDER BY deleted_at DESC, archive_id`,
-    )
-    .all() as ArchiveRow[];
-  const records: ConversationArchiveRecord[] = [];
-  for (const row of rows) {
-    const record = recordFromRow(row);
-    if (record) records.push(record);
-  }
-  return records;
-}
-
-function archiveRow(database: StoreDatabase, archiveId: string): ArchiveRow | undefined {
-  // SAFETY: as above, for one row or none.
-  return database
-    .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM conversation_archives WHERE archive_id = ?`)
-    .get(archiveId) as ArchiveRow | undefined;
+  return listArchiveRecords(database);
 }
 
 /**
@@ -285,29 +236,22 @@ export function deleteConversation(
     const content = `${lines.join("\n")}\n`;
     const encoded = encodeArchiveContent(content);
     const fileName = archiveFileName(sessionKey, now, archiveId, encoded.encoding);
-    database
-      .prepare(
-        `INSERT INTO conversation_archives
-           (archive_id, session_key, kind, name, created_at, deleted_at, encoding, sha256, byte_length,
-            file_name, published_at, conversation_lines, transcript_events, previous_cutoff, payload)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
-      )
-      .run(
-        archiveId,
-        sessionKey,
-        record.kind,
-        record.name,
-        record.createdAt,
-        now,
-        encoded.encoding,
-        hashBytes(encoded.bytes),
-        encoded.bytes.length,
-        fileName,
-        conversationRows.length,
-        transcript.length,
-        nullable(header.previousCutoff),
-        encoded.bytes,
-      );
+    insertArchive(database, {
+      archiveId,
+      sessionKey,
+      kind: record.kind,
+      name: record.name,
+      createdAt: record.createdAt,
+      deletedAt: now,
+      encoding: encoded.encoding,
+      sha256: hashBytes(encoded.bytes),
+      byteLength: encoded.bytes.length,
+      fileName,
+      conversationLines: conversationRows.length,
+      transcriptEvents: transcript.length,
+      previousCutoff: header.previousCutoff,
+      payload: encoded.bytes,
+    });
     raiseConversationCutoff(database, sessionKey, now);
     if (removeConversation && record.kind !== CONVERSATION_KIND.MAIN) {
       removeConversationRows(database, sessionKey);
@@ -319,8 +263,7 @@ export function deleteConversation(
   });
   if (!committed) return undefined;
   const published = publishArchive(database, agentRoot, committed, durability);
-  const row = archiveRow(database, committed);
-  const archive = row ? recordFromRow(row) : undefined;
+  const archive = archiveRecord(database, committed);
   if (!archive) throw new Error(`archive ${committed} was not registered`);
   return { archive, published };
 }
@@ -344,16 +287,13 @@ function publishArchive(
   archiveId: string,
   durability: PublicationDurability = FILE_SYSTEM_DURABILITY,
 ): boolean {
-  const row = archiveRow(database, archiveId);
-  if (!row) return false;
-  if (row.published_at !== null) return true;
-  // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published.
-  const payload = database
-    .prepare("SELECT payload FROM conversation_archives WHERE archive_id = ?")
-    .get(archiveId) as { payload: Uint8Array | null } | undefined;
-  if (!payload?.payload) return false;
+  const record = archiveRecord(database, archiveId);
+  if (!record) return false;
+  if (record.publishedAt !== undefined) return true;
+  const payload = archivePayload(database, archiveId);
+  if (!payload) return false;
   const directory = archiveDirectory(agentRoot);
-  const target = path.resolve(directory, row.file_name);
+  const target = path.resolve(directory, record.fileName);
   if (path.dirname(target) !== path.resolve(directory)) return false;
   try {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -362,7 +302,7 @@ function publishArchive(
       try {
         const fd = fs.openSync(staging, "wx", 0o600);
         try {
-          fs.writeFileSync(fd, payload.payload);
+          fs.writeFileSync(fd, payload);
           fs.fsyncSync(fd);
         } finally {
           fs.closeSync(fd);
@@ -378,15 +318,11 @@ function publishArchive(
     }
     syncFile(target);
     durability.syncDirectory(directory);
-    if (hashBytes(fs.readFileSync(target)) !== row.sha256) return false;
+    if (hashBytes(fs.readFileSync(target)) !== record.sha256) return false;
   } catch {
     return false;
   }
-  database
-    .prepare(
-      "UPDATE conversation_archives SET published_at = ?, payload = NULL WHERE archive_id = ?",
-    )
-    .run(Date.now(), archiveId);
+  markArchivePublished(database, archiveId, Date.now());
   return true;
 }
 
@@ -406,15 +342,9 @@ export function publishPendingArchives(
   agentRoot: string,
   durability: PublicationDurability = FILE_SYSTEM_DURABILITY,
 ): string[] {
-  // SAFETY: one text column selected.
-  const rows = database
-    .prepare(
-      "SELECT archive_id FROM conversation_archives WHERE published_at IS NULL ORDER BY deleted_at",
-    )
-    .all() as { archive_id: string }[];
-  return rows
-    .map((row) => row.archive_id)
-    .filter((archiveId) => !publishArchive(database, agentRoot, archiveId, durability));
+  return pendingArchiveIds(database).filter(
+    (archiveId) => !publishArchive(database, agentRoot, archiveId, durability),
+  );
 }
 
 /** Forgets one archive's registry row and removes its file; the disk budget's own removal path. */
@@ -423,14 +353,13 @@ export function removeArchive(
   agentRoot: string,
   archiveId: string,
 ): boolean {
-  const row = archiveRow(database, archiveId);
-  if (!row) return false;
-  const target = path.resolve(archiveDirectory(agentRoot), row.file_name);
+  const record = archiveRecord(database, archiveId);
+  if (!record) return false;
+  const target = path.resolve(archiveDirectory(agentRoot), record.fileName);
   try {
     fs.rmSync(target, { force: true });
   } catch {
     return false;
   }
-  database.prepare("DELETE FROM conversation_archives WHERE archive_id = ?").run(archiveId);
-  return true;
+  return removeArchiveRow(database, archiveId);
 }

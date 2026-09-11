@@ -369,7 +369,12 @@ nothing else — it takes no handle, reads its rows through `@effect/sql`'s
 derives a row that is a shared shape from that shape's own declaration
 instead of stating it twice — and the synchronous function each one still
 exports is `StoreDatabase#run` wearing its old signature, for the callers
-that hold a handle rather than a client until P5-11.
+that hold a handle rather than a client until P5-11. `store/workspace-files.ts`
+touches no client at all — the notebook's own files are read and written
+synchronously by hand because they run inside the worker's own sync
+transactions — so its sibling, `workspace-files.effect.ts`, states what
+either can throw as a typed `WorkspaceFileIOError` instead of wrapping a
+client this file never holds.
 `@sidecar/brain/envelope` is the third: the envelope's shape and its readings
 are what everything under `brain/src/store/` needs, and reaching them through
 the barrel — or through `state-store.ts`, which is the store class over them —
