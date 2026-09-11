@@ -202,6 +202,20 @@ resolve nowhere at run time, so the bundle step refuses any import that
 resolved external and is not one of those declared dependencies or a Node
 builtin.
 
+Vercel roots its install at `apps/web`, so a package the web compiles by
+relative door must be declared there too. `server/hosted/` names
+`@sidecar/providers` by path rather than by specifier, and while everything
+that package reached from inside its own directory was another workspace
+package, the omission cost nothing; the first third-party dependency it
+needed resolved from there — `@effect/platform`, when the cloud pass moved
+onto `HttpClient` — failed the deploy and nothing else, because an undeclared
+package is not part of what Vercel installs where a whole-workspace install
+would have had it. The declaration is what the app owes for a package it
+compiles at all, however it names it, and `knip` is told to ignore that one
+because the name never appears as a specifier. Giving `@sidecar/providers`
+export subpaths so those imports could be specifiers is the better shape and
+a decision about that package's doors.
+
 ## A barrel is an all-or-nothing door
 
 Importing a package resolves its whole export graph, not the one name asked

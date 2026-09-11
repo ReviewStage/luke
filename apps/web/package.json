@@ -39,6 +39,7 @@
     "@sidecar/brain": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/panel": "workspace:*",
+    "@sidecar/providers": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",
