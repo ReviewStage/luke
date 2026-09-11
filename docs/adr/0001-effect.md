@@ -39,7 +39,10 @@ workspace's own manifest, which is the only manifest this repository writes —
 an installed dependency naming `effect` as a peer states the range it was
 published with. Each companion package joins the same catalog at the newest
 release whose peer range accepts that `effect`: `@effect/platform` at `0.97.2`,
-which peers `^3.22.2`.
+which peers `^3.22.2`, and `@effect/sql` and `@effect/sql-pg` at `0.52.1`, which
+peer that platform. `@effect/sql` also peers `@effect/experimental`, at `0.61.1`
+here, which `apps/web` declares for the same reason it declares the others —
+a runtime requirement of a dependency the function bundles keep external.
 
 `@sidecar/wire` reaches both and declares them as dependencies rather than
 development ones, because the bridges under `packages/wire/src/effect/` are
