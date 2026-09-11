@@ -80,7 +80,15 @@ test("usage snapshots overwrite one another unconfirmed, the close confirms the 
       [{ seconds: 26.5, confirmed: true }],
     );
     await record.noteUsage({ sessionId: "live_unknown", seconds: 1 });
-    assert.equal((await opened.db.select().from(voiceSessions)).length, 1);
+    assert.equal(
+      (
+        await opened.db
+          .select()
+          .from(voiceSessions)
+          .where(eq(voiceSessions.liveSessionId, "live_unknown"))
+      ).length,
+      0,
+    );
   } finally {
     await opened.close();
   }
