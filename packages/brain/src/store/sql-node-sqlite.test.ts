@@ -19,8 +19,8 @@ import {
   Scope,
   TestClock,
 } from "effect";
-import { StoreDatabase } from "./database.js";
 import { layer } from "./sql-node-sqlite.js";
+import { openDatabase } from "./testing.js";
 
 const SQLITE_BUSY = 5;
 const WAL_JOURNAL_MODE = "wal";
@@ -317,7 +317,7 @@ describe("the node:sqlite client", () => {
     withNodeFileSystem(
       Effect.gen(function* () {
         const directory = yield* temporaryDirectoryScoped();
-        const database = StoreDatabase.open(databaseIn(directory));
+        const database = openDatabase(databaseIn(directory));
         yield* Effect.addFinalizer(() => Effect.sync(() => database.close()));
         database.exec("CREATE TABLE handles (name TEXT NOT NULL)");
         database.prepare("INSERT INTO handles (name) VALUES (?)").run("synchronous");

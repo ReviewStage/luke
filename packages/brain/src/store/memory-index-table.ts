@@ -37,7 +37,6 @@ import {
 import { DAILY_NOTES_DIRECTORY, WORKSPACE_FILE } from "@sidecar/runtime";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Option, Schema } from "effect";
-import type { StoreDatabase } from "./database.js";
 import type { NotebookEntry } from "./notebook-table.js";
 import { columnsDecoded } from "./rows.js";
 
@@ -637,49 +636,4 @@ export function readMemoryLines(
     totalLines: all.length,
     truncated: end < all.length,
   };
-}
-
-/**
- * The synchronous doors onto the effects above, for the callers that still
- * hold a handle rather than a client: the store's own tests today.
- *
- * @deprecated Each goes with the caller that holds it; P5-11 runs every
- * remaining one on the worker's own runtime edge.
- */
-export function planMemorySync(
-  database: StoreDatabase,
-  root: string,
-  identity: EmbeddingModelIdentity | undefined,
-  entries: readonly Pick<NotebookEntry, "id" | "words">[],
-): MemoryScanPlan {
-  return database.run(planMemorySyncEffect(root, identity, entries));
-}
-
-/** @deprecated The synchronous door onto {@link applyMemorySyncEffect}; see {@link planMemorySync}. */
-export function applyMemorySync(
-  database: StoreDatabase,
-  plan: { changed: readonly IndexedFileWrite[]; removed: readonly string[] },
-  embeddings: readonly EmbeddingWrite[],
-  identity: EmbeddingModelIdentity | undefined,
-  now: number,
-): MemoryApplyReport {
-  return database.run(applyMemorySyncEffect(plan, embeddings, identity, now));
-}
-
-/** @deprecated The synchronous door onto {@link rebuildMemoryIndexEffect}; see {@link planMemorySync}. */
-export function rebuildMemoryIndex(database: StoreDatabase): boolean {
-  return database.run(rebuildMemoryIndexEffect);
-}
-
-/** @deprecated The synchronous door onto {@link memoryIndexStatusEffect}; see {@link planMemorySync}. */
-export function memoryIndexStatus(database: StoreDatabase): MemoryIndexStatus {
-  return database.run(memoryIndexStatusEffect);
-}
-
-/** @deprecated The synchronous door onto {@link searchMemoryIndexEffect}; see {@link planMemorySync}. */
-export function searchMemoryIndex(
-  database: StoreDatabase,
-  query: MemorySearchQuery,
-): MemorySearchOutcome {
-  return database.run(searchMemoryIndexEffect(query));
 }

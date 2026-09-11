@@ -27,13 +27,14 @@ import {
   searchConversation,
 } from "./conversation-table.js";
 import { createConversation, raiseConversationCutoff } from "./conversations-table.js";
-import { StoreDatabase } from "./database.js";
+import type { StoreDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
 import { STORE_SCHEMA_VERSION } from "./schema.js";
 import {
   inspectConversation,
   line,
   NOW,
+  openDatabase,
   openTestDatabase,
   populatedState,
   request,
@@ -542,7 +543,7 @@ test("the reproduced boundary: marker written, erase failed, store load at exact
   assert.deepEqual(listConversation(first, MAIN_SESSION_KEY, clock), []);
   first.close();
   // The next launch opens the same file: the cutoff is the conversation's, not the dead generation's.
-  const relaunch = StoreDatabase.open(location);
+  const relaunch = openDatabase(location);
   assert.equal(conversationClearedAt(relaunch, MAIN_SESSION_KEY), cutoff);
   assert.deepEqual(listConversation(relaunch, MAIN_SESSION_KEY, clock), []);
   assert.deepEqual(listConversation(relaunch, MAIN_SESSION_KEY, clock + 1), []);
@@ -573,7 +574,7 @@ test("a line keeps its Markdown line structure through the store and a relaunch"
   );
   assert.equal(appended.entries[0]?.words, words);
   database.close();
-  const relaunch = StoreDatabase.open(location);
+  const relaunch = openDatabase(location);
   assert.equal(listConversation(relaunch, MAIN_SESSION_KEY, NOW)[0]?.words, words);
   relaunch.close();
 });
@@ -619,7 +620,7 @@ test("the checkpoint stamp lives on the generation: an empty foreign checkpoint 
 test("a database from before the rename opens with its lines, archives, and requests carried under the new names, and a newer one is never guessed at", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-runtime-store-"));
   const location = path.join(directory, "agent.sqlite");
-  const seeded = StoreDatabase.open(location);
+  const seeded = openDatabase(location);
   createConversation(seeded, {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
@@ -651,7 +652,7 @@ test("a database from before the rename opens with its lines, archives, and requ
   older.exec("UPDATE schema_version SET version = 10");
   older.close();
 
-  const database = StoreDatabase.open(location);
+  const database = openDatabase(location);
   // SAFETY: the schema_version table has one integer column.
   const version = database.prepare("SELECT version FROM schema_version").get() as {
     version: number;
@@ -689,11 +690,11 @@ test("a database from before the rename opens with its lines, archives, and requ
   );
   database.close();
   // Reopening at the current version is a no-op, and a newer database is refused.
-  StoreDatabase.open(location).close();
+  openDatabase(location).close();
   const newer = new DatabaseSync(location);
   newer.exec("UPDATE schema_version SET version = 99");
   newer.close();
-  assert.throws(() => StoreDatabase.open(location), /schema version 99/u);
+  assert.throws(() => openDatabase(location), /schema version 99/u);
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
@@ -738,7 +739,7 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
     );
   raw.close();
 
-  const database = StoreDatabase.open(location);
+  const database = openDatabase(location);
   const loaded = loadBrainEnvelope(database, MAIN_SESSION_KEY);
   assert.equal(loaded.state?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
   assert.equal(loaded.state?.items.length, 1);
@@ -770,14 +771,14 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
     ["first"],
   );
   database.close();
-  StoreDatabase.open(location).close();
+  openDatabase(location).close();
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
 test("a database still carrying the retired memory tables opens with them dropped and everything else intact", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
   const location = path.join(directory, "agent.sqlite");
-  const seeded = StoreDatabase.open(location);
+  const seeded = openDatabase(location);
   createConversation(seeded, {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
@@ -801,7 +802,7 @@ test("a database still carrying the retired memory tables opens with them droppe
   older.exec("UPDATE schema_version SET version = 9");
   older.close();
 
-  const database = StoreDatabase.open(location);
+  const database = openDatabase(location);
   // SAFETY: the query selects the one column its row type names.
   const tables = database
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'memory_%'")
@@ -878,7 +879,7 @@ test("the observation inbox and capture cursors round-trip, amend whole, and cas
 test("a database from before the run accounting opens with the two columns added, and a record's usage and response ids round-trip through them", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-runtime-store-"));
   const location = path.join(directory, "agent.sqlite");
-  const seeded = StoreDatabase.open(location);
+  const seeded = openDatabase(location);
   createConversation(seeded, {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
@@ -896,7 +897,7 @@ test("a database from before the run accounting opens with the two columns added
   older.exec("UPDATE schema_version SET version = 11");
   older.close();
 
-  const database = StoreDatabase.open(location);
+  const database = openDatabase(location);
   // SAFETY: the schema_version table has one integer column.
   const version = database.prepare("SELECT version FROM schema_version").get() as {
     version: number;

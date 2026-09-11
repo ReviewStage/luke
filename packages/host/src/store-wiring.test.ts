@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { MessageChannel } from "node:worker_threads";
-import { type StorePort, serveStore } from "@sidecar/brain/store";
+import { inProcessStoreTransport } from "@sidecar/brain/store";
 import {
   CONVERSATION_KIND,
   type ConversationRecord,
@@ -31,15 +30,9 @@ function wiring(root: string) {
   const directories: (readonly ConversationRecord[])[] = [];
   let ids = 0;
   let clock = NOW;
-  const channel = new MessageChannel();
   const wired = wireStore({
     persistent: true,
-    createWorker: () => {
-      // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
-      serveStore(channel.port2 as unknown as StorePort);
-      // SAFETY: as above, for the client's end of the same channel.
-      return channel.port1 as unknown as StorePort;
-    },
+    transport: inProcessStoreTransport(),
     agentRoot: () => root,
     workspaceDirectory: () => path.join(root, "workspace"),
     ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true }),
@@ -58,8 +51,6 @@ function wiring(root: string) {
     if (closed) return;
     closed = true;
     await wired.client().close();
-    channel.port1.close();
-    channel.port2.close();
   };
   return {
     wired,

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { type BrainDelivery, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
+import { workerStoreTransport } from "@sidecar/brain/store";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
   carried,
@@ -93,7 +94,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
    */
   const store = wireStore({
     persistent: runMode.observesProviders,
-    createWorker: kernel.options.createWorker,
+    transport: workerStoreTransport(kernel.options.createWorker),
     agentRoot: () => agentRootPath(kernel.stateRoot),
     workspaceDirectory: kernel.agentWorkspacePath,
     ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),

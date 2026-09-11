@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { MessageChannel, Worker } from "node:worker_threads";
+import { Worker } from "node:worker_threads";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
@@ -11,10 +11,10 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { test } from "vitest";
 import { BrainStateStore } from "../state-store.js";
-import { storeClient } from "./store-client.js";
+import { StoreWorkerGone, storeClient, workerStoreTransport } from "./store-client.js";
+import type { StoreOpenOptions } from "./store-operations.js";
 import { line, NOW, populatedState } from "./testing.js";
-import type { StorePort } from "./wire.js";
-import { serveStore } from "./worker-host.js";
+import { inProcessStoreTransport } from "./worker-host.js";
 
 function agentRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-store-"));
@@ -22,34 +22,57 @@ function agentRoot(): string {
   return path.join(root, "agents", "main");
 }
 
-/** Both ends of a channel in one thread: the client on one port, the host on the other. */
-function inThread() {
-  const channel = new MessageChannel();
-  // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
-  const host = channel.port2 as unknown as StorePort;
-  serveStore(host);
-  // SAFETY: as above, for the client's end of the same channel.
-  const client = storeClient(channel.port1 as unknown as StorePort);
+function openOptions(root: string): StoreOpenOptions {
   return {
-    client,
-    close: () => {
-      channel.port1.close();
-      channel.port2.close();
-    },
-  };
-}
-
-test("the protocol answers every request once and serves the brain store, the thread, the notebook, and the index", async () => {
-  const root = agentRoot();
-  const { client, close } = inThread();
-  const report = await client.open({
     agentRoot: root,
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
     conversationName: MAIN_CONVERSATION_NAME,
     now: NOW,
-  });
-  assert.equal(report, true);
+  };
+}
+
+/** The tag a rejected ask carries, or nothing where the rejection is not a tagged failure. */
+async function rejectedTag(promise: Promise<unknown>): Promise<string | undefined> {
+  try {
+    await promise;
+    return undefined;
+  } catch (error) {
+    return error instanceof Error && "_tag" in error ? String(error._tag) : undefined;
+  }
+}
+
+/** The rejection of an ask as the failure it is, or nothing where it settled or failed some other way. */
+async function rejectedWith<Failure extends Error>(
+  promise: Promise<unknown>,
+  kind: new (...args: never[]) => Failure,
+): Promise<Failure | undefined> {
+  try {
+    await promise;
+    return undefined;
+  } catch (error) {
+    return error instanceof kind ? error : undefined;
+  }
+}
+
+/** The client over the real worker entry, on its own thread. */
+function overWorker() {
+  let spawned: Worker | undefined;
+  const client = storeClient(
+    workerStoreTransport(() => {
+      spawned = new Worker(new URL("./worker-entry.ts", import.meta.url), {
+        execArgv: ["--import", "tsx"],
+      });
+      return spawned;
+    }),
+  );
+  return { client, worker: () => spawned };
+}
+
+test("the group answers every request once and serves the brain store, the thread, the notebook, and the index", async () => {
+  const root = agentRoot();
+  const client = storeClient(inProcessStoreTransport());
+  assert.equal(await client.open(openOptions(root)), true);
   assert.equal(fs.existsSync(path.join(root, "agent.sqlite")), true);
   let ids = 0;
   const store = new BrainStateStore({
@@ -119,24 +142,32 @@ test("the protocol answers every request once and serves the brain store, the th
     [],
   );
   assert.equal(await client.close(), true);
-  // A request against a closed database is an error answer, not a hang.
-  await assert.rejects(
-    client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
-    /not open/,
+  // A request against a closed client is a typed refusal, not a hang.
+  assert.equal(
+    await rejectedTag(client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW })),
+    "StoreNotOpen",
   );
-  close();
+});
+
+test("a request before any open is refused, and an open at a schema this build cannot reach names the version", async () => {
+  const client = storeClient(inProcessStoreTransport());
+  assert.equal(await rejectedTag(client.ask("conversations.list", {})), "StoreNotOpen");
+  const root = agentRoot();
+  const raw = new DatabaseSync(path.join(root, "agent.sqlite"));
+  raw.exec("CREATE TABLE schema_version (version INTEGER NOT NULL)");
+  raw.exec("INSERT INTO schema_version (version) VALUES (99)");
+  raw.close();
+  const refused = client.open(openOptions(root));
+  assert.equal(await rejectedTag(refused), "StoreSchemaRefused");
+  // The worker stayed up but holds no store, so an operation is the worker's own refusal.
+  assert.equal(await rejectedTag(client.ask("conversations.list", {})), "StoreOperationFailed");
+  await client.close();
 });
 
 test("two handles over the boundary: a stale checkpoint cannot replace the newer generation", async () => {
   const root = agentRoot();
-  const { client, close } = inThread();
-  await client.open({
-    agentRoot: root,
-    agentId: DEFAULT_AGENT_ID,
-    sessionKey: MAIN_SESSION_KEY,
-    conversationName: MAIN_CONVERSATION_NAME,
-    now: NOW,
-  });
+  const client = storeClient(inProcessStoreTransport());
+  await client.open(openOptions(root));
   const first = client.brainStateRepository(MAIN_SESSION_KEY);
   const second = client.brainStateRepository(MAIN_SESSION_KEY);
   const gen1 = populatedState("gen-1");
@@ -147,66 +178,73 @@ test("two handles over the boundary: a stale checkpoint cannot replace the newer
   assert.equal(await first.save({ ...gen1, cursors: {} }), false);
   assert.equal(await first.save(populatedState("gen-3", NOW + 2)), false);
   assert.deepEqual((await second.load()).state, gen2);
-  close();
+  await client.close();
 });
 
-test("a worker that dies settles every pending request as rejected and refuses later ones", async () => {
-  let exit: ((code: number) => void) | undefined;
-  const port: StorePort = {
-    postMessage: () => undefined,
-    on: (event, listener) => {
-      if (event !== "exit") return;
-      // SAFETY: the "exit" listener takes the code this test fires; the others are never called.
-      exit = listener as (code: number) => void;
-    },
-  };
-  const client = storeClient(port);
-  const pending = client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW });
-  exit?.(1);
-  await assert.rejects(pending, /exited with code 1/);
-  await assert.rejects(
-    client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
-    /exited with code 1/,
+test("asks fired without awaiting land in the order they were made", async () => {
+  const root = agentRoot();
+  const client = storeClient(inProcessStoreTransport());
+  await client.open(openOptions(root));
+  const eventIds = Array.from({ length: 24 }, (_, index) => `event-${index}`);
+  const appends = eventIds.map((eventId) =>
+    client.ask("conversation.append", {
+      sessionKey: MAIN_SESSION_KEY,
+      entries: [line("w", NOW, { eventId })],
+      now: NOW,
+    }),
   );
+  const listed = client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW });
+  await Promise.all(appends);
+  assert.deepEqual(
+    (await listed).map((entry) => entry.eventId),
+    eventIds,
+  );
+  await client.close();
 });
 
-test("the real worker entry serves the same protocol on its own thread", async () => {
-  const worker = new Worker(new URL("./worker-entry.ts", import.meta.url), {
-    execArgv: ["--import", "tsx"],
+test("a worker that dies before it is ready fails the open typed and refuses every later ask", async () => {
+  const client = storeClient(
+    workerStoreTransport(() => new Worker("process.exit(3)", { eval: true })),
+  );
+  const opened = client.open(openOptions(agentRoot()));
+  assert.equal((await rejectedWith(opened, StoreWorkerGone))?.code, 3);
+  assert.equal(
+    await rejectedTag(client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW })),
+    "StoreWorkerGone",
+  );
+  assert.equal(await client.close(), true);
+});
+
+test("a worker that dies with a request in flight settles it as a failure, not a hang", async () => {
+  const { client, worker } = overWorker();
+  const root = agentRoot();
+  await client.open(openOptions(root));
+  const pending = client.ask("maintenance.run", { now: NOW, preserve: [] });
+  await worker()?.terminate();
+  const tag = await rejectedTag(pending);
+  assert.equal(["StoreWorkerGone", "RpcClientError"].includes(tag ?? ""), true);
+  assert.equal(await rejectedTag(client.ask("conversations.list", {})), "StoreWorkerGone");
+});
+
+test("the real worker entry serves the same group on its own thread and ends with the close", async () => {
+  const { client, worker } = overWorker();
+  const root = agentRoot();
+  await client.open(openOptions(root));
+  const appended = await client.ask("conversation.append", {
+    sessionKey: MAIN_SESSION_KEY,
+    entries: [line("hi", NOW, { eventId: "x" })],
+    now: NOW,
   });
-  // SAFETY: a Worker posts and receives structured-clone values on the same events the port contract names.
-  const client = storeClient(worker as unknown as StorePort);
-  try {
-    const root = agentRoot();
-    await client.open({
-      agentRoot: root,
-      agentId: DEFAULT_AGENT_ID,
-      sessionKey: MAIN_SESSION_KEY,
-      conversationName: MAIN_CONVERSATION_NAME,
-      now: NOW,
-    });
-    const appended = await client.ask("conversation.append", {
-      sessionKey: MAIN_SESSION_KEY,
-      entries: [line("hi", NOW, { eventId: "x" })],
-      now: NOW,
-    });
-    assert.equal(appended.entries.length, 1);
-    await client.close();
-  } finally {
-    await worker.terminate();
-  }
+  assert.equal(appended.entries.length, 1);
+  const exited = new Promise<number>((resolve) => worker()?.once("exit", resolve));
+  assert.equal(await client.close(), true);
+  assert.equal(await exited, 0);
 });
 
 test("over the worker boundary an unreadable generation keeps its compare token, so the repair lands and a stale save does not", async () => {
   const root = agentRoot();
-  const { client, close } = inThread();
-  await client.open({
-    agentRoot: root,
-    agentId: DEFAULT_AGENT_ID,
-    sessionKey: MAIN_SESSION_KEY,
-    conversationName: MAIN_CONVERSATION_NAME,
-    now: NOW,
-  });
+  const client = storeClient(inProcessStoreTransport());
+  await client.open(openOptions(root));
   const stale = client.brainStateRepository(MAIN_SESSION_KEY);
   await stale.load();
   assert.equal(await stale.save(populatedState("gen-old")), true);
@@ -233,5 +271,5 @@ test("over the worker boundary an unreadable generation keeps its compare token,
   assert.equal(await stale.save({ ...populatedState("gen-old"), cursors: {} }), false);
   const reader = client.brainStateRepository(MAIN_SESSION_KEY);
   assert.deepEqual((await reader.load()).state?.cursors, { codex: { s: "c" } });
-  close();
+  await client.close();
 });

@@ -22,6 +22,8 @@
   "dependencies": {
     "@effect/experimental": "catalog:",
     "@effect/platform": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@effect/rpc": "catalog:",
     "@effect/sql": "catalog:",
     "@sidecar/actions": "workspace:*",
     "@sidecar/guide": "workspace:*",
@@ -34,7 +36,6 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "tsx": "catalog:",

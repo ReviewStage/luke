@@ -9,7 +9,6 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
-import type { StoreDatabase } from "./database.js";
 import { changedRows, columnsDecoded } from "./rows.js";
 
 /**
@@ -138,42 +137,3 @@ export const deleteChildCompletionEffect = (
     );
     return changes > 0;
   });
-
-/**
- * The synchronous doors onto the effects above, for the callers that still
- * hold a handle rather than a client: the store's own tests today.
- *
- * @deprecated Each goes with the caller that holds it; P5-11 runs every
- * remaining one on the worker's own runtime edge.
- */
-export function listChildRuns(database: StoreDatabase): readonly ChildRunRecord[] {
-  return database.run(listChildRunsEffect);
-}
-
-/** @deprecated The synchronous door onto {@link putChildRunEffect}; see {@link listChildRuns}. */
-export function putChildRun(database: StoreDatabase, record: ChildRunRecord): boolean {
-  return database.run(putChildRunEffect(record));
-}
-
-/** @deprecated The synchronous door onto {@link deleteChildRunEffect}; see {@link listChildRuns}. */
-export function deleteChildRun(database: StoreDatabase, childId: string): boolean {
-  return database.run(deleteChildRunEffect(childId));
-}
-
-/** @deprecated The synchronous door onto {@link listChildCompletionsEffect}; see {@link listChildRuns}. */
-export function listChildCompletions(database: StoreDatabase): readonly ChildCompletionRecord[] {
-  return database.run(listChildCompletionsEffect);
-}
-
-/** @deprecated The synchronous door onto {@link putChildCompletionEffect}; see {@link listChildRuns}. */
-export function putChildCompletion(
-  database: StoreDatabase,
-  completion: ChildCompletionRecord,
-): boolean {
-  return database.run(putChildCompletionEffect(completion));
-}
-
-/** @deprecated The synchronous door onto {@link deleteChildCompletionEffect}; see {@link listChildRuns}. */
-export function deleteChildCompletion(database: StoreDatabase, completionId: string): boolean {
-  return database.run(deleteChildCompletionEffect(completionId));
-}

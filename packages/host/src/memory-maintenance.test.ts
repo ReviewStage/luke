@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
+import { inProcessStoreTransport, storeClient } from "@sidecar/brain/store";
 import {
   MEMORY_HOUSEKEEPING_OUTCOME,
   memoryFlushPrompt,
@@ -49,18 +49,8 @@ function turnOf(phase: MemoryCapturePhase, items: readonly WireRecord[]): Memory
 }
 
 function client() {
-  const channel = new MessageChannel();
-  // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
-  serveStore(channel.port2 as unknown as StorePort);
-  // SAFETY: as above, for the client's end of the same channel.
-  const store = storeClient(channel.port1 as unknown as StorePort);
-  return {
-    store,
-    close: () => {
-      channel.port1.close();
-      channel.port2.close();
-    },
-  };
+  const store = storeClient(inProcessStoreTransport());
+  return { store, close: () => store.close() };
 }
 
 /** A runtime whose one answer per system prompt the test decides; it executes no tool. */

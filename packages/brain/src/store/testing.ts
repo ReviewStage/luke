@@ -11,7 +11,7 @@ import {
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { type BrainPersistedState, freshBrainState } from "../envelope.js";
 import type { BrainJournalEntry } from "../journal.js";
 import {
@@ -21,13 +21,25 @@ import {
 } from "../requests.js";
 import { createConversation, createConversationEffect } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
+import type { StoreSchemaRefused } from "./migration.js";
 
 /** Synthetic fixtures for the store's own tests: no real title, branch, or transcript anywhere. */
 
 export const NOW = 1_800_000_000_000;
 
+/**
+ * A database opened by hand for a test that holds the handle itself, run on
+ * the test's own runtime; the test releases it with `close()`. What the open
+ * failed with is thrown as itself, so a test asserts the refusal it names.
+ */
+export function openDatabase(location: string): StoreDatabase {
+  const exit = Effect.runSyncExit(StoreDatabase.open(location));
+  if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
+  return exit.value;
+}
+
 export function openTestDatabase(location = ":memory:"): StoreDatabase {
-  const database = StoreDatabase.open(location);
+  const database = openDatabase(location);
   createConversation(database, {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
@@ -45,11 +57,13 @@ export function openTestDatabase(location = ":memory:"): StoreDatabase {
  */
 export function overStore<A, E>(
   effect: Effect.Effect<A, E, SqlClient>,
-): Effect.Effect<A, E | SqlError | PlatformError> {
+): Effect.Effect<A, E | SqlError | StoreSchemaRefused | PlatformError> {
   return Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped();
-    const database = StoreDatabase.open(path.join(directory, AGENT_DATABASE_FILE));
-    yield* Effect.addFinalizer(() => Effect.sync(() => database.close()));
+    const database = yield* Effect.acquireRelease(
+      StoreDatabase.open(path.join(directory, AGENT_DATABASE_FILE)),
+      (opened) => Effect.sync(() => opened.close()),
+    );
     return yield* Effect.provide(
       Effect.zipRight(
         createConversationEffect({

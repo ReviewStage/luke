@@ -301,4 +301,46 @@ describe("the memory index over the client", () => {
       }),
     ),
   );
+
+  it.effect(
+    "two agents are two databases over two workspaces: neither sees the other's notebook or index",
+    () =>
+      Effect.gen(function* () {
+        const firstRoot = workspace();
+        const secondRoot = workspace();
+        yield* overStore(
+          Effect.gen(function* () {
+            yield* rememberNotebookEntryEffect(
+              firstRoot,
+              { id: "a", words: "agent one drinks espresso" },
+              NOW,
+            );
+            yield* sync(firstRoot);
+            assert.equal(
+              (yield* searchMemoryIndexEffect({ query: "espresso", now: NOW })).results.length,
+              1,
+            );
+          }),
+        );
+        yield* overStore(
+          Effect.gen(function* () {
+            yield* sync(secondRoot);
+            assert.equal(
+              (yield* searchMemoryIndexEffect({ query: "espresso", now: NOW })).results.length,
+              0,
+            );
+            assert.equal(
+              readMemoryLines(secondRoot, "USER.md"),
+              undefined,
+              "the second workspace holds no USER.md",
+            );
+            assert.equal(
+              (yield* memoryIndexStatusEffect).sources,
+              2,
+              "only its own MEMORY.md and note",
+            );
+          }),
+        );
+      }),
+  );
 });

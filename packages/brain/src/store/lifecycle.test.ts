@@ -42,7 +42,7 @@ import {
   listConversations,
   pinConversation,
 } from "./conversations-table.js";
-import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
+import { AGENT_DATABASE_FILE, type StoreDatabase } from "./database.js";
 import { EnvelopeTracker } from "./envelope.js";
 import {
   CONVERSATION_MAINTENANCE_DEFAULTS,
@@ -53,7 +53,7 @@ import {
   staleVictims,
 } from "./maintenance.js";
 import { measurePhysicalUsage, runConversationMaintenance } from "./maintenance-run.js";
-import { inspectConversation, line, NOW } from "./testing.js";
+import { inspectConversation, line, NOW, openDatabase } from "./testing.js";
 import { listCompactionBoundaries, listTranscript, searchTranscript } from "./transcript-table.js";
 
 /**
@@ -71,7 +71,7 @@ function agentRoot(): string {
 }
 
 function openAt(root: string): StoreDatabase {
-  const database = StoreDatabase.open(path.join(root, AGENT_DATABASE_FILE));
+  const database = openDatabase(path.join(root, AGENT_DATABASE_FILE));
   createConversation(database, {
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
@@ -304,7 +304,7 @@ test("a publication a crash interrupted keeps its payload in the registry and is
   database.close();
   // The next launch: the directory is a directory again, and the retry publishes.
   fs.rmSync(archiveDirectory(root));
-  const relaunched = StoreDatabase.open(path.join(root, AGENT_DATABASE_FILE));
+  const relaunched = openDatabase(path.join(root, AGENT_DATABASE_FILE));
   assert.deepEqual(publishPendingArchives(relaunched, root), []);
   const [archive] = listArchives(relaunched);
   assert.ok(archive?.publishedAt !== undefined);

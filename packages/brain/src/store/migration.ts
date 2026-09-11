@@ -17,7 +17,7 @@
 
 import * as Client from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
-import { Cause, Data, Effect, Exit, type Layer, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   type SchemaMigrationStep,
   STORE_SCHEMA_FLOOR,
@@ -29,11 +29,13 @@ import {
 /**
  * A database at a version this build cannot reach from — past its own, or
  * before the floor it carries forward from — is refused rather than migrated
- * by guess.
+ * by guess. It is a Schema class because the refusal crosses the store
+ * worker's boundary as the answer to an open, carrying the version it found.
  */
-export class StoreSchemaRefused extends Data.TaggedError("StoreSchemaRefused")<{
-  readonly version: number;
-}> {
+export class StoreSchemaRefused extends Schema.TaggedError<StoreSchemaRefused>()(
+  "StoreSchemaRefused",
+  { version: Schema.Number },
+) {
   override get message(): string {
     return `the brain's store is at schema version ${this.version}, not ${STORE_SCHEMA_VERSION}`;
   }
@@ -144,20 +146,3 @@ export const migrateStoreSchema: Effect.Effect<
   const sql = yield* Client.SqlClient;
   yield* sql.withTransaction(upgrade);
 });
-
-/**
- * {@link migrateStoreSchema} run where the store's own open still is: a
- * synchronous constructor that hands back a handle, not a fiber. Every
- * statement the migration issues is a synchronous call into `node:sqlite`, so
- * the run holds nothing and the layer's scope closes with it, and the refusal
- * is thrown as the error it already is.
- *
- * @deprecated A strangler shim on the `Effect.runSync` allowlist in
- * `docs/adr/0001-effect.md`. P5-11 makes the worker an Rpc server that opens
- * the store on its own runtime edge and runs {@link migrateStoreSchema}
- * there; this door goes with it.
- */
-export function migrateStoreSchemaSync(client: Layer.Layer<Client.SqlClient>): void {
-  const exit = Effect.runSyncExit(Effect.provide(migrateStoreSchema, client));
-  if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
-}

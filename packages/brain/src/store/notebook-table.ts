@@ -15,7 +15,6 @@ import {
 } from "@sidecar/memory";
 import { Data, Effect, Either, Option, Schema } from "effect";
 import { BRAIN_WORKSPACE_SEEDS } from "../workspace-seeds.js";
-import type { StoreDatabase } from "./database.js";
 import { columnsDecoded } from "./rows.js";
 import { readWorkspaceFileSync, writeWorkspaceFileSync } from "./workspace-files.js";
 
@@ -366,47 +365,3 @@ export const migrateFactsIntoNotebookEffect = (
     );
     return facts.length;
   });
-
-/**
- * The synchronous doors onto the effects above, for the callers that still
- * hold a handle rather than a client: the store's own tests today.
- *
- * @deprecated Each goes with the caller that holds it; P5-11 runs every
- * remaining one on the worker's own runtime edge.
- */
-export function listNotebookEntries(
-  database: StoreDatabase,
-  root: string,
-  now: number,
-): readonly NotebookEntry[] {
-  return database.run(listNotebookEntriesEffect(root, now));
-}
-
-/** @deprecated The synchronous door onto {@link rememberNotebookEntryEffect}; see {@link listNotebookEntries}. */
-export function rememberNotebookEntry(
-  database: StoreDatabase,
-  root: string,
-  ask: { id: string; words: string; replaces?: string },
-  now: number,
-): NotebookMutation {
-  return database.run(rememberNotebookEntryEffect(root, ask, now));
-}
-
-/** @deprecated The synchronous door onto {@link forgetNotebookEntryEffect}; see {@link listNotebookEntries}. */
-export function forgetNotebookEntry(
-  database: StoreDatabase,
-  root: string,
-  id: string,
-  now: number,
-): NotebookMutation {
-  return database.run(forgetNotebookEntryEffect(root, id, now));
-}
-
-/** @deprecated The synchronous door onto {@link migrateFactsIntoNotebookEffect}; see {@link listNotebookEntries}. */
-export function migrateFactsIntoNotebook(
-  database: StoreDatabase,
-  root: string,
-  now: number,
-): number {
-  return database.run(migrateFactsIntoNotebookEffect(root, now));
-}
