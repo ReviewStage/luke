@@ -287,17 +287,9 @@ The vocabulary door names none of them, so a package that opens only it
 resolves no `effect`, while the barrel now does: `ObservationLoop` keeps its
 cadence on a `Schedule` forked into a `Scope` of its own rather than on an
 interval, so a caller that opens the barrel resolves `effect` behind it.
-`@sidecar/providers/effect` is that door one package further up, and holds one
-thing: `providersLayer` with its `Providers` tag and the
-`DuplicateProviderRegistration` a merged build refuses a repeated id with, so
-which providers stand is decided where their layers are merged. `builtProviders`
-beside it is that registry read out of a build for a caller holding a `Scope`,
-which is what `providerRegistrations` still is a Promise door over. The
-package's shared mechanics stay on the barrel beside the promise faces they
-replace — `observationSpoolEvents`, the hook spool as a `Stream` over
-`FileSystem.watch`, and `scopedReadOnlyDatabase`, a provider's own database
-open inside a `Scope` — and each takes the `FileSystem` or the `Scope` it
-needs from whoever runs it, so the package names `@effect/platform` and no
+`@sidecar/providers` needs no such door any more: what remains of it is the
+Conductor cloud adapter, whose pass rides `HttpClient` and takes the `Scope`
+it needs from whoever runs it, so the package names `@effect/platform` and no
 `@effect/platform-node` layer of its own.
 `@sidecar/memory/effect` is the same door one package over: `housekeepingEffect`
 reads a completed or nothing-to-store result as a success and an interrupted

@@ -1,7 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { INTRODUCTION_PEEK_FRESH_MS } from "@sidecar/host";
-import { peekLocalSessions } from "@sidecar/providers";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
@@ -108,21 +106,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.UPDATE_OPEN_CHANGELOG]: () => updates.openChangelog(),
     [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: () => operator.host.skipCalendarOnboarding(),
     [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: () => operator.host.completeCalendarOnboarding(),
-    // The introduction's one-shot keyless read of this machine's local
-    // sessions: the same read-only observe every pass runs, once, with no hook
-    // registration and no credential, answered only while the takeover holds
-    // the panel that is asking.
-    [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: async (_payload, { introduction }) => {
-      if (!introduction || !runMode.observesProviders) return [];
-      const now = Date.now();
-      const sessions = await peekLocalSessions();
-      return sessions.filter(
-        (session) => now - session.lastActivityAt <= INTRODUCTION_PEEK_FRESH_MS,
-      );
-    },
     // The takeover's own session, answered only while it holds the panel and
     // only on a run that reaches the network at all: the offer goes to the
-    // accountless voice service with the titles the takeover may name, and
+    // accountless voice service naming nothing observed, and
     // the hang-up closes the connection the service reads as the end.
     [ACT_KIND.INTRODUCTION_CREATE_SESSION]: ({ sdp, titles }, { introduction }) =>
       introduction && runMode.sendsNetwork

@@ -254,12 +254,9 @@ node --input-type=module -e '
 # row, or a window can reach a provider plugin, a CLI, or a local file without
 # the service's admission in between. The web functions still compile the
 # Conductor cloud adapter out of that package by relative path, which is the
-# service's own read and not this Mac's. The one file excluded holds the
-# spoken introduction's keyless local peek, whose removal is a product
-# decision still open; it is the last import this fence tolerates.
+# service's own read and not this Mac's.
 host_provider_imports=$(grep -rEn 'from "@sidecar/providers(/[^"]*)?"' \
     --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
-    --exclude='register-desktop-ipc.ts' \
     "$SIDECAR_REPO_ROOT"/packages/host/src \
     "$SIDECAR_REPO_ROOT"/apps/desktop/src || true)
 if [[ -n "$host_provider_imports" ]]; then

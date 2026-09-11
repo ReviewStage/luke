@@ -1,8 +1,8 @@
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
-import { boundedIntroductionTitles, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
+import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { WingFace as LukeFace, MicrophoneIcon } from "@sidecar/panel";
-import { SESSION_URGENCY, type Session } from "@sidecar/session";
+import { SESSION_URGENCY } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS } from "@sidecar/session/fixtures";
 import {
   FACE_MOTION,
@@ -25,12 +25,7 @@ import { useAct } from "../act";
 import { NotchWings } from "../notch-wings";
 import { PANEL_PRESENTATION } from "../panel-state";
 import { rendererRuntimeNow } from "../renderer-runtime";
-import {
-  fixtureSessions,
-  observedSessions,
-  type SessionView,
-  sessionTally,
-} from "../session-model";
+import { fixtureSessions, type SessionView, sessionTally } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { SessionRow, type SessionWriteHandlers } from "../session-row-view";
 import { useSignInFaceCycle } from "../sign-in-gate";
@@ -399,7 +394,6 @@ function IntroductionFlight({
   const [remoteStream, setRemoteStream] = useState<MediaStream | undefined>(undefined);
   const [meterAnalyser, setMeterAnalyser] = useState<AnalyserNode | undefined>(undefined);
   const [rows, setRows] = useState<readonly SessionView[]>([]);
-  const [rowsPretend, setRowsPretend] = useState(false);
   /**
    * The row the greeting's staged moment is drawn on: one of the detected
    * rows, picked from the middle so the reorder is seen. The flip is a
@@ -437,13 +431,6 @@ function IntroductionFlight({
     observer.observe(group);
     return () => observer.disconnect();
   }, []);
-  /**
-   * The detected titles the session is created with: bounded here to the
-   * same count and length the voice service admits, and only for rows that
-   * are real — pretend rows send nothing, since their titles are the
-   * fixture's and not the developer's.
-   */
-  const titlesRef = useRef<readonly string[]>([]);
   /**
    * Whether the introduction was actually given — the greeting spoken to its
    * quiet. A glide past a refused microphone or a voice that never stood up
@@ -516,8 +503,7 @@ function IntroductionFlight({
         onError: () => undefined,
       },
       acts: {
-        createSession: (sdp) =>
-          act(ACT_KIND.INTRODUCTION_CREATE_SESSION, { sdp, titles: [...titlesRef.current] }),
+        createSession: (sdp) => act(ACT_KIND.INTRODUCTION_CREATE_SESSION, { sdp, titles: [] }),
         endSession: () => tell(ACT_KIND.INTRODUCTION_END_SESSION),
         reportTransport: (transport) => {
           if (
@@ -669,31 +655,13 @@ function IntroductionFlight({
         return;
       }
       case INTRODUCTION_BEAT.DETECT: {
-        let stale = false;
-        let holdTimer: ReturnType<typeof setTimeout> | undefined;
-        const stage = (detected: readonly Session[]) => {
-          if (stale) return;
-          const found = detected.length > 0;
-          const mapped = found
-            ? observedSessions(detected)
-            : fixtureSessions(state.run.fixture).slice(0, PRETEND_ROW_COUNT);
-          const staged = mapped.map(inertRow);
-          setRows(staged);
-          setRowsPretend(!found);
-          // Titles alone travel — the one observed thing the introduction's
-          // bounds allow on the wire; the providers stay on the screen, and
-          // however long the drawn list scrolls, only the first few titles
-          // leave the machine, each cut to the length the service admits.
-          titlesRef.current = found
-            ? boundedIntroductionTitles(staged.map((row) => row.title))
-            : [];
-          holdTimer = setTimeout(() => dispatch(INTRODUCTION_EVENT.DETECTED), DETECT_HOLD_MS);
-        };
-        act(ACT_KIND.INTRODUCTION_PEEK_SESSIONS).then(stage, () => stage([]));
-        return () => {
-          stale = true;
-          if (holdTimer !== undefined) clearTimeout(holdTimer);
-        };
+        // The rows the greeting is said over are the fixture's pretend rows,
+        // drawn inert to show the shape of a desk: Luke observes no session
+        // on this machine before an account, so nothing observed is drawn
+        // and nothing observed travels with the offer.
+        setRows(fixtureSessions(state.run.fixture).slice(0, PRETEND_ROW_COUNT).map(inertRow));
+        const holdTimer = setTimeout(() => dispatch(INTRODUCTION_EVENT.DETECTED), DETECT_HOLD_MS);
+        return () => clearTimeout(holdTimer);
       }
       case INTRODUCTION_BEAT.GLIDE:
       case INTRODUCTION_BEAT.FLIGHT: {
@@ -909,7 +877,7 @@ function IntroductionFlight({
       ]
     : rows;
   const stagedTally = sessionTally(stagedRows);
-  const rowsNow = rowsPretend ? FIXTURE_EPOCH_MS : Date.now();
+  const rowsNow = FIXTURE_EPOCH_MS;
   // Who the strip hears, on the app's own vocabulary. The introduction's call
   // names one status at a time, so one speaker stands and the real wings
   // place that speaker's meter exactly as they do in the panel: Luke's beside

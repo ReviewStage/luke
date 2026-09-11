@@ -25,7 +25,6 @@ import {
   isSessionApplicationId,
   isSessionWriteResult,
   maximumSessionMessageLength,
-  type Session,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionWriteResult,
@@ -152,10 +151,9 @@ export const ACT_KIND = {
   FEEDBACK_SEND: "feedback.send",
   ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
   ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
-  INTRODUCTION_PEEK_SESSIONS: "introduction.peekSessions",
   /**
-   * The introduction's own GPT Live session: the takeover's SDP offer and the
-   * detected titles it may name, handed to the accountless voice service,
+   * The introduction's own GPT Live session: the takeover's SDP offer, with
+   * the titles field the service admits left empty, handed to the accountless voice service,
    * which answers the SDP and holds the session's trusted side; and the
    * hang-up, which closes the connection the service reads as the end. Both
    * are answered only while the takeover holds the panel, and no credential
@@ -573,11 +571,6 @@ export const ACT = {
   },
   [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: press("Could not skip that step on this system."),
   [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: press("Could not settle that step on this system."),
-  [ACT_KIND.INTRODUCTION_PEEK_SESSIONS]: {
-    payload: noPayload,
-    result: wireResult<readonly Session[]>(),
-    refusal: "Could not read this machine's sessions.",
-  },
   [ACT_KIND.INTRODUCTION_CREATE_SESSION]: {
     payload: s.record({
       sdp: s.text({ max: LIVE_SDP_MAX_CHARACTERS, ends: TEXT_ENDS.KEEP }),
