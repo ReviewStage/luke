@@ -18,6 +18,7 @@ import {
   type LiveDelegationId,
   type LiveServerEvent,
   type LiveSessionClosed,
+  PROACTIVE_SPEECH_KIND,
   type ProactiveSpeechKind,
   renderAskContext,
   speechAppends,
@@ -148,6 +149,14 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   onSessionCreated?: () => void;
   /** A proactive turn was settled spoken, for the bookkeeping the beats owe. */
   onProactiveSpoken?: (kind: ProactiveSpeechKind) => void;
+  /**
+   * A briefing's last append is about to be sent under the event id given,
+   * so a record that ties the append's acknowledgment and the speech after it
+   * to the briefing's own message can be told which message before the
+   * session answers. Told once per briefing, for the append whose speech
+   * settles it.
+   */
+  onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
 }
 
 interface RetainedDelegation {
@@ -919,8 +928,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     chunks.forEach((chunk, index) => {
       const last = index === chunks.length - 1;
       session.channel.enqueue(async () => {
+        const input = this.#input(null, chunk);
+        if (last && request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+          this.#options.onBriefingAppend?.(request.delivery, input.eventId);
+        }
         const taken = await session.channel.send(
-          commentaryAppend(this.#input(null, chunk)),
+          commentaryAppend(input),
           last
             ? () => {
                 this.#queue.spoken(request);

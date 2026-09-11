@@ -11,5 +11,9 @@ export {
   type LiveBrainSubmission,
 } from "./live-brain.js";
 export type { LiveRecord } from "./live-record.js";
-export { ASK_UNRECORDED_NOTE, LiveSessionService } from "./live-session-service.js";
+export {
+  ASK_UNRECORDED_NOTE,
+  type BriefingDelivery,
+  LiveSessionService,
+} from "./live-session-service.js";
 export type { BeatKind } from "./proactive-queue.js";

@@ -555,6 +555,36 @@ path the reply arrives whole at the turn's end; what the follow carries
 mid-turn is the slow step and the actions settling. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask.
 
+### Briefings claimed before they are spoken
+
+`server/voice/live-briefings.ts` is how a briefing reaches the hosted live
+session. The brain's `announce` put it on offer as a `speech.offered` event
+on its own message; while a session stands, the look reads the account's open
+offers on a schedule and, for each still merely offered, reads the
+announcement's words (`server/hosted/briefing-words.ts`, the same read the
+push pass makes), claims the offer as the device the session belongs to
+through `claimSpeech`, and only then hands it to the service to speak. The
+order is a rule and the type is what keeps it: the hosted delivery carries the
+`SpeechClaim` that `claimSpeech` alone mints, so a briefing delivered without
+a landed claim does not compile, and `repository-checks.sh` refuses the brand
+spelled anywhere else. A claim the record refuses delivers nothing, since a
+briefing spoken but not recorded as claimed can be pushed again and heard
+twice. **A session whose row names no device claims nothing and speaks no
+briefing**: `voice_sessions.device_id` is null until the handshake that
+creates the row carries a device the account owns, and a path that cannot
+prove which device is speaking must not speak. That is the contract, not a
+gap: the accountless introduction never claims, and a desktop that sends no
+device id hears its briefings by push instead. The service's own hold stands
+empty here: a held offer is `speech.held` on the record, and the look reads
+the account's quiet instant the way the sweep and the push do, so an offer
+the minute's sweep has not yet marked held is still not spoken into a
+meeting. Every open offer of the account is read at each look and only the
+still-offered ones are claimed, a bounded few per look, so rows claimed or
+held elsewhere cannot fill a page ahead of a newer offer; and a briefing is
+handed to the service as decided at its claim, since the record's expiry is
+what says how long an offer stands and the service's staleness rule measures
+only the wait from that decision to the speech.
+
 ### One connection is one invocation
 
 A WebSocket connection to a Vercel Function closes when the function reaches

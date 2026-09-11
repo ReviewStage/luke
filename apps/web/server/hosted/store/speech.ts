@@ -160,6 +160,29 @@ export type SpeechWriteResult =
   | { readonly ok: true; readonly id: string; readonly seq: number }
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
+declare const SPEECH_CLAIM: unique symbol;
+
+/**
+ * The one authorization to speak a briefing, minted here by `claimSpeech`
+ * alone once the claim has landed on the record, and by nothing else: the
+ * brand is a symbol no other module can spell, so a briefing append that
+ * takes a claim can be handed only what a landed claim answered, and
+ * "appended without claiming" is a call that does not compile rather than a
+ * rule to remember. It names what was claimed and by whom, which is what the
+ * spoken mark is later written against.
+ */
+export interface SpeechClaim {
+  readonly [SPEECH_CLAIM]: true;
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly deviceId: string;
+}
+
+export type SpeechClaimResult =
+  | { readonly ok: true; readonly id: string; readonly seq: number; readonly claim: SpeechClaim }
+  | { readonly ok: false; readonly refusal: SpeechRefusal };
+
 export interface SpeechStore {
   /** The runner of the edge that composed this store, which is what answers the reads below. */
   readonly run: HostedStoreRun;
@@ -409,12 +432,22 @@ interface Move {
  * a kind it names as excluding it arrived between the read and the lock, and
  * the refusal answered is then the one the offer's new standing names.
  */
+/** Where a transition landed, with the conversation the message stands in, which a claim carries onward. */
+type Moved =
+  | {
+      readonly ok: true;
+      readonly id: string;
+      readonly seq: number;
+      readonly conversationId: string;
+    }
+  | { readonly ok: false; readonly refusal: SpeechRefusal };
+
 async function move(
   store: SpeechStore,
   userId: string,
   messageId: string,
   { transition, deviceId, payload, guard }: Move,
-): Promise<SpeechWriteResult> {
+): Promise<Moved> {
   const located = await store.run(locate(userId, messageId));
   if (!located.ok) return located;
   const refusal = transition.refusals[located.standing.state] ?? guard?.(located.standing);
@@ -429,7 +462,7 @@ async function move(
       unless: transition.unless,
     },
   );
-  if (written.ok) return written;
+  if (written.ok) return { ...written, conversationId: located.conversationId };
   switch (written.refusal) {
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
       return { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED };
@@ -497,18 +530,27 @@ export async function offerSpeech(
  * re-reads the claim under the conversation's lock and answers the second
  * by name; the partial unique index stands behind that as the backstop.
  */
-export function claimSpeech(
+export async function claimSpeech(
   store: SpeechStore,
   userId: string,
   messageId: string,
   deviceId: string,
   now: number,
-): Promise<SpeechWriteResult> {
-  return move(store, userId, messageId, {
+): Promise<SpeechClaimResult> {
+  const moved = await move(store, userId, messageId, {
     transition: CLAIM,
     deviceId,
     guard: (standing) => (standing.expiresAt <= now ? SPEECH_REFUSAL.EXPIRED : undefined),
   });
+  if (!moved.ok) return moved;
+  // SAFETY: the claim event is on the record under this device; this is the one place the brand is minted.
+  const claim = {
+    userId,
+    conversationId: moved.conversationId,
+    messageId,
+    deviceId,
+  } as SpeechClaim;
+  return { ok: true, id: moved.id, seq: moved.seq, claim };
 }
 
 /**
