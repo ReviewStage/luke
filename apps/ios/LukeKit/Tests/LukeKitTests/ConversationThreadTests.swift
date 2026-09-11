@@ -220,6 +220,37 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: false)])
     }
 
+    func testAReplayStillPagingLeavesTheFoldedSpeechMarksStanding() {
+        var thread = ConversationThread()
+        let identity = ToolPartIdentity(toolCallId: "c1", toolName: "announce", state: .outputAvailable)
+        let announcement = ConversationReadMessage(
+            message: reply(
+                id: "m1",
+                parts: [.tool(ToolPart(toolName: "announce", toolCallId: "c1", state: .outputAvailable, input: .object(["briefing": .string("Hi")])))]
+            ),
+            seq: 1,
+            createdAt: Date(timeIntervalSince1970: 100),
+            tools: [.announce(identity, unspoken: true)]
+        )
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly, groups: [group(turnId: "t1", turn: nil, messages: [announcement])], next: "c1", hasMore: false
+            )
+        )
+        func event(_ seq: Int, _ kind: ConversationEventKind) -> ConversationReadEvent {
+            ConversationReadEvent(
+                id: "e\(seq)", conversationId: Self.main, seq: seq, messageId: "m1", kind: kind,
+                createdAt: Date(timeIntervalSince1970: 100 + Double(seq))
+            )
+        }
+        thread.apply(ConversationEventsAnswer(events: [event(1, .speechOffered)], next: "e1", hasMore: true))
+        XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: true)])
+        thread.apply(ConversationEventsAnswer(events: [event(2, .speechExpired)], next: "e2", hasMore: false))
+        XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: true)])
+        thread.apply(ConversationEventsAnswer(events: [event(3, .speechSpoken)], next: "e3", hasMore: true))
+        XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: false)])
+    }
+
     func testTheSignalsTurnsHeadSeedsOnlyAThreadThatHoldsNothingAndEventsNever() {
         var thread = ConversationThread()
         thread.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: "t1"))

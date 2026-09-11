@@ -23,6 +23,13 @@ public struct ConversationThread: Equatable, Sendable {
     private var groups: [String: Group] = [:]
     private var latestSpeech: [String: SpeechMark] = [:]
     private var latestRating: [String: RatingMark] = [:]
+    /// Whether the events read has reached the end of the record once. The
+    /// messages answer already folds every speech event up to the moment it
+    /// was read, so while the events are still being replayed from their
+    /// beginning the marks held here are older than that fold and stand
+    /// behind it; once the replay has caught up they carry everything the
+    /// fold did and whatever came after, and only then do they amend it.
+    private var eventsCaughtUp = false
 
     private struct Group: Equatable, Sendable {
         let turnId: String
@@ -87,6 +94,7 @@ public struct ConversationThread: Equatable, Sendable {
     public mutating func apply(_ answer: ConversationEventsAnswer) {
         for event in answer.events { record(event) }
         eventsCursor = answer.next
+        if !answer.hasMore { eventsCaughtUp = true }
     }
 
     /// Takes one event as the latest word about its message where it is
@@ -161,7 +169,7 @@ public struct ConversationThread: Equatable, Sendable {
     }
 
     private func amended(_ message: ConversationReadMessage) -> ConversationReadMessage {
-        guard let mark = latestSpeech[message.message.id] else { return message }
+        guard eventsCaughtUp, let mark = latestSpeech[message.message.id] else { return message }
         let tools = message.tools.map { tool -> ConversationViewToolPart in
             if case .announce(let identity, _) = tool {
                 return .announce(identity, unspoken: mark.kind == .speechExpired)
