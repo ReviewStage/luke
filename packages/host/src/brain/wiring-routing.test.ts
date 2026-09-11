@@ -35,8 +35,8 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**

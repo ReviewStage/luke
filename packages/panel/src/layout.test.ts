@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { lastActivityLabel, wingMarkCapacity, wingPileOffset } from "./layout.js";
 
 const MINUTE_MS = 60_000;

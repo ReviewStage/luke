@@ -22,9 +22,9 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance.js";
-import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 03:00 local on a fixed day, so the notes' day stamps are stable in any zone the test runs in. */

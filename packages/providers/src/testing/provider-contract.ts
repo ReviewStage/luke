@@ -30,6 +30,7 @@ import {
   type JsonObject,
   type JsonValue,
   recordedRoutes,
+  temporaryDirectory,
 } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import {
@@ -40,7 +41,6 @@ import {
   recordedApi,
   seedHome,
 } from "./fixture-recording.js";
-import { temporaryDirectory } from "./temporary-directory.js";
 
 /** How this provider is observed at all, which decides which cases run. */
 export const PROVIDER_OBSERVATION = {

@@ -378,9 +378,10 @@ fi
 # checker or esbuild can report, because both are real modules that simply are
 # not there at run time.
 #
-# A colocated test is not the renderer: it runs under Node and never enters the
-# bundle, so `node:test` is its whole point. The main-process door stays shut
-# for it either way — a renderer test that needs main is testing the wrong side.
+# A colocated test is not the renderer: it runs under Node and never enters
+# the bundle, so a `node:assert` import is its whole point. The main-process
+# door stays shut for it either way — a renderer test that needs main is
+# testing the wrong side.
 renderer_escapes=$(grep -ranE 'from "(#main/|node:)' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
     grep -vE '\.test\.tsx?:[0-9]+:import .*"node:' || true)
 if [[ -n "$renderer_escapes" ]]; then
@@ -417,6 +418,18 @@ hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
 if [[ -n "$hand_rolled_fixtures" ]]; then
     printf 'error: test files import temporaryDirectory and drainMicrotasks from @sidecar/runtime/testing rather than hand-rolling them:\n%s\n' \
         "$hand_rolled_fixtures" >&2
+    exit 1
+fi
+
+# Every workspace's tests run on vitest; `node:test` is retired. The `.mjs`
+# harness under `test:harness` is the one holdout, and it is exempt by
+# extension alone, never by path.
+node_test_imports=$(grep -rnE --include='*.ts' --include='*.tsx' --include='*.mts' \
+    'from "node:test"|require\("node:test"\)' \
+    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" || true)
+if [[ -n "$node_test_imports" ]]; then
+    printf 'error: these files still import node:test; every TypeScript test runs on vitest:\n%s\n' \
+        "$node_test_imports" >&2
     exit 1
 fi
 

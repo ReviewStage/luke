@@ -15,23 +15,18 @@ The shared ones, and the rule each carries:
   every action wired to nothing: the table's own tests and the row's read the
   same fixture, so neither can pass against a shape the other never sees.
 - `spoken-setting-bridge.ts` — the bridge a spoken settings change crosses.
-- `temporary-directory.ts` — this app's own vitest-native copy of
-  `@sidecar/wire/testing`'s `temporaryDirectory`, calling vitest's
-  `TestContext.onTestFinished` rather than `node:test`'s `after`, which
-  vitest's context does not carry; a directory of the test's own, removed
-  when the test ends. `packages/providers` keeps the same local copy for the
-  same reason; `P0-14` folds every copy back into wire once every consumer
-  runs on vitest.
 
-Two fixtures every test in the repository shares live in
+Three fixtures every test in the repository shares live in
 `@sidecar/runtime/testing` instead, because the host's tests are in a package
-and a package cannot reach into an app: `drainMicrotasks(ticks)` (the tick
-count is the length of the await chain being waited out, stated rather than
-guessed; hand-rolled copies had settled on four different numbers for the
-same wait), and `FakeClock` (a clock the test drives, so a deadline is
-crossed without waiting out a real one). The brain composition and the
-operator a window's ask crosses went with the host they compose, behind
-`@sidecar/host/testing`.
+and a package cannot reach into an app: `temporaryDirectory(t)` (a directory
+of the test's own, removed when the test ends, re-exported from
+`@sidecar/wire/testing`, which every package here already reaches),
+`drainMicrotasks(ticks)` (the tick count is the length of the await chain
+being waited out, stated rather than guessed; hand-rolled copies had settled
+on four different numbers for the same wait), and `FakeClock` (a clock the
+test drives, so a deadline is crossed without waiting out a real one). The
+brain composition and the operator a window's ask crosses went with the host
+they compose, behind `@sidecar/host/testing`.
 
 A test file does not hand-roll a temporary directory, a microtask drain, a
 clock, or a native-helper process: `repository-checks.sh` fails the build on a

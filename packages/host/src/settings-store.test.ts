@@ -23,6 +23,7 @@ import {
 import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
   apiKeyRejection,
@@ -30,7 +31,6 @@ import {
   SettingsStore,
   type SettingsStoreOptions,
 } from "./settings-store.js";
-import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";

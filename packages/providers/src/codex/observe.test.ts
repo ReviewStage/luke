@@ -12,9 +12,8 @@ import {
   SessionRoster,
   type SessionStatus,
 } from "@sidecar/session";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
-import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { codexLocalPlugin } from "./index.js";
 import { isCodexRealtimeDelegationText } from "./records.js";
 
