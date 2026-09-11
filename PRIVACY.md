@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 7 September 2026
+Last updated: 11 September 2026
 
 Luke is a macOS app that watches your coding agent sessions, with companion
 iOS and Apple Watch apps for the cloud sessions your account can see. This
@@ -83,9 +83,9 @@ session when it opens, beside a summary of the coding agent sessions on your
 screen (their titles, status, and branch, as the rows draw them), so the voice
 can follow what was just said and what is on your desk; while a session
 stands, that summary is sent again as quiet context whenever it changes. A thread you open as temporary is held in memory alone and is gone
-when Luke next opens; nothing said in it is remembered automatically. Nothing
-about a conversation is written on our servers, and a fixture or evidence run
-keeps no conversation at all.
+when Luke next opens; nothing said in it is remembered automatically. What
+our servers keep of a conversation is the record described under "Your
+account" below; a fixture or evidence run keeps no conversation at all.
 
 **Luke's workspace.** Luke keeps a small set of Markdown files of his own on
 your Mac, under his application data (`agents/main/workspace`): his operating
@@ -98,7 +98,16 @@ working memory as described below; dated notes travel only when he reads one
 or when a conversation starts fresh. Luke may edit these files himself through
 his own tools, in any of his turns, and nothing else on your machine: a
 coding agent's transcript or session state is never written, and a write whose
-arguments are malformed is refused rather than filled in.
+arguments are malformed is refused rather than filled in. When Luke runs a
+turn for you on our service, that turn reads the same set of files from rows
+in our database instead, one row per file per account: seeded with the same
+defaults the first time a turn runs for you, composed into the standing
+instructions the turn runs under, bounded the same way, and edited only
+through Luke's own workspace tools there. The file's name is stored in
+the clear and its contents are sealed under a key only our service holds,
+each row bound to your account so it cannot be opened under another. Those
+rows are untouched by clearing the conversation and are removed when you
+delete your account.
 
 **Luke's working memory.** For each conversation Luke keeps a working memory
 of his own turns in the same database, in its own tables — main's, each
@@ -204,7 +213,12 @@ bookkeeping about each line — an id Luke can name to correct or forget it, whe
 it was written, and whether it came from you, from Luke, or from the list an
 earlier version kept in the database — and that list, if one was found, was
 moved into `USER.md` once under the same ids and is not written any more. The
-iOS app keeps no such memory and does not read the Mac's. You can ask Luke what
+iOS app keeps no such memory and does not read the Mac's. When Luke runs a
+turn for you on our service, the facts he remembers in it are rows of their
+own in our database instead, their words sealed the same way as his workspace files
+there and bound to your account; a changed fact replaces the one it corrects,
+clearing the conversation does not touch them, and they are removed when you
+delete your account. You can ask Luke what
 he remembers, correct something, or tell him to forget it. They travel with the
 rest of Luke's working memory when he thinks, so he can personalize replies:
 directly to OpenAI on your own key if you entered one, or through our own
@@ -258,11 +272,22 @@ Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
 counts — on an admin page of our site that only an account we have marked as an
 administrator can open; nothing you type, say, or run in a session appears on
-it. The service also keeps your account's conversation with Luke — the
-messages, the turns that produced them, and the events about them — as the
-record the Conversation tab draws on every Mac you sign in on. Clearing the
-tab marks that conversation deleted and the service removes it thirty days
-later; deleting your account removes it at once.
+it. The service also keeps your account's conversation with Luke, as the
+record the Conversation tab draws on every Mac you sign in on and the iOS and
+Apple Watch apps read. When Luke runs a turn for you on our service, that
+turn writes rows to our database: your ask as it was given; Luke's reply, the
+summaries of his reasoning, and each tool he called with its input and its
+result, the briefing he offered you among them; the words an observation
+turn opened with, which for a Conductor session include the messages that
+chat gained since he last looked; the turn's model, token counts, and the
+ids of OpenAI's responses; and the events about each message — that a briefing was offered,
+claimed, spoken, pushed, held, or expired, and each rating you gave — naming
+the device that took part. Unlike his workspace files and the facts he
+remembers, described below, these rows are not sealed: they are stored as
+written, and our own operators can read them. They stand until you clear
+the conversation, which marks it deleted so that every device stops drawing
+it at its next read and the service removes it thirty days later, or until
+you delete your account, which removes it at once.
 
 **Usage data.** We count how Luke's features are used, on the Mac, in the
 iOS app, and in the Apple Watch app, and attach your name and email to that
@@ -366,17 +391,24 @@ your account if you delete that.
 
 **Devices.** When you sign in on the Mac app, the iOS app, or the Apple Watch
 app, that installation registers itself with our service as one device row.
-The row holds which platform it is, when it was last seen (refreshed on a
-timer by the Mac and each time the phone comes to the foreground), an
-optional push token, and two instants the Mac reports about once a minute
-on the same poll it uses to learn what changed: a presence instant, set only
-while your Mac has seen input in the last two minutes and its screen is
-unlocked, and a quiet-until instant, the end of a meeting its calendar hold
-observes while you have Luke quiet during meetings. Each is an instant and
-nothing else — not what you typed, not which app you were in, not the
-meeting's title, which never reaches the Mac either — and the service
-records them and decides nothing from them beyond holding speech while a
-quiet instant stands. The phone and the watch report neither. The
+The row holds which platform it is, when it was last seen (refreshed by
+every poll and heartbeat: on a timer by the Mac, each time the phone comes
+to the foreground, and by the phone's and the watch's Conversation screens
+while they are open), an optional push token, and two instants: a presence
+instant and a quiet-until instant. The Mac reports both about once a minute
+on the same poll it uses to learn what changed: presence set only while your
+Mac has seen input in the last two minutes and its screen is unlocked, and
+quiet-until as the end of a meeting its calendar hold observes while you
+have Luke quiet during meetings. The phone and the watch each report a
+presence instant too, on the poll their Conversation screen makes every few
+seconds while it is on screen and the app is in the foreground, each holding
+for thirty seconds; neither observes a meeting, so neither reports a quiet
+instant. Each is an instant and nothing else — not what you typed, not which
+app you were in, not the meeting's title, which never reaches the Mac either
+— and the service records them and decides nothing from them beyond holding
+speech while a quiet instant stands and, for a Mac alone, waiting before it
+pushes a briefing, as described next: a phone or watch is present or not, but
+only a Mac can be spoken through. The
 installation is named by an id the app made up once for itself; it is not a
 credential, and neither is a push token, which only our own Apple key can
 address. Signing into a different account on the same device moves its one
@@ -388,10 +420,12 @@ you delete that.
 **Briefing notifications.** When Luke decides to tell you something about your
 sessions and no device of yours is placed to say it — no Mac of yours
 reports itself active, or the active one has not taken the briefing within
-two minutes —
-our service sends the briefing to one of your devices as a push
-notification, through Apple's push notification service, addressed to the
-push token that device registered. The notification carries Luke's own
+two minutes; a phone or watch reporting itself present does not count, since
+neither can say it —
+our service sends the briefing to the device of yours most recently seen
+holding a push token, as a push notification through Apple's push
+notification service, addressed to the push token that device registered.
+The notification carries Luke's own
 words, the briefing exactly as he chose to say it, and one identifier of
 our own: the briefing's message id, an opaque identifier unique to that
 one message, which is what lets a tap open the Conversation at that briefing
@@ -402,7 +436,13 @@ Luke. It is shown on the lock screen, so it is readable on a locked phone
 without unlocking it, and Apple carries it under its own terms on the way.
 A briefing is pushed at most once; one a device is already saying is never
 pushed; and while any of your devices reports a quiet-until instant,
-nothing is pushed until it lifts. The iOS app asks for notification
+nothing is pushed until it lifts. Because a device's row moves with its
+sign-in, no briefing for the account you left is addressed to that device
+afterwards; one already handed to Apple at the moment you switched still
+arrives on its lock screen, and nothing we send can stop its display. That
+is the one window in which a briefing can reach a device signed in as
+someone else, and it holds only a briefing no device of the account had
+claimed. The iOS app asks for notification
 permission in the system's own dialog at its first launch, before you sign
 in; it asks Apple for a push token only where you allowed it, holds that
 token on the phone until a sign-in lands, and registers it with our service
@@ -454,6 +494,9 @@ Send.
   our service performs one model call per request and stores and logs none of
   the request, the reply, or the encrypted reasoning that travels in it; the
   record the reply joins is kept only on your Mac, under the lifetime above.
+  When Luke runs a turn for you on our service, the call to OpenAI is made
+  from there, and the record it joins is the conversation our service keeps,
+  described under "Your account" above.
   Each call counts against
   your daily review allowance. When Luke runs through your account, the Mac
   app also sends our service the standing instructions it prepared for the
@@ -537,13 +580,16 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, your conversation with Luke, his working memory, his workspace
-files, the things he remembers about you, local provider API keys, and
-calendar access stay on your Mac.
+Your settings, local provider API keys, and calendar access stay on your
+Mac, and so do the conversation, working memory, workspace files, and
+remembered facts of a Luke whose judgment runs on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
 API keys you sync to the hosted service, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
-encrypted in our own database, as described above. Your account information is held by our own
+encrypted in our own database, as described above. When Luke runs a turn for
+you on our service, the workspace files and remembered facts that turn reads
+and writes are stored sealed in the same database, and the conversation it
+writes is stored there unsealed, each as described above. Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
@@ -560,7 +606,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   clear it.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
-  your edit, and clearing the Conversation tab does not touch them.
+  your edit, and clearing the Conversation tab does not touch them. Rows of
+  them on our service are edited through Luke alone, and go with your
+  account.
 - Luke may act on his own judgment in a turn you did not open — answering a
   coding agent, keeping his notes, on a hook or a look
   — within the tool policy his configuration sets; the Conversation tab records
@@ -578,8 +626,10 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   presses alone, so one press opens the microphone and the next closes it,
   and the Keyboard shortcuts page says so.
 - Delete your account from the Account section in Settings. This erases your
-  account, your sign-in records, your usage counts, and any provider API keys
-  you synced to the hosted service, and asks PostHog to erase your usage data
+  account, your sign-in records, your usage counts, any provider API keys
+  you synced to the hosted service, your device rows, the conversation our
+  service kept with its workspace files and remembered facts, and the stored
+  roster of your sessions, and asks PostHog to erase your usage data
   and recordings, including the iOS and Apple Watch apps'. It does not reach a recording that was
   never attached to your account, as described above. Luke stops recording for
   the rest of the session, and starts again the next time you open it or sign

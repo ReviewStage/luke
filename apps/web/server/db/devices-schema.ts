@@ -7,15 +7,23 @@ import { instant } from "./instant.js";
  * iPhone, and the watch. The installation id is the key the client minted
  * once and keeps on the device, so a device that signs into a different
  * account carries its one row to that account in the same upsert rather than
- * leaving a second, and a notice for the old account can never land on a
- * device now signed in as someone else. The id is the service's own, minted
- * once for the row and answered back so a heartbeat can name it without
- * repeating the installation id. Presence (`active_until`) is written only by a
- * platform that can read its own input activity, and the meeting hold
- * (`quiet_until`) by one that reads a calendar; both arrive on the
- * change-signal poll, which the Mac sends and the phone does not yet. A push token is not a credential:
- * nothing but this deployment's own Apple key can address it. Every row goes
- * with the account, at sign-out, and when Apple reports its token gone.
+ * leaving a second, and no notice for the old account is addressed to that
+ * device afterwards. The window this leaves is one push already handed to
+ * Apple when the row moved: it still arrives, nothing in its payload can
+ * stop the display, and it carries only a briefing no device of the old
+ * account had claimed. The id is the service's own, minted once for the row
+ * and answered back so a heartbeat can name it without repeating the
+ * installation id. Presence (`active_until`) is written by a platform
+ * reporting on its own input activity or its Conversation screen standing
+ * in the foreground, and the meeting hold (`quiet_until`) by one that reads a
+ * calendar; both arrive on the change-signal poll, which the Mac sends once
+ * a minute with both and the phone and the watch send with presence alone
+ * while their Conversation screen is open. Which platforms' presence delays
+ * a push is `speech-push.ts`'s `SPEAKING_PLATFORMS`, not this column. A push
+ * token is not a credential: nothing but this deployment's own Apple key can
+ * address it.
+ * Every row goes with the account, at sign-out, and when Apple reports its
+ * token gone.
  */
 export const devices = pgTable("devices", {
   id: text("id").primaryKey(),
