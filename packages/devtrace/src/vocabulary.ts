@@ -67,8 +67,6 @@ export const TRACE_LIVE_EVENT = {
   COMMENTARY_APPEND: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
 } as const;
 
-export type TraceLiveEvent = (typeof TRACE_LIVE_EVENT)[keyof typeof TRACE_LIVE_EVENT];
-
 /**
  * The two reflected-audio events, and the field each carries its base64
  * samples in. Neither reaches the renderer's channel, but a sideband trace
