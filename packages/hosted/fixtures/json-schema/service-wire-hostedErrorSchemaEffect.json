@@ -16,7 +16,8 @@
         "unreadable-row",
         "method-not-allowed",
         "not-found",
-        "not-rateable"
+        "not-rateable",
+        "not-running"
       ]
     }
   },

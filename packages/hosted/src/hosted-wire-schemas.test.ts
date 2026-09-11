@@ -9,6 +9,7 @@ import {
 } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import * as actionWire from "./action-wire.js";
+import * as askWire from "./ask-wire.js";
 import * as brainContract from "./brain-contract.js";
 import * as conversationClearWire from "./conversation-clear-wire.js";
 import * as conversationWire from "./conversation-wire.js";
@@ -41,6 +42,11 @@ const MODULE_SCHEMAS = {
     hostedActionAnswerSchema: actionWire.hostedActionAnswerSchema,
     hostedActionWorkspaceAnswerSchema: actionWire.hostedActionWorkspaceAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof actionWire>,
+  "ask-wire": {
+    hostedBrainAskRequestSchema: askWire.hostedBrainAskRequestSchema,
+    hostedBrainAskAnswerSchema: askWire.hostedBrainAskAnswerSchema,
+    hostedBrainTurnAnswerSchema: askWire.hostedBrainTurnAnswerSchema,
+  } satisfies RecordedJsonSchemas<typeof askWire>,
   "conversation-clear-wire": {
     conversationClearAnswerSchema: conversationClearWire.conversationClearAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof conversationClearWire>,

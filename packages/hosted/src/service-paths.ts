@@ -111,6 +111,13 @@ export const HOSTED_SERVICE_PATH = {
   /** The account's turns in the order they last changed, behind a device's own cursor (GET). */
   BRAIN_TURNS: "/api/brain/turns",
   /**
+   * A developer's question to Luke's judgment (POST): admitted against the
+   * conversation it names before eve is reached, dispatched into that
+   * conversation's one eve session, and answered with the id its turn is
+   * read and stopped by. The client id is the idempotency key.
+   */
+  BRAIN_ASK: "/api/brain/ask",
+  /**
    * Clear (POST): the soft delete of the account's standing main conversation.
    * Nothing is erased: the main and its descendants are stamped deleted and a
    * new main opened in the same transaction, the reads above stop listing
@@ -138,6 +145,16 @@ export const VOICE_SERVICE_PATH = {
   /** The accountless introduction session, metered by the function itself; no bearer. */
   INTRODUCTION: "/api/voice/introduction",
 } as const;
+
+/** Where one turn stands (GET), by the id its ask answered or the turn's own; `wait` holds the read for a bounded settlement. */
+export function brainTurnPath(id: string): string {
+  return `/api/brain/turns/${encodeURIComponent(id)}`;
+}
+
+/** Stop one turn (POST): eve's cancel of the running turn, or the stamp a queued ask's turn is cancelled by when it starts. */
+export function brainTurnCancelPath(id: string): string {
+  return `${brainTurnPath(id)}/cancel`;
+}
 
 /** Rate one of Luke's stored messages (PUT): a hosted path with a row's id inside it rather than in a body. */
 export function conversationMessageRatingPath(messageId: string): string {
