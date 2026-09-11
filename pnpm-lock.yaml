@@ -506,12 +506,18 @@ importers:
 
   packages/calendar:
     dependencies:
+      '@effect/platform':
+        specifier: 'catalog:'
+        version: 0.97.2(effect@3.22.2)
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

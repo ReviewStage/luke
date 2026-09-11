@@ -134,7 +134,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Fourteen strangler shims are on that allowlist for as long as they live.
+Fifteen strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -236,6 +236,14 @@ the join over the internal `Semaphore` and `Deferred` is run to a promise for
 them. P7-04 and P7-06 move each composer onto the host's own runtime; once
 both callers run on Effect themselves, this seam goes with them.
 
+`GoogleCalendarReader`'s `#run` in `packages/calendar/src/reader.ts` and
+`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are the fifteenth:
+`packages/host/src/compose-calendars.ts` still calls both synchronously, as
+promises, so each runs its request effect over the ambient `HttpClient` down
+to a promise where it is built rather than on a runtime it owns. P7-06 moves
+the calendars composer onto the host's own runtime, at which point both run
+there instead and each disappears with its `Effect.runPromise`.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -264,6 +272,7 @@ design decision stated as such:
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
 | `LinearIssueTracker#post` | P4-03 | P12-04 |
 | `singleFlight`'s Promise-returning closure | P4-03 | P7-04, P7-06 |
+| `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |

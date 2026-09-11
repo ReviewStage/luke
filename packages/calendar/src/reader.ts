@@ -1,3 +1,7 @@
+import * as HttpBody from "@effect/platform/HttpBody";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
+import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "@sidecar/credentials";
 import {
   isRecord,
@@ -5,9 +9,11 @@ import {
   isWireString,
   wireRecord as readWireRecord,
   text,
-  unparsedWire,
   type WireValue,
+  WireValueSchema,
 } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Data, Duration, Effect, type Layer } from "effect";
 import {
   CALENDAR_LOOKAHEAD_MS,
   MAXIMUM_MEETING_LENGTH_MS,
@@ -34,6 +40,78 @@ const GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/m
 const GOOGLE_FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy";
 
 const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * The range a status is answered ok in, restated because what is read here is
+ * a status rather than a `Response`.
+ */
+const OK_STATUS = { FIRST: 200, PAST: 300 } as const;
+
+function answeredOk(status: number): boolean {
+  return status >= OK_STATUS.FIRST && status < OK_STATUS.PAST;
+}
+
+/** Why a request to Google's endpoints did not answer with a usable body. */
+const CALENDAR_REQUEST_FAULT = {
+  TRANSPORT: "transport",
+  STATUS: "status",
+  UNREADABLE: "unreadable",
+} as const;
+
+type CalendarRequestFault = (typeof CALENDAR_REQUEST_FAULT)[keyof typeof CALENDAR_REQUEST_FAULT];
+
+/** One request to Google ended before its body could be read, named by its kind. */
+class GoogleCalendarRequestError extends Data.TaggedError("GoogleCalendarRequestError")<{
+  readonly fault: CalendarRequestFault;
+  readonly message: string;
+}> {}
+
+/**
+ * One request to a Google endpoint, read to its JSON body under a deadline
+ * that covers the send as well as the read. A status outside 2xx, a transport
+ * fault, and a body that is not JSON are each their own named fault; the
+ * payload past that is unread here — every caller trusts no shape and reads
+ * through the wire helpers instead.
+ */
+function jsonRequest(
+  request: HttpClientRequest.HttpClientRequest,
+): Effect.Effect<WireValue, GoogleCalendarRequestError, HttpClient.HttpClient> {
+  return HttpClient.execute(request).pipe(
+    Effect.mapError(
+      (error) =>
+        new GoogleCalendarRequestError({
+          fault: CALENDAR_REQUEST_FAULT.TRANSPORT,
+          message: String(error),
+        }),
+    ),
+    Effect.flatMap((response) =>
+      answeredOk(response.status)
+        ? HttpClientResponse.schemaBodyJson(WireValueSchema)(response).pipe(
+            Effect.mapError(
+              () =>
+                new GoogleCalendarRequestError({
+                  fault: CALENDAR_REQUEST_FAULT.UNREADABLE,
+                  message: "Google Calendar answered a body that was not JSON",
+                }),
+            ),
+          )
+        : Effect.fail(
+            new GoogleCalendarRequestError({
+              fault: CALENDAR_REQUEST_FAULT.STATUS,
+              message: `Google Calendar answered ${response.status}`,
+            }),
+          ),
+    ),
+    Effect.timeoutFail({
+      duration: Duration.millis(REQUEST_TIMEOUT_MS),
+      onTimeout: () =>
+        new GoogleCalendarRequestError({
+          fault: CALENDAR_REQUEST_FAULT.TRANSPORT,
+          message: "Google Calendar did not answer in time",
+        }),
+    }),
+  );
+}
 
 // The list bounds, exported because the Apple reader keeps them too: the two
 // sources' calendars land on the same settings rows, which must not learn to
@@ -100,7 +178,7 @@ export interface GoogleCalendarReaderOptions {
 export class GoogleCalendarReader {
   readonly #readAccounts: () => Promise<readonly CalendarAccountCredential[]>;
   readonly #signInConfig: () => GoogleCalendarSignInConfig | undefined;
-  readonly #fetch: typeof fetch;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #now: () => number;
   /** Short-lived access tokens by account id, so passes never drum the minter. */
   readonly #accessTokens = new Map<string, CachedAccessToken>();
@@ -110,8 +188,22 @@ export class GoogleCalendarReader {
   constructor(options: GoogleCalendarReaderOptions) {
     this.#readAccounts = options.readAccounts;
     this.#signInConfig = options.signInConfig ?? googleCalendarSignInConfig;
-    this.#fetch = options.fetchImplementation ?? fetch;
+    const fetchImplementation = options.fetchImplementation ?? fetch;
+    this.#client = layerFromCloudFetch((url, init) => fetchImplementation(url, init));
     this.#now = options.now ?? Date.now;
+  }
+
+  /**
+   * @deprecated On the `Effect.runPromise` allowlist in
+   * `docs/adr/0001-effect.md`: every caller of this reader still holds a
+   * promise, not a fiber, so the request effect is run to one here rather
+   * than on a runtime this class owns. P7-06 moves the calendars composer
+   * onto the host's own runtime, at which point this method goes with it.
+   */
+  #run<Answer>(
+    effect: Effect.Effect<Answer, GoogleCalendarRequestError, HttpClient.HttpClient>,
+  ): Promise<Answer> {
+    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 
   /**
@@ -167,20 +259,18 @@ export class GoogleCalendarReader {
    * new account by its primary calendar and seeding what is selected.
    */
   async listCalendars(accessToken: string): Promise<readonly ListedCalendar[]> {
-    const response = await this.#fetch(GOOGLE_CALENDAR_LIST_URL, {
-      method: "GET",
-      headers: { authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`Google Calendar answered ${response.status}`);
-    const payload = await response.json();
-    const parsedPayload = unparsedWire(payload);
-    const items =
-      isRecord(parsedPayload) && Array.isArray(parsedPayload.items) ? parsedPayload.items : [];
+    const payload = await this.#run(
+      jsonRequest(
+        HttpClientRequest.get(GOOGLE_CALENDAR_LIST_URL, {
+          headers: { authorization: `Bearer ${accessToken}` },
+        }),
+      ),
+    );
+    const items = isRecord(payload) && Array.isArray(payload.items) ? payload.items : [];
     const calendars: ListedCalendar[] = [];
     for (const item of items) {
       if (calendars.length >= MAXIMUM_ACCOUNT_CALENDARS) break;
-      const itemRecord = readWireRecord(unparsedWire(item));
+      const itemRecord = readWireRecord(item);
       if (!itemRecord) continue;
       const id = text(itemRecord.id);
       if (!id) continue;
@@ -237,25 +327,23 @@ export class GoogleCalendarReader {
     calendarIds: readonly string[],
     now: number,
   ): Promise<MeetingInterval[]> {
-    const response = await this.#fetch(GOOGLE_FREEBUSY_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        timeMin: new Date(now - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
-        timeMax: new Date(now + CALENDAR_LOOKAHEAD_MS).toISOString(),
-        items: calendarIds.map((id) => ({ id })),
-      }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`Google Calendar answered ${response.status}`);
-    const payload = await response.json();
-    const responseRecord = readWireRecord(unparsedWire(payload));
-    const calendars = responseRecord
-      ? (readWireRecord(unparsedWire(responseRecord.calendars)) ?? {})
-      : {};
+    const payload = await this.#run(
+      jsonRequest(
+        HttpClientRequest.post(GOOGLE_FREEBUSY_URL, {
+          headers: { authorization: `Bearer ${accessToken}` },
+          body: HttpBody.raw(
+            JSON.stringify({
+              timeMin: new Date(now - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
+              timeMax: new Date(now + CALENDAR_LOOKAHEAD_MS).toISOString(),
+              items: calendarIds.map((id) => ({ id })),
+            }),
+            { contentType: "application/json" },
+          ),
+        }),
+      ),
+    );
+    const responseRecord = readWireRecord(payload);
+    const calendars = responseRecord ? (readWireRecord(responseRecord.calendars) ?? {}) : {};
     // Every asked-for calendar's busy blocks, together: which calendar a
     // meeting sits on does not matter to a hold, only that the user is in it.
     // Every asked-for calendar must also have answered: Google reports a
@@ -266,7 +354,7 @@ export class GoogleCalendarReader {
     // the account stands what it last showed.
     const busy: WireValue[] = [];
     for (const id of calendarIds) {
-      const entryRecord = readWireRecord(unparsedWire(calendars[id]));
+      const entryRecord = readWireRecord(calendars[id]);
       if (!entryRecord) {
         throw new Error(`Google Calendar could not read free/busy for "${id}"`);
       }
@@ -301,19 +389,28 @@ export class GoogleCalendarReader {
       refresh_token: account.refreshToken,
       client_id: config.clientId,
       client_secret: config.clientSecret,
+    }).toString();
+    const request = HttpClientRequest.post(GOOGLE_TOKEN_URL, {
+      body: HttpBody.raw(body, { contentType: "application/x-www-form-urlencoded" }),
     });
-    const response = await this.#fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      this.#accessTokens.delete(account.id);
-      throw new Error("Google no longer honours the sign-in; connect the account again");
-    }
-    const payload = await response.json();
-    const tokenRecord = readWireRecord(unparsedWire(payload));
+    const payload = await this.#run(
+      jsonRequest(request).pipe(
+        Effect.tapError((error) =>
+          error.fault === CALENDAR_REQUEST_FAULT.STATUS
+            ? Effect.sync(() => this.#accessTokens.delete(account.id))
+            : Effect.void,
+        ),
+        Effect.mapError((error) =>
+          error.fault === CALENDAR_REQUEST_FAULT.STATUS
+            ? new GoogleCalendarRequestError({
+                fault: CALENDAR_REQUEST_FAULT.STATUS,
+                message: "Google no longer honours the sign-in; connect the account again",
+              })
+            : error,
+        ),
+      ),
+    );
+    const tokenRecord = readWireRecord(payload);
     let accessToken = "";
     let expiresIn = 0;
     if (tokenRecord) {
