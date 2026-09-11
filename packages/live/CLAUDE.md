@@ -52,24 +52,18 @@ unchanged, since converting those callers to the typed error is its own,
 later PR.
 
 `instructions.ts` is the prompt a session is created with: the Live prompting
-guide's starter template with its brackets filled in and nothing else. The
-identity block is the template's three sentences, the scene filling the
-bracket in the first; `Backchannel policy:` and `Interruption policy:` are the
-template's whole; and `Delegation policy:` keeps its three labels —
-`Backend tools:`, `Delegate to the backend when:`, `Do not delegate to the
-backend when:` — over capabilities and conditions naming Luke's own backend,
-because the guide's Delegation section asks for concrete conditions and fills
-its own example the same way, closed by the template's two lines about
-delegating first and never guessing. Only one line departs from the words the
-guide prints: the identity reads "chief of staff" where the template reads
-"voice assistant". Every optional control from the guide's appendix — exact
-wording, fixed response sequences, turn-taking, tool narration — is absent
-until listening shows a behavior it would change, which is the guide's own
-instruction for a migration from Realtime, and no persona stands here at all:
-`@sidecar/guide`'s is the brain's, whose words the voice says. Two scenes
-stand, `DESKTOP` with the brain as its backend and `INTRODUCTION` with none,
-and `sessionInstructionBlocks` exposes which sections a scene emits so a test
-asserts the decision and not the words.
+guide's starter template with its brackets filled in and nothing beside them.
+Both scenes share one body — the template's three identity sentences,
+`Backchannel policy:`, and `Interruption policy:` — and differ only in the
+`Delegation policy:` block, whose capabilities and concrete conditions are
+what the guide's Delegation section asks for. `DESKTOP` names the brain's;
+`INTRODUCTION` names none and says never, because the accountless endpoint
+wires no carrier, so a model told it had backend tools would emit a
+delegation nobody reads. Only one line departs from the words the guide
+prints: the identity reads "chief of staff" where the template reads "voice
+assistant". Every optional control from the guide's appendix is absent until
+listening shows a behavior it would change, and no persona stands here at
+all: `@sidecar/guide`'s is the brain's, whose words the voice says.
 `greetingInstruction` is the introduction's opening, sent as one
 instructions append after `session.started` by the voice service, from the
 trusted side; `introductionSeedItems` is the one developer message the
@@ -116,6 +110,6 @@ The tests here cover only what this package owns, as values and structure:
 event type membership, `delegation_id` present-and-null against an id,
 `client_event_id` correlation, config keys present and absent, the permission
 arrays, seed roles and bounds, ledger grouping and ask context since an
-offset, chunk bounds and round trips, and which instruction sections a scene
-emits over an identity block bounded to the template's three lines. No test
-reads the prose.
+offset, chunk bounds and round trips, and an identity block bounded to the
+template's three lines over scenes that differ in their delegation policy
+alone. No test reads the prose.
