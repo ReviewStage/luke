@@ -420,7 +420,7 @@ test("an event keeps its kind, device, and payload as written", async () => {
   assert.equal(row.kind, CONVERSATION_EVENT_KIND.SPEECH_HELD);
   assert.equal(row.device_id, "mac-1");
   assert.deepEqual(row.payload, { until: 1_700_000_000_000 });
-  assert.equal(row.seq, 1);
+  assert.equal(Number(row.seq), 1);
   assert.ok(row.created_at instanceof Date);
 });
 
