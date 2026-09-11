@@ -329,29 +329,33 @@ test("at most one authorization to speak per briefing, never that it was heard: 
   });
 });
 
-test("a claim racing a push: the push lands either way, the claim lands only if it reached the lock first, two pushes racing land one, and a duplicate offer told again is the same offer rather than a state", async () => {
+test("a claim racing a push: exactly one lands, whichever reached the lock first, two pushes racing land one, and a duplicate offer told again is the same offer rather than a state", async () => {
   clock = NOW;
   const raced = await offered();
   const [claim, push] = await Promise.all([
     claimSpeech(store, raced.userId, raced.messageId, MAC, clock),
     markSpeechPushed(store, raced.userId, raced.messageId, clock, PHONE),
   ]);
-  assert.equal(push.ok, true);
+  assert.equal([claim, push].filter((outcome) => outcome.ok).length, 1);
   const kinds = (await speechEvents(raced.messageId)).map((event) => event.kind);
   if (claim.ok) {
+    assert.deepEqual(push, { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED });
     assert.deepEqual(kinds, [
       CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
       CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-      CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
     ]);
+    assert.deepEqual(
+      (await openSpeechOffers(database.db, { userId: raced.userId })).map((offer) => offer.state),
+      [SPEECH_STATE.CLAIMED],
+    );
   } else {
     assert.deepEqual(claim, { ok: false, refusal: SPEECH_REFUSAL.SETTLED });
     assert.deepEqual(kinds, [
       CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
       CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
     ]);
+    assert.deepEqual(await openSpeechOffers(database.db, { userId: raced.userId }), []);
   }
-  assert.deepEqual(await openSpeechOffers(database.db, { userId: raced.userId }), []);
 
   const twice = await offered(raced.userId);
   const pushes = await Promise.all([
@@ -400,6 +404,38 @@ test("a claim racing a push: the push lands either way, the claim lands only if 
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
 
+  // The mirror interleaving: the claim lands between the push's read and its
+  // lock, and the push is refused under it rather than told over the claim.
+  const claimedUnderneath: SpeechStore = {
+    db: database.db,
+    writer: {
+      recordEvent: async (target, event) => {
+        if (event.kind === CONVERSATION_EVENT_KIND.SPEECH_PUSHED) {
+          assert.equal(
+            (await claimSpeech(store, target.userId, event.messageId, MAC, clock)).ok,
+            true,
+          );
+        }
+        return store.writer.recordEvent(target, event);
+      },
+    },
+  };
+  const takenUnderneath = await offered(raced.userId);
+  assert.deepEqual(
+    await markSpeechPushed(
+      claimedUnderneath,
+      takenUnderneath.userId,
+      takenUnderneath.messageId,
+      clock,
+      PHONE,
+    ),
+    { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED },
+  );
+  assert.deepEqual(
+    (await speechEvents(takenUnderneath.messageId)).map((event) => event.kind),
+    [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED],
+  );
+
   const claimed = await offered(raced.userId);
   assert.equal((await claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock)).ok, true);
   await store.writer.recordEvent(
@@ -407,16 +443,14 @@ test("a claim racing a push: the push lands either way, the claim lands only if 
     { messageId: claimed.messageId, kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, unless: [] },
   );
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId: raced.userId })).map((offer) => [
-      offer.messageId,
-      offer.state,
-      offer.expiresAt,
-    ]),
-    [[claimed.messageId, SPEECH_STATE.CLAIMED, NOW + SPEECH_OFFER.TTL_MS]],
+    (await openSpeechOffers(database.db, { userId: raced.userId }))
+      .filter((offer) => offer.messageId === claimed.messageId)
+      .map((offer) => [offer.state, offer.expiresAt]),
+    [[SPEECH_STATE.CLAIMED, NOW + SPEECH_OFFER.TTL_MS]],
   );
 });
 
-test("a push closes an offer nobody claimed or a claim that never became speech, records the device pushed to, and refuses one already due", async () => {
+test("a push closes an offer nobody claimed, records the device pushed to, never takes a claimed one, and refuses one already due", async () => {
   clock = NOW;
   const unclaimed = await offered();
   const pushed = await markSpeechPushed(store, unclaimed.userId, unclaimed.messageId, clock, PHONE);
@@ -431,11 +465,11 @@ test("a push closes an offer nobody claimed or a claim that never became speech,
 
   const claimed = await offered(unclaimed.userId);
   assert.equal((await claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock)).ok, true);
-  assert.equal((await markSpeechPushed(store, claimed.userId, claimed.messageId, clock)).ok, true);
-  assert.deepEqual(await markSpeechSpoken(store, claimed.userId, claimed.messageId, MAC), {
+  assert.deepEqual(await markSpeechPushed(store, claimed.userId, claimed.messageId, clock), {
     ok: false,
-    refusal: SPEECH_REFUSAL.SETTLED,
+    refusal: SPEECH_REFUSAL.ALREADY_CLAIMED,
   });
+  assert.equal((await markSpeechSpoken(store, claimed.userId, claimed.messageId, MAC)).ok, true);
 
   const due = await offered(unclaimed.userId);
   const later = clock + SPEECH_OFFER.TTL_MS;
