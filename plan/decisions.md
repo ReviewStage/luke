@@ -2123,3 +2123,42 @@ of the first rehearsal, no longer the whole truth. #1104 required **real rewrite
 transaction and cursor keep, (c)'s `dequeueTurn` as a `Write<>` over `SqlSchema`, the released and
 carried reads as `findAll` pages, the tick's composition moving into `observationTickHandler`. **The
 replay is minutes; the work was hours, and the delay caused it.**
+
+
+## 2026-09-11 ~14:00Z — Dean rules six of seven (orchestrator)
+
+1. **The `asks` table — still open**, pending one clarification Dean asked for (industry practice on
+   folding). **Correction to how I framed it: the table is needed whether or not asks fold**, because
+   the turn id does not exist until `turn.started`, so the route cannot answer with one and a caller
+   needs something keyed by its own client id to poll. Folding makes it *also* true that two asks can
+   share a turn; lateness alone already forces the record.
+2. **Reuse `CRON_SECRET`. RULED.** C3's #1069 lands as it stands — no constant change, no environment
+   rename. Its bodies say why it is not a widening (whoever holds it already reads every account's
+   provider keys) and why the record names **one** authenticator with the turn kind as the role.
+3. **`prompts`: C′. RULED — store the hash, not the text.** Dean's reason: nobody is replaying yet.
+   The migration adds no sealed column; `prompts` keeps `(user_id, hash)` with `created_at` and the
+   cascade; `recordPrompt` stores the hash alone; the seal-reversibility assertions go. **The
+   Security Agent's HIGH is answered by the change rather than by an argument.** Two questions put to
+   C4 before it builds: **does `prompts` need to exist at all** under C′, since `turns.prompt_hash`
+   already carries the hash and the row's only content becomes "first seen at" — if not, the
+   migration drops the table rather than reshaping it; and the **asymmetry with `tool_sets`** (which
+   keeps its schemas, being the build's own content) goes in the schema comment in one sentence.
+4. **The Vercel preset is flipped.** C2a's hold lifted, in a fixed order: rebase once, let checks and
+   both bots run, **read the preview's build outcome before enqueueing** (a services build with two
+   entries, and `eve build` ending `built output at .../agent/.vercel/output`), **confirm main's own
+   production deploy is still green after the flip**, then enqueue. **Ready in ~70 s still means the
+   preset did not take.**
+5. **Notification permission on first launch. RULED** — Dean: "that feels more standard." One point
+   his ruling does not settle, handed to F3 rather than back to him: the introduction runs **before
+   any account exists**, and a token is useless until there is an account to attach it to — so ask at
+   first launch and upload on sign-in, and **say where the dialog lands relative to the
+   introduction's takeover**, since CLAUDE.md is explicit that the introduction raises no dialog of
+   its own. **If it cannot be shown at first launch without landing inside the introduction, F3 tells
+   me rather than moving it** — that is Dean's ruling meeting a constraint he did not have.
+6. **LUKE-161 gets a worker.** Launched with a brief that names the four false claims, the true
+   narrower statements, and the scope line: **correct what is false, leave G5's rewrite alone.**
+   Prose only, plus the one `devices-schema.ts` comment; anything that would change behaviour to
+   match a sentence comes back to me as a different ticket.
+7. **Do not interrupt the Effect lane over `packages/providers`. RULED.** G3's notes already carry
+   the two instructions that matter either way: **deletion wins a conflict with a rewrite**, and G3
+   reads who imports a module **now** rather than who imported it when the plan was written.
