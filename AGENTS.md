@@ -1371,8 +1371,10 @@ Canonical commands:
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report
 exact results; UI changes also require inspection of the visual evidence and a
-note stating whether a physical-notch check was performed. CI links generated
-evidence from the pull request description. Screenshots and recordings are
+note stating whether a physical-notch check was performed. CI runs the portable
+check on Linux alone; the packaged macOS app is proven by `verify.sh` at the
+developer's hand and by the release workflow, never by a PR run, so the
+evidence a UI PR needs is the developer's own. Screenshots and recordings are
 never committed, on any platform: a macOS capture, an iOS Simulator
 screenshot, and a physical-device recording all reach a pull request through
 GitHub's editor, which uploads them to its own attachment host, never through

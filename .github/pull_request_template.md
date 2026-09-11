@@ -7,11 +7,12 @@
 - Platform-independent checks: `not run`
 - macOS Electron verification (`./scripts/verify.sh`): `not run`
 
-<!-- automated-visual-evidence:start -->
-### Automated visual evidence
+### Visual evidence
 
-CI will replace this block with a link to the deterministic macOS screenshots.
-<!-- automated-visual-evidence:end -->
+CI runs on Linux only, so the deterministic macOS screenshots are yours to
+produce with `./scripts/verify.sh` and attach through GitHub's editor.
+
+- Fixture screenshots inspected: `not attached`
 
 ### Physical-device evidence
 
