@@ -7,6 +7,7 @@ import {
   type RuntimeCheckpoint,
 } from "@sidecar/runtime/vocabulary";
 import type { UnknownActionResult } from "@sidecar/wire";
+import { Effect, Exit, Scope } from "effect";
 import { TranscriptCursors } from "./cursors.js";
 import type { BrainPersistedState } from "./envelope.js";
 import { BrainJournal } from "./journal.js";
@@ -62,6 +63,14 @@ export interface Generation {
   /** Runs accepted in memory but not yet checkpointed; not yet acknowledged to anyone. */
   provisional: Set<string>;
   abort: AbortController;
+  /**
+   * What the generation owns, released in reverse order by one close: the
+   * signal every wait of the generation settles on, and, behind it, the
+   * context the runtime opened. Closing is the whole of retiring a
+   * generation, and it is synchronous — every finalizer here is — so the
+   * fence a replacement raises still stands before any disk is waited on.
+   */
+  scope: Scope.CloseableScope;
 }
 
 export const CONTEXT_OPENING = {
@@ -160,6 +169,19 @@ export function generationFrom(
           .catch((error: Error) =>
             incompatibleContext(`the runtime could not open the context: ${error.message}`),
           );
+  const scope = Effect.runSync(Scope.make());
+  Effect.runSync(
+    Scope.addFinalizer(
+      scope,
+      Effect.sync(() => retireOpenedContext(opened)),
+    ),
+  );
+  Effect.runSync(
+    Scope.addFinalizer(
+      scope,
+      Effect.sync(() => abort.abort()),
+    ),
+  );
   return {
     id: state.generationId,
     expiresAt: state.expiresAt,
@@ -173,13 +195,27 @@ export function generationFrom(
     requests: new Map(state.requests.map((record) => [record.runId, { ...record }])),
     provisional: new Set(),
     abort,
+    scope,
   };
 }
 
-/** Retires the generation's context once it is known, when it was loaded; nothing else holds one. */
-export function retireOpenedContext(generation: Generation): void {
-  void generation.opened.then((opened) => {
-    if (opened.kind === CONTEXT_OPENING.LOADED) retireContext(opened.context);
+/**
+ * Lets go of everything the generation owns, in one close and in reverse
+ * order: the signal fires first, so every wait of the generation settles,
+ * and the context the runtime opened is retired behind it. Nothing here
+ * waits — a close of a generation nobody will read again must not hold a
+ * stop, a replacement, or a successor's first turn — so the retirement is
+ * over by the time this returns, and closing a generation already retired
+ * does nothing.
+ */
+export function retireGeneration(generation: Generation): void {
+  Effect.runSync(Scope.close(generation.scope, Exit.void));
+}
+
+/** Retires the context once the open is known, when it was loaded; nothing else holds one. */
+function retireOpenedContext(opened: Promise<OpenedContext>): void {
+  void opened.then((standing) => {
+    if (standing.kind === CONTEXT_OPENING.LOADED) retireContext(standing.context);
   });
 }
 

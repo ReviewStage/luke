@@ -397,6 +397,26 @@ scope. The hook spool has no such face at all: `observationSpoolEvents` is a
 `Stream` and P6-12 runs it where the hook wiring lives, so nothing in that
 package forks a fiber of its own.
 
+`GenerationHolder` in `packages/brain/src/generation-holder.ts` and
+`retireGeneration` in `packages/brain/src/generation.ts` are on the allowlist
+for the same reason and under the same rule as `AskLedger#submit`. Which
+generation stands is a plain `Ref` whose `modify` takes the whole decision at
+once — the announcement names the generation already held, or a successor is
+built and installed over it — and a plain `Ref`'s `modify` never suspends, so
+the fence a replacement raises is up before the caller's next statement,
+which is what the storage rule means by a synchronous fence: the successor is
+announced and the dead generation stands nowhere before any disk is waited
+on. What a generation owns is a `Scope` of its own, and retiring it is one
+`Scope.close` whose finalizers — the abort signal every wait of the
+generation settles on, and the context the runtime opened behind it — run in
+reverse order and every one of them synchronously, so the close is a
+`runSync` too rather than a stop or a replacement waiting on a dispose.
+`state-store.ts` keeps its own compare-and-set against the envelope it last
+observed standing, because it is ported from OpenClaw `b7528507` and imports
+nothing from `effect`; its Effect surface stays in `state-store.effect.ts`.
+P5-14 deletes both runs once the agent's turns run on fibers of its own and
+the adoption is decided inside one.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -442,6 +462,7 @@ design decision stated as such:
 | The conversation, directory, and transcript tables' synchronous doors | P5-10a | P5-11 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P5-14 |
+| `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P5-14 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P5-14 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
