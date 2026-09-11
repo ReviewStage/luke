@@ -1,5 +1,8 @@
-import type { CloudFetch, WireRecord } from "@sidecar/wire";
-import { type AccountCall, accountBearer, createAccountCall } from "./account-call.js";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { type CloudFetch, effectSchema, type WireRecord } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Effect, type Layer } from "effect";
+import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
   type ChangesAnswer,
@@ -43,27 +46,40 @@ function changesRecord(request: ChangesRequest): WireRecord {
  * traveling at all.
  */
 export class HostedChangesClient {
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedChangesClientOptions) {
-    this.#call = createAccountCall({
+    this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
-      fetch: options.fetch,
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
   }
 
   poll(request: ChangesRequest): Promise<ChangesAnswer | undefined> {
     const admitted = changesRequestSchema.parse(changesRecord(request));
     if (admitted === undefined) return Promise.resolve(undefined);
-    return this.#call.ask(
-      {
-        method: CHANGES_METHOD,
-        path: HOSTED_SERVICE_PATH.CHANGES,
-        body: JSON.stringify(changesRecord(admitted)),
-      },
-      (payload) => changesAnswerSchema.parse(payload),
+    return this.#run(
+      this.#call.ask(
+        {
+          method: CHANGES_METHOD,
+          path: HOSTED_SERVICE_PATH.CHANGES,
+          body: JSON.stringify(changesRecord(admitted)),
+        },
+        effectSchema(changesAnswerSchema),
+      ),
     );
+  }
+
+  /**
+   * @deprecated The promise face `poll` keeps while its caller still awaits a
+   * `Promise` rather than holding a runtime edge of its own; deleted with
+   * `CloudFetch` in P12-04, at which point the caller runs `#call.ask` on its
+   * own runtime instead.
+   */
+  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
+    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }
