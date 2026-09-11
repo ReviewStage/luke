@@ -35,7 +35,12 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { type ConversationTarget, STORE_WRITE_REFUSAL, storeWriter } from "../server/hosted/store";
+import {
+  type ConversationTarget,
+  SPEECH_OFFER,
+  STORE_WRITE_REFUSAL,
+  storeWriter,
+} from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
@@ -61,7 +66,8 @@ const writer = await storeWriter({
 const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,
-  offer: (target, turnId) => offerBriefing({ db: database.db, writer }, target, turnId),
+  offer: (target, turnId) =>
+    offerBriefing({ db: database.db, writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: (message) => refusals.push(message),
 });
@@ -358,11 +364,15 @@ test("an observation turn over a roster diff lands the same way, with the roster
     [STEP_START, `tool-${BRAIN_TOOL.ANNOUNCE}`, STEP_START],
   );
   const offered = await database.db
-    .select({ kind: events.kind, messageId: events.messageId })
+    .select({ kind: events.kind, messageId: events.messageId, payload: events.payload })
     .from(events)
     .where(eq(events.conversationId, target.conversationId));
   assert.deepEqual(offered, [
-    { kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, messageId: answer.id },
+    {
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      messageId: answer.id,
+      payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
+    },
   ]);
 });
 

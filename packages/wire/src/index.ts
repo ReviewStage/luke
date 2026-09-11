@@ -21,7 +21,21 @@ export {
   RATING_EVENT_PAYLOAD,
   RATING_EVENT_PAYLOAD_FIELDS,
   type RatingEventPayload,
+  SPEECH_EXPIRED_EVENT_PAYLOAD,
+  SPEECH_EXPIRED_EVENT_PAYLOAD_FIELDS,
+  SPEECH_EXPIRY_REASON,
+  SPEECH_HELD_EVENT_PAYLOAD,
+  SPEECH_HELD_EVENT_PAYLOAD_FIELDS,
+  SPEECH_OFFERED_EVENT_PAYLOAD,
+  SPEECH_OFFERED_EVENT_PAYLOAD_FIELDS,
+  SPEECH_SPOKEN_EVENT_PAYLOAD,
+  SPEECH_SPOKEN_EVENT_PAYLOAD_FIELDS,
   type SpeechEventKind,
+  type SpeechExpiredEventPayload,
+  type SpeechExpiryReason,
+  type SpeechHeldEventPayload,
+  type SpeechOfferedEventPayload,
+  type SpeechSpokenEventPayload,
 } from "./conversation-event.js";
 export { Emitter, type Event } from "./event.js";
 export {

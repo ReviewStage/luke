@@ -389,12 +389,14 @@ and any Preview that needs a working vault) alongside `DATABASE_URL`.
 ## Hosted conversation store
 
 The tables under `server/db/conversation-schema.ts`, `workspace-schema.ts`,
-`roster-schema.ts`, and `briefing-schema.ts` hold the hosted brain's
+and `roster-schema.ts` hold the hosted brain's
 conversation per account: the conversation directory, the standing generation
 with its checkpoint items, cursors, inbox, runs, and action receipts, the
 conversation lines, the retained transcript and its compaction boundaries, the
-identity workspace and daily notes, the remembered facts, the latest roster
-snapshot with its diffs and pass record, and the briefings. Every row is
+identity workspace and daily notes, the remembered facts, and the latest roster
+snapshot with its diffs and pass record. `briefing-schema.ts` declares a table
+nothing writes or reads any more — a briefing's delivery is events on its
+message, below — and stands only until the migration that drops it. Every row is
 keyed by `user_id` and cascades with the user row, so `server/routes/account/delete.ts`
 erases them with the account. The roster tables are read and written by the
 scheduled observation below and the routes that serve it; nothing reads the
@@ -438,9 +440,31 @@ own event sequence, unique on `(conversation_id, seq)` like a message: a
 briefing's `speech.offered`, `speech.claimed`, `speech.spoken`,
 `speech.pushed`, `speech.expired`, or `speech.held`, or a `rating`. The
 partial unique index over `message_id` where the kind is `speech.claimed` is
-the reply-grant ledger's guarantee of at most one authorization to speak per
-briefing, carried by the schema alone: two devices claiming at once both
-insert and exactly one insert lands. A prompt and a tool set are
+the whole guarantee of at most one authorization to speak per briefing,
+carried by the schema alone: two devices claiming at once both insert and
+exactly one insert lands. `server/hosted/store/speech.ts` is the delivery
+over those events and the one door for a `speech.*` write: the writer's own
+type refuses a speech kind on a plain event write, so every transition goes
+through that module, carrying the kinds whose standing excludes it for the
+writer to check under the lock. Two races, two mechanisms: a claim losing to
+another claim is the index, a transition losing to a settled one is that
+check. The voice writer marks a briefing spoken through the same door, as
+the device its session belongs to, so only a briefing that device claimed is
+marked. `announce` puts a briefing on offer through
+`speech.offered`, whose payload is the instant the offer expires
+(`SPEECH_OFFER.TTL_MS` after it was made); a device claims it, the claimant
+reports it spoken or the service marks it pushed, and how an offer stands is
+folded from the speech events on its message in sequence order, the latest
+being the state. What is guaranteed is one authorization per briefing and
+never that the words were heard, so a claimed briefing whose device vanished
+is never offered to anyone else: it expires like an unclaimed one. The
+hold (`speech.held`, carrying the quiet instant a device reported, during
+which nothing is claimed, pushed, or expired), its release, and the expiry
+(`speech.expired`, carrying its reason: `due`, or `hold_released` for a
+briefing the brain re-decides rather than speaks stale) are the writes of a
+scheduled sweep over the open offers, which lands beside this module on the
+observation tick. The Conversation view marks an announcement unspoken when
+the latest speech event on its message is `speech.expired`. A prompt and a tool set are
 content-addressed, the hash of the text or the schemas as the key, so the same
 prompt written by every turn is one row a turn's hash names without a foreign
 key. A provider cursor is where the observation of one provider session last
@@ -482,7 +506,11 @@ a row nothing could read back. A compaction is written by its owner through
 first kept message nor, under eve, the summary's text; an event about a
 message goes through `recordEvent`, numbered by the conversation's event
 sequence, and a second `speech.claimed` on one message is answered as already
-claimed rather than left to the partial unique index. Every write is
+claimed rather than left to the partial unique index; an event write may also
+name the kinds whose standing on the message excludes it (`unless`), checked
+under the same lock, so a speech transition decided against the events a
+caller read is refused as superseded when another landed first rather than
+re-opening a settled offer. Every write is
 idempotent — a message by `(conversation_id, client_id)`, a turn by its id, a
 tool part by its call id, a reasoning part by its item's id — so an event
 delivered twice writes one row and a replayed stream changes nothing, and

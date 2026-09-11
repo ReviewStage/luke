@@ -8,7 +8,7 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -27,6 +27,7 @@ import {
   SCHEMA_REFUSAL,
   type SchemaPath,
   type SchemaRefusal,
+  type SpeechEventKind,
   STEP_START_PART,
   type StoredMessageMetadata,
   type StoredToolPart,
@@ -127,8 +128,9 @@ type StoreWriteEffect = (typeof STORE_WRITE_EFFECT)[keyof typeof STORE_WRITE_EFF
 
 /**
  * Why a write was refused: the row it needs is not there, the row or call it
- * would change is closed, the claim it makes is already another's, or what it
- * carries is outside the vocabulary.
+ * would change is closed, the claim it makes is already another's, an event
+ * it named as excluding it already stands, or what it carries is outside the
+ * vocabulary.
  */
 export const STORE_WRITE_REFUSAL = {
   NO_CONVERSATION: "no_conversation",
@@ -137,6 +139,7 @@ export const STORE_WRITE_REFUSAL = {
   NO_MESSAGE: "no_message",
   FINISHED: "finished",
   ALREADY_CLAIMED: "already_claimed",
+  SUPERSEDED: "superseded",
   MESSAGE_REFUSED: "message_refused",
 } as const;
 
@@ -222,11 +225,29 @@ type UserMessageWriteResult =
   | typeof NO_CONVERSATION
   | Extract<StoreWriteResult, { ok: false; refusal: typeof STORE_WRITE_REFUSAL.MESSAGE_REFUSED }>;
 
+/** An event any caller may write: every kind but speech, whose writes have one door, `store/speech.ts`. */
 interface EventWrite {
   readonly messageId: string;
-  readonly kind: ConversationEventKind;
+  readonly kind: Exclude<ConversationEventKind, SpeechEventKind>;
   readonly deviceId?: string;
   readonly payload?: UnparsedWireValue;
+}
+
+/**
+ * A speech event, which cannot be written without naming the kinds whose
+ * standing on the message refuse it: read under the conversation's lock in
+ * the same transaction as the insert, so a transition decided against the
+ * events a caller read lands only while those are still all there are. The
+ * speech module composes these; a `speech.*` kind on a plain event write
+ * does not compile, which is what keeps every speech transition behind that
+ * one door.
+ */
+interface SpeechEventWrite {
+  readonly messageId: string;
+  readonly kind: SpeechEventKind;
+  readonly deviceId?: string;
+  readonly payload?: UnparsedWireValue;
+  readonly unless: readonly ConversationEventKind[];
 }
 
 type EventWriteResult =
@@ -235,6 +256,7 @@ type EventWriteResult =
       | typeof STORE_WRITE_REFUSAL.NO_CONVERSATION
       | typeof STORE_WRITE_REFUSAL.NO_MESSAGE
       | typeof STORE_WRITE_REFUSAL.ALREADY_CLAIMED
+      | typeof STORE_WRITE_REFUSAL.SUPERSEDED
     >;
 
 export interface StoreWriter {
@@ -248,7 +270,10 @@ export interface StoreWriter {
     compaction: CompactionWrite,
   ): Promise<StoreWriteResult>;
   /** Appends one event about a message, numbered by the conversation's event sequence. */
-  recordEvent(target: ConversationTarget, event: EventWrite): Promise<EventWriteResult>;
+  recordEvent(
+    target: ConversationTarget,
+    event: EventWrite | SpeechEventWrite,
+  ): Promise<EventWriteResult>;
   /** Writes the developer's own words as a finished user message, once per client id. */
   recordUserMessage(
     target: ConversationTarget,
@@ -906,26 +931,36 @@ async function recordUserMessage(
  * One event about a message. A claim is the one kind the schema makes
  * exclusive, and under the conversation's lock the check for a standing claim
  * holds when the insert runs, so the second claimant is answered by name and
- * the partial unique index stays the backstop it is.
+ * the partial unique index stays the backstop it is. The kinds a write names
+ * in `unless` are checked the same way, so a speech transition decided
+ * against the events a caller read is refused as superseded when another
+ * landed between the read and the lock, rather than re-opening a settled
+ * offer by landing after it.
  */
-async function recordEvent(context: WriterContext, event: EventWrite): Promise<EventWriteResult> {
+async function recordEvent(
+  context: WriterContext,
+  event: EventWrite | SpeechEventWrite,
+): Promise<EventWriteResult> {
   const { conversationId, userId } = context.target;
   const [message] = await context.tx
     .select({ id: messages.id })
     .from(messages)
     .where(and(eq(messages.id, event.messageId), eq(messages.conversationId, conversationId)));
   if (message === undefined) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-  if (event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED) {
-    const [claimed] = await context.tx
-      .select({ id: events.id })
+  const claiming = event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED;
+  const excluding: ConversationEventKind[] = [
+    ...(claiming ? [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED] : []),
+    ...("unless" in event ? event.unless : []),
+  ];
+  if (excluding.length > 0) {
+    const standing = await context.tx
+      .select({ kind: events.kind })
       .from(events)
-      .where(
-        and(
-          eq(events.messageId, event.messageId),
-          eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED),
-        ),
-      );
-    if (claimed !== undefined) return { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED };
+      .where(and(eq(events.messageId, event.messageId), inArray(events.kind, excluding)));
+    if (standing.some((row) => claiming && row.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)) {
+      return { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED };
+    }
+    if (standing.length > 0) return { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED };
   }
   const seq = await allocateEventSeq(context);
   const [inserted] = await context.tx

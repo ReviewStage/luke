@@ -71,7 +71,8 @@ const writer = await storeWriter({
 });
 const relay = new StreamRelay({
   writer,
-  offer: (target, turnId) => offerBriefing({ db: database.db, writer }, target, turnId),
+  offer: (target, turnId) =>
+    offerBriefing({ db: database.db, writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: () => undefined,
 });
