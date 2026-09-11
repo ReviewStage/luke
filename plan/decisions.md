@@ -1429,3 +1429,35 @@ verification and not only of C2a's merge.
 
 `observedSideband` needs nothing from C2b-2b: its only seam is E5's attach in `VoiceService.#serve`,
 so part b waits on E5 for nothing.
+
+
+## 2026-09-11 — G4's counts are zero, measured; and a one-character catastrophe worth a test (orchestrator)
+
+**All thirteen tables at zero**, read directly from Neon project `luke`, branch `production`. The
+reasoning that "nothing has written these" was almost certainly right and would have been an awful
+thing to be wrong about, which is why the brief made it the first instruction rather than a
+footnote. **And I was wrong that no worker could reach that database** — G4 did, so C4 is now asked
+to measure its own `prompts` count the same way rather than leaving it in Dean's queue. A fact a
+worker can measure should not sit behind three decisions.
+
+**Two corrections to the ticket, both G4's:**
+
+- **`conversation_line_rating` has never existed** in any migration or in production. Named in the
+  ticket, so its absence from the migration is stated in the body rather than silently omitted — a
+  reader comparing the two would otherwise think one was missed.
+- **The ticket's list omitted the v1 `conversation` directory table**, which four of the listed
+  tables FK to and only the deleted modules read. **Dropping it is approved:** keeping it would
+  leave an orphan with no readers and no writers, the same dead-code-wearing-a-live-name problem as
+  `latestMessageRating`. The ticket's list was written from the store modules; the FK graph gives
+  the better one.
+
+**And the hazard that sits beside it: the table being dropped is `conversation`; the table that is
+the entire new design is `conversations`.** A typo in `0021` — in the migration, a later hand-edit,
+or a merge resolution — drops the v2 table and takes every conversation, message, event and turn
+with it by cascade. **Required: assert after the migration that `conversations`, `messages`,
+`events` and `turns` still exist.** Four lines, and the cheapest insurance in that PR.
+
+**The payload envelope helpers stay, correctly scoped:** `workspace_file`, `personal_fact`,
+`roster_snapshot` and `roster_diff` still seal through them, which is what the ticket's "remove the
+sealing helpers for conversation payloads (the vault's stay)" meant. `@sidecar/brain/store-shapes`
+and an unused `RunEndReason` export go, both having existed only for what G4 removed.
