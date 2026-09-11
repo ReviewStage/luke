@@ -1,4 +1,4 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import { Duration, Effect, type Scope } from "effect";
 
 /**
  * The WebRTC peer the voice window is, as the WebRTC guide builds one: the
@@ -10,6 +10,11 @@ import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
  * `session.start`. The peer is written over the narrowest slice of the
  * browser's objects the peer touches, so a test can stand a fake in for each
  * without a browser.
+ *
+ * The peer is acquired into the caller's `Scope` rather than handed over to be
+ * closed by hand: the connection and the device that rode its offer are
+ * released when that scope closes, which is the one end a session has, and a
+ * scope closes once.
  */
 
 /** How long ICE gathering may run before the offer goes with what it has. */
@@ -62,8 +67,6 @@ export interface LivePeerSeams {
   /** The host: the peer's offer becomes the one session, answered with the SDP the peer sets. */
   createSession: (sdp: string) => Promise<{ sessionId: string; sdpAnswer: string } | undefined>;
   onRemoteStream: (stream: MediaStream) => void;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
 }
 
 export interface LivePeer {
@@ -89,21 +92,49 @@ export type LivePeerOpening =
 
 const SESSION_REFUSED_MESSAGE = "Luke could not open a voice session.";
 
-async function gatherIce(connection: LivePeerConnection, seams: LivePeerSeams): Promise<void> {
-  if (connection.iceGatheringState === ICE_GATHERING_COMPLETE) return;
-  await new Promise<void>((resolve) => {
-    const timer = seams.schedule(() => {
-      connection.onicegatheringstatechange = null;
-      resolve();
-    }, ICE_GATHERING_TIMEOUT_MS);
-    connection.onicegatheringstatechange = () => {
-      if (connection.iceGatheringState !== ICE_GATHERING_COMPLETE) return;
-      seams.cancel(timer);
-      connection.onicegatheringstatechange = null;
-      resolve();
-    };
-  });
-}
+const messageOf = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
+
+/**
+ * Gathering, under its bound: the loser of the race is interrupted, and the
+ * handler is cleared whichever won, since the connection outlives this wait.
+ */
+const gatherIce = (connection: LivePeerConnection): Effect.Effect<void> =>
+  connection.iceGatheringState === ICE_GATHERING_COMPLETE
+    ? Effect.void
+    : Effect.race(
+        Effect.async<void>((resume) => {
+          connection.onicegatheringstatechange = () => {
+            if (connection.iceGatheringState !== ICE_GATHERING_COMPLETE) return;
+            resume(Effect.void);
+          };
+        }),
+        Effect.sleep(Duration.millis(ICE_GATHERING_TIMEOUT_MS)),
+      ).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            connection.onicegatheringstatechange = null;
+          }),
+        ),
+      );
+
+/**
+ * The device the offer rides, for a session a press opened. A refusal is not a
+ * failure — the session opens with a trackless line the first unmute fills.
+ * The device a later press opens is the call's own, released by the mute that
+ * ends that press; this one is the scope's, so a call ending mid-press releases
+ * whichever of them the peer is holding.
+ */
+const acquireDevice = (
+  seams: LivePeerSeams,
+): Effect.Effect<MediaStream | undefined, never, Scope.Scope> => {
+  const open = seams.openMicrophone;
+  if (open === undefined) return Effect.succeed(undefined);
+  return Effect.acquireRelease(
+    Effect.tryPromise(() => open()).pipe(Effect.orElseSucceed(() => undefined)),
+    (stream) => Effect.sync(() => stopDevice(stream)),
+  );
+};
 
 /**
  * Opens the peer in the guide's order. A press's microphone rides the offer
@@ -111,44 +142,59 @@ async function gatherIce(connection: LivePeerConnection, seams: LivePeerSeams): 
  * session opened for Luke's own speech, or one whose microphone the system
  * refuses, carries a sending line with no track, which the first unmute
  * fills, so no capture device is open behind a session nobody pressed for.
+ *
+ * A refusal answers rather than fails, so the call can say what went wrong,
+ * and releases nothing by hand: whatever was acquired goes when the scope
+ * does.
  */
-export async function openLivePeer(seams: LivePeerSeams): Promise<LivePeerOpening> {
-  let connection: LivePeerConnection | undefined;
-  let microphoneStream: MediaStream | undefined;
-  try {
-    connection = seams.createPeerConnection();
+export const acquireLivePeer = (
+  seams: LivePeerSeams,
+): Effect.Effect<LivePeerOpening, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const connection = yield* Effect.acquireRelease(
+      Effect.try({ try: () => seams.createPeerConnection(), catch: messageOf }),
+      (connection) => Effect.sync(() => connection.close()),
+    );
     connection.ontrack = (event) => {
       const stream = event.streams[0] ?? new MediaStream([event.track]);
       seams.onRemoteStream(stream);
     };
-    let microphone: MediaStreamTrack | undefined;
-    if (seams.openMicrophone) {
-      try {
-        microphoneStream = await seams.openMicrophone();
-        microphone = microphoneStream.getAudioTracks()[0];
-      } catch {
-        microphoneStream = undefined;
-      }
-    }
-    let sender: LiveTrackSender;
-    if (microphone && microphoneStream) {
-      microphone.enabled = false;
-      sender = connection.addTrack(microphone, microphoneStream);
-    } else {
-      sender = connection.addTransceiver("audio", { direction: "sendrecv" }).sender;
-    }
-    const channel = connection.createDataChannel(LIVE_EVENTS_CHANNEL_LABEL);
-    const offer = await connection.createOffer();
-    await connection.setLocalDescription(offer);
-    await gatherIce(connection, seams);
+    const microphoneStream = yield* acquireDevice(seams);
+    const microphone = microphoneStream?.getAudioTracks()[0];
+    const sender = yield* Effect.try({
+      try: () => {
+        if (microphone && microphoneStream) {
+          microphone.enabled = false;
+          return connection.addTrack(microphone, microphoneStream);
+        }
+        return connection.addTransceiver("audio", { direction: "sendrecv" }).sender;
+      },
+      catch: messageOf,
+    });
+    const channel = yield* Effect.try({
+      try: () => connection.createDataChannel(LIVE_EVENTS_CHANNEL_LABEL),
+      catch: messageOf,
+    });
+    const offer = yield* Effect.tryPromise({
+      try: () => connection.createOffer(),
+      catch: messageOf,
+    });
+    yield* Effect.tryPromise({
+      try: () => connection.setLocalDescription(offer),
+      catch: messageOf,
+    });
+    yield* gatherIce(connection);
     const sdp = connection.localDescription?.sdp;
-    if (!sdp) throw new Error("the peer produced no local description");
-    const created = await seams.createSession(sdp);
-    if (!created) {
-      teardown(connection, microphoneStream);
-      return { outcome: LIVE_PEER_OUTCOME.FAILED, message: SESSION_REFUSED_MESSAGE };
-    }
-    await connection.setRemoteDescription({ type: "answer", sdp: created.sdpAnswer });
+    if (!sdp) return yield* Effect.fail("the peer produced no local description");
+    const created = yield* Effect.tryPromise({
+      try: () => seams.createSession(sdp),
+      catch: messageOf,
+    });
+    if (!created) return yield* Effect.fail(SESSION_REFUSED_MESSAGE);
+    yield* Effect.tryPromise({
+      try: () => connection.setRemoteDescription({ type: "answer", sdp: created.sdpAnswer }),
+      catch: messageOf,
+    });
     return {
       outcome: LIVE_PEER_OUTCOME.OPENED,
       peer: {
@@ -159,26 +205,14 @@ export async function openLivePeer(seams: LivePeerSeams): Promise<LivePeerOpenin
         microphoneStream,
         sender,
       },
-    };
-  } catch (error) {
-    if (connection) teardown(connection, microphoneStream);
-    return {
-      outcome: LIVE_PEER_OUTCOME.FAILED,
-      message: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
+    } satisfies LivePeerOpening;
+  }).pipe(
+    Effect.catchAll((message) =>
+      Effect.succeed({ outcome: LIVE_PEER_OUTCOME.FAILED, message } satisfies LivePeerOpening),
+    ),
+  );
 
 /** Stops every track of a capture device, so the system's indicator goes with it. */
 export function stopDevice(stream: MediaStream | undefined): void {
   for (const track of stream?.getTracks() ?? []) track.stop();
-}
-
-/** Closes the peer and stops the capture device standing on it. */
-export function teardown(
-  connection: LivePeerConnection,
-  microphoneStream: MediaStream | undefined,
-): void {
-  stopDevice(microphoneStream);
-  connection.close();
 }

@@ -11,6 +11,7 @@ import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { VOICE_COMMAND, voiceExchangeKind } from "#shared/messages/voice-view";
 import { act, useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
+import { rendererRuntimeNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
 import { LiveCall } from "./live-call";
@@ -87,10 +88,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           }),
         onRemoteStream: (remote) => setStreams((held) => ({ ...held, remote })),
         onLocalStream: (local) => setStreams((held) => ({ ...held, local })),
-        now: () => Date.now(),
-        schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
-        // SAFETY: every timer the call cancels is one the scheduler above made, a window timeout handle.
-        cancel: (timer) => window.clearTimeout(timer as number),
+        runtime: rendererRuntimeNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the
         // document that says whether a writer stands behind the bridge.

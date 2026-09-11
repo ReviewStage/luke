@@ -257,6 +257,16 @@ component to hold a hook's return value. `runAct` sets the atom and reads its
 result back to a promise there instead. P9-08 deletes it once nothing outside
 a hook still asks for an act.
 
+`LiveCall`'s `open`, `unmute`, `mute`, and `close` in
+`apps/desktop/src/renderer/voice/live-call.ts` are on the allowlist on the same
+terms as every other: the session's life is a fiber it forks on the renderer's
+own runtime and every bound of it an `Effect.sleep` in that fiber's scope, but
+`LiveVoiceCall` — what the policy above the peer holds — is four promises, so
+each verb runs its effect on the runtime the call was handed rather than on one
+it built. The clock the captions are stamped from is read there too. P9-08
+deletes the promise-facing seam once the hooks and the orchestrator take the
+fiber.
+
 `Maintenance`'s `#writeFlushMarker` in `packages/brain/src/maintenance.ts` is on
 the allowlist too: its own caller still holds a `Promise<Settled<...>>` for
 the flush marker's write outcome, so `writeFlushMarkerEffect` — an
@@ -308,6 +318,7 @@ design decision stated as such:
 | `singleFlight`'s Promise-returning closure | P4-03 | P7-04, P7-06 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
 | `runAct` Promise door over the act `Atom.fn` | P9-02 | P9-08 |
+| `LiveCall`'s `open`/`unmute`/`mute`/`close` over the renderer's runtime | P9-03 | P9-08 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
@@ -349,3 +360,9 @@ refuses is a second copy of `effect`, which is the catalog's guarantee, and a
 Node-reaching companion such as `@effect/platform` arriving behind a barrel.
 P12-12's tightening of the budget's slack to five percent measures from these
 post-Effect numbers.
+
+P9-03's fiber for the voice call is the first renderer adoption that adds no
+library at all: naming `Deferred`, `Scope`, `Clock`, and `Duration` where a
+timer seam stood cost `renderer.js` 2,914 gzipped bytes and `voice.js` 2,940,
+the same modules in each, and both bundles stay under the baselines above, so
+the budget is left as P9-01 recorded it.

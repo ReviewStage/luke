@@ -22,6 +22,7 @@ import type { DisplayDiagnostic } from "#shared/messages/session";
 import { useAct } from "../act";
 import { NotchWings } from "../notch-wings";
 import { PANEL_PRESENTATION } from "../panel-state";
+import { rendererRuntimeNow } from "../renderer-runtime";
 import {
   fixtureSessions,
   observedSessions,
@@ -527,10 +528,7 @@ function IntroductionFlight({
         setRemoteStream(stream);
       },
       onLocalStream: (stream) => setLocalStream(stream),
-      now: () => Date.now(),
-      schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
-      // SAFETY: every timer the call cancels is one the scheduler above made, a window timeout handle.
-      cancel: (timer) => window.clearTimeout(timer as number),
+      runtime: rendererRuntimeNow(),
       onWireEvent: (direction, event) => {
         if (appStateNow()?.run.agentTraceEnabled !== true) return;
         window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });
