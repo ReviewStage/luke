@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { HttpApp } from "@effect/platform";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { adminViewerGate } from "../server/admin/gate";
@@ -10,15 +11,15 @@ function adminRequest(method = "GET"): Request {
   return new Request("https://luke.test/api/admin/metrics", { method });
 }
 
-function gate(
-  overrides: Partial<Parameters<typeof adminViewerGate>[0]> = {},
-): ReturnType<typeof adminViewerGate> {
-  return adminViewerGate({
+/** The gate as one function answers it, which is the web handler an `HttpApp` builds. */
+function gate(overrides: Partial<Parameters<typeof adminViewerGate>[0]> = {}) {
+  const app = adminViewerGate({
     methods: ["GET"],
     resolveViewer: async () => ADMIN_VIEWER,
     handler: async () => new Response("{}", { status: 200 }),
     ...overrides,
   });
+  return { fetch: HttpApp.toWebHandler(app) };
 }
 
 test("the gate answers 405, 503, 401, 403, and the handler as distinct outcomes", async () => {

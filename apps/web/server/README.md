@@ -162,9 +162,10 @@ than a second one, and a warm invocation reaches the services the cold one
 built. The brain group's four routes, the three mint routes, the auth group,
 the actions group, the five routes behind the observation group below, the
 account group's `server/routes/account/delete.ts` and
-`server/routes/account/preferences.ts`, and the devices and vault group's three
-routes are converted this way; every other route still default-exports the
-promise-shaped handler beside it.
+`server/routes/account/preferences.ts`, the devices and vault group's three
+routes, and the dashboard's five behind the admin group are converted this
+way; every other route still default-exports the promise-shaped handler
+beside it.
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -294,6 +295,35 @@ path — a register, a heartbeat, a forget, a store, a delete, a list, and one
 refusal of each shape — and `tests/devices-vault-app.test.ts` carries every
 gate-order and validation case the promise-shaped handlers were tested
 against, run against the group instead.
+
+## The admin group
+
+`server/admin-app.ts` is the dashboard's route group: its four reads and the
+Users tab's one star write, each its own function, with the group declaring
+all five addresses from `ADMIN_ROUTE_PATH` in `server/admin/http.ts` — the
+same constants the page composes its calls from, so an address cannot drift
+between the two ends. A path the group declares no route for is the admin
+vocabulary's own `not-found`; nothing routes one there, since each address is
+its own exact-path function, so that refusal is what the group says about
+itself.
+
+What the group owns is the gate, and only the gate: `server/admin/gate.ts`
+keeps the order the pages depend on — a method the address does not answer is
+a 405 before a session is even looked for, an auth seam that throws is a 503
+rather than a crash, an anonymous request is a 401 the page answers with a
+sign-in, and a signed-in non-admin is a 403 it answers with a plain refusal —
+and takes the resolver rather than reaching for it, because the real one is
+Better Auth and a gate this much depends on has to be exercisable without a
+database. Each read still answers for its own parameters and its own body,
+and the group carries that answer as it came, status, headers, and bytes, the
+way the auth group carries Better Auth's. `server/admin/admin-route.ts` is
+the one place that hands the group this deployment's real session resolver,
+database, and integration presence booleans.
+
+Every admin answer is viewer-gated account data, refusals included, so each
+one carries `no-store`; `fixtures/admin-refusal/` records the five the group
+answers itself and `tests/admin-refusal.test.ts` holds them to the bytes the
+promise-shaped vocabulary in `server/admin/http.ts` gives.
 
 ## Signing in on a Preview deployment
 

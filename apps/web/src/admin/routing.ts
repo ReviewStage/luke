@@ -5,6 +5,7 @@ import {
   ADMIN_METRICS_WINDOW,
   ADMIN_METRICS_WINDOW_DEFAULT,
   ADMIN_METRICS_WINDOW_PARAM,
+  ADMIN_ROUTE_PATH,
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   ADMIN_USERS_SEARCH_PARAM,
@@ -12,15 +13,15 @@ import {
   isUtcDayKey,
 } from "../../server/admin/http";
 
-export const METRICS_PATH = "/api/admin/metrics";
+export const METRICS_PATH = ADMIN_ROUTE_PATH.METRICS;
 
-const USER_DETAIL_PATH = "/api/admin/user";
+const USER_DETAIL_PATH = ADMIN_ROUTE_PATH.USER;
 
-export const USERS_PATH = "/api/admin/users";
+export const USERS_PATH = ADMIN_ROUTE_PATH.USERS;
 
-export const FAVORITE_PATH = "/api/admin/favorite";
+export const FAVORITE_PATH = ADMIN_ROUTE_PATH.FAVORITE;
 
-const DAY_DETAIL_PATH = "/api/admin/day";
+const DAY_DETAIL_PATH = ADMIN_ROUTE_PATH.DAY;
 
 /**
  * The page's own addresses, distinct from the API's parameters so a pasted

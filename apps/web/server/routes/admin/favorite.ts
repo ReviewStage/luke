@@ -1,18 +1,10 @@
-import { handleAdminFavorite } from "../../admin/admin-favorite.js";
-import { writeAdminFavorite } from "../../admin/admin-queries.js";
-import { withAdminViewer } from "../../admin/viewer.js";
-import { getDatabase } from "../../db/index.js";
+import { hostedAdminSeams } from "../../admin/admin-route.js";
+import { adminApp } from "../../admin-app.js";
+import { routeFromHttpApp } from "../../route-effect.js";
 
 /**
- * The Users tab's star write: PUT favorites the named account for the signed-in
- * admin, DELETE takes the star back. The logic lives behind seams in
- * `server/admin/`; this file hands it the deployment's real database.
+ * The Users tab's star write: PUT favorites the named account for the
+ * signed-in admin, DELETE takes the star back. It lives behind the group in
+ * `server/admin-app.ts`; this file only hands it the deployment's real seams.
  */
-export default withAdminViewer(["PUT", "DELETE"], (viewer, request) =>
-  handleAdminFavorite({
-    request,
-    viewer,
-    writeFavorite: (adminId, userId, favorite) =>
-      writeAdminFavorite(getDatabase(), { adminId, userId, favorite }),
-  }),
-);
+export default routeFromHttpApp(adminApp(hostedAdminSeams()));
