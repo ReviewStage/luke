@@ -46,6 +46,14 @@ export interface ObservedRoster {
   readonly providers: readonly ObservedRosterProvider[];
 }
 
+/** One provider's slice of the roster, or nothing where the snapshot holds none for it. */
+export function rosterProvider(
+  roster: ObservedRoster,
+  providerId: CloudAgentProviderId,
+): ObservedRosterProvider | undefined {
+  return roster.providers.find((provider) => provider.providerId === providerId);
+}
+
 export function encodeObservedRoster(roster: ObservedRoster): string {
   return JSON.stringify(roster);
 }

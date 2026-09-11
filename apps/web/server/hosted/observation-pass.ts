@@ -127,7 +127,7 @@ function keyFingerprints(
  * another key's roster, however recent, and is neither served nor admitted
  * against nor diffed from.
  */
-export function rosterObservedUnder(
+function rosterObservedUnder(
   roster: ObservedRoster,
   rows: readonly VaultKeyRow[],
   secret: string,
