@@ -38,6 +38,7 @@ import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, lateRef, type UnparsedWireValue } from "@sidecar/wire";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
+import { settingsOverridesFromEnvironment } from "./effect/settings-overrides.js";
 import type { HostKernel } from "./host-kernel.js";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
@@ -103,7 +104,7 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
     // reported as available that would not actually happen.
     credentialsUsable: runMode.observesProviders,
     cipher: options.cipher,
-    environment: options.environment,
+    overrides: settingsOverridesFromEnvironment(options.environment),
   });
 
   const productEvents = new ProductEventSender({

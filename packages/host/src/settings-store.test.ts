@@ -25,6 +25,7 @@ import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { test } from "vitest";
+import { settingsOverridesFromEnvironment } from "./effect/settings-overrides.js";
 import {
   apiKeyRejection,
   type SecretCipher,
@@ -119,7 +120,7 @@ function storeIn(
   const config: SettingsStoreOptions = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
-    environment: options.environment ?? {},
+    overrides: settingsOverridesFromEnvironment(options.environment ?? {}),
   };
   return new SettingsStore(config);
 }
@@ -144,7 +145,7 @@ test("a failed first load is retried before a later write", async (t) => {
       return directory;
     },
     cipher: testCipher(),
-    environment: {},
+    overrides: settingsOverridesFromEnvironment({}),
   });
 
   await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);

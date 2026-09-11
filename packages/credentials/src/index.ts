@@ -28,7 +28,9 @@ export {
 export { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "./expiry.js";
 export { LinearCredentials } from "./linear/credentials.js";
 export {
+  LINEAR_SIGN_IN_ENVIRONMENT,
   type LinearGrant,
+  type LinearSignInConfig,
   linearSignIn,
   linearSignInConfig,
 } from "./linear/oauth.js";

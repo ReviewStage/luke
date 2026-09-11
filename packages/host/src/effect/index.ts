@@ -44,3 +44,10 @@ export {
   StoreWorker,
   type StoreWorkerSource,
 } from "./seams.js";
+export {
+  SETTINGS_OVERRIDE_VARIABLE,
+  SETTINGS_OVERRIDE_VARIABLE_NAMES,
+  type SettingsEnvironmentOverrides,
+  settingsOverrides,
+  settingsOverridesFromEnvironment,
+} from "./settings-overrides.js";

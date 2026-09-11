@@ -7,6 +7,8 @@ export {
   nextMeetingBoundary,
 } from "./calendar.js";
 export {
+  GOOGLE_CALENDAR_SIGN_IN_ENVIRONMENT,
+  type GoogleCalendarSignInConfig,
   googleCalendarSignIn,
   googleCalendarSignInConfig,
 } from "./oauth.js";

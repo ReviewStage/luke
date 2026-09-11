@@ -23,6 +23,22 @@ tag up from the one `HostSeams` object the desktop builds today,
 a named shim the migration's last host PR deletes; the clock seam stays the
 injected reading for as long as a test drives a `FakeClock`.
 
+Every override that seam holds is a `Config` read of the variable's own name,
+and the settings store's are read together (`effect/settings-overrides.ts`):
+the launch voice, the two registrations a development run points the Google
+Calendar and Linear sign-ins at, and each credential provider's own key
+variables, the keys as `Config.redacted` because the store hands one on to
+that provider's adapter and to nothing else. The store itself reads no
+environment any more — it is handed what was resolved — so nothing it answers
+can depend on a variable this composition was not given. Which packaged build
+honours which override stays with the override rather than with the provider:
+the account service's is refused at the packaging boundary by
+`accountBaseUrlFor`, and a key this machine's shell exported is read in a
+packaged build exactly as it always was.
+`settingsOverridesFromEnvironment` is the record adaptor beside the effect,
+for the composers and tests that still hand in the one `HostSeams`
+environment, and P12-05 deletes it with `createHostKernel`.
+
 ## It draws nothing, and imports no Electron
 
 What a window must learn leaves as a host event; what only the machine a

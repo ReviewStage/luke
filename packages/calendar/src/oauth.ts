@@ -39,7 +39,8 @@ export interface GoogleCalendarSignInConfig {
   clientSecret: string;
 }
 
-const SIGN_IN_ENVIRONMENT = {
+/** The variables a development run points the sign-in at another registration with. */
+export const GOOGLE_CALENDAR_SIGN_IN_ENVIRONMENT = {
   CLIENT_ID: "GOOGLE_CALENDAR_OAUTH_CLIENT_ID",
   CLIENT_SECRET: "GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET",
 } as const;
@@ -82,9 +83,10 @@ export function googleCalendarSignInConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): GoogleCalendarSignInConfig | undefined {
   const clientId =
-    environment[SIGN_IN_ENVIRONMENT.CLIENT_ID]?.trim() || REGISTERED_GOOGLE_CALENDAR_CLIENT_ID;
+    environment[GOOGLE_CALENDAR_SIGN_IN_ENVIRONMENT.CLIENT_ID]?.trim() ||
+    REGISTERED_GOOGLE_CALENDAR_CLIENT_ID;
   const clientSecret =
-    environment[SIGN_IN_ENVIRONMENT.CLIENT_SECRET]?.trim() || packagedClientSecret;
+    environment[GOOGLE_CALENDAR_SIGN_IN_ENVIRONMENT.CLIENT_SECRET]?.trim() || packagedClientSecret;
   // Google's token endpoint expects a desktop client's secret; a flow that
   // would fail mid-exchange is not offered at all.
   if (!clientId || !clientSecret) return undefined;
