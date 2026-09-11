@@ -46,7 +46,8 @@ export const BOOTSTRAP_BOUNDS = {
 
 const WORKSPACE_FILE_LIST: readonly string[] = Object.values(WORKSPACE_FILE);
 
-function isWorkspaceFile(name: string): name is WorkspaceFile {
+/** Whether a name is one of the bootstrap files, and so a path the workspace tools may name directly. */
+export function isWorkspaceFile(name: string): name is WorkspaceFile {
   return WORKSPACE_FILE_LIST.includes(name);
 }
 

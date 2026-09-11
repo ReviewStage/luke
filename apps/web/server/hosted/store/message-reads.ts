@@ -1,8 +1,23 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   CONVERSATION_EVENT_KIND,
+  MESSAGE_ROLE,
   type MessageRole,
   RATING_EVENT_PAYLOAD,
   type RatingEventPayload,
@@ -122,38 +137,38 @@ function standingConversation(table: { conversationId: AnyPgColumn }) {
   return and(eq(conversations.id, table.conversationId), isNull(conversations.deletedAt));
 }
 
-export async function listMessages(
-  db: HostedStoreDatabase,
-  userId: string,
+/** The columns every message read selects, as the unparsed boundary values the read below holds to the vocabulary. */
+const MESSAGE_COLUMNS = {
+  id: messages.id,
+  seq: messages.seq,
+  turnId: messages.turnId,
+  clientId: messages.clientId,
+  role: messages.role,
+  // The jsonb columns are selected as the unparsed boundary values they hold, since the read below is what holds them to the vocabulary; the driver hands jsonb back parsed either way.
+  parts: sql<WireBoundaryInput>`${messages.parts}`,
+  metadata: sql<WireBoundaryInput>`${messages.metadata}`,
+  createdAt: messages.createdAt,
+  finishedAt: messages.finishedAt,
+};
+
+type SelectedMessage = {
+  readonly id: string;
+  readonly seq: number;
+  readonly turnId: string | null;
+  readonly clientId: string;
+  readonly role: string;
+  readonly parts: WireBoundaryInput;
+  readonly metadata: WireBoundaryInput;
+  readonly createdAt: Date;
+  readonly finishedAt: Date | null;
+};
+
+/** Selected rows read back through the vocabulary, in the order given, or the page refused at its first unreadable row. */
+async function readSelected(
   conversationId: string,
+  selected: readonly SelectedMessage[],
   tools: ToolSet,
-  cursor: MessageCursor = {},
 ): Promise<MessageListRead> {
-  const selected = await db
-    .select({
-      id: messages.id,
-      seq: messages.seq,
-      turnId: messages.turnId,
-      clientId: messages.clientId,
-      role: messages.role,
-      // The jsonb columns are selected as the unparsed boundary values they hold, since the read below is what holds them to the vocabulary; the driver hands jsonb back parsed either way.
-      parts: sql<WireBoundaryInput>`${messages.parts}`,
-      metadata: sql<WireBoundaryInput>`${messages.metadata}`,
-      createdAt: messages.createdAt,
-      finishedAt: messages.finishedAt,
-    })
-    .from(messages)
-    .innerJoin(conversations, standingConversation(messages))
-    .where(
-      and(
-        eq(messages.conversationId, conversationId),
-        eq(messages.userId, userId),
-        gt(messages.seq, cursor.after ?? 0),
-        cursor.since === undefined ? undefined : gte(messages.createdAt, cursor.since),
-      ),
-    )
-    .orderBy(asc(messages.seq))
-    .limit(pageLimit(cursor));
   const rows: MessageRow[] = selected.map(({ role, parts, metadata, ...row }) => ({
     ...row,
     stored: { id: row.id, role, parts, ...optionalField("metadata", metadata) },
@@ -177,6 +192,81 @@ export async function listMessages(
       };
     }),
   };
+}
+
+export async function listMessages(
+  db: HostedStoreDatabase,
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  cursor: MessageCursor = {},
+): Promise<MessageListRead> {
+  const selected = await db
+    .select(MESSAGE_COLUMNS)
+    .from(messages)
+    .innerJoin(conversations, standingConversation(messages))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.userId, userId),
+        gt(messages.seq, cursor.after ?? 0),
+        cursor.since === undefined ? undefined : gte(messages.createdAt, cursor.since),
+      ),
+    )
+    .orderBy(asc(messages.seq))
+    .limit(pageLimit(cursor));
+  return readSelected(conversationId, selected, tools);
+}
+
+/**
+ * The newest finished messages of the two speaking roles, answered oldest
+ * first: what a turn's standing context and a rotated session's seed read
+ * back. A row still in flight says nothing finished yet, and a system row
+ * says nothing a speaker said, so neither is answered.
+ */
+export async function listRecentMessages(
+  db: HostedStoreDatabase,
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  limit: number,
+): Promise<MessageListRead> {
+  const selected = await db
+    .select(MESSAGE_COLUMNS)
+    .from(messages)
+    .innerJoin(conversations, standingConversation(messages))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.userId, userId),
+        isNotNull(messages.finishedAt),
+        inArray(messages.role, [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT]),
+      ),
+    )
+    .orderBy(desc(messages.seq))
+    .limit(pageLimit({ limit }));
+  return readSelected(conversationId, [...selected].reverse(), tools);
+}
+
+/** The row a writer's own client id names in a conversation, by its id alone; nothing where none stands. */
+export async function findMessageByClientId(
+  db: HostedStoreDatabase,
+  userId: string,
+  conversationId: string,
+  clientId: string,
+): Promise<{ readonly id: string } | undefined> {
+  const [row] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .innerJoin(conversations, standingConversation(messages))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.userId, userId),
+        eq(messages.clientId, clientId),
+      ),
+    );
+  return row;
 }
 
 /**

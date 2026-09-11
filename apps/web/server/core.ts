@@ -13,6 +13,10 @@ export * from "@sidecar/analytics";
 export * from "@sidecar/brain";
 export * from "@sidecar/brain/store-shapes";
 export * from "@sidecar/hosted";
+// The runtime's barrel and its vocabulary door carry no name in common, so
+// both stand open: server code names the prompt builder and the workspace
+// bounds from the one and the identifiers from the other.
+export * from "@sidecar/runtime";
 export * from "@sidecar/runtime/vocabulary";
 export * from "@sidecar/session";
 export * from "@sidecar/session/ui-messages";

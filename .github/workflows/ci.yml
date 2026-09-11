@@ -50,6 +50,11 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm --filter @luke/web db:migrate
       - run: pnpm --filter @luke/web test:store
+      # The eve end-to-end eval writes through the real writer, so it runs where a Postgres stands.
+      - run: pnpm --filter @luke/web test:agent
+        env:
+          DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
+          PROVIDER_KEY_ENCRYPTION_SECRET: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 
   # Packages the app and captures the fixture frames. The portable job above is
   # the one place the full check runs: repeating it on a macOS runner costs

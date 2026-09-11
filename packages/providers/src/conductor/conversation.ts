@@ -5,7 +5,9 @@ import {
   OMISSION_MARKER,
   type ProviderConversationMessage,
   type ProviderConversationResult,
+  type ProviderSessionObservation,
   type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
 } from "@sidecar/session";
 import { type WireRecord, wholeText } from "@sidecar/wire";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
@@ -24,18 +26,19 @@ import {
 
 /**
  * One observed chat's stored conversation, through the documented transcript
- * read `GET …/sessions/{id}/messages`, never from an observation pass. Two
+ * read `GET …/sessions/{id}/messages`, never from an observation pass. Three
  * callers ask for it. A conversation screen reads the way a chat screen does:
  * opened plain it answers the newest page, walking to the transcript's end
  * because the endpoint pages ascending; handed `beforeOffset` it answers the
  * older history just before what the screen holds; handed `afterMessageId`
  * it answers only what is newer, behind the endpoint's own polling cursor.
- * The brain's transcript read takes the same newest page, rendered in the
- * line vocabulary every local transcript reader speaks, so one shape
- * describes an agent wherever it runs. Every mode keeps only the messages the
- * store itself attributes, and everything else is dropped unread. The page is
- * answered to the caller and nothing is kept here: the conversation stays the
- * provider's.
+ * The brain's whole transcript read takes the same newest page, and its
+ * incremental read takes what is newer than the cursor its last read handed
+ * back — the same `after` the screen polls with — each rendered in the line
+ * vocabulary every local transcript reader speaks, so one shape describes an
+ * agent wherever it runs. Every mode keeps only the messages the store itself
+ * attributes, and everything else is dropped unread. The page is answered to
+ * the caller and nothing is kept here: the conversation stays the provider's.
  */
 
 /**
@@ -274,6 +277,40 @@ function readRefusal(failure: AdapterFailure, subject: string) {
   };
 }
 
+const NOT_REPORTED = {
+  status: ACTION_RESULT_STATUS.UNSUPPORTED,
+  reason: "That session is not one the latest observation pass reported.",
+} as const;
+
+/** The roster a brain read answers for: what the latest pass reported, or what a host holding the roster itself hands in. */
+export type ReportedSessions = () => readonly ProviderSessionObservation[];
+
+/** The session behind a brain read, or nothing: a read reaches the provider, so only a reported UUID may. */
+function reportedSession(
+  reported: ReportedSessions,
+  providerSessionId: string,
+): ProviderSessionObservation | undefined {
+  if (!UUID_PATTERN.test(providerSessionId)) return undefined;
+  return reported().find((candidate) => candidate.providerSessionId === providerSessionId);
+}
+
+/** Attributed messages as transcript lines: the developer's in the shared lead, the agent's under its own name. */
+function transcriptLines(
+  observation: ProviderSessionObservation,
+  messages: readonly ProviderConversationMessage[],
+): string[] {
+  const speaker = observation.agent?.displayName ?? CONDUCTOR_SPEAKER_NAME;
+  return messages.flatMap((message) => {
+    const words = wholeText(message.text);
+    if (!words) return [];
+    return [
+      message.author === CONVERSATION_MESSAGE_AUTHOR.USER
+        ? transcriptLine.developer(words)
+        : transcriptLine.agent(speaker, words),
+    ];
+  });
+}
+
 /**
  * The brain's whole-transcript read of one cloud chat: the newest page of its
  * stored conversation, rendered one attributed message per line. It reaches
@@ -286,17 +323,11 @@ function readRefusal(failure: AdapterFailure, subject: string) {
 export async function readConductorTranscript(
   pass: CloudPass,
   ends: ConductorConversationEnds,
+  reported: ReportedSessions,
   providerSessionId: string,
 ): Promise<ProviderTranscriptResult> {
-  const observation = pass
-    .latest()
-    .find((candidate) => candidate.providerSessionId === providerSessionId);
-  if (!observation || !UUID_PATTERN.test(providerSessionId)) {
-    return {
-      status: ACTION_RESULT_STATUS.UNSUPPORTED,
-      reason: "That session is not one the latest observation pass reported.",
-    };
-  }
+  const observation = reportedSession(reported, providerSessionId);
+  if (!observation) return NOT_REPORTED;
   let tail: ProviderConversationResult;
   try {
     tail = await readTailPage(pass, ends, providerSessionId);
@@ -305,17 +336,7 @@ export async function readConductorTranscript(
     throw error;
   }
   if (tail.status !== ACTION_RESULT_STATUS.ACCEPTED) return tail;
-  const speaker = observation.agent?.displayName ?? CONDUCTOR_SPEAKER_NAME;
-  const lines = tail.messages.flatMap((message) => {
-    const words = wholeText(message.text);
-    if (!words) return [];
-    return [
-      message.author === CONVERSATION_MESSAGE_AUTHOR.USER
-        ? transcriptLine.developer(words)
-        : transcriptLine.agent(speaker, words),
-    ];
-  });
-  const rendered = boundedTranscript(lines);
+  const rendered = boundedTranscript(transcriptLines(observation, tail.messages));
   if (rendered === undefined) {
     return {
       status: ACTION_RESULT_STATUS.REJECTED,
@@ -325,6 +346,65 @@ export async function readConductorTranscript(
   return {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     transcript: tail.hasOlder ? `${OMISSION_MARKER}\n${rendered}` : rendered,
+  };
+}
+
+/**
+ * The brain's incremental read of one cloud chat, for an observation turn:
+ * what the store gained since the cursor the last read handed back, walked
+ * forward behind the endpoint's own `after` exactly as the screen's poll is,
+ * and rendered in the same lines the whole read speaks. With no cursor yet it
+ * answers the newest page and says the front was cut, the way a local reader
+ * falls back to its tail, so the first look at a chat reads its recent words
+ * rather than its whole history. The cursor answered is the newest stored
+ * message the read consumed, attributed or not, so the next read resumes past
+ * the lifecycle noise too; a chat that gained nothing answers no words and
+ * the same cursor. It reaches the provider, so it answers only for a session
+ * the latest pass reported, and only behind a cursor Conductor itself handed
+ * back.
+ */
+export async function readConductorTranscriptSince(
+  pass: CloudPass,
+  ends: ConductorConversationEnds,
+  reported: ReportedSessions,
+  providerSessionId: string,
+  cursor: string | undefined,
+): Promise<ProviderTranscriptSinceResult> {
+  const observation = reportedSession(reported, providerSessionId);
+  if (!observation) return NOT_REPORTED;
+  if (cursor !== undefined && !UUID_PATTERN.test(cursor)) {
+    return {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: "That transcript cursor is not one Conductor handed back.",
+    };
+  }
+  let page: ProviderConversationResult;
+  try {
+    page =
+      cursor === undefined
+        ? await readTailPage(pass, ends, providerSessionId)
+        : await readNewerMessages(pass, providerSessionId, cursor);
+  } catch (error) {
+    if (error instanceof AdapterFailure) return readRefusal(error, "transcript");
+    throw error;
+  }
+  if (page.status !== ACTION_RESULT_STATUS.ACCEPTED) return page;
+  const next = page.lastMessageId ?? cursor;
+  // A first look reads the newest page's worth and no more, however far the
+  // walk to the end went: the observation turn is handed a chat's recent
+  // words, and the cursor already rests at its end.
+  const kept =
+    cursor === undefined
+      ? page.messages.slice(-CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE)
+      : page.messages;
+  return {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    text: transcriptLines(observation, kept).join("\n"),
+    ...(next !== undefined ? { cursor: next } : undefined),
+    truncated:
+      cursor === undefined
+        ? page.hasOlder === true || kept.length < page.messages.length
+        : page.hasMore,
   };
 }
 

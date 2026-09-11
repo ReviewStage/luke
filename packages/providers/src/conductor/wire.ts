@@ -33,8 +33,9 @@ import {
  * a user asks for by opening a conversation screen:
  * `GET …/sessions/{id}/messages`, Conductor's documented read of one
  * session's stored transcript, paged with the `after` cursor its own answers
- * hand back; the brain's own transcript read takes its newest page too, and
- * it is never issued by an observation pass. The writers
+ * hand back; the brain's own transcript reads take its newest page and what
+ * is newer than a cursor too, and it is never issued by an observation pass.
+ * The writers
  * are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
  * while it is idle, steered into the running turn while it works —

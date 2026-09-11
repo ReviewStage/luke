@@ -239,25 +239,6 @@ test("a poll walks the store's pages to the fixed bounds and answers hasMore hon
   assert.equal(reads[2]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[6]);
 });
 
-test("an incremental transcript read keeps the inherited unsupported answer and reads nothing", async () => {
-  const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
-  await plugin.observe();
-  const requestsBefore = api.requests.length;
-
-  const opening = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID);
-  const poll = await dispatchRead(
-    plugin,
-    "transcriptSince",
-    IDLE_SESSION_UUID,
-    STORED_MESSAGE_UUIDS[2],
-  );
-
-  assert.equal(opening.status, "unsupported");
-  assert.equal(poll.status, "unsupported");
-  assert.equal(api.requests.length, requestsBefore);
-});
-
 test("refuses a conversation read for anything the latest pass did not stand behind", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.fetch);
@@ -579,4 +560,96 @@ test("a transcript read that Conductor refuses is rejected with the reason, neve
 
   assert.equal(read.status, "rejected");
   if (read.status !== "rejected") return;
+});
+
+test("the brain's incremental read with no cursor answers the newest page, says the front was cut only when history precedes it, and hands back the newest stored id", async () => {
+  const api = conversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+
+  const read = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined);
+
+  assert.equal(read.status, "accepted");
+  if (read.status !== "accepted") return;
+  assert.equal(read.truncated, false);
+  assert.equal(read.cursor, STORED_MESSAGE_UUIDS[7]);
+  assert.deepEqual(read.text.split("\n"), [
+    "Developer: Fix the flaky roster test",
+    "Conductor: Looking at the test now.",
+    "",
+    "It races the clock.",
+    "Conductor: Fixed: the test now stubs the clock.",
+  ]);
+});
+
+test("the brain's incremental read behind a cursor answers only what is newer and moves the cursor past lifecycle noise", async () => {
+  const api = conversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+  const requestsBefore = api.requests.length;
+
+  const read = await dispatchRead(
+    plugin,
+    "transcriptSince",
+    IDLE_SESSION_UUID,
+    STORED_MESSAGE_UUIDS[2],
+  );
+
+  assert.equal(read.status, "accepted");
+  if (read.status !== "accepted") return;
+  assert.deepEqual(read.text.split("\n"), ["Conductor: Fixed: the test now stubs the clock."]);
+  assert.equal(read.cursor, STORED_MESSAGE_UUIDS[7]);
+  assert.equal(read.truncated, false);
+  const polls = api.requests.slice(requestsBefore);
+  assert.equal(polls.length, 1);
+  assert.equal(polls[0]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[2]);
+
+  const again = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, read.cursor);
+  assert.equal(again.status, "accepted");
+  if (again.status !== "accepted") return;
+  assert.equal(again.text, "");
+  assert.equal(again.cursor, STORED_MESSAGE_UUIDS[7]);
+});
+
+test("the brain's incremental read refuses a cursor Conductor never handed back and a session the pass did not report", async () => {
+  const api = conversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+  const requestsBefore = api.requests.length;
+
+  const forged = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, "page=2");
+  assert.equal(forged.status, "rejected");
+  const unreported = await dispatchRead(
+    plugin,
+    "transcriptSince",
+    "99999999-9999-4999-8999-999999999999",
+    undefined,
+  );
+  assert.equal(unreported.status, "unsupported");
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+test("the brain's reads answer for a roster the host hands in, not only the pass's own", async () => {
+  const api = conversationApi();
+  const plugin = pluginFor(api.fetch, { reported: () => [] });
+  await plugin.observe();
+
+  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+  assert.equal(read.status, "unsupported");
+});
+
+test("the brain's first incremental read of a long chat answers one page's worth from the end and says the front was cut", async () => {
+  const api = longConversationApi();
+  const plugin = pluginFor(api.fetch);
+  await plugin.observe();
+
+  const read = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined);
+
+  assert.equal(read.status, "accepted");
+  if (read.status !== "accepted") return;
+  const lines = read.text.split("\n");
+  assert.equal(lines.length, 100);
+  assert.equal(lines.at(-1), `Developer: message ${LONG_TRANSCRIPT_LENGTH - 1}`);
+  assert.equal(read.truncated, true);
+  assert.notEqual(read.cursor, undefined);
 });

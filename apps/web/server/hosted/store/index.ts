@@ -356,6 +356,8 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
 export { BRIEFING_STATE } from "./briefings.js";
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
 export {
+  findMessageByClientId,
+  listRecentMessages,
   MAXIMUM_READ_PAGE,
   type StoredEventRecord,
   type StoredMessageRecord,
