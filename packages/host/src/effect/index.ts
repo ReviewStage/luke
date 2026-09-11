@@ -54,7 +54,6 @@ export {
   SETTINGS_OVERRIDE_VARIABLE_NAMES,
   type SettingsEnvironmentOverrides,
   settingsOverrides,
-  settingsOverridesFromEnvironment,
 } from "./settings-overrides.js";
 export {
   parsePersistedSettingsEither,

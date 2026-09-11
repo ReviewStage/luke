@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type * as FileSystem from "@effect/platform/FileSystem";
+import { NodeFileSystem } from "@effect/platform-node";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
@@ -24,8 +26,13 @@ import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "@sidecar/se
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
+import { ConfigProvider, Effect, Layer, type Runtime } from "effect";
 import { test } from "vitest";
-import { settingsOverridesFromEnvironment } from "./effect/settings-overrides.js";
+import { Environment } from "./effect/seams.js";
+import {
+  type SettingsEnvironmentOverrides,
+  settingsOverrides,
+} from "./effect/settings-overrides.js";
 import {
   apiKeyRejection,
   type SecretCipher,
@@ -113,6 +120,23 @@ function expectedPersistedSettings(overrides: WireRecord = {}): UnparsedWireValu
   );
 }
 
+/** The runtime `#readPersisted`/`#write` run their `FileSystem` effects on, built once for every store this suite opens. */
+const FILE_SYSTEM_RUNTIME: Runtime.Runtime<FileSystem.FileSystem> = Effect.runSync(
+  Effect.provide(Effect.runtime<FileSystem.FileSystem>(), NodeFileSystem.layer),
+);
+
+function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverrides {
+  const entries = Object.entries(environment).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined,
+  );
+  return Effect.runSync(
+    Effect.provide(
+      settingsOverrides,
+      Layer.succeed(Environment, ConfigProvider.fromMap(new Map(entries))),
+    ),
+  );
+}
+
 function storeIn(
   directory: string,
   options: { cipher?: SecretCipher; environment?: NodeJS.ProcessEnv } = {},
@@ -120,7 +144,8 @@ function storeIn(
   const config: SettingsStoreOptions = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
-    overrides: settingsOverridesFromEnvironment(options.environment ?? {}),
+    overrides: overridesFor(options.environment ?? {}),
+    runtime: FILE_SYSTEM_RUNTIME,
   };
   return new SettingsStore(config);
 }
@@ -145,7 +170,8 @@ test("a failed first load is retried before a later write", async (t) => {
       return directory;
     },
     cipher: testCipher(),
-    overrides: settingsOverridesFromEnvironment({}),
+    overrides: overridesFor({}),
+    runtime: FILE_SYSTEM_RUNTIME,
   });
 
   await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);

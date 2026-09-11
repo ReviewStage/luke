@@ -275,17 +275,14 @@ bounded, forking the close as a daemon and reporting what did not close in
 time rather than waiting on it. `hostLayerFromSeams(options)` beside
 it is `hostKernelLayerFromSeams` one level up, and the desktop reaches that
 shim still: `apps/desktop/src/main/services/host-layer.ts` builds the one
-`HostSeams` object this process answers for and provides
-`hostKernelLayerFromSeams` to the assembly, and P12-05 deletes the adaptor
-with `createHostKernel`. `settingsOverridesFromEnvironment` in
-`packages/host/src/effect/settings-overrides.ts` is that same shim at the
-settings store's own door and is on no allowlist, because it runs no effect:
-every override is a `Config` read of the variable's own name, and what each
-read value means is one function both the effect over the `Environment` seam
-and this record face answer through, so the composer and the store's tests
-that still hand in the one `HostSeams` environment cannot resolve an override
-differently from a composition that reads the provider. P12-05 deletes it with
-`createHostKernel`.
+`HostSeams` object this process answers for, merges in `NodeFileSystem.layer`
+for the `FileSystem.FileSystem` the settings composer now reaches through its
+own tag, and provides both to the assembly; P12-05 deletes the adaptor with
+`createHostKernel`. `settingsOverridesFromEnvironment`, the record face beside
+the effect at the settings store's own door, is gone with its last caller:
+`compose-settings.ts` is now the effect over the `Environment` seam directly,
+and the store's own tests read the same `settingsOverrides` effect through a
+`ConfigProvider` built from the environment record they still pass around.
 
 `startConversationMaintenance` in `packages/host/src/conversation-operations.ts`
 is on the same allowlist and for the same reason: the hourly pass is now
@@ -383,26 +380,29 @@ composer that holds it is a `Layer` able to hold that runtime itself, in
 Phase 7's devtrace composer conversion.
 
 `SettingsStore`'s `#readPersisted` and `#write` in
-`packages/host/src/settings-store.ts` are on the same terms as
-`AgentTraceWriter`, and for the same reason: `compose-settings.ts` still
-constructs this class from a plain object rather than a `Scope`, so the class
-builds its own `ManagedRuntime` over `NodeFileSystem.layer` and runs
-`readSettingsFileText` and `writeSettingsFileAtomic` — the atomic
-write-then-rename, now an `Effect` over `@effect/platform`'s `FileSystem` in
-`packages/host/src/effect/settings-store-io.ts` — to a promise on it. The
-parse failure beside them, `parsePersistedSettingsEither`, answers an `Either`
-rather than a throw and is not on this allowlist, since it runs no effect: it
-wraps the store's own `parsePersistedSettingsThrowing` in `Either.try`, kept
-private to that wrapping rather than a second parse a caller could reach
-directly, and every caller today still folds a refusal into
-`defaultPersistedSettings()` exactly as the throwing form's catch already did.
-The cipher stays a plain field passed to the class rather than read through
-the `SecretCipher` tag `@sidecar/host/effect` already declares: decrypting a
-stored key or grant is still synchronous and throws on its own terms, and
-widening it to the tag is left with the rest of this class's public methods,
-in the composer conversion this row shares with `AgentTraceWriter` — P7-05's
-`compose-settings.ts`, once it is a `Layer` that can hold the runtime and the
-cipher both.
+`packages/host/src/settings-store.ts` are on the allowlist too, though not on
+`AgentTraceWriter`'s terms any more: `compose-settings.ts` is now an `Effect`
+over the `HostKernelTag`, `Environment`, `SecretCipher`, and
+`FileSystem.FileSystem` tags, so the class no longer builds its own
+`ManagedRuntime` over `NodeFileSystem.layer` — the composer captures the
+`Runtime.Runtime<FileSystem.FileSystem>` it is already running under, with
+`Effect.runtime`, and hands that in, so `readSettingsFileText` and
+`writeSettingsFileAtomic` run on the one `FileSystem` the host's assembly
+layer resolves rather than a second layer of the class's own. What keeps this
+on the allowlist is narrower now: the class still answers `get`/`set`/
+`snapshot`/... as Promises rather than Effects, so those two reads and writes
+still have to reach a promise somewhere, and this is where. The parse failure
+beside them, `parsePersistedSettingsEither`, answers an `Either` rather than a
+throw and is not on this allowlist, since it runs no effect: it wraps the
+store's own `parsePersistedSettingsThrowing` in `Either.try`, kept private to
+that wrapping rather than a second parse a caller could reach directly, and
+every caller today still folds a refusal into `defaultPersistedSettings()`
+exactly as the throwing form's catch already did. The cipher is sourced
+through the `SecretCipher` tag at the composer and handed to the class as the
+same plain field it always was: decrypting a stored key or grant is still
+synchronous and throws on its own terms, so widening the tag past the
+composer would gain the class nothing. The plan schedules no PR that states
+this class's own methods as Effects, and this row is where that is recorded.
 
 `tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is on the same
 terms as `runCall`: the traced `respond` still answers the `ModelAdapter`
