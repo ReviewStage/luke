@@ -60,20 +60,35 @@ async function openMigratedPglite(): Promise<PGlite> {
   return client;
 }
 
-const pgliteSqlClient = Layer.scoped(
-  SqlClient.SqlClient,
-  Effect.gen(function* () {
-    const client = yield* Effect.acquireRelease(
-      Effect.promise(() => openMigratedPglite()),
-      (client) => Effect.promise(() => client.close()),
-    );
-    return yield* SqlClient.make({
-      acquirer: Effect.succeed(pgliteConnection(client)),
-      compiler: PgClient.makeCompiler(),
-      spanAttributes: [],
-    });
-  }),
-).pipe(Layer.provide(Reactivity.layer));
+function pgliteSqlClientOver(open: () => Promise<PGlite>) {
+  return Layer.scoped(
+    SqlClient.SqlClient,
+    Effect.gen(function* () {
+      const client = yield* Effect.acquireRelease(Effect.promise(open), (client) =>
+        Effect.promise(() => client.close()),
+      );
+      return yield* SqlClient.make({
+        acquirer: Effect.succeed(pgliteConnection(client)),
+        compiler: PgClient.makeCompiler(),
+        spanAttributes: [],
+      });
+    }),
+  ).pipe(Layer.provide(Reactivity.layer));
+}
+
+const pgliteSqlClient = pgliteSqlClientOver(openMigratedPglite);
+
+/**
+ * A PGlite with nothing applied to it, which is what a test of the migration
+ * runner itself needs: the shared Postgres a CI run points at has already been
+ * migrated, so only an in-process database can stand in for a fresh one.
+ */
+export const unmigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlError> =
+  pgliteSqlClientOver(async () => new PGlite());
+
+/** A PGlite the Drizzle runner migrated, so its history is Drizzle's own. */
+export const drizzleMigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlError> =
+  pgliteSqlClient;
 
 function postgresSqlClient(connectionString: string) {
   return PgClient.layerFromPool({

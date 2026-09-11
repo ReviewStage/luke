@@ -117,6 +117,9 @@ are the process's own edges, one runtime each:
   a cold start builds it once. The hosted voice service is one of these: it
   runs inside the two `api/voice` functions rather than as a process of its
   own, so it takes that edge and needs none.
+- `apps/web/server/db/migrate.ts`, the migration command, through
+  `NodeRuntime.runMain`. A command's whole life is one Effect, so the run is
+  the edge and nothing of it outlives the process.
 - the two renderer roots, `apps/desktop/src/renderer/index.tsx` and
   `apps/desktop/src/renderer/voice/index.tsx`, one browser `ManagedRuntime`
   each — two roots because the panel is the one surface that records, and the
