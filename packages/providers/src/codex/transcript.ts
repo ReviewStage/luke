@@ -1,3 +1,4 @@
+import { transcriptLine } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -8,7 +9,7 @@ import {
   type WireRecord,
   wholeText,
 } from "@sidecar/wire";
-import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
+import { TRANSCRIPT_BOUNDS } from "../shared/jsonl-transcript.js";
 import { argumentPhrase, CODEX_CALL_ARGUMENT_KEY } from "./records.js";
 
 /**

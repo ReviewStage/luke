@@ -116,3 +116,84 @@ it.effect("each way a call ends short of an answer says whether the action may h
     });
   }),
 );
+
+it.effect(
+  "a creation names the project and carries the selection whole, and reads the session the provider made",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/actions/workspace": {
+          answer: () => ({
+            result: ACTION_RESULT_STATUS.ACCEPTED,
+            providerSessionId: "session-new",
+          }),
+        },
+      });
+
+      const outcome = yield* Effect.promise(() =>
+        client(api.fetch).createWorkspace(TARGET.providerId, {
+          providerProjectId: "project-1",
+          agent: "claude",
+          model: "fable-5",
+          task: "add tests",
+        }),
+      );
+
+      assert.deepEqual(outcome, {
+        answer: { result: ACTION_RESULT_STATUS.ACCEPTED, providerSessionId: "session-new" },
+      });
+      assert.deepEqual(recordedRoutes(api.requests()), ["POST /api/actions/workspace"]);
+      // An unset field is left off the wire rather than sent as a key holding nothing.
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        providerId: TARGET.providerId,
+        providerProjectId: "project-1",
+        agent: "claude",
+        model: "fable-5",
+        task: "add tests",
+      });
+    }),
+);
+
+it.effect("an agent addition and the two renames each name the session and carry the ask", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "POST /api/actions/agent": { answer: () => ({ result: ACTION_RESULT_STATUS.ACCEPTED }) },
+      "POST /api/actions/rename-session": {
+        answer: () => ({ result: ACTION_RESULT_STATUS.ACCEPTED }),
+      },
+      "POST /api/actions/rename-workspace": {
+        answer: () => ({ result: ACTION_RESULT_STATUS.REJECTED, reason: "Name too long." }),
+      },
+    });
+    const carrier = client(api.fetch);
+
+    const added = yield* Effect.promise(() =>
+      carrier.addAgent(TARGET, { agent: "codex", model: "gpt-5", effort: "high" }),
+    );
+    const renamed = yield* Effect.promise(() => carrier.renameSession(TARGET, "Flaky test"));
+    const refused = yield* Effect.promise(() => carrier.renameWorkspace(TARGET, "x".repeat(300)));
+
+    assert.deepEqual(added, { answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
+    assert.deepEqual(renamed, { answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
+    assert.deepEqual(refused, {
+      answer: { result: ACTION_RESULT_STATUS.REJECTED, reason: "Name too long." },
+    });
+    assert.deepEqual(recordedRoutes(api.requests()), [
+      "POST /api/actions/agent",
+      "POST /api/actions/rename-session",
+      "POST /api/actions/rename-workspace",
+    ]);
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+      providerId: TARGET.providerId,
+      providerSessionId: TARGET.providerSessionId,
+      agent: "codex",
+      model: "gpt-5",
+      effort: "high",
+    });
+    assert.deepEqual(JSON.parse(api.requests()[1]?.body ?? "{}"), {
+      providerId: TARGET.providerId,
+      providerSessionId: TARGET.providerSessionId,
+      name: "Flaky test",
+    });
+  }),
+);

@@ -20,6 +20,9 @@ export {
   type HostedActionFailure,
   type HostedActionOutcome,
   type HostedActionTarget,
+  type HostedActionWorkspaceOutcome,
+  type HostedAgentAddition,
+  type HostedWorkspaceCreation,
 } from "./action-client.js";
 export {
   type HostedActionAnswer,
@@ -85,6 +88,7 @@ export {
   type HostedConversationAnswer,
   type HostedConversationMessage,
   hostedConversationAnswerSchema,
+  SESSION_MESSAGES_QUERY,
 } from "./conversation-wire.js";
 export {
   DEVICE_METHOD,
@@ -253,6 +257,11 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
+export {
+  HostedSessionMessagesClient,
+  type HostedSessionMessagesClientOptions,
+  type SessionMessagesQuery,
+} from "./session-messages-client.js";
 export {
   decodeTurnEventFrame,
   encodeTurnEventFrame,

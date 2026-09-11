@@ -245,7 +245,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     },
     roster: observation.roster,
     standingContext,
-    pluginFor: observation.pluginFor,
+    transcripts: observation.transcripts,
     session: observation.session,
     deliver: announcements.deliverBriefing,
     model: () => account.voiceCapabilities.brainModel,

@@ -8,12 +8,13 @@ import {
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
+  transcriptLine,
 } from "@sidecar/session";
 import { type WireRecord, wholeText } from "@sidecar/wire";
 import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
 import type { CloudPass } from "../shared/cloud-pass.js";
 import { isDefined, recordsFromPage, textFromRecord } from "../shared/cloud-wire.js";
-import { boundedTranscript, transcriptLine } from "../shared/jsonl-transcript.js";
+import { boundedTranscript } from "../shared/jsonl-transcript.js";
 import { runAdapterRead } from "../shared/promise-face.js";
 import { CONDUCTOR_PROVIDER_NAME, UUID_PATTERN } from "./vocabulary.js";
 import {

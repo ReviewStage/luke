@@ -2,6 +2,7 @@ import {
   type CloudAgentProviderId,
   type HostedConversationAnswer,
   isCloudAgentProviderId,
+  SESSION_MESSAGES_QUERY,
 } from "../core.js";
 import type { ConversationReadRefusal } from "./action-execute.js";
 import { providerReadsConversation } from "./action-execute.js";
@@ -92,24 +93,26 @@ export async function handleConversationRead(options: ConversationReadOptions): 
   }
 
   const query = new URL(request.url).searchParams;
-  const providerId = query.get("providerId") ?? undefined;
+  const providerId = query.get(SESSION_MESSAGES_QUERY.PROVIDER_ID) ?? undefined;
   if (!isCloudAgentProviderId(providerId) || !providerReadsConversation(providerId)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
-  const providerSessionId = parseProviderSessionId(query.get("providerSessionId") ?? undefined);
+  const providerSessionId = parseProviderSessionId(
+    query.get(SESSION_MESSAGES_QUERY.PROVIDER_SESSION_ID) ?? undefined,
+  );
   if (!providerSessionId) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
   // Both positions are optional — absent, the read answers the latest page —
   // but one that arrives must hold the shape an earlier answer handed back,
   // and a poll and a history read are different asks, never combined.
-  const afterParameter = query.get("after");
+  const afterParameter = query.get(SESSION_MESSAGES_QUERY.AFTER);
   const afterMessageId =
     afterParameter === null ? undefined : parseProviderSessionId(afterParameter);
   if (afterParameter !== null && !afterMessageId) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
-  const beforeParameter = query.get("beforeOffset");
+  const beforeParameter = query.get(SESSION_MESSAGES_QUERY.BEFORE_OFFSET);
   const beforeOffset = beforeParameter === null ? undefined : parseBeforeOffset(beforeParameter);
   if (beforeParameter !== null && beforeOffset === undefined) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);

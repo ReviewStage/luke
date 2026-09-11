@@ -30,14 +30,6 @@ import {
 } from "./local-files.js";
 import { runAdapterRead } from "./promise-face.js";
 
-export const transcriptLine = {
-  developer: (words: string) => `Developer: ${words}`,
-  agent: (name: string, words: string) => `${name}: ${words}`,
-  toolCall: (name: string, detail?: string) => (detail ? `→ ${name}: ${detail}` : `→ ${name}`),
-  toolResult: (answer: string) => `← ${answer}`,
-  error: (reason: string) => `Error: ${reason}`,
-} as const;
-
 export const TRANSCRIPT_BOUNDS = {
   /** How much of the file's end one read may load. */
   READ_TAIL_BYTES: transcriptReadTailBytes,

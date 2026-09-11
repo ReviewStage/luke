@@ -1,4 +1,5 @@
 import path from "node:path";
+import { transcriptLine } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -8,7 +9,7 @@ import {
   type WireRecord,
   wholeText,
 } from "@sidecar/wire";
-import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/jsonl-transcript.js";
+import { TRANSCRIPT_BOUNDS } from "../shared/jsonl-transcript.js";
 import { readDirectory, statDirectoryEntry } from "../shared/local-files.js";
 import {
   CLAUDE_CONTENT_TYPE,

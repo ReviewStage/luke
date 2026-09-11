@@ -225,32 +225,27 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
     // The host decides what belongs in one conversation's standing context by
     // its key; this harness reports the key it was asked about.
     standingContext: (sessionKey) => `standing context for ${sessionKey}`,
-    pluginFor: (providerId) => ({
-      provider: providerId === conductor.id ? conductor : claude,
-      observe: async () => [],
-      latest: () => [],
-      reads: {
-        transcriptSince: async (providerSessionId: string, cursor?: string) => {
-          reads.push({ providerId, providerSessionId });
-          // A cloud provider answers no incremental read; the look still opens.
-          if (providerId === conductor.id) {
-            return {
-              status: ACTION_RESULT_STATUS.UNSUPPORTED,
-              reason: "This provider keeps no transcript this build can read.",
-            };
-          }
-          // The transcript grows once; every later read from the cursor finds
-          // nothing new.
+    // The cloud provider answers no incremental read; the look still opens.
+    // The local transcript grows once; every later read from the cursor
+    // finds nothing new.
+    transcripts: {
+      readTranscriptSince: async (identity, cursor) => {
+        reads.push(identity);
+        if (identity.providerId === conductor.id) {
           return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            text: cursor === undefined ? SECRET(providerSessionId) : "",
-            cursor: `${providerSessionId}-1`,
-            truncated: false,
+            status: ACTION_RESULT_STATUS.UNSUPPORTED,
+            reason: "This provider keeps no transcript this build can read.",
           };
-        },
-        transcript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "" }),
+        }
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          text: cursor === undefined ? SECRET(identity.providerSessionId) : "",
+          cursor: `${identity.providerSessionId}-1`,
+          truncated: false,
+        };
       },
-    }),
+      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "" }),
+    },
     session: (identity) =>
       roster.find((held) => held.providerSessionId === identity.providerSessionId),
     deliver: async (delivery) => {

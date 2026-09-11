@@ -18,6 +18,7 @@ import { Effect, type Layer } from "effect";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import { type ObserveAnswer, type ObservedSession, observeAnswerSchema } from "./observe-wire.js";
+import { type HostedProjectsAnswer, hostedProjectsAnswerSchema } from "./projects-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 export interface HostedRosterClientOptions extends AccountToken {
@@ -28,11 +29,13 @@ export interface HostedRosterClientOptions extends AccountToken {
 }
 
 /**
- * The desktop's side of the observe endpoint: the roster the service's own
+ * The desktop's side of the stored snapshot: the roster the service's own
  * scheduled pass last stored for the signed-in account, read as the phone
  * reads it and never asked fresh, so a Mac drawing its rows every minute
- * spends no provider request and no rate brake. An answer the call could not
- * get resolves to nothing, and the caller keeps the roster it last drew.
+ * spends no provider request and no rate brake, and the projects the same
+ * snapshot lists for the account's keys, where a workspace can be created.
+ * An answer the call could not get resolves to nothing, and the caller keeps
+ * what it last drew.
  */
 export class HostedRosterClient {
   readonly #call: AccountCallEffects;
@@ -52,6 +55,15 @@ export class HostedRosterClient {
       this.#call.ask(
         { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.OBSERVE },
         observeAnswerSchema,
+      ),
+    );
+  }
+
+  projects(): Promise<HostedProjectsAnswer | undefined> {
+    return this.#run(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.PROJECTS },
+        hostedProjectsAnswerSchema,
       ),
     );
   }

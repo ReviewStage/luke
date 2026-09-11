@@ -246,7 +246,16 @@ async function composed(
     },
     roster: () => ({ text: "", identities: [], sessions: [] }),
     standingContext: () => "",
-    pluginFor: () => undefined,
+    transcripts: {
+      readTranscript: async () => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "not in test",
+      }),
+      readTranscriptSince: async () => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "not in test",
+      }),
+    },
     session: () => undefined,
     deliver: async () => undefined,
     model: () => model,

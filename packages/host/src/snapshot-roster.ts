@@ -1,5 +1,14 @@
-import { type HostedRosterClient, snapshotRoster } from "@sidecar/hosted";
-import { PROVIDER_IDENTITY_BY_ID, type SessionRoster } from "@sidecar/session";
+import {
+  type HostedProjectsAnswer,
+  type HostedRosterClient,
+  snapshotRoster,
+} from "@sidecar/hosted";
+import {
+  isCloudAgentProviderId,
+  type ObservedWorkspaceProject,
+  PROVIDER_IDENTITY_BY_ID,
+  type SessionRoster,
+} from "@sidecar/session";
 
 export interface SnapshotRosterDependencies {
   client: Pick<HostedRosterClient, "observe">;
@@ -36,4 +45,50 @@ export async function drawSnapshotRoster(dependencies: SnapshotRosterDependencie
       );
     }
   }
+}
+
+export interface SnapshotProjectsDependencies {
+  client: Pick<HostedRosterClient, "projects">;
+  /** Whether the pass that began this read still owns the list once the read answers. */
+  isCurrent: () => boolean;
+  report: (message: string) => void;
+}
+
+/**
+ * The projects the service's answer lists, as the app reports a project:
+ * stamped with the provider that offered it, under the name this build
+ * gives that provider. A project under a provider this build does not
+ * observe in the cloud is dropped, and no agent list is read onto a
+ * project, exactly as the cloud adapter's own listing carried none: which
+ * agents a creation may name is the build's table, which the service's
+ * admission and this Mac's read the same way.
+ */
+export function snapshotProjects(
+  answer: HostedProjectsAnswer,
+): readonly ObservedWorkspaceProject[] {
+  return answer.projects.flatMap((project) =>
+    isCloudAgentProviderId(project.providerId)
+      ? [{ ...project, providerName: PROVIDER_IDENTITY_BY_ID[project.providerId].displayName }]
+      : [],
+  );
+}
+
+/**
+ * The same pass's read of where a workspace can be created: the projects the
+ * service's stored snapshot lists for the account's keys, so the brain and
+ * the settings rows offer exactly what a creation is admitted against. A
+ * read that answers nothing leaves the last list standing and says so; a
+ * pass stopped while its read was out replaces nothing.
+ */
+export async function drawSnapshotProjects(
+  dependencies: SnapshotProjectsDependencies,
+): Promise<readonly ObservedWorkspaceProject[] | undefined> {
+  const { client, isCurrent, report } = dependencies;
+  const answer = await client.projects();
+  if (!isCurrent()) return undefined;
+  if (!answer) {
+    report("Workspace projects could not be read; the last list stands.");
+    return undefined;
+  }
+  return snapshotProjects(answer);
 }

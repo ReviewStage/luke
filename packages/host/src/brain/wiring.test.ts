@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { BRAIN_WAKE_KIND, type BrainStateRepository } from "@sidecar/brain";
+import type { BrainStateRepository } from "@sidecar/brain";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
-import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { test } from "vitest";
-import { type BrainWiringDependencies, wakeEventsFromHooks, wireBrain } from "./wiring.js";
+import { type BrainWiringDependencies, wireBrain } from "./wiring.js";
 
 /**
  * The brain wiring reaches a conversation's store only when a brain may
@@ -54,7 +54,16 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
-    pluginFor: () => undefined,
+    transcripts: {
+      readTranscript: async () => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "not in test",
+      }),
+      readTranscriptSince: async () => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "not in test",
+      }),
+    },
     session: () => undefined,
     deliver: async () => undefined,
     model: () => undefined,
@@ -86,49 +95,4 @@ test("with no model to run on, a rebuild opens no conversation and loads no stor
   assert.equal(brains.current(threadSessionKey("t-1")), undefined);
   await brains.closeConversation(threadSessionKey("t-1"));
   brains.retire();
-});
-
-const NOW = 1_800_000_000_000;
-
-test("every hook event wakes the brain, carrying the session when the roster holds it", () => {
-  const held = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-a",
-      title: "Fix the flaky test",
-      status: SESSION_STATUS.COMPLETE,
-      lastActivityAt: NOW - 1_000,
-    },
-  );
-  const registry = {
-    get: (identity: { providerSessionId: string }): Session | undefined =>
-      identity.providerSessionId === "session-a" ? held : undefined,
-  };
-
-  const wakes = wakeEventsFromHooks(
-    "claude-code",
-    [
-      { providerSessionId: "session-a", event: "stop", atMs: NOW - 500 },
-      { providerSessionId: "session-b", event: "prompt", atMs: Number.NaN },
-    ],
-    registry,
-    NOW,
-  );
-
-  assert.equal(wakes.length, 2);
-  assert.deepEqual(wakes[0], {
-    kind: BRAIN_WAKE_KIND.HOOK,
-    identity: { providerId: "claude-code", providerSessionId: "session-a" },
-    hookEvent: "stop",
-    session: held,
-    atMs: NOW - 500,
-  });
-  // A hook for a session the poll has not seen yet still wakes the brain,
-  // dated now when the spool carried no usable time.
-  assert.deepEqual(wakes[1], {
-    kind: BRAIN_WAKE_KIND.HOOK,
-    identity: { providerId: "claude-code", providerSessionId: "session-b" },
-    hookEvent: "prompt",
-    atMs: NOW,
-  });
 });

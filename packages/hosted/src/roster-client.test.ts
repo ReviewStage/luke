@@ -5,8 +5,9 @@ import {
   CLOUD_AGENT_PROVIDER_ID,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
+  WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { fakeCloudApi, recordedRoutes } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import type { ObservedSession } from "./observe-wire.js";
@@ -162,3 +163,75 @@ test("the roster names every cloud provider, and a row under any other provider 
   const empty = snapshotRoster({ sessions: [] });
   assert.deepEqual(empty.get(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR), []);
 });
+
+it.effect(
+  "the projects are a bearer GET, read with a malformed entry skipped and the agent table beside them",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "GET /api/projects": {
+          answer: () => ({
+            projects: [
+              {
+                providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+                providerProjectId: "project-1",
+                repository: "acme/app",
+                taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+              },
+              { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, repository: "acme/other" },
+            ],
+            agentModels: [
+              {
+                providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+                agent: "claude",
+                models: [{ id: "fable-5", label: "Fable 5" }],
+                efforts: ["high"],
+              },
+            ],
+          }),
+        },
+      });
+
+      const answer = yield* Effect.promise(() => client(api.fetch).projects());
+
+      assert.deepEqual(answer, {
+        projects: [
+          {
+            providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+            providerProjectId: "project-1",
+            repository: "acme/app",
+            taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+          },
+        ],
+        agentModels: [
+          {
+            providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+            agent: "claude",
+            models: [{ id: "fable-5", label: "Fable 5" }],
+            efforts: ["high"],
+          },
+        ],
+      });
+      assert.deepEqual(recordedRoutes(api.requests()), ["GET /api/projects"]);
+      assert.deepEqual(api.credentials(), ["token-1"]);
+    }),
+);
+
+it.effect(
+  "a projects read that is refused, lost, or answered outside the contract is no answer",
+  () =>
+    Effect.gen(function* () {
+      const refused = fakeCloudApi({
+        "GET /api/projects": { answer: () => ({}), status: HTTP_STATUS.SERVER_ERROR },
+      });
+      assert.equal(yield* Effect.promise(() => client(refused.fetch).projects()), undefined);
+
+      const lost = client(() => {
+        throw new TypeError("fetch failed");
+      });
+      assert.equal(yield* Effect.promise(() => lost.projects()), undefined);
+
+      const unreadable = fakeCloudApi({ "GET /api/projects": { answer: () => ({ projects: 1 }) } });
+      assert.equal(yield* Effect.promise(() => client(unreadable.fetch).projects()), undefined);
+    }),
+);

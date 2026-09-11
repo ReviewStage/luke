@@ -1,6 +1,12 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
-import { type CloudFetch, HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
+import {
+  type CloudFetch,
+  HTTP_METHOD,
+  type Schema,
+  unparsedWire,
+  type WireRecord,
+} from "@sidecar/wire";
 import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect, type Layer } from "effect";
 import {
@@ -11,7 +17,12 @@ import {
   callAnswered,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
-import { type HostedActionAnswer, hostedActionAnswerSchema } from "./action-wire.js";
+import {
+  type HostedActionAnswer,
+  type HostedActionWorkspaceAnswer,
+  hostedActionAnswerSchema,
+  hostedActionWorkspaceAnswerSchema,
+} from "./action-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 export interface HostedActionClientOptions extends AccountToken {
@@ -49,9 +60,48 @@ export type HostedActionFailure =
 
 export type HostedActionOutcome = { answer: HostedActionAnswer } | { failure: HostedActionFailure };
 
+/** A creation's outcome: the same ends, and an answer that may name the session the provider made. */
+export type HostedActionWorkspaceOutcome =
+  | { answer: HostedActionWorkspaceAnswer }
+  | { failure: HostedActionFailure };
+
 /**
- * The desktop's side of the two session actions a row asks for: the message
- * typed into its composer and the press of a control its provider advertised.
+ * A new workspace, as the creation endpoint takes it: the project the
+ * provider itself listed, and the developer's own bounded words for what
+ * the agent should start on. The model and effort ride only beside the agent
+ * they pair with, as one selection, so the service's admission holds the
+ * pairing to the build's table exactly as the desktop's did.
+ */
+export interface HostedWorkspaceCreation {
+  providerProjectId: string;
+  agent?: string | undefined;
+  model?: string | undefined;
+  effort?: string | undefined;
+  name?: string | undefined;
+  task?: string | undefined;
+}
+
+/** Another agent in an observed workspace: one of the kinds the row's own observation listed. */
+export interface HostedAgentAddition {
+  agent: string;
+  model?: string | undefined;
+  effort?: string | undefined;
+  name?: string | undefined;
+  task?: string | undefined;
+}
+
+/** A record with the absent fields left out, so the wire carries what was asked and no `undefined`. */
+function present(fields: HostedWorkspaceCreation | HostedAgentAddition): WireRecord {
+  return Object.fromEntries(
+    Object.entries(fields).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+}
+
+/**
+ * The desktop's side of every session action the service carries: the two a
+ * row asks for — the message typed into its composer and the press of a
+ * control its provider advertised — and the four the brain asks for at the
+ * developer's word, a new workspace, another agent, and the two renames.
  * Each is one call on the signed-in account; the service admits it against
  * the stored snapshot the same account's rows were drawn from, builds the
  * write from that snapshot's own advertisement, and answers what the provider
@@ -72,14 +122,65 @@ export class HostedActionClient {
   }
 
   sendMessage(target: HostedActionTarget, text: string): Promise<HostedActionOutcome> {
-    return this.#post(HOSTED_SERVICE_PATH.ACTION_MESSAGE, { ...targetRecord(target), text });
+    return this.#post(
+      HOSTED_SERVICE_PATH.ACTION_MESSAGE,
+      { ...targetRecord(target), text },
+      hostedActionAnswerSchema,
+    );
   }
 
   executeControl(target: HostedActionTarget, controlId: string): Promise<HostedActionOutcome> {
-    return this.#post(HOSTED_SERVICE_PATH.ACTION_CONTROL, { ...targetRecord(target), controlId });
+    return this.#post(
+      HOSTED_SERVICE_PATH.ACTION_CONTROL,
+      { ...targetRecord(target), controlId },
+      hostedActionAnswerSchema,
+    );
   }
 
-  async #post(path: string, body: WireRecord): Promise<HostedActionOutcome> {
+  createWorkspace(
+    providerId: CloudAgentProviderId,
+    creation: HostedWorkspaceCreation,
+  ): Promise<HostedActionWorkspaceOutcome> {
+    return this.#post(
+      HOSTED_SERVICE_PATH.ACTION_WORKSPACE,
+      { providerId, ...present(creation) },
+      hostedActionWorkspaceAnswerSchema,
+    );
+  }
+
+  addAgent(
+    target: HostedActionTarget,
+    addition: HostedAgentAddition,
+  ): Promise<HostedActionOutcome> {
+    return this.#post(
+      HOSTED_SERVICE_PATH.ACTION_AGENT,
+      { ...targetRecord(target), ...present(addition) },
+      hostedActionAnswerSchema,
+    );
+  }
+
+  renameSession(target: HostedActionTarget, name: string): Promise<HostedActionOutcome> {
+    return this.#post(
+      HOSTED_SERVICE_PATH.ACTION_RENAME_SESSION,
+      { ...targetRecord(target), name },
+      hostedActionAnswerSchema,
+    );
+  }
+
+  renameWorkspace(target: HostedActionTarget, name: string): Promise<HostedActionOutcome> {
+    return this.#post(
+      HOSTED_SERVICE_PATH.ACTION_RENAME_WORKSPACE,
+      { ...targetRecord(target), name },
+      hostedActionAnswerSchema,
+    );
+  }
+
+  /** One action call, its answer read by the schema of the route it went to. */
+  async #post<Answer extends HostedActionAnswer>(
+    path: string,
+    body: WireRecord,
+    answerSchema: Schema<Answer>,
+  ): Promise<{ answer: Answer } | { failure: HostedActionFailure }> {
     const sent = await this.#run(
       this.#call.send({
         method: HTTP_METHOD.POST,
@@ -99,8 +200,7 @@ export class HostedActionClient {
     }
     if (!sent.response.ok) return { failure: HOSTED_ACTION_FAILURE.REFUSED };
     const payload = await sent.response.json().catch(() => undefined);
-    const answer =
-      payload === undefined ? undefined : hostedActionAnswerSchema.parse(unparsedWire(payload));
+    const answer = payload === undefined ? undefined : answerSchema.parse(unparsedWire(payload));
     return answer ? { answer } : { failure: HOSTED_ACTION_FAILURE.UNREADABLE };
   }
 

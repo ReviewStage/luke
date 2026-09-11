@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -7,12 +6,6 @@ import {
   dispatchByKind,
   guardedRead,
   type IssueActionKind,
-  providerControlRequest,
-  providerSessionMessage,
-  providerSessionRenameRequest,
-  providerWorkspaceAgentRequest,
-  providerWorkspaceRenameRequest,
-  providerWorkspaceRequest,
   type SessionActionKind,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -24,35 +17,30 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import type { LinearIssueTracker } from "@sidecar/credentials";
+import type { HostedActionClient, HostedActionOutcome, HostedActionTarget } from "@sidecar/hosted";
 import {
-  isSupersetControlId,
-  type SupersetCli,
-  type SupersetSessionContext,
-  supersetPressedLink,
-} from "@sidecar/providers";
-import {
-  dispatchAction,
+  type CloudAgentProviderId,
   ExternalOpenAnswerLostError,
   ISSUE_ACTION_KIND,
+  isCloudAgentProviderId,
   isIssueTrackerId,
   isProviderId,
-  type ProviderActionResult,
-  type ProviderWorkspaceResult,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionOpenResult,
-  type SessionProviderPlugin,
   type SessionRoster,
+  type SessionWriteResult,
   type TrackedIssue,
   type TrackerActionResult,
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import {
-  ACTION_RESULT_STATUS,
-  UNKNOWN_ACTION_STATUS,
-  type UnknownActionResult,
-} from "@sidecar/wire";
+  HOSTED_ACTION_ANSWER,
+  hostedActionResult,
+  settleHostedWrite,
+} from "./hosted-action-result.js";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import type { SettingsStore } from "./settings-store.js";
 
@@ -70,12 +58,12 @@ function unknownOpen(error: ExternalOpenAnswerLostError): SessionOpenResult {
 }
 
 /**
- * What performing an action needs from the app: the registry the action is
- * validated against once more, the adapters that carry it, and the seams a
+ * What performing an action needs from the app: the roster an open reads its
+ * address from, the service call that carries every write, and the seams a
  * landed action moves — the refresh, the created-workspace watch, the counts.
  */
 export interface SessionActionPerformerDependencies {
-  sessionRegistry: SessionRoster;
+  sessionRegistry: Pick<SessionRoster, "get">;
   /**
    * Hands an address to the operating system through the native node, told
    * what the address is: a row's press has already stood its panel down, and
@@ -83,26 +71,35 @@ export interface SessionActionPerformerDependencies {
    * owe the two different things.
    */
   openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void>;
-  pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
+  /**
+   * The service's side of every session write. The service admits each
+   * against the stored snapshot this Mac's rows were drawn from, by the same
+   * `admit()` the brain already ran here, builds the write from that
+   * snapshot's own advertisement, and answers what the provider said.
+   */
+  actions: Pick<
+    HostedActionClient,
+    | "sendMessage"
+    | "executeControl"
+    | "createWorkspace"
+    | "addAgent"
+    | "renameSession"
+    | "renameWorkspace"
+  >;
+  /** Draws the roster again, so a write that moved a session is seen rather than remembered. */
+  refreshSessions: () => Promise<void>;
   sendsNetwork: boolean;
   settingsStore: Pick<SettingsStore, "get">;
   rememberWorkspaceDefaults: (
-    plugin: SessionProviderPlugin,
+    providerId: CloudAgentProviderId,
     providerProjectId: string,
-    providerTargetId: string | undefined,
     selection: WorkspaceAgentSelection | undefined,
-    agent: string | undefined,
   ) => Promise<void>;
   expectCreatedWorkspace: (identity: SessionIdentity, now: number) => void;
   openCreatedWorkspaces: () => void;
   trackedIssues: () => readonly TrackedIssue[] | undefined;
   issueTrackers: readonly LinearIssueTracker[];
   refreshIssues: () => void;
-  supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
-  supersetCli: Pick<
-    SupersetCli,
-    "sendMessage" | "executeControl" | "createAgent" | "renameWorkspace"
-  >;
   recordProductEvent: RecordProductEvent;
 }
 
@@ -110,10 +107,11 @@ export interface SessionActionPerformerDependencies {
  * The one entry every action on a session or an issue passes through. The brain
  * is the only caller, and what arrives is a `ValidatedAction`, which only
  * `admit()` mints: whether the action may run was decided there, against the
- * roster it read for itself, so what is left here is carrying it — reading each
- * effect's own route back out of the adapter or the tracker that offered it,
- * and counting what landed. The opens are exposed on their own because a row
- * press is not a write and reaches them without the brain.
+ * roster it read for itself, so what is left here is carrying it — a session
+ * write to the service that admits it once more against the same stored
+ * snapshot, an issue write to the tracker that offered it — and counting what
+ * landed. The opens are exposed on their own because a row press is not a
+ * write and reaches them without the brain.
  */
 export interface SessionActionPerformer {
   /**
@@ -150,7 +148,9 @@ const REFUSAL = {
   NO_ISSUE: ACTION_REFUSAL.NO_ISSUE,
   NO_ADDRESS: ACTION_REFUSAL.NO_ADDRESS,
   TURN_OVER: ACTION_REFUSAL.TURN_OVER,
-  PROVIDER_ABSENT: "That session's provider is not connected.",
+  NO_ENDPOINT: HOSTED_ACTION_ANSWER.NO_ENDPOINT,
+  NO_CREATION: "That provider documents no way to create a workspace from this Mac.",
+  NO_NETWORK: "This run reaches no provider, so it can create nothing.",
   NO_APP_ADDRESS: "That session has no address to open in that app.",
   NO_CHANGE: "That session reports no pull request.",
   OPEN_FAILED: OPEN_REFUSAL.SESSION,
@@ -164,7 +164,8 @@ export function createSessionActionPerformer(
   const {
     sessionRegistry,
     openExternal,
-    pluginFor,
+    actions,
+    refreshSessions,
     sendsNetwork,
     settingsStore,
     rememberWorkspaceDefaults,
@@ -173,67 +174,36 @@ export function createSessionActionPerformer(
     trackedIssues,
     issueTrackers,
     refreshIssues,
-    supersetContext,
-    supersetCli,
     recordProductEvent,
   } = dependencies;
 
-  /**
-   * Counts an action that actually landed. It takes the result rather than
-   * sitting inside `performOnSession`, because a Superset-managed session
-   * takes the same actions through the CLI without passing through there — an action
-   * counted in only one of the two paths would read as a provider nobody sends
-   * messages to.
-   */
-  function countSessionAction<Result extends ProviderActionResult | UnknownActionResult>(
-    providerId: string,
+  const settle = <Result extends SessionWriteResult>(
+    providerId: CloudAgentProviderId,
     counted: ProductSessionAction,
     result: Result,
-  ): Result {
-    // An adapter reports its provider id as a string; only one this build's
-    // own vocabulary names has anything to be counted under.
-    if (result.status === ACTION_RESULT_STATUS.ACCEPTED && isProviderId(providerId)) {
-      recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
-        provider_id: providerId,
-        session_action: counted,
-      });
-    }
-    return result;
-  }
+  ): Result => settleHostedWrite(result, providerId, counted, refreshSessions, recordProductEvent);
 
   /**
-   * Hands one admitted action to the adapter that observed its session. Whether
-   * the action may run is admission's answer; what is asked here is whether this
-   * process still holds the provider it names at all, which is a fact about
-   * the app rather than about the roster.
+   * The session an admitted act names, as the service admits it: only a cloud
+   * session has a documented way in from this Mac, and a local session, which
+   * stands behind no row here, has none.
    */
-  async function performOnSession<Result extends ProviderActionResult | UnknownActionResult>(
-    identity: SessionIdentity,
-    counted: ProductSessionAction,
-    action: (plugin: SessionProviderPlugin) => Promise<Result>,
-  ): Promise<Result | { status: typeof ACTION_RESULT_STATUS.UNSUPPORTED; reason: string }> {
-    const plugin = pluginFor(identity.providerId);
-    if (!plugin) {
-      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.PROVIDER_ABSENT };
-    }
-    const result = await action(plugin);
-    // A rejection refreshes like an acceptance: a write whose answer never
-    // arrived may still have landed, so the roster must catch up with the
-    // provider rather than keep advertising what it may have already taken. A
-    // rejection that never reached the network is answered from the adapter's
-    // cache anyway.
-    if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) {
-      void sessionRegistry.refresh(plugin);
-    }
-    return countSessionAction(plugin.provider.id, counted, result);
+  function cloudTarget(identity: SessionIdentity): HostedActionTarget | undefined {
+    return isCloudAgentProviderId(identity.providerId)
+      ? { providerId: identity.providerId, providerSessionId: identity.providerSessionId }
+      : undefined;
   }
 
-  // What a press fires is the address the roster reported, plus the one
-  // nonce Superset's own rows mint per press: the app consumes a terminal
-  // focus once per request id, so a nonce composed at observation time would
-  // be spent by the first press and dead for every later one.
-  const pressedLink = (link: string | undefined): string | undefined =>
-    link === undefined ? undefined : supersetPressedLink(link, randomUUID());
+  /** Hands one admitted act on a session to the service, and reads what the provider said. */
+  async function carry(
+    identity: SessionIdentity,
+    counted: ProductSessionAction,
+    call: (target: HostedActionTarget) => Promise<HostedActionOutcome>,
+  ): Promise<CarriedActionResult> {
+    const target = cloudTarget(identity);
+    if (!target) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
+    return settle(target.providerId, counted, hostedActionResult(await call(target)));
+  }
 
   const countOpen = (identity: SessionIdentity) => {
     if (isProviderId(identity.providerId)) {
@@ -271,10 +241,12 @@ export function createSessionActionPerformer(
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
 
+  // What a press fires is the address the roster reported, as the service
+  // relayed it from the provider's own pass.
   const openSession = (identity: SessionIdentity, kind: HostNodeOpenKind) =>
     openAddress(
       identity,
-      (target) => pressedLink(sessionRegistry.get(target)?.detail.link),
+      (target) => sessionRegistry.get(target)?.detail.link,
       REFUSAL.NO_ADDRESS,
       REFUSAL.OPEN_FAILED,
       kind,
@@ -299,7 +271,7 @@ export function createSessionActionPerformer(
           : "That session lists no app to open in.",
       };
     }
-    const url = pressedLink(application.link);
+    const url = application.link;
     if (!url) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_APP_ADDRESS };
     try {
       await openExternal(url, kind);
@@ -322,123 +294,87 @@ export function createSessionActionPerformer(
       HOST_NODE_OPEN_KIND.ADDRESS,
     );
 
-  // A message is handed to the session's own provider, through the adapter
-  // that observed it — the one component that knows the documented way in —
-  // or, for a Superset-managed row, through the CLI that owns its terminal.
-  const sendMessage = async (
-    action: ValidatedAction<typeof ACTION_KIND.MESSAGE>,
-  ): Promise<CarriedActionResult> => {
-    const { identity } = action;
-    const managed = supersetContext(identity);
-    if (managed) {
-      return countSessionAction(
-        identity.providerId,
-        PRODUCT_SESSION_ACTION.MESSAGE_SEND,
-        await supersetCli.sendMessage(managed, action.text),
-      );
-    }
-    return performOnSession(identity, PRODUCT_SESSION_ACTION.MESSAGE_SEND, (plugin) =>
-      dispatchAction(plugin, "message", providerSessionMessage(action)),
+  // A message is handed to the session's own provider through the service,
+  // which holds the documented way in under the developer's synced key.
+  const sendMessage = (action: ValidatedAction<typeof ACTION_KIND.MESSAGE>) =>
+    carry(action.identity, PRODUCT_SESSION_ACTION.MESSAGE_SEND, (target) =>
+      actions.sendMessage(target, action.text),
     );
-  };
 
-  // The control the action carries is the advertised entry itself, which is what
-  // the effect is built from on either path.
-  const executeControl = async (
-    action: ValidatedAction<typeof ACTION_KIND.CONTROL>,
-  ): Promise<CarriedActionResult> => {
-    const { identity, control } = action;
-    const managed = supersetContext(identity);
-    if (managed && isSupersetControlId(control.id)) {
-      return countSessionAction(
-        identity.providerId,
-        PRODUCT_SESSION_ACTION.CONTROL_RUN,
-        await supersetCli.executeControl(managed, control.id),
-      );
-    }
-    return performOnSession(identity, PRODUCT_SESSION_ACTION.CONTROL_RUN, (plugin) =>
-      dispatchAction(plugin, "control", providerControlRequest(action)),
+  // The control the action carries is the advertised entry itself; the
+  // service reads the same advertisement back out of its stored snapshot.
+  const executeControl = (action: ValidatedAction<typeof ACTION_KIND.CONTROL>) =>
+    carry(action.identity, PRODUCT_SESSION_ACTION.CONTROL_RUN, (target) =>
+      actions.executeControl(target, action.control.id),
     );
-  };
 
-  // A new workspace lands only in a project an adapter reported on its latest
-  // pass — read back here from the adapter itself, never from the action — before
-  // it reaches the provider's documented creation endpoint. A fixture run
-  // offers no projects at all, so it refuses every ask without touching a
-  // network.
+  /**
+   * The stored agent pairing for a provider, read under the turn's guard: the
+   * one read a create and a spawn each await between admission and the write.
+   */
+  const storedSelection = (
+    providerId: CloudAgentProviderId,
+    guard: ActionGuard | undefined,
+  ): Promise<WorkspaceAgentSelection | undefined> =>
+    guardedRead(settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field), guard).then(
+      (defaults) => defaults?.[providerId],
+    );
+
+  // A new workspace lands only in a project the service's snapshot listed:
+  // admission read that list here, and the service admits the ask against
+  // the same snapshot before the provider's documented creation endpoint is
+  // reached. A fixture run offers no projects at all, so it refuses every ask
+  // without touching a network.
   const createWorkspace = async (
     action: ValidatedAction<typeof ACTION_KIND.CREATE_WORKSPACE>,
     guard: ActionGuard | undefined,
-  ): Promise<ProviderWorkspaceResult> => {
-    const { providerId, providerProjectId, providerTargetId } = action;
+  ): Promise<CarriedActionResult> => {
+    const { providerId, providerProjectId } = action;
     if (!sendsNetwork) {
-      return {
-        status: ACTION_RESULT_STATUS.UNSUPPORTED,
-        reason: "This run reaches no provider, so it can create nothing.",
-      };
+      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_NETWORK };
     }
-    const plugin = pluginFor(providerId);
-    if (!plugin) {
-      return {
-        status: ACTION_RESULT_STATUS.UNSUPPORTED,
-        reason: "That provider is not connected.",
-      };
-    }
-    const project = (plugin.projects?.() ?? []).find(
-      (candidate) =>
-        candidate.providerProjectId === providerProjectId &&
-        candidate.providerTargetId === providerTargetId,
-    );
-    if (!project) {
-      return {
-        status: ACTION_RESULT_STATUS.UNSUPPORTED,
-        reason: "No listed project matches that identity.",
-      };
+    if (!isCloudAgentProviderId(providerId)) {
+      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_CREATION };
     }
     // A model the user named for this one creation outranks the stored choice
-    // for this action alone; the stored choice stands otherwise. Both are held to
-    // the build's documented table — the named one by admission, the stored one
-    // when it was written — and the adapter holds whichever rides to its own
-    // table again before anything reaches the network.
-    const stored = isProviderId(providerId)
-      ? (
-          await guardedRead(
-            settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
-            guard,
-          )
-        )?.[providerId]
-      : undefined;
-    if (guard?.isRevoked())
+    // for this action alone; the stored choice stands otherwise. Both are held
+    // to the build's documented table — the named one by admission, the stored
+    // one when it was written — and the service's admission holds whichever
+    // rides to the same table again before anything reaches the provider.
+    const stored = await storedSelection(providerId, guard);
+    if (guard?.isRevoked()) {
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
-    const result = await dispatchAction(
-      plugin,
-      "createWorkspace",
-      providerWorkspaceRequest(action, stored),
+    }
+    const selection = action.agentSelection ?? stored;
+    const outcome = await actions.createWorkspace(providerId, {
+      providerProjectId,
+      agent: action.agent ?? selection?.agent,
+      model: selection?.model,
+      effort: selection?.effort,
+      name: action.name,
+      task: action.task,
+    });
+    const result = settle(
+      providerId,
+      PRODUCT_SESSION_ACTION.WORKSPACE_CREATE,
+      hostedActionResult(outcome),
     );
-    // A workspace that landed is a session the panel should be showing, so
-    // the next look must actually ask rather than serve the cache. A
-    // rejection refreshes too: a workspace can stand with its opening task
-    // undelivered, and the adapter answers a rejection that never reached
-    // the network from its cache anyway.
-    if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) {
+    if ("failure" in outcome || result.status !== ACTION_RESULT_STATUS.ACCEPTED) return result;
+    // The session the creation named rides out as an identity under the
+    // provider that was asked — an identifier, never an address — for the
+    // envelope to record as the created session.
+    const { providerSessionId } = outcome.answer;
+    const createdSession: SessionIdentity | undefined =
+      providerSessionId === undefined ? undefined : { providerId, providerSessionId };
+    if (createdSession) {
       // A workspace that landed is also one the developer just asked to be
-      // taken to, so the session the creation response named — an id the
-      // adapter reported, never an address — waits here for observation to
-      // report it, and is opened then like a pressed row. Noted before the
-      // refresh, so the very pass that first sees the session resolves it.
-      if (result.status === ACTION_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
-        expectCreatedWorkspace(
-          { providerId: plugin.provider.id, providerSessionId: result.providerSessionId },
-          Date.now(),
-        );
-        // An interval pass can commit the new session while the creation's
-        // own follow-up write is still in flight — before the entry above
-        // exists — and a registry already holding the session commits
-        // nothing further to resolve it. So the current picture is claimed
-        // against here, and future commits carry every later arrival.
-        openCreatedWorkspaces();
-      }
-      void sessionRegistry.refresh(plugin);
+      // taken to, so the session the creation response named waits here for
+      // observation to report it, and is opened then like a pressed row.
+      // Noted before the refresh the settle began can commit, so the very pass
+      // that first sees the session resolves it; a pass that already committed
+      // it is claimed against here, and later commits carry every later arrival.
+      expectCreatedWorkspace(createdSession, Date.now());
+      openCreatedWorkspaces();
     }
     // The first workspace that actually lands chooses the default provider,
     // so a later ask that names none has somewhere unsurprising to go. Only
@@ -446,90 +382,57 @@ export function createSessionActionPerformer(
     // never a creation's. Deterministic on the validated action — nothing a
     // model composed decides this — and losing the save loses only the
     // remembered default, never the workspace that just landed.
-    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
-      await rememberWorkspaceDefaults(
-        plugin,
-        providerProjectId,
-        providerTargetId,
-        action.agentSelection,
-        action.agent,
-      );
-      countSessionAction(plugin.provider.id, PRODUCT_SESSION_ACTION.WORKSPACE_CREATE, result);
-      // The session the creation named rides out as an identity under the
-      // provider that was asked — an identifier, never an address — for the
-      // envelope to record as the created session.
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        ...(result.providerSessionId !== undefined
-          ? {
-              createdSession: {
-                providerId: plugin.provider.id,
-                providerSessionId: result.providerSessionId,
-              },
-            }
-          : undefined),
-        ...(result.warning !== undefined ? { warning: result.warning } : undefined),
-      };
-    }
-    return result;
+    await rememberWorkspaceDefaults(providerId, providerProjectId, action.agentSelection);
+    return {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      ...(createdSession ? { createdSession } : undefined),
+    };
   };
 
-  // Another agent in an observed workspace: the agent kind the action carries is
-  // the one that session's own observation listed, and the adapter reads the
-  // workspace it lands in back from its own last pass.
+  // Another agent in an observed workspace: the agent kind the action carries
+  // is the one that session's own observation listed, and the service reads
+  // the workspace it lands in back from its stored snapshot.
   const addWorkspaceAgent = async (
     action: ValidatedAction<typeof ACTION_KIND.ADD_AGENT>,
     guard: ActionGuard | undefined,
   ): Promise<CarriedActionResult> => {
-    const { identity } = action;
-    const managed = supersetContext(identity);
-    if (managed) {
-      return countSessionAction(
-        identity.providerId,
-        PRODUCT_SESSION_ACTION.AGENT_ADD,
-        await supersetCli.createAgent(managed, action.agent, action.task),
-      );
+    const target = cloudTarget(action.identity);
+    if (!target) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
+    const stored = await storedSelection(target.providerId, guard);
+    if (guard?.isRevoked()) {
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
     }
-    return performOnSession(identity, PRODUCT_SESSION_ACTION.AGENT_ADD, async (plugin) => {
-      const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
-        ? (
-            await guardedRead(
-              settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
-              guard,
-            )
-          )?.[identity.providerId]
-        : undefined;
-      if (guard?.isRevoked()) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
-      }
-      return dispatchAction(plugin, "spawnAgent", providerWorkspaceAgentRequest(action, stored));
-    });
-  };
-
-  // Renaming a workspace: the adapter resolves the workspace from its own
-  // last pass, never from the action, which carries the session and the name.
-  const renameWorkspace = async (
-    action: ValidatedAction<typeof ACTION_KIND.RENAME_WORKSPACE>,
-  ): Promise<CarriedActionResult> => {
-    const { identity } = action;
-    const managed = supersetContext(identity);
-    if (managed) {
-      return countSessionAction(
-        identity.providerId,
-        PRODUCT_SESSION_ACTION.WORKSPACE_RENAME,
-        await supersetCli.renameWorkspace(managed, action.name),
-      );
-    }
-    return performOnSession(identity, PRODUCT_SESSION_ACTION.WORKSPACE_RENAME, (plugin) =>
-      dispatchAction(plugin, "renameWorkspace", providerWorkspaceRenameRequest(action)),
+    // A stored pairing rides along only when it names the very agent kind the
+    // developer asked for, and a model the ask named brings its own effort or
+    // none: a preference rides with an ask, never against it.
+    const paired = stored?.agent === action.agent ? stored : undefined;
+    const model = action.model ?? paired?.model;
+    const effort = action.model === undefined ? paired?.effort : action.effort;
+    return settle(
+      target.providerId,
+      PRODUCT_SESSION_ACTION.AGENT_ADD,
+      hostedActionResult(
+        await actions.addAgent(target, {
+          agent: action.agent,
+          model,
+          effort,
+          name: action.name,
+          task: action.task,
+        }),
+      ),
     );
   };
 
-  const renameSession = async (
-    action: ValidatedAction<typeof ACTION_KIND.RENAME_SESSION>,
-  ): Promise<CarriedActionResult> =>
-    performOnSession(action.identity, PRODUCT_SESSION_ACTION.SESSION_RENAME, (plugin) =>
-      dispatchAction(plugin, "renameSession", providerSessionRenameRequest(action)),
+  // The two renames carry the session and the name, never the target: the
+  // service resolves the workspace or the session from its stored snapshot.
+  const renameWorkspace = (action: ValidatedAction<typeof ACTION_KIND.RENAME_WORKSPACE>) =>
+    carry(action.identity, PRODUCT_SESSION_ACTION.WORKSPACE_RENAME, (target) =>
+      actions.renameWorkspace(target, action.name),
+    );
+
+  const renameSession = (action: ValidatedAction<typeof ACTION_KIND.RENAME_SESSION>) =>
+    carry(action.identity, PRODUCT_SESSION_ACTION.SESSION_RENAME, (target) =>
+      actions.renameSession(target, action.name),
     );
 
   // An issue action is built from observed state alone: the issue's own tracker
@@ -595,7 +498,7 @@ export function createSessionActionPerformer(
 
   // Of the actions below, only the create and the spawn await anything of their
   // own between admission and the provider effect, so only they take the
-  // guard; the rest reach their adapter or the CLI with nothing awaited between.
+  // guard; the rest reach the service with nothing awaited between.
   const performSessionAction = (
     action: ValidatedAction<SessionActionKind>,
     guard: ActionGuard | undefined,
@@ -613,8 +516,7 @@ export function createSessionActionPerformer(
               HOST_NODE_OPEN_KIND.ASKED_SESSION,
             )
           : openSession(open.identity, HOST_NODE_OPEN_KIND.ASKED_SESSION),
-      [ACTION_KIND.CREATE_WORKSPACE]: async (creation): Promise<CarriedActionResult> =>
-        createWorkspace(creation, guard),
+      [ACTION_KIND.CREATE_WORKSPACE]: (creation) => createWorkspace(creation, guard),
       [ACTION_KIND.ADD_AGENT]: (spawn) => addWorkspaceAgent(spawn, guard),
       [ACTION_KIND.RENAME_WORKSPACE]: renameWorkspace,
       [ACTION_KIND.RENAME_SESSION]: renameSession,

@@ -1,17 +1,10 @@
 import { ACTION_REFUSAL } from "@sidecar/actions";
 import {
-  PRODUCT_EVENT,
   PRODUCT_SESSION_ACTION,
   type ProductSessionAction,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import {
-  HOSTED_ACTION_FAILURE,
-  type HostedActionClient,
-  type HostedActionFailure,
-  type HostedActionOutcome,
-  type HostedActionTarget,
-} from "@sidecar/hosted";
+import type { HostedActionClient, HostedActionOutcome, HostedActionTarget } from "@sidecar/hosted";
 import {
   isCloudAgentProviderId,
   type Session,
@@ -19,7 +12,12 @@ import {
   type SessionWriteResult,
   sessionWithIdentity,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import {
+  HOSTED_ACTION_ANSWER,
+  hostedActionResult,
+  settleHostedWrite,
+} from "./hosted-action-result.js";
 
 /**
  * What a row's own write needs: the sessions the rows draw, read at the
@@ -55,47 +53,6 @@ export interface SessionRowActions {
   executeControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
 }
 
-const ROW_ANSWER = {
-  NO_ENDPOINT: "That session's provider documents no way in from this Mac.",
-  NOT_SENT: "Luke could not reach his service under your account; sign in and try again.",
-  REFUSED: "Luke's service refused the request before it reached the provider.",
-  UNSAID: "The provider refused the write and said nothing more.",
-  LOST: "The write was handed on, and its answer was lost; it may have landed.",
-  UNREADABLE:
-    "The write was handed on, and its provider answered in a shape this build cannot read.",
-} as const;
-
-/**
- * A failure short of an answer, as the row hears it. A call that never left
- * or was turned away ran nothing and is a refusal; one that left and lost its
- * answer, or came back unreadable, may have landed, and the row must neither
- * call it failed nor repeat it.
- */
-const FAILURE_RESULT = {
-  [HOSTED_ACTION_FAILURE.NOT_SENT]: {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: ROW_ANSWER.NOT_SENT,
-  },
-  [HOSTED_ACTION_FAILURE.REFUSED]: {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: ROW_ANSWER.REFUSED,
-  },
-  [HOSTED_ACTION_FAILURE.LOST]: { status: UNKNOWN_ACTION_STATUS, reason: ROW_ANSWER.LOST },
-  [HOSTED_ACTION_FAILURE.UNREADABLE]: {
-    status: UNKNOWN_ACTION_STATUS,
-    reason: ROW_ANSWER.UNREADABLE,
-  },
-} as const satisfies Readonly<Record<HostedActionFailure, SessionWriteResult>>;
-
-function writeResult(outcome: HostedActionOutcome): SessionWriteResult {
-  if ("failure" in outcome) return FAILURE_RESULT[outcome.failure];
-  const { answer } = outcome;
-  if (answer.result === ACTION_RESULT_STATUS.ACCEPTED) {
-    return { status: ACTION_RESULT_STATUS.ACCEPTED };
-  }
-  return { status: answer.result, reason: answer.reason ?? ROW_ANSWER.UNSAID };
-}
-
 export function createSessionRowActions(
   dependencies: SessionRowActionsDependencies,
 ): SessionRowActions {
@@ -111,22 +68,15 @@ export function createSessionRowActions(
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: ACTION_REFUSAL.NO_SESSION };
     const providerId = session.providerId;
     if (!isCloudAgentProviderId(providerId)) {
-      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: ROW_ANSWER.NO_ENDPOINT };
+      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: HOSTED_ACTION_ANSWER.NO_ENDPOINT };
     }
-    const result = writeResult(
-      await call({ providerId, providerSessionId: session.providerSessionId }),
+    return settleHostedWrite(
+      hostedActionResult(await call({ providerId, providerSessionId: session.providerSessionId })),
+      providerId,
+      counted,
+      refresh,
+      recordProductEvent,
     );
-    // A rejection redraws like an acceptance: a write whose answer never
-    // arrived may still have landed, so the rows must catch up with the
-    // snapshot rather than keep advertising what it may have already taken.
-    if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) void refresh().catch(() => undefined);
-    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
-      recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
-        provider_id: providerId,
-        session_action: counted,
-      });
-    }
-    return result;
   };
 
   return {

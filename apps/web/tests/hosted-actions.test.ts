@@ -180,6 +180,36 @@ test("a creation names a project rather than a session, and carries none", async
   });
 });
 
+test("an agent addition carries the model and effort beside the agent, renamed and unparsed", async () => {
+  let received: WireRecord | undefined;
+  await handleSessionAction(
+    messageOptions({
+      request: actionRequest("/api/actions/agent", {
+        providerId: "conductor",
+        providerSessionId: "session-1",
+        agent: "claude",
+        model: "fable-5",
+        effort: "high",
+        task: "add tests",
+      }),
+      kind: ACTION_KIND.ADD_AGENT,
+      execute: async (options) => {
+        received = options.fields;
+        return { result: "accepted" };
+      },
+    }),
+  );
+
+  assert.deepEqual(received, {
+    provider_id: "conductor",
+    provider_session_id: "session-1",
+    agent: "claude",
+    model: "fable-5",
+    effort: "high",
+    task: "add tests",
+  });
+});
+
 // --- The execute result travels to the wire unchanged ---
 
 test("a rejected execute result carries its reason and session id to the wire", async () => {

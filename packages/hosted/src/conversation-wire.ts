@@ -27,6 +27,18 @@ import { countedNumber, writtenText } from "./service-wire.js";
  * two voices a chat screen draws exist on the wire, because a message the
  * provider's store did not attribute never left the adapter at all.
  */
+/**
+ * The query parameters the messages endpoint reads: the session by its two
+ * identifiers, and one of two positions, the message id an earlier answer
+ * handed back to poll on from, or the stored offset to read history before.
+ */
+export const SESSION_MESSAGES_QUERY = {
+  PROVIDER_ID: "providerId",
+  PROVIDER_SESSION_ID: "providerSessionId",
+  AFTER: "after",
+  BEFORE_OFFSET: "beforeOffset",
+} as const;
+
 export interface HostedConversationMessage {
   id: string;
   author: ConversationMessageAuthor;
