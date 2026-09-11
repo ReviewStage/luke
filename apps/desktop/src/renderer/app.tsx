@@ -28,7 +28,6 @@ import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages
 import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import { act, tell, updateSetting } from "./act";
 import { useAppActionCarrier } from "./app-action-carrier";
-import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CalendarGateControl } from "./calendar-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
 import { FeedbackSlot } from "./feedback-slot";
@@ -268,8 +267,6 @@ export function App(): React.JSX.Element {
         removed: current.voiceHotkey === VOICE_HOTKEY_NONE,
         held: held.hotkeys.talkHeld,
       },
-      ...(held.hotkeys.ask ? { askKey: voiceHotkeyLabel(held.hotkeys.ask) } : undefined),
-      askKeyRemoved: current.askHotkey === VOICE_HOTKEY_NONE,
       ...(held.hotkeys.stop ? { stopKey: voiceHotkeyLabel(held.hotkeys.stop) } : undefined),
       stopKeyRemoved: current.stopHotkey === VOICE_HOTKEY_NONE,
     });
@@ -457,15 +454,8 @@ export function App(): React.JSX.Element {
     [],
   );
 
-  // The ask key, under the same rule: the key the row shows follows the main
+  // The stop key, under the same rule: the key the row shows follows the main
   // process's own announcement of what actually registered.
-  const changeAskHotkey = useCallback(
-    (accelerator: string | undefined) =>
-      updateSetting(APP_SETTING_SCHEMA.askHotkey.field, accelerator),
-    [],
-  );
-
-  // The stop key, under the same rule again.
   const changeStopHotkey = useCallback(
     (accelerator: string | undefined) =>
       updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
@@ -475,8 +465,7 @@ export function App(): React.JSX.Element {
   // True while a settings row is recording a chord. Both Luke keys stay
   // registered through a recording — the recording is how one gets replaced —
   // so a press of a current chord landing then is held here rather than
-  // opening the microphone, or summoning the composer, under the field being
-  // typed into.
+  // opening the microphone under the field being typed into.
   const shortcutCapture = useRef(false);
   const changeShortcutCapture = useCallback((capturing: boolean) => {
     shortcutCapture.current = capturing;
@@ -484,30 +473,6 @@ export function App(): React.JSX.Element {
     // is not this one, so the recording is reported there to be honored.
     window.sidecar.setShortcutCapturing(capturing);
   }, []);
-
-  /**
-   * The ask key, pressed anywhere on the system. The main process has already
-   * stood the panel up focused; what is left is the caret — or the dismissal,
-   * because a summons repeated over its own open field is someone asking the
-   * launcher to go away, the same second press every launcher answers.
-   */
-  const summonAsk = useCallback(() => {
-    const field = document.getElementById(ASK_LUKE_INPUT_ID);
-    if (
-      presentationOf() === PANEL_PRESENTATION.PANEL &&
-      field !== null &&
-      document.activeElement === field
-    ) {
-      cancelHover();
-      void changeMode(false);
-      return;
-    }
-    // Sessions and Conversation each hold the composer, so a summons over either
-    // lands in the field already showing; only Settings, which has none,
-    // gives way to the sessions list.
-    if (tabNow() === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
-    focusAskField();
-  }, [cancelHover, changeMode, changeTab, presentationOf, tabNow]);
 
   /**
    * The settings search summons, from its magnifier beside the tab bar. The
@@ -565,9 +530,7 @@ export function App(): React.JSX.Element {
     voiceTurn,
     level: voiceLevel,
     voiceActive,
-    askLuke,
     brainRequests,
-    cancelBrainAsk,
     stopSpeaking,
     requestMicrophoneAccess,
     clearConversationLines,
@@ -578,13 +541,6 @@ export function App(): React.JSX.Element {
   // draws its wait from: the strip's face, the stage's growth for the dots
   // beside it, and the thread's wait all read one answer.
   const thinking = brainRequests.some(brainRequestPending);
-  // The composer's stop takes every run still going: a second ask joined the
-  // turn under way, so stopping the turn is stopping them all.
-  const stopThinking = useCallback(() => {
-    for (const run of brainRequests) {
-      if (brainRequestPending(run)) cancelBrainAsk(run.runId);
-    }
-  }, [brainRequests, cancelBrainAsk]);
   // A capture run always draws the fixture's words: the voice window that
   // otherwise decides the captions does not stand in one.
   const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
@@ -691,16 +647,13 @@ export function App(): React.JSX.Element {
     setSettingsView,
   ]);
 
-  // The mode main decided, and the two events only a window can be told: the
-  // ask field summoned from any app, and the composer a spoken request opens.
+  // The mode main decided, and the one event only a window can be told: the
+  // feedback composer a spoken request opens.
   useEffect(() => {
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
       if (eventName === "mode:compact") applyAuthoritativeMode("compact");
       if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
       if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
-      // Held while a shortcut row is recording, for the same reason the talk
-      // key's press is: the chord just typed is an entry, not an ask.
-      if (eventName === "ask:focus" && !shortcutCapture.current) summonAsk();
       // A spoken feedback request stands the surface straight down to
       // the composer's shape, on the kind that was asked for. The window was
       // expanded before this event was sent; this is the renderer's half. The
@@ -717,14 +670,7 @@ export function App(): React.JSX.Element {
       cancelHover();
       removeLifecycle();
     };
-  }, [
-    applyAuthoritativeMode,
-    cancelHover,
-    changeTab,
-    feedback.begin,
-    feedback.takeSpokenDraft,
-    summonAsk,
-  ]);
+  }, [applyAuthoritativeMode, cancelHover, changeTab, feedback.begin, feedback.takeSpokenDraft]);
 
   // The one greeting an unauthed launch gets: the panel opens on the sign-in
   // gate exactly once, then behaves like any panel — Escape, the pointer, and
@@ -889,7 +835,6 @@ export function App(): React.JSX.Element {
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
   const now = state.run.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
-  const shownAskHotkey = state.hotkeys.ask;
   const shownStopHotkey = state.hotkeys.stop;
   const hasAudioSignal = fixtureSpeaking || voiceTurn !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -926,10 +871,6 @@ export function App(): React.JSX.Element {
     onVoiceHotkeyChange: changeVoiceHotkey,
     // Both rows take the accelerator: they draw the keys apart and
     // label the chord whole for the buttons beside them.
-    ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : undefined),
-    askChosen: settings?.askHotkey !== undefined,
-    askOff: settings?.askHotkey === VOICE_HOTKEY_NONE,
-    onAskHotkeyChange: changeAskHotkey,
     ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : undefined),
     stopChosen: settings?.stopHotkey !== undefined,
     stopOff: settings?.stopHotkey === VOICE_HOTKEY_NONE,
@@ -1056,10 +997,7 @@ export function App(): React.JSX.Element {
             spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}
             brainRequests={brainRequests}
-            onStopThinking={stopThinking}
-            ask={askLuke}
-            onAskEngaged={changeAskEngagement}
-            {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
+            onFieldEngaged={changeAskEngagement}
             offerOptions={sessions.offerOptions}
             optionsOpen={sessions.optionsOpen}
             onOptionsToggle={sessions.toggleOptions}

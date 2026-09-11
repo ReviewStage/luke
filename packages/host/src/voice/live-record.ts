@@ -1,9 +1,5 @@
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import {
-  CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
-  replyConversationEntry,
-} from "@sidecar/session";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 
 /**
  * Where what was said on a live session is written down, behind its own door
@@ -57,8 +53,10 @@ export interface ConversationLiveRecordOptions {
 
 /**
  * The desktop's implementation: main's Conversation thread in the brain's
- * store. The developer's utterance becomes a spoken-ask line tied to its run
- * where one was accepted, and Luke's becomes a reply or announcement line;
+ * store. The developer's utterance becomes an ask line tied to its run where
+ * one was accepted, and Luke's becomes a reply or announcement line — the one
+ * line Luke's words ever leave, since the brain's own reply text is never
+ * written;
  * the session id, the delegation id, and the ask span are the record
  * contract's and are kept out of the line, which carries no identity a model
  * did not validate.
@@ -70,7 +68,7 @@ export function conversationLiveRecord(options: ConversationLiveRecordOptions): 
       if (!words) return false;
       return options.recordConversationEntry(
         {
-          kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+          kind: CONVERSATION_ENTRY_KIND.ASK,
           words,
           eventId: options.createEventId(),
           ...(record.runId !== undefined ? { requestId: record.runId } : undefined),
@@ -82,12 +80,8 @@ export function conversationLiveRecord(options: ConversationLiveRecordOptions): 
     writeLukeUtterance: async (record) => {
       const words = record.text.trim();
       if (!words) return false;
-      const entry =
-        record.role === CONVERSATION_ENTRY_KIND.REPLY
-          ? replyConversationEntry(words)
-          : { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words };
       return options.recordConversationEntry(
-        { ...entry, eventId: options.createEventId() },
+        { kind: record.role, words, eventId: options.createEventId() },
         record.recordedAt,
         MAIN_SESSION_KEY,
       );

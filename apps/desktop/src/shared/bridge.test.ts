@@ -45,7 +45,7 @@ test("the act channel takes one act of any kind and nothing else", () => {
 
 test("a conversation report carries only well-formed conversation lines", () => {
   const guard = BRIDGE.appendConversationLines.args;
-  const ask = { kind: "typed-ask", words: "how is it going?", recordedAt: 1 };
+  const ask = { kind: "spoken-ask", words: "how is it going?", recordedAt: 1 };
   const announcement = {
     kind: "announcement",
     words: "A chat finished.",

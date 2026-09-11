@@ -17,14 +17,7 @@ const SPOKEN_ASK: BrainTurnDescription = {
   askOrigin: BRAIN_REQUEST_ORIGIN.SPOKEN,
 };
 
-const TYPED_ASK: BrainTurnDescription = {
-  kind: BRAIN_TURN_KIND.TURN,
-  trigger: BRAIN_TURN_TRIGGER.ASK,
-  askOrigin: BRAIN_REQUEST_ORIGIN.TYPED,
-};
-
 const OTHER_TURNS: readonly BrainTurnDescription[] = [
-  TYPED_ASK,
   { kind: BRAIN_TURN_KIND.TURN, trigger: BRAIN_TURN_TRIGGER.ASK },
   {
     kind: BRAIN_TURN_KIND.TURN,
@@ -83,14 +76,16 @@ test("the composed prompt opens a spoken turn with the preamble section and carr
   );
 });
 
-test("the composed prompt of a typed ask opens with the identity, then the persona, and no preamble section", () => {
-  const typed = sectionsFor(TYPED_ASK);
-  assert.deepEqual(
-    typed.slice(0, 2).map((section) => section.id),
-    [PROMPT_SECTION.IDENTITY, PROMPT_SECTION.PERSONA],
-  );
-  assert.equal(
-    typed.some((section) => section.id === PROMPT_SECTION.BACKEND_PREAMBLE),
-    false,
-  );
+test("the composed prompt of every other turn opens with the identity, then the persona, and no preamble section", () => {
+  for (const turn of OTHER_TURNS) {
+    const sections = sectionsFor(turn);
+    assert.deepEqual(
+      sections.slice(0, 2).map((section) => section.id),
+      [PROMPT_SECTION.IDENTITY, PROMPT_SECTION.PERSONA],
+    );
+    assert.equal(
+      sections.some((section) => section.id === PROMPT_SECTION.BACKEND_PREAMBLE),
+      false,
+    );
+  }
 });

@@ -504,7 +504,7 @@ export class TurnRunner {
       return { outcome: TURN_OUTCOME.REVOKED };
     };
     if (this.#revoked(turnContext)) return revocation();
-    events.started(turnOriginOf(plan.trigger, plan.askOrigin), plan.trigger);
+    events.started(turnOriginOf(plan.trigger), plan.trigger);
 
     // The consumed cursor moves to where each entry's capture read, in
     // memory now and on disk with the checkpoint; a turn that fails rolls it

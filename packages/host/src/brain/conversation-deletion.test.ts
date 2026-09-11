@@ -156,14 +156,7 @@ async function composed(t: TestContext) {
       report: () => undefined,
       now: () => clock,
     });
-    followers.set(
-      agent,
-      followBrainRequests(
-        agent,
-        { recordConversationEntry: record, broadcastRequests: () => undefined },
-        MAIN_SESSION_KEY,
-      ),
-    );
+    followers.set(agent, followBrainRequests(agent, { broadcastRequests: () => undefined }));
     return agent;
   };
   const stop = async (agent: BrainAgent) => {
@@ -210,16 +203,13 @@ async function composed(t: TestContext) {
   // The operator stands over whichever agent the ask names, as the host's
   // current brain would, so a rebuilt agent is submitted to like the first.
   let asking: BrainAgent | undefined;
-  const operator = operatorOverBrain({
-    current: () => asking,
-    recordConversationEntry: (entry, at) => record(entry, at),
-  });
+  const operator = operatorOverBrain({ current: () => asking });
   const submit = async (agent: BrainAgent, question: string) => {
     asking = agent;
     const result = await operator.submit({
       submissionId: `sub-${++ids}`,
       question,
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     });
     assert.equal(result.outcome, "accepted");
     return result.outcome === "accepted" ? result.runId : "";
@@ -323,18 +313,37 @@ async function composed(t: TestContext) {
   };
 }
 
-/** Seeds a finished, compacted exchange whose words stand in the checkpoint, the transcript, and the thread. */
+/**
+ * Seeds a finished, compacted exchange whose words stand in the checkpoint,
+ * the transcript, and the thread. The thread's two lines are written the way
+ * the live record writes them — both speakers' settled utterances, tied to
+ * the run — since the brain's publication writes no line of its own.
+ */
 async function seeded(c: Awaited<ReturnType<typeof composed>>) {
   await c.open();
   const client = heldClient();
   const agent = c.build(client);
   const first = await c.submit(agent, OLD_ASK);
+  assert.equal(
+    await c.record(
+      { kind: CONVERSATION_ENTRY_KIND.ASK, words: OLD_ASK, requestId: first },
+      c.tick(),
+    ),
+    true,
+  );
   await drainMicrotasks(40);
   client.release(
     reply(OLD_REPLY, { type: "compaction", id: "cmp_1", encrypted_content: OLD_COMPACTION }),
   );
   await drainMicrotasks(40);
   assert.equal(agent.request(first)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(
+    await c.record(
+      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: OLD_REPLY, requestId: first },
+      c.tick(),
+    ),
+    true,
+  );
   assert.ok(c.thread.entries().some((entry) => entry.words === OLD_REPLY));
   return { agent, client };
 }
@@ -382,9 +391,17 @@ test("a Clear under a held model answer fences the brain and the thread before a
   const c = await composed(t);
   t.onTestFinished(() => c.close());
   const { agent, client } = await seeded(c);
-  // A second ask whose answer is still out when the press lands.
+  // A second ask whose answer is still out when the press lands, its own
+  // line already on the thread the way the live record writes an utterance.
   c.tick();
   const late = await c.submit(agent, "second ask");
+  assert.equal(
+    await c.record(
+      { kind: CONVERSATION_ENTRY_KIND.ASK, words: "second ask", requestId: late },
+      c.tick(),
+    ),
+    true,
+  );
   await drainMicrotasks(40);
   const pressedAt = c.tick();
   const clearing = c.clear();
@@ -397,7 +414,7 @@ test("a Clear under a held model answer fences the brain and the thread before a
   // A voice line landing a beat after the press, while the deletion waits, is the conversation's next line.
   const afterAt = c.tick();
   assert.equal(
-    await c.record({ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: AFTER_WORDS }, afterAt),
+    await c.record({ kind: CONVERSATION_ENTRY_KIND.ASK, words: AFTER_WORDS }, afterAt),
     true,
   );
   // The late answer lands on the fenced generation: recorded nowhere.

@@ -89,7 +89,7 @@ function request(runId: string, overrides: Partial<BrainRequestRecord> = {}): Br
   return {
     runId,
     submissionId: `submission-${runId}`,
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     question: `question for ${runId}`,
     status: BRAIN_REQUEST_STATUS.QUEUED,
     revision: 0,

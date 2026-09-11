@@ -300,8 +300,7 @@ export const APP_SETTING_SCHEMA = {
     label: "Captions",
     description:
       "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
-      "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
-      "muted or at zero.",
+      "whatever this says, while the Mac's output is muted or at zero.",
     default: false,
     page: SETTINGS_PAGE.VOICE,
     section: SETTING_SECTION.CONTROLS,
@@ -317,12 +316,6 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.TALK_HOTKEY,
     order: 60,
     sideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
-  }),
-  askHotkey: hotkeySetting({
-    field: "askHotkey",
-    id: APP_SETTING_ID.ASK_HOTKEY,
-    order: 70,
-    sideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
   }),
   stopHotkey: hotkeySetting({
     field: "stopHotkey",

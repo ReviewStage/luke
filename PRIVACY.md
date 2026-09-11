@@ -55,8 +55,8 @@ can say which app holds them and open there; that read opens no transcript and
 sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 
 **Your conversation with Luke.** Luke keeps the conversations you have with
-him — what you typed or said, what he spoke or announced, the actions he took
-at your request, and the asks he is still working on — in a database on your
+him — what you said, what he spoke or announced, the actions he took at your
+request, and the asks he is still working on — in a database on your
 Mac, so they are still there the next time you open him. The Conversation tab
 draws a different record: the conversation Luke's own service keeps for your
 account, read by every Mac you sign in on, so two Macs on one account show
@@ -387,10 +387,11 @@ and email you signed it with, and any screenshots you attached.
   is one continuous conversation: while you hold the talk key everything the
   microphone hears streams to OpenAI, and the moment you let go the
   microphone is closed and nothing does; Luke can still speak into a session
-  whose microphone is closed. A typed turn sends your words, each voice
-  session carries the recent Conversation lines and the session summary
-  described above as it opens, and both kinds of turn send the session fields
-  listed above — on the Mac app, iOS, and Apple Watch alike, drawn from the
+  whose microphone is closed. There is no way to type to Luke; every ask is
+  spoken. Each voice session carries the recent Conversation lines and the
+  session summary described above as it opens, and every turn sends the
+  session fields listed above — on the Mac app, iOS, and Apple Watch alike,
+  drawn from the
   same cloud observation your vault keys already
   allow (titles, status, repository, and branch of your cloud sessions, as
   described under Provider API keys above). When you use voice through your

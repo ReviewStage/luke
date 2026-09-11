@@ -7,7 +7,6 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
-import { type AskHandler, AskLuke } from "./ask-luke";
 import {
   CONVERSATION_ENTRY_SPEAKER,
   type ConversationEntrySpeaker,
@@ -29,8 +28,7 @@ export function conversationEntryPresentation(
   kind: ConversationEntryKind,
 ): ConversationEntryPresentation {
   switch (kind) {
-    case CONVERSATION_ENTRY_KIND.TYPED_ASK:
-    case CONVERSATION_ENTRY_KIND.SPOKEN_ASK:
+    case CONVERSATION_ENTRY_KIND.ASK:
       return { speaker: CONVERSATION_ENTRY_SPEAKER.YOU, label: "You" };
     case CONVERSATION_ENTRY_KIND.REPLY:
     case CONVERSATION_ENTRY_KIND.ANNOUNCEMENT:
@@ -73,13 +71,6 @@ const UNREADABLE_NOTICE = "Part of the conversation could not be read.";
  * further than that, and the stream must not drag them back down.
  */
 const STREAM_FOLLOW_SLACK_PX = 48;
-
-/**
- * Where the composer stands in the panel's arrival stack: the tab bar is index
- * 0, and the thread above it is not a member of the stack, so the pill is the
- * first thing to fan in under the bar.
- */
-const CONVERSATION_COMPOSER_ROW_INDEX = 1;
 
 /**
  * The thread's one control, seated beside the tab bar the way each tab's
@@ -134,10 +125,6 @@ export function ConversationPanel({
   requests = [],
   spokenAskPending = false,
   now,
-  ask,
-  onAskEngaged,
-  askShortcut,
-  onStop,
 }: {
   /** The Conversation as the host's reads of the service compose it: the turn groups, and whether a read has landed. */
   view: ConversationViewSnapshot;
@@ -153,8 +140,8 @@ export function ConversationPanel({
   now: number;
   /**
    * The brain's runs, so a run still going draws Luke's turn at the thread's
-   * tail. Read here from the records alone; the reply's own line arrives when
-   * the run ends, and the stop is the composer's.
+   * tail. Read here from the records alone; the reply's own line is the
+   * transcript of what Luke says, written as each utterance settles.
    */
   requests?: readonly BrainRequestSnapshot[];
   /**
@@ -168,12 +155,6 @@ export function ConversationPanel({
    * holds the developer's place before anything is written.
    */
   spokenAskPending?: boolean;
-  /** The same ask the sessions tab's composer carries: one conversation, reached from either tab. */
-  ask: AskHandler;
-  onAskEngaged: (engaged: boolean) => void;
-  askShortcut?: string;
-  /** Stops every run still going, for the composer's disc while one is. */
-  onStop?: () => void;
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement | null>(null);
   const entryCount = messageCount(view);
@@ -263,19 +244,6 @@ export function ConversationPanel({
           {UNREADABLE_NOTICE}
         </p>
       ) : null}
-      {/* The thread is where a typed ask's reply lands as a bubble, so the field
-          that asks stands at its foot — the same composer the sessions tab
-          holds, addressed to the same conversation. It rides inside the
-          blocked subtree: a draft here is worded beside the words it will
-          join, and a recording sees neither. */}
-      <AskLuke
-        ask={ask}
-        onEngagedChange={onAskEngaged}
-        rowIndex={CONVERSATION_COMPOSER_ROW_INDEX}
-        thinking={thinkingSince !== undefined}
-        {...(onStop ? { onStop } : undefined)}
-        {...(askShortcut ? { shortcut: askShortcut } : undefined)}
-      />
     </section>
   );
 }

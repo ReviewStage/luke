@@ -73,7 +73,7 @@ function wiring(root: string) {
   };
 }
 
-const LINE = { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "kept for good" } as const;
+const LINE = { kind: CONVERSATION_ENTRY_KIND.ASK, words: "kept for good" } as const;
 
 test("a listed conversation and its lines survive the next launch; archiving keeps the thread readable and main cannot be archived", async (t) => {
   const root = await temporaryDirectory(t, "luke-wiring-");

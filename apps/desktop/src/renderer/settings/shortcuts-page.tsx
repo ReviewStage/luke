@@ -1,7 +1,6 @@
 import { CloseIcon, PencilIcon, ResetIcon, TrashIcon } from "@sidecar/panel";
 import {
   capturedVoiceHotkey,
-  DEFAULT_ASK_HOTKEYS,
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
@@ -249,14 +248,10 @@ export function ShortcutSection({
   // is already the whole truth about a key that will never register.
   const attention = voiceAvailable ? undefined : VOICE_KEYLESS_NOTE;
   const promisedTalk = view?.settings.voiceHotkey ?? DEFAULT_VOICE_HOTKEYS[0];
-  const promisedAsk = view?.settings.askHotkey ?? DEFAULT_ASK_HOTKEYS[0];
   const promisedStop = view?.settings.stopHotkey ?? DEFAULT_STOP_HOTKEYS[0];
   const shownTalk = shortcuts.voiceOff
     ? undefined
     : (shortcuts.voiceHotkey ?? (voiceAvailable ? undefined : promisedTalk));
-  const shownAsk = shortcuts.askOff
-    ? undefined
-    : (shortcuts.askHotkey ?? (voiceAvailable ? undefined : promisedAsk));
   const shownStop = shortcuts.stopOff
     ? undefined
     : (shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop));
@@ -287,18 +282,6 @@ export function ShortcutSection({
       {view ? (
         <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.SHORTCUTS} view={view} writes={writes} />
       ) : null}
-      <ShortcutRow
-        title="Ask Luke"
-        anchor={SETTINGS_SEARCH_ROW.ASK_KEY}
-        detail="Press to type to Luke from any app."
-        {...(shownAsk ? { shown: shownAsk } : undefined)}
-        chosen={shortcuts.askChosen}
-        off={shortcuts.askOff}
-        defaultKey={DEFAULT_ASK_HOTKEYS[0] ?? ""}
-        {...(attention && !shortcuts.askOff ? { attention } : undefined)}
-        onChange={shortcuts.onAskHotkeyChange}
-        onCapture={shortcuts.onCapture}
-      />
       <ShortcutRow
         title="Stop Luke"
         anchor={SETTINGS_SEARCH_ROW.STOP_KEY}

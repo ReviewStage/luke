@@ -7,9 +7,9 @@
  * the developer opens next.
  *
  * Every line already traveled to the voice service once, on the call that
- * said it: the developer's own asks — typed, or spoken and handed back as
- * text by the service that heard them — the words Luke spoke or announced,
- * and the actions he carried at the developer's ask. Nothing else may enter —
+ * said it: the developer's own asks, spoken and handed back as text by the
+ * service that heard them, the words Luke spoke or announced, and the
+ * actions he carried at the developer's ask. Nothing else may enter —
  * not a roster, not a transcript rendering, not an outcome a provider
  * answered with — and never a claim Luke formed about the developer, which is
  * a different kind of thing kept somewhere else.
@@ -38,10 +38,8 @@ export const SESSION_NO_LONGER_OBSERVED_NOTE = "this session is no longer observ
 
 /** What one history line records, which also says who it speaks for. */
 export const CONVERSATION_ENTRY_KIND = {
-  /** The developer's own words, typed into Luke's composer. */
-  TYPED_ASK: "typed-ask",
   /** The developer's own spoken turn, as the voice service transcribed it. */
-  SPOKEN_ASK: "spoken-ask",
+  ASK: "spoken-ask",
   /** The words Luke spoke as a conversation reply. */
   REPLY: "reply",
   /** The words Luke spoke as a proactive announcement. */
@@ -363,7 +361,7 @@ export function insertSpokenAskThreadEntry(
   const at = after ? entries.indexOf(after) + 1 : 0;
   const placed = [...entries];
   placed.splice(at, 0, {
-    kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     words: normalized,
     recordedAt,
     ...(requestId !== undefined ? { requestId } : undefined),
@@ -408,29 +406,14 @@ export function replyConversationEntry(words: string, requestId?: string): Conve
 }
 
 /**
- * The quiet line a run the developer stopped leaves behind, tied to its run
- * the way the reply it stands in for would be, so it is recorded exactly once
- * however many windows hear of the run's end.
- */
-export function stoppedAskConversationEntry(words: string, requestId: string): ConversationEntry {
-  return { kind: CONVERSATION_ENTRY_KIND.ACTION, words, requestId };
-}
-
-/** The history line a typed ask the brain accepted leaves behind, tied to its run. */
-export function typedAskConversationEntry(words: string, requestId: string): ConversationEntry {
-  return { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words, requestId };
-}
-
-/**
  * How each line leads, which is also who it speaks for, and whether the words
- * follow in quotes. Only the typed-ask lines speak for the developer; words
+ * follow in quotes. Only the ask lines speak for the developer; words
  * inside a reply, an announcement, or an action never do — the same rule every
  * observed value keeps. Said words are quoted; an action's narration runs on
  * from its lead.
  */
 const CONVERSATION_ENTRY_LEAD = {
-  [CONVERSATION_ENTRY_KIND.TYPED_ASK]: { lead: "the developer typed", quoted: true },
-  [CONVERSATION_ENTRY_KIND.SPOKEN_ASK]: { lead: "the developer said", quoted: true },
+  [CONVERSATION_ENTRY_KIND.ASK]: { lead: "the developer said", quoted: true },
   [CONVERSATION_ENTRY_KIND.REPLY]: { lead: "Luke said", quoted: true },
   [CONVERSATION_ENTRY_KIND.ANNOUNCEMENT]: { lead: "Luke announced", quoted: true },
   [CONVERSATION_ENTRY_KIND.ACTION]: { lead: "at the developer's ask, Luke", quoted: false },

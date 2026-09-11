@@ -1,7 +1,6 @@
 import type { BrainAgent } from "@sidecar/brain";
 import { BRAIN_DEFAULTS } from "@sidecar/brain";
 import {
-  BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
   type BrainSubmissionResult,
@@ -38,10 +37,9 @@ import {
 import {
   type ConversationEntry,
   conversationEntryToWire,
-  maximumTypedAskLength,
+  maximumAskLength,
 } from "@sidecar/session";
 import { isRecord, isWireNumber, isWireString, type WireRecord } from "@sidecar/wire";
-import { publishAsk } from "./brain/publication.js";
 import type { SettableConfigurationPatch } from "./brain/wiring.js";
 import type { ConversationOperations } from "./conversation-operations.js";
 
@@ -84,11 +82,6 @@ export interface GatewayServiceDependencies {
   /** How many sessions the roster holds now; the observation event's whole payload. */
   observedSessionCount: () => number;
   nodes?: NodeRegistry;
-  recordConversationEntry: (
-    entry: ConversationEntry,
-    recordedAt: number,
-    sessionKey: SessionKey,
-  ) => boolean | Promise<boolean>;
   askWaitMs?: number;
   now: () => number;
   createId: () => string;
@@ -98,8 +91,6 @@ export interface GatewayServiceDependencies {
    * runtime host owns. A method both name is the host's.
    */
   methods?: GatewayMethodTable;
-  /** A typed ask main's brain accepted, in the developer's words and under its run, so the voice can be told what was asked and speak the reply. */
-  onTypedAsk?: (question: string, runId: string) => void;
 }
 
 export interface GatewayService {
@@ -287,7 +278,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
   const submit = async (read: ParamReader): Promise<GatewayMethodOutcome> => {
     const sessionKey = read.sessionKeyOrMain("sessionKey");
     const submissionId = read.identifier("submissionId");
-    const question = read.string("question").trim().slice(0, maximumTypedAskLength);
+    const question = read.string("question").trim().slice(0, maximumAskLength);
     const origin = read.string("origin");
     if (!isBrainRequestOrigin(origin)) return invalid("origin is not one this build knows");
     const agent = brain.current(sessionKey);
@@ -300,12 +291,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       );
     }
     const result = await agent.submitAsk({ submissionId, origin, question });
-    if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-      await publishAsk(agent, result.runId, dependencies.recordConversationEntry, sessionKey);
-      if (origin === BRAIN_REQUEST_ORIGIN.TYPED && sessionKey === MAIN_SESSION_KEY) {
-        dependencies.onTypedAsk?.(question, result.runId);
-      }
-    }
     return gatewayOk(submissionResultToWire(result));
   };
 

@@ -175,11 +175,11 @@ test("the BrainStateStore keeps its lease, fence, and Clear guarantees over the 
 test("history appends are idempotent on the line's own id, and two identical utterances with ids of their own are two lines", () => {
   const database = openTestDatabase();
   const one = line("run the tests", NOW, {
-    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     eventId: "e1",
   });
   const again = line("run the tests", NOW, {
-    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     eventId: "e2",
   });
   const first = appendConversation(database, MAIN_SESSION_KEY, [one], NOW);
@@ -198,7 +198,7 @@ test("history appends are idempotent on the line's own id, and two identical utt
 test("a line learns the run it opened, and a run's ask and end are each published once", () => {
   const database = openTestDatabase();
   const spoken = line("what is running", NOW, {
-    kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     eventId: "s1",
   });
   appendConversation(database, MAIN_SESSION_KEY, [spoken], NOW);

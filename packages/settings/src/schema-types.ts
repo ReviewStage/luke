@@ -57,7 +57,6 @@ export const SETTING_SIDE_EFFECT = {
   FORM_FACTOR: "form-factor",
   VOICE: "voice",
   TALK_HOTKEY: "talk-hotkey",
-  ASK_HOTKEY: "ask-hotkey",
   STOP_HOTKEY: "stop-hotkey",
   MEDIA_DUCK: "media-duck",
   VOICE_SOURCE: "voice-source",

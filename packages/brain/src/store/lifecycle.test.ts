@@ -249,7 +249,7 @@ test("Delete conversation commits the archive with the removal, publishes and ve
     database,
     MAIN_SESSION_KEY,
     [
-      line("first words", NOW - 10, { eventId: "h1", kind: CONVERSATION_ENTRY_KIND.TYPED_ASK }),
+      line("first words", NOW - 10, { eventId: "h1", kind: CONVERSATION_ENTRY_KIND.ASK }),
       line("second words", NOW - 5, { eventId: "h2" }),
     ],
     NOW,

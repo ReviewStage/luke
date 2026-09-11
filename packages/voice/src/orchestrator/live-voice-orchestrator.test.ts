@@ -434,7 +434,7 @@ test("the view reports each edge once, counts the exchange on its opening edge u
   assert.equal(f.views.at(-1)?.spokenAskPending, true);
   // Both speakers' rows still being spoken are the live lines; Luke's are the captions while he speaks.
   call.events.onCaptions([
-    row(1, CONVERSATION_ENTRY_KIND.SPOKEN_ASK, "what needs me"),
+    row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me"),
     row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions"),
   ]);
   call.settle(LIVE_STATUS.SPEAKING);
@@ -444,11 +444,11 @@ test("the view reports each edge once, counts the exchange on its opening edge u
   assert.deepEqual(speaking?.lukeCaptions, ["Two sessions"]);
   assert.deepEqual(
     speaking?.liveConversationEntries.map((entry) => entry.kind),
-    [CONVERSATION_ENTRY_KIND.SPOKEN_ASK, CONVERSATION_ENTRY_KIND.REPLY],
+    [CONVERSATION_ENTRY_KIND.ASK, CONVERSATION_ENTRY_KIND.REPLY],
   );
   // A settled row leaves the live lines: the host has written it by then.
   call.events.onCaptions([
-    row(1, CONVERSATION_ENTRY_KIND.SPOKEN_ASK, "what needs me", true),
+    row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me", true),
     row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished"),
   ]);
   await drainMicrotasks();

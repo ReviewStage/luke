@@ -222,8 +222,6 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     ...(account.agentTrace
       ? { traceTurn: (record) => account.agentTrace?.recordBrainTurn(record) }
       : undefined),
-    recordConversationEntry: (entry, recordedAt, sessionKey) =>
-      store.recordConversationEntry(entry, recordedAt, sessionKey),
     broadcastRequests: (snapshots) => kernel.service().runsReported(snapshots),
     onGenerationReplaced: (sessionKey) => {
       if (sessionKey === MAIN_SESSION_KEY) announcements.dropBriefings();

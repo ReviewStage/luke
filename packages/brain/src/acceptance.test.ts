@@ -340,7 +340,7 @@ function host(
       const accepted = await agent.submitAsk({
         submissionId: `sub-${++ids}`,
         question,
-        origin: BRAIN_REQUEST_ORIGIN.TYPED,
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
       });
       assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED, JSON.stringify(accepted));
       const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
@@ -417,7 +417,7 @@ for (const transport of [KEYED, HOSTED]) {
     const accepted = await h.agent.submitAsk({
       submissionId: "cancel-me",
       question: "send twice",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     });
     assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
     await settle();
@@ -680,7 +680,7 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   const refused = await responses.agent.submitAsk({
     submissionId: "over-foreign",
     question: "hello?",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.deepEqual(refused, {
     outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
@@ -754,7 +754,7 @@ test("an ingest held across a cancel that resolves after the successor turn bega
   const accepted = await h.agent.submitAsk({
     submissionId: "held",
     question: "first",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await settle();

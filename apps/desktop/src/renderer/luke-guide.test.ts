@@ -51,7 +51,6 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     voiceAvailable: true,
     microphoneStatus: "granted",
     hotkey: { hotkey: "⌥Space" },
-    askKey: "⌥L",
     stopKey: "⌥S",
     ...overrides,
   };
@@ -88,7 +87,6 @@ const GUIDE_FACT_LABELS: readonly string[] = [
   "Renaming workspaces and chats",
   "Archiving",
   "Talk key",
-  "Ask key",
   "Microphone access",
   "Stopping a reply",
   "Announcements",

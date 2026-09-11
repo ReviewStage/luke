@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
-import {
-  BRAIN_REQUEST_ORIGIN,
-  BRAIN_SUBMISSION_OUTCOME,
-  type BrainRequestOrigin,
-} from "@sidecar/brain/requests";
-import type { BrainAskSubmission } from "@sidecar/brain/requests-wire";
-import { type GatewayOperator, REJECTED_SUBMISSION } from "@sidecar/host";
-import type { SessionKey } from "@sidecar/runtime/vocabulary";
+import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+import type { GatewayOperator } from "@sidecar/host";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -15,64 +10,44 @@ import { brainActRows } from "./brain";
 
 const NOW = 1_800_000_000_000;
 
-/**
- * The origin gate as the act router actually wires it: which window may
- * submit an ask under which origin, checked before the operator client is
- * reached at all.
- */
-function registered() {
-  // SAFETY: the rows read senders by identity alone; two distinct inert objects are two windows.
-  const voiceSender = {} as WebContents;
-  // SAFETY: a second inert object, so the rows read two distinct windows.
-  const panelSender = {} as WebContents;
-  const submitted: { submission: BrainAskSubmission; sessionKey: SessionKey }[] = [];
-  // SAFETY: the origin gate reaches only `submit` on the operator; the fixture stands in for the rest.
+const CANCELLED: BrainRequestSnapshot = {
+  runId: "run-1",
+  submissionId: "sub-1",
+  origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  question: "what needs me?",
+  status: BRAIN_REQUEST_STATUS.CANCELLED,
+  revision: 2,
+  acceptedAt: NOW,
+  settledAt: NOW + 1,
+  performedActions: 0,
+  unknownActions: 0,
+};
+
+test("a cancel crosses to the operator under the run it names, and the brain rows offer no submit", async () => {
+  const cancelled: string[] = [];
+  // SAFETY: the rows reach only `cancel` on the operator; the fixture stands in for the rest.
   const operator = {
-    submit: async (submission: BrainAskSubmission, sessionKey: SessionKey) => {
-      submitted.push({ submission, sessionKey });
-      return { outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED, runId: "run-1", acceptedAt: NOW };
+    cancel: async (runId: string) => {
+      cancelled.push(runId);
+      return CANCELLED;
     },
   } as unknown as GatewayOperator;
+  const rows = brainActRows({ operator });
+  assert.deepEqual(Object.keys(rows), [ACT_KIND.BRAIN_CANCEL_ASK]);
   // SAFETY: only the brain rows are under test; the router dispatches on the
   // kind alone, so the kinds this fragment does not answer are never reached.
-  const router = createActRouter(brainActRows({ operator }) as ActRows);
-  const senderOf = (sender: WebContents): ActSender => ({
-    sender,
-    panel: sender === panelSender,
-    voice: sender === voiceSender,
+  const router = createActRouter(rows as ActRows);
+  // SAFETY: the rows read nothing off the sender; one inert object is a window.
+  const sender: ActSender = {
+    sender: {} as WebContents,
+    panel: true,
+    voice: false,
     introduction: false,
-  });
-  const submit = (sender: WebContents, origin: BrainRequestOrigin) =>
-    router.performAct(
-      {
-        kind: ACT_KIND.BRAIN_SUBMIT_ASK,
-        payload: { submission: { submissionId: "sub-1", question: "what needs me?", origin } },
-      },
-      senderOf(sender),
-    );
-  return { submit, submitted, voiceSender, panelSender };
-}
-
-test("a typed ask is the panel's alone, and every other origin is refused whichever window claims it", async () => {
-  const f = registered();
-  assert.deepEqual(await f.submit(f.panelSender, BRAIN_REQUEST_ORIGIN.TYPED), {
-    status: "done",
-    value: { outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED, runId: "run-1", acceptedAt: NOW },
-  });
-  assert.equal(f.submitted.length, 1);
-  assert.equal(f.submitted[0]?.submission.origin, BRAIN_REQUEST_ORIGIN.TYPED);
-  // The voice window composes no ask of its own any more: the host does, from the transcript.
-  assert.deepEqual(await f.submit(f.voiceSender, BRAIN_REQUEST_ORIGIN.SPOKEN), {
-    status: "done",
-    value: REJECTED_SUBMISSION,
-  });
-  assert.deepEqual(await f.submit(f.voiceSender, BRAIN_REQUEST_ORIGIN.TYPED), {
-    status: "done",
-    value: REJECTED_SUBMISSION,
-  });
-  assert.deepEqual(await f.submit(f.panelSender, BRAIN_REQUEST_ORIGIN.SPOKEN), {
-    status: "done",
-    value: REJECTED_SUBMISSION,
-  });
-  assert.equal(f.submitted.length, 1);
+  };
+  const answer = await router.performAct(
+    { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } },
+    sender,
+  );
+  assert.deepEqual(answer, { status: "done", value: CANCELLED });
+  assert.deepEqual(cancelled, ["run-1"]);
 });

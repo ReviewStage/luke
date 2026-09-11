@@ -36,7 +36,6 @@ const guideInput: LukeGuideInput = {
   voiceAvailable: true,
   microphoneStatus: "granted",
   hotkey: { hotkey: "⌥Space" },
-  askKey: "⌥L",
 };
 
 function guideSetting(id: string): AppGuideSetting {

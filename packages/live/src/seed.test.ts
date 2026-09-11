@@ -33,9 +33,9 @@ function line(kind: ConversationEntryKind, words: string, index = 0): Conversati
 
 test("each line becomes one message in its own role and content type, closed by a developer note", () => {
   const items = conversationSeedItems([
-    line(CONVERSATION_ENTRY_KIND.TYPED_ASK, "what needs me?", 1),
+    line(CONVERSATION_ENTRY_KIND.ASK, "what needs me?", 1),
     line(CONVERSATION_ENTRY_KIND.REPLY, "Nothing yet.", 2),
-    line(CONVERSATION_ENTRY_KIND.SPOKEN_ASK, "and now?", 3),
+    line(CONVERSATION_ENTRY_KIND.ASK, "and now?", 3),
     line(CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, "Codex finished.", 4),
   ]);
 
@@ -58,7 +58,7 @@ test("each line becomes one message in its own role and content type, closed by 
 });
 
 test("no message carries a system role, an identity, a time, or an id", () => {
-  const items = conversationSeedItems([line(CONVERSATION_ENTRY_KIND.TYPED_ASK, "hello", 1)]);
+  const items = conversationSeedItems([line(CONVERSATION_ENTRY_KIND.ASK, "hello", 1)]);
   const roles: readonly string[] = Object.values(SEED_ROLE);
 
   assert.equal(roles.includes("system"), false);
@@ -95,7 +95,7 @@ test("words are flattened and cut to the render bound, as the brain's context is
 
 test("only the recent slice is seeded, and it stays under the API's message bound", () => {
   const entries = Array.from({ length: maximumConversationEntries * 3 }, (_, index) =>
-    line(CONVERSATION_ENTRY_KIND.TYPED_ASK, `ask ${index}`, index),
+    line(CONVERSATION_ENTRY_KIND.ASK, `ask ${index}`, index),
   );
   const items = conversationSeedItems(entries);
 
@@ -120,7 +120,7 @@ test("the oldest lines go first when the token budget would not hold them all", 
 
 test("a message budget cuts the oldest first and keeps the closing note", () => {
   const entries = Array.from({ length: 6 }, (_, index) =>
-    line(CONVERSATION_ENTRY_KIND.TYPED_ASK, `ask ${index}`, index),
+    line(CONVERSATION_ENTRY_KIND.ASK, `ask ${index}`, index),
   );
   const items = conversationSeedItems(entries, { messages: 4, tokens: LIVE_INPUT_BOUNDS.TOKENS });
 
@@ -133,7 +133,7 @@ test("a message budget cuts the oldest first and keeps the closing note", () => 
 });
 
 test("a budget too small for one line and the note seeds nothing rather than a lone note", () => {
-  const entries = [line(CONVERSATION_ENTRY_KIND.TYPED_ASK, "hello", 1)];
+  const entries = [line(CONVERSATION_ENTRY_KIND.ASK, "hello", 1)];
 
   assert.deepEqual(
     conversationSeedItems(entries, { messages: 1, tokens: LIVE_INPUT_BOUNDS.TOKENS }),

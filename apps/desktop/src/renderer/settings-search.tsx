@@ -179,19 +179,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Microphone", "permission access allow privacy system settings"],
         }
       : undefined,
-    // The three keys, which are rows but not stored settings: what each is
+    // The two keys, which are rows but not stored settings: what each is
     // set to lives with the registrar, and the rows are always drawn.
     {
       id: SETTINGS_SEARCH_ROW.TALK_KEY,
       label: "Talk to Luke",
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Talk to Luke", SHORTCUT_WORDS, "talk speak hold microphone hold to talk"],
-    },
-    {
-      id: SETTINGS_SEARCH_ROW.ASK_KEY,
-      label: "Ask Luke",
-      page: SETTINGS_VIEW.SHORTCUTS,
-      haystack: ["Ask Luke", SHORTCUT_WORDS, "ask type composer summon"],
     },
     {
       id: SETTINGS_SEARCH_ROW.STOP_KEY,

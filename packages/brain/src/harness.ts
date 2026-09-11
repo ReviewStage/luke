@@ -80,7 +80,7 @@ export function seededRequests(count: number, published: boolean): BrainPersiste
   return Array.from({ length: count }, (_, index) => ({
     runId: `seeded-${index}`,
     submissionId: `seeded-sub-${index}`,
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     question: `seeded ${index}`,
     status: BRAIN_REQUEST_STATUS.SUCCEEDED,
     revision: 1,
@@ -447,7 +447,7 @@ export function submissionsIssued(): number {
   return submissions;
 }
 
-/** Submits a typed ask and waits as long as it takes, answering the terminal record. */
+/** Submits an ask and waits as long as it takes, answering the terminal record. */
 export async function ask(h: Harness, question: string): Promise<BrainRequestRecord | undefined> {
   const accepted = await submit(h, question);
   if (accepted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
@@ -462,7 +462,7 @@ export function submit(
   return h.agent.submitAsk({
     submissionId: submissionId ?? `submission-${nextSubmission()}`,
     question,
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
 }
 

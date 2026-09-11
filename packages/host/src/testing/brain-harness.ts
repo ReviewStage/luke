@@ -16,11 +16,6 @@ import {
   fakeBrainStateRepository,
 } from "@sidecar/brain/testing";
 import { MAIN_SESSION_KEY, type ModelResponse } from "@sidecar/runtime/vocabulary";
-import {
-  appendConversationThreadEntry,
-  CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
-} from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";
@@ -56,36 +51,25 @@ export function brainHarness() {
     createGenerationId: () => `gen-${++ids}`,
     now: () => NOW,
   });
-  let thread: readonly ConversationEntry[] = [];
-  let refuseWrites = false;
   const broadcasts: (readonly BrainRequestSnapshot[])[] = [];
-  const record = (entry: ConversationEntry, at: number) => {
-    if (refuseWrites) return false;
-    thread = appendConversationThreadEntry(thread, entry, NOW + 1000, at);
-    return true;
-  };
   const host = new BrainHost({
     follow: (agent) =>
       followBrainRequests(agent, {
-        recordConversationEntry: record,
         broadcastRequests: (snapshots) => {
           broadcasts.push(snapshots);
         },
       }),
     publishEmpty: () => broadcasts.push([]),
   });
-  /** Submits as a window does, through the operator over the standing brain; the ask's own line is written here. */
-  const { submit } = operatorOverBrain({
-    current: () => host.current(),
-    recordConversationEntry: record,
-  });
+  /** Submits as a client does, through the operator over the standing brain. */
+  const { submit } = operatorOverBrain({ current: () => host.current() });
   const submitMany = async (count: number, from = 0) => {
     const runIds: string[] = [];
     for (let index = from; index < from + count; index += 1) {
       const result = await submit({
         submissionId: `sub-${index}`,
         question: `ask ${index}`,
-        origin: BRAIN_REQUEST_ORIGIN.TYPED,
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
       });
       assert.equal(result.outcome, "accepted");
       if (result.outcome === "accepted") runIds.push(result.runId);
@@ -127,14 +111,8 @@ export function brainHarness() {
     host,
     build,
     submit,
-    thread: () => thread,
-    replies: (runId: string) =>
-      thread.filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY && e.requestId === runId),
     submitMany,
     broadcasts,
-    refuse: (value: boolean) => {
-      refuseWrites = value;
-    },
   };
 }
 

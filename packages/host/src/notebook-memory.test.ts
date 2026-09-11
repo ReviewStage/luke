@@ -172,7 +172,7 @@ test("past-conversation results come from eligible conversations' Conversation a
     sessionKey: MAIN_SESSION_KEY,
     entries: [
       {
-        kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+        kind: CONVERSATION_ENTRY_KIND.ASK,
         words: "we chose Tuesday deploys in main",
         recordedAt: NOW,
         eventId: "a",

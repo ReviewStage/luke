@@ -33,7 +33,7 @@ function runAccounting(run: RunControl): Pick<RecordChanges, "usage" | "response
   };
 }
 
-/** The two markers the host's thread writes onto a run, each once. */
+/** The markers a host may write onto a run, each once; the desktop writes only the end's. */
 export const PENDING_MARK_FIELD = {
   ASK_RECORDED_AT: "askRecordedAt",
   CONVERSATION_RECORDED_AT: "conversationRecordedAt",

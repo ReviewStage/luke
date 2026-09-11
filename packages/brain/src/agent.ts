@@ -479,7 +479,7 @@ export class BrainAgent {
     return this.#mark(runId, PENDING_MARK_FIELD.CONVERSATION_RECORDED_AT, recordedAt);
   }
 
-  /** Marks a run's own ask as written into the host's thread, on the same terms. */
+  /** Marks a run's own ask as written into a host's thread, on the same terms; the desktop's host writes no ask line and never calls it. */
   markAskRecorded(runId: string, recordedAt: number): Promise<boolean> {
     return this.#mark(runId, PENDING_MARK_FIELD.ASK_RECORDED_AT, recordedAt);
   }

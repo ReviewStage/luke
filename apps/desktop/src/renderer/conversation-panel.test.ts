@@ -23,8 +23,6 @@ function render(
       view: { groups, settled: true },
       roster: FIXTURE_ROSTER,
       now: NOW,
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
       ...extra,
     }),
   );
@@ -40,11 +38,7 @@ const SINGLE_TURN = fixtureConversationTurns().filter(
 );
 
 test("a line still being said is shown in the developer's or Luke's voice by its kind", () => {
-  assert.deepEqual(conversationEntryPresentation(CONVERSATION_ENTRY_KIND.TYPED_ASK), {
-    speaker: CONVERSATION_ENTRY_SPEAKER.YOU,
-    label: "You",
-  });
-  assert.deepEqual(conversationEntryPresentation(CONVERSATION_ENTRY_KIND.SPOKEN_ASK), {
+  assert.deepEqual(conversationEntryPresentation(CONVERSATION_ENTRY_KIND.ASK), {
     speaker: CONVERSATION_ENTRY_SPEAKER.YOU,
     label: "You",
   });
@@ -106,14 +100,11 @@ test("a line still being said joins the same list as the stored turns, without a
   assert.ok(streaming.lastIndexOf('data-streaming="true"') < streaming.indexOf("</ol>"));
 });
 
-test("the composer stands at the foot of the thread, empty or not", () => {
-  const threaded = render(SINGLE_TURN, { askShortcut: "Alt+Space" });
-  // One composer, after the list, inside the subtree recordings never see.
-  assert.equal(count(threaded, 'id="ask-luke-input"'), 1);
-  assert.ok(threaded.indexOf("</ol>") < threaded.indexOf('id="ask-luke-input"'));
-  const empty = render([]);
-  assert.equal(count(empty, 'id="ask-luke-input"'), 1);
-  assert.equal(count(empty, 'class="conversation-empty"'), 1);
+test("the thread draws no text input, empty or not: Luke is voice only", () => {
+  for (const markup of [render(SINGLE_TURN), render([])]) {
+    assert.equal(markup.match(/<(textarea|input|form)\b/g), null);
+  }
+  assert.equal(count(render([]), 'class="conversation-empty"'), 1);
 });
 
 test("before the first read lands an empty thread claims nothing", () => {
@@ -121,13 +112,10 @@ test("before the first read lands an empty thread claims nothing", () => {
     createElement(ConversationPanel, {
       view: { groups: [], settled: false },
       now: NOW,
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
     }),
   );
   assert.equal(count(unread, 'class="conversation-empty"'), 0);
   assert.equal(count(unread, "<ol class="), 0);
-  assert.equal(count(unread, 'id="ask-luke-input"'), 1);
 });
 
 test("a row the service could not read back is said once, under the thread as it last stood", () => {
@@ -140,8 +128,6 @@ test("a row the service could not read back is said once, under the thread as it
     createElement(ConversationPanel, {
       view,
       now: NOW,
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
     }),
   );
   assert.equal(count(markup, 'class="conversation-notice"'), 1);

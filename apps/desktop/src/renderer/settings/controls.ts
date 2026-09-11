@@ -78,18 +78,6 @@ export interface ShortcutControl {
    * the row is where that answer belongs.
    */
   onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
-  /** The ask key as registered, an accelerator on the talk key's terms. */
-  askHotkey?: string;
-  /** Whether a chosen ask chord is stored, on the talk key's terms. */
-  askChosen: boolean;
-  /** Whether the ask key was deleted outright, on the talk key's terms. */
-  askOff: boolean;
-  /**
-   * Moves the ask key to a recorded chord, the none token, or back to the
-   * defaults when omitted, on the talk key's terms: the store answers with
-   * why when it refuses, and the row is where that answer belongs.
-   */
-  onAskHotkeyChange: (accelerator: string | undefined) => Promise<ActionResult>;
   /** The stop key as registered, an accelerator on the talk key's terms. */
   stopHotkey?: string;
   /** Whether a chosen stop chord is stored, on the other rows' terms. */

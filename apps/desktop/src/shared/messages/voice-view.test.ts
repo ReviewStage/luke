@@ -20,7 +20,7 @@ test("every live status is recognized and nothing else is", () => {
   assert.equal(isLiveStatus(1), false);
 });
 
-test("the three voice commands are the whole set; a typed ask is a brain submission, not one", () => {
+test("the three voice commands are the whole set", () => {
   const commands = Object.values(VOICE_COMMAND);
   assert.equal(commands.length, 3);
   assert.equal(isVoiceCommand("ask-text"), false);

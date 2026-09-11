@@ -54,9 +54,7 @@ export type VoiceCommand = (typeof VOICE_COMMAND)[keyof typeof VOICE_COMMAND];
 /**
  * What became of the one command with an outcome worth answering, a Clear:
  * refused when the stored thread could not be deleted, so the panel can say
- * so. The other commands answer nothing; a typed ask is not a command at all
- * but a brain submission, whose own result tells the composer whether the
- * draft is still the developer's to retry.
+ * so. The other commands answer nothing.
  */
 export const VOICE_COMMAND_OUTCOME = {
   ACCEPTED: "accepted",
@@ -123,8 +121,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
 /**
  * Who opened the exchange the count is about. A session opened for Luke's own
  * speech was opened by no press, which is the whole of what tells his
- * announcement from a turn the developer took; a typed ask opens no session
- * of its own any more, so its reply counts under the session it is said into.
+ * announcement from a turn the developer took.
  */
 export function voiceExchangeKind(input: { microphoneCall: boolean }): ProductExchangeKind {
   return input.microphoneCall ? PRODUCT_EXCHANGE_KIND.SPOKEN : PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT;

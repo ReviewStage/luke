@@ -45,13 +45,13 @@ export interface ClientSettingSideEffectDependencies {
 
 /**
  * The side effects this process has hands on; the host applied its own before
- * answering. The two keys that may be deferred are deferred the same way: a
- * single write does not wait on a reapply, and a reset does.
+ * answering. The stop key may be deferred: a single write does not wait on a
+ * reapply, and a reset does.
  */
 export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDependencies) {
   const { hotkeys, dock, applyLoginItem, panels, mediaDuck } = dependencies;
   const reapply = async (
-    rank: typeof HOTKEY_RANK.ASK | typeof HOTKEY_RANK.STOP,
+    rank: typeof HOTKEY_RANK.STOP,
     chosen: string | undefined,
     waitForDeferredEffects: boolean,
   ): Promise<void> => {
@@ -79,8 +79,6 @@ export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDe
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings.stored.voiceHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);
     },
-    [SETTING_SIDE_EFFECT.ASK_HOTKEY]: ({ settings, waitForDeferredEffects }) =>
-      reapply(HOTKEY_RANK.ASK, settings.stored.askHotkey, waitForDeferredEffects),
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: ({ settings, waitForDeferredEffects }) =>
       reapply(HOTKEY_RANK.STOP, settings.stored.stopHotkey, waitForDeferredEffects),
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: ({ settings }) =>

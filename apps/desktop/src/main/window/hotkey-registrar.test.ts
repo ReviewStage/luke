@@ -59,13 +59,8 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
         },
       };
     },
-    recordProductEvent: () => undefined,
     host: {
       voiceHost: () => voiceHost,
-      primaryPanel: () => undefined,
-      displayIdFor: () => undefined,
-      modeFor: () => "compact",
-      setMode: () => undefined,
       hotkeyChanged: (rank) => announced.push(rank),
     },
   });
@@ -104,41 +99,20 @@ test("reserve answers from the pecking order instead of re-deriving it", async (
   context.announceTalk("Alt+Space");
 
   // Talk's whole candidate list is reserved, not just the chord it holds.
-  assert.equal(context.registrar.reserve("Alt+Space", HOTKEY_RANK.ASK), HOTKEY_RANK.TALK);
-  assert.equal(context.registrar.reserve("Alt+L", HOTKEY_RANK.ASK), undefined);
-
-  // Stop yields to both: talk first, then ask's own candidates.
   assert.equal(context.registrar.reserve("Alt+Space", HOTKEY_RANK.STOP), HOTKEY_RANK.TALK);
-  assert.equal(context.registrar.reserve("Alt+L", HOTKEY_RANK.STOP), HOTKEY_RANK.ASK);
   assert.equal(context.registrar.reserve("Alt+S", HOTKEY_RANK.STOP), undefined);
+  assert.equal(context.registrar.reserve("Alt+L", HOTKEY_RANK.STOP), undefined);
 });
 
-test("reapply from talk unregisters everything, then ask and stop in order", async () => {
+test("reapply from talk unregisters everything, then takes stop behind it", async () => {
   const context = harness();
   await context.registrar.reapply(HOTKEY_RANK.TALK);
   context.announceTalk("Alt+Space");
 
   assert.equal(context.unregisterAllCount(), 1);
-  // Ask then stop: Option-L before Option-S, and never a chord talk sits on.
-  assert.deepEqual(context.registered(), ["Alt+L", "Alt+S"]);
-  assert.equal(context.registrar.ask, "Alt+L");
+  // Stop after talk: Option-S, and never a chord talk sits on.
+  assert.deepEqual(context.registered(), ["Alt+S"]);
   assert.equal(context.registrar.stop, "Alt+S");
-});
-
-test("reapply from ask leaves talk alone and re-takes stop behind it", async () => {
-  const context = harness();
-  await context.registrar.reapply(HOTKEY_RANK.TALK);
-  context.announceTalk("Alt+Space");
-  const afterTalk = context.unregisterAllCount();
-
-  context.registrar.setChosen(HOTKEY_RANK.ASK, "Control+Alt+K");
-  await context.registrar.reapply(HOTKEY_RANK.ASK);
-
-  assert.equal(context.unregisterAllCount(), afterTalk);
-  assert.ok(context.unregistered().includes("Alt+L"));
-  assert.ok(context.unregistered().includes("Alt+S"));
-  assert.deepEqual(context.registered().slice(-2), ["Control+Alt+K", "Alt+S"]);
-  assert.equal(context.registrar.ask, "Control+Alt+K");
 });
 
 test("reapply from stop lets only itself go", async () => {
@@ -153,7 +127,6 @@ test("reapply from stop lets only itself go", async () => {
   assert.equal(context.unregisterAllCount(), 1);
   assert.deepEqual(context.unregistered().slice(afterTalk), ["Alt+S"]);
   assert.equal(context.registrar.stop, "Control+Alt+X");
-  assert.equal(context.registrar.ask, "Alt+L");
 });
 
 test("a deleted talk key spawns no helper and reserves no chord", async () => {
@@ -164,25 +137,10 @@ test("a deleted talk key spawns no helper and reserves no chord", async () => {
   // Nothing registered and nothing promised: no helper, no toggle fallback,
   // and the panel is told the honest absence.
   assert.equal(context.registrar.talk, undefined);
-  assert.deepEqual(context.registered(), ["Alt+L", "Alt+S"]);
-  // A key that will never register defends no candidate list, so the ranks
+  assert.deepEqual(context.registered(), ["Alt+S"]);
+  // A key that will never register defends no candidate list, so the rank
   // below may sit even on the talk key's own default.
-  assert.equal(context.registrar.reserve("Alt+Space", HOTKEY_RANK.ASK), undefined);
-});
-
-test("a deleted ask key takes no chord and stop keeps its own", async () => {
-  const context = harness();
-  await context.registrar.reapply(HOTKEY_RANK.TALK);
-  context.announceTalk("Alt+Space");
-
-  context.registrar.setChosen(HOTKEY_RANK.ASK, VOICE_HOTKEY_NONE);
-  await context.registrar.reapply(HOTKEY_RANK.ASK);
-
-  assert.equal(context.registrar.ask, undefined);
-  assert.equal(context.registrar.stop, "Alt+S");
-  // The deleted key's defaults are no longer spoken for either: the stop key
-  // could be moved onto Option-L now without a refusal.
-  assert.equal(context.registrar.reserve("Alt+L", HOTKEY_RANK.STOP), undefined);
+  assert.equal(context.registrar.reserve("Alt+Space", HOTKEY_RANK.STOP), undefined);
 });
 
 test("a deleted stop key lets its chord go and takes nothing back", async () => {
@@ -195,7 +153,7 @@ test("a deleted stop key lets its chord go and takes nothing back", async () => 
 
   assert.equal(context.registrar.stop, undefined);
   assert.ok(context.unregistered().includes("Alt+S"));
-  assert.equal(context.registrar.ask, "Alt+L");
+  assert.equal(context.registrar.talk, "Alt+Space");
 });
 
 test("a capture run takes no system key", async () => {

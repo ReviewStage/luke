@@ -1,11 +1,4 @@
-import {
-  type BrainAskSubmission,
-  type BrainAskSubmissionResult,
-  type BrainRequestSnapshot,
-  isBrainAskSubmission,
-  isBrainAskSubmissionResult,
-  isBrainRequestSnapshot,
-} from "@sidecar/brain/requests-wire";
+import { type BrainRequestSnapshot, isBrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
@@ -127,7 +120,6 @@ export const ACT_KIND = {
    */
   SESSION_SEND_MESSAGE: "session.sendMessage",
   SESSION_EXECUTE_CONTROL: "session.executeControl",
-  BRAIN_SUBMIT_ASK: "brain.submitAsk",
   BRAIN_CANCEL_ASK: "brain.cancelAsk",
   VOICE_COMMAND: "voice.command",
   /**
@@ -511,11 +503,6 @@ export const ACT = {
     }),
     result: answersSessionWrite,
     refusal: "Could not run that control on this system.",
-  },
-  [ACT_KIND.BRAIN_SUBMIT_ASK]: {
-    payload: fields<{ submission: BrainAskSubmission }>({ submission: isBrainAskSubmission }),
-    result: wireResult<BrainAskSubmissionResult>(isBrainAskSubmissionResult),
-    refusal: "Could not reach Luke's runtime to ask that.",
   },
   [ACT_KIND.BRAIN_CANCEL_ASK]: {
     payload: s.record({ runId: exactId }),

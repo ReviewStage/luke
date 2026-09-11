@@ -340,7 +340,7 @@ function phases(changes: readonly VoiceLiveSessionChanged[]) {
 test("a created session is seeded from the record and the roster, attached before the answer, and its phases are announced", async () => {
   const f = fixture();
   f.entries.push(
-    { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "what needs me?" },
+    { kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" },
     { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Nothing yet." },
   );
   const created = await f.service.createSession("offer");
@@ -835,39 +835,6 @@ test("a roster change while a session stands becomes one coalesced thinking appe
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
 });
 
-test("a typed ask is mirrored into the session as one thinking append, and only while a session stands", async () => {
-  const f = fixture();
-  f.service.followTypedAsk("open the failing session", "typed-1");
-  const sideband = await f.open();
-  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-  f.service.followTypedAsk("open the failing session", "typed-2");
-  await drainMicrotasks();
-  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
-});
-
-test("a typed ask's reply is spoken into the standing session with no delegation, after its actions settle", async () => {
-  const f = fixture();
-  const sideband = await f.open();
-  f.service.followTypedAsk("what needs me?", "typed-1");
-  await drainMicrotasks();
-  sideband.acknowledge(0, 0, 0);
-  f.brain.fire({
-    kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    runId: "typed-1",
-    sentence: "Nothing needs you yet.",
-  });
-  await drainMicrotasks();
-  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "typed-1" });
-  await drainMicrotasks();
-  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-  assert.equal(commentary.length, 1);
-  assert.equal(
-    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
-    null,
-  );
-});
-
 test("a line is recorded at the instant its utterance began, so a Clear's cutoff refuses what was begun before it", async () => {
   const f = fixture();
   const sideband = await f.open();
@@ -878,42 +845,6 @@ test("a line is recorded at the instant its utterance began, so a Clear's cutoff
   await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
   assert.equal(f.record.luke.length, 1);
   assert.equal(f.record.luke[0]?.recordedAt, began);
-});
-
-test("a typed ask still being answered keeps an idle session open", async () => {
-  const f = fixture();
-  await f.open();
-  f.service.followTypedAsk("what needs me?", "typed-1");
-  f.service.reportActivity(true);
-  await f.clock.advance(f.clock.now + LIVE_IDLE_WINDOW_MS);
-  assert.equal(f.service.sessionStands(), true);
-  f.brain.fire({
-    kind: LIVE_BRAIN_RUN_EVENT.ENDED,
-    runId: "typed-1",
-    end: LIVE_BRAIN_RUN_END.COMPLETED,
-  });
-  await f.clock.advance(f.clock.now + LIVE_IDLE_WINDOW_MS + 1_000);
-  assert.equal(f.service.sessionStands(), false);
-});
-
-test("a typed ask's reply with no session standing asks for one and is spoken once it opens", async () => {
-  const f = fixture();
-  f.service.followTypedAsk("what needs me?", "typed-1");
-  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "typed-1" });
-  f.brain.fire({
-    kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    runId: "typed-1",
-    sentence: "Two sessions finished.",
-  });
-  await drainMicrotasks();
-  assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.WANTED);
-  const sideband = await f.open();
-  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-  assert.equal(commentary.length, 1);
-  assert.equal(
-    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
-    null,
-  );
 });
 
 test("a muted microphone never carries the stop instruction, whether Luke is silent or mid-sentence", async () => {

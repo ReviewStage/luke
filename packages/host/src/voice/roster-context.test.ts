@@ -29,7 +29,7 @@ test("the seed budget beside the roster leaves the whole list under the API's bo
   assert.equal(budget.messages, LIVE_INPUT_BOUNDS.MESSAGES - 1);
   assert.equal(budget.tokens, LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens([roster]));
   const entries = Array.from({ length: 300 }, (_, index) => ({
-    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     words: `ask ${index} ${"w".repeat(300)}`,
   }));
   const items = [...conversationSeedItems(entries, budget), roster];

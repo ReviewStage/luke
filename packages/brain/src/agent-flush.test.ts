@@ -185,7 +185,7 @@ async function ask(agent: BrainAgent, question: string) {
   const accepted = await agent.submitAsk({
     submissionId: `s-${question.length}-${Math.random()}`,
     question,
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
@@ -406,7 +406,7 @@ test("a marker write still out when the turn is revoked is waited for at the nex
   const accepted = await h.agent.submitAsk({
     submissionId: "after-revoke",
     question: "still over the threshold",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await new Promise((resolve) => setImmediate(resolve));

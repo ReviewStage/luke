@@ -11,7 +11,7 @@ import {
 import { TextLoopbackTransport } from "@sidecar/gateway/testing";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
@@ -37,7 +37,7 @@ function record(overrides: RecordOverrides = {}): BrainRequestRecord {
     {
       runId: "run-1",
       submissionId: "sub-1",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
       question: "what needs me?",
       status: BRAIN_REQUEST_STATUS.RUNNING,
       revision: 1,
@@ -61,7 +61,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
   const records = new Map<string, BrainRequestRecord>();
   const asked: BrainSubmission[] = [];
   const generation = { id: "gen-1" };
-  const recorded: ConversationEntry[] = [];
   const deleted: SessionKey[] = [];
   // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
   const agent = {
@@ -115,10 +114,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,
-    recordConversationEntry: (entry) => {
-      recorded.push(entry);
-      return true;
-    },
     now: () => NOW,
     createId: () => `id-${++ids}`,
   });
@@ -138,7 +133,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     transport,
     records,
     asked,
-    recorded,
     deleted,
     events,
     generation,
@@ -151,18 +145,17 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
 }
 
 for (const kind of ["in-process", "loopback"] as const) {
-  test(`[${kind}] a duplicate submission finds the one run, and the ask is recorded once`, async () => {
+  test(`[${kind}] a duplicate submission finds the one run`, async () => {
     const f = fixture(kind);
     const submission = {
       submissionId: "sub-1",
       question: "what needs me?",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     } as const;
     const first = await f.operator.submit(submission);
     const retry = await f.operator.submit(submission);
     assert.deepEqual(first, retry);
     assert.equal(f.asked.length, 1);
-    assert.equal(f.recorded.length, 1);
     // A submission of other words under the same id is a conflict the client reads as a refusal.
     const conflict = await f.operator.submit({ ...submission, question: "other words" });
     assert.equal(conflict.outcome, "rejected");
@@ -186,12 +179,12 @@ for (const kind of ["in-process", "loopback"] as const) {
     await f.operator.submit({
       submissionId: "s",
       question: "q",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     });
     f.report();
     f.service.conversationChanged(
       MAIN_SESSION_KEY,
-      [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "q" }],
+      [{ kind: CONVERSATION_ENTRY_KIND.ASK, words: "q" }],
       "window-7",
     );
     f.service.conversationChanged(MAIN_SESSION_KEY, []);

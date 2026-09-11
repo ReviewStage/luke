@@ -9,7 +9,7 @@ import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@sidecar/se
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
 
 const ENTRY_KIND_OF = {
-  [TRANSCRIPT_SPEAKER.USER]: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+  [TRANSCRIPT_SPEAKER.USER]: CONVERSATION_ENTRY_KIND.ASK,
   [TRANSCRIPT_SPEAKER.ASSISTANT]: CONVERSATION_ENTRY_KIND.REPLY,
 } as const satisfies Record<TranscriptSpeaker, string>;
 

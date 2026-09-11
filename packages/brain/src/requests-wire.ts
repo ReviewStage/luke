@@ -1,5 +1,4 @@
 import type { CarriedAppAction } from "@sidecar/actions";
-import { maximumTypedAskLength } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -15,7 +14,6 @@ import {
   type BrainRequestRecord,
   type BrainSubmissionRejection,
   brainRequestRecordFromWire,
-  isBrainRequestOrigin,
 } from "./requests.js";
 
 /**
@@ -31,17 +29,6 @@ export interface BrainAskSubmission {
   submissionId: string;
   question: string;
   origin: (typeof BRAIN_REQUEST_ORIGIN)[keyof typeof BRAIN_REQUEST_ORIGIN];
-}
-
-export function isBrainAskSubmission(value: UnparsedWireValue): boolean {
-  return (
-    isRecord(value) &&
-    isWireString(value.submissionId) &&
-    value.submissionId.length > 0 &&
-    isWireString(value.question) &&
-    value.question.length <= maximumTypedAskLength &&
-    isBrainRequestOrigin(value.origin)
-  );
 }
 
 /** The answer to a submission, as the bridge carries the brain's own result. */

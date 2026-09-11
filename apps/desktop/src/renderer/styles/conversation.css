@@ -8,12 +8,6 @@
   gap: 8px;
 }
 
-/* The thread's own gap already separates the composer from the last bubble;
-   the margin the pill keeps under the sessions list would double it. */
-.conversation-view .ask-luke-row {
-  margin-top: 0;
-}
-
 /* The clear rides the tab bar's line beside the other header controls, the
    way each tab's search does, rather than taking a row of the thread's own. */
 .conversation-clear-controls {

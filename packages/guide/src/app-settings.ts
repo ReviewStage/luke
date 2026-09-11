@@ -25,7 +25,6 @@ export const APP_SETTING_ID = {
   SUPERSET_AGENT: "superset_agent",
   VOICE_SOURCE: "voice_source",
   TALK_HOTKEY: "talk_hotkey",
-  ASK_HOTKEY: "ask_hotkey",
   STOP_HOTKEY: "stop_hotkey",
   CALENDAR_SELECTED: "calendar_selected",
 } as const;

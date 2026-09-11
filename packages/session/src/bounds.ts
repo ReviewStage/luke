@@ -37,12 +37,13 @@ export const maximumSessionLinkLength = 300;
 export const maximumSessionMessageLength = 4_000;
 
 /**
- * How long a typed ask to Luke himself may run. The same bound a session
- * message carries: room for anything worth typing into a chat field, and a
- * floor under a paste of a whole document — which is cut rather than sent,
- * because the ask is a sentence to a companion, not a transfer.
+ * How long an ask to Luke himself may run, as the host composes it from the
+ * live transcript. The same bound a session message carries: room for
+ * anything worth saying in one turn, and a floor under a run-on that is cut
+ * rather than sent, because the ask is a sentence to a companion, not a
+ * transfer.
  */
-export const maximumTypedAskLength = maximumSessionMessageLength;
+export const maximumAskLength = maximumSessionMessageLength;
 
 /**
  * The text of a message on its way to a session, or nothing. Unlike an observed

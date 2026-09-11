@@ -87,10 +87,6 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.SESSION_EXECUTE_CONTROL,
     payload: { identity: IDENTITY, controlId: "cancel-run" },
   },
-  [ACT_KIND.BRAIN_SUBMIT_ASK]: {
-    kind: ACT_KIND.BRAIN_SUBMIT_ASK,
-    payload: { submission: { submissionId: "sub-1", question: "what needs me?", origin: "typed" } },
-  },
   [ACT_KIND.BRAIN_CANCEL_ASK]: { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,

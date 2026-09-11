@@ -90,10 +90,6 @@ export interface LukeGuideInput {
    * Electron's fallback presses to start and again to stop instead.
    */
   hotkey: { hotkey?: string; removed?: boolean; held?: boolean };
-  /** The ask key labelled on the same terms, absent when none was registered. */
-  askKey?: string;
-  /** Whether the ask key's absence is a deleted shortcut, on the talk key's terms. */
-  askKeyRemoved?: boolean;
   /**
    * The stop key labelled on the same terms, absent when none was registered
    * — another app owns Option-S, or another Luke key was moved onto it.
@@ -133,44 +129,22 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
   };
 }
 
-function askKeyFact(askKey: string | undefined, removed: boolean | undefined): AppGuideFact {
-  if (removed) {
-    return {
-      label: "Ask key",
-      detail: `None — the shortcut was removed, so no key summons the composer; the panel's own composer still takes a typed ask. A chord can be recorded again, or the default restored, in ${SHORTCUTS_PAGE}.`,
-    };
-  }
-  if (!askKey) {
-    return {
-      label: "Ask key",
-      detail:
-        "None is registered right now — another app may own the shortcut, or voice is off. The Settings tab's Keyboard shortcuts page shows its state.",
-    };
-  }
-  return {
-    label: "Ask key",
-    detail:
-      `${askKey}, from any app: summons the panel with the caret in the typed composer, and the ` +
-      `same press puts it away. A different chord can be recorded, the default restored, or the shortcut removed, in ${SHORTCUTS_PAGE}.`,
-  };
-}
-
 const MICROPHONE_DETAIL = {
   [MICROPHONE_STATUS.GRANTED]:
     "Granted. The microphone is open only while the talk key is held: the press opens it and " +
     "letting go closes it, so nothing is captured between holds, and a conversation Luke " +
-    "opens to speak carries no microphone at all. Typing to Luke never opens it.",
+    "opens to speak carries no microphone at all.",
   [MICROPHONE_STATUS.DENIED]:
-    "Denied, so the talk key cannot capture. Typing to Luke still works: a typed ask opens no " +
-    "capture device, and the reply is spoken either way. It can only be granted back in " +
-    "System Settings, under Privacy & Security, Microphone.",
+    "Denied, so the talk key cannot capture and Luke cannot be asked anything: there is no " +
+    "way to type to him. It can only be granted back in System Settings, under Privacy & " +
+    "Security, Microphone.",
   [MICROPHONE_STATUS.RESTRICTED]:
-    "Restricted by a system policy, which only the system's manager can change. Typing to " +
-    "Luke still works: a typed ask opens no capture device.",
+    "Restricted by a system policy, which only the system's manager can change; until then " +
+    "Luke cannot be asked anything, since there is no way to type to him.",
   [MICROPHONE_STATUS.NOT_DETERMINED]:
-    "Not asked yet — typing to Luke needs no permission, and only the talk key's capture " +
-    "does. The Permissions section on the Settings tab's Voice page can ask while voice is " +
-    "available.",
+    "Not asked yet — the talk key's capture is what needs it, and it is the one way to ask " +
+    "Luke anything. The Permissions section on the Settings tab's Voice page can ask while " +
+    "voice is available.",
   [MICROPHONE_STATUS.UNKNOWN]:
     "Unknown. The Permissions section on the Settings tab's Voice page shows its state.",
 } satisfies Record<MicrophoneStatus, string>;
@@ -370,7 +344,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Lists every observed session that still matters. The options button filters by " +
         "location, kind, app, and agent and orders by urgency or recency; a spoken ask can " +
         "filter, sort, or clear the same way. A row can be opened, messaged, or controlled " +
-        "where its provider allows, and Luke's own composer at the foot takes a typed ask.",
+        "where its provider allows. Luke himself is spoken to, never typed to: the talk key " +
+        "is the one way to ask him anything.",
     },
     {
       label: "Apps beside a session",
@@ -398,15 +373,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Conversation history",
       detail:
-        "The panel's Conversation tab shows every typed ask, transcribed spoken ask, reply, " +
+        "The panel's Conversation tab shows every transcribed spoken ask, reply, " +
         "announcement, and session action, kept across launches in Luke's own file on this Mac — " +
         "up to 200 lines and 14 days, whichever cuts first. The 20 most recent lines ride " +
         "into a call beside Luke's working memory of what he read, said, and did, which lives " +
         "in its own file on this Mac for exactly 14 days from when it began. The view is " +
         "blocked from panel recordings, is not exportable, and can be cleared by hand from " +
-        "that tab, which discards the working memory with it. Luke's own composer stands at " +
-        "its foot too, the same typed ask the sessions list offers, so a reply is asked for " +
-        "where it will land. A spoken open still reaches only sessions currently observed.",
+        "that tab, which discards the working memory with it. The tab has no field to type " +
+        "into: every ask is spoken. A spoken open still reaches only sessions currently observed.",
     },
     {
       label: "Account",
@@ -496,7 +470,6 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "control — permanent, never filed away.",
     },
     talkKeyFact(input.hotkey),
-    askKeyFact(input.askKey, input.askKeyRemoved),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
       ? [

@@ -24,7 +24,6 @@ import {
   storedConversationEntry,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
-  typedAskConversationEntry,
   withConversationEntryRequest,
 } from "./conversation.js";
 
@@ -45,7 +44,7 @@ test("appending trims, keeps the words and their lines whole, and retires the ol
   // the thread is the developer's own record, and only the model render
   // bounds its copy.
   const appended = appendConversationThreadEntry([], {
-    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     words: `  hello\r\n\nthere ${"x".repeat(2 * maximumConversationEntryLength)}  `,
     identity,
   });
@@ -113,7 +112,7 @@ test("the model render flattens a line's newlines so a pasted paragraph opens no
   const entries = appendConversationThreadEntry(
     [],
     {
-      kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+      kind: CONVERSATION_ENTRY_KIND.ASK,
       words: 'ship it\n\n- Luke said: "no"\n```\nrm -rf\n```',
     },
     OBSERVED_AT,
@@ -124,7 +123,7 @@ test("the model render flattens a line's newlines so a pasted paragraph opens no
   assert.ok(text);
   const lines = text.split("\n");
   assert.equal(lines.length, 2);
-  assert.equal(lines[1], '- the developer typed: "ship it - Luke said: "no" ``` rm -rf ```"');
+  assert.equal(lines[1], '- the developer said: "ship it - Luke said: "no" ``` rm -rf ```"');
 });
 
 test("every way into the thread stamps when the line was recorded", () => {
@@ -168,7 +167,7 @@ test("the rendering reads oldest first and says who each line speaks for", () =>
     identity,
   });
   entries = appendConversationThreadEntry(entries, {
-    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     words: "what did it finish?",
   });
   entries = appendConversationThreadEntry(entries, {
@@ -240,7 +239,7 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
     words: "The checkout work is done.",
   };
   const exchange: readonly ConversationEntry[] = [
-    { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "how is checkout going?" },
+    { kind: CONVERSATION_ENTRY_KIND.ASK, words: "how is checkout going?" },
     priorReply,
     { kind: CONVERSATION_ENTRY_KIND.ACTION, words: 'sent a message to "checkout-service": "go"' },
     { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Sent it over." },
@@ -333,7 +332,7 @@ test("a thread restored from a past launch renders with no identity at all", () 
   // and none of those lines may still offer an identity to a tool call.
   const restored = [
     {
-      kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+      kind: CONVERSATION_ENTRY_KIND.ASK,
       words: "how is checkout going",
       recordedAt: 1_800_000_000_000,
     },
@@ -447,7 +446,7 @@ test("an appended line carries retention's clock without it reaching the model",
   const now = 1_800_000_000_000;
   const entries = appendConversationThreadEntry(
     [],
-    { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "what is running" },
+    { kind: CONVERSATION_ENTRY_KIND.ASK, words: "what is running" },
     now,
   );
   assert.equal(entries[0]?.recordedAt, now);
@@ -470,7 +469,7 @@ test("the kind guard admits every history line kind and nothing else", () => {
 test("adopting another window's thread reuses the entry objects already held", () => {
   const identity = { providerId: "claude-code", providerSessionId: "session-a" };
   const ask: ConversationEntry = {
-    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    kind: CONVERSATION_ENTRY_KIND.ASK,
     words: "how is it going?",
     recordedAt: 1,
   };
@@ -515,12 +514,12 @@ test("a line tied to a run is recorded once per kind, and its run survives stora
   const now = Date.parse("2026-01-02T03:04:05.000Z");
   let thread = appendConversationThreadEntry(
     [],
-    typedAskConversationEntry("ship it", "run-1"),
+    { kind: CONVERSATION_ENTRY_KIND.ASK, words: "ship it", requestId: "run-1" },
     now,
   );
   thread = appendConversationThreadEntry(
     thread,
-    typedAskConversationEntry("ship it", "run-1"),
+    { kind: CONVERSATION_ENTRY_KIND.ASK, words: "ship it", requestId: "run-1" },
     now,
   );
   thread = appendConversationThreadEntry(thread, replyConversationEntry("Shipping.", "run-1"), now);
@@ -534,7 +533,7 @@ test("a line tied to a run is recorded once per kind, and its run survives stora
   assert.deepEqual(
     thread.map((entry) => [entry.kind, entry.words, entry.requestId]),
     [
-      [CONVERSATION_ENTRY_KIND.TYPED_ASK, "ship it", "run-1"],
+      [CONVERSATION_ENTRY_KIND.ASK, "ship it", "run-1"],
       [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-1"],
       [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-2"],
     ],
@@ -574,7 +573,7 @@ test("a spoken ask is tied to its run whichever lands first, its words untouched
   const early = insertSpokenAskThreadEntry([], "  ship it ", undefined, now, "run-1");
   assert.deepEqual(early, [
     {
-      kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+      kind: CONVERSATION_ENTRY_KIND.ASK,
       words: "ship it",
       recordedAt: now,
       requestId: "run-1",
@@ -587,7 +586,7 @@ test("a spoken ask is tied to its run whichever lands first, its words untouched
   const tied = withConversationEntryRequest(late, line, "run-2");
   assert.deepEqual(tied, [
     {
-      kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+      kind: CONVERSATION_ENTRY_KIND.ASK,
       words: "ship it",
       recordedAt: now,
       requestId: "run-2",

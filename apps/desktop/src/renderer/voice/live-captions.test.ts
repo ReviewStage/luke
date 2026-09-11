@@ -25,7 +25,7 @@ test("fragments group into one row per utterance, verbatim and in arrival order,
   f.captions.append(TRANSCRIPT_SPEAKER.USER, "needs me", 400, 900);
   assert.equal(f.latest().length, 1);
   assert.equal(f.latest()[0]?.rowId, 1);
-  assert.equal(f.latest()[0]?.entry.kind, CONVERSATION_ENTRY_KIND.SPOKEN_ASK);
+  assert.equal(f.latest()[0]?.entry.kind, CONVERSATION_ENTRY_KIND.ASK);
   assert.equal(f.latest()[0]?.entry.words, "what needs me");
   assert.equal(f.latest()[0]?.settled, false);
   // A gap wider than the utterance gap opens a new row rather than growing the first.
@@ -45,7 +45,7 @@ test("both speakers draw at once, each as their own kind, and overlap does not m
     f.latest().map((row) => [row.rowId, row.entry.kind, row.entry.words]),
     [
       [1, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished."],
-      [2, CONVERSATION_ENTRY_KIND.SPOKEN_ASK, "wait"],
+      [2, CONVERSATION_ENTRY_KIND.ASK, "wait"],
     ],
   );
 });

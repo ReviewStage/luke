@@ -33,7 +33,7 @@ test("a developer utterance is main's spoken-ask line tied to its run, carrying 
   assert.deepEqual(written, [
     {
       entry: {
-        kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+        kind: CONVERSATION_ENTRY_KIND.ASK,
         words: "what needs me?",
         eventId: "event-1",
         requestId: "run-1",

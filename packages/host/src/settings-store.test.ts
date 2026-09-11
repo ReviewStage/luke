@@ -200,7 +200,6 @@ const SAMPLE_VALUE = {
   voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
   voiceHotkey: "Shift+Command+L",
-  askHotkey: "Control+Alt+K",
   stopHotkey: "Control+Alt+P",
   duckOtherMedia: false,
   voiceSource: VOICE_SOURCE.ACCOUNT,
@@ -1012,11 +1011,7 @@ test("stores a deleted talk key as the none token and reads it back", async (t) 
 });
 
 test("ignores a stored chord this build cannot register", async (t) => {
-  for (const field of [
-    APP_SETTING_SCHEMA.voiceHotkey.field,
-    APP_SETTING_SCHEMA.askHotkey.field,
-    APP_SETTING_SCHEMA.stopHotkey.field,
-  ]) {
+  for (const field of [APP_SETTING_SCHEMA.voiceHotkey.field, APP_SETTING_SCHEMA.stopHotkey.field]) {
     const directory = await temporaryDirectory(t, "luke-settings-");
     await fs.writeFile(
       path.join(directory, SETTINGS_FILE_NAME),
@@ -1031,17 +1026,15 @@ test("ignores a stored chord this build cannot register", async (t) => {
   }
 });
 
-test("the three Luke keys survive each other's writes", async (t) => {
+test("the two Luke keys survive each other's writes", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
-  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
   await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
 
   const reopened = storeIn(directory);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.askHotkey.field), "Control+Alt+K");
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
 });
 
@@ -1414,21 +1407,18 @@ test("an appearance reset returns Luke's stances without touching the voice page
   assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);
 });
 
-test("a shortcuts reset forgets all three chords at once", async (t) => {
+test("a shortcuts reset forgets both chords at once", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
-  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
   await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS);
 
   assert.equal(reason, undefined);
   assert.equal(appSettingsView(settings).voiceHotkey, undefined);
-  assert.equal(appSettingsView(settings).askHotkey, undefined);
   assert.equal(appSettingsView(settings).stopHotkey, undefined);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
 });
 

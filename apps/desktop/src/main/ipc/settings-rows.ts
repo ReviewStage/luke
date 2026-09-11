@@ -137,17 +137,11 @@ export function settingsActRows(
    * value apart, because it is the field that says the value is a chord.
    */
   const chordHolder = (payload: SettingUpdatePayload): string | undefined => {
-    if (payload.field === APP_SETTING_SCHEMA.askHotkey.field) {
-      if (payload.value === undefined) return undefined;
-      return hotkeys.reserve(payload.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK
-        ? "talk"
-        : undefined;
-    }
     if (payload.field !== APP_SETTING_SCHEMA.stopHotkey.field) return undefined;
     if (payload.value === undefined) return undefined;
-    const owner = hotkeys.reserve(payload.value, HOTKEY_RANK.STOP);
-    if (owner === HOTKEY_RANK.TALK) return "talk";
-    return owner === HOTKEY_RANK.ASK ? "ask" : undefined;
+    return hotkeys.reserve(payload.value, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK
+      ? "talk"
+      : undefined;
   };
 
   return {

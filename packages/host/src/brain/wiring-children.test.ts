@@ -222,12 +222,6 @@ async function composed(
     parallelism: () => 8,
     createId: () => `id-${++ids}`,
     report: () => undefined,
-    recordConversationEntry: (entry, recordedAt, sessionKey) => {
-      const lines = history.get(sessionKey) ?? [];
-      lines.push({ ...entry, recordedAt });
-      history.set(sessionKey, lines);
-      return true;
-    },
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
@@ -298,7 +292,7 @@ async function ask(c: Composed, question: string, submissionId = "s-1"): Promise
   const accepted = await main.submitAsk({
     submissionId,
     question,
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   return accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";

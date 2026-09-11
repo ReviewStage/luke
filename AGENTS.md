@@ -99,8 +99,8 @@ Canonical commands:
 
 - The one thing Luke may change about a session is what the user just asked to
   send it: a message typed on its row, a control its provider advertised for
-  it, or the same two actions asked of Luke, out loud or typed into his own
-  composer, in a conversation the user is holding, each through the
+  it, or the same two actions asked of Luke out loud, in a conversation the
+  user is holding, each through the
   provider's own documented endpoint under the same user-supplied credential,
   and each admitted against the observed roster, and against that session's
   own advertisement of the actions its provider documents for it now, by
@@ -287,13 +287,14 @@ Canonical commands:
   collect, and interrupt as OpenClaw names them). An ask past the queue's
   own depth of twenty is not dropped: the oldest waiting is folded into a
   summary line the next turn opens with, and settles with that turn, while
-  the words the developer typed stand on their own record uncut, because the
+  the words the developer said stand on their own record uncut, because the
   summary bounds what the model reads and rewrites no history. A relaunch runs
   nothing that was only queued or steered: such records read interrupted,
   and wakes that only waited in memory are gone. The conversation an ask is
-  for is captured at the submission and never retargeted; the existing
-  composer and talk key submit to main, and no conversation, selector,
-  control, or label is drawn for any of this. The provider's file is only ever read. Everything a turn reads and
+  for is captured at the submission and never retargeted; the talk key is
+  the one way to ask, every ask reaches main, and no conversation, selector,
+  control, composer, or label is drawn for any of this: Luke is voice only,
+  and the panel offers no field to type to him in. The provider's file is only ever read. Everything a turn reads and
   says travels as the Responses input the agent keeps — behind a marker, as
   data — directly to OpenAI on the developer's own key, or through Luke's own
   service on the hosted tier, where the service performs one model inference
@@ -531,8 +532,9 @@ Canonical commands:
 ### Replies, the drain, and the hosted tier
 
 - Everything Luke says unprompted has one sink, the host's live session
-  service: an observed conversation's briefing, a typed ask's reply, and the
-  two onboarding beats are each appended into the standing session as
+  service: an observed conversation's briefing, a late reply of a run whose
+  session has since closed, and the two onboarding beats are each appended
+  into the standing session as
   commentary with no delegation id, or into the one session the voice window
   opens muted when the service says it wants one. There is no other speech
   path: the earlier reply-grant ledger, receiver epochs, and speech offers
@@ -651,8 +653,8 @@ Canonical commands:
   surface does; a conversation is listed by the runtime that owns it (an
   observed session's, a child's) and archived only by the brain's own
   cleanup of an ended child and by conversation maintenance below. Main is the
-  agent's ordinary conversation, the one the talk key, both composers, and
-  every observation reach; a private thread (`agent:<agentId>:thread:<uuid>`)
+  agent's ordinary conversation, the one the talk key and every observation
+  reach; a private thread (`agent:<agentId>:thread:<uuid>`)
   is another logical conversation of the same agent with its own generation,
   lines, and transcript, and only main's thread is relayed to a window. A
   run that keeps nothing on disk holds its conversations in memory alone —
@@ -875,9 +877,13 @@ Canonical commands:
 
 - The conversation Luke holds outlives the app, and one narrower thing beside
   it does too. The thread itself is words that were already said — the
-  developer's asks, what Luke spoke or announced, the actions he carried at their
-  ask — each of which reached the voice service once on the call that said it,
-  so storing it changes only how long it stands, not what it is. It lives in
+  developer's spoken asks, what Luke spoke or announced, the actions he carried
+  at their ask — each of which reached the voice service once on the call that
+  said it, so storing it changes only how long it stands, not what it is. Both
+  speakers' lines are the live session's own transcript, written as each
+  utterance settles; the brain's reply text is the backend's facts, which the
+  voice paraphrases, and is never written as a line, so one spoken ask leaves
+  one line of the developer's and one of Luke's. It lives in
   Luke's own application data, never a provider's file, under a real retention
   policy replacing the old "dies with the app": every admitted line stands
   in the brain's store's own table until Delete conversation or the conversation
@@ -1095,8 +1101,7 @@ Canonical commands:
   then closes the microphone the same way; no timing heuristic turns one
   into the other. A
   session Luke opens for his own speech carries no capture device at all,
-  only a sending line with no track that the next press fills, and typed asks
-  open none. The one place a press stands in for a release is the Electron
+  only a sending line with no track that the next press fills. The one place a press stands in for a release is the Electron
   fallback, where the native talk-key helper could not start and the system
   reports presses alone: there one press starts the hold and the next ends
   it, and the shortcuts row says so. An unreadable route means the browser's
@@ -1304,8 +1309,8 @@ Canonical commands:
   every action in the run has settled, so nothing is announced before it is
   done. It is the brain whose standing context carries the recent exchange —
   the 20 most recent Conversation lines, each cut to its own length bound
-  (the developer's asks, typed or spoken as the session transcribed them,
-  the words Luke spoke or announced as the same transcript carried them,
+  (the developer's asks as the session transcribed them, the words Luke
+  spoke or announced as the same transcript carried them,
   and the actions he carried at their ask), beside the brain's own working
   memory of its turns — so the one conversation survives the sessions that
   transport it: a briefing said into a session opened for it, or a session
