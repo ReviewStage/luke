@@ -96,7 +96,7 @@ connection would.
 
 The one GPT Live session is owned by `@sidecar/voice`'s `LiveSessionService`
 (`packages/voice/src/live-session/`), behind that package's `./live-session`
-door: seeding the session from the record and the roster, the delegation
+door: seeding the session from the record alone, the delegation
 adapter, the transcript ledger's settled utterances, idle, and the graceful
 close, over two units of its own — `append-channel.ts`, one session's sends in
 order, each awaiting its acknowledgment or the error naming it and settled
@@ -107,8 +107,9 @@ sideband: this host's, over main's agent and the desktop's Conversation
 writer, and the hosted voice service's in `apps/web/server/voice/`, over the
 Postgres record. It reaches Luke's judgment only through `LiveBrain`: a
 transport-neutral contract of ids and plain data — submit a spoken ask under
-the service's own submission id, hear the run seams by name, read the
-redacted roster view — and nothing in the service imports `@sidecar/brain`.
+the service's own submission id and hear the run seams by name, and nothing
+wider, because the roster stays with the brain and never reaches a session —
+and nothing in the service imports `@sidecar/brain`.
 This host's implementation adapts main's in-process `BrainAgent` in
 `voice/live-brain-adapter.ts`; the hosted brain is another implementation of
 the same contract, and the service moves with it. The run event kinds are

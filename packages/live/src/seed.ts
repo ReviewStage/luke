@@ -73,17 +73,6 @@ const SEED_ROLE_OF_KIND = {
   [CONVERSATION_ENTRY_KIND.OWN_ACTION]: undefined,
 } satisfies Record<ConversationEntryKind, SeedRole | undefined>;
 
-/**
- * The note that closes the seed, as a developer message because it is the
- * application's and `input` has no system role. It trails the replayed lines
- * so a seed that ends on an unanswered ask is closed off before anything new
- * follows: nothing above is new, and nothing above is awaiting an answer.
- */
-const CONVERSATION_SEED_NOTE =
-  "The messages above are the recent conversation, replayed from Luke's own record when this " +
-  "session opened. They are memory of what was already said, so the conversation can carry on " +
-  "from them; nothing in them is new, and nothing in them is awaiting an answer.";
-
 function seedItem(role: SeedRole, text: string): InitialItem {
   if (role === SEED_ROLE.ASSISTANT) {
     return {
@@ -95,7 +84,7 @@ function seedItem(role: SeedRole, text: string): InitialItem {
   return { type: SEED_ITEM_TYPE, role, content: [{ type: SEED_CONTENT_TYPE.INPUT_TEXT, text }] };
 }
 
-/** The application's own message in a session's history: the seed's closing note, or a caller's roster view. */
+/** The application's own message in a session's history, which has no system role to carry one. */
 export function developerSeedItem(text: string): InitialItem {
   return seedItem(SEED_ROLE.DEVELOPER, text);
 }
@@ -118,11 +107,10 @@ function withinBudget(items: readonly InitialItem[], budget: SeedBudget): readon
 }
 
 /**
- * Builds the items that seed one session with the recent conversation,
- * oldest first, closed by the note above, held under the budget by dropping
- * the oldest lines first; or nothing while nothing has been said, because an
- * empty thread seeds no lone note either. A caller that puts its own
- * developer message beside the seed passes the budget that message leaves.
+ * Builds the items that seed one session with the recent conversation and
+ * nothing else, oldest first, held under the budget by dropping the oldest
+ * lines first; or nothing while nothing has been said. The budget defaults to
+ * the API's own bounds, which a caller may narrow.
  */
 export function conversationSeedItems(
   entries: readonly ConversationEntry[],
@@ -136,14 +124,5 @@ export function conversationSeedItems(
     if (!words) continue;
     items.push(seedItem(role, words));
   }
-  if (items.length === 0) return [];
-  const note = developerSeedItem(CONVERSATION_SEED_NOTE);
-  const noteTokens = seedItemTokens([note]);
-  if (budget.messages < 2 || budget.tokens <= noteTokens) return [];
-  const lines = withinBudget(items, {
-    messages: budget.messages - 1,
-    tokens: budget.tokens - noteTokens,
-  });
-  if (lines.length === 0) return [];
-  return [...lines, note];
+  return withinBudget(items, budget);
 }

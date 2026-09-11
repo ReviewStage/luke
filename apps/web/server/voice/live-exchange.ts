@@ -61,7 +61,6 @@ export interface HostedLiveExchangeOptions {
   readonly eve: EveSessions;
   readonly source: () => LiveSessionSource | undefined;
   readonly conversationEntries: LiveSessionServiceOptions<BriefingDelivery>["conversationEntries"];
-  readonly rosterView: () => string;
   readonly emit: LiveSessionServiceOptions<BriefingDelivery>["emit"];
   readonly now: () => number;
   readonly schedule: LiveSessionServiceOptions<BriefingDelivery>["schedule"];
@@ -119,7 +118,6 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
       now: options.now,
     },
     store,
-    rosterView: options.rosterView,
     report,
   });
 

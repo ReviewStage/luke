@@ -139,7 +139,6 @@ function stand(
     userId: target.userId,
     asks: { run: database.run, asks, eve, now: () => NOW },
     store,
-    rosterView: () => "roster: one session",
     report: (message) => reports.push(message),
     bounds,
   });
@@ -188,7 +187,6 @@ test("a spoken ask goes through the ask door under the spoken origin with the su
   const again = await f.brain.submitAsk(ask);
   assert.deepEqual(again, accepted);
   assert.equal(f.eve.opened.length, 1);
-  assert.equal(f.brain.standingRosterView(), "roster: one session");
   f.brain.stop();
 });
 

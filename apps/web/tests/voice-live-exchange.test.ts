@@ -204,7 +204,6 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
     eve,
     source: () => source,
     conversationEntries: () => [],
-    rosterView: () => "roster: one session",
     emit: () => undefined,
     now: () => NOW,
     schedule: (callback, delayMs) => setTimeout(callback, delayMs),

@@ -24,8 +24,6 @@ export type LiveBrainAgent = Pick<BrainAgent, "onRunEvent" | "submitAsk">;
 export interface BrainAgentLiveBrainOptions {
   /** Main's brain as it stands now; nothing between credential transitions. */
   agent: () => LiveBrainAgent | undefined;
-  /** The redacted roster view the brain's standing context carries. */
-  rosterView: () => string;
 }
 
 function endOf(status: string): LiveBrainRunEnd {
@@ -109,6 +107,5 @@ export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): LiveBr
         listeners.delete(listener);
       };
     },
-    standingRosterView: () => options.rosterView(),
   };
 }

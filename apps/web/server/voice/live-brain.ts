@@ -114,8 +114,6 @@ export interface HostedLiveBrainOptions {
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, over the same runner. */
   readonly store: Pick<HostedStore, "turns" | "messages">;
-  /** The bounded, redacted roster view the brain's standing context carries, as the composition last read it. */
-  readonly rosterView: () => string;
   readonly report: (message: string) => void;
   /** The follow's own bounds, narrowed by a test so a poll is milliseconds and the bound is reached inside a test. */
   readonly bounds?: Partial<FollowBounds>;
@@ -241,7 +239,6 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
         listeners.delete(listener);
       };
     },
-    standingRosterView: () => options.rosterView(),
     stop() {
       Deferred.unsafeDone(stopped, Effect.void);
     },

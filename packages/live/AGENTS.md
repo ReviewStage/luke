@@ -68,17 +68,18 @@ trusted side; `introductionSeedItems` is the one developer message the
 introduction's `input` may carry, the detected titles under
 `INTRODUCTION_SEED_BOUNDS`, composed by the takeover and admitted by the
 service against the same bound. The docs' backend preamble is not here: it is a prompt section
-of `@sidecar/brain`, and the roster rendering the voice is shown is the
-host's, which already holds the brain's redacted view; neither package
-depends on this one and this one depends on neither.
+of `@sidecar/brain`, and the roster is not here or anywhere the voice can
+read it, because what is on the desk is the brain's; neither package depends
+on this one and this one depends on neither.
 
 `seed.ts` is what a session is told as it opens: the recent Conversation
 lines as `input` messages in their own roles (developer and user as
-`input_text`, assistant as `output_text`, no `system`), closed by a developer
-note saying nothing above awaits an answer, and held under the API's 128
-messages and 8,192 estimated tokens by dropping the oldest lines first. A
-caller that puts its own developer message beside the seed passes the budget
-that message leaves. `transcript.ts` is the record of what was said on one
+`input_text`, assistant as `output_text`, no `system`), and nothing else —
+no note addressed to the model, no roster — held under the API's 128
+messages and 8,192 estimated tokens by dropping the oldest lines first. That
+the history above is memory rather than a fresh ask is the identity block's
+line in `instructions.ts`, where an instruction belongs, since a developer
+message trailing the history is one more thing the model may answer. `transcript.ts` is the record of what was said on one
 session: `TranscriptLedger` keeps every fragment exactly as received with its
 place on the session timeline, groups them into utterances by
 `UTTERANCE_GAP_MS` per speaker with overlap allowed and late fragments

@@ -7,7 +7,6 @@ import { LiveBrainTag, liveBrainLayer } from "./live-brain.js";
 const fakeBrain: LiveBrain = {
   submitAsk: () => Promise.resolve({ outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-1" }),
   onRunEvent: () => () => undefined,
-  standingRosterView: () => "roster: none",
 };
 
 describe("liveBrainLayer", () => {
