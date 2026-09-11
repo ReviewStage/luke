@@ -40,10 +40,10 @@ type LiveCreateResult =
 export interface LiveUpstreamOptions {
   apiKey: string;
   /** The API's `/v1` base; a test points it at a fake. The attach socket derives from the same base. */
-  baseUrl?: string;
-  fetch?: CloudFetch;
-  createTimeoutMs?: number;
-  attachTimeoutMs?: number;
+  baseUrl?: string | undefined;
+  fetch?: CloudFetch | undefined;
+  createTimeoutMs?: number | undefined;
+  attachTimeoutMs?: number | undefined;
 }
 
 export interface LiveUpstream {

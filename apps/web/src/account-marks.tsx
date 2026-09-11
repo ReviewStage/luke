@@ -9,7 +9,7 @@
  * them; change both copies if a provider publishes an updated mark.
  */
 interface MarkProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 export function GoogleMark({ className }: MarkProps): React.JSX.Element {

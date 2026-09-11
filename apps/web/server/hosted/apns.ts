@@ -133,7 +133,7 @@ export interface ApnsNotification {
   environment: PushEnvironment;
   payload: ApnsPayload;
   /** Later notifications with the same id replace earlier ones still on the lock screen. */
-  collapseId?: string;
+  collapseId?: string | undefined;
 }
 
 /**

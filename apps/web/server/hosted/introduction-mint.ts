@@ -72,11 +72,11 @@ export interface IntroductionMintOptions {
   /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
   apiKey: string | undefined;
   /** A deployment-configured model override; the shared default otherwise. */
-  model?: string;
+  model?: string | undefined;
   spend: () => Promise<IntroductionSpend>;
-  fetch?: CloudFetch;
-  now?: () => number;
-  timeoutMs?: number;
+  fetch?: CloudFetch | undefined;
+  now?: (() => number) | undefined;
+  timeoutMs?: number | undefined;
 }
 
 export async function handleIntroductionMint(options: IntroductionMintOptions): Promise<Response> {

@@ -21,11 +21,12 @@ function readRequest(headers: Record<string, string> = {}): Request {
 }
 
 function writeRequest(body?: WireBoundaryInput, headers: Record<string, string> = {}): Request {
-  return new Request("https://luke.test/api/account/preferences", {
+  const init: RequestInit = {
     method: "PUT",
     headers: { authorization: "Bearer token-1", "content-type": "application/json", ...headers },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return new Request("https://luke.test/api/account/preferences", init);
 }
 
 function readOptions(overrides: Partial<Parameters<typeof handleAccountPreferencesRead>[0]> = {}) {

@@ -41,10 +41,10 @@ export type OpenAiPostBody =
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;
-  fetch?: CloudFetch;
-  timeoutMs?: number;
+  fetch?: CloudFetch | undefined;
+  timeoutMs?: number | undefined;
   /** The caller's own cancellation, when the runtime carries one; the upstream call is dropped with it. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }
 
 /**

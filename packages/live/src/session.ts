@@ -46,7 +46,7 @@ export const LIVE_DELEGATION_TYPE = "client";
 export interface LiveSessionOptions {
   scene: LiveScene;
   /** The model, where a deployment pins one; `LIVE_DEFAULTS.MODEL` otherwise. */
-  model?: string;
+  model?: string | undefined;
   /** Chosen at creation and immutable after startup. */
   voice?: LiveVoice;
   /** The startup history; `conversationSeedItems` bounds it. */

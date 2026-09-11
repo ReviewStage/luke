@@ -36,8 +36,8 @@ export function readApiKeyFor(
 
 export interface ProviderPassSeams {
   /** Injected in tests; production uses the global fetch. */
-  fetch?: CloudFetch;
-  now?: () => number;
+  fetch?: CloudFetch | undefined;
+  now?: (() => number) | undefined;
 }
 
 /** What one provider's leg of a fan-out answered, or nothing where it failed. */

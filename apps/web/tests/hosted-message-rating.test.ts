@@ -17,11 +17,12 @@ function rawRequest(
   const messageId = init.messageId ?? MESSAGE_ID;
   const url = new URL("https://luke.test/api/conversation/messages/rating.ts");
   if (messageId !== "") url.searchParams.set("id", messageId);
-  return new Request(url, {
+  const requestInit: RequestInit = {
     method: init.method ?? "PUT",
     headers: { authorization: "Bearer token-1", "content-type": "application/json" },
-    body: text,
-  });
+  };
+  if (text !== undefined) requestInit.body = text;
+  return new Request(url, requestInit);
 }
 
 function ratingRequest(
