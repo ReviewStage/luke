@@ -32,6 +32,7 @@ required_files=(
     scripts/release-macos.sh
     scripts/verify.sh
     docs/DESIGN.md
+    docs/adr/0001-effect.md
     apps/desktop/src/renderer/AGENTS.md
     apps/desktop/src/renderer/CLAUDE.md
     packages/AGENTS.md
@@ -490,6 +491,35 @@ literal_effect_versions=$(grep -RnE '"effect": *"[^c]' --include=package.json \
 if [[ -n "$literal_effect_versions" ]]; then
     printf 'error: "effect" must be declared as "catalog:", never a literal version:\n%s\n' \
         "$literal_effect_versions" >&2
+    exit 1
+fi
+
+# `Admitted` is a nominal brand behind a module-private `unique symbol`, and the
+# whole point is that the set is entered in one place. The type system already
+# refuses an object literal, but a cast spells the brand out and would enter the
+# set from anywhere it is written, so the cast lives in the two wire modules that
+# define and re-shape the brand and in `admit()`, the one minter. An Effect
+# `Schema.brand` would be a third way in, which is why admission is not one.
+admitted_casts=$(grep -rEn --include='*.ts' --include='*.tsx' 'as Admitted\b' \
+    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
+    grep -vE '/(packages/actions/src/admit\.ts|packages/wire/src/admitted\.ts|packages/wire/src/testing/admitted[^/]*\.ts):' || true)
+if [[ -n "$admitted_casts" ]]; then
+    printf 'error: the Admitted brand is cast only in admit() and wire'"'"'s admitted modules — reshapeAdmitted() is how everything else re-shapes what admission already minted:\n%s\n' \
+        "$admitted_casts" >&2
+    exit 1
+fi
+
+# `@effect/platform-node` and `@effect/sql*` reach `node:` modules, so an import
+# of either compiles and bundles happily and then fails where there is no Node:
+# in the sandboxed renderer, and in a web function whose builder ships only what
+# it could follow. The renderer's `node:` grep above catches the direct reach;
+# this catches the Effect layer that would carry it in behind a bare specifier.
+node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
+    '"@effect/(platform-node|sql)' \
+    "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" "$SIDECAR_REPO_ROOT/apps/web/api" || true)
+if [[ -n "$node_reaching_effect" ]]; then
+    printf 'error: @effect/platform-node and @effect/sql* reach node: modules and must not be imported by the renderer or a web function — put the layer behind the runtime edge that builds it:\n%s\n' \
+        "$node_reaching_effect" >&2
     exit 1
 fi
 
