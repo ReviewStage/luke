@@ -10,7 +10,7 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test": "tsx --test 'src/**/*.test.ts'",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -20,7 +20,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
-    "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

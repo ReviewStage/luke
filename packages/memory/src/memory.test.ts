@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import { chunkMarkdown } from "./chunking.js";
 import { MEMORY_ORIGIN, MEMORY_SOURCE, type MemoryProvenance } from "./contracts.js";
 import { MEMORY_QUERY_MAXIMUM_CHARS, MEMORY_SEARCH_DEFAULTS } from "./defaults.js";

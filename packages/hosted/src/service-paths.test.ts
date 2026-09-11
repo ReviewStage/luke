@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "./service-paths.js";
 
 test("the introduction mint has its own path beside the ordinary one", () => {

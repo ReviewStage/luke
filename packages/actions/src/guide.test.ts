@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
@@ -21,6 +20,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   ACTION_FAMILY,
   ACTION_TOOL,

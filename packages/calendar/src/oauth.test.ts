@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   exchangeGoogleCode,
   GOOGLE_AUTHORIZATION_URL,

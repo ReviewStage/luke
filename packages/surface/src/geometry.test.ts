@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CAPSULE_SIDE_WIDTH,
   PANEL_FORM_FACTOR,
@@ -11,6 +10,7 @@ import {
   VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
+import { test } from "vitest";
 import { BUBBLE_LIFT } from "./generated/motion-tokens.js";
 import { SIMULATED_HOUSING_WIDTH, SURFACE_MARGIN } from "./geometry.js";
 

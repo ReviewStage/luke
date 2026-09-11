@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
@@ -11,6 +10,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import { ACTION_KIND } from "./action-kinds.js";
 import { actionNarration, sessionActionConversationEntry } from "./action-narration.js";
 import { ACTION_TOOL, actionToolDefinitions, remoteRealtimeToolDefinitions } from "./actions.js";

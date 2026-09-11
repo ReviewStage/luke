@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { parseReleaseVersion } from "./release-version.js";
 
 test("release versions parse with or without the tag convention's v", () => {

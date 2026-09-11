@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
+import { test } from "vitest";
 import { HostedVaultClient } from "./vault-client.js";
 
 const LIST_ANSWER = {

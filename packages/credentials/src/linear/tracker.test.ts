@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_RESULT_STATUS, ISSUE_ACTION_KIND } from "@sidecar/session";
 import { UNSUPPORTED_BY_OBSERVATION } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
@@ -9,6 +8,7 @@ import {
   type RecordedRequest,
   recordingFetch,
 } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import { LinearIssueTracker } from "./tracker.js";
 
 const OBSERVED_AT = 1_800_000_000_000;

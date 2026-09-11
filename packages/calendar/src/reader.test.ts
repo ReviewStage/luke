@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import { type CalendarAccountCredential, GoogleCalendarReader } from "./reader.js";
 
 const NOW = Date.UTC(2026, 7, 17, 12, 0, 0);

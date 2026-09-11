@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import { HOSTED_ACTION_FAILURE, HostedActionClient } from "./action-client.js";
 
 const TARGET = {

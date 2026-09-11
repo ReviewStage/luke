@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { HostedDeviceClient } from "./device-client.js";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "./device-wire.js";
 

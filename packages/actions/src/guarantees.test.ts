@@ -5,7 +5,6 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
@@ -21,6 +20,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { ACTION_KIND, type ActionKind } from "./action-kinds.js";
 import {
   ACTION_REFUSAL,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { JsonObject } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   FEEDBACK_KIND,
   FEEDBACK_LIFECYCLE_EVENT,

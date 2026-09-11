@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import { hostedActionAnswerSchema, hostedActionWorkspaceAnswerSchema } from "./action-wire.js";
 
 test("an action answer names one of the three outcomes and carries its reason as written", () => {

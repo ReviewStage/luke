@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { MESSAGE_RATING, SCHEMA_REFUSAL, unparsedWire } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   hostedMessageRatingAnswerSchema,
   hostedMessageRatingRequestSchema,

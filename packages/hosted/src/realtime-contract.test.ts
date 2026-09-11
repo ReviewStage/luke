@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import { realtimeCredentialFromResponse, realtimeCredentialIsUsable } from "./realtime-contract.js";
 
 const EXPIRES_AT_SECONDS = 1_800_000_060;

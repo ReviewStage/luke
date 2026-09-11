@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { JsonObject } from "@sidecar/wire/testing";
 import {
   HTTP_STATUS,
@@ -7,6 +6,7 @@ import {
   type RecordedRequest,
   recordingFetch,
 } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   exchangeLinearCode,
   LINEAR_AUTHORIZATION_URL,

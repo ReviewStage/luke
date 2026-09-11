@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   CLOUD_AGENT_PROVIDER_ID,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
 } from "@sidecar/session";
+import { test } from "vitest";
 import type { ObservedSession } from "./observe-wire.js";
 import { HostedRosterClient, snapshotRoster } from "./roster-client.js";
 

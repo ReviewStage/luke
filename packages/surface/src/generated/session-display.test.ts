@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { SESSION_URGENCY } from "@sidecar/session";
 import { compareSessionsByUrgency, MOTION_DURATION_MS } from "@sidecar/surface";
+import { test } from "vitest";
 import { URGENCY_LABEL, URGENCY_PRIORITY } from "./session-display.js";
 
 test("every display urgency has a label, and the priority list is a permutation of them", () => {

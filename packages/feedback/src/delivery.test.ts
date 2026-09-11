@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { FeedbackDelivery } from "./delivery.js";
 import { FEEDBACK_KIND, type FeedbackSubmission } from "./submission.js";
 
