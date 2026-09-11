@@ -23,7 +23,8 @@
               "spoken",
               "roster_diff",
               "hold_release",
-              "child"
+              "child",
+              "child_completion"
             ]
           },
           "status": {

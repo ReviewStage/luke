@@ -13,7 +13,16 @@ export const TURN_ORIGIN = {
   SPOKEN: "spoken",
   ROSTER_DIFF: "roster_diff",
   HOLD_RELEASE: "hold_release",
+  /** A child run's own turn, opened by the task it was delegated. */
   CHILD: "child",
+  /**
+   * The requester's turn, opened because a child it delegated to finished.
+   * Kept apart from `child` because the two record different judgments: the
+   * child's turn is the child's, this one is the parent's, and a reader
+   * tracing why Luke spoke should not have to infer which from the
+   * conversation's kind.
+   */
+  CHILD_COMPLETION: "child_completion",
 } as const;
 
 export type TurnOrigin = (typeof TURN_ORIGIN)[keyof typeof TURN_ORIGIN];

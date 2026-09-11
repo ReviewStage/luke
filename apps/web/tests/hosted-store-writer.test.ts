@@ -511,6 +511,36 @@ test("a child turn on a child conversation is a child-origin turn opened by the 
   assert.deepEqual([turn?.origin, turn?.status], [TURN_ORIGIN.CHILD, TURN_STATUS.SETTLED]);
 });
 
+test("a child's completion opens a turn of the requester's own, written with the child_completion origin rather than folded onto child", async () => {
+  const target = await conversation();
+  const stream = new Stream();
+  const replyParts: UIMessage["parts"] = [
+    {
+      type: UI_PART_TYPE.TEXT,
+      text: "The child finished; two files changed.",
+      state: UI_PART_STATE.DONE,
+    },
+  ];
+  const results = await feed(target, [
+    stream.started(BRAIN_TURN_ORIGIN.CHILD_COMPLETION, BRAIN_TURN_TRIGGER.CHILD_COMPLETION),
+    stream.words(randomUUID(), "[child completion] Summarize the change: done.", {
+      author: MESSAGE_AUTHOR.BRAIN,
+      source: OBSERVATION_SOURCE.CHILD_COMPLETION,
+    }),
+    stream.answered(randomUUID(), replyParts),
+    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
+  ]);
+  assert.equal(
+    results.every((result) => result.ok),
+    true,
+  );
+  const turn = await storedTurn(stream.turnId);
+  assert.deepEqual(
+    [turn?.origin, turn?.status],
+    [TURN_ORIGIN.CHILD_COMPLETION, TURN_STATUS.SETTLED],
+  );
+});
+
 test("a writer killed after the calls were told leaves a resumable journal: one call answered, one still pending, the row open", async () => {
   const target = await conversation();
   const stream = new Stream();
