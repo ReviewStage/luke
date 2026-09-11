@@ -54,6 +54,13 @@ final class ProductEventsTests: XCTestCase {
         )
         XCTAssertEqual(ProductEvent.settingsReset.name, "settings:reset")
         XCTAssertTrue(ProductEvent.settingsReset.wireProperties(appVersion: "0.1.1").isEmpty)
+
+        let rated = ProductEvent.conversationRated(rating: .down, kind: .announcement)
+        XCTAssertEqual(rated.name, "conversation:rated")
+        XCTAssertEqual(
+            rated.wireProperties(appVersion: "0.1.1") as? [String: String],
+            ["rating": "down", "message_kind": "announcement"]
+        )
     }
 
     /// A roster row's provider id reaches a count only through this set, so

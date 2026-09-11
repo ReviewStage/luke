@@ -18,26 +18,49 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertEqual(rows.judgment, .ask)
         XCTAssertFalse(rows.pending)
         XCTAssertEqual(rows.rows.count, 3)
-        guard case .words(_, let speaker, let text, _, let unspoken) = rows.rows[0] else { return XCTFail("the ask") }
+        guard case .words(_, let speaker, let text, _, let unspoken, let rateable) = rows.rows[0] else {
+            return XCTFail("the ask")
+        }
         XCTAssertEqual(speaker, .you)
         XCTAssertEqual(text, "Tell the fixture session to run the tests.")
         XCTAssertFalse(unspoken)
+        XCTAssertNil(rateable)
         guard case .action(_, let action, _) = rows.rows[1] else { return XCTFail("the action") }
         XCTAssertEqual(action.kind, .message)
         XCTAssertEqual(action.outcome, .accepted)
-        guard case .words(_, let replySpeaker, let reply, _, _) = rows.rows[2] else { return XCTFail("the reply") }
+        guard case .words(_, let replySpeaker, let reply, _, _, let replyRateable) = rows.rows[2] else {
+            return XCTFail("the reply")
+        }
         XCTAssertEqual(replySpeaker, .luke)
         XCTAssertEqual(reply, "Sent.")
+        XCTAssertEqual(
+            replyRateable,
+            RateableMessage(
+                messageId: "2b000000-0000-4000-8000-000000000012",
+                conversationId: "3c000000-0000-4000-8000-000000000001",
+                kind: .reply
+            )
+        )
     }
 
     func testARosterDiffTurnIsLukesOwnAndItsBriefingIsHisWords() throws {
         let rows = ConversationTurnRows(group: try fixtureGroups()[1], roster: [])
         XCTAssertEqual(rows.judgment, .own)
         XCTAssertEqual(rows.rows.count, 1)
-        guard case .words(_, let speaker, let text, _, let unspoken) = rows.rows[0] else { return XCTFail("the briefing") }
+        guard case .words(_, let speaker, let text, _, let unspoken, let rateable) = rows.rows[0] else {
+            return XCTFail("the briefing")
+        }
         XCTAssertEqual(speaker, .luke)
         XCTAssertEqual(text, "The fixture session is waiting on a permission prompt.")
         XCTAssertFalse(unspoken)
+        XCTAssertEqual(
+            rateable,
+            RateableMessage(
+                messageId: "2b000000-0000-4000-8000-000000000032",
+                conversationId: "3c000000-0000-4000-8000-000000000002",
+                kind: .announcement
+            )
+        )
     }
 
     func testAnUnspokenBriefingCarriesItsMark() throws {
@@ -53,7 +76,7 @@ final class ConversationTurnRowsTests: XCTestCase {
                 ),
             ]
         )
-        guard case .words(_, _, _, _, let unspoken) = ConversationTurnRows(group: marked, roster: []).rows[0] else {
+        guard case .words(_, _, _, _, let unspoken, _) = ConversationTurnRows(group: marked, roster: []).rows[0] else {
             return XCTFail("the briefing")
         }
         XCTAssertTrue(unspoken)
@@ -102,8 +125,10 @@ final class ConversationTurnRowsTests: XCTestCase {
         guard case .reasoning = rows.rows[0] else { return XCTFail("the thought") }
         guard case .actionsFold(_, let folded, _) = rows.rows[1] else { return XCTFail("the fold") }
         XCTAssertEqual(folded.map(\.outcome), [.accepted, .unknown])
-        guard case .words(_, let speaker, _, _, _) = rows.rows[2] else { return XCTFail("Luke's words") }
+        guard case .words(_, let speaker, _, _, _, let rateable) = rows.rows[2] else { return XCTFail("Luke's words") }
         XCTAssertEqual(speaker, .own)
+        XCTAssertEqual(rateable?.kind, .reply)
+        XCTAssertEqual(rateable?.messageId, "2b000000-0000-4000-8000-000000000042")
         guard case .details(_, let items) = rows.rows[3] else { return XCTFail("the details") }
         XCTAssertEqual(items.count, 1)
         guard case .refusedAction(let toolCallId, let refused) = items[0] else { return XCTFail("the refusal") }
@@ -163,7 +188,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         )
         let rows = ConversationTurnRows(group: group, roster: [])
         XCTAssertEqual(rows.rows.count, 2)
-        guard case .words(_, let speaker, _, _, _) = rows.rows[0] else { return XCTFail("the words") }
+        guard case .words(_, let speaker, _, _, _, _) = rows.rows[0] else { return XCTFail("the words") }
         XCTAssertEqual(speaker, .luke)
         guard case .details(_, let items) = rows.rows[1] else { return XCTFail("the details") }
         XCTAssertEqual(items, [.tool(read), .tool(remember)])
@@ -175,9 +200,28 @@ final class ConversationTurnRowsTests: XCTestCase {
             turnId: "t", conversationId: "c", source: .main, turn: nil,
             messages: [ConversationReadMessage(message: note, seq: 1, createdAt: Date(timeIntervalSince1970: 1), tools: [])]
         )
-        guard case .words(_, let speaker, _, _, _) = ConversationTurnRows(group: group, roster: []).rows[0] else {
+        guard case .words(_, let speaker, _, _, _, let rateable) = ConversationTurnRows(group: group, roster: []).rows[0] else {
             return XCTFail("the note")
         }
         XCTAssertEqual(speaker, .note)
+        XCTAssertNil(rateable)
+    }
+
+    func testOneMessageTakesOneControlOnItsLastWords() {
+        let reply = UIMessage(
+            id: "m", attribution: .assistant(AssistantMessageMetadata(author: .brain)),
+            parts: [.text("First."), .reasoning("Then."), .text("Second.")]
+        )
+        let group = ConversationReadTurnGroup(
+            turnId: "t", conversationId: "c", source: .main, turn: nil,
+            messages: [ConversationReadMessage(message: reply, seq: 1, createdAt: Date(timeIntervalSince1970: 1), tools: [])]
+        )
+        let rows = ConversationTurnRows(group: group, roster: []).rows
+        XCTAssertEqual(rows.count, 3)
+        guard case .words(_, _, _, _, _, let first) = rows[0], case .words(_, _, _, _, _, let last) = rows[2] else {
+            return XCTFail("two rows of words")
+        }
+        XCTAssertNil(first)
+        XCTAssertEqual(last, RateableMessage(messageId: "m", conversationId: "c", kind: .reply))
     }
 }

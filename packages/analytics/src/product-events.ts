@@ -7,7 +7,14 @@ import {
   PROVIDER_ID_LIST,
   type ProviderId,
 } from "@sidecar/session";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  MESSAGE_RATING,
+  type MessageRating,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
@@ -57,6 +64,7 @@ export const PRODUCT_EVENT = {
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
   VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   SETTING_UPDATE: "setting:update",
+  CONVERSATION_RATED: "conversation:rated",
 } as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT];
@@ -117,6 +125,8 @@ export const PRODUCT_EVENT_PROPERTY = {
   SIGN_IN_AGE: "sign_in_age",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
+  RATING: "rating",
+  MESSAGE_KIND: "message_kind",
 } as const;
 
 export type ProductEventProperty =
@@ -325,6 +335,21 @@ export type ProductSettingValue =
   (typeof PRODUCT_SETTING_VALUE)[keyof typeof PRODUCT_SETTING_VALUE];
 
 /**
+ * Which kind of Luke's messages a rating landed on, never the message: a
+ * reply to the developer, or a briefing he announced on his own. The verdict
+ * itself travels as `MESSAGE_RATING`, the stored event's own two words; the
+ * note a developer may leave with a rating is their free text and travels in
+ * the rating request alone, never here, and no message id travels either.
+ */
+export const PRODUCT_RATED_MESSAGE_KIND = {
+  REPLY: "reply",
+  ANNOUNCEMENT: "announcement",
+} as const;
+
+export type ProductRatedMessageKind =
+  (typeof PRODUCT_RATED_MESSAGE_KIND)[keyof typeof PRODUCT_RATED_MESSAGE_KIND];
+
+/**
  * How long after the account's first sign-in the first announcement was
  * spoken, as a rung rather than a duration for the reason counts travel as
  * buckets: an exact elapsed time is a fingerprint, where a rung answers the
@@ -414,6 +439,8 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
+  [PRODUCT_EVENT_PROPERTY.RATING]: MessageRating;
+  [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: ProductRatedMessageKind;
 }
 
 /**
@@ -451,6 +478,8 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
+  [PRODUCT_EVENT_PROPERTY.RATING]: Object.values(MESSAGE_RATING),
+  [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: Object.values(PRODUCT_RATED_MESSAGE_KIND),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
 
 /**
@@ -505,6 +534,10 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
+  ],
+  [PRODUCT_EVENT.CONVERSATION_RATED]: [
+    PRODUCT_EVENT_PROPERTY.RATING,
+    PRODUCT_EVENT_PROPERTY.MESSAGE_KIND,
   ],
 } as const satisfies { [Name in ProductEventName]: readonly ProductEventProperty[] };
 

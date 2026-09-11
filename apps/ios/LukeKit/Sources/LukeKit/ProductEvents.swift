@@ -60,6 +60,14 @@ public enum ProductSettingValue: String, Sendable {
     case cleared
 }
 
+/// Which kind of Luke's messages a rating landed on, never the message —
+/// `PRODUCT_RATED_MESSAGE_KIND`: a reply to the developer, or a briefing he
+/// announced on his own.
+public enum ProductRatedMessageKind: String, Sendable {
+    case reply
+    case announcement
+}
+
 /// The rungs every count travels on. A raw count is a weak fingerprint —
 /// "137 Codex sessions" identifies a device across days — where a rung says
 /// the same thing about adoption and says it about a crowd rather than a
@@ -92,6 +100,8 @@ public enum ProductEvent: Equatable, Sendable {
     case sessionActionSend(provider: ProductProviderID, action: ProductSessionAction)
     case settingUpdate(setting: ProductSettingID, value: ProductSettingValue)
     case settingsReset
+    /// A thumb on one of Luke's messages: the verdict and the message's kind, never its id or a note.
+    case conversationRated(rating: MessageRating, kind: ProductRatedMessageKind)
 
     public var name: String {
         switch self {
@@ -103,6 +113,7 @@ public enum ProductEvent: Equatable, Sendable {
         case .sessionActionSend: "session:action_send"
         case .settingUpdate: "setting:update"
         case .settingsReset: "settings:reset"
+        case .conversationRated: "conversation:rated"
         }
     }
 
@@ -115,6 +126,8 @@ public enum ProductEvent: Equatable, Sendable {
         static let sessionAction = "session_action"
         static let settingID = "setting_id"
         static let settingValue = "setting_value"
+        static let rating = "rating"
+        static let messageKind = "message_kind"
     }
 
     /// The properties the event's allowlist row names, in the wire's shape.
@@ -134,6 +147,8 @@ public enum ProductEvent: Equatable, Sendable {
             [Property.settingID: setting.rawValue, Property.settingValue: value.rawValue]
         case .settingsReset:
             [:]
+        case .conversationRated(let rating, let kind):
+            [Property.rating: rating.rawValue, Property.messageKind: kind.rawValue]
         }
     }
 }

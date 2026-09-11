@@ -10,8 +10,12 @@ import SwiftUI
 /// on this phone from the call's arguments and its envelope, the session it
 /// reached a chip that opens that session's screen while the roster still
 /// holds it; a turn Luke opened himself leads with his face and never wears
-/// a reply's bubble. The screen polls the change signal while it stands in
-/// the foreground and draws only what it holds in memory.
+/// a reply's bubble. Under each of Luke's messages stand two thumbs, the one
+/// write this screen makes: a verdict on that message, sent to the service
+/// under the account's fence and drawn back from the latest rating event,
+/// so a verdict given on the Mac shows here and one given here shows there.
+/// The screen polls the change signal while it stands in the foreground and
+/// draws only what it holds in memory.
 ///
 /// Every row here is masked from the session recording — the whole scroll
 /// carries the recording library's mask, the way the desktop blocks its
@@ -22,6 +26,7 @@ struct ConversationView: View {
 
     @Environment(AccountSession.self) private var account
     @Environment(SessionsStore.self) private var store
+    @Environment(ProductEventSender.self) private var events
     @Environment(\.scenePhase) private var scenePhase
     /// The reader's presses on each turn's actions fold, by turn id.
     @State private var foldChoices: [String: ConversationFoldChoice] = [:]
@@ -66,7 +71,10 @@ struct ConversationView: View {
                                 judgment: turn.judgment,
                                 pending: turn.pending,
                                 foldChoice: foldBinding(turn.turnId),
-                                openSession: { session in store.openLeavingConversation(session) }
+                                openSession: { session in store.openLeavingConversation(session) },
+                                ratings: conversation.ratings,
+                                canRate: conversation.canRate,
+                                rate: rate
                             )
                         }
                     }
@@ -109,6 +117,16 @@ struct ConversationView: View {
         }
     }
 
+    /// The developer's thumb on one of Luke's messages: written to the
+    /// service, and counted as the verdict and the message's kind alone once
+    /// the service has recorded it.
+    private func rate(_ message: RateableMessage, _ rating: MessageRating) {
+        Task {
+            guard await conversation.rate(message, rating, account: account) else { return }
+            events.record(.conversationRated(rating: rating, kind: message.kind))
+        }
+    }
+
     private func foldBinding(_ turnId: String) -> Binding<ConversationFoldChoice?> {
         Binding(
             get: { foldChoices[turnId] },
@@ -118,7 +136,7 @@ struct ConversationView: View {
 
     private static func instant(_ row: ConversationRow) -> Date? {
         switch row {
-        case .words(_, _, _, let at, _), .action(_, _, let at), .actionsFold(_, _, let at): at
+        case .words(_, _, _, let at, _, _), .action(_, _, let at), .actionsFold(_, _, let at): at
         case .reasoning, .details: nil
         }
     }
@@ -168,11 +186,23 @@ private struct ConversationRowView: View {
     let pending: Bool
     @Binding var foldChoice: ConversationFoldChoice?
     let openSession: (RosterSession) -> Void
+    let ratings: [String: MessageRating]
+    let canRate: Bool
+    let rate: (RateableMessage, MessageRating) -> Void
 
     var body: some View {
         switch row {
-        case .words(_, let speaker, let text, _, let unspoken):
-            wordsRow(speaker: speaker, text: text, unspoken: unspoken)
+        case .words(_, let speaker, let text, _, let unspoken, let rateable):
+            VStack(alignment: .leading, spacing: 4) {
+                wordsRow(speaker: speaker, text: text, unspoken: unspoken)
+                if let rateable {
+                    RatingControl(
+                        rating: ratings[rateable.messageId],
+                        enabled: canRate,
+                        rate: { rate(rateable, $0) }
+                    )
+                }
+            }
         case .reasoning(_, let text):
             ReasoningRow(text: text)
         case .action(_, let toolRow, _):
@@ -219,6 +249,41 @@ private struct ConversationRowView: View {
         }
     }
 
+}
+
+/// Two thumbs under one of Luke's messages, the way a chat rates a reply:
+/// the one pressed is filled, a press on the other moves the verdict, and a
+/// press on the filled one sends the same verdict again, since a rating is a
+/// fact stated and never an edit. Each thumb keeps a 44pt target.
+private struct RatingControl: View {
+    let rating: MessageRating?
+    let enabled: Bool
+    let rate: (MessageRating) -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            thumb(.up, symbol: "hand.thumbsup", label: "Thumbs up")
+            thumb(.down, symbol: "hand.thumbsdown", label: "Thumbs down")
+        }
+        .padding(.leading, 8)
+        .disabled(!enabled)
+    }
+
+    private func thumb(_ verdict: MessageRating, symbol: String, label: String) -> some View {
+        let chosen = rating == verdict
+        return Button {
+            rate(verdict)
+        } label: {
+            Image(systemName: chosen ? "\(symbol).fill" : symbol)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(chosen ? Color.ink : Color.inkTertiary)
+                .frame(width: 44, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(chosen ? .isSelected : [])
+    }
 }
 
 /// Luke's own judgment leads with his face, in the quiet voice, and never

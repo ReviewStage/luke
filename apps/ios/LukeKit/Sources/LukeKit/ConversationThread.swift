@@ -6,8 +6,10 @@ import Foundation
 /// answered on every read until it is finished — replaces the copy held
 /// rather than standing beside it; the rows of a conversation an answer no
 /// longer lists are dropped, which is how a Clear reaches a screen that drew
-/// them; a turn is replaced by id as its stamps move; and the latest speech
-/// event on an announcement decides whether it reads as unspoken. The three
+/// them; a turn is replaced by id as its stamps move; the latest speech
+/// event on an announcement decides whether it reads as unspoken; and the
+/// latest rating event on a message is the verdict its control shows, since
+/// a second rating is a second event and never an edit. The three
 /// cursors are the strings the service minted, echoed back on the next read
 /// and never composed here. Every device that reads to the end holds the same
 /// rows in the same order, because the order is the view's own: a group's
@@ -20,6 +22,14 @@ public struct ConversationThread: Equatable, Sendable {
 
     private var groups: [String: Group] = [:]
     private var latestSpeech: [String: SpeechMark] = [:]
+    private var latestRating: [String: RatingMark] = [:]
+    /// Whether the events read has reached the end of the record once. The
+    /// messages answer already folds every speech event up to the moment it
+    /// was read, so while the events are still being replayed from their
+    /// beginning the marks held here are older than that fold and stand
+    /// behind it; once the replay has caught up they carry everything the
+    /// fold did and whatever came after, and only then do they amend it.
+    private var eventsCaughtUp = false
 
     private struct Group: Equatable, Sendable {
         let turnId: String
@@ -34,6 +44,15 @@ public struct ConversationThread: Equatable, Sendable {
         let seq: Int
         let kind: ConversationEventKind
     }
+
+    /// The latest rating a message has, by the same sequence; a payload the wire does not spell a verdict in marks nothing.
+    private struct RatingMark: Equatable, Sendable {
+        let seq: Int
+        let rating: MessageRating
+    }
+
+    /// The key a rating event's verdict travels under in its payload — `RATING_EVENT_PAYLOAD_FIELDS`.
+    private static let ratingPayloadKey = "rating"
 
     public init() {}
 
@@ -61,6 +80,7 @@ public struct ConversationThread: Equatable, Sendable {
         }
         let held = Set(groups.values.flatMap { $0.messages.values.map(\.message.id) })
         latestSpeech = latestSpeech.filter { held.contains($0.key) }
+        latestRating = latestRating.filter { held.contains($0.key) }
         messagesCursor = answer.next
     }
 
@@ -72,26 +92,52 @@ public struct ConversationThread: Equatable, Sendable {
     }
 
     public mutating func apply(_ answer: ConversationEventsAnswer) {
-        for event in answer.events where event.kind.isSpeech {
+        for event in answer.events { record(event) }
+        eventsCursor = answer.next
+        if !answer.hasMore { eventsCaughtUp = true }
+    }
+
+    /// Takes one event as the latest word about its message where it is
+    /// newer than the one held: a speech event moves the announcement's mark,
+    /// a rating event the message's verdict. The events read hands every
+    /// event here, and a rating this device just wrote arrives the same way,
+    /// from the answer that recorded it, so the control shows the verdict
+    /// before the next poll reads it back.
+    public mutating func record(_ event: ConversationReadEvent) {
+        if event.kind.isSpeech {
             let standing = latestSpeech[event.messageId]
             if standing == nil || standing!.seq < event.seq {
                 latestSpeech[event.messageId] = SpeechMark(seq: event.seq, kind: event.kind)
             }
+            return
         }
-        eventsCursor = answer.next
+        guard let rating = event.payload?[Self.ratingPayloadKey]?.stringValue.flatMap(MessageRating.init(rawValue:)) else {
+            return
+        }
+        let standing = latestRating[event.messageId]
+        if standing == nil || standing!.seq < event.seq {
+            latestRating[event.messageId] = RatingMark(seq: event.seq, rating: rating)
+        }
     }
 
-    /// Takes the change signal's heads for the turns and events, for a
-    /// device that has read nothing yet: the messages read that follows folds
-    /// every event and turn up to the moment it runs, so those two start from
-    /// where they stand rather than from the beginning of the record. A
-    /// device already holding messages adopts nothing — a mark or a stamp
-    /// that moved since its last read is only found by reading — and a
-    /// resource already read keeps its own cursor.
+    /// The developer's latest verdict on each message the thread holds.
+    public var ratings: [String: MessageRating] {
+        latestRating.mapValues(\.rating)
+    }
+
+    /// Takes the change signal's head for the turns, for a device that has
+    /// read nothing yet: the messages read that follows carries every turn
+    /// row as it then stands, so the turns start from where they are rather
+    /// than from the beginning of the record. The events are never seeded:
+    /// the messages read folds a briefing's speech marks but not the ratings,
+    /// which only the events themselves carry, so a device reads them from
+    /// the beginning once and behind its cursor after. A device already
+    /// holding messages adopts nothing — a stamp that moved since its last
+    /// read is only found by reading — and a resource already read keeps its
+    /// own cursor.
     public mutating func adoptHeads(from changes: ChangesAnswer) {
-        guard messagesCursor == nil else { return }
-        if eventsCursor == nil { eventsCursor = changes.events }
-        if turnsCursor == nil, let turns = changes.turns { turnsCursor = turns }
+        guard messagesCursor == nil, turnsCursor == nil, let turns = changes.turns else { return }
+        turnsCursor = turns
     }
 
     /// The turn groups in the view's order, each message's tool decisions
@@ -123,7 +169,7 @@ public struct ConversationThread: Equatable, Sendable {
     }
 
     private func amended(_ message: ConversationReadMessage) -> ConversationReadMessage {
-        guard let mark = latestSpeech[message.message.id] else { return message }
+        guard eventsCaughtUp, let mark = latestSpeech[message.message.id] else { return message }
         let tools = message.tools.map { tool -> ConversationViewToolPart in
             if case .announce(let identity, _) = tool {
                 return .announce(identity, unspoken: mark.kind == .speechExpired)

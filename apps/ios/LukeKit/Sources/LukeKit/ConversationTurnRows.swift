@@ -39,10 +39,32 @@ public enum ConversationDetail: Equatable, Sendable, Identifiable {
     }
 }
 
+/// One of Luke's messages as a rating names it: the row the service takes a
+/// verdict on, the conversation it stands in, and which kind of message it
+/// is to the count. Only an assistant message is one — a message Luke said
+/// to the developer, a reply or a briefing — which is exactly the set the
+/// service accepts a rating for; the developer's own ask and the brain's note
+/// to itself carry none, so no control is drawn where the service would
+/// refuse it. A compaction summary is Luke's too but never enters the view.
+public struct RateableMessage: Equatable, Sendable {
+    public let messageId: String
+    public let conversationId: String
+    public let kind: ProductRatedMessageKind
+}
+
 /// One row of a turn as the screen draws it.
 public enum ConversationRow: Equatable, Sendable, Identifiable {
-    /// A text part, or an announcement's words; `unspoken` marks a briefing nobody heard.
-    case words(id: String, speaker: ConversationSpeaker, text: String, at: Date, unspoken: Bool)
+    /// A text part, or an announcement's words; `unspoken` marks a briefing
+    /// nobody heard, and `rateable` names the message a thumb would rate on
+    /// the message's last words, so one message takes one control.
+    case words(
+        id: String,
+        speaker: ConversationSpeaker,
+        text: String,
+        at: Date,
+        unspoken: Bool,
+        rateable: RateableMessage?
+    )
     /// Luke's thought before what followed it, folded to a line that opens on its words.
     case reasoning(id: String, text: String)
     /// One action, standing as a row of its own.
@@ -54,7 +76,7 @@ public enum ConversationRow: Equatable, Sendable, Identifiable {
 
     public var id: String {
         switch self {
-        case .words(let id, _, _, _, _), .reasoning(let id, _), .action(let id, _, _),
+        case .words(let id, _, _, _, _, _), .reasoning(let id, _), .action(let id, _, _),
              .actionsFold(let id, _, _), .details(let id, _):
             id
         }
@@ -125,7 +147,10 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
         var drawn: [Drawn] = []
         var details: [ConversationDetail] = []
         for message in group.messages {
-            Self.draw(message, judgment: judgment, roster: roster, into: &drawn, details: &details)
+            Self.draw(
+                message, conversationId: group.conversationId, judgment: judgment, roster: roster,
+                into: &drawn, details: &details
+            )
         }
         var rows = Self.placeActions(drawn, turnId: group.turnId)
         if !details.isEmpty { rows.append(.details(id: "\(group.turnId):details", items: details)) }
@@ -141,6 +166,7 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
 
     private static func draw(
         _ view: ConversationReadMessage,
+        conversationId: String,
         judgment: ConversationJudgment,
         roster: [RosterSession],
         into drawn: inout [Drawn],
@@ -156,17 +182,28 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
                 return nil
             }.joined(separator: "\n\n")
             let speaker: ConversationSpeaker = metadata.author == .developer ? .you : .note
-            drawn.append(.row(.words(id: message.id, speaker: speaker, text: text, at: view.createdAt, unspoken: false)))
+            drawn.append(
+                .row(.words(id: message.id, speaker: speaker, text: text, at: view.createdAt, unspoken: false, rateable: nil))
+            )
         case .assistant:
             let described = Dictionary(
                 view.tools.map { ($0.identity.toolCallId, $0) }, uniquingKeysWith: { first, _ in first }
             )
+            let rateable = RateableMessage(
+                messageId: message.id,
+                conversationId: conversationId,
+                kind: view.tools.contains { $0.kind == .announce } ? .announcement : .reply
+            )
+            var lastWords: Int?
             for (index, part) in message.parts.enumerated() {
                 let id = "\(message.id):\(index)"
                 switch part {
                 case .text(let text):
                     let speaker: ConversationSpeaker = judgment == .own ? .own : .luke
-                    drawn.append(.row(.words(id: id, speaker: speaker, text: text, at: view.createdAt, unspoken: false)))
+                    drawn.append(
+                        .row(.words(id: id, speaker: speaker, text: text, at: view.createdAt, unspoken: false, rateable: nil))
+                    )
+                    lastWords = drawn.count - 1
                 case .reasoning(let text):
                     drawn.append(.row(.reasoning(id: id, text: text)))
                 case .stepStart, .other:
@@ -175,7 +212,10 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
                     switch described[tool.toolCallId] {
                     case .announce(_, let unspoken):
                         guard let words = tool.input?[briefingArgument]?.stringValue else { continue }
-                        drawn.append(.row(.words(id: id, speaker: .luke, text: words, at: view.createdAt, unspoken: unspoken)))
+                        drawn.append(
+                            .row(.words(id: id, speaker: .luke, text: words, at: view.createdAt, unspoken: unspoken, rateable: nil))
+                        )
+                        lastWords = drawn.count - 1
                     case .action(_, let outcome):
                         guard let row = ConversationToolRow(part: tool, roster: roster) else {
                             details.append(.tool(tool))
@@ -190,6 +230,11 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
                         details.append(.tool(tool))
                     }
                 }
+            }
+            if let lastWords, case .row(.words(let id, let speaker, let text, let at, let unspoken, _)) = drawn[lastWords] {
+                drawn[lastWords] = .row(
+                    .words(id: id, speaker: speaker, text: text, at: at, unspoken: unspoken, rateable: rateable)
+                )
             }
         }
     }
