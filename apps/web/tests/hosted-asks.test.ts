@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import * as SqlClient from "@effect/sql/SqlClient";
 import { ASK_ORIGIN } from "@sidecar/hosted";
-import { TURN_STATUS } from "@sidecar/wire";
+import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-schema";
-import { ASK_REFUSAL, acceptAsk, askStanding } from "../server/hosted/brain-ask";
+import { ASK_REFUSAL, acceptAsk, askStanding, stopAsk } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_CANCEL_OUTCOME,
@@ -259,6 +259,7 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
   await asks.cancelRequested(stamped.id, new Date(NOW));
 
   const stops: (readonly [string, string, string, string])[] = [];
+  let throwOnce = false;
   const writer = await storeWriter({
     run: database.run,
     tools: CATALOG_TOOL_SET,
@@ -268,6 +269,10 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
     writer,
     asks,
     stopTurn: async (stopped, session, eveTurnId, turnId) => {
+      if (throwOnce) {
+        throwOnce = false;
+        throw new Error("eve unreachable");
+      }
       stops.push([stopped.conversationId, session, eveTurnId, turnId]);
     },
     offer: async () => true,
@@ -294,6 +299,94 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
   assert.deepEqual(stops, [[conversationId, sessionId, "turn_2", hostTurnId(sessionId, "turn_2")]]);
   await relay.handle(start("turn_2", ["delivery-s"]), standing);
   assert.equal(stops.length, 1);
+
+  // A stop that throws leaves the start unrecorded, so the start eve emits again carries it.
+  const failing = await asks.record(write(userId, conversationId));
+  await asks.dispatchOnce(target, failing.id, async () => ({
+    sessionId,
+    deliveryId: "delivery-f",
+  }));
+  await asks.cancelRequested(failing.id, new Date(NOW));
+  throwOnce = true;
+  await assert.rejects(relay.handle(start("turn_3", ["delivery-f"]), standing));
+  assert.equal(stops.length, 1);
+  await relay.handle(start("turn_3", ["delivery-f"]), standing);
+  assert.deepEqual(stops[1], [
+    conversationId,
+    sessionId,
+    "turn_3",
+    hostTurnId(sessionId, "turn_3"),
+  ]);
+
+  // The ask that opened the session was bound to the first turn at its dispatch, with no delivery
+  // for a start to name; its Stop is carried by the start that names that turn all the same.
+  const opener = await asks.record(write(userId, conversationId));
+  const openingTurn = hostTurnId(sessionId, "turn_0");
+  await asks.dispatchOnce(target, opener.id, async () => ({ sessionId, turnId: openingTurn }));
+  await asks.cancelRequested(opener.id, new Date(NOW));
+  await relay.handle(start("turn_0", []), standing);
+  assert.deepEqual(stops[2], [conversationId, sessionId, "turn_0", openingTurn]);
+  assert.equal(stops.length, 3);
+  assert.deepEqual(
+    (await asks.stoppedOn(target, openingTurn)).map((row) => row.id),
+    [opener.id],
+  );
+});
+
+test("a Stop that stamps a waiting ask the start has bound meanwhile reads the binding and cancels the turn itself, so neither order leaves the turn running", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const target = { userId, conversationId };
+  const sessionId = `wrun_${randomUUID()}`;
+  await setConversationRuntimeSessionId(conversationId, sessionId);
+  const writer = await storeWriter({
+    run: database.run,
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  });
+  const turnId = hostTurnId(sessionId, "turn_9");
+  const waiting = await asks.record(write(userId, conversationId));
+  await asks.dispatchOnce(target, waiting.id, async () => ({
+    sessionId,
+    deliveryId: "delivery-w",
+  }));
+  const cancels: string[] = [];
+  const eve = {
+    ...eveAccepting(sessionId),
+    async cancel(session: string) {
+      cancels.push(session);
+      return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+    },
+  };
+  // The start lands between the Stop's read and its stamp: the turn row is written and the ask
+  // bound before the stamp, so the start read no stamp and carried nothing.
+  const bindingBeforeStamp = {
+    ...asks,
+    cancelRequested: async (id: string, at: Date) => {
+      assert.equal(
+        (await writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED })).ok,
+        true,
+      );
+      await asks.bindDeliveries(target, ["delivery-w"], turnId);
+      return asks.cancelRequested(id, at);
+    },
+  };
+  const outcome = await stopAsk(
+    {
+      store: database.store,
+      run: database.run,
+      asks: bindingBeforeStamp,
+      writer,
+      eve,
+      now: () => NOW,
+    },
+    userId,
+    waiting.id,
+  );
+  assert.equal(outcome.ok, true);
+  assert.deepEqual(cancels, [sessionId]);
+  const [turn] = await database.store.turns.named(userId, [turnId]);
+  assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
 });
 
 test("over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in", async () => {

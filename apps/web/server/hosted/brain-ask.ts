@@ -441,21 +441,37 @@ export async function stopAsk(seams: StopSeams, userId: string, id: string): Pro
   if (TERMINAL_TURN_STATUSES.has(standing.answer.status))
     return { ok: true, answer: standing.answer };
   const at = new Date(seams.now());
+  let turn: StoredTurnRecord;
   if (standing.turn === undefined) {
     await seams.asks.cancelRequested(standing.ask.id, at);
+    // The stamp and the start's binding are two writes with no lock between them, so the ask is
+    // read again once the stamp stands: a start that bound it meanwhile has read the row before
+    // the stamp and carries nothing, and the Stop is then eve's cancel of that turn from here. A
+    // start that binds it after this read finds the stamp and carries it. Either order stops the
+    // turn once; neither leaves a turn running that its client was told is stopped.
     const stampedAt = standing.ask.cancelRequestedAt ?? at;
-    return { ok: true, answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() } };
+    const stampedAnswer: StopOutcome = {
+      ok: true,
+      answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() },
+    };
+    const bound = await seams.asks.named(userId, standing.ask.id);
+    if (bound?.turnId === undefined) return stampedAnswer;
+    const [started] = await seams.store.turns.named(userId, [bound.turnId]);
+    if (started === undefined) return stampedAnswer;
+    turn = started;
+  } else {
+    turn = standing.turn;
   }
-  const target = { userId, conversationId: standing.turn.conversationId };
+  const target = { userId, conversationId: turn.conversationId };
   const sessionId = await seams.run(recordedRuntimeSession(target));
   if (sessionId === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_RUNNING };
   const cancelled = await seams.eve.cancel(sessionId);
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
     return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
   }
-  const stamped = await seams.writer.requestTurnCancel(target, { turnId: standing.turn.id, at });
+  const stamped = await seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
   if (!stamped.ok) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
-  const stampedAt = standing.turn.cancelRequestedAt ?? at;
+  const stampedAt = turn.cancelRequestedAt ?? at;
   return { ok: true, answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() } };
 }
 

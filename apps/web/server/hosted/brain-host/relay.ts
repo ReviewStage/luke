@@ -389,9 +389,15 @@ export class StreamRelay {
       }
       // eve folds the asks that waited into one turn and stamps their deliveries on its events,
       // so the start is where each ask learns the turn it ran in; a start emitted again names
-      // the same deliveries and binds nothing new.
-      const bound = await this.#seams.asks.bindDeliveries(standing.target, deliveryIds, turnId);
-      if (bound.some((ask) => ask.cancelRequestedAt !== undefined)) {
+      // the same deliveries and binds nothing new. The Stop is honoured over every ask bound to
+      // the turn, not only the rows this start bound: the ask that opened the session was bound
+      // at its dispatch with no delivery, and a follow-up's stamp may land after its binding.
+      // A stop that throws drops the turn from relay state with the rest of this block, so the
+      // start eve emits again reaches the stamp and carries it; a start that finds its turn under
+      // way never comes this far and carries nothing twice.
+      await this.#seams.asks.bindDeliveries(standing.target, deliveryIds, turnId);
+      const stopped = await this.#seams.asks.stoppedOn(standing.target, turnId);
+      if (stopped.length > 0) {
         await this.#seams.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
       }
       const written = await this.#tell(eveTurnId, standing, {

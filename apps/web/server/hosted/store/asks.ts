@@ -88,6 +88,12 @@ export interface AskDeliveryBinding {
     deliveryIds: readonly string[],
     turnId: string,
   ): Promise<readonly AskRow[]>;
+  /**
+   * The conversation's asks bound to the turn that carry a Stop: the ask that opened the session is
+   * bound at its dispatch with no delivery, and a follow-up's stamp may land after its binding, so the
+   * start reads every ask of the turn rather than only the rows it just bound.
+   */
+  stoppedOn(target: ConversationTarget, turnId: string): Promise<readonly AskRow[]>;
 }
 
 type AskFailure = SqlError | ParseResult.ParseError;
@@ -280,6 +286,28 @@ const BindSchema = Schema.Struct({
   turnId: Schema.String,
 });
 
+const StoppedOnSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  turnId: Schema.String,
+});
+
+const findStoppedOn = SqlSchema.findAll({
+  Request: StoppedOnSchema,
+  Result: AskRowSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select * from asks
+        where user_id = ${key.userId}
+          and conversation_id = ${key.conversationId}
+          and turn_id = ${key.turnId}
+          and cancel_requested_at is not null
+        order by id
+      `,
+    ),
+});
+
 /** Only an ask not yet bound takes the turn: a start eve emits again names the same deliveries and changes nothing. */
 const bindDeliveredAsks = SqlSchema.findAll({
   Request: BindSchema,
@@ -413,5 +441,7 @@ export function askRecord(run: HostedStoreRun): AskRecord & AskDeliveryBinding {
               (rows) => rows.map(askRow),
             ),
           ),
+    stoppedOn: (target, turnId) =>
+      run(Effect.map(findStoppedOn({ ...target, turnId }), (rows) => rows.map(askRow))),
   };
 }
