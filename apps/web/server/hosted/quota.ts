@@ -1,9 +1,7 @@
-import { eq, sql } from "drizzle-orm";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
 import type { HostedQuota } from "../core.js";
-import { user } from "../db/auth-schema.js";
-import type { createDatabase } from "../db/index.js";
-import { hostedUsage, introductionUsage, voiceSessionUsage } from "../db/usage-schema.js";
-import type { HostedStoreDatabase } from "./store/database.js";
 
 /**
  * The free tier's daily ceiling, spent by every hosted operation alike — a
@@ -32,7 +30,39 @@ export function utcDayEnd(dayKey: string): number {
   return Date.parse(`${dayKey}T00:00:00.000Z`) + DAY_MS;
 }
 
-type UsageDatabase = Pick<ReturnType<typeof createDatabase>, "insert">;
+/** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
+type QuotaFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+/**
+ * A row a statement had to answer. Its absence is this module's own
+ * invariant broken — an upsert that returned nothing — which is a defect
+ * rather than an outcome a caller could act on.
+ */
+function required<A>(row: Option.Option<A>, absent: string): Effect.Effect<A> {
+  return Option.match(row, { onNone: () => Effect.dieMessage(absent), onSome: Effect.succeed });
+}
+
+const HostedUsageWriteSchema = Schema.Struct({ userId: Schema.String, day: Schema.String });
+const HostedUsageCallsRowSchema = Schema.Struct({ calls: Schema.Number });
+
+const spendHostedUsage = SqlSchema.findOne({
+  Request: HostedUsageWriteSchema,
+  Result: HostedUsageCallsRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into hosted_usage (user_id, day, calls)
+        values (${write.userId}, ${write.day}, 1)
+        on conflict (user_id, day) do update
+          set calls = hosted_usage.calls + 1
+        returning calls
+      `,
+    ),
+});
 
 /**
  * Spends one hosted use and answers whether it fit inside the day. The
@@ -41,43 +71,22 @@ type UsageDatabase = Pick<ReturnType<typeof createDatabase>, "insert">;
  * is refused. A refused attempt still counts — the counter
  * records what was asked, and past the ceiling every answer is the same no.
  */
-export async function spendHostedMeter(
-  database: UsageDatabase,
-  input: { userId: string; now: number },
-): Promise<HostedSpend> {
+export function spendHostedMeter(input: {
+  readonly userId: string;
+  readonly now: number;
+}): Effect.Effect<HostedSpend, QuotaFailure, SqlClient.SqlClient> {
   const day = utcDayKey(input.now);
-  const [row] = await database
-    .insert(hostedUsage)
-    .values({ userId: input.userId, day, calls: 1 })
-    .onConflictDoUpdate({
-      target: [hostedUsage.userId, hostedUsage.day],
-      set: { calls: sql`${hostedUsage.calls} + 1` },
-    })
-    .returning();
-  if (!row) throw new Error("The usage upsert returned no row.");
-
-  return {
-    allowed: row.calls <= HOSTED_DAILY_LIMIT,
-    quota: { used: row.calls, limit: HOSTED_DAILY_LIMIT, resetsAt: utcDayEnd(day) },
-  };
+  return spendHostedUsage({ userId: input.userId, day }).pipe(
+    Effect.flatMap((row) => required(row, "The usage upsert returned no row.")),
+    Effect.map((row) => ({
+      allowed: row.calls <= HOSTED_DAILY_LIMIT,
+      quota: { used: row.calls, limit: HOSTED_DAILY_LIMIT, resetsAt: utcDayEnd(day) },
+    })),
+  );
 }
 
 /** The one row every introduction request shares, holding the global count. */
 const INTRODUCTION_USAGE_KEY = "global";
-
-/** Increments the shared introduction row for the day and answers the new count. */
-async function incrementIntroductionUsage(database: UsageDatabase, day: string): Promise<number> {
-  const [row] = await database
-    .insert(introductionUsage)
-    .values({ caller: INTRODUCTION_USAGE_KEY, day, mints: 1 })
-    .onConflictDoUpdate({
-      target: [introductionUsage.caller, introductionUsage.day],
-      set: { mints: sql`${introductionUsage.mints} + 1` },
-    })
-    .returning();
-  if (!row) throw new Error("The introduction usage upsert returned no row.");
-  return row.mints;
-}
 
 /**
  * Whether an introduction mint fit inside the day. Unlike a metered spend it
@@ -89,22 +98,38 @@ export interface IntroductionSpend {
   allowed: boolean;
 }
 
+const IntroductionUsageWriteSchema = Schema.Struct({ caller: Schema.String, day: Schema.String });
+const IntroductionUsageMintsRowSchema = Schema.Struct({ mints: Schema.Number });
+
+const spendIntroductionUsage = SqlSchema.findOne({
+  Request: IntroductionUsageWriteSchema,
+  Result: IntroductionUsageMintsRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into introduction_usage (caller, day, mints)
+        values (${write.caller}, ${write.day}, 1)
+        on conflict (caller, day) do update
+          set mints = introduction_usage.mints + 1
+        returning mints
+      `,
+    ),
+});
+
 /**
  * Spends one introduction mint and answers whether it fit inside the shared
  * ceiling. Like the metered spend, the increment is a single atomic upsert
  * taken before the upstream call, and a refused attempt still counts.
  */
-export async function spendIntroductionMeter(
-  database: UsageDatabase,
-  input: { now: number },
-): Promise<IntroductionSpend> {
+export function spendIntroductionMeter(input: {
+  readonly now: number;
+}): Effect.Effect<IntroductionSpend, QuotaFailure, SqlClient.SqlClient> {
   const day = utcDayKey(input.now);
-  const used = await incrementIntroductionUsage(database, day);
-  return { allowed: used <= HOSTED_DAILY_LIMIT };
+  return spendIntroductionUsage({ caller: INTRODUCTION_USAGE_KEY, day }).pipe(
+    Effect.flatMap((row) => required(row, "The introduction usage upsert returned no row.")),
+    Effect.map((row) => ({ allowed: row.mints <= HOSTED_DAILY_LIMIT })),
+  );
 }
-
-/** Whichever driver stands behind the hosted schema, as the store's tables already take it. */
-type VoiceUsageDatabase = Pick<HostedStoreDatabase, "transaction">;
 
 /**
  * What recording a session's seconds came to: recorded, repeated for a
@@ -120,47 +145,91 @@ export const VOICE_SECONDS_OUTCOME = {
 export type VoiceSecondsOutcome =
   (typeof VOICE_SECONDS_OUTCOME)[keyof typeof VOICE_SECONDS_OUTCOME];
 
+const findUserId = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (userId) => statement((sql) => sql`select id from "user" where id = ${userId} limit 1`),
+});
+
+const VoiceSessionUsageInsertSchema = Schema.Struct({
+  sessionId: Schema.String,
+  userId: Schema.String,
+  seconds: Schema.Number,
+  recordedAt: Schema.Number,
+});
+
+const insertVoiceSessionUsage = SqlSchema.findAll({
+  Request: VoiceSessionUsageInsertSchema,
+  Result: Schema.Struct({
+    sessionId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("session_id")),
+  }),
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into voice_session_usage (session_id, user_id, seconds, recorded_at)
+        values (${write.sessionId}, ${write.userId}, ${write.seconds}, ${write.recordedAt})
+        on conflict (session_id) do nothing
+        returning session_id
+      `,
+    ),
+});
+
+const HostedVoiceSecondsWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  day: Schema.String,
+  seconds: Schema.Number,
+});
+
+const addHostedVoiceSeconds = SqlSchema.void({
+  Request: HostedVoiceSecondsWriteSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into hosted_usage (user_id, day, voice_seconds)
+        values (${write.userId}, ${write.day}, ${write.seconds})
+        on conflict (user_id, day) do update
+          set voice_seconds = hosted_usage.voice_seconds + excluded.voice_seconds
+      `,
+    ),
+});
+
 /**
  * Records the seconds OpenAI billed for one closed GPT Live session, once. The
  * session row is the ledger: its insert is the idempotent step, and only a
  * report that created the row moves the day's `voice_seconds`, so a report
  * repeated after a lost answer, or seen by two function connections, adds
- * nothing. Both writes share one
- * transaction so a crash between them cannot leave a session recorded and a
- * day uncounted. The day is the report's, not the session's start: the
- * service reports at `session.closed`, and that is the instant it knows.
+ * nothing. Both writes share one transaction so a crash between them cannot
+ * leave a session recorded and a day uncounted. The day is the report's, not
+ * the session's start: the service reports at `session.closed`, and that is
+ * the instant it knows.
  */
-export async function recordVoiceSeconds(
-  database: VoiceUsageDatabase,
-  input: { userId: string; sessionId: string; seconds: number; now: number },
-): Promise<VoiceSecondsOutcome> {
-  return database.transaction(async (transaction) => {
-    const [account] = await transaction
-      .select({ id: user.id })
-      .from(user)
-      .where(eq(user.id, input.userId))
-      .limit(1);
-    if (!account) return VOICE_SECONDS_OUTCOME.UNKNOWN_USER;
+export function recordVoiceSeconds(input: {
+  readonly userId: string;
+  readonly sessionId: string;
+  readonly seconds: number;
+  readonly now: number;
+}): Effect.Effect<VoiceSecondsOutcome, QuotaFailure, SqlClient.SqlClient> {
+  return statement((sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        const account = yield* findUserId(input.userId);
+        if (Option.isNone(account)) return VOICE_SECONDS_OUTCOME.UNKNOWN_USER;
 
-    const inserted = await transaction
-      .insert(voiceSessionUsage)
-      .values({
-        sessionId: input.sessionId,
-        userId: input.userId,
-        seconds: input.seconds,
-        recordedAt: input.now,
-      })
-      .onConflictDoNothing({ target: voiceSessionUsage.sessionId })
-      .returning({ sessionId: voiceSessionUsage.sessionId });
-    if (inserted.length === 0) return VOICE_SECONDS_OUTCOME.REPEATED;
+        const inserted = yield* insertVoiceSessionUsage({
+          sessionId: input.sessionId,
+          userId: input.userId,
+          seconds: input.seconds,
+          recordedAt: input.now,
+        });
+        if (inserted.length === 0) return VOICE_SECONDS_OUTCOME.REPEATED;
 
-    await transaction
-      .insert(hostedUsage)
-      .values({ userId: input.userId, day: utcDayKey(input.now), voiceSeconds: input.seconds })
-      .onConflictDoUpdate({
-        target: [hostedUsage.userId, hostedUsage.day],
-        set: { voiceSeconds: sql`${hostedUsage.voiceSeconds} + ${input.seconds}` },
-      });
-    return VOICE_SECONDS_OUTCOME.RECORDED;
-  });
+        yield* addHostedVoiceSeconds({
+          userId: input.userId,
+          day: utcDayKey(input.now),
+          seconds: input.seconds,
+        });
+        return VOICE_SECONDS_OUTCOME.RECORDED;
+      }),
+    ),
+  );
 }

@@ -139,7 +139,7 @@ export function productionBrainHostSeams(): BrainHostSeams {
     },
     scriptedModel: () =>
       process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
-    spend: (userId) => spendHostedMeter(db(), { userId, now: Date.now() }),
+    spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
     vaultRows,
     vaultSecret,
     providerKey: async (userId, providerId) =>

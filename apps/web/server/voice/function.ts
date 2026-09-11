@@ -4,6 +4,7 @@ import { getDatabase } from "../db/index.js";
 import { oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "../hosted/bearer.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { recordVoiceSeconds, spendHostedMeter, spendIntroductionMeter } from "../hosted/quota.js";
+import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { VoiceService } from "./service.js";
 import { voiceSessionRecord } from "./session-record.js";
@@ -29,9 +30,9 @@ const deploymentAccounts: VoiceAccounts = {
       const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
       return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
     }),
-  spend: (userId) => spendHostedMeter(getDatabase(), { userId, now: Date.now() }),
-  spendIntroduction: () => spendIntroductionMeter(getDatabase(), { now: Date.now() }),
-  recordSeconds: (input) => recordVoiceSeconds(getDatabase(), { ...input, now: Date.now() }),
+  spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
+  spendIntroduction: () => runWeb(spendIntroductionMeter({ now: Date.now() })),
+  recordSeconds: (input) => runWeb(recordVoiceSeconds({ ...input, now: Date.now() })),
 };
 
 let service: VoiceService | undefined;

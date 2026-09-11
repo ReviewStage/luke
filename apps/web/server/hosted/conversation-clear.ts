@@ -52,7 +52,7 @@ export async function handleConversationClear(
   if (!userId) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
-  if (clearRateLimited(userId, now())) {
+  if (await clearRateLimited(userId)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
   const openedAt = now();

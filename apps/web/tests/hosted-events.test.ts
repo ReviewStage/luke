@@ -385,17 +385,9 @@ test("past the per-account brake the batch is refused rather than forwarded", as
   assert.equal(braked.status, 429);
   assert.equal((await braked.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   assert.equal(posthog.forwarded.length, 2);
-
-  // The window turning frees the account again.
-  const later = await handleEvents(
-    options({
-      request: eventsRequest({ events: [LAUNCH] }),
-      fetch: posthog.fetch,
-      resolveUserId,
-      now: () => NOW + 61_000,
-    }),
-  );
-  assert.equal(later.status, 202);
+  // The window turning frees the account again: covered by the brake's own
+  // `TestClock` test, since the brake now reads Effect's own real Clock
+  // rather than this handler's injected `now`.
 });
 
 test("an upstream refusal answers 502 carrying its status and nothing else", async () => {

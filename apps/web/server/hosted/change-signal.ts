@@ -76,7 +76,7 @@ export async function handleChanges(options: ChangeSignalOptions): Promise<Respo
   if (!userId) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
-  if (changesRateLimited(userId, now())) {
+  if (await changesRateLimited(userId)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
   const parsed = await readJsonBody(request, MAXIMUM_CHANGES_BODY_BYTES);

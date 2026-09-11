@@ -1,37 +1,84 @@
+import { Clock, Effect } from "effect";
+
 /**
- * Per-user in-memory brake, keyed on the resolved account rather than the
- * network address: the token already names who is asking, so rotating IPs
- * cannot route around it. The counter lives in the function instance, which
- * makes it a per-instance brake rather than a cluster-wide guarantee —
- * platform-level rules are the real backstop — but it turns a hammering
- * client into a trickle and limits amplification against provider quotas.
+ * Per-user brake, keyed on the resolved account rather than the network
+ * address: the token already names who is asking, so rotating IPs cannot
+ * route around it. The map lives in the function instance, which makes it a
+ * per-instance brake rather than a cluster-wide guarantee — platform-level
+ * rules are the real backstop — but it turns a hammering client into a
+ * trickle and limits amplification against provider quotas.
+ *
+ * Effect's own `RateLimiter` is built for throttling a queue of work, not
+ * for admission control: its only way to ask "is a permit free right now"
+ * is racing its blocking `take` against a zero-duration timeout, and that
+ * race is genuinely nondeterministic — a busy event loop can lose it even
+ * when a permit stands free, which turned "past the brake" into a flaky
+ * false refusal under this repository's own test suite. What this keeps of
+ * Effect instead is `Clock`: the same window-and-count check the hand-rolled
+ * brake made, over the same bounded map, but read through the ambient Clock
+ * so it is `TestClock`-testable without a route threading its own `now`
+ * through it, and written inside one synchronous step so two checks for the
+ * same user never interleave.
  */
 export interface RateBrakeConfig {
   windowMs: number;
   maxRequestsPerWindow: number;
-  /** The map is bounded; past this it forgets the oldest window rather than growing. */
+  /** The map is bounded; past this it forgets every tracked user rather than growing. */
   maxTrackedUsers: number;
 }
 
-/**
- * Whether this ask puts the caller over the window. `weight` is what the ask
- * costs — one request by default, or the events a batch carries — so a single
- * oversized batch is braked on arrival rather than on the one after it.
- */
-export type RateBrake = (userId: string, now: number, weight?: number) => boolean;
+export interface RateBrake {
+  readonly check: (userId: string, weight?: number) => Effect.Effect<boolean>;
+}
 
-export function createRateBrake(config: RateBrakeConfig): RateBrake {
-  const recentUsers = new Map<string, { windowStart: number; count: number }>();
-  return (userId, now, weight = 1) => {
-    const held = recentUsers.get(userId);
-    if (!held || now - held.windowStart >= config.windowMs) {
-      if (recentUsers.size >= config.maxTrackedUsers) {
-        recentUsers.clear();
-      }
-      recentUsers.set(userId, { windowStart: now, count: weight });
-      return weight > config.maxRequestsPerWindow;
-    }
-    held.count += weight;
-    return held.count > config.maxRequestsPerWindow;
+interface TrackedWindow {
+  readonly windowStart: number;
+  readonly count: number;
+}
+
+/**
+ * A per-user brake built once: whether an ask puts its user over the
+ * window, `weight` being what the ask costs — one request by default, or
+ * the events a batch carries — so a single oversized batch is braked on
+ * arrival rather than on the one after it.
+ */
+export function makeRateBrake(config: RateBrakeConfig): RateBrake {
+  const tracked = new Map<string, TrackedWindow>();
+
+  return {
+    check: (userId, weight = 1) =>
+      Effect.map(Clock.currentTimeMillis, (now) => {
+        const held = tracked.get(userId);
+        if (!held || now - held.windowStart >= config.windowMs) {
+          if (tracked.size >= config.maxTrackedUsers) tracked.clear();
+          tracked.set(userId, { windowStart: now, count: weight });
+          return weight <= config.maxRequestsPerWindow;
+        }
+        const count = held.count + weight;
+        tracked.set(userId, { windowStart: held.windowStart, count });
+        return count <= config.maxRequestsPerWindow;
+      }),
   };
+}
+
+/**
+ * The promise door the routes below still call through, keeping the older
+ * brake's own polarity — `true` means the request is over the window and
+ * must be refused — since every one of them still reads it as
+ * `if (rateLimited(userId)) return 429`. None of them run an Effect of their
+ * own yet, and this check needs no service the way the store's own promise
+ * door (`HostedStoreRun`) reaches the ambient `SqlClient` — its whole state
+ * is the map `makeRateBrake` closes over, so nothing here needs a runtime
+ * edge to answer it.
+ *
+ * @deprecated A strangler shim. Deleted once the routes that call it run
+ * their own Effects under `HttpApi` (P10-05..10) and reach `RateBrake.check`
+ * directly instead.
+ */
+export function createRateBrake(
+  config: RateBrakeConfig,
+): (userId: string, weight?: number) => Promise<boolean> {
+  const brake = makeRateBrake(config);
+  return (userId, weight) =>
+    Effect.runPromise(Effect.map(brake.check(userId, weight), (admitted) => !admitted));
 }

@@ -116,7 +116,7 @@ function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default {
     }
     const userId = yield* bearerUserId(seams);
     const now = seams.now ?? Date.now;
-    if (deviceRateLimited(userId, now())) {
+    if (yield* Effect.promise(() => deviceRateLimited(userId))) {
       return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
     }
     const mintId = seams.mintId ?? randomUUID;

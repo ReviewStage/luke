@@ -42,7 +42,6 @@ export interface ConversationReadOptions
     beforeOffset?: number;
     apiKey: string;
   }) => Promise<HostedConversationAnswer | ConversationReadRefusal>;
-  now?: () => number;
 }
 
 /**
@@ -88,8 +87,7 @@ export async function handleConversationRead(options: ConversationReadOptions): 
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
 
-  const now = (options.now ?? Date.now)();
-  if (conversationRateLimited(userId, now)) {
+  if (await conversationRateLimited(userId)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
 

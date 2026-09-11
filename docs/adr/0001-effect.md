@@ -345,6 +345,18 @@ composes each of them apart from the store: it is the one door either way, and t
 under is the client's own. P10-14 deletes it with the Drizzle half, once every
 module here is an effect and the routes take one.
 
+`createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
+for the same reason `HostedStoreRun` is: `RateBrake.check` is an
+`Effect.Effect<boolean>` a per-user window reads through the ambient `Clock`,
+but every route that braked a request still holds a plain boolean it awaits,
+so `createRateBrake` runs that check to a promise here rather than on a fiber
+of its own. Effect's own `RateLimiter` was tried first and dropped: its only
+way to ask whether a permit is free without waiting for one is racing its
+blocking `take` against a zero-duration timeout, and that race lost to a busy
+event loop in this repository's own test suite, refusing a request nothing had
+actually rate-limited. P10-05..10 deletes the door once the routes that call it
+run their own Effects under `HttpApi` and reach `RateBrake.check` directly.
+
 `Maintenance`'s `#writeFlushMarker` in `packages/brain/src/maintenance.ts` is on
 the allowlist too: its own caller still holds a `Promise<Settled<...>>` for
 the flush marker's write outcome, so `writeFlushMarkerEffect` — an
@@ -565,6 +577,7 @@ design decision stated as such:
 | The envelope and generation tables' synchronous doors | P5-10d | P5-11 |
 | The archive registry table's synchronous doors | P5-10c | P5-11 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
+| `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P7-08 |
 | `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P7-08 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |

@@ -161,7 +161,7 @@ export async function handleEvents(options: EventsOptions): Promise<Response> {
   }
 
   const now = (options.now ?? Date.now)();
-  if (rateLimited(userId, now, events.length)) {
+  if (await rateLimited(userId, events.length)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
 

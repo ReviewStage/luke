@@ -230,7 +230,7 @@ function request(path: string, query: ReadQuery = {}, method = "GET", authorized
 }
 
 function options(userId: string, req: Request): ResourceReadOptions {
-  return { request: req, resolveUserId: async () => userId, store: database.store, now: () => NOW };
+  return { request: req, resolveUserId: async () => userId, store: database.store };
 }
 
 async function answered<Value>(response: Response, schema: Schema<Value>): Promise<Value> {
