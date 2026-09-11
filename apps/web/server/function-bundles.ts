@@ -1,16 +1,19 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { join } from "node:path";
-import type { BuildOptions, Metafile } from "esbuild";
-import { FUNCTION_BUNDLE_DIRECTORY } from "./function-stubs.js";
+import type { BuildOptions, Metafile, Plugin } from "esbuild";
+import type { FunctionDefinition } from "./function-durations.js";
+import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-stubs.js";
 
 /**
- * How the routes under `server/routes/` become function bundles, declared
- * once so the build script and the test bundle the same way. Workspace
- * packages are inlined; the web app's own declared runtime dependencies stay
- * external, because those are what Vercel's builder traces from
- * `apps/web/node_modules`, and everything else that resolves external is a
- * dependency a bundled package reaches that this app never declared.
+ * How the functions become bundles, declared once so the build script and the
+ * test bundle the same way. A grouped function's entry is generated here: it
+ * imports each member route and hands them to `dispatchRoutes`. A standalone
+ * function's entry is its route file. Workspace packages are inlined; the web
+ * app's own declared runtime dependencies stay external, because those are
+ * what Vercel's builder traces from `apps/web/node_modules`, and everything
+ * else that resolves external is a dependency a bundled package reaches that
+ * this app never declared.
  *
  * The externals are also where an import edge shows itself. A package this
  * app declares but no function should load — the eve package, whose door
@@ -21,13 +24,14 @@ import { FUNCTION_BUNDLE_DIRECTORY } from "./function-stubs.js";
  * test asserts over, before any deploy.
  */
 
-const ROUTES_DIRECTORY = join("server", "routes");
 const WORKSPACE_PROTOCOL = "workspace:";
 const FUNCTION_BUNDLE_TARGET = "node24";
+const DISPATCHER_NAMESPACE = "function-dispatcher";
+const DISPATCH_MODULE = join("server", "function-dispatch.ts");
 
 export interface FunctionBundlePlan {
-  /** Absolute paths of every route, the bundle entry points. */
-  readonly entryPoints: readonly string[];
+  /** The functions the bundles are built for. */
+  readonly functions: readonly FunctionDefinition[];
   /** The declared runtime dependencies left external, by package name. */
   readonly externalPackages: ReadonlySet<string>;
   /** The esbuild options the bundles are built with; `write` is the caller's, and the metafile is always asked for since the checks read it. */
@@ -41,6 +45,46 @@ export function packageNameOf(specifier: string): string {
     : (specifier.split("/")[0] ?? specifier);
 }
 
+/** The generated entry of a grouped function: every member route, keyed for the dispatcher. */
+function dispatcherSource(web: string, definition: FunctionDefinition): string {
+  const imports = definition.routes.map(
+    (route, index) =>
+      `import route${index} from ${JSON.stringify(join(web, routeSourcePath(route)))};`,
+  );
+  const entries = definition.routes.map(
+    (route, index) => `[${JSON.stringify(route)}, route${index}]`,
+  );
+  return [
+    `import { dispatchRoutes } from ${JSON.stringify(join(web, DISPATCH_MODULE))};`,
+    ...imports,
+    `export default dispatchRoutes(new Map([${entries.join(", ")}]));`,
+    "",
+  ].join("\n");
+}
+
+function dispatcherPlugin(web: string, functions: readonly FunctionDefinition[]): Plugin {
+  const sources = new Map(
+    functions
+      .filter((definition) => definition.dispatches)
+      .map((definition) => [definition.file, dispatcherSource(web, definition)]),
+  );
+  const filter = new RegExp(`^${DISPATCHER_NAMESPACE}:`);
+  return {
+    name: DISPATCHER_NAMESPACE,
+    setup(build) {
+      build.onResolve({ filter }, (args) => ({
+        path: args.path.slice(`${DISPATCHER_NAMESPACE}:`.length),
+        namespace: DISPATCHER_NAMESPACE,
+      }));
+      build.onLoad({ filter: /.*/, namespace: DISPATCHER_NAMESPACE }, (args) => {
+        const contents = sources.get(args.path);
+        if (contents === undefined) throw new Error(`no dispatcher for the function ${args.path}`);
+        return { contents, loader: "ts", resolveDir: web };
+      });
+    },
+  };
+}
+
 export async function functionBundlePlan(web: string): Promise<FunctionBundlePlan> {
   // SAFETY: the file is this app's own package.json, read for its dependencies map alone.
   const manifest = JSON.parse(await readFile(join(web, "package.json"), "utf8")) as {
@@ -49,12 +93,15 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
   const externalDependencies = Object.entries(manifest.dependencies)
     .filter(([, range]) => !range.startsWith(WORKSPACE_PROTOCOL))
     .map(([name]) => name);
-  const routes = join(web, ROUTES_DIRECTORY);
-  const entryPoints = (await readdir(routes, { recursive: true }))
-    .filter((path) => path.endsWith(".ts"))
-    .map((path) => join(routes, path));
+  const functions = await webFunctions(web);
+  const entryPoints = functions.map((definition) => ({
+    in: definition.dispatches
+      ? `${DISPATCHER_NAMESPACE}:${definition.file}`
+      : join(web, routeSourcePath(definition.file)),
+    out: definition.file,
+  }));
   return {
-    entryPoints,
+    functions,
     externalPackages: new Set([
       ...externalDependencies,
       ...builtinModules,
@@ -62,7 +109,6 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
     ]),
     options: {
       entryPoints,
-      outbase: routes,
       outdir: join(web, FUNCTION_BUNDLE_DIRECTORY),
       bundle: true,
       platform: "node",
@@ -71,6 +117,7 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       sourcemap: false,
       metafile: true,
       logLevel: "warning",
+      plugins: [dispatcherPlugin(web, functions)],
       external: [...externalDependencies, ...externalDependencies.map((name) => `${name}/*`)],
     },
   };
