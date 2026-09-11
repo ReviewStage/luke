@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
 import type { WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { channels } from "#shared/bridge";
@@ -97,12 +98,14 @@ function fixture(clearConversation: () => Promise<boolean>) {
     introduction: false,
   });
   const command = (sender: WebContents) =>
-    router.performAct(
-      { kind: ACT_KIND.VOICE_COMMAND, payload: { command: VOICE_COMMAND.CLEAR_CONVERSATION } },
-      senderOf(sender),
+    Effect.runPromise(
+      router.performAct(
+        { kind: ACT_KIND.VOICE_COMMAND, payload: { command: VOICE_COMMAND.CLEAR_CONVERSATION } },
+        senderOf(sender),
+      ),
     );
   const perform = (sender: WebContents, act: Parameters<typeof router.performAct>[0]) =>
-    router.performAct(act, senderOf(sender));
+    Effect.runPromise(router.performAct(act, senderOf(sender)));
   return { command, perform, liveCalls, sentToVoice, panelSender, voiceSender };
 }
 

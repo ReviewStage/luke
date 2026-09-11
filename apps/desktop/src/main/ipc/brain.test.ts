@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import type { GatewayOperator } from "@sidecar/host";
+import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -44,9 +45,8 @@ test("a cancel crosses to the operator under the run it names, and the brain row
     voice: false,
     introduction: false,
   };
-  const answer = await router.performAct(
-    { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } },
-    sender,
+  const answer = await Effect.runPromise(
+    router.performAct({ kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } }, sender),
   );
   assert.deepEqual(answer, { status: "done", value: CANCELLED });
   assert.deepEqual(cancelled, ["run-1"]);

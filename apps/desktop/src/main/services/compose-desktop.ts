@@ -5,7 +5,7 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@sidecar/host/effect";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Runtime } from "effect";
 import { powerMonitor } from "electron";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
@@ -41,6 +41,13 @@ export interface DesktopServices {
   readonly updates: UpdateServiceHost;
   readonly operator: OperatorClient;
   readonly windows: WindowService;
+  /**
+   * Every act's Effect, run here rather than a second runtime: the desktop's
+   * own `ManagedRuntime` is what `main.ts` disposes, and this is the same
+   * runtime read back out of the fiber that is building this layer, never one
+   * built apart from it.
+   */
+  readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
 }
 
 /** The desktop client as it stands once every step of the launch has run. */
@@ -107,6 +114,11 @@ export function composeDesktop(
     DesktopTag,
     Effect.gen(function* () {
       const host = yield* HostAssemblyTag;
+      // The one runtime this launch has, read back out of the fiber building
+      // it rather than built again: every act's Effect runs on it, never on a
+      // runtime of act-router's own.
+      const runtime: Runtime.Runtime<never> = yield* Effect.runtime();
+      const run = <A>(effect: Effect.Effect<A>): Promise<A> => Runtime.runPromise(runtime)(effect);
       // Nothing to install without a signed build, a network, and the platform
       // Squirrel serves; the row says so rather than offering a press that could
       // not land, and the document says so from its first version.
@@ -172,7 +184,7 @@ export function composeDesktop(
       // going to settle.
       quit.beforeTeardown(() => native.refusePendingActions());
 
-      return { config, state, telemetry, native, updates, operator, windows };
+      return { config, state, telemetry, native, updates, operator, windows, run };
     }),
   );
 

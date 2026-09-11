@@ -3,6 +3,7 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
@@ -81,7 +82,7 @@ test("a write the host took, whose client-side effect then failed, is refused wi
       throw new Error("the login item could not be written");
     },
   });
-  assert.deepEqual(await router.performAct(OPEN_AT_LOGIN, PANEL), {
+  assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
     status: "done",
     value: {
       status: ACTION_RESULT_STATUS.REJECTED,
@@ -97,7 +98,7 @@ test("a write the host refused is refused with the settings this client last saw
       throw new Error("the host is not reachable");
     },
   });
-  assert.deepEqual(await router.performAct(OPEN_AT_LOGIN, PANEL), {
+  assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
     status: "done",
     value: {
       status: ACTION_RESULT_STATUS.REJECTED,
@@ -114,15 +115,18 @@ test("a client with no snapshot at all refuses through the act's own sentence", 
       throw new Error("the host is not reachable");
     },
   });
-  assert.deepEqual(await router.performAct({ kind: ACT_KIND.TRACKER_CONNECT }, PANEL), {
-    status: "refused",
-    reason: ACT[ACT_KIND.TRACKER_CONNECT].refusal,
-  });
+  assert.deepEqual(
+    await Effect.runPromise(router.performAct({ kind: ACT_KIND.TRACKER_CONNECT }, PANEL)),
+    {
+      status: "refused",
+      reason: ACT[ACT_KIND.TRACKER_CONNECT].refusal,
+    },
+  );
 });
 
 test("a write that landed is answered as the host answered it", async () => {
   const router = rows({});
-  assert.deepEqual(await router.performAct(OPEN_AT_LOGIN, PANEL), {
+  assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
     status: "done",
     value: accepted(),
   });
