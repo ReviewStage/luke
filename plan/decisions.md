@@ -124,3 +124,48 @@ row exactly as `readStoredUIMessages` returned it, so any stored reasoning part 
 item id, since eve's stream carries no opaque item; a Responses-path row carries the full
 encrypted item. Only the Conversation messages read could carry a message — the turns and events
 routes carry no parts.
+
+## 2026-09-11 04:2x — C1's door refuses an unnamed conversation before eve dispatches (orchestrator, from #957's Security Agent)
+
+A MEDIUM finding worth recording as a trust rule rather than a bug fix, because it names a
+property the door must keep rather than a line that was wrong.
+
+**`POST /eve/v1/session` with a missing or malformed conversation header passed the door**, and
+**eve dispatched a durable, unmetered, unrecorded run** before the host refused it with
+`NO_CONVERSATION`. The refusal was correct and too late: by the time it happened, a Workflow run
+existed that nobody had paid for, nobody had recorded, and no conversation owned.
+
+**The door now refuses the open route unless it names a well-formed conversation of the
+caller's.** So the ordering is the rule: *identify and admit before dispatch, never after*.
+
+This generalises past the one route, and C2a/C2b/C2c should hold to it: **anything that can
+cause eve to start durable work must be admitted before it starts, not validated after.** eve
+does not enforce session ownership (S0's spike), the host is the only thing standing there
+(C1's earlier finding), and a check that runs after dispatch protects the record but not the
+spend.
+
+Recorded alongside C1's other two ownership properties: a session or conversation that is not
+the caller's is refused before eve accepts the request, and a conversation runs in one eve
+session at a time, claimed forward-only by compare-and-set on eve's sortable ids.
+
+## 2026-09-11 04:2x — Gates that did not exist when the graph started (orchestrator)
+
+Recorded because five of them appeared in one night on a repository three workstreams are
+changing at once, and each cost real time before someone proved what it actually did:
+
+1. **`apps/web` moved to vitest** with no `testTimeout`, so database-backed tests timed out at
+   the 5 s default under load. Fixed (#987, suite-wide 30 s).
+2. **No `LukeKit` target in CI.** Swift compile and logic errors land green. Standing rule: if
+   your PR edits Swift, run the Swift tests; recipe in the orchestrator's addendum.
+3. **No watch target in CI either** — `DisclosureGroup` is unavailable on watchOS and F5's use
+   of it merged green, breaking the watch build on main.
+4. **Push-on-main does not run lint**, so main went red on an unused-suppression error (#992)
+   without anyone seeing it, blocking every merge group. Fixed (#999).
+5. **A `CLEAN` PR check does not mean a PR can merge.** The PR check runs on the merge base; the
+   merge group runs on current main and lints the whole tree.
+6. **JSON Schema goldens** (#994) mean any PR widening a recorded schema fails
+   `hosted-wire-schemas` after a rebase until the fixture is re-recorded with
+   `LUKE_UPDATE_FIXTURES=1`.
+
+The common shape: **every one was a gate that did not say what it appeared to say.** A missing
+gate is worse than a failing one, because nobody knows to look.
