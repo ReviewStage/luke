@@ -6,12 +6,14 @@ import Observation
 /// signal while the screen stands in the foreground. Each poll asks where
 /// every resource stands, reads only the ones whose head differs from the
 /// cursor this device holds, and merges what came back under
-/// `ConversationThread`'s rules; a first poll seeds the turns and events
-/// cursors from the signal's heads, since the messages answer already folds
-/// both up to the moment it was read. A device with no registered row yet
-/// has no signal to ask and reads the messages alone. Nothing here writes
-/// anything anywhere: the reads are GETs and the signal is the same
-/// heartbeat the devices route already takes.
+/// `ConversationThread`'s rules; a first poll over a thread that holds
+/// nothing seeds the turns and events cursors from the signal's heads, since
+/// the messages read it makes already folds both. A device with no
+/// registered row yet has no signal to ask and reads the messages alone, and
+/// once it has one it reads the turns and events from their beginning, since
+/// nothing it holds says where they stood. Nothing here writes anything
+/// anywhere: the reads are GETs and the signal is the same heartbeat the
+/// devices route already takes.
 @Observable
 @MainActor
 public final class ConversationStore {

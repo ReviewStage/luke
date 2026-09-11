@@ -220,7 +220,7 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: false)])
     }
 
-    func testTheSignalsHeadsSeedOnlyTheCursorsNotYetRead() {
+    func testTheSignalsHeadsSeedOnlyAThreadThatHoldsNothing() {
         var thread = ConversationThread()
         thread.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: "t1"))
         XCTAssertNil(thread.messagesCursor)
@@ -232,5 +232,17 @@ final class ConversationThreadTests: XCTestCase {
         var fresh = ConversationThread()
         fresh.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: nil))
         XCTAssertNil(fresh.turnsCursor)
+        fresh.apply(ConversationMessagesAnswer(conversations: mainOnly, groups: [], next: "m1", hasMore: false))
+        fresh.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e2", turns: "t2"))
+        XCTAssertEqual(fresh.eventsCursor, "e1")
+        XCTAssertNil(fresh.turnsCursor)
+    }
+
+    func testAThreadReadWithoutASignalAdoptsNoHeadLater() {
+        var thread = ConversationThread()
+        thread.apply(ConversationMessagesAnswer(conversations: mainOnly, groups: [], next: "m1", hasMore: false))
+        thread.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: "t1"))
+        XCTAssertNil(thread.eventsCursor)
+        XCTAssertNil(thread.turnsCursor)
     }
 }

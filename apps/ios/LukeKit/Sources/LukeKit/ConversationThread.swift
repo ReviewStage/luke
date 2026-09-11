@@ -81,12 +81,15 @@ public struct ConversationThread: Equatable, Sendable {
         eventsCursor = answer.next
     }
 
-    /// Takes the change signal's heads for the resources not yet read: the
-    /// messages answer's tool decisions already fold every event and turn up
-    /// to the moment it was read, so the first poll starts reading turns and
-    /// events from where they stand rather than from the beginning of the
-    /// record. A resource already read keeps its own cursor.
+    /// Takes the change signal's heads for the turns and events, for a
+    /// device that has read nothing yet: the messages read that follows folds
+    /// every event and turn up to the moment it runs, so those two start from
+    /// where they stand rather than from the beginning of the record. A
+    /// device already holding messages adopts nothing — a mark or a stamp
+    /// that moved since its last read is only found by reading — and a
+    /// resource already read keeps its own cursor.
     public mutating func adoptHeads(from changes: ChangesAnswer) {
+        guard messagesCursor == nil else { return }
         if eventsCursor == nil { eventsCursor = changes.events }
         if turnsCursor == nil, let turns = changes.turns { turnsCursor = turns }
     }
