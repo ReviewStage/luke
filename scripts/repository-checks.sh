@@ -511,6 +511,49 @@ if [[ -n "$admitted_casts" ]]; then
     exit 1
 fi
 
+# A file ported from OpenClaw stays faithful to the pinned `b7528507`, so a
+# later port of an upstream change reads as a diff of that source and nothing
+# else. Effect reaches these through a sibling `*.effect.ts` beside each one,
+# which is why the list is spelled out rather than matched by a pattern: the
+# sibling imports `effect` and the port never does.
+openclaw_ported_files=(
+    packages/runtime/src/queue.ts
+    packages/runtime/src/lanes.ts
+    packages/runtime/src/children.ts
+    packages/runtime/src/child-records.ts
+    packages/runtime/src/workspace.ts
+    packages/runtime/src/prompt.ts
+    packages/runtime/src/tool-policy.ts
+    packages/runtime/src/storage.ts
+    packages/runtime/src/skills.ts
+    packages/memory/src/defaults.ts
+    packages/memory/src/ranking.ts
+    packages/memory/src/chunking.ts
+    packages/memory/src/flush.ts
+    packages/brain/src/loop-guard.ts
+    packages/brain/src/compaction.ts
+    packages/brain/src/context-engine.ts
+    packages/brain/src/state-store.ts
+    packages/brain/src/store/maintenance.ts
+    packages/brain/src/store/maintenance-run.ts
+    packages/brain/src/store/archives.ts
+    packages/brain/src/store/compression.ts
+)
+openclaw_effect_imports=""
+for ported in "${openclaw_ported_files[@]}"; do
+    if [[ ! -f "$SIDECAR_REPO_ROOT/$ported" ]]; then
+        printf 'error: this check names a file that no longer exists: %s\n' "$ported" >&2
+        exit 1
+    fi
+    openclaw_effect_imports+=$(grep -nE 'from "(effect|@effect/[^"]+)"|require\("(effect|@effect/[^"]+)"\)' \
+        "$SIDECAR_REPO_ROOT/$ported" | sed "s|^|$ported:|" || true)
+done
+if [[ -n "$openclaw_effect_imports" ]]; then
+    printf 'error: these files are ported from OpenClaw b7528507 and must import nothing from effect — put the Effect surface in the sibling *.effect.ts beside each one:\n%s\n' \
+        "$openclaw_effect_imports" >&2
+    exit 1
+fi
+
 # `@effect/platform-node` and `@effect/sql*` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
 # in the sandboxed renderer, and in a web function whose builder ships only what
