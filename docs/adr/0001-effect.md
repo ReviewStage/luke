@@ -229,8 +229,8 @@ is a `runSync` over a scope that closes at once, holding nothing; P7-01 and
 P7-02 hand the layer to the host itself and delete the door.
 
 `GatewayServer` in `packages/gateway/src/server.ts` is on the same allowlist,
-as the class `@sidecar/host`'s `GatewayService`, the in-process transports, and
-the socket binding still hold: the server itself is `layerGatewayServer`, an
+as the class `@sidecar/host`'s `GatewayService` and the in-process transports
+still hold: the server itself is `layerGatewayServer`, an
 `RpcServer` over the protocol's group with its ledger and revision checks as
 middleware and its event log a service, but the host composes it from a promise
 and the transports subscribe to it with callbacks, so the class builds a
@@ -238,7 +238,13 @@ and the transports subscribe to it with callbacks, so the class builds a
 an emit, a reconnect, and the close of admissions synchronously against the
 services it made ahead of the runtime. P7-01 hands the host the layers and the
 services as `Context` tags and P7-02 composes the host as a `Layer`, at which
-point the class and its runtime go.
+point the class and its runtime go. The socket binding
+(`packages/gateway/src/websocket.ts`) holds the class no longer: it provides
+the `Protocol` a server is built over rather than attaching to one already
+built, and composes `layerGatewayServer` over it itself, so what it needs of
+a host is the server's own layer options, which `GatewayService` hands out as
+`serverOptions`. That field runs no effect and is on no allowlist, but it is
+the same shim wearing a smaller face, and the same two PRs delete it.
 
 `StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
 allowlist as the two OpenClaw ports' reach into the store. The store's worker

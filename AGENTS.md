@@ -413,9 +413,12 @@ Canonical commands:
   says whether it mutates, and typed error codes. That package is the
   contract and its runtime together — the protocol, the server, the client,
   the transports, and the node registry — and the socket binding keeps a door
-  of its own (`@sidecar/gateway/websocket`), because it reaches `ws` and
-  `node:http` and a bundle that only wants the vocabulary must not resolve
-  them, as does the protocol's Rpc form (`@sidecar/gateway/rpc`: the same
+  of its own (`@sidecar/gateway/websocket`), because it reaches `ws`,
+  `node:http`, and the platform's `Socket` — every admitted connection is
+  one, run in the binding's own `Scope`, and the frames they carry are the
+  `Protocol` the server is built over — and a bundle that only wants the
+  vocabulary must not resolve any of them, as does the protocol's Rpc form
+  (`@sidecar/gateway/rpc`: the same
   method table as an `RpcGroup`, each entry's `mutates` flag as an annotation
   on its `Rpc`, the error codes as a tagged-error family whose wire form is
   still the bare `{ code, message }` object, and the serialization that

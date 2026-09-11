@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
@@ -11,15 +12,18 @@ import {
   NODE_CAPABILITY_STATUS,
   shutdownGateway,
 } from "@sidecar/gateway";
+import { gatewayMethodEffects } from "@sidecar/gateway/server";
 import {
   bearerAuthentication,
   connectWebSocketGateway,
+  GatewaySocketBinding,
+  layerGatewaySocket,
   WEB_SOCKET_GATEWAY_DEFAULTS,
-  WebSocketTransport,
 } from "@sidecar/gateway/websocket";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireValue } from "@sidecar/wire";
+import { Context, Effect, Layer, Runtime, type Scope } from "effect";
 import { test } from "vitest";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import type { ConversationOperations } from "./conversation-operations.js";
@@ -115,14 +119,38 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
   return { service, live, persisted, lines, agent };
 }
 
-async function listen(service: ReturnType<typeof fakeHost>["service"]) {
-  const host = new WebSocketTransport({
-    server: service.server,
-    authenticate: bearerAuthentication(TOKEN),
-  });
-  const port = await host.bind();
-  return { host, port };
+/** One host's own methods on a real socket, bound for as long as the test's scope stands. */
+interface Listening {
+  readonly port: number;
+  /** The shutdown's own press, as the report's options take it: a callback, run on this test's runtime. */
+  readonly closeAdmissions: () => void;
 }
+
+/**
+ * The host's own methods on a real socket. The binding provides the
+ * `Protocol` a server is built over rather than attaching to one already
+ * built, so it composes a server of its own over the service's own options:
+ * the same methods, the same readers, and the same node registry the service
+ * holds.
+ */
+const listen = (
+  service: ReturnType<typeof fakeHost>["service"],
+): Effect.Effect<Listening, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const context = yield* Layer.build(
+      layerGatewaySocket({
+        ...service.serverOptions,
+        methods: gatewayMethodEffects(service.serverOptions.methods),
+        authenticate: bearerAuthentication(TOKEN),
+      }),
+    ).pipe(Effect.orDie);
+    const binding = Context.get(context, GatewaySocketBinding);
+    const runSync = Runtime.runSync(yield* Effect.runtime<never>());
+    return {
+      port: binding.port,
+      closeAdmissions: () => runSync(binding.closeAdmissions),
+    };
+  });
 
 async function client(port: number, clientId: string) {
   const connected = await connectWebSocketGateway({
@@ -144,128 +172,143 @@ function recordOf(value: WireValue | undefined) {
   return value;
 }
 
-test("an ask survives the client that submitted it dying, and the next client reads it from the host", async () => {
-  const f = fakeHost();
-  const { host, port } = await listen(f.service);
-  try {
-    const first = await client(port, "desktop-1");
-    const submitted = await first.gateway.call(
-      GATEWAY_METHOD.RUN_SUBMIT,
-      { submissionId: "sub-1", question: "what needs me?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-      { idempotencyKey: "sub-1" },
-    );
-    assert.ok(submitted.ok);
-    assert.equal(recordOf(submitted.result).runId, "run-1");
-    // The client is gone; the host is not.
-    first.connection.close();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
-    // The next client's hello snapshot and reads find the run and the host's lines.
-    f.lines.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
-    const second = await client(port, "desktop-2");
-    const hello = await second.gateway.call(GATEWAY_METHOD.HELLO);
-    assert.ok(hello.ok);
-    const snapshot = recordOf(recordOf(hello.result).snapshot);
-    assert.ok(Array.isArray(snapshot.runs) && snapshot.runs.length === 1);
-    const listed = await second.gateway.call(GATEWAY_METHOD.CONVERSATION_LINES, {});
-    assert.ok(listed.ok);
-    const entries = recordOf(listed.result).entries;
-    assert.ok(Array.isArray(entries) && entries.length === 1);
-    second.connection.close();
-  } finally {
-    await host.close();
-  }
-});
+it.live(
+  "an ask survives the client that submitted it dying, and the next client reads it from the host",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const f = fakeHost();
+        const { port } = yield* listen(f.service);
+        yield* Effect.promise(async () => {
+          const first = await client(port, "desktop-1");
+          const submitted = await first.gateway.call(
+            GATEWAY_METHOD.RUN_SUBMIT,
+            {
+              submissionId: "sub-1",
+              question: "what needs me?",
+              origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+            },
+            { idempotencyKey: "sub-1" },
+          );
+          assert.ok(submitted.ok);
+          assert.equal(recordOf(submitted.result).runId, "run-1");
+          // The client is gone; the host is not.
+          first.connection.close();
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
+          // The next client's hello snapshot and reads find the run and the host's lines.
+          f.lines.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
+          const second = await client(port, "desktop-2");
+          const hello = await second.gateway.call(GATEWAY_METHOD.HELLO);
+          assert.ok(hello.ok);
+          const snapshot = recordOf(recordOf(hello.result).snapshot);
+          assert.ok(Array.isArray(snapshot.runs) && snapshot.runs.length === 1);
+          const listed = await second.gateway.call(GATEWAY_METHOD.CONVERSATION_LINES, {});
+          assert.ok(listed.ok);
+          const entries = recordOf(listed.result).entries;
+          assert.ok(Array.isArray(entries) && entries.length === 1);
+          second.connection.close();
+        });
+      }),
+    ),
+);
 
-test("while no client stands, a native capability the host needs answers unavailable", async () => {
-  const f = fakeHost();
-  const { host, port } = await listen(f.service);
-  try {
-    const desktop = await client(port, "desktop");
-    desktop.connection.serveInvocations?.(async () => ({
-      status: NODE_CAPABILITY_STATUS.OK,
-      value: undefined,
-    }));
-    assert.ok(
-      (
-        await desktop.gateway.call(GATEWAY_METHOD.NODE_REGISTER, {
-          nodeId: HOST_NATIVE_NODE_ID,
-          capabilities: [HOST_NODE_CAPABILITY.OPEN_EXTERNAL],
-        })
-      ).ok,
-    );
-    const served = await f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
-      url: "https://a",
-    });
-    assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
-    desktop.connection.close();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    const absent = await f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
-      url: "https://b",
-    });
-    assert.equal(absent.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-  } finally {
-    await host.close();
-  }
-});
+it.live("while no client stands, a native capability the host needs answers unavailable", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const f = fakeHost();
+      const { port } = yield* listen(f.service);
+      yield* Effect.promise(async () => {
+        const desktop = await client(port, "desktop");
+        desktop.connection.serveInvocations?.(async () => ({
+          status: NODE_CAPABILITY_STATUS.OK,
+          value: undefined,
+        }));
+        assert.ok(
+          (
+            await desktop.gateway.call(GATEWAY_METHOD.NODE_REGISTER, {
+              nodeId: HOST_NATIVE_NODE_ID,
+              capabilities: [HOST_NODE_CAPABILITY.OPEN_EXTERNAL],
+            })
+          ).ok,
+        );
+        const served = await f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
+          url: "https://a",
+        });
+        assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
+        desktop.connection.close();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const absent = await f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
+          url: "https://b",
+        });
+        assert.equal(absent.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+      });
+    }),
+  ),
+);
 
-test("the explicit shutdown closes admissions, cancels what runs, and counts unresolved from the persisted records, so a cancellation that never landed stays recoverable", async () => {
-  for (const persistCancellations of [true, false]) {
-    const f = fakeHost({ persistCancellations });
-    const { host, port } = await listen(f.service);
-    try {
-      const desktop = await client(port, "desktop");
-      const submitted = await desktop.gateway.call(
-        GATEWAY_METHOD.RUN_SUBMIT,
-        { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-        { idempotencyKey: "sub-q" },
-      );
-      assert.ok(submitted.ok);
-      const report = await shutdownGateway(
-        {
-          closeAdmissions: () => {
-            host.closeAdmissions();
-          },
-          cancelActive: async () => {
-            const cancelled: string[] = [];
-            for (const held of f.live.values()) {
-              if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
-              cancelled.push(held.runId);
-              await f.agent.cancelAsk(held.runId);
-            }
-            return cancelled;
-          },
-          awaitSettled: async () => undefined,
-          persistUnresolved: async () =>
-            [...f.persisted.values()].filter(
-              (held) =>
-                held.status === BRAIN_REQUEST_STATUS.QUEUED ||
-                held.status === BRAIN_REQUEST_STATUS.RUNNING,
-            ).length,
-        },
-        { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
-      );
-      assert.deepEqual(report.cancelled, ["run-1"]);
-      assert.equal(report.settled, true);
-      // A cancellation the store took leaves nothing unresolved; one it did
-      // not leaves the run running on disk, which the next launch marks
-      // interrupted and never replays.
-      assert.equal(report.unresolved, persistCancellations ? 0 : 1);
-      // The door is closed: a new ask is refused as shutting down, a read still answers.
-      const refused = await desktop.gateway.call(
-        GATEWAY_METHOD.RUN_SUBMIT,
-        { submissionId: "sub-late", question: "more", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-        { idempotencyKey: "sub-late" },
-      );
-      assert.equal(refused.ok, false);
-      if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
-      assert.ok((await desktop.gateway.call(GATEWAY_METHOD.RUN_LIST)).ok);
-      desktop.connection.close();
-    } finally {
-      await host.close();
-    }
-  }
-});
+it.live(
+  "the explicit shutdown closes admissions, cancels what runs, and counts unresolved from the persisted records, so a cancellation that never landed stays recoverable",
+  () =>
+    Effect.forEach(
+      [true, false],
+      (persistCancellations: boolean) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const f = fakeHost({ persistCancellations });
+            const { port, closeAdmissions } = yield* listen(f.service);
+            yield* Effect.promise(async () => {
+              const desktop = await client(port, "desktop");
+              const submitted = await desktop.gateway.call(
+                GATEWAY_METHOD.RUN_SUBMIT,
+                { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
+                { idempotencyKey: "sub-q" },
+              );
+              assert.ok(submitted.ok);
+              const report = await shutdownGateway(
+                {
+                  closeAdmissions,
+                  cancelActive: async () => {
+                    const cancelled: string[] = [];
+                    for (const held of f.live.values()) {
+                      if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
+                      cancelled.push(held.runId);
+                      await f.agent.cancelAsk(held.runId);
+                    }
+                    return cancelled;
+                  },
+                  awaitSettled: async () => undefined,
+                  persistUnresolved: async () =>
+                    [...f.persisted.values()].filter(
+                      (held) =>
+                        held.status === BRAIN_REQUEST_STATUS.QUEUED ||
+                        held.status === BRAIN_REQUEST_STATUS.RUNNING,
+                    ).length,
+                },
+                { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
+              );
+              assert.deepEqual(report.cancelled, ["run-1"]);
+              assert.equal(report.settled, true);
+              // A cancellation the store took leaves nothing unresolved; one it did
+              // not leaves the run running on disk, which the next launch marks
+              // interrupted and never replays.
+              assert.equal(report.unresolved, persistCancellations ? 0 : 1);
+              // The door is closed: a new ask is refused as shutting down, a read still answers.
+              const refused = await desktop.gateway.call(
+                GATEWAY_METHOD.RUN_SUBMIT,
+                { submissionId: "sub-late", question: "more", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
+                { idempotencyKey: "sub-late" },
+              );
+              assert.equal(refused.ok, false);
+              if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
+              assert.ok((await desktop.gateway.call(GATEWAY_METHOD.RUN_LIST)).ok);
+              desktop.connection.close();
+            });
+          }),
+        ),
+      { discard: true },
+    ),
+);
 
 test("a shutdown whose cancellation hangs still ends at the deadline with what did not settle counted", async () => {
   const report = await shutdownGateway(

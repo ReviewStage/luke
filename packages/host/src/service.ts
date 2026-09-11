@@ -23,7 +23,7 @@ import {
   NodeRegistry,
   nodeSnapshotToWire,
 } from "@sidecar/gateway";
-import { GatewayServer } from "@sidecar/gateway/server";
+import { GatewayServer, type GatewayServerOptions } from "@sidecar/gateway/server";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
   type ChildRunRecord,
@@ -95,6 +95,17 @@ export interface GatewayServiceDependencies {
 
 export interface GatewayService {
   readonly server: GatewayServer;
+  /**
+   * What its own server was built over, so a transport that composes a server
+   * of its own — the socket binding, which provides the `Protocol` a server is
+   * built on rather than attaching to one already built — answers the same
+   * methods over the same readers.
+   *
+   * @deprecated A strangler shim: P7-01 hands the host the server's layers and
+   * its services as `Context` tags, and P7-02 composes the host as a `Layer`,
+   * at which point a transport is provided the layers directly.
+   */
+  readonly serverOptions: GatewayServerOptions;
   readonly nodes: NodeRegistry;
   /** The brain's whole list of records, as the followers report it, for every client to hear. */
   runsReported: (snapshots: readonly BrainRequestSnapshot[]) => void;
@@ -410,7 +421,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     }),
   };
 
-  const server = new GatewayServer({
+  const serverOptions: GatewayServerOptions = {
     methods,
     configurationRevision: () => brain.configuration().revision,
     sessionRevision: (key) =>
@@ -418,7 +429,8 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     snapshot,
     now: dependencies.now,
     createEventId: dependencies.createId,
-  });
+  };
+  const server = new GatewayServer(serverOptions);
 
   nodes.onChange((list) => {
     server.emit(GATEWAY_EVENT.NODE_CHANGED, { nodes: list.map(nodeSnapshotToWire) });
@@ -426,6 +438,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
 
   return {
     server,
+    serverOptions,
     nodes,
     runsReported: (snapshots) => {
       server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });

@@ -1,0 +1,153 @@
+{
+  "frames": [
+    {
+      "kind": "response",
+      "envelope": {
+        "id": "request-run-list",
+        "ok": true,
+        "result": {
+          "runs": []
+        },
+        "revision": {
+          "configuration": 7,
+          "sequence": 0
+        }
+      }
+    },
+    {
+      "kind": "response",
+      "envelope": {
+        "id": "request-memory-status",
+        "ok": false,
+        "error": {
+          "code": "not_found",
+          "message": "<message>"
+        },
+        "revision": {
+          "configuration": 7,
+          "sequence": 0
+        }
+      }
+    },
+    {
+      "kind": "response",
+      "envelope": {
+        "id": "request-torn",
+        "ok": false,
+        "error": {
+          "code": "invalid_params",
+          "message": "<message>"
+        },
+        "revision": {
+          "configuration": 7,
+          "sequence": 0
+        }
+      }
+    },
+    {
+      "kind": "event",
+      "envelope": {
+        "eventId": "event-1",
+        "sequence": 1,
+        "kind": "runs.changed",
+        "at": 1700000000000,
+        "payload": {
+          "runs": []
+        }
+      }
+    },
+    {
+      "kind": "response",
+      "envelope": {
+        "id": "request-node-register",
+        "ok": true,
+        "result": {
+          "nodeId": "desktop-native"
+        },
+        "revision": {
+          "configuration": 7,
+          "sequence": 1
+        }
+      }
+    },
+    {
+      "kind": "invocation",
+      "envelope": {
+        "invocationId": "invocation-1",
+        "nodeId": "desktop-native",
+        "capability": "os.openExternal",
+        "params": {
+          "url": "https://example.test"
+        }
+      }
+    },
+    {
+      "kind": "event",
+      "envelope": {
+        "eventId": "event-2",
+        "sequence": 2,
+        "kind": "runs.changed",
+        "at": 1700000000000,
+        "payload": {
+          "runs": []
+        }
+      }
+    },
+    {
+      "kind": "event",
+      "envelope": {
+        "eventId": "event-3",
+        "sequence": 3,
+        "kind": "runs.changed",
+        "at": 1700000000000,
+        "payload": {
+          "runs": []
+        }
+      }
+    },
+    {
+      "kind": "response",
+      "envelope": {
+        "id": "request-replay-inside",
+        "ok": true,
+        "result": {
+          "kind": "replay",
+          "events": [
+            {
+              "eventId": "event-3",
+              "sequence": 3,
+              "kind": "runs.changed",
+              "at": 1700000000000,
+              "payload": {
+                "runs": []
+              }
+            }
+          ]
+        },
+        "revision": {
+          "configuration": 7,
+          "sequence": 3
+        }
+      }
+    },
+    {
+      "kind": "response",
+      "envelope": {
+        "id": "request-replay-past",
+        "ok": true,
+        "result": {
+          "kind": "snapshot",
+          "sequence": 3,
+          "snapshot": {
+            "kind": "snapshot",
+            "rows": []
+          }
+        },
+        "revision": {
+          "configuration": 7,
+          "sequence": 3
+        }
+      }
+    }
+  ]
+}

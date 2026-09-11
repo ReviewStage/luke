@@ -64,6 +64,17 @@ exchange asserts that a message was said at all. A rewrite of what composes an
 envelope is measured against those bytes, and recording them again
 (`LUKE_UPDATE_FIXTURES=1`) is a claim that the protocol itself moved.
 
+`fixtures/socket/` is the same recording one level out, for the frames the
+socket binding wraps those envelopes in: one exchange's worth, in the order a
+client read them — an answer, a refusal, an unreadable request's refusal, an
+event, a node invocation, and a reconnection replayed from inside the window
+and answered with a snapshot from past it — each as the frame kind and the one
+envelope under it, and each asserted to be a single document, since the
+binding wraps one envelope and never several. `socket-frames.test.ts` records
+them through a real ephemeral socket on this machine, so a rewrite of the
+binding is measured against what a client of an earlier build would have
+read.
+
 The Rpc model speaks those same bytes through `gatewayEnvelopeSerialization`,
 the `RpcSerialization` in `rpc.ts`, and never through `@effect/rpc`'s own
 framings: a request travels as the request envelope, with what the Rpc model
@@ -134,9 +145,10 @@ the configuration revision, because `gatewayEnvelopeSerialization` stamps an
 answer's revision inside its encoder, which the runtime calls as a plain
 function.
 
-The layer takes its `Protocol` from whoever carries the frames.
-`layerGatewayInProcessProtocol` is the one this build ships, the client and
-the host in one process: `GatewayInProcessProtocol.connect` admits a client
+The layer takes its `Protocol` from whoever carries the frames, and there are
+two. `layerGatewayInProcessProtocol` is the one the desktop reaches, the
+client and the host in one process: `GatewayInProcessProtocol.connect` admits
+a client
 into the registry and answers a door whose `carry` takes one request envelope
 as text and answers the response envelope as text, both through the same
 serialization a socket would use. The runtime numbers requests itself, so
@@ -150,14 +162,29 @@ byte for byte with the recorded one, including the replayed key, the
 conflicting key, the stale revision, and a reconnection inside and past the
 window.
 
-The `GatewayServer` class is what `@sidecar/host`'s `GatewayService`, the
-in-process transports, and the socket binding still hold, and it is a
+The socket's own `Protocol` is the other, behind the `./websocket` door and
+described below: the binding provides it and composes `layerGatewayServer`
+over it, so the server that answers a socket is the same server, with the same
+middleware, that answers the in-process transport. `layerGatewaySocket` is
+that whole host end as one layer — the event log, the admissions door, and the
+client registry the binding and the server share, the serialization stamping
+each answer with the log's own revision, and the server over the socket's
+frames — and `GatewaySocketBinding` is what a host holds of it: the port it
+bound, how many connections stand, and the one close of admissions that shuts
+its own door and the server's together.
+
+The `GatewayServer` class is what `@sidecar/host`'s `GatewayService` and the
+in-process transports still hold, and it is a
 strangler shim (`@deprecated`, deleted by P7-01 and P7-02, on the ADR's
 allowlist): it makes the log, the admissions door, and the registry ahead of
 a `ManagedRuntime` over the layers above, runs a request as a promise through
 the in-process protocol, and runs an emit, a reconnect, and the close of
 admissions synchronously, delivering each emitted event to its own listeners
-on the same tick beside the stream the log publishes.
+on the same tick beside the stream the log publishes. The socket binding holds
+it no longer: it provides the `Protocol` a server is built over rather than
+attaching to one already built, so what it needs of a host is the server's own
+layer options, which `GatewayService` hands out as `serverOptions` — a shim of
+the same family, deleted with the class.
 
 ## Five doors, because three of them reach beyond the vocabulary
 
@@ -165,7 +192,9 @@ The barrel carries the protocol, the handler vocabulary (`./methods`: the
 outcome a handler answers, its context, and the table type), the client, the
 in-process transport, and the node registry — nothing that reaches a socket,
 and nothing that reaches `@effect/rpc`. `./websocket` is the binding that
-reaches a socket (`ws`, `node:http`, `node:crypto`); `./rpc` is the door that
+reaches a socket (`ws`, `node:http`, `node:crypto`, and `@effect/platform`'s
+`Socket`, which every admitted connection is one of) and, through the
+`Protocol` it provides, the server below it; `./rpc` is the door that
 reaches `@effect/rpc` (the `RpcGroup`, the `GatewayMutates` annotation, and
 the envelope serialization); and `./server` is the host's server, which
 composes that runtime over the group, so a bundle that only wants the
@@ -176,12 +205,18 @@ answers when every envelope goes through JSON and back.
 
 ## Authentication is injected, never spelled here
 
-The handshake decides two things of its own — a host no longer admitting
-refuses, and so does a client on another protocol version — and asks
-`authenticate` for the third. Who is asking is compared where it is
+The handshake runs on the binding's own upgrade, before `ws` is handed the
+socket and before the client registry has heard of it, and a connection is
+served only for a client it admitted. It decides two things of its own — a
+host no longer admitting refuses, and so does a client on another protocol
+version — and asks `authenticate` for the third. Who is asking is compared
+where it is
 understood: a shared secret in constant time on a loopback binding, an
 account's bearer on a server. This package therefore learns no credential,
-and none reaches a log line in it.
+and none reaches a log line in it. A host that starts to leave while a
+credential is still being checked takes the socket with it rather than holding
+its own close open behind an authority that may never answer, and a client
+that drops mid-handshake is admitted as nobody.
 
 ## Unavailable and unknown are different answers
 

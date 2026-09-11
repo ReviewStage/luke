@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { Context, Effect, Layer, type Scope } from "effect";
 import { test } from "vitest";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
@@ -19,15 +21,16 @@ import {
   nodeInvocationAnswerToWire,
   nodeInvocationFromWire,
 } from "./protocol.js";
-import { GatewayServer } from "./server.js";
+import { GatewayServer, gatewayMethodEffects } from "./server.js";
 import { TextLoopbackTransport } from "./testing.js";
 import { InProcessTransport } from "./transport.js";
 import {
   bearerAuthentication,
   connectWebSocketGateway,
   GATEWAY_FRAME,
+  GatewaySocketBinding,
+  layerGatewaySocket,
   WEB_SOCKET_GATEWAY_DEFAULTS,
-  WebSocketTransport,
 } from "./websocket.js";
 
 const TOKEN = "a-shared-secret";
@@ -43,7 +46,7 @@ const NODE_ID = "desktop-native";
  * exactly as the desktop's service does: the invoker is bound to that
  * connection, and its closing disconnects the node.
  */
-function hostWithNodes() {
+function nodeMethods() {
   const nodes = new NodeRegistry();
   const owners = new Map<string, string>();
   let ids = 0;
@@ -74,23 +77,43 @@ function hostWithNodes() {
       return gatewayOk({ nodeId });
     },
   };
+  return { methods, nodes, nextId: () => `event-${++ids}` };
+}
+
+function hostWithNodes() {
+  const { methods, nodes, nextId } = nodeMethods();
   const server = new GatewayServer({
     methods,
     configurationRevision: () => 1,
     sessionRevision: () => undefined,
     snapshot: () => ({}),
     now: () => 0,
-    createEventId: () => `event-${++ids}`,
+    createEventId: nextId,
   });
   return { server, nodes };
 }
 
-async function socketHost() {
-  const { server, nodes } = hostWithNodes();
-  const host = new WebSocketTransport({ server, authenticate: bearerAuthentication(TOKEN) });
-  const port = await host.bind();
-  return { server, nodes, host, port, close: () => host.close() };
-}
+/** The same host on an ephemeral socket, bound for as long as the test's scope stands. */
+const socketHost = (): Effect.Effect<
+  { readonly nodes: NodeRegistry; readonly port: number },
+  never,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    const { methods, nodes, nextId } = nodeMethods();
+    const context = yield* Layer.build(
+      layerGatewaySocket({
+        methods: gatewayMethodEffects(methods),
+        configurationRevision: () => 1,
+        sessionRevision: () => undefined,
+        snapshot: () => ({}),
+        now: () => 0,
+        createEventId: nextId,
+        authenticate: bearerAuthentication(TOKEN),
+      }),
+    ).pipe(Effect.orDie);
+    return { nodes, port: Context.get(context, GatewaySocketBinding).port };
+  });
 
 function socketUrl(port: number): string {
   return `ws://${WEB_SOCKET_GATEWAY_DEFAULTS.HOST}:${port}/`;
@@ -206,153 +229,163 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 }
 
-test("over the socket: an ask dispatched to a node whose connection closes answers unknown, one made after answers unavailable, and a new connection is never replayed the old ask", async () => {
-  const hosted = await socketHost();
-  try {
-    const first = await rawSocket(hosted.port, "desktop");
-    const seenByFirst = frames(first);
-    sendRequest(first, "reg-1", GATEWAY_METHOD.NODE_REGISTER, {
-      nodeId: NODE_ID,
-      capabilities: [CAPABILITY],
-    });
-    await until(
-      () => seenByFirst.some((frame) => frame.kind === GATEWAY_FRAME.RESPONSE),
-      "the registration answered",
-    );
-    // The host asks; the node has performed the effect and dies before answering.
-    const pending = hosted.nodes.invoke(CAPABILITY, { url: "https://effect.test" });
-    await until(
-      () => seenByFirst.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
-      "the invocation reached the node",
-    );
-    const dispatched = seenByFirst.find((frame) => frame.kind === GATEWAY_FRAME.INVOCATION);
-    assert.ok(dispatched && isRecord(dispatched.envelope));
-    const invocation = nodeInvocationFromWire(dispatched.envelope);
-    assert.ok(invocation);
-    first.terminate();
-    const lost = await pending;
-    assert.equal(lost.status, NODE_CAPABILITY_STATUS.UNKNOWN);
-    if (lost.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
-      assert.equal(lost.reason, NODE_INVOCATION_REFUSAL.ANSWER_LOST);
-    }
-    // Nothing connected offers the capability now: never dispatched.
-    const undispatched = await hosted.nodes.invoke(CAPABILITY, { url: "https://later.test" });
-    assert.equal(undispatched.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-    // A relaunched client registers again and hears no frame for the lost ask;
-    // its reconnect replay carries no invocation either, because none is an event.
-    const second = await rawSocket(hosted.port, "desktop");
-    const seenBySecond = frames(second);
-    sendRequest(second, "reg-2", GATEWAY_METHOD.NODE_REGISTER, {
-      nodeId: NODE_ID,
-      capabilities: [CAPABILITY],
-    });
-    sendRequest(second, "rc-1", GATEWAY_METHOD.RECONNECT, { lastSequence: 0 });
-    await until(
-      () => seenBySecond.filter((frame) => frame.kind === GATEWAY_FRAME.RESPONSE).length === 2,
-      "the second client's registration and reconnection answered",
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.equal(seenBySecond.filter((frame) => frame.kind === GATEWAY_FRAME.INVOCATION).length, 0);
-    const replay = seenBySecond.find(
-      (frame) =>
-        frame.kind === GATEWAY_FRAME.RESPONSE &&
-        isRecord(frame.envelope) &&
-        frame.envelope.id === "rc-1",
-    );
-    assert.ok(replay && isRecord(replay.envelope) && isRecord(replay.envelope.result));
-    assert.deepEqual(replay.envelope.result.events, []);
-    // A late answer for the lost ask, from the new connection, lands nowhere.
-    second.send(
-      JSON.stringify({
-        kind: GATEWAY_FRAME.ANSWER,
-        envelope: nodeInvocationAnswerToWire({
-          invocationId: invocation.invocationId,
-          result: { status: NODE_CAPABILITY_STATUS.OK, value: "too late" },
+it.live(
+  "over the socket: an ask dispatched to a node whose connection closes answers unknown, one made after answers unavailable, and a new connection is never replayed the old ask",
+  () =>
+    Effect.scoped(
+      Effect.flatMap(socketHost(), (hosted) =>
+        Effect.promise(async () => {
+          const first = await rawSocket(hosted.port, "desktop");
+          const seenByFirst = frames(first);
+          sendRequest(first, "reg-1", GATEWAY_METHOD.NODE_REGISTER, {
+            nodeId: NODE_ID,
+            capabilities: [CAPABILITY],
+          });
+          await until(
+            () => seenByFirst.some((frame) => frame.kind === GATEWAY_FRAME.RESPONSE),
+            "the registration answered",
+          );
+          // The host asks; the node has performed the effect and dies before answering.
+          const pending = hosted.nodes.invoke(CAPABILITY, { url: "https://effect.test" });
+          await until(
+            () => seenByFirst.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
+            "the invocation reached the node",
+          );
+          const dispatched = seenByFirst.find((frame) => frame.kind === GATEWAY_FRAME.INVOCATION);
+          assert.ok(dispatched && isRecord(dispatched.envelope));
+          const invocation = nodeInvocationFromWire(dispatched.envelope);
+          assert.ok(invocation);
+          first.terminate();
+          const lost = await pending;
+          assert.equal(lost.status, NODE_CAPABILITY_STATUS.UNKNOWN);
+          if (lost.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
+            assert.equal(lost.reason, NODE_INVOCATION_REFUSAL.ANSWER_LOST);
+          }
+          // Nothing connected offers the capability now: never dispatched.
+          const undispatched = await hosted.nodes.invoke(CAPABILITY, { url: "https://later.test" });
+          assert.equal(undispatched.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+          // A relaunched client registers again and hears no frame for the lost ask;
+          // its reconnect replay carries no invocation either, because none is an event.
+          const second = await rawSocket(hosted.port, "desktop");
+          const seenBySecond = frames(second);
+          sendRequest(second, "reg-2", GATEWAY_METHOD.NODE_REGISTER, {
+            nodeId: NODE_ID,
+            capabilities: [CAPABILITY],
+          });
+          sendRequest(second, "rc-1", GATEWAY_METHOD.RECONNECT, { lastSequence: 0 });
+          await until(
+            () =>
+              seenBySecond.filter((frame) => frame.kind === GATEWAY_FRAME.RESPONSE).length === 2,
+            "the second client's registration and reconnection answered",
+          );
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          assert.equal(
+            seenBySecond.filter((frame) => frame.kind === GATEWAY_FRAME.INVOCATION).length,
+            0,
+          );
+          const replay = seenBySecond.find(
+            (frame) =>
+              frame.kind === GATEWAY_FRAME.RESPONSE &&
+              isRecord(frame.envelope) &&
+              frame.envelope.id === "rc-1",
+          );
+          assert.ok(replay && isRecord(replay.envelope) && isRecord(replay.envelope.result));
+          assert.deepEqual(replay.envelope.result.events, []);
+          // A late answer for the lost ask, from the new connection, lands nowhere.
+          second.send(
+            JSON.stringify({
+              kind: GATEWAY_FRAME.ANSWER,
+              envelope: nodeInvocationAnswerToWire({
+                invocationId: invocation.invocationId,
+                result: { status: NODE_CAPABILITY_STATUS.OK, value: "too late" },
+              }),
+            }),
+          );
+          // And a fresh ask is dispatched to the new connection alone, once.
+          const fresh = hosted.nodes.invoke(CAPABILITY, { url: "https://fresh.test" });
+          await until(
+            () => seenBySecond.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
+            "the fresh invocation reached the second client",
+          );
+          const freshFrame = seenBySecond.find((frame) => frame.kind === GATEWAY_FRAME.INVOCATION);
+          assert.ok(freshFrame && isRecord(freshFrame.envelope));
+          const freshInvocation = nodeInvocationFromWire(freshFrame.envelope);
+          assert.ok(freshInvocation && freshInvocation.invocationId !== invocation.invocationId);
+          second.send(
+            JSON.stringify({
+              kind: GATEWAY_FRAME.ANSWER,
+              envelope: nodeInvocationAnswerToWire({
+                invocationId: freshInvocation.invocationId,
+                result: { status: NODE_CAPABILITY_STATUS.OK, value: "opened" },
+              }),
+            }),
+          );
+          const answered = await fresh;
+          assert.deepEqual(answered, { status: NODE_CAPABILITY_STATUS.OK, value: "opened" });
+          second.terminate();
         }),
-      }),
-    );
-    // And a fresh ask is dispatched to the new connection alone, once.
-    const fresh = hosted.nodes.invoke(CAPABILITY, { url: "https://fresh.test" });
-    await until(
-      () => seenBySecond.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
-      "the fresh invocation reached the second client",
-    );
-    const freshFrame = seenBySecond.find((frame) => frame.kind === GATEWAY_FRAME.INVOCATION);
-    assert.ok(freshFrame && isRecord(freshFrame.envelope));
-    const freshInvocation = nodeInvocationFromWire(freshFrame.envelope);
-    assert.ok(freshInvocation && freshInvocation.invocationId !== invocation.invocationId);
-    second.send(
-      JSON.stringify({
-        kind: GATEWAY_FRAME.ANSWER,
-        envelope: nodeInvocationAnswerToWire({
-          invocationId: freshInvocation.invocationId,
-          result: { status: NODE_CAPABILITY_STATUS.OK, value: "opened" },
-        }),
-      }),
-    );
-    const answered = await fresh;
-    assert.deepEqual(answered, { status: NODE_CAPABILITY_STATUS.OK, value: "opened" });
-    second.terminate();
-  } finally {
-    await hosted.close();
-  }
-});
+      ),
+    ),
+);
 
-test("over the socket: another connection's answer to a node's ask is ignored; only the node's own connection settles it", async () => {
-  const hosted = await socketHost();
-  try {
-    const node = await rawSocket(hosted.port, "desktop");
-    const other = await rawSocket(hosted.port, "intruder");
-    const seenByNode = frames(node);
-    frames(other);
-    sendRequest(node, "reg", GATEWAY_METHOD.NODE_REGISTER, {
-      nodeId: NODE_ID,
-      capabilities: [CAPABILITY],
-    });
-    await until(
-      () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.RESPONSE),
-      "registered",
-    );
-    const pending = hosted.nodes.invoke(CAPABILITY, { url: "https://guarded.test" });
-    await until(
-      () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
-      "dispatched",
-    );
-    const frame = seenByNode.find((held) => held.kind === GATEWAY_FRAME.INVOCATION);
-    assert.ok(frame && isRecord(frame.envelope));
-    const invocation = nodeInvocationFromWire(frame.envelope);
-    assert.ok(invocation);
-    other.send(
-      JSON.stringify({
-        kind: GATEWAY_FRAME.ANSWER,
-        envelope: nodeInvocationAnswerToWire({
-          invocationId: invocation.invocationId,
-          result: { status: NODE_CAPABILITY_STATUS.OK, value: "forged" },
+it.live(
+  "over the socket: another connection's answer to a node's ask is ignored; only the node's own connection settles it",
+  () =>
+    Effect.scoped(
+      Effect.flatMap(socketHost(), (hosted) =>
+        Effect.promise(async () => {
+          const node = await rawSocket(hosted.port, "desktop");
+          const other = await rawSocket(hosted.port, "intruder");
+          const seenByNode = frames(node);
+          frames(other);
+          sendRequest(node, "reg", GATEWAY_METHOD.NODE_REGISTER, {
+            nodeId: NODE_ID,
+            capabilities: [CAPABILITY],
+          });
+          await until(
+            () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.RESPONSE),
+            "registered",
+          );
+          const pending = hosted.nodes.invoke(CAPABILITY, { url: "https://guarded.test" });
+          await until(
+            () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
+            "dispatched",
+          );
+          const frame = seenByNode.find((held) => held.kind === GATEWAY_FRAME.INVOCATION);
+          assert.ok(frame && isRecord(frame.envelope));
+          const invocation = nodeInvocationFromWire(frame.envelope);
+          assert.ok(invocation);
+          other.send(
+            JSON.stringify({
+              kind: GATEWAY_FRAME.ANSWER,
+              envelope: nodeInvocationAnswerToWire({
+                invocationId: invocation.invocationId,
+                result: { status: NODE_CAPABILITY_STATUS.OK, value: "forged" },
+              }),
+            }),
+          );
+          let settled = false;
+          void pending.then(() => {
+            settled = true;
+          });
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          assert.equal(settled, false);
+          node.send(
+            JSON.stringify({
+              kind: GATEWAY_FRAME.ANSWER,
+              envelope: nodeInvocationAnswerToWire({
+                invocationId: invocation.invocationId,
+                result: { status: NODE_CAPABILITY_STATUS.OK, value: "genuine" },
+              }),
+            }),
+          );
+          assert.deepEqual(await pending, { status: NODE_CAPABILITY_STATUS.OK, value: "genuine" });
+          node.terminate();
+          other.terminate();
         }),
-      }),
-    );
-    let settled = false;
-    void pending.then(() => {
-      settled = true;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    assert.equal(settled, false);
-    node.send(
-      JSON.stringify({
-        kind: GATEWAY_FRAME.ANSWER,
-        envelope: nodeInvocationAnswerToWire({
-          invocationId: invocation.invocationId,
-          result: { status: NODE_CAPABILITY_STATUS.OK, value: "genuine" },
-        }),
-      }),
-    );
-    assert.deepEqual(await pending, { status: NODE_CAPABILITY_STATUS.OK, value: "genuine" });
-    node.terminate();
-    other.terminate();
-  } finally {
-    await hosted.close();
-  }
-});
+      ),
+    ),
+);
 
 test("a client that adopts a replaced host follows the new host's numbering from its snapshot rather than dropping its events", async () => {
   let ids = 0;
@@ -415,45 +448,48 @@ test("a client that adopts a replaced host follows the new host's numbering from
   assert.equal(heard.length, 6);
 });
 
-test("the socket client serves invocations only while a handler is served, answering unavailable otherwise", async () => {
-  const hosted = await socketHost();
-  try {
-    const connected = await connectWebSocketGateway({
-      url: socketUrl(hosted.port),
-      headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
-      client: OPERATOR,
-    });
-    assert.ok(connected.ok);
-    const client = new GatewayClient({
-      transport: connected.connection,
-      createId: () => `c-${Math.random()}`,
-    });
-    assert.ok(
-      (
-        await client.call(GATEWAY_METHOD.NODE_REGISTER, {
-          nodeId: NODE_ID,
-          capabilities: [CAPABILITY],
-        })
-      ).ok,
-    );
-    const unserved = await hosted.nodes.invoke(CAPABILITY, { url: "https://none.test" });
-    assert.equal(unserved.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-    if (unserved.status === NODE_CAPABILITY_STATUS.UNAVAILABLE) {
-      assert.equal(unserved.reason, NODE_INVOCATION_REFUSAL.NOT_SERVING);
-    }
-    const opened: string[] = [];
-    connected.connection.serveInvocations?.((invocation) => {
-      opened.push(String(invocation.params.url));
-      return Promise.resolve({ status: NODE_CAPABILITY_STATUS.OK, value: undefined });
-    });
-    const served = await hosted.nodes.invoke(CAPABILITY, { url: "https://served.test" });
-    assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
-    assert.deepEqual(opened, ["https://served.test"]);
-    connected.connection.close();
-  } finally {
-    await hosted.close();
-  }
-});
+it.live(
+  "the socket client serves invocations only while a handler is served, answering unavailable otherwise",
+  () =>
+    Effect.scoped(
+      Effect.flatMap(socketHost(), (hosted) =>
+        Effect.promise(async () => {
+          const connected = await connectWebSocketGateway({
+            url: socketUrl(hosted.port),
+            headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
+            client: OPERATOR,
+          });
+          assert.ok(connected.ok);
+          const client = new GatewayClient({
+            transport: connected.connection,
+            createId: () => `c-${Math.random()}`,
+          });
+          assert.ok(
+            (
+              await client.call(GATEWAY_METHOD.NODE_REGISTER, {
+                nodeId: NODE_ID,
+                capabilities: [CAPABILITY],
+              })
+            ).ok,
+          );
+          const unserved = await hosted.nodes.invoke(CAPABILITY, { url: "https://none.test" });
+          assert.equal(unserved.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+          if (unserved.status === NODE_CAPABILITY_STATUS.UNAVAILABLE) {
+            assert.equal(unserved.reason, NODE_INVOCATION_REFUSAL.NOT_SERVING);
+          }
+          const opened: string[] = [];
+          connected.connection.serveInvocations?.((invocation) => {
+            opened.push(String(invocation.params.url));
+            return Promise.resolve({ status: NODE_CAPABILITY_STATUS.OK, value: undefined });
+          });
+          const served = await hosted.nodes.invoke(CAPABILITY, { url: "https://served.test" });
+          assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
+          assert.deepEqual(opened, ["https://served.test"]);
+          connected.connection.close();
+        }),
+      ),
+    ),
+);
 
 test("a fresh client with no baseline adopts the host as it stands rather than replaying the window before it arrived", async () => {
   let ids = 0;
