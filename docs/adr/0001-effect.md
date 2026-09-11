@@ -486,6 +486,7 @@ design decision stated as such:
 | The conversation, directory, and transcript tables' synchronous doors | P5-10a | P5-11 |
 | The children, notebook, and memory index tables' synchronous doors | P5-10b | P5-11 |
 | The envelope and generation tables' synchronous doors | P5-10d | P5-11 |
+| The archive registry table's synchronous doors | P5-10c | P5-11 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P5-14 |
 | `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P5-14 |

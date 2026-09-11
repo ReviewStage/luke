@@ -1,4 +1,4 @@
-import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 import type { SqlClient } from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, type Context, Effect, Exit, Layer, Scope } from "effect";
@@ -127,9 +127,4 @@ export class StoreDatabase {
     Effect.runSync(Scope.close(this.#scope, Exit.void));
     this.#db.close();
   }
-}
-
-/** An optional field as its column takes it: the value, or NULL for an absent one. */
-export function nullable(value: string | number | undefined): SQLInputValue {
-  return value === undefined ? null : value;
 }
