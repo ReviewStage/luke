@@ -266,6 +266,18 @@ promise here rather than on a fiber of its own. It goes in P7-08 once the
 brain composes onto the host's own `Layer` and this write reaches a runtime
 edge of its own.
 
+`settledUnlessAborted` and `claimedUnlessAborted` in
+`packages/brain/src/settled.ts` are on the allowlist on the same terms: the
+interruption bridge is `packages/brain/src/effect/settled.ts`, where a run's
+`AbortSignal` is an effect a race settles against and a value that must be
+owned by exactly one party is a `Deferred` both arms reach for, and the
+Promise door runs it to the `Promise<Settled<T>>` its callers still hold. The
+door is also where a hot promise's outcome is observed, since the bridge may
+answer a signal that had already fired without ever starting the work, and a
+rejection nobody waits on must still have its handler. P12-02 deletes the door
+once the turn runner, the generation, and maintenance each wait in a fiber of
+their own.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
