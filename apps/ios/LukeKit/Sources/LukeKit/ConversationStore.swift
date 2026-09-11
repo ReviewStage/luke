@@ -87,8 +87,14 @@ public final class ConversationStore {
         } catch is AccountSessionError {
             return
         } catch ConversationReadError.unreadableRow(let row) {
+            guard !Task.isCancelled else { return }
             failure = .unreadableRow(row)
         } catch {
+            // A poll cut short by its own task's cancellation — the screen
+            // left, or the app went to the background — says nothing about
+            // the service, and it may end after the task that replaced it
+            // has already polled and cleared the failure.
+            guard !Task.isCancelled, !(error is CancellationError) else { return }
             failure = .unavailable
         }
     }
