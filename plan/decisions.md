@@ -1625,3 +1625,34 @@ turn and leave the route honest; or state the one-minute window as a known inter
 weakest, because it is a state no client asked for. **Orchestrator leans the first:** a route that
 answers inbox entries from a record read contradicts the principle, and the contradiction stays
 invisible until a client draws one.
+
+
+## 2026-09-11 — G4 merged, and it added the first gate this rework built rather than found broken
+
+**`dc9ff94d`, #1066, LUKE-146 Done. Lane G's first merge, and the only one of its five that never
+needed E5.** Thirteen v1 tables, `briefings`, and `conversation_lease` gone; the store-shapes door and
+an unused `RunEndReason` export with them, so **G1 finds one fewer seam.** Counts measured on Neon
+(project `luke`, branch `production`) and tabled in the body at all thirteen zero.
+
+**The assertion is better than the one I required, in a direction I did not think of.** I asked for
+"`conversations`, `messages`, `events` and `turns` still exist after `0021`" — a guard against one
+typo, since the table being dropped (`conversation`) and the table that is the whole new design
+(`conversations`) differ by a character. At the thermonuclear reviewer's suggestion, G4 asserted
+instead that **Postgres's public tables equal, as a sorted list, every table `server/db/schema.ts`
+declares.**
+
+That catches the typo **and the reverse — a table declared and never migrated.** So **the schema
+declaration and the database are now held equal in both directions, for every future migration in
+this repository.** Mutation-checked by dropping the `0021` journal entry and watching it fail naming
+all thirteen tables.
+
+**Worth naming against the day's other findings.** The record above holds eight gate findings, every
+one of them a gate that did not say what it appeared to say: a `CLEAN` check that was not mergeable,
+a `test:store` list that silently downgraded files to PGlite, a Push-on-main that skipped lint, a
+preview reporting Ready on the wrong shape, a store-backed test on PGlite alone, `test:store` files
+sharing one database, the Vercel preview not being required at all, and previews unreadable behind
+Deployment Protection. **G4's is the first gate this rework has added rather than found broken.**
+
+And one method worth keeping: **measuring rather than reasoning.** G4's counts made its own migration
+safe as a fact, and they corrected my claim that no worker could reach that database — which then let
+C4 measure its own `prompts` count and took an item off Dean's list.
