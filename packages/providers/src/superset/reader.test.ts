@@ -16,6 +16,7 @@ import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
 import { type TestContext, test } from "vitest";
+import { homeManifest } from "../testing/index.js";
 import { supersetHostState } from "./reader.js";
 import { SUPERSET_CONTROL_ID } from "./vocabulary.js";
 
@@ -156,6 +157,31 @@ test("reads live host databases and enriches an exact provider session", async (
     ])[0]?.detail?.link,
     "codex://threads/session-1",
   );
+});
+
+// "Never write provider transcripts or session-state files. Reading them is
+// what Luke is for; writing to them is never." The read opens each
+// organization's host database read-only inside a scope that closes it, so
+// every file under the Superset home stands byte for byte.
+test("reading Superset's own host state writes nothing under its home", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES (
+      'workspace-1', NULL, NULL, 'power-vacation', 'feat/superset', 200
+    );
+    INSERT INTO terminal_agent_bindings VALUES (
+      'terminal-1', 'workspace-1', 'codex', 'session-1', 'Start'
+    );
+  `);
+  database.close();
+  const before = await homeManifest(home);
+
+  const snapshot = await supersetHostState({ homeDirectory: home });
+
+  assert.ok(snapshot.context(PROVIDER_ID.CODEX, "session-1"));
+  assert.deepEqual(await homeManifest(home), before);
 });
 
 test("binds Cursor's agents CLI under Superset's own name for it", async (t) => {

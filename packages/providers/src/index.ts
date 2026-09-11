@@ -25,7 +25,6 @@ export {
   canIgnoreSqliteError,
   defaultSqliteModule,
   numberFromRow,
-  openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
   scopedReadOnlyDatabase,

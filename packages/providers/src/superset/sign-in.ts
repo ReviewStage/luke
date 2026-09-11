@@ -9,6 +9,14 @@ const AUTHORIZATION_HOST = "api.superset.sh";
 const AUTHORIZATION_PATH = "/api/auth/oauth2/authorize";
 
 /**
+ * The fixed segments of the CLI invocation root `AGENTS.md` authorizes for
+ * connecting: `auth login`, invoked directly without a shell.
+ */
+const SUPERSET_CLI_COMMAND = {
+  AUTH_LOGIN: ["auth", "login", "--json"],
+} as const;
+
+/**
  * What the sign-in flow uses of the CLI it spawned. Stated rather than
  * `Pick`ed: a child process's `once` returns the child itself, so a picked
  * shape still demands every member a real one has, and nothing could stand in
@@ -128,7 +136,7 @@ export class SupersetSignIn {
     this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.BROWSER_CODE));
     let child: LoginChild;
     try {
-      child = this.#spawnLogin(this.#cli.executable, ["auth", "login", "--json"]);
+      child = this.#spawnLogin(this.#cli.executable, SUPERSET_CLI_COMMAND.AUTH_LOGIN);
     } catch {
       this.#starting = false;
       return this.#fail("Superset sign-in could not start.");
