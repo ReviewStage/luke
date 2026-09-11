@@ -131,8 +131,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         registry,
       );
       if (!read.ok) {
-        const [index] = read.path;
-        const refused = typeof index === "number" ? group.messages[index] : undefined;
+        // The reader's path begins with the index of the row it refused.
+        const refused = group.messages.find((_, position) => position === read.path[0]);
         const row: UnreadableRow = {
           conversationId: group.conversationId,
           seq: refused?.seq ?? group.messages[0]?.seq ?? 0,
