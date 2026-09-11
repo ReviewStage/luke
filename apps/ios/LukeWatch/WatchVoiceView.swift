@@ -5,39 +5,34 @@ import SwiftUI
 /// which in turn drives a RealtimeSession carrying the same tools the phone's
 /// conversation does: each call is validated through LukeKit's shared
 /// dispatcher against the roster the sessions page draws, and an open or a
-/// list ask lands on that page once Luke has finished speaking.
+/// list ask lands on that page once Luke has finished speaking. The thread
+/// under the controls is the stored Conversation, read from the service the
+/// way the phone reads it; the in-memory thread the call records into is the
+/// call's own context and is drawn nowhere.
 struct WatchVoiceView: View {
     @Environment(WatchAccountSession.self) private var accountSession
     @Environment(WatchRosterStore.self) private var store
     @Environment(WatchNavigation.self) private var navigation
-    @Environment(VoiceConversationThread.self) private var conversation
+    @Environment(VoiceConversationThread.self) private var voiceThread
+    @Environment(ConversationStore.self) private var stored
     @Environment(ProductEventSender.self) private var events
     @AppStorage(VoiceSettingsKey.voice) private var voice = RealtimeVoice.default
     @AppStorage(VoiceSettingsKey.speed) private var speed = RealtimeVoiceSpeed.default
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
     @State private var settingsShown = false
-    // The sideways pull that uncovers the thread's stamps, and whether the
-    // drag under way is the pull's or the scroll's, decided at its first move.
-    @State private var timePull: CGFloat = 0
-    @State private var pullClaimed: Bool?
-    // The instant the thread's dates are read against, so a line from earlier
-    // today says Today and one from last week says which day. It moves when a
-    // line lands, when the page appears, and at midnight, and at no other
-    // time, because nothing else can change what a date should say.
-    @State private var now = Date()
     private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            messageThread
+            WatchConversationView(conversation: stored)
             floatingControls
         }
         .task {
             model.voice = voice
             model.speed = speed
             model.prepare(
-                accountSession: accountSession, thread: conversation, actionContext: makeActionContext
+                accountSession: accountSession, thread: voiceThread, actionContext: makeActionContext
             )
             // The roster the actions are validated against is the list's own,
             // refreshed as this page opens so a session archived since the
@@ -107,82 +102,6 @@ struct WatchVoiceView: View {
             store.showList(ask)
             navigation.showList()
         }
-    }
-
-    // MARK: - Message thread
-
-    private var messageThread: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 6) {
-                    if conversation.messages.isEmpty {
-                        LukeMark()
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 40)
-                            .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
-                            .opacity(model.status == .connecting ? 0.4 : 1)
-                    } else {
-                        ForEach(Array(conversation.messages.enumerated()), id: \.element.id) {
-                            index, message in
-                            if ConversationTimeBreak.opens(
-                                after: index == 0 ? nil : conversation.messages[index - 1].recordedAt,
-                                recordedAt: message.recordedAt
-                            ) {
-                                WatchTimeBreakLabel(recordedAt: message.recordedAt, now: now)
-                            }
-                            WatchVoiceBubble(message: message, pull: timePull)
-                                .id(message.id)
-                        }
-                    }
-                }
-                .padding(.horizontal, 4)
-                .padding(.top, 8)
-                // Bottom padding so the newest bubble clears the floating controls
-                // while still being reachable by scroll.
-                .padding(.bottom, 88)
-                .frame(maxWidth: .infinity)
-            }
-            .simultaneousGesture(timePullGesture)
-            .onChange(of: conversation.messages) {
-                now = Date()
-                guard let last = conversation.messages.last else { return }
-                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-            }
-            .onAppear {
-                now = Date()
-                if let last = conversation.messages.last {
-                    proxy.scrollTo(last.id, anchor: .bottom)
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-                now = Date()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// The pull rides beside the scroll rather than replacing it, as on the
-    /// phone: a drag that starts mostly sideways is the pull's for its whole
-    /// length, one that starts mostly upright is the scroll's, and the lift
-    /// springs the column back. The crown still scrolls throughout.
-    private var timePullGesture: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                let claimed =
-                    pullClaimed
-                    ?? ConversationTimePull.claimsDrag(
-                        width: value.translation.width, height: value.translation.height
-                    )
-                pullClaimed = claimed
-                guard claimed else { return }
-                timePull = ConversationTimePull.distance(
-                    dragged: value.translation.width, reveal: WatchVoiceBubble.reveal
-                )
-            }
-            .onEnded { _ in
-                pullClaimed = nil
-                withAnimation(.spring(duration: 0.35)) { timePull = 0 }
-            }
     }
 
     // MARK: - Floating controls
@@ -307,82 +226,5 @@ struct WatchVoiceView: View {
         case .speaking: return Color(red: 0.2, green: 0.8, blue: 0.5)
         default: return Color.accentColor
         }
-    }
-}
-
-// MARK: - Message bubble
-
-/// One line of the thread with its stamp in the column past the screen's
-/// trailing edge, which the pull brings in the way iMessage uncovers a
-/// message's time. The watch's screen is too narrow for a received bubble to
-/// keep room spare beside it, so here both sides ride the pull and move left
-/// together, Luke's words running off the leading edge for as long as the
-/// fingers hold; the phone, with room to the right of his bubbles, leaves
-/// them standing. The pull stops the moment the column stands fully in, the
-/// least travel that shows every stamp whole, because every point further is
-/// more of the words off the screen for nothing.
-private struct WatchVoiceBubble: View {
-    let message: VoiceConversationMessage
-    let pull: CGFloat
-
-    /// Room for the widest stamp a twelve-hour clock draws at this size, and
-    /// the inset it keeps from the thread's edge once uncovered.
-    private static let timeColumn: CGFloat = 44
-    private static let stampInset: CGFloat = 2
-    /// The thread's horizontal inset, which the column rests behind.
-    private static let threadInset: CGFloat = 4
-    /// How far the pull travels before it stops: the column and the inset it
-    /// rests behind, which is exactly what stands it fully in view.
-    static let reveal: CGFloat = timeColumn + stampInset + threadInset
-
-    private var isDeveloper: Bool { message.speaker == .developer }
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            Text(message.words)
-                .font(.system(size: 13))
-                .foregroundStyle(isDeveloper ? Color.white : Color.primary)
-                .multilineTextAlignment(.leading)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 7)
-                .background {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(isDeveloper ? Color.accentColor : Color.secondary.opacity(0.18))
-                }
-                .frame(maxWidth: .infinity, alignment: isDeveloper ? .trailing : .leading)
-                .offset(x: -pull)
-            Text(message.recordedAt, format: .dateTime.hour().minute())
-                .font(.system(size: 10))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(width: Self.timeColumn, alignment: .trailing)
-                .padding(.trailing, Self.stampInset)
-                .offset(x: Self.reveal - pull)
-        }
-    }
-}
-
-// MARK: - Time break
-
-/// The moment a line was said, set over it the way iMessage dates a message
-/// that followed a long silence, worded by the rule the phone and the desktop
-/// share. It is the thread's line, not a message: centered, in the quiet
-/// voice of the status label, and standing still under the pull, so
-/// uncovering the stamp column never pushes a date off the screen.
-private struct WatchTimeBreakLabel: View {
-    let recordedAt: Date
-    let now: Date
-
-    var body: some View {
-        let label = ConversationTimeBreak.label(recordedAt: recordedAt, now: now)
-        return (Text(label.day).fontWeight(.semibold) + Text(" \(label.time)"))
-            .font(.system(size: 10))
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 4)
-            .accessibilityElement(children: .combine)
     }
 }

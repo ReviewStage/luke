@@ -43,6 +43,30 @@ final class ConversationTurnRowsTests: XCTestCase {
         )
     }
 
+    func testATurnIsDatedByItsFirstAndLastDatedRowsAndAThoughtAloneByNone() throws {
+        let group = try fixtureGroups()[0]
+        let rows = ConversationTurnRows(group: group, roster: [])
+        XCTAssertEqual(rows.opensAt, group.messages.first?.createdAt)
+        XCTAssertEqual(rows.closesAt, group.messages.last?.createdAt)
+        let thought = ConversationReadTurnGroup(
+            turnId: "t-thought", conversationId: group.conversationId, source: .main, turn: nil,
+            messages: [
+                ConversationReadMessage(
+                    message: UIMessage(
+                        id: "m-thought",
+                        attribution: .assistant(AssistantMessageMetadata(author: .brain)),
+                        parts: [.reasoning("Weighing it.")]
+                    ),
+                    seq: 9, createdAt: Date(timeIntervalSince1970: 900), tools: []
+                ),
+            ]
+        )
+        let thoughtRows = ConversationTurnRows(group: thought, roster: [])
+        XCTAssertEqual(thoughtRows.rows.map(\.instant), [nil])
+        XCTAssertNil(thoughtRows.opensAt)
+        XCTAssertNil(thoughtRows.closesAt)
+    }
+
     func testARosterDiffTurnIsLukesOwnAndItsBriefingIsHisWords() throws {
         let rows = ConversationTurnRows(group: try fixtureGroups()[1], roster: [])
         XCTAssertEqual(rows.judgment, .own)

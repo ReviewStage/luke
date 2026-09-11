@@ -48,6 +48,7 @@
 		AABBCC0000000000000000E6 /* WatchVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E5 /* WatchVoiceView.swift */; };
 		AABBCC0000000000000000E8 /* WatchVoiceSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */; };
 		AABBCC0000000000000000F6 /* WatchNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F5 /* WatchNavigation.swift */; };
+		AABBCC000000000000000123 /* WatchConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000122 /* WatchConversationView.swift */; };
 		AABBCC000000000000000100 /* WatchVoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */; };
 		AABBCC000000000000000110 /* MarksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000113 /* MarksTests.swift */; };
 		AABBCC000000000000000111 /* PaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000114 /* PaletteTests.swift */; };
@@ -126,6 +127,7 @@
 		AABBCC0000000000000000E5 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceSessionModel.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000F5 /* WatchNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNavigation.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000122 /* WatchConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConversationView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceSettingsView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000113 /* MarksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarksTests.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000114 /* PaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteTests.swift; sourceTree = "<group>"; };
@@ -241,6 +243,7 @@
 				AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */,
 				AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */,
 				AABBCC0000000000000000F5 /* WatchNavigation.swift */,
+				AABBCC000000000000000122 /* WatchConversationView.swift */,
 				AABBCC0000000000000000B2 /* Assets.xcassets */,
 			);
 			path = LukeWatch;
@@ -448,6 +451,7 @@
 				AABBCC000000000000000100 /* WatchVoiceSettingsView.swift in Sources */,
 				AABBCC0000000000000000E8 /* WatchVoiceSessionModel.swift in Sources */,
 				AABBCC0000000000000000F6 /* WatchNavigation.swift in Sources */,
+				AABBCC000000000000000123 /* WatchConversationView.swift in Sources */,
 				AABBCC0000000000000000F4 /* MarkdownMessageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

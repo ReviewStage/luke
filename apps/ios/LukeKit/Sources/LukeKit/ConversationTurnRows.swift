@@ -81,6 +81,16 @@ public enum ConversationRow: Equatable, Sendable, Identifiable {
             id
         }
     }
+
+    /// The instant a row is dated by. A thought and the turn's working carry
+    /// none: they stand under the rows around them rather than at a moment of
+    /// their own.
+    public var instant: Date? {
+        switch self {
+        case .words(_, _, _, let at, _, _), .action(_, _, let at), .actionsFold(_, _, let at): at
+        case .reasoning, .details: nil
+        }
+    }
 }
 
 /// The reader's press on an actions fold, remembered with the turn state it
@@ -113,6 +123,14 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
     public let rows: [ConversationRow]
 
     public var id: String { turnId }
+
+    /// When the turn's first dated row stands, for the time break a screen
+    /// may set over it; nil for a turn of thoughts and working alone.
+    public var opensAt: Date? { rows.compactMap(\.instant).first }
+
+    /// When the turn's last dated row stands, for the silence the next turn's
+    /// break is measured from.
+    public var closesAt: Date? { rows.compactMap(\.instant).last }
 
     /// How many actions a turn carries before they fold under a count rather than standing as rows.
     public static let foldFromActions = 2
