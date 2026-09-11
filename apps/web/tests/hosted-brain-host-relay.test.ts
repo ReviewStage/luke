@@ -745,3 +745,20 @@ test("a turn end the store refuses keeps the turn in relay state, so the boundar
   assert.equal(settled.turnRows[0]?.status, TURN_STATUS.SETTLED);
   assert.equal(settled.messageRows.filter((row) => row.role === MESSAGE_ROLE.ASSISTANT).length, 1);
 });
+
+test("a hold-release turn lands under the hold_release origin, its received message the brain's own note of a hold released", async () => {
+  const target = await conversation(CONVERSATION_KIND.OBSERVED);
+  const standing = standingFor(target, BRAIN_HOST_TURN.HOLD_RELEASE);
+  await play(typedTurn("turn_0", 0), standing);
+
+  const { turnRows, messageRows } = await rows(target);
+  assert.equal(turnRows.length, 1);
+  assert.equal(turnRows[0]?.origin, TURN_ORIGIN.HOLD_RELEASE);
+  assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
+  const words = messageRows.find((row) => row.role === MESSAGE_ROLE.USER);
+  assert.ok(words);
+  assert.deepEqual(words.metadata, {
+    author: MESSAGE_AUTHOR.BRAIN,
+    source: OBSERVATION_SOURCE.HOLD_RELEASE,
+  });
+});

@@ -8,8 +8,10 @@ import {
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewEvent,
   DEVICE_PLATFORM,
+  holdReleasedInputText,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   readStoredUIMessages,
   SPEECH_EXPIRY_REASON,
   selectConversationView,
@@ -17,17 +19,20 @@ import {
   TURN_STATUS,
   unparsedWire,
   type WireRecord,
+  wakeInputText,
 } from "../server/core";
 import { devices } from "../server/db/devices-schema";
 import { CONVERSATION_KIND, conversations, events, messages, turns } from "../server/db/schema";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   claimSpeech,
+  heldBriefingsNamed,
   markSpeechPushed,
   markSpeechSpoken,
   type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
+  releasedBriefings,
   SPEECH_OFFER,
   SPEECH_REFUSAL,
   SPEECH_STATE,
@@ -771,4 +776,88 @@ test("a sweep write racing a settled transition is refused under the lock: the o
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
   assert.equal(await viewMarksUnspoken(due), false);
+});
+
+test("the briefings a hold released are read back with their words and instants, a due expiry among them is not, and one a hold-release message already names is not read again", async () => {
+  clock = NOW;
+  const held = await offered();
+  const { userId } = held;
+  const alsoHeld = await offered(userId);
+  const target = { userId, conversationId: held.conversationId };
+  await reportQuiet(userId, MAC, NOW + 30 * 60_000);
+  clock = NOW + 60_000;
+  await sweepSpeech(store, { now: clock, userIds: [userId] });
+  await reportQuiet(userId, MAC, null);
+  clock = NOW + 120_000;
+  const released = await sweepSpeech(store, { now: clock, userIds: [userId] });
+  assert.equal(released.released, 2);
+
+  const read = await database.run(releasedBriefings(target, { limit: 8 }));
+  assert.deepEqual(
+    read.map((briefing) => [briefing.messageId, briefing.briefing, briefing.decidedAt]),
+    [[held.messageId, "One fixture agent finished.", NOW]],
+  );
+  assert.equal(read[0]?.releasedAt, NOW + 120_000);
+  assert.equal(
+    (
+      await database.run(
+        releasedBriefings({ userId, conversationId: alsoHeld.conversationId }, { limit: 8 }),
+      )
+    ).length,
+    1,
+  );
+
+  // The re-decision's own opening words, as the relay writes them, are what marks the release carried.
+  const words = await storeWriter({
+    run: database.run,
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(clock),
+  });
+  const carried = await words.recordUserMessage(target, {
+    clientId: "hold-release-words",
+    text: holdReleasedInputText(
+      read.map((briefing) => ({ briefing: briefing.briefing, decidedAt: briefing.decidedAt })),
+      clock,
+    ),
+    metadata: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
+  });
+  assert.equal(carried.ok, true);
+  assert.deepEqual(await database.run(releasedBriefings(target, { limit: 8 })), []);
+
+  clock = NOW;
+  const expiredDue = await offered();
+  clock = NOW + SPEECH_OFFER.TTL_MS;
+  await sweepSpeech(store, { now: clock, userIds: [expiredDue.userId] });
+  assert.deepEqual(
+    await database.run(
+      releasedBriefings(
+        { userId: expiredDue.userId, conversationId: expiredDue.conversationId },
+        { limit: 8 },
+      ),
+    ),
+    [],
+  );
+});
+
+test("the hold-release item the host writes reads back to exactly the briefings it named, alone and folded by eve between other items", () => {
+  const plain = { briefing: "Plain.", decidedAt: NOW + 2_000 };
+  const named = [
+    { briefing: 'Quoted "words", a {brace} and a comma, here.', decidedAt: NOW },
+    { briefing: "Two lines\nof briefing — with a dash and 日本語.", decidedAt: NOW + 1 },
+    plain,
+  ];
+  const item = holdReleasedInputText(named, NOW + 3_000);
+  assert.deepEqual(heldBriefingsNamed(item), named);
+
+  // eve folds the deliveries waiting when a turn settles into one received message, a blank line between.
+  const folded = [wakeInputText([], NOW + 3_000), item, wakeInputText([], NOW + 4_000)].join(
+    "\n\n",
+  );
+  assert.deepEqual(heldBriefingsNamed(folded), named);
+  const twice = [item, holdReleasedInputText([plain], NOW + 5_000)].join("\n\n");
+  assert.equal(heldBriefingsNamed(twice).length, 4);
+
+  assert.deepEqual(heldBriefingsNamed(wakeInputText([], NOW)), []);
+  assert.deepEqual(heldBriefingsNamed(`${item.split("\n")[0]}\nnot json`), []);
+  assert.deepEqual(heldBriefingsNamed(""), []);
 });

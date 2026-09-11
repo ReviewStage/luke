@@ -1075,14 +1075,43 @@ rest pending; the one diff wider than the bound is cut to it, the sessions
 past it not woken for that diff, since the snapshot is the truth the diff was
 read from.
 
+The opener's other inbox is the queued `turns` rows the speech sweep writes
+when a hold lifts, one per conversation per release, each saying the
+briefings a meeting or a pause held back deserve a fresh decision. A queued
+row is the opener's inbox and never the run's record: for each conversation
+with rows queued, the opener hands eve one message under
+`x-luke-turn: hold_release` listing every briefing released and named in
+no hold-release message of the conversation yet — the record's own contents
+as the boundary, since the opening words the relay writes for each
+re-decision name what it carried, so a message not yet written can only
+make a release be listed again and never lose one; the words are read back
+through `heldBriefingsNamed`, the one reader coupled to what
+`holdReleasedInputText` writes, and a round-trip test holds the two
+together — taken from the
+`speech.expired` events whose reason is the hold's and the announcing rows'
+own words, and
+once eve has it removes the rows through the writer's `dequeueTurn`, which
+takes only a queued row no message names, so the turn eve runs is the
+relay's row under `hold_release` and the record still says why Luke spoke.
+A row eve refuses stands for the next tick; a conversation whose rows name
+no released briefing left to decide has its rows removed without a turn,
+said in the log rather than sent as an empty ask. The Conversation view
+draws no queued row, since it groups messages by their turn and a queued
+row has none, and the turns read and its change-signal head skip a queued
+row too, answering a turn only once the relay has moved it to running, so
+the minute between the sweep's row and the opener's send reaches no device
+as a turn that then goes. Hold releases are opened first, being the older news, and count
+against the same per-account bound as the observations.
+
 The opener reaches eve as the deployment acting for the one account the tick
 is passing over, since the tick holds no account's bearer. It calls eve's
 session routes under the tick's own `CRON_SECRET` as its bearer with the
 account in `x-luke-account`, and the eve door's first authenticator admits
 that pair as a principal of the deployment's own type — the deployment's one
-id, the account as its attribute — for a message naming an observation turn
-and nothing else: any other route or kind of turn carrying the secret is
-refused outright rather than passed to the account authenticator behind it.
+id, the account as its attribute — for a message naming a kind of turn its
+table admits (an observation or a hold's release) and nothing else: any other
+route or kind of turn carrying the secret is refused outright rather than
+passed to the account authenticator behind it.
 Which account a request acts for is one accessor over both principal types,
 and the door's ownership checks and the host's admission read that answer, so
 the deployment can open a turn only on a conversation the named account

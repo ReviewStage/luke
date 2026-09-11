@@ -1054,6 +1054,34 @@ test("the latest turn position stops at a given cursor, so an empty page never m
   assert.deepEqual(await database.store.turns.latest(userId, later.cursor), later.cursor);
 });
 
+test("a queued turn is the opener's inbox and not the record: the turns read and its head skip it until the relay moves it to running", async () => {
+  const userId = await database.createUser();
+  const { main, turns: ids } = await populate(userId);
+  const queued = await insertTurn(userId, main, {
+    status: TURN_STATUS.QUEUED,
+    queuedAt: new Date(NOW + 60_000),
+  });
+  const listed = await database.store.turns.list(userId);
+  assert.deepEqual(
+    listed.map((turn) => turn.id),
+    [ids.typed, ids.roster, ids.later, ids.idle],
+  );
+  const head = listed.at(-1);
+  assert.ok(head);
+  assert.deepEqual(await database.store.turns.latest(userId), head.cursor);
+
+  await database.db
+    .update(turns)
+    .set({ status: TURN_STATUS.RUNNING, startedAt: new Date(NOW + 61_000) })
+    .where(eq(turns.id, queued));
+  const started = await database.store.turns.list(userId, { after: head.cursor });
+  assert.deepEqual(
+    started.map((turn) => [turn.id, turn.status]),
+    [[queued, TURN_STATUS.RUNNING]],
+  );
+  assert.deepEqual(await database.store.turns.latest(userId), started[0]?.cursor);
+});
+
 test("a turns cursor naming a turn a Clear took moves back to the last turn at or before it, and to nothing when no turn stands", async () => {
   const userId = await database.createUser();
   const { turns: ids, observed } = await populate(userId);

@@ -32,6 +32,7 @@ export { runMemoryHousekeeping } from "./housekeeping.js";
 export {
   askInputText,
   BRAIN_INPUT_MARKER,
+  holdReleasedInputText,
   standingContextText,
   wakeInputText,
 } from "./input-items.js";
