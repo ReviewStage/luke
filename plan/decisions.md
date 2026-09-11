@@ -1378,3 +1378,54 @@ nothing else: no ask route, no cancel, no rating, and the compiler says so.
 **And it is not only C3's:** C8 part b needs the same header-based account naming, because the voice
 function drops the bearer after the handshake. **One shape for both**, written so part b uses it
 unchanged.
+
+
+## 2026-09-11 — One decision, two callers: a deployment principal at eve's door (orchestrator, from C3 and C8 independently)
+
+**Correcting my own ruling first.** I told C8 to "answer `LiveBrain` in process". That was about not
+calling **our own** route over HTTP and **it never addressed eve's door**, which is the thing that
+matters: `eveSessions()` posts to eve's routes over HTTP at the deployment's origin and forwards
+**the caller's** `Authorization`, which eve's door (`ownedAuth` over `lukeAccount(userInfo)`)
+resolves through userinfo. The voice function resolved and dropped its bearer at the handshake —
+deliberately, and I ruled out holding it — so at delegation time it holds a `userId` and **no
+credential that door accepts.** In-process changes nothing, because the door is eve's and eve is a
+service.
+
+**And two workers reached the same design independently, from opposite ends:**
+
+- **C3's tick** has no user bearer: nothing lets the deployment act for an account at eve's door.
+- **C8's voice function** has a `userId` and no bearer, for the same reason.
+
+Both propose a **second principal at eve's door beside `lukeAccount` and `localDev`: a
+deployment-fixed credential that authenticates the caller itself and names the account it acts for
+in `x-luke-account`, with `ownedAuth`'s conversation-ownership check applied to that account
+unchanged**, so admit-before-dispatch still holds.
+
+**So this is ONE decision with TWO callers, not two decisions**, and that is how it stands with Dean.
+Recommendation unchanged: **reuse `CRON_SECRET`** rather than provision a second secret — whoever
+holds it can already read every account's provider keys and write their rosters, so opening a
+metered run is not the marginal risk, and a second secret adds a state where **observation is
+silently off until provisioned.** Required whichever way: **the deployment principal is a distinct
+TYPE, not a flag**, so a route serving a developer cannot be handed it and no forgotten check turns
+that secret into universal impersonation. **Ownership is not scope.** C3 writes it; C8 part b uses it
+unchanged and says so if it does not fit while C3 can still change it.
+
+### A requirement this puts on C2b-2b
+
+**Expose the ask standing as an in-process reader, not only behind the route.** The voice service keys
+an exchange by the **ask's** id; `projectTurnEvents` keys on the **turn's** own id, which
+`HostedBrainTurnAnswer` says exists only once eve names it. So `LiveBrain` answers `runId = ask id`,
+reads the standing until `turnId` is set, projects with `projectTurnEvents`, and translates `turnId`
+back to the ask id per event. Without the reader it would have to call C2b's route over HTTP with a
+bearer it does not have. **Sent to C2b so it lands in its PR rather than as a follow-up in its file
+written by someone else.**
+
+### And C2a is on part b's end-to-end path
+
+`eveSessions` needs the deployment's rewrites to carry `/eve/v1/*` into the eve service, which main's
+`vercel.json` does not yet. **Part b is unit-testable against a fake eve; end to end only after
+#1018**, which is parked on the framework-preset flip. The preset is therefore a dependency of C8's
+verification and not only of C2a's merge.
+
+`observedSideband` needs nothing from C2b-2b: its only seam is E5's attach in `VoiceService.#serve`,
+so part b waits on E5 for nothing.
