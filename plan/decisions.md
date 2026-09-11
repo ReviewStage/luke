@@ -3108,3 +3108,58 @@ may be the intended shape: `LUKE_EVE_ORIGIN` already reads from the environment 
 as its default**, and Vercel's own CLI calls the feature **`experimentalServicesV2`**. **Under
 investigation from eve's and Vercel's documentation; the Build Output writer is halted until it is
 answered, because it is work that exists only to make one project hold two services.**
+
+
+## 2026-09-11 ~23:54Z — production publication stalled while previews flow; the site is fine
+
+**Read from the GitHub deployments API, twice, by me and independently by a worker.**
+
+Newest **Production** record: `6403509155`, sha `cd856635`, created **23:31:58Z**, state success.
+Newest **Preview** record at the time of reading: `6403702923`, created **23:52:31Z**. Previews have
+continued at roughly one a minute throughout.
+
+Main has moved **three commits** past the last published one, and **none has a Production record at
+all** — not failed, never created:
+
+| sha | PR | merged | Production record |
+|---|---|---|---|
+| `a9d295fe` | #1184 (G3-1, the providers fence) | ~23:33Z | none |
+| `6dbdf222` | #1155 (LUKE-157, the Stop) | 23:46:34Z | none |
+| `bda9bd2f` | #1185 (app-state SubscriptionRef) | ~23:40Z | none |
+
+**The site is serving.** The `cd856635` build answers its heartbeat unchanged (200/401/401/405). So
+this is **publication stalled, not an outage** — a distinction worth making in the words every time,
+because the two deserve different urgency and the earlier outage today taught us how fast that gets
+confused.
+
+**Every Production record before this was created by `vercel[bot]` within a minute or two of its
+merge**, so the cadence changing is the anomaly rather than the absence of any one record.
+
+### What it costs right now
+
+**LUKE-157's cancel route is on main and cannot reach production.** LUKE-186's after-probe is
+therefore unrunnable: the before-probe's 404 on
+`POST /api/brain/turns/7f3e9d2a-4b1c-4e8f-9a6d-2c5b8e1f0a37/cancel` continues to be the truth about
+production, and **the continuing 404 is not a finding about #1155**. Both watchers were stood down at
+23:54:07Z rather than left polling every 30 s for a record that does not exist.
+
+### The rule this produced
+
+**A watcher that sees nothing must say so on a clock.** A watcher waiting for a record that will
+never appear is indistinguishable, from outside, from one about to succeed — this is the fifth time
+today that *absence is not information* has cost us silence on a live question. #1199's post-merge
+Production watcher was rewritten on the spot: it polls at 90 s and, absent a record, **says so out
+loud every ten minutes with the elapsed time and the stall anchor**, so that *deployed and probed*
+and *no record after N minutes* are two different lines rather than one silence.
+
+### Standing until Dean reads the dashboard
+
+Two hypotheses, distinguishable only there. **(a)** the project's production branch or auto-deploy
+setting changed — the preset was flipped by hand twice today, so a settings change is not exotic;
+**(b)** the build queue is saturated by our own fleet's preview builds and production is behind them,
+in which case the records are absent because the builds have not started. **(b) would be our own
+doing** — five workers pushing continuously is a load the project has not carried before — and if it
+is (b), the remediation is a concurrency question and not a bug.
+
+Merges are unaffected and continue. #1199 is queued at position 2; **the merge does not depend on
+deploys**, only the post-merge probe does.
