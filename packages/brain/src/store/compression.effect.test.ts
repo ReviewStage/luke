@@ -37,4 +37,17 @@ describe("decodeArchiveContentEffect", () => {
         assert.ok(refusal instanceof ZstdUnsupported);
       }),
   );
+
+  it.effect.skipIf(!zstdSupported())(
+    "surfaces corrupt zstd bytes as a defect rather than ZstdUnsupported",
+    () =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(
+          decodeArchiveContentEffect(Buffer.from("not zstd at all"), ARCHIVE_ENCODING.ZSTD),
+        );
+
+        assert.equal(exit._tag, "Failure");
+        assert.equal(exit._tag === "Failure" && exit.cause._tag, "Die");
+      }),
+  );
 });
