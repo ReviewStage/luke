@@ -126,6 +126,26 @@ container. The Postgres half is the production layer's own client; the PGlite
 half is a small `SqlClient` over `@electric-sql/pglite`, because no
 `@effect/sql-pglite` ships against the 3.x Effect line.
 
+## A route built from an HttpApp
+
+`server/route-effect.ts` holds `routeFromHttpApp(app)`, which turns the
+`HttpApp` an endpoint or an `HttpApi` group composes into the one fetch handler
+a function default-exports. It reads the runtime through `runWeb` and then
+holds the handler for the instance's life, so it is a caller of the edge rather
+than a second one, and a warm invocation reaches the services the cold one
+built. `server/routes/brain/capabilities.ts` is the route converted this way;
+every other route still default-exports the promise-shaped handler beside it.
+
+`server/hosted/http-effect.ts` is the response vocabulary that conversion
+speaks: one schema per refusal, each annotated with the status it answers, and
+`readJsonBodyEffect` reading a bounded body off the request stream the way
+`readJsonBody` reads it off a `Request`. A refusal is declared as its body
+rather than as a `Schema.TaggedError`, because `error` is already the
+discriminant the desktop's hosted clients read and a `_tag` beside it would be
+a byte they never asked for. `fixtures/hosted-refusal/` records the status,
+content type, and body bytes of each one, and `tests/hosted-refusal.test.ts`
+holds both shapes to them; `LUKE_UPDATE_FIXTURES=1` records.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so
