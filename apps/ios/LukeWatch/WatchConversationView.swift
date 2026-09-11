@@ -154,7 +154,7 @@ private struct WatchConversationRow: View {
         case .action(_, let toolRow, _):
             WatchActionRow(row: toolRow, judgment: judgment, openSession: openSession)
         case .actionsFold(_, let rows, _):
-            DisclosureGroup(
+            WatchFold(
                 isExpanded: Binding(
                     get: { ConversationTurnRows.foldOpen(choice: foldChoice, pending: pending) },
                     set: { foldChoice = ConversationFoldChoice(pending: pending, open: $0) }
@@ -165,7 +165,6 @@ private struct WatchConversationRow: View {
                         WatchActionRow(row: row, judgment: judgment, openSession: openSession)
                     }
                 }
-                .padding(.top, 4)
             } label: {
                 HStack(spacing: 6) {
                     if judgment == .own {
@@ -176,7 +175,6 @@ private struct WatchConversationRow: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .tint(.secondary)
         case .details(_, let items):
             WatchFoldRow(label: items.count == 1 ? "1 detail" : "\(items.count) details") {
                 VStack(alignment: .leading, spacing: 6) {
@@ -383,21 +381,56 @@ private struct WatchActionRow: View {
     }
 }
 
-/// A fold closed by default, a native disclosure rather than a control of Luke's own.
+/// A fold the watch draws for itself, because `DisclosureGroup` does not
+/// exist on watchOS: one plain button whose label is the fold's own line, a
+/// chevron turned for its state, and the content under it only while open.
+/// The press moves the binding it was handed and nothing else, so the fold
+/// is presentation alone and the watch stays read-only.
+private struct WatchFold<Content: View, Label: View>: View {
+    @Binding var isExpanded: Bool
+    @ViewBuilder let content: Content
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    label
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            if isExpanded {
+                content
+            }
+        }
+    }
+}
+
+/// A fold closed by default, holding only its own open state: the watch's
+/// stand-in for a native disclosure, and still no control of Luke's own.
 private struct WatchFoldRow<Content: View>: View {
     let label: String
     @ViewBuilder let content: Content
     @State private var open = false
 
     var body: some View {
-        DisclosureGroup(isExpanded: $open) {
-            content.padding(.top, 4)
+        WatchFold(isExpanded: $open) {
+            content
         } label: {
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
-        .tint(.secondary)
         .padding(.horizontal, 4)
     }
 }
