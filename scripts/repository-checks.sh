@@ -326,13 +326,12 @@ if [[ -n "$snaps_outside_history" ]]; then
     exit 1
 fi
 
-# The web functions are bundled from server/routes/ into api/ with every
-# workspace package inlined, so a bare `@sidecar/…` specifier is resolved by
-# esbuild at build time from apps/web's own node_modules. pnpm links there only
-# what apps/web/package.json declares, so a specifier the web app's sources name
-# without declaring resolves in a developer's hoisted tree, typechecks, and
-# fails the deploy's bundle step, or, for the Vite client, ships a bundle that
-# happened to resolve through another package's link. Declare what is named.
+# The web functions resolve a bare `@sidecar/…` specifier at build time from
+# apps/web's own node_modules. pnpm links there only what apps/web/package.json
+# declares, so a specifier the web app's sources name without declaring resolves
+# in a developer's hoisted tree, typechecks, and fails on the deployment as a
+# missing module, or, for the Vite client, ships a bundle that happened to
+# resolve through another package's link. Declare what is named.
 web_manifest="$SIDECAR_REPO_ROOT/apps/web/package.json"
 declared_web_packages=$(grep -oE '"@sidecar/[a-z-]+": "workspace:\*"' "$web_manifest" |
     sed -E 's#"@sidecar/([a-z-]+)".*#\1#' | sort -u)

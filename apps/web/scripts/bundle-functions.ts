@@ -10,8 +10,9 @@ import {
 
 /**
  * Bundles every route under `server/routes/` into a plain ESM file under
- * `api/`, mirroring the tree, so Vercel's builder finds JavaScript and only
- * traces dependencies. Handed TypeScript, the builder runs its own compiler
+ * `api/`, mirroring the tree. Not part of `pnpm build`: Vercel discovers
+ * functions from the source tree before the build runs, so bundles emitted
+ * here are never deployed until they travel through the Build Output API. Handed TypeScript, the builder runs its own compiler
  * over each function's whole import graph separately — thirty-odd passes over
  * the same sixteen workspace packages, most of a deploy's build time, under
  * compiler options that are not this repository's.

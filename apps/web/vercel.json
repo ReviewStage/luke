@@ -3,6 +3,26 @@
   "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
   "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json",
+  "functions": {
+    "api/brain/v2/respond.ts": {
+      "maxDuration": 120
+    },
+    "api/brain/v2/count-tokens.ts": {
+      "maxDuration": 120
+    },
+    "api/brain/v2/embed.ts": {
+      "maxDuration": 60
+    },
+    "api/observation/tick.ts": {
+      "maxDuration": 60
+    },
+    "api/voice/sessions.ts": {
+      "maxDuration": 800
+    },
+    "api/voice/introduction.ts": {
+      "maxDuration": 800
+    }
+  },
   "crons": [
     {
       "path": "/api/observation/tick",
@@ -12,11 +32,11 @@
   "routes": [
     {
       "src": "/api/auth/(.*)",
-      "dest": "/api/auth/[...all].js"
+      "dest": "/api/auth/[...all].ts"
     },
     {
       "src": "/api/conversation/messages/([^/]+)/rating",
-      "dest": "/api/conversation/messages/rating.js?id=$1"
+      "dest": "/api/conversation/messages/rating.ts?id=$1"
     },
     {
       "src": "/about",

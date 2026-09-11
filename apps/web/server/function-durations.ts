@@ -13,10 +13,9 @@ const BRAIN_EMBED_MAX_DURATION_SECONDS = 60;
 
 /**
  * The functions that may run longer than the platform's default, by the path
- * the client calls. The bundle step writes each as the `export const config`
- * the Node builder reads from a function's own file; nothing in `vercel.json`
- * names a function, because the builder checks that file's patterns against
- * the source tree before the build that emits the functions has run.
+ * the client calls. `vercel.json`'s `functions` block names each by its
+ * committed `api/` entrypoint, and the test beside this table holds the two in
+ * step; the bundle script writes the same durations as `export const config`.
  */
 export const FUNCTION_MAX_DURATION_SECONDS: ReadonlyMap<string, number> = new Map([
   [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, BRAIN_INFERENCE_MAX_DURATION_SECONDS],

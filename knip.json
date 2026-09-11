@@ -41,8 +41,9 @@
     },
     "apps/web": {
       "entry": [
-        "server/routes/**/*.ts",
+        "api/**/*.ts",
         "api/**/*.mjs",
+        "server/routes/**/*.ts",
         "src/*.tsx",
         "src/entry-server.tsx",
         "server/db/migrate.ts",

@@ -66,14 +66,17 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests
 `user:email`, because Luke requires an email address for its account snapshot.
 
-Every function Vercel deploys is plain ESM. The route sources live under
-`server/routes/`, mirroring the `api/` tree, and `scripts/bundle-functions.ts`
-bundles them into `api/**/*.js` (gitignored) as the last step of `pnpm build`,
-with the workspace packages inlined and this app's declared runtime dependencies
-left external. Handed TypeScript, the builder compiled every function's whole
-import graph separately, and those thirty-odd passes were most of a deploy's
-build time. `api/feedback.mjs` is the one hand-written function and stays plain
-ESM for the same reason.
+Every function Vercel deploys is a file under `api/` that the platform finds in
+the source tree before the build runs, so a function emitted by the build is
+never deployed. The route sources live under `server/routes/`, and each has a
+one-line entrypoint under `api/` at the same path that re-exports it; the test
+in `tests/vercel-functions.test.ts` refuses a route without one. The six
+functions that run longer than the platform's default are named in
+`vercel.json`'s `functions` block, which Vercel likewise validates against the
+source tree. `scripts/bundle-functions.ts` bundles the routes into plain ESM
+and is not part of `pnpm build`: emitting the functions that way needs the
+Build Output API, which is a follow-up. `api/feedback.mjs` is the one
+hand-written function.
 
 ## Signing in on a Preview deployment
 
