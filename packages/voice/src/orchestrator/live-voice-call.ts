@@ -1,5 +1,6 @@
 import type { LiveStatus } from "@sidecar/live";
 import type { ConversationEntry } from "@sidecar/session";
+import type { Effect } from "effect";
 
 /**
  * The one GPT Live session as the policy above the peer drives it. The peer
@@ -31,20 +32,21 @@ export interface LiveVoiceCall {
    * Builds the peer, hands the offer to the host, and waits for the session
    * to start; a press's microphone track rides the offer disabled, and any
    * other opening carries no device. Answers whether a session stands at the
-   * end of it.
+   * end of it. Runs on the fiber the caller already holds rather than one of
+   * its own.
    */
-  open(opening: LiveVoiceCallOpening): Promise<boolean>;
+  open(opening: LiveVoiceCallOpening): Effect.Effect<boolean>;
   /** Opens the capture device if none stands and asks the session to hear it; the track enables on the acknowledgment. */
-  unmute(): Promise<boolean>;
+  unmute(): Effect.Effect<boolean>;
   /**
    * Asks the session to stop hearing the microphone, then releases the
    * capture device whatever the session answered: the key coming up is the
    * developer's decision and the device is theirs. The answer stays the
    * session's own word on the switch.
    */
-  mute(): Promise<boolean>;
+  mute(): Effect.Effect<boolean>;
   /** The graceful hang-up: `session.closed` registered, `session.close` sent, waited for under the guide's bound. */
-  close(): Promise<void>;
+  close(): Effect.Effect<void>;
 }
 
 /** What the call tells the policy as it moves, so the view can be reported. */

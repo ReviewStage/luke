@@ -3,6 +3,7 @@ import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type {
   LiveCaptionRow,
@@ -53,15 +54,15 @@ class FakeCall implements LiveVoiceCall {
     return this.status === LIVE_STATUS.LISTENING;
   }
 
-  open(opening: LiveVoiceCallOpening): Promise<boolean> {
+  open(opening: LiveVoiceCallOpening): Effect.Effect<boolean> {
     this.opens += 1;
     this.openings.push(opening);
     this.settle(LIVE_STATUS.CONNECTING);
-    return new Promise<boolean>((resolve) => {
+    return Effect.async<boolean>((resume) => {
       this.#release = () => {
         if (this.opensSucceed) this.settle(LIVE_STATUS.MUTED);
         else this.settle(LIVE_STATUS.FAILED);
-        resolve(this.opensSucceed);
+        resume(Effect.succeed(this.opensSucceed));
       };
     });
   }
@@ -73,21 +74,22 @@ class FakeCall implements LiveVoiceCall {
     this.#release = undefined;
   }
 
-  async unmute(): Promise<boolean> {
+  unmute(): Effect.Effect<boolean> {
     this.unmutes += 1;
     this.settle(LIVE_STATUS.LISTENING);
-    return true;
+    return Effect.succeed(true);
   }
 
-  async mute(): Promise<boolean> {
+  mute(): Effect.Effect<boolean> {
     this.mutes += 1;
     this.settle(LIVE_STATUS.MUTED);
-    return true;
+    return Effect.succeed(true);
   }
 
-  async close(): Promise<void> {
+  close(): Effect.Effect<void> {
     this.closes += 1;
     this.settle(LIVE_STATUS.IDLE);
+    return Effect.void;
   }
 
   settle(status: LiveStatus): void {

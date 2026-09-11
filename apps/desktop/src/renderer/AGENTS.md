@@ -30,9 +30,13 @@ That one subscription is an `Atom` over the stream of the bridge's deliveries,
 held in the registry `renderer-runtime.ts` makes and each root provides. The
 runtime beside that registry is the bundle's one Effect edge, and not the
 atoms' alone: `rendererRuntimeNow` hands it to work that is a fiber of its own
-rather than an atom's — the voice window's call, and `LiveVoiceOrchestrator`'s
-own standing-call lifecycle above it — so nothing here builds a second runtime
-to fork on. The
+rather than an atom's, run through `Runtime.runFork` or `Runtime.runPromise`
+on the value it answers — `use-voice-session.ts`'s remote-audio retry,
+`voice/live-call.ts`'s own session-life fiber and its armed bounds,
+`LiveVoiceOrchestrator`'s own standing-call lifecycle above it, and
+`introduction-takeover.tsx`'s one `runCallEffect` helper, through which every
+verb it asks of its own `LiveCall` runs — so nothing here builds a second
+runtime to fork on. The
 stream's scope is what installs the subscription, before anything is asked
 for, so the one read a root awaits is a bootstrap rather than a race, and the
 version rule above is a step of the stream rather than a comparison a reader
@@ -52,11 +56,13 @@ effect whose answer nothing reads, which drops the refusal rather than leaving
 it to surface as an unhandled rejection. A new command is a new `ACT_KIND`
 entry with its payload schema, its answer's guard, and its one router row;
 there is no second write path to add one on. The channel itself is an
-`Atom.fn` on the runtime `renderer-runtime.ts` builds; a component or a hook
-reaches it through `useAct()`'s `useAtomSet`, and `act`/`tell` stay as a
-Promise door over the same atom for the few callers outside any render
-tree — a static writes table built at module scope, and a bootstrap-failure
-path with no component to hold a hook's return value.
+`Atom.fn` on the runtime `renderer-runtime.ts` builds, and `useAct()`'s
+`useAtomSet` is the only way to it: `act` and `tell` are its bound handle's
+members, reached by every component and hook, including
+`settings/writes.ts`'s `useSettingsWrites`. The one caller outside any render
+tree, `index.tsx`'s bootstrap-failure path, takes the window's own
+`window.sidecar.act` directly rather than through a promise door this bundle
+no longer keeps.
 
 Two renderers run under the same rule, and they are two bundles rather than
 one bundle branching on a role. The panel's is `renderer/index.tsx`, which
@@ -112,9 +118,9 @@ graceful close, the microphone acknowledgment, the speaking hangover, the
 caption tick, the idle window — is an `Effect.sleep` forked into that same
 scope, so nothing is left armed behind a session that ended and a test drives
 all six by advancing a `TestClock` rather than by standing a timer seam in.
-The four verbs the policy above the peer holds still answer promises, and each
-runs its effect on the runtime the call was handed rather than on one of its
-own. It waits for
+The four verbs the policy above the peer holds answer Effects, run on the
+fiber the caller already has rather than converted to a promise here. It
+waits for
 `session.started`, sends only the mute, the unmute, and the close the data
 channel permissions allow it, opens the capture device for an unmute when
 none stands and puts it on the line before the switch goes, flips the track

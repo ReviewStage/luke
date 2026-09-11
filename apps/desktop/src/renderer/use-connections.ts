@@ -9,7 +9,7 @@ import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-servi
 import { ACT_KIND } from "#shared/messages/acts";
 import type { SupersetSignInSnapshot } from "#shared/messages/session";
 import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
-import { act, tell, useAct } from "./act";
+import { useAct } from "./act";
 import type { ConsentConnectEntry } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -28,35 +28,6 @@ import {
 } from "./settings-views";
 import { type PanelEntrySurface, panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { useStateWithRef } from "./use-state-with-ref";
-
-/**
- * The bridge acts behind each consent service's wait: the documented connect
- * the slot's send runs, the main-process side a mid-wait cancel must stop,
- * and — for the browser flows alone — the way a lost tab reopens. One row
- * per service, so a fourth service is a fourth row rather than a fourth
- * branch at every dispatch site.
- */
-const CONSENT_ACTS = {
-  [CONSENT_SERVICE_ID.APPLE_CALENDAR]: {
-    connect: () => act(ACT_KIND.CALENDAR_CONNECT_APPLE),
-    cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT),
-  },
-  [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: {
-    connect: () => act(ACT_KIND.CALENDAR_CONNECT_GOOGLE),
-    cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN),
-    reopen: () => tell(ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN),
-  },
-  [CONSENT_SERVICE_ID.LINEAR]: {
-    connect: () => act(ACT_KIND.TRACKER_CONNECT),
-    cancel: () => tell(ACT_KIND.TRACKER_CANCEL_SIGN_IN),
-    reopen: () => tell(ACT_KIND.TRACKER_REOPEN_SIGN_IN),
-  },
-} as const satisfies Readonly<
-  Record<
-    ConsentServiceId,
-    { connect: () => Promise<SettingsUpdateResult>; cancel: () => void; reopen?: () => void }
-  >
->;
 
 export interface UseConnectionsOptions {
   surface: PanelEntrySurface;
@@ -117,6 +88,38 @@ export interface Connections {
  */
 export function useConnections(options: UseConnectionsOptions): Connections {
   const { act, tell, updateSettingEntry } = useAct();
+  /**
+   * The bridge acts behind each consent service's wait: the documented
+   * connect the slot's send runs, the main-process side a mid-wait cancel
+   * must stop, and — for the browser flows alone — the way a lost tab
+   * reopens. One row per service, so a fourth service is a fourth row rather
+   * than a fourth branch at every dispatch site.
+   */
+  const consentActs = useMemo(
+    () =>
+      ({
+        [CONSENT_SERVICE_ID.APPLE_CALENDAR]: {
+          connect: () => act(ACT_KIND.CALENDAR_CONNECT_APPLE),
+          cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT),
+        },
+        [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: {
+          connect: () => act(ACT_KIND.CALENDAR_CONNECT_GOOGLE),
+          cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN),
+          reopen: () => tell(ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN),
+        },
+        [CONSENT_SERVICE_ID.LINEAR]: {
+          connect: () => act(ACT_KIND.TRACKER_CONNECT),
+          cancel: () => tell(ACT_KIND.TRACKER_CANCEL_SIGN_IN),
+          reopen: () => tell(ACT_KIND.TRACKER_REOPEN_SIGN_IN),
+        },
+      }) as const satisfies Readonly<
+        Record<
+          ConsentServiceId,
+          { connect: () => Promise<SettingsUpdateResult>; cancel: () => void; reopen?: () => void }
+        >
+      >,
+    [act, tell],
+  );
   const {
     surface,
     credentialHeld,
@@ -176,7 +179,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     send: async (sending) => {
       // Which service is being connected decides which documented act runs,
       // and nothing else does: the entry names a row of the acts table.
-      const result = await CONSENT_ACTS[sending.serviceId].connect();
+      const result = await consentActs[sending.serviceId].connect();
       return result.reason ? { rejection: result.reason } : {};
     },
     heldRef: consentConnectHeld,
@@ -241,7 +244,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     // browser flow's loopback, or Apple's System Settings watch; after a
     // failure there is nothing left to stop.
     const waiting = consentConnect.latest();
-    if (waiting?.busy) CONSENT_ACTS[waiting.serviceId].cancel();
+    if (waiting?.busy) consentActs[waiting.serviceId].cancel();
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
 
@@ -465,7 +468,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
   const reopenConsentPage = useCallback(() => {
     const waiting = consentConnect.latest()?.serviceId;
     if (!waiting) return;
-    const acts = CONSENT_ACTS[waiting];
+    const acts = consentActs[waiting];
     if ("reopen" in acts) acts.reopen();
   }, [consentConnect.latest]);
 

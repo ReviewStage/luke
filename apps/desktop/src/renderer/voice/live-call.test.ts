@@ -55,9 +55,6 @@ const settle = Effect.repeatN(
 const advance = (delayMs: number): Effect.Effect<void> =>
   Effect.andThen(TestClock.adjust(Duration.millis(delayMs)), settle);
 
-/** The answer one of the call's promise-facing verbs gave, awaited on the test's own fiber. */
-const answered = <A>(promise: Promise<A>): Effect.Effect<A> => Effect.promise(() => promise);
-
 /** What the fake peer did, in the order it did it, so the guide's order can be asserted. */
 type PeerStep =
   | "add-track"
@@ -311,7 +308,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       assert.deepEqual(f.peer.steps, ["add-track", "create-channel", "create-offer", "set-local"]);
       assert.equal(f.track.enabled, false);
@@ -325,7 +322,7 @@ it.effect(
       // Nothing is sent before the server says started, and never session.start.
       assert.deepEqual(f.sentTypes(), []);
       f.started();
-      assert.equal(yield* answered(opening), true);
+      assert.equal(yield* Fiber.join(opening), true);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
       assert.equal(f.call.standing, true);
       assert.equal(f.call.listening, false);
@@ -335,7 +332,7 @@ it.effect(
 it.effect("ICE gathering that never completes sends the offer at the bound", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    void f.call.open({ byPress: true });
+    yield* Effect.fork(f.call.open({ byPress: true }));
     yield* settle;
     yield* advance(5_000);
     assert.equal(f.offers.length, 1);
@@ -345,10 +342,10 @@ it.effect("ICE gathering that never completes sends the offer at the bound", () 
 it.effect("a host that creates no session leaves the peer closed and the call failed", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ sessionCreated: false });
-    const opening = f.call.open({ byPress: true });
+    const opening = yield* Effect.fork(f.call.open({ byPress: true }));
     yield* settle;
     f.peer.gathered();
-    assert.equal(yield* answered(opening), false);
+    assert.equal(yield* Fiber.join(opening), false);
     yield* settle;
     assert.equal(f.peer.steps.at(-1), "close");
     assert.equal(f.track.stopped, true);
@@ -361,7 +358,7 @@ it.effect("a host that creates no session leaves the peer closed and the call fa
 it.effect("a session that never announces itself started is given up at the bound", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const opening = f.call.open({ byPress: true });
+    const opening = yield* Effect.fork(f.call.open({ byPress: true }));
     yield* settle;
     f.peer.gathered();
     yield* settle;
@@ -369,7 +366,7 @@ it.effect("a session that never announces itself started is given up at the boun
     assert.equal(f.statuses.at(-1), LIVE_STATUS.CONNECTING);
     assert.deepEqual(f.errors, []);
     yield* advance(1);
-    assert.equal(yield* answered(opening), false);
+    assert.equal(yield* Fiber.join(opening), false);
     assert.equal(f.statuses.at(-1), LIVE_STATUS.FAILED);
     yield* settle;
     assert.equal(f.peer.steps.at(-1), "close");
@@ -381,22 +378,22 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
-      const unmuting = f.call.unmute();
+      yield* Fiber.join(opening);
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       assert.deepEqual(f.sentTypes(), [LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE]);
       assert.equal(f.track.enabled, false);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      assert.equal(yield* answered(unmuting), true);
+      assert.equal(yield* Fiber.join(unmuting), true);
       assert.equal(f.track.enabled, true);
       assert.equal(f.call.listening, true);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.LISTENING);
-      const muting = f.call.mute();
+      const muting = yield* Effect.fork(f.call.mute());
       yield* settle;
       assert.deepEqual(f.sentTypes().at(-1), LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE);
       assert.equal(f.track.enabled, true);
@@ -408,7 +405,7 @@ it.effect(
         client_event_id: String(sent.event_id),
         error: { type: "invalid_request_error", message: "no" },
       });
-      assert.equal(yield* answered(muting), false);
+      assert.equal(yield* Fiber.join(muting), false);
       // Refused or not, the key is up: the device leaves the line and stops.
       assert.deepEqual(f.peer.replaced, [null]);
       assert.equal(f.track.stopped, true);
@@ -423,29 +420,29 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
-      const unmuting = f.call.unmute();
+      yield* Fiber.join(opening);
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      assert.equal(yield* answered(unmuting), true);
-      const muting = f.call.mute();
+      assert.equal(yield* Fiber.join(unmuting), true);
+      const muting = yield* Effect.fork(f.call.mute());
       yield* settle;
       // The switch first, the device after: nothing is taken off the line while the mute is in flight.
       assert.deepEqual(f.peer.replaced, []);
       assert.equal(f.track.stopped, false);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      assert.equal(yield* answered(muting), true);
+      assert.equal(yield* Fiber.join(muting), true);
       assert.deepEqual(f.peer.replaced, [null]);
       assert.equal(f.track.stopped, true);
       assert.equal(f.local.at(-1), undefined);
       assert.equal(f.call.listening, false);
       // A second release finds no device and sends nothing.
-      assert.equal(yield* answered(f.call.mute()), true);
+      assert.equal(yield* f.call.mute(), true);
       assert.deepEqual(f.peer.replaced, [null]);
       assert.equal(f.sentTypes().length, 2);
     }),
@@ -454,20 +451,20 @@ it.effect(
 it.effect("a mute the server never acknowledges still releases the device at the bound", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const opening = f.call.open({ byPress: true });
+    const opening = yield* Effect.fork(f.call.open({ byPress: true }));
     yield* settle;
     f.peer.gathered();
     yield* settle;
     f.started();
-    yield* answered(opening);
-    const unmuting = f.call.unmute();
+    yield* Fiber.join(opening);
+    const unmuting = yield* Effect.fork(f.call.unmute());
     yield* settle;
     f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-    yield* answered(unmuting);
-    const muting = f.call.mute();
+    yield* Fiber.join(unmuting);
+    const muting = yield* Effect.fork(f.call.mute());
     yield* settle;
     yield* advance(MICROPHONE_ACK_TIMEOUT_MS);
-    assert.equal(yield* answered(muting), false);
+    assert.equal(yield* Fiber.join(muting), false);
     assert.deepEqual(f.peer.replaced, [null]);
     assert.equal(f.track.stopped, true);
     assert.equal(f.local.at(-1), undefined);
@@ -479,22 +476,22 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       assert.equal(f.microphoneOpens(), 1);
-      const first = f.call.unmute();
+      const first = yield* Effect.fork(f.call.unmute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      yield* answered(first);
-      const muting = f.call.mute();
+      yield* Fiber.join(first);
+      const muting = yield* Effect.fork(f.call.mute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      yield* answered(muting);
-      const second = f.call.unmute();
+      yield* Fiber.join(muting);
+      const second = yield* Effect.fork(f.call.unmute());
       yield* settle;
       assert.equal(f.microphoneOpens(), 2);
       assert.equal(f.tracks.length, 2);
@@ -504,7 +501,7 @@ it.effect(
       assert.equal(fresh.enabled, false);
       assert.deepEqual(f.sentTypes().at(-1), LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      assert.equal(yield* answered(second), true);
+      assert.equal(yield* Fiber.join(second), true);
       assert.equal(fresh.enabled, true);
       assert.equal(f.local.at(-1) !== undefined, true);
     }),
@@ -515,20 +512,20 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: false });
+      const opening = yield* Effect.fork(f.call.open({ byPress: false }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       f.holdNextMicrophone();
-      const unmuting = f.call.unmute();
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       assert.equal(f.microphoneOpens(), 1);
-      const muting = f.call.mute();
-      assert.equal(yield* answered(muting), true);
+      const muting = yield* Effect.fork(f.call.mute());
+      assert.equal(yield* Fiber.join(muting), true);
       f.releaseMicrophone();
-      assert.equal(yield* answered(unmuting), false);
+      assert.equal(yield* Fiber.join(unmuting), false);
       assert.equal(f.track.stopped, true);
       assert.deepEqual(f.peer.replaced, []);
       assert.deepEqual(f.sentTypes(), []);
@@ -541,12 +538,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: false });
+      const opening = yield* Effect.fork(f.call.open({ byPress: false }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       let attach: (() => void) | undefined;
       f.peer.sender.replaceTrack = (track) => {
         f.peer.replaced.push(track);
@@ -556,12 +553,12 @@ it.effect(
               attach = resolve;
             });
       };
-      const unmuting = f.call.unmute();
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       assert.deepEqual(f.peer.replaced, [f.track]);
-      assert.equal(yield* answered(f.call.mute()), true);
+      assert.equal(yield* f.call.mute(), true);
       attach?.();
-      assert.equal(yield* answered(unmuting), false);
+      assert.equal(yield* Fiber.join(unmuting), false);
       assert.deepEqual(f.peer.replaced, [f.track, null]);
       assert.equal(f.track.stopped, true);
       assert.deepEqual(f.sentTypes(), []);
@@ -574,19 +571,19 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
-      const first = f.call.unmute();
+      yield* Fiber.join(opening);
+      const first = yield* Effect.fork(f.call.unmute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      yield* answered(first);
-      const muting = f.call.mute();
+      yield* Fiber.join(first);
+      const muting = yield* Effect.fork(f.call.mute());
       yield* settle;
-      const second = f.call.unmute();
+      const second = yield* Effect.fork(f.call.unmute());
       yield* settle;
       // Nothing of the press goes until the release has let the device go.
       assert.deepEqual(f.sentTypes(), [
@@ -595,7 +592,7 @@ it.effect(
       ]);
       assert.equal(f.microphoneOpens(), 1);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      assert.equal(yield* answered(muting), true);
+      assert.equal(yield* Fiber.join(muting), true);
       yield* settle;
       assert.equal(f.track.stopped, true);
       assert.equal(f.microphoneOpens(), 2);
@@ -604,7 +601,7 @@ it.effect(
       assert.deepEqual(f.peer.replaced, [null, fresh]);
       assert.deepEqual(f.sentTypes().at(-1), LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      assert.equal(yield* answered(second), true);
+      assert.equal(yield* Fiber.join(second), true);
       assert.equal(f.call.listening, true);
       assert.equal(fresh.enabled, true);
     }),
@@ -615,14 +612,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       assert.equal(f.track.stopped, false);
-      assert.equal(yield* answered(f.call.mute()), true);
+      assert.equal(yield* f.call.mute(), true);
       assert.deepEqual(f.sentTypes(), []);
       assert.deepEqual(f.peer.replaced, [null]);
       assert.equal(f.track.stopped, true);
@@ -635,35 +632,35 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: false });
+      const opening = yield* Effect.fork(f.call.open({ byPress: false }));
       yield* settle;
       assert.deepEqual(f.peer.steps.slice(0, 2), ["add-transceiver", "create-channel"]);
       assert.equal(f.microphoneOpens(), 0);
       f.peer.gathered();
       yield* settle;
       f.started();
-      assert.equal(yield* answered(opening), true);
+      assert.equal(yield* Fiber.join(opening), true);
       assert.equal(f.local.at(-1), undefined);
       assert.equal(f.track.stopped, false);
       // The press against it opens the device then, and only then.
-      const unmuting = f.call.unmute();
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       assert.equal(f.microphoneOpens(), 1);
       assert.deepEqual(f.peer.replaced, [f.track]);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      assert.equal(yield* answered(unmuting), true);
+      assert.equal(yield* Fiber.join(unmuting), true);
     }),
 );
 
 it.effect("a muted session with no device still reports idle once the window passes", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const opening = f.call.open({ byPress: false });
+    const opening = yield* Effect.fork(f.call.open({ byPress: false }));
     yield* settle;
     f.peer.gathered();
     yield* settle;
     f.started();
-    yield* answered(opening);
+    yield* Fiber.join(opening);
     yield* advance(LIVE_IDLE_WINDOW_MS - 1);
     assert.deepEqual(f.activity, []);
     yield* advance(1);
@@ -676,23 +673,23 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
-      const unmuting = f.call.unmute();
+      yield* Fiber.join(opening);
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
-      const muting = f.call.mute();
-      assert.equal(yield* answered(unmuting), false);
+      const muting = yield* Effect.fork(f.call.mute());
+      assert.equal(yield* Fiber.join(unmuting), false);
       yield* settle;
       assert.deepEqual(f.sentTypes(), [
         LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
         LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
       ]);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      assert.equal(yield* answered(muting), true);
+      assert.equal(yield* Fiber.join(muting), true);
       assert.equal(f.track.enabled, false);
       assert.equal(f.call.listening, false);
     }),
@@ -703,17 +700,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ microphone: false });
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       assert.deepEqual(f.peer.steps.slice(0, 2), ["add-transceiver", "create-channel"]);
       f.peer.gathered();
       yield* settle;
       f.started();
-      assert.equal(yield* answered(opening), true);
+      assert.equal(yield* Fiber.join(opening), true);
       assert.equal(f.local.at(-1), undefined);
       assert.equal(f.peer.replaced.length, 0);
       // Still refused at the press: the unmute cannot fill the line and sends no switch.
-      assert.equal(yield* answered(f.call.unmute()), false);
+      assert.equal(yield* f.call.unmute(), false);
       assert.deepEqual(f.sentTypes(), []);
     }),
 );
@@ -723,20 +720,20 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ microphone: false });
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      assert.equal(yield* answered(opening), true);
+      assert.equal(yield* Fiber.join(opening), true);
       f.grantMicrophone();
-      const unmuting = f.call.unmute();
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       assert.equal(f.peer.replaced.length, 1);
       assert.equal(f.track.enabled, false);
       assert.deepEqual(f.sentTypes(), [LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE]);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      assert.equal(yield* answered(unmuting), true);
+      assert.equal(yield* Fiber.join(unmuting), true);
       assert.equal(f.track.enabled, true);
     }),
 );
@@ -746,12 +743,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       f.channel().receive({
         type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
         event_id: "out-1",
@@ -800,12 +797,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       f.peer.transport("connecting");
       f.peer.transport("connected");
       f.peer.transport("disconnected");
@@ -829,12 +826,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       yield* advance(LIVE_IDLE_WINDOW_MS - 1);
       assert.deepEqual(f.activity, []);
       f.call.reportMicrophoneActivity(true);
@@ -854,13 +851,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
-      const closing = f.call.close();
+      yield* Fiber.join(opening);
+      const closing = yield* Effect.fork(f.call.close());
       yield* settle;
       assert.deepEqual(f.sentTypes(), [LIVE_CLIENT_EVENT.CLOSE]);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.CLOSING);
@@ -871,7 +868,7 @@ it.effect(
         reason: "close_requested",
         usage: { seconds: 42 },
       });
-      yield* answered(closing);
+      yield* Fiber.join(closing);
       yield* settle;
       assert.deepEqual(
         f.peer.steps.filter((step) => step === "close"),
@@ -882,16 +879,16 @@ it.effect(
       assert.deepEqual(f.remote.at(-1), undefined);
       // A second call with no closed event gives up at the bound.
       const g = yield* fixture();
-      const opened = g.call.open({ byPress: true });
+      const opened = yield* Effect.fork(g.call.open({ byPress: true }));
       yield* settle;
       g.peer.gathered();
       yield* settle;
       g.started();
-      yield* answered(opened);
-      const abandoned = g.call.close();
+      yield* Fiber.join(opened);
+      const abandoned = yield* Effect.fork(g.call.close());
       yield* settle;
       yield* advance(SESSION_CLOSE_TIMEOUT_MS);
-      yield* answered(abandoned);
+      yield* Fiber.join(abandoned);
       yield* settle;
       assert.equal(g.peer.steps.at(-1), "close");
       assert.equal(g.statuses.at(-1), LIVE_STATUS.IDLE);
@@ -907,25 +904,25 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       f.channel().dropped();
       assert.equal(f.call.standing, false);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.IDLE);
       assert.equal(f.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
       const g = yield* fixture();
-      const opened = g.call.open({ byPress: true });
+      const opened = yield* Effect.fork(g.call.open({ byPress: true }));
       yield* settle;
       g.peer.gathered();
       yield* settle;
       g.started();
-      yield* answered(opened);
+      yield* Fiber.join(opened);
       g.channel().readyState = "closing";
-      yield* answered(g.call.close());
+      yield* g.call.close();
       assert.equal(g.ends(), 1);
       assert.equal(g.statuses.at(-1), LIVE_STATUS.IDLE);
     }),
@@ -936,21 +933,21 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: true });
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
-      const unmuting = f.call.unmute();
+      yield* Fiber.join(opening);
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      yield* answered(unmuting);
-      const muting = f.call.mute();
+      yield* Fiber.join(unmuting);
+      const muting = yield* Effect.fork(f.call.mute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      yield* answered(muting);
-      const closing = f.call.close();
+      yield* Fiber.join(muting);
+      const closing = yield* Effect.fork(f.call.close());
       yield* settle;
       f.channel().receive({
         type: LIVE_SERVER_EVENT.SESSION_CLOSED,
@@ -958,7 +955,7 @@ it.effect(
         reason: "close_requested",
         usage: { seconds: 1 },
       });
-      yield* answered(closing);
+      yield* Fiber.join(closing);
       // The window's whole outbound vocabulary: no session configuration, no
       // tool list, no instructions, and nothing that could carry an append.
       assert.deepEqual(f.channel().sent, [
@@ -974,25 +971,25 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = f.call.open({ byPress: false });
+      const opening = yield* Effect.fork(f.call.open({ byPress: false }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      yield* answered(opening);
+      yield* Fiber.join(opening);
       // No session configuration, tool list, or instructions crosses for a
       // session nobody pressed for: the briefing's own vocabulary is empty
       // until the developer presses.
       assert.deepEqual(f.sentTypes(), []);
-      const unmuting = f.call.unmute();
+      const unmuting = yield* Effect.fork(f.call.unmute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      yield* answered(unmuting);
-      const muting = f.call.mute();
+      yield* Fiber.join(unmuting);
+      const muting = yield* Effect.fork(f.call.mute());
       yield* settle;
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      yield* answered(muting);
-      const closing = f.call.close();
+      yield* Fiber.join(muting);
+      const closing = yield* Effect.fork(f.call.close());
       yield* settle;
       f.channel().receive({
         type: LIVE_SERVER_EVENT.SESSION_CLOSED,
@@ -1000,7 +997,7 @@ it.effect(
         reason: "close_requested",
         usage: { seconds: 1 },
       });
-      yield* answered(closing);
+      yield* Fiber.join(closing);
       assert.deepEqual(f.channel().sent, [
         { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
         { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
@@ -1076,15 +1073,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const first = f.call.open({ byPress: true });
+      const first = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
-      const second = f.call.open({ byPress: true });
+      const second = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
-      assert.equal(yield* answered(first), true);
-      assert.equal(yield* answered(second), true);
+      assert.equal(yield* Fiber.join(first), true);
+      assert.equal(yield* Fiber.join(second), true);
       // One peer, one offer, one session: the second ask built nothing.
       assert.deepEqual(f.offers, ["v=0\r\noffer\r\n"]);
       assert.equal(f.microphoneOpens(), 1);
@@ -1093,6 +1090,6 @@ it.effect(
         ["create-channel"],
       );
       // Once it has settled, an ask reads the call's own standing.
-      assert.equal(yield* answered(f.call.open({ byPress: true })), true);
+      assert.equal(yield* f.call.open({ byPress: true }), true);
     }),
 );

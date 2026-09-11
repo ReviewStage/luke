@@ -52,7 +52,7 @@ import { ShortcutSection } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { settingsRowsInput, useConnectionInput } from "./use-connection-input";
 import { VoiceSection } from "./voice-page";
-import { SETTINGS_WRITES } from "./writes";
+import { useSettingsWrites } from "./writes";
 
 /**
  * The settings tab, as the grouped controls that draw it. A preference write
@@ -143,6 +143,7 @@ export function SettingsPanel({
   onSearchClose,
   onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
+  const writes = useSettingsWrites();
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
   // has to stand while that page is not drawn: it is the front page saying a
@@ -220,7 +221,7 @@ export function SettingsPanel({
     backControl.current?.focus();
   }, [view, panelOpen]);
   // The drawn page's reset, absent while that page stands at its defaults.
-  const pageReset = pageResetControl(view, settings, SETTINGS_WRITES);
+  const pageReset = pageResetControl(view, settings, writes);
   return (
     <div
       className="settings"
@@ -282,19 +283,19 @@ export function SettingsPanel({
         <VoiceSection
           input={connections}
           view={panelView}
-          writes={SETTINGS_WRITES}
+          writes={writes}
           microphone={microphone}
         />
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && panelView && !search ? (
-        <AppearanceSection view={panelView} writes={SETTINGS_WRITES} />
+        <AppearanceSection view={panelView} writes={writes} />
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS && !search ? (
         <ShortcutSection
           shortcuts={shortcuts}
-          writes={SETTINGS_WRITES}
+          writes={writes}
           {...(panelView ? { view: panelView } : undefined)}
           voiceAvailable={microphone.voiceAvailable}
         />
@@ -302,17 +303,17 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.CONNECTIONS && connections && panelView && !search ? (
         <>
-          <WorkspacesSection view={panelView} writes={SETTINGS_WRITES} />
-          <KeySyncSection view={panelView} writes={SETTINGS_WRITES} />
+          <WorkspacesSection view={panelView} writes={writes} />
+          <KeySyncSection view={panelView} writes={writes} />
           <CredentialsSection input={connections} />
-          <IntegrationsSection input={connections} view={panelView} writes={SETTINGS_WRITES} />
+          <IntegrationsSection input={connections} view={panelView} writes={writes} />
           {/* Whatever the page holds that stands under no heading of its
               own: the sections above draw their own members, and a setting
               added to this page with no section named lands here. */}
           <SchemaSettingRows
             page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
             view={panelView}
-            writes={SETTINGS_WRITES}
+            writes={writes}
           />
         </>
       ) : null}

@@ -14,6 +14,7 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { type Effect, Runtime } from "effect";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -459,6 +460,17 @@ function IntroductionFlight({
     });
   }, []);
 
+  /**
+   * The one place this window's own `LiveCall` use reaches the renderer's
+   * runtime, the same edge `use-voice-session.ts`'s hook and `LiveCall`
+   * itself already run their own fibers on: every verb the takeover asks of
+   * its call comes through here rather than each press converting its own.
+   */
+  const runCallEffect = useCallback(
+    <A,>(effect: Effect.Effect<A>): Promise<A> => Runtime.runPromise(rendererRuntimeNow())(effect),
+    [],
+  );
+
   const audio = useCallback((): IntroductionAudio => {
     // Built against the output as bootstrapped: playing a room tone into a
     // muted Mac serves nobody, and the captions are the speech there.
@@ -547,17 +559,17 @@ function IntroductionFlight({
     // switch the app's own key is, and a release ends nothing.
     const unsubscribePress = window.sidecar.onVoiceHotkeyPress(() => {
       const call = callRef.current;
-      if (call?.standing) void call.unmute();
+      if (call?.standing) void runCallEffect(call.unmute());
     });
     return () => {
       clearTimeout(darkTimer);
       unsubscribePress();
-      void callRef.current?.close();
+      if (callRef.current) void runCallEffect(callRef.current.close());
       audioRef.current?.dispose();
       void meterContextRef.current?.close().catch(() => undefined);
       meterContextRef.current = undefined;
     };
-  }, [dispatch]);
+  }, [dispatch, runCallEffect]);
 
   // Two meters over one context, exactly as the voice window keeps them:
   // Luke's track decides whether he is speaking, since the guide forbids
@@ -721,7 +733,7 @@ function IntroductionFlight({
         // the voice service's, sent on the same event.
         let gone = false;
         const call = ensureCall();
-        void call.open({ byPress: true }).then(async (opened) => {
+        void runCallEffect(call.open({ byPress: true })).then(async (opened) => {
           if (gone) return;
           if (!opened) {
             dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
@@ -730,7 +742,7 @@ function IntroductionFlight({
           // A greeting nobody can answer is not the introduction: an unmute
           // the session refused, or a track that never arrived, stands the
           // takeover down rather than consuming the one introduction.
-          const heard = await call.unmute();
+          const heard = await runCallEffect(call.unmute());
           if (gone) return;
           dispatch(heard ? INTRODUCTION_EVENT.SESSION_STARTED : INTRODUCTION_EVENT.VOICE_FAILED);
         });
@@ -777,7 +789,7 @@ function IntroductionFlight({
         // exit, the shape follows on the spring — and only then does the
         // handoff run, so the capsule the takeover fades over is the capsule
         // the real panel draws.
-        void callRef.current?.close();
+        if (callRef.current) void runCallEffect(callRef.current.close());
         const root = rootRef.current;
         const standMs = root
           ? parseMilliseconds(getComputedStyle(root).getPropertyValue("--duration-exit")) +
@@ -787,7 +799,7 @@ function IntroductionFlight({
         return () => clearTimeout(timer);
       }
       case INTRODUCTION_BEAT.DONE: {
-        void callRef.current?.close();
+        if (callRef.current) void runCallEffect(callRef.current.close());
         audioRef.current?.dispose();
         // What the stand-down leaves drawn is the identical compact signed-out
         // panel the app itself draws, so reporting the ending here — and
@@ -799,7 +811,7 @@ function IntroductionFlight({
       default:
         return;
     }
-  }, [audio, beat, state, display, dispatch, ensureCall, reducedMotion]);
+  }, [audio, beat, state, display, dispatch, ensureCall, reducedMotion, runCallEffect]);
 
   // The listening window's patience: restarted by any word either way, so a
   // developer mid-sentence is not cut off, and ended only through the quiet
