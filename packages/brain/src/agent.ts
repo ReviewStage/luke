@@ -13,7 +13,9 @@ import type {
   ProviderTranscriptSinceResult,
   SessionIdentity,
 } from "@sidecar/session";
-import { Emitter, type Event, type WireRecord } from "@sidecar/wire";
+import type { Event, WireRecord } from "@sidecar/wire";
+import { eventFromStream } from "@sidecar/wire/effect";
+import { Effect, Exit, PubSub, Scope, Stream } from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -220,7 +222,8 @@ export class BrainAgent {
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
   #incompatibleReported: string | undefined;
-  readonly #runEvents = new Emitter<BrainRunEvent>();
+  readonly #runEventsScope: Scope.CloseableScope = Effect.runSync(Scope.make());
+  readonly #runEventsPubSub: PubSub.PubSub<BrainRunEvent> = Effect.runSync(PubSub.unbounded());
 
   /**
    * What every turn tells as it goes, whichever kind opened it. A recorded
@@ -231,8 +234,26 @@ export class BrainAgent {
    * reasoning item, each message it completed, each compaction it folded, and
    * its end, each event stamped with the conversation, the turn, and its
    * place in the turn's sequence. A listener that throws ends no turn.
+   *
+   * Published from `#fireRunEvent` into `#runEventsPubSub` and read out here
+   * as the `Event` every subscriber already holds, bridged by
+   * `eventFromStream`; the bridge's own daemon pump is what keeps the
+   * delivery order and the mid-round-subscribe rule an `Emitter` guaranteed.
+   *
+   * Building that bridge is a run outside a runtime edge, on the
+   * `docs/adr/0001-effect.md` allowlist on the same terms as this file's
+   * other seams: every subscriber here still holds a plain `Event`, not a
+   * `Stream`, so the bridge is built once, synchronously, over a scope this
+   * agent owns and closes in `stop()`. P5-14 deletes it once a turn runs on
+   * a fiber of the agent's own and a subscriber can read the stream directly.
    */
-  readonly onRunEvent: Event<BrainRunEvent> = this.#runEvents.event;
+  readonly onRunEvent: Event<BrainRunEvent> = Effect.runSync(
+    Effect.provideService(
+      eventFromStream(Stream.fromPubSub(this.#runEventsPubSub)),
+      Scope.Scope,
+      this.#runEventsScope,
+    ),
+  );
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
@@ -603,17 +624,15 @@ export class BrainAgent {
     }
     await this.#queue;
     if (this.#generation) retireOpenedContext(this.#generation);
-    this.#runEvents.dispose();
+    // Closing this scope interrupts the bridge's daemon pump, which may be
+    // suspended waiting on the pubsub; that interruption is not guaranteed
+    // to settle synchronously, so the close runs to a promise here rather
+    // than with runSync.
+    await Effect.runPromise(Scope.close(this.#runEventsScope, Exit.void));
   }
 
   #fireRunEvent(event: BrainRunEvent): void {
-    try {
-      this.#runEvents.fire(event);
-    } catch (failure) {
-      this.#report(
-        `Brain run listener failed: ${failure instanceof Error ? failure.name : "unknown error"}`,
-      );
-    }
+    Effect.runSync(PubSub.publish(this.#runEventsPubSub, event));
   }
 
   /**
