@@ -25,7 +25,7 @@ const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns", "event
 
 const WRITER = "server/hosted/store/writer.ts";
 
-/** The read module: `listMessages`, `listEvents`, and `listTurns` select from the three tables and insert into none. */
+/** The read module: the cursor reads and the rating's authorship and latest-rating reads select from the three tables and insert into none. */
 const READER = "server/hosted/store/message-reads.ts";
 
 const TABLE_IMPORTERS: ReadonlySet<string> = new Set([WRITER, READER]);

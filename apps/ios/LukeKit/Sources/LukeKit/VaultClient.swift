@@ -96,6 +96,10 @@ public enum HostedAPIError: String, Sendable {
     case promptTooLarge = "prompt-too-large"
     case unknownTool = "unknown-tool"
     case methodNotAllowed = "method-not-allowed"
+    /// The row the path names is not one this account holds; another account's and none at all read alike.
+    case notFound = "not-found"
+    /// The message is the caller's but not one of Luke's, and only Luke's words take a rating.
+    case notRateable = "not-rateable"
 }
 
 public enum VaultClientError: Error, Equatable {

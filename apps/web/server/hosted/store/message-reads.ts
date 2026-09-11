@@ -1,7 +1,11 @@
 import type { ToolSet } from "ai";
-import { and, asc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
+  CONVERSATION_EVENT_KIND,
+  type MessageRole,
+  RATING_EVENT_PAYLOAD,
+  type RatingEventPayload,
   readStoredUIMessages,
   type SchemaPath,
   type SchemaRead,
@@ -14,9 +18,10 @@ import { conversations, events, messages, turns } from "../../db/schema.js";
 import { type HostedStoreDatabase, optionalField } from "./database.js";
 
 /**
- * The per-resource reads a device polls with a cursor of its own: a
+ * The per-resource reads a device polls with a cursor of its own — a
  * conversation's messages after a sequence, its events after a sequence, and
- * the account's turns after the instant one last changed. There is no feed;
+ * the account's turns after the instant one last changed — and the two
+ * point reads a rating needs, a message's authorship and its latest rating. There is no feed;
  * every device keeps its own cursors, and the unique `(conversation_id, seq)`
  * pairs are what make every device converge on the same rows in the same
  * order. A conversation Clear soft-deleted is read by nothing here: each
@@ -263,4 +268,78 @@ export async function listTurns(
     ...row.turn,
     cursor: { changedAt: row.changedAt, id: row.turn.id },
   }));
+}
+
+/**
+ * Where one stored message stands, who wrote it, and whether it is a
+ * compaction standing in for earlier rows, only where its conversation is
+ * the caller's and still standing. Another account's message
+ * and no message at all answer alike, so a caller learns nothing of rows it
+ * does not own.
+ */
+export async function messageAuthorship(
+  db: HostedStoreDatabase,
+  userId: string,
+  messageId: string,
+): Promise<{ conversationId: string; role: MessageRole; compaction: boolean } | undefined> {
+  const [row] = await db
+    .select({
+      conversationId: messages.conversationId,
+      role: messages.role,
+      compaction: sql<boolean>`${messages.metadata} ? 'compaction'`,
+    })
+    .from(messages)
+    .innerJoin(conversations, standingConversation(messages))
+    .where(and(eq(messages.id, messageId), eq(messages.userId, userId)));
+  return row;
+}
+
+/** One rating as the record holds it: the event's place, the verdict and note, and the device that gave it. */
+export interface StoredRatingRecord extends RatingEventPayload {
+  readonly id: string;
+  readonly seq: number;
+  readonly deviceId?: string;
+  readonly ratedAt: Date;
+}
+
+/**
+ * The newest rating on a message, or nothing. Every rating stands as its own
+ * event, so the latest is the one with the highest sequence; a latest payload
+ * the vocabulary cannot read answers nothing rather than an older verdict,
+ * since the developer's last word is what a read is for.
+ */
+export async function latestMessageRating(
+  db: HostedStoreDatabase,
+  userId: string,
+  messageId: string,
+): Promise<StoredRatingRecord | undefined> {
+  const [row] = await db
+    .select({
+      id: events.id,
+      seq: events.seq,
+      deviceId: events.deviceId,
+      payload: sql<WireBoundaryInput>`${events.payload}`,
+      createdAt: events.createdAt,
+    })
+    .from(events)
+    .innerJoin(conversations, standingConversation(events))
+    .where(
+      and(
+        eq(events.messageId, messageId),
+        eq(events.userId, userId),
+        eq(events.kind, CONVERSATION_EVENT_KIND.RATING),
+      ),
+    )
+    .orderBy(desc(events.seq))
+    .limit(1);
+  if (row === undefined) return undefined;
+  const payload = RATING_EVENT_PAYLOAD.parse(unparsedWire(row.payload));
+  if (payload === undefined) return undefined;
+  return {
+    ...payload,
+    id: row.id,
+    seq: row.seq,
+    ...optionalField("deviceId", row.deviceId),
+    ratedAt: row.createdAt,
+  };
 }

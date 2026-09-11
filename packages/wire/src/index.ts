@@ -13,6 +13,12 @@ export {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
   isSpeechEventKind,
+  MESSAGE_RATING,
+  type MessageRating,
+  maximumRatingNoteLength,
+  RATING_EVENT_PAYLOAD,
+  RATING_EVENT_PAYLOAD_FIELDS,
+  type RatingEventPayload,
   type SpeechEventKind,
 } from "./conversation-event.js";
 export { Emitter, type Event } from "./event.js";

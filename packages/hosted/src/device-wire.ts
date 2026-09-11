@@ -5,6 +5,7 @@ import {
   s,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { isWireUuid, WIRE_UUID_LENGTH, wireUuidSchema } from "./service-wire.js";
 
 /**
  * One device record per app installation, on every platform Luke runs on.
@@ -81,21 +82,14 @@ const pushEnvironmentSchema: Schema<PushEnvironment> = s.enumOf(PUSH_ENVIRONMENT
 /**
  * Every id on this wire is a UUID: the installation id a client mints once
  * and keeps, and the device id the service mints for its row. The shape is
- * checked as the canonical lowercase hyphenated form, which is the only one
- * either side ever writes.
+ * the hosted wire's one UUID rule, the canonical lowercase hyphenated form,
+ * which is the only one either side ever writes.
  */
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+export const DEVICE_ID_LENGTH = WIRE_UUID_LENGTH;
 
-export const DEVICE_ID_LENGTH = 36;
+export const isDeviceWireId = isWireUuid;
 
-export function isDeviceWireId(value: string): boolean {
-  return UUID_PATTERN.test(value);
-}
-
-const deviceWireIdSchema: Schema<string> = s.refine(
-  s.map(s.text({ max: DEVICE_ID_LENGTH }), (id) => id.toLowerCase()),
-  isDeviceWireId,
-);
+export const deviceWireIdSchema: Schema<string> = wireUuidSchema;
 
 /** Whether a token and its gateway arrived together: one without the other addresses nothing. */
 function pushFieldsPaired(fields: {

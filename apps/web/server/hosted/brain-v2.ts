@@ -33,13 +33,12 @@ import {
   type UnparsedWireValue,
 } from "../core.js";
 import {
-  BODY_READ,
   errorResponse,
   HOSTED_API_ERROR,
   HOSTED_HTTP_STATUS,
   type HostedErrorFields,
   jsonResponse,
-  readBoundedBody,
+  readJsonBody,
 } from "./http.js";
 import { postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
@@ -208,21 +207,9 @@ async function admittedRequest<Admitted>(
   request: Request,
   read: (payload: UnparsedWireValue) => HostedBrainRequestRead<Admitted>,
 ): Promise<Admitted | Response> {
-  const body = await readBoundedBody(request, maximumHostedBrainRequestBytes);
-  if (body.outcome === BODY_READ.TOO_LARGE) {
-    return errorResponse(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE);
-  }
-  if (body.outcome !== BODY_READ.READ) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  let payload: unknown;
-  try {
-    payload = JSON.parse(body.text);
-  } catch {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  // SAFETY: JSON.parse returns a runtime value; the contract reader validates it as wire.
-  const result = read(payload as UnparsedWireValue);
+  const payload = await readJsonBody(request, maximumHostedBrainRequestBytes);
+  if (payload instanceof Response) return payload;
+  const result = read(payload);
   if (!result.ok) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, REFUSAL_ERROR[result.refusal]);
   }
