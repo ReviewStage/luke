@@ -30,9 +30,10 @@ import {
   type VoiceWriter,
   voiceWriter,
 } from "../server/hosted/store";
-import { LIVE_DELEGATION_TARGET, LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
+import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { appended, delegated, heard, liveEventId, said } from "./support/live-events";
 
 /**
  * The voice writer over the real migrations on PGlite, fed a synthetic Live
@@ -63,8 +64,6 @@ const speech = { db: database.db, writer: store };
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 
 let liveSessions = 0;
-let eventIds = 0;
-
 const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 
 function writer(): VoiceWriter {
@@ -88,51 +87,6 @@ async function target(): Promise<VoiceTarget> {
     .where(eq(voiceSessions.liveSessionId, liveSessionId));
   return { userId, liveSessionId, conversation: { userId, conversationId: row.id } };
 }
-
-function eventId(): string {
-  eventIds += 1;
-  return `evt_${eventIds}`;
-}
-
-function heard(delta: string, startMs: number, endMs: number): LiveServerEvent {
-  return {
-    type: LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA,
-    event_id: eventId(),
-    delta,
-    start_ms: startMs,
-    end_ms: endMs,
-  };
-}
-
-function said(delta: string, startMs: number, endMs: number): LiveServerEvent {
-  return {
-    type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
-    event_id: eventId(),
-    delta,
-    start_ms: startMs,
-    end_ms: endMs,
-  };
-}
-
-function appended(clientEventId: string, startMs: number, endMs: number): LiveServerEvent {
-  return {
-    type: LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
-    event_id: eventId(),
-    client_event_id: clientEventId,
-    start_ms: startMs,
-    end_ms: endMs,
-  };
-}
-
-function delegated(delegationId: string, offsetMs: number): LiveServerEvent {
-  return {
-    type: LIVE_SERVER_EVENT.DELEGATION_CREATED,
-    event_id: eventId(),
-    offset_ms: offsetMs,
-    delegation: { id: delegationId, target: LIVE_DELEGATION_TARGET.CLIENT },
-  };
-}
-
 async function sessionRowId(liveSessionId: string): Promise<string> {
   const [row] = await database.db
     .select({ id: voiceSessions.id })
@@ -281,13 +235,13 @@ test("events the writer does not keep are ignored, and nothing is written for th
   const live = await target();
   const voice = writer();
   const ignored: LiveServerEvent[] = [
-    { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: eventId() },
-    { type: LIVE_SERVER_EVENT.USAGE_UPDATED, event_id: eventId(), usage: { seconds: 3 } },
+    { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: liveEventId() },
+    { type: LIVE_SERVER_EVENT.USAGE_UPDATED, event_id: liveEventId(), usage: { seconds: 3 } },
     { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND },
     { type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA },
     {
       type: LIVE_SERVER_EVENT.SESSION_STARTED,
-      event_id: eventId(),
+      event_id: liveEventId(),
       session: { id: live.liveSessionId },
     },
   ];

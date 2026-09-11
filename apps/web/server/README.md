@@ -238,6 +238,38 @@ may, is shown only what one is shown, and `greetingInstruction()` goes up once
 on `session.started`. The seed is bounded to one developer message of at most
 1,024 characters.
 
+### The live session service, composed and not yet attached
+
+The machinery that owns a session's exchange — seeding, the delegation
+adapter that hands each ask to the brain and speaks the reply as commentary
+once the run's actions settle, the append channel, the briefing queue under
+the announcement hold, idle, and the graceful close — is `@sidecar/voice`'s
+`LiveSessionService`, behind that package's `./live-session` door, which
+names no socket library so a function bundle takes it without `ws`. The
+desktop's host composes it over its local brain today; this service's
+composition of it stands in `server/voice/` and is exercised by
+`tests/voice-live-record.test.ts` but is attached to no route yet, because
+while the desktop owns the exchange both ends would append. Attaching it is
+the desktop cutover's, by build, and the brain door it needs (`LiveBrain`,
+answered in process from the ask door and `projectTurnEvents` over the store,
+never over HTTP as the user) lands with it.
+
+What stands: `server/voice/live-record.ts` is the `LiveRecord` door over the
+voice writer (`server/hosted/store/voice-writer.ts`). Every server event is
+handed to `observe` in arrival order and the writer takes what it keeps —
+each transcript delta a segment, nothing Luke said a message. A
+`session.delegation.created` is the one event held rather than consumed as it
+arrives: the writer cuts the developer's ask from the segments already on
+record before the delegation's offset, and the API may deliver the delegation
+ahead of the deltas it is about, so the event is consumed only when the
+service asks for the developer's utterance to be written, after every delta
+that arrived ahead of that ask has taken its place. The write answers true
+only when the ask is on record, which is what keeps the service's own rule —
+the record precedes the speech — over Postgres. `server/voice/live-sideband.ts`
+reads the upstream socket as the `LiveSideband` the service consumes, and
+`observedSideband` hands each event to the record once, ahead of every
+listener, replay included.
+
 ### One connection is one invocation
 
 A WebSocket connection to a Vercel Function closes when the function reaches
