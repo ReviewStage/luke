@@ -25,7 +25,9 @@ export interface ConversationRow {
   readonly providerSessionId?: string | null;
   readonly parentConversationId?: string | null;
   readonly spawnedByMessageId?: string | null;
+  readonly forkOfSeq?: number | null;
   readonly runtimeSessionId?: string | null;
+  readonly createdAt?: Date;
   readonly deletedAt?: Date | null;
   readonly nextMessageSeq?: number;
   readonly nextEventSeq?: number;
@@ -38,14 +40,14 @@ export function insertConversation(run: HostedStoreRun, row: ConversationRow): P
       const rows = yield* sql`
       insert into conversations (
         user_id, kind, provider_id, provider_session_id,
-        parent_conversation_id, spawned_by_message_id, runtime_session_id, deleted_at,
-        next_message_seq, next_event_seq
+        parent_conversation_id, spawned_by_message_id, fork_of_seq, runtime_session_id,
+        created_at, deleted_at, next_message_seq, next_event_seq
       )
       values (
         ${row.userId}, ${row.kind ?? CONVERSATION_KIND.MAIN},
         ${row.providerId ?? null}, ${row.providerSessionId ?? null},
-        ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null},
-        ${row.runtimeSessionId ?? null}, ${row.deletedAt ?? null},
+        ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null}, ${row.forkOfSeq ?? null},
+        ${row.runtimeSessionId ?? null}, ${row.createdAt ?? new Date()}, ${row.deletedAt ?? null},
         ${row.nextMessageSeq ?? 1}, ${row.nextEventSeq ?? 1}
       )
       returning id
@@ -149,17 +151,25 @@ export interface TurnInsertRow {
   readonly queuedAt?: Date;
   readonly startedAt?: Date | null;
   readonly settledAt?: Date | null;
+  readonly responseIds?: readonly string[] | null;
+  readonly usage?: unknown;
 }
 
 export function insertTurn(run: HostedStoreRun, row: TurnInsertRow): Promise<string> {
+  const responseIds = row.responseIds ?? null;
+  const usage = row.usage === undefined ? null : JSON.stringify(row.usage);
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql`
-      insert into turns (user_id, conversation_id, origin, status, queued_at, started_at, settled_at)
+      insert into turns (
+        user_id, conversation_id, origin, status, queued_at, started_at, settled_at,
+        response_ids, usage
+      )
       values (
         ${row.userId}, ${row.conversationId}, ${row.origin}, ${row.status},
-        ${row.queuedAt ?? new Date()}, ${row.startedAt ?? null}, ${row.settledAt ?? null}
+        ${row.queuedAt ?? new Date()}, ${row.startedAt ?? null}, ${row.settledAt ?? null},
+        ${responseIds}, ${usage}::jsonb
       )
       returning id
     `;
@@ -603,6 +613,105 @@ export function countRowsForUser(
       select count(*)::int as count from ${sql(table)} where user_id = ${userId}
     `;
       return Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count;
+    }),
+  );
+}
+
+/** A count of a table's rows matching one column's equality, by the table and column's own names. */
+export function countRowsWhere(
+  run: HostedStoreRun,
+  table: string,
+  column: string,
+  value: string,
+): Promise<number> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+      select count(*)::int as count from ${sql(table)} where ${sql(column)} = ${value}
+    `;
+      return Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count;
+    }),
+  );
+}
+
+export interface ToolSetRow {
+  readonly hash: string;
+  readonly schemas: unknown;
+}
+
+export function insertToolSet(run: HostedStoreRun, row: ToolSetRow): Promise<void> {
+  const schemas = JSON.stringify(row.schemas);
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`insert into tool_sets (hash, schemas) values (${row.hash}, ${schemas}::jsonb)`;
+    }),
+  );
+}
+
+export function insertToolSetIgnoringConflict(run: HostedStoreRun, row: ToolSetRow): Promise<void> {
+  const schemas = JSON.stringify(row.schemas);
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      insert into tool_sets (hash, schemas) values (${row.hash}, ${schemas}::jsonb)
+      on conflict (hash) do nothing
+    `;
+    }),
+  );
+}
+
+export function readToolSetsByHash(run: HostedStoreRun, hash: string) {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select * from tool_sets where hash = ${hash}`;
+    }),
+  );
+}
+
+export interface ProviderCursorRow {
+  readonly userId: string;
+  readonly providerId: string;
+  readonly providerSessionId: string;
+  readonly cursor: string;
+}
+
+export function insertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      insert into provider_cursors (user_id, provider_id, provider_session_id, cursor)
+      values (${row.userId}, ${row.providerId}, ${row.providerSessionId}, ${row.cursor})
+    `;
+    }),
+  );
+}
+
+export function upsertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      insert into provider_cursors (user_id, provider_id, provider_session_id, cursor)
+      values (${row.userId}, ${row.providerId}, ${row.providerSessionId}, ${row.cursor})
+      on conflict (user_id, provider_id, provider_session_id) do update set cursor = excluded.cursor
+    `;
+    }),
+  );
+}
+
+export function readProviderCursorsByUser(run: HostedStoreRun, userId: string) {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+      select provider_session_id, cursor from provider_cursors
+      where user_id = ${userId} order by provider_session_id
+    `;
     }),
   );
 }

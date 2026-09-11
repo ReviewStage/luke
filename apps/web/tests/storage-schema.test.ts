@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as SqlClient from "@effect/sql/SqlClient";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -7,22 +8,33 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
-import { and, eq, getTableName, is, type SQL, sql } from "drizzle-orm";
-import { PgTable, pgSchema, text } from "drizzle-orm/pg-core";
+import { getTableName, is } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { user } from "../server/db/auth-schema";
 import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
 import * as schema from "../server/db/schema";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  events,
-  messages,
-  providerCursors,
-  toolSets,
-  turns,
-} from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  assertRefusedWithCode,
+  countRowsWhere,
+  deleteUser,
+  insertConversation,
+  insertEvent,
+  insertMessage,
+  insertProviderCursor,
+  insertToolSet,
+  insertToolSetIgnoringConflict,
+  insertTurn,
+  POSTGRES_ERROR,
+  readConversationById,
+  readEventsByMessage,
+  readProviderCursorsByUser,
+  readToolSetsByHash,
+  readTurnById,
+  upsertProviderCursor,
+} from "./support/store-rows";
 
 /**
  * What these tests hold to is the shape the migrations built: every row
@@ -44,19 +56,18 @@ const DECLARED_TABLES = Object.values(schema)
   .flatMap((value) => (is(value, PgTable) ? [getTableName(value)] : []))
   .sort();
 
-/** Postgres's own catalogue of tables, read through the same typed query surface as the rows. */
-const informationSchemaTables = pgSchema("information_schema").table("tables", {
-  tableSchema: text("table_schema").notNull(),
-  tableName: text("table_name").notNull(),
-});
-
 async function publicTableNames(): Promise<readonly string[]> {
-  const rows = await database.db
-    .select({ name: informationSchemaTables.tableName })
-    .from(informationSchemaTables)
-    .where(eq(informationSchemaTables.tableSchema, "public"));
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select table_name as name from information_schema.tables where table_schema = 'public'
+      `;
+    }),
+  );
+  const NameRowSchema = Schema.Struct({ name: Schema.String });
   return rows
-    .map((row) => row.name)
+    .map((row) => Schema.decodeUnknownSync(NameRowSchema)(row).name)
     .filter((name) => name !== MIGRATIONS_TABLE)
     .sort();
 }
@@ -65,113 +76,72 @@ test("the migrations end at the declared schema: every declared table stands, an
   assert.deepEqual(await publicTableNames(), DECLARED_TABLES);
 });
 
-const UNIQUE_VIOLATION = "23505";
+async function insertTestConversation(
+  userId: string,
+  row: Omit<Parameters<typeof insertConversation>[1], "userId"> = {},
+): Promise<string> {
+  return insertConversation(database.run, { ...row, userId });
+}
 
-/** Drizzle wraps the driver's error, so the Postgres code stands on the cause rather than the top. */
-async function assertUniqueViolation(insert: Promise<unknown>): Promise<void> {
-  await assert.rejects(insert, (error) => {
-    assert.ok(error instanceof Error);
-    const { cause } = error;
-    assert.ok(cause instanceof Error && "code" in cause);
-    assert.equal(cause.code, UNIQUE_VIOLATION);
-    return true;
+async function insertTestTurn(userId: string, conversationId: string): Promise<string> {
+  return insertTurn(database.run, {
+    userId,
+    conversationId,
+    origin: TURN_ORIGIN.TYPED,
+    status: TURN_STATUS.SETTLED,
+    responseIds: ["resp_1"],
+    usage: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0, reasoningTokens: 0 },
   });
 }
 
-async function insertConversation(
-  userId: string,
-  row: Partial<typeof conversations.$inferInsert> = {},
-): Promise<string> {
-  const [inserted] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN, ...row })
-    .returning({ id: conversations.id });
-  assert.ok(inserted);
-  return inserted.id;
-}
-
-async function insertTurn(userId: string, conversationId: string): Promise<string> {
-  const [inserted] = await database.db
-    .insert(turns)
-    .values({
-      userId,
-      conversationId,
-      origin: TURN_ORIGIN.TYPED,
-      status: TURN_STATUS.SETTLED,
-      responseIds: ["resp_1"],
-      usage: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0, reasoningTokens: 0 },
-    })
-    .returning({ id: turns.id });
-  assert.ok(inserted);
-  return inserted.id;
-}
-
-async function insertMessage(
+async function insertTestMessage(
   userId: string,
   conversationId: string,
-  row: Partial<typeof messages.$inferInsert> = {},
+  row: Partial<Parameters<typeof insertMessage>[1]> = {},
 ): Promise<string> {
-  const [inserted] = await database.db
-    .insert(messages)
-    .values({
-      userId,
-      conversationId,
-      seq: 1,
-      clientId: "client-1",
-      role: MESSAGE_ROLE.USER,
-      parts: [{ type: "text", text: "hello" }],
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-      ...row,
-    })
-    .returning({ id: messages.id });
-  assert.ok(inserted);
-  return inserted.id;
+  return insertMessage(database.run, {
+    userId,
+    conversationId,
+    seq: 1,
+    clientId: "client-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "hello" }],
+    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+    ...row,
+  });
 }
 
-async function insertEvent(
+async function insertTestEvent(
   userId: string,
   conversationId: string,
   messageId: string,
-  row: Partial<typeof events.$inferInsert> = {},
+  row: Partial<Parameters<typeof insertEvent>[1]> = {},
 ): Promise<string> {
-  const [inserted] = await database.db
-    .insert(events)
-    .values({
-      userId,
-      conversationId,
-      messageId,
-      seq: 1,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-      ...row,
-    })
-    .returning({ id: events.id });
-  assert.ok(inserted);
-  return inserted.id;
-}
-
-async function countRows(table: PgTable, where: SQL): Promise<number> {
-  const [row] = await database.db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(table)
-    .where(where);
-  return row?.count ?? 0;
+  return insertEvent(database.run, {
+    userId,
+    conversationId,
+    messageId,
+    seq: 1,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+    ...row,
+  });
 }
 
 /** One account's full set of rows: a main conversation with a turn and a message, a child of it, and a provider cursor. */
 async function populateAccount(userId: string): Promise<{ main: string; child: string }> {
-  const main = await insertConversation(userId);
-  const turnId = await insertTurn(userId, main);
-  const spawnedBy = await insertMessage(userId, main, { turnId });
-  const child = await insertConversation(userId, {
+  const main = await insertTestConversation(userId);
+  const turnId = await insertTestTurn(userId, main);
+  const spawnedBy = await insertTestMessage(userId, main, { turnId });
+  const child = await insertTestConversation(userId, {
     kind: CONVERSATION_KIND.CHILD,
     parentConversationId: main,
     spawnedByMessageId: spawnedBy,
     forkOfSeq: 1,
   });
-  await insertTurn(userId, child);
-  await insertMessage(userId, child, { role: MESSAGE_ROLE.ASSISTANT, metadata: undefined });
-  await insertEvent(userId, main, spawnedBy);
-  await database.db.insert(providerCursors).values({
+  await insertTestTurn(userId, child);
+  await insertTestMessage(userId, child, { role: MESSAGE_ROLE.ASSISTANT, metadata: undefined });
+  await insertTestEvent(userId, main, spawnedBy);
+  await insertProviderCursor(database.run, {
     userId,
     providerId: "conductor",
     providerSessionId: "session-1",
@@ -186,17 +156,17 @@ test("every conversation row cascades with its account and no other account's", 
   await populateAccount(userId);
   await populateAccount(other);
 
-  await database.db.delete(user).where(eq(user.id, userId));
+  await deleteUser(database.run, userId);
 
-  for (const table of [conversations, messages, turns, events, providerCursors]) {
+  for (const table of ["conversations", "messages", "turns", "events", "provider_cursors"]) {
     assert.equal(
-      await countRows(table, eq(table.userId, userId)),
+      await countRowsWhere(database.run, table, "user_id", userId),
       0,
-      `${getTableName(table)} still holds rows for the deleted user`,
+      `${table} still holds rows for the deleted user`,
     );
     assert.ok(
-      (await countRows(table, eq(table.userId, other))) > 0,
-      `${getTableName(table)} lost the other user's rows`,
+      (await countRowsWhere(database.run, table, "user_id", other)) > 0,
+      `${table} lost the other user's rows`,
     );
   }
 });
@@ -204,50 +174,61 @@ test("every conversation row cascades with its account and no other account's", 
 test("deleting a parent conversation takes its descendants, their turns, and their messages", async () => {
   const userId = await database.createUser();
   const { main, child } = await populateAccount(userId);
-  const grandchild = await insertConversation(userId, {
+  const grandchild = await insertTestConversation(userId, {
     kind: CONVERSATION_KIND.CHILD,
     parentConversationId: child,
   });
-  const bystander = await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
-  await insertMessage(userId, bystander, { turnId: await insertTurn(userId, bystander) });
+  const bystander = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  await insertTestMessage(userId, bystander, { turnId: await insertTestTurn(userId, bystander) });
 
-  await database.db.delete(conversations).where(eq(conversations.id, main));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from conversations where id = ${main}`;
+    }),
+  );
 
   for (const gone of [main, child, grandchild]) {
-    assert.equal(await countRows(conversations, eq(conversations.id, gone)), 0);
-    assert.equal(await countRows(messages, eq(messages.conversationId, gone)), 0);
-    assert.equal(await countRows(turns, eq(turns.conversationId, gone)), 0);
-    assert.equal(await countRows(events, eq(events.conversationId, gone)), 0);
+    assert.equal(await countRowsWhere(database.run, "conversations", "id", gone), 0);
+    assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", gone), 0);
+    assert.equal(await countRowsWhere(database.run, "turns", "conversation_id", gone), 0);
+    assert.equal(await countRowsWhere(database.run, "events", "conversation_id", gone), 0);
   }
-  assert.equal(await countRows(conversations, eq(conversations.id, bystander)), 1);
-  assert.equal(await countRows(messages, eq(messages.conversationId, bystander)), 1);
-  assert.equal(await countRows(turns, eq(turns.conversationId, bystander)), 1);
+  assert.equal(await countRowsWhere(database.run, "conversations", "id", bystander), 1);
+  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", bystander), 1);
+  assert.equal(await countRowsWhere(database.run, "turns", "conversation_id", bystander), 1);
 });
 
 test("a message's client id is unique within its conversation and free in another", async () => {
   const userId = await database.createUser();
-  const first = await insertConversation(userId);
-  const second = await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
-  await insertMessage(userId, first, { clientId: "ask-1" });
+  const first = await insertTestConversation(userId);
+  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  await insertTestMessage(userId, first, { clientId: "ask-1" });
 
-  await assertUniqueViolation(insertMessage(userId, first, { clientId: "ask-1", seq: 2 }));
-  await insertMessage(userId, second, { clientId: "ask-1" });
+  await assertRefusedWithCode(
+    insertTestMessage(userId, first, { clientId: "ask-1", seq: 2 }),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
+  );
+  await insertTestMessage(userId, second, { clientId: "ask-1" });
 
-  assert.equal(await countRows(messages, eq(messages.conversationId, first)), 1);
-  assert.equal(await countRows(messages, eq(messages.conversationId, second)), 1);
+  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", first), 1);
+  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", second), 1);
 });
 
 test("a message's sequence is unique within its conversation and free in another", async () => {
   const userId = await database.createUser();
-  const first = await insertConversation(userId);
-  const second = await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
-  await insertMessage(userId, first, { clientId: "ask-1", seq: 7 });
+  const first = await insertTestConversation(userId);
+  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  await insertTestMessage(userId, first, { clientId: "ask-1", seq: 7 });
 
-  await assertUniqueViolation(insertMessage(userId, first, { clientId: "ask-2", seq: 7 }));
-  await insertMessage(userId, second, { clientId: "ask-2", seq: 7 });
+  await assertRefusedWithCode(
+    insertTestMessage(userId, first, { clientId: "ask-2", seq: 7 }),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
+  );
+  await insertTestMessage(userId, second, { clientId: "ask-2", seq: 7 });
 
-  assert.equal(await countRows(messages, eq(messages.conversationId, first)), 1);
-  assert.equal(await countRows(messages, eq(messages.conversationId, second)), 1);
+  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", first), 1);
+  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", second), 1);
 });
 
 test("an observed session has one conversation per account, and unobserved kinds never collide", async () => {
@@ -258,39 +239,48 @@ test("an observed session has one conversation per account, and unobserved kinds
     providerId: "conductor",
     providerSessionId: "session-1",
   } as const;
-  await insertConversation(userId, observed);
+  await insertTestConversation(userId, observed);
 
-  await assertUniqueViolation(insertConversation(userId, observed));
-  await insertConversation(other, observed);
-  await insertConversation(userId, { ...observed, providerSessionId: "session-2" });
-  await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
-  await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  await assertRefusedWithCode(
+    insertTestConversation(userId, observed),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
+  );
+  await insertTestConversation(other, observed);
+  await insertTestConversation(userId, { ...observed, providerSessionId: "session-2" });
+  await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
 
-  assert.equal(await countRows(conversations, eq(conversations.userId, userId)), 4);
-  assert.equal(await countRows(conversations, eq(conversations.userId, other)), 1);
+  assert.equal(await countRowsWhere(database.run, "conversations", "user_id", userId), 4);
+  assert.equal(await countRowsWhere(database.run, "conversations", "user_id", other), 1);
 });
 
 test("a new conversation numbers its messages and events from one and stands undeleted", async () => {
   const userId = await database.createUser();
-  const id = await insertConversation(userId);
+  const id = await insertTestConversation(userId);
 
-  const [row] = await database.db.select().from(conversations).where(eq(conversations.id, id));
+  const [row] = await readConversationById(database.run, id);
   assert.ok(row);
-  assert.equal(row.nextMessageSeq, 1);
-  assert.equal(row.nextEventSeq, 1);
-  assert.equal(row.deletedAt, null);
-  assert.equal(row.parentConversationId, null);
-  assert.equal(row.spawnedByMessageId, null);
-  assert.ok(row.createdAt instanceof Date);
-  assert.ok(row.lastActivityAt instanceof Date);
+  const decoded = Schema.decodeUnknownSync(
+    Schema.Struct({
+      next_message_seq: Schema.Union(Schema.Number, Schema.NumberFromString),
+      next_event_seq: Schema.Union(Schema.Number, Schema.NumberFromString),
+      deleted_at: Schema.Null,
+      parent_conversation_id: Schema.Null,
+      spawned_by_message_id: Schema.Null,
+      created_at: Schema.DateFromSelf,
+      last_activity_at: Schema.DateFromSelf,
+    }),
+  )(row);
+  assert.equal(decoded.next_message_seq, 1);
+  assert.equal(decoded.next_event_seq, 1);
 });
 
 test("a turn keeps its response ids in order and its usage as the four counts", async () => {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(userId);
-  const turnId = await insertTurn(userId, conversationId);
+  const conversationId = await insertTestConversation(userId);
+  const turnId = await insertTestTurn(userId, conversationId);
 
-  const [row] = await database.db.select().from(turns).where(eq(turns.id, turnId));
+  const row = await readTurnById(database.run, turnId);
   assert.ok(row);
   assert.deepEqual(row.responseIds, ["resp_1"]);
   assert.deepEqual(row.usage, {
@@ -307,134 +297,144 @@ test("a turn keeps its response ids in order and its usage as the four counts", 
 
 test("a message takes one speech.claimed event, and the claim refuses every second claimant", async () => {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(userId);
-  const briefing = await insertMessage(userId, conversationId, { role: MESSAGE_ROLE.ASSISTANT });
-  await insertEvent(userId, conversationId, briefing, {
+  const conversationId = await insertTestConversation(userId);
+  const briefing = await insertTestMessage(userId, conversationId, {
+    role: MESSAGE_ROLE.ASSISTANT,
+  });
+  await insertTestEvent(userId, conversationId, briefing, {
     seq: 1,
     kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
   });
-  await insertEvent(userId, conversationId, briefing, {
+  await insertTestEvent(userId, conversationId, briefing, {
     seq: 2,
     kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
     deviceId: "mac-1",
   });
 
-  await assertUniqueViolation(
-    insertEvent(userId, conversationId, briefing, {
+  await assertRefusedWithCode(
+    insertTestEvent(userId, conversationId, briefing, {
       seq: 3,
       kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
       deviceId: "phone-1",
     }),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
   );
 
-  const claims = await database.db
-    .select({ deviceId: events.deviceId })
-    .from(events)
-    .where(
-      and(eq(events.messageId, briefing), eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)),
-    );
+  const events = await readEventsByMessage(database.run, briefing);
+  const claims = events
+    .filter((event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)
+    .map((event) => ({ deviceId: event.device_id }));
   assert.deepEqual(claims, [{ deviceId: "mac-1" }]);
 });
 
 test("the claim binds one message alone: other kinds on it and claims on other messages are admitted", async () => {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(userId);
-  const first = await insertMessage(userId, conversationId, {
+  const conversationId = await insertTestConversation(userId);
+  const first = await insertTestMessage(userId, conversationId, {
     clientId: "briefing-1",
     seq: 1,
     role: MESSAGE_ROLE.ASSISTANT,
   });
-  const second = await insertMessage(userId, conversationId, {
+  const second = await insertTestMessage(userId, conversationId, {
     clientId: "briefing-2",
     seq: 2,
     role: MESSAGE_ROLE.ASSISTANT,
   });
-  await insertEvent(userId, conversationId, first, {
+  await insertTestEvent(userId, conversationId, first, {
     seq: 1,
     kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
   });
 
-  await insertEvent(userId, conversationId, first, {
+  await insertTestEvent(userId, conversationId, first, {
     seq: 2,
     kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
   });
-  await insertEvent(userId, conversationId, first, {
+  await insertTestEvent(userId, conversationId, first, {
     seq: 3,
     kind: CONVERSATION_EVENT_KIND.RATING,
     payload: { rating: "up" },
   });
-  await insertEvent(userId, conversationId, second, {
+  await insertTestEvent(userId, conversationId, second, {
     seq: 4,
     kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
   });
 
-  assert.equal(await countRows(events, eq(events.messageId, first)), 3);
-  assert.equal(await countRows(events, eq(events.messageId, second)), 1);
+  assert.equal(await countRowsWhere(database.run, "events", "message_id", first), 3);
+  assert.equal(await countRowsWhere(database.run, "events", "message_id", second), 1);
 });
 
 test("an event's sequence is unique within its conversation and free in another", async () => {
   const userId = await database.createUser();
-  const first = await insertConversation(userId);
-  const second = await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
-  const firstMessage = await insertMessage(userId, first);
-  const secondMessage = await insertMessage(userId, second);
-  await insertEvent(userId, first, firstMessage, { seq: 7 });
+  const first = await insertTestConversation(userId);
+  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  const firstMessage = await insertTestMessage(userId, first);
+  const secondMessage = await insertTestMessage(userId, second);
+  await insertTestEvent(userId, first, firstMessage, { seq: 7 });
 
-  await assertUniqueViolation(insertEvent(userId, first, firstMessage, { seq: 7 }));
-  await insertEvent(userId, second, secondMessage, { seq: 7 });
+  await assertRefusedWithCode(
+    insertTestEvent(userId, first, firstMessage, { seq: 7 }),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
+  );
+  await insertTestEvent(userId, second, secondMessage, { seq: 7 });
 
-  assert.equal(await countRows(events, eq(events.conversationId, first)), 1);
-  assert.equal(await countRows(events, eq(events.conversationId, second)), 1);
+  assert.equal(await countRowsWhere(database.run, "events", "conversation_id", first), 1);
+  assert.equal(await countRowsWhere(database.run, "events", "conversation_id", second), 1);
 });
 
 test("deleting a message takes its events and leaves its neighbour's", async () => {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(userId);
-  const gone = await insertMessage(userId, conversationId, { clientId: "m-1", seq: 1 });
-  const kept = await insertMessage(userId, conversationId, { clientId: "m-2", seq: 2 });
-  await insertEvent(userId, conversationId, gone, { seq: 1 });
-  await insertEvent(userId, conversationId, gone, {
+  const conversationId = await insertTestConversation(userId);
+  const gone = await insertTestMessage(userId, conversationId, { clientId: "m-1", seq: 1 });
+  const kept = await insertTestMessage(userId, conversationId, { clientId: "m-2", seq: 2 });
+  await insertTestEvent(userId, conversationId, gone, { seq: 1 });
+  await insertTestEvent(userId, conversationId, gone, {
     seq: 2,
     kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
   });
-  await insertEvent(userId, conversationId, kept, { seq: 3 });
+  await insertTestEvent(userId, conversationId, kept, { seq: 3 });
 
-  await database.db.delete(messages).where(eq(messages.id, gone));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from messages where id = ${gone}`;
+    }),
+  );
 
-  assert.equal(await countRows(events, eq(events.messageId, gone)), 0);
-  assert.equal(await countRows(events, eq(events.messageId, kept)), 1);
+  assert.equal(await countRowsWhere(database.run, "events", "message_id", gone), 0);
+  assert.equal(await countRowsWhere(database.run, "events", "message_id", kept), 1);
 });
 
 test("an event keeps its kind, device, and payload as written", async () => {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(userId);
-  const messageId = await insertMessage(userId, conversationId);
-  const id = await insertEvent(userId, conversationId, messageId, {
+  const conversationId = await insertTestConversation(userId);
+  const messageId = await insertTestMessage(userId, conversationId);
+  const id = await insertTestEvent(userId, conversationId, messageId, {
     kind: CONVERSATION_EVENT_KIND.SPEECH_HELD,
     deviceId: "mac-1",
     payload: { until: 1_700_000_000_000 },
   });
 
-  const [row] = await database.db.select().from(events).where(eq(events.id, id));
+  const events = await readEventsByMessage(database.run, messageId);
+  const row = events.find((event) => event.id === id);
   assert.ok(row);
   assert.equal(row.kind, CONVERSATION_EVENT_KIND.SPEECH_HELD);
-  assert.equal(row.deviceId, "mac-1");
+  assert.equal(row.device_id, "mac-1");
   assert.deepEqual(row.payload, { until: 1_700_000_000_000 });
   assert.equal(row.seq, 1);
-  assert.ok(row.createdAt instanceof Date);
+  assert.ok(row.created_at instanceof Date);
 });
 
 test("a tool set is one row per hash however often it is written", async () => {
   const toolSet = { hash: "tools-hash-1", schemas: [{ name: "read_transcript" }] };
 
-  await database.db.insert(toolSets).values(toolSet);
-  await database.db.insert(toolSets).values(toolSet).onConflictDoNothing();
-  await assertUniqueViolation(database.db.insert(toolSets).values(toolSet));
+  await insertToolSet(database.run, toolSet);
+  await insertToolSetIgnoringConflict(database.run, toolSet);
+  await assertRefusedWithCode(
+    insertToolSet(database.run, toolSet),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
+  );
 
-  const toolSetRows = await database.db
-    .select()
-    .from(toolSets)
-    .where(eq(toolSets.hash, toolSet.hash));
+  const toolSetRows = await readToolSetsByHash(database.run, toolSet.hash);
   assert.equal(toolSetRows.length, 1);
   assert.deepEqual(toolSetRows[0]?.schemas, toolSet.schemas);
 });
@@ -443,39 +443,27 @@ test("an observed session keeps one cursor per account, advanced in place", asyn
   const userId = await database.createUser();
   const other = await database.createUser();
   const session = { providerId: "conductor", providerSessionId: "session-1" } as const;
-  await database.db.insert(providerCursors).values({ userId, ...session, cursor: "after-1" });
+  await insertProviderCursor(database.run, { userId, ...session, cursor: "after-1" });
 
-  await assertUniqueViolation(
-    database.db.insert(providerCursors).values({ userId, ...session, cursor: "after-2" }),
+  await assertRefusedWithCode(
+    insertProviderCursor(database.run, { userId, ...session, cursor: "after-2" }),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
   );
-  await database.db
-    .insert(providerCursors)
-    .values({ userId, ...session, cursor: "after-2" })
-    .onConflictDoUpdate({
-      target: [
-        providerCursors.userId,
-        providerCursors.providerId,
-        providerCursors.providerSessionId,
-      ],
-      set: { cursor: "after-2" },
-    });
-  await database.db
-    .insert(providerCursors)
-    .values({ userId: other, ...session, cursor: "after-9" });
-  await database.db
-    .insert(providerCursors)
-    .values({ userId, ...session, providerSessionId: "session-2", cursor: "after-3" });
+  await upsertProviderCursor(database.run, { userId, ...session, cursor: "after-2" });
+  await insertProviderCursor(database.run, { userId: other, ...session, cursor: "after-9" });
+  await insertProviderCursor(database.run, {
+    userId,
+    ...session,
+    providerSessionId: "session-2",
+    cursor: "after-3",
+  });
 
-  const rows = await database.db
-    .select({
-      providerSessionId: providerCursors.providerSessionId,
-      cursor: providerCursors.cursor,
-    })
-    .from(providerCursors)
-    .where(eq(providerCursors.userId, userId))
-    .orderBy(providerCursors.providerSessionId);
-  assert.deepEqual(rows, [
-    { providerSessionId: "session-1", cursor: "after-2" },
-    { providerSessionId: "session-2", cursor: "after-3" },
-  ]);
+  const rows = await readProviderCursorsByUser(database.run, userId);
+  assert.deepEqual(
+    rows.map((row) => ({ providerSessionId: row.provider_session_id, cursor: row.cursor })),
+    [
+      { providerSessionId: "session-1", cursor: "after-2" },
+      { providerSessionId: "session-2", cursor: "after-3" },
+    ],
+  );
 });

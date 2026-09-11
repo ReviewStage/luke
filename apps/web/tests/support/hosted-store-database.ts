@@ -28,14 +28,17 @@ import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-clie
  * runner applies, because it is opened empty; a Postgres is not, because
  * `db:migrate` is the one runner that records what it applied.
  *
- * The Drizzle handle stands over the same connection for the modules and test
- * files P10-14c has not yet moved onto `@effect/sql`; it runs no migration of
- * its own and reads whatever `runWebMigrations` already applied.
+ * The Drizzle handle stands over the same connection for the three
+ * `BrainHostSeams`/`HostedStoreContext` wiring sites (`docs/adr/0001-effect.md`
+ * names them) that construct a production seams object under test and so
+ * still take a `HostedStoreDatabase`; every other test file reaches
+ * `@effect/sql` directly instead, as of P10-14c5. It runs no migration of its
+ * own and reads whatever `runWebMigrations` already applied.
  *
  * @deprecated The `db` field and the Drizzle handle behind it are what
- * P10-14c2 (the last remaining-drizzle slice, tracked beside P10-14a/b/c in
- * `docs/adr/0001-effect.md`) removes, once every test file reaches the
- * `sql` client below directly instead.
+ * P10-15 removes, once `BrainHostSeams.db`/`HostedStoreContext.db` themselves
+ * are deleted and the three wiring sites above move onto `HostedStoreRun`
+ * alone.
  */
 export interface HostedStoreTestDatabase {
   readonly db: HostedStoreDatabase;
