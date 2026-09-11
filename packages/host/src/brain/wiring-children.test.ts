@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
@@ -17,7 +16,7 @@ import {
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
-import { drainMicrotasks, FakeClock, temporaryDirectory } from "@sidecar/runtime/testing";
+import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import {
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -34,6 +33,8 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { type TestContext, test } from "vitest";
+import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -131,11 +132,11 @@ interface Composed {
   clock: FakeClock;
 }
 
-function composed(
+async function composed(
   t: TestContext,
   script: Script,
   overrides: Partial<Parameters<typeof wireBrain>[0]> = {},
-): Composed {
+): Promise<Composed> {
   const seen: Seen[] = [];
   let calls = 0;
   const client: BareResponsesModel = {
@@ -186,7 +187,7 @@ function composed(
   const history = new Map<SessionKey, ConversationEntry[]>();
   let ids = 0;
   const clock = new FakeClock();
-  const workspace = temporaryDirectory(t, "luke-children-");
+  const workspace = await temporaryDirectory(t, "luke-children-");
   const wiring = wireBrain({
     childTimers: { schedule: clock.schedule, cancel: clock.cancel },
     repositoryFor: (sessionKey) => {
@@ -304,7 +305,7 @@ async function ask(c: Composed, question: string, submissionId = "s-1"): Promise
 }
 
 test("a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn", async (t) => {
-  const c = composed(t, delegatingScript());
+  const c = await composed(t, delegatingScript());
   await c.wiring.rebuild();
   const runId = await ask(c, "look into the last commit");
   await waitFor(() =>
@@ -375,7 +376,7 @@ test("a child spawning a child counts one deeper, and at the depth cap the deleg
     }
     return textAnswer("ok");
   };
-  const c = composed(t, script);
+  const c = await composed(t, script);
   await c.wiring.rebuild();
   await ask(c, "go deep");
   await waitFor(
@@ -418,7 +419,7 @@ test("a fork carries the requester's context into the child and an isolated chil
     }
     return textAnswer(MAIN_SECRET);
   };
-  const c = composed(t, script);
+  const c = await composed(t, script);
   await c.wiring.rebuild();
   // Main first says something memorable, so its context holds a secret to fork.
   const first = await ask(c, "remember this", "s-0");
@@ -457,7 +458,7 @@ test("Start fresh cancels a conversation's descendants first, and their cancella
     }
     return textAnswer("ok");
   };
-  const c = composed(t, (seen, calls) => {
+  const c = await composed(t, (seen, calls) => {
     if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
       // The child's model call never answers until released: the child stays running.
       return new Promise<ScriptedAnswer>((_resolve, reject) => {
@@ -494,7 +495,7 @@ test("a reset capture that was skipped reports nothing, while one that failed is
   ] as const) {
     const reports: string[] = [];
     let captures = 0;
-    const c = composed(t, () => textAnswer("ok"), {
+    const c = await composed(t, () => textAnswer("ok"), {
       report: (message) => {
         reports.push(message);
       },

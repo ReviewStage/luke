@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -30,6 +29,7 @@ import type {
   SocketClose,
 } from "@sidecar/voice";
 import type { WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,

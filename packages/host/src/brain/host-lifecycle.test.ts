@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -7,6 +6,7 @@ import {
 } from "@sidecar/brain";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
+import { test } from "vitest";
 import { answerOf, brainHarness, heldModel } from "../testing/index.js";
 
 test("removing the capability under five outstanding runs leaves every run interrupted, published, and marked", async () => {

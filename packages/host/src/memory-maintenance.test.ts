@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
 import {
   MEMORY_HOUSEKEEPING_OUTCOME,
@@ -9,7 +8,6 @@ import {
   resetCapturePrompt,
 } from "@sidecar/memory";
 import { recentDailyNotes } from "@sidecar/runtime";
-import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   type AgentRuntime,
   DEFAULT_AGENT_ID,
@@ -24,7 +22,9 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { type TestContext, test } from "vitest";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance.js";
+import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 03:00 local on a fixed day, so the notes' day stamps are stable in any zone the test runs in. */
@@ -96,7 +96,7 @@ async function harness(
   answer: (prompt: string, input: string) => string | undefined = () => "stored.",
   overrides: Partial<MemoryMaintenanceDependencies> = {},
 ) {
-  const root = temporaryDirectory(t, "luke-memory-maintenance-");
+  const root = await temporaryDirectory(t, "luke-memory-maintenance-");
   const workspace = path.join(root, "workspace");
   fs.mkdirSync(path.join(workspace, "memory"), { recursive: true });
   fs.writeFileSync(

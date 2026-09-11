@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
@@ -14,6 +13,7 @@ import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import type { ConversationOperations } from "./conversation-operations.js";
 import { HOST_NATIVE_NODE_ID } from "./node-capabilities.js";

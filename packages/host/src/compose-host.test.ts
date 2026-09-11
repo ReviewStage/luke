@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_REFUSAL } from "@sidecar/actions";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -8,13 +7,14 @@ import {
   type GatewayMethod,
   gatewayOk,
 } from "@sidecar/gateway";
-import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { ACTION_RESULT_STATUS, isRecord, lateRef } from "@sidecar/wire";
+import { test } from "vitest";
 import { composeHost } from "./compose-host.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
 import type { SecretCipher } from "./settings-store.js";
+import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const CIPHER: SecretCipher = {
   isAvailable: () => false,
@@ -95,7 +95,7 @@ test("the kernel's service is a named failure before the merge composed it", () 
 });
 
 test("the merge answers the bootstrap every concern contributes to, and starts and stops", async (t) => {
-  const host = fixtureHost(temporaryDirectory(t));
+  const host = fixtureHost(await temporaryDirectory(t));
   await host.start();
   // The one method no composer owns: it reads six of them, so an answer
   // proves the merge stood every concern up and linked their back-edges.
@@ -118,7 +118,7 @@ test("the merge answers the bootstrap every concern contributes to, and starts a
 });
 
 test("a row's write reaches the host as a method and is refused for a session the roster does not hold", async (t) => {
-  const host = fixtureHost(temporaryDirectory(t));
+  const host = fixtureHost(await temporaryDirectory(t));
   await host.start();
   const identity = { providerId: "conductor", providerSessionId: "chat-nobody-observed" };
   const [sent, pressed] = await Promise.all([

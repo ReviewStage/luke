@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   ACTION_OUTPUT,
@@ -30,6 +29,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,

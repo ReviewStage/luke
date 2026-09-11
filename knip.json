@@ -52,7 +52,12 @@
       "project": ["api/**", "src/**", "server/**", "scripts/**", "tests/**"]
     },
     "packages/*": {
-      "entry": ["src/**/*.test.ts", "src/**/worker-entry.ts", "src/ui-messages/index.ts"],
+      "entry": [
+        "src/**/*.test.ts",
+        "src/**/worker-entry.ts",
+        "src/ui-messages/index.ts",
+        "src/testing/index.ts"
+      ],
       "project": ["src/**"]
     },
     "tools/*": {

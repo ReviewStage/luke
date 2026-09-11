@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_REFUSAL } from "@sidecar/actions";
 import {
   PRODUCT_EVENT,
@@ -20,6 +19,7 @@ import {
   type Session,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import { createSessionRowActions } from "./session-row-actions.js";
 
 /*

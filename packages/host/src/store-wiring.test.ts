@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
 import { type StorePort, serveStore } from "@sidecar/brain/store";
-import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
   type ConversationRecord,
@@ -14,7 +12,9 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { test } from "vitest";
 import { wireStore } from "./store-wiring.js";
+import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 /**
  * The store wiring over a real database served in-thread: a conversation the
@@ -76,9 +76,9 @@ function wiring(root: string) {
 const LINE = { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "kept for good" } as const;
 
 test("a listed conversation and its lines survive the next launch; archiving keeps the thread readable and main cannot be archived", async (t) => {
-  const root = temporaryDirectory(t, "luke-wiring-");
+  const root = await temporaryDirectory(t, "luke-wiring-");
   const first = wiring(root);
-  t.after(() => first.close());
+  t.onTestFinished(() => first.close());
   await first.wired.open();
   await first.wired.restore();
   const durable = await first.wired.ensureConversation(DURABLE, CONVERSATION_KIND.THREAD, "Thread");
@@ -99,7 +99,7 @@ test("a listed conversation and its lines survive the next launch; archiving kee
   await first.close();
 
   const relaunched = wiring(root);
-  t.after(() => relaunched.close());
+  t.onTestFinished(() => relaunched.close());
   await relaunched.wired.open();
   await relaunched.wired.restore();
   assert.deepEqual(
@@ -126,9 +126,9 @@ test("a listed conversation and its lines survive the next launch; archiving kee
 });
 
 test("an erasure takes what stood at the instant it was asked at; a line recorded after the press is the conversation's next line", async (t) => {
-  const root = temporaryDirectory(t, "luke-wiring-");
+  const root = await temporaryDirectory(t, "luke-wiring-");
   const c = wiring(root);
-  t.after(() => c.close());
+  t.onTestFinished(() => c.close());
   await c.wired.open();
   await c.wired.restore();
   await c.wired.ensureConversation(OTHER, CONVERSATION_KIND.THREAD, "Thread");

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
@@ -18,7 +17,7 @@ import {
 } from "@sidecar/brain/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
-import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
   conversationKindOf,
@@ -36,6 +35,8 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { type TestContext, test } from "vitest";
+import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -131,7 +132,7 @@ interface Gate {
   release: () => void;
 }
 
-function composed(t: TestContext, gate?: Gate): Composed {
+async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
   const inputs: ResponsesInputItem[][] = [];
   const waiting: (() => void)[] = [];
   const client: BareResponsesModel = {
@@ -162,7 +163,7 @@ function composed(t: TestContext, gate?: Gate): Composed {
   const roster: Session[] = [session("abc"), session("def")];
   let ids = 0;
   let builds = 0;
-  const workspace = temporaryDirectory(t, "luke-wiring-");
+  const workspace = await temporaryDirectory(t, "luke-wiring-");
   const wiring = wireBrain({
     repositoryFor: (sessionKey) => {
       repositories.set(sessionKey, (repositories.get(sessionKey) ?? 0) + 1);
@@ -286,7 +287,7 @@ function composed(t: TestContext, gate?: Gate): Composed {
 }
 
 test("each conversation's standing context is built for its own key", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   c.wiring.rosterLook();
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
@@ -295,7 +296,7 @@ test("each conversation's standing context is built for its own key", async (t) 
 });
 
 test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   c.wiring.rosterLook();
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
@@ -351,7 +352,7 @@ test("a roster look opens one conversation per observed session, each reading on
 });
 
 test("a roster look opens a cloud session's conversation like a local one, reads no message, and stands it down when the session leaves", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   c.roster.push(cloudSession());
   await c.wiring.rebuild();
   c.wiring.rosterLook();
@@ -390,7 +391,7 @@ test("a roster look opens a cloud session's conversation like a local one, reads
 });
 
 test("hooks route to the session's own conversation, main is never woken by one, and a held briefing returns to its source", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.wake([
@@ -428,7 +429,7 @@ test("hooks route to the session's own conversation, main is never woken by one,
 });
 
 test("a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
   c.wiring.releaseHeld([
@@ -457,7 +458,7 @@ test("a held briefing whose source conversation has stood down goes back to that
 
 test("a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends", async (t) => {
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("abc")), release: () => undefined };
-  const c = composed(t, gate);
+  const c = await composed(t, gate);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.rosterLook();
@@ -485,7 +486,7 @@ test("a session that leaves the roster while its analysis is held keeps its conv
 });
 
 test("a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.rosterLook();
@@ -519,7 +520,7 @@ test("a hook for a session whose conversation is standing down waits for the clo
 });
 
 test("a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   c.wiring.rosterLook();
@@ -559,7 +560,7 @@ test("a rebuild landing while a conversation stands down leaves the closing host
 });
 
 test("a conversation reopened while it stands down waits for the close and stands on its own new store", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   const threadKey = threadSessionKey("t-1");
   await c.wiring.openConversation(threadKey);
@@ -578,7 +579,7 @@ test("a conversation reopened while it stands down waits for the close and stand
 });
 
 test("two opens of one key landing in the same tick, a hook and a held briefing, build one store and list the conversation once", async (t) => {
-  const c = composed(t);
+  const c = await composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
   assert.equal(c.repositories.get(abcKey), undefined);
@@ -607,7 +608,7 @@ test("two opens of one key landing in the same tick, a hook and a held briefing,
 
 test("one observed conversation waiting on its model neither blocks another nor main", async (t) => {
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("def")), release: () => undefined };
-  const c = composed(t, gate);
+  const c = await composed(t, gate);
   await c.wiring.rebuild();
   c.wiring.rosterLook();
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 1);

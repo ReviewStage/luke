@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test, { type TestContext } from "node:test";
 import { MessageChannel } from "node:worker_threads";
 import {
   BRAIN_REQUEST_ORIGIN,
@@ -20,7 +19,7 @@ import {
   bareModelAdapter,
   fakeActionPerformer,
 } from "@sidecar/brain/testing";
-import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
@@ -35,8 +34,10 @@ import {
   recentConversationEntries,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { type TestContext, test } from "vitest";
 import { ConversationThread } from "../conversation-thread.js";
 import { operatorOverBrain } from "../testing/index.js";
+import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { CONVERSATION_DELETE_OUTCOME, deleteConversationFlow } from "./conversation-deletion.js";
 import { followBrainRequests } from "./publication.js";
 
@@ -102,8 +103,8 @@ function repository(client: StoreClient) {
   return repo;
 }
 
-function composed(t: TestContext) {
-  const root = temporaryDirectory(t, "luke-clear-");
+async function composed(t: TestContext) {
+  const root = await temporaryDirectory(t, "luke-clear-");
   const channel = new MessageChannel();
   // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
   serveStore(channel.port2 as unknown as StorePort);
@@ -311,7 +312,7 @@ function composed(t: TestContext) {
 }
 
 /** Seeds a finished, compacted exchange whose words stand in the checkpoint, the transcript, and the thread. */
-async function seeded(c: ReturnType<typeof composed>) {
+async function seeded(c: Awaited<ReturnType<typeof composed>>) {
   await c.open();
   const client = heldClient();
   const agent = c.build(client);
@@ -366,8 +367,8 @@ function previousCutoffOf(root: string, archiveId: string): number | null | unde
 }
 
 test("a Clear under a held model answer fences the brain and the thread before any wait, keeps the line accepted after the press, archives what stood, and the next ask sees none of the old words", async (t) => {
-  const c = composed(t);
-  t.after(() => c.close());
+  const c = await composed(t);
+  t.onTestFinished(() => c.close());
   const { agent, client } = await seeded(c);
   // A second ask whose answer is still out when the press lands.
   c.tick();
@@ -427,8 +428,8 @@ test("a Clear under a held model answer fences the brain and the thread before a
 });
 
 test("a Clear whose rows the store will not remove answers refused, yet the old words reach no context, no window, and no later launch of the brain", async (t) => {
-  const c = composed(t);
-  t.after(() => c.close());
+  const c = await composed(t);
+  t.onTestFinished(() => c.close());
   const { agent, client } = await seeded(c);
   c.refuseErase(true);
   const pressedAt = c.tick();
@@ -464,8 +465,8 @@ test("a Clear whose rows the store will not remove answers refused, yet the old 
 });
 
 test("a Clear whose marker the disk refuses answers refused without touching the rows, and still fences every context; the next landed write replaces what the disk kept", async (t) => {
-  const c = composed(t);
-  t.after(() => c.close());
+  const c = await composed(t);
+  t.onTestFinished(() => c.close());
   const { agent, client } = await seeded(c);
   c.repo.refuse = true;
   const pressedAt = c.tick();
@@ -487,8 +488,8 @@ test("a Clear whose marker the disk refuses answers refused without touching the
 });
 
 test("a credential rebuild landing while the deletion waits on the disk builds over the successor, never the old checkpoint, and a second Clear during the first is harmless", async (t) => {
-  const c = composed(t);
-  t.after(() => c.close());
+  const c = await composed(t);
+  t.onTestFinished(() => c.close());
   const { agent, client } = await seeded(c);
   await c.stop(agent);
   const release = c.holdErase();
@@ -514,8 +515,8 @@ test("a credential rebuild landing while the deletion waits on the disk builds o
 });
 
 test("a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the cutoff the disk held before the press, never the refused press's own fence", async (t) => {
-  const c = composed(t);
-  t.after(() => c.close());
+  const c = await composed(t);
+  t.onTestFinished(() => c.close());
   const { agent } = await seeded(c);
   await c.stop(agent);
   // The first press: fenced in memory, marker refused, the lines still on disk.

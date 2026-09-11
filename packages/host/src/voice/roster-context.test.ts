@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   APPEND_TOKEN_BOUND,
   conversationSeedItems,
@@ -10,6 +9,7 @@ import {
   seedItemTokens,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
+import { test } from "vitest";
 import { rosterAppendContent, rosterSeedItem, seedBudgetBesideRoster } from "./roster-context.js";
 
 test("the roster seed item is one developer message whose text ends with the view", () => {

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { type StorePort, serveStore, storeClient } from "@sidecar/brain/store";
 import { MEMORY_SOURCE, RETRIEVAL_MODE } from "@sidecar/memory";
-import { temporaryDirectory } from "@sidecar/runtime/testing";
 import {
   type ConversationRecord,
   conversationKindOf,
@@ -19,12 +17,14 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
+import { type TestContext, test } from "vitest";
 import { composeNotebookMemory, type NotebookMemoryDependencies } from "./notebook-memory.js";
+import { temporaryDirectory } from "./testing/temporary-directory.js";
 
 const NOW = 1_800_000_000_000;
 
-function agentRoot(t: TestContext) {
-  const root = temporaryDirectory(t, "luke-notebook-memory-");
+async function agentRoot(t: TestContext) {
+  const root = await temporaryDirectory(t, "luke-notebook-memory-");
   fs.mkdirSync(path.join(root, "workspace", "memory"), { recursive: true });
   fs.writeFileSync(
     path.join(root, "workspace", "MEMORY.md"),
@@ -78,7 +78,7 @@ function adapter(
 }
 
 async function harness(t: TestContext, overrides: Partial<NotebookMemoryDependencies> = {}) {
-  const root = agentRoot(t);
+  const root = await agentRoot(t);
   const { store, close } = client();
   await store.open({
     agentRoot: root,
