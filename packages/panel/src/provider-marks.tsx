@@ -45,12 +45,16 @@ import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   HOSTED_AGENT_ID,
   type HostedAgentId,
+  HostedAgentIdSchema,
   ISSUE_TRACKER_ID,
   type IssueTrackerId,
+  IssueTrackerIdSchema,
   PROVIDER_ID,
   type ProviderId,
+  ProviderIdSchema,
   SESSION_APPLICATION_ID,
   type SessionApplicationId,
+  SessionApplicationIdSchema,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
 import {
@@ -74,6 +78,7 @@ import {
   OPENCODE_FRAME_PATH,
   SUPERSET_PATH,
 } from "@sidecar/surface";
+import { Schema } from "effect";
 import React, { useId } from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
@@ -444,6 +449,20 @@ export type MarkId =
   | typeof SUPERSET_WORKSPACE_PROVIDER_ID
   | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
 
+export const MarkIdSchema = Schema.Union(
+  ProviderIdSchema,
+  HostedAgentIdSchema,
+  SessionApplicationIdSchema,
+  IssueTrackerIdSchema,
+  Schema.Literal(
+    APPLE_CALENDAR_ID,
+    GOOGLE_CALENDAR_ID,
+    CREDENTIAL_PROVIDER_ID.OPENAI,
+    SUPERSET_WORKSPACE_PROVIDER_ID,
+    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  ),
+);
+
 const PROVIDER_MARKS = {
   [APPLE_CALENDAR_ID]: AppleCalendarMark,
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
@@ -466,8 +485,10 @@ const PROVIDER_MARKS = {
   [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 
+const readsMarkId = Schema.is(MarkIdSchema);
+
 function isMarkId(value: string): value is MarkId {
-  return value in PROVIDER_MARKS;
+  return readsMarkId(value);
 }
 
 export function ProviderMark({

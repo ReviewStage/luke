@@ -699,6 +699,9 @@ importers:
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
       react:
         specifier: 'catalog:'
         version: 19.2.8
