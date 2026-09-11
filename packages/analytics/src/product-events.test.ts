@@ -48,6 +48,8 @@ const SAMPLE_VALUE = {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: "within_hour",
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: "voice_captions",
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: "on",
+  [PRODUCT_EVENT_PROPERTY.RATING]: "up",
+  [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: "announcement",
 } satisfies Record<ProductEventProperty, string | number>;
 
 function legalEvent(name: ProductEventName): WireRecord {
@@ -82,6 +84,34 @@ test("every event round-trips through the reader unchanged", () => {
       properties: wire.properties,
     });
   }
+});
+
+test("a rating travels as its verdict and the message's kind, and a note or an id has no property to ride", () => {
+  const rated = productEventFromWire({
+    name: PRODUCT_EVENT.CONVERSATION_RATED,
+    at: AT,
+    properties: {
+      [PRODUCT_EVENT_PROPERTY.RATING]: "down",
+      [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: "reply",
+      note: "the answer skipped the failing test",
+      message_id: "2b000000-0000-4000-8000-000000000012",
+    },
+  });
+  assert.deepEqual(rated?.properties, {
+    [PRODUCT_EVENT_PROPERTY.RATING]: "down",
+    [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: "reply",
+  });
+  assert.equal(
+    productEventFromWire({
+      name: PRODUCT_EVENT.CONVERSATION_RATED,
+      at: AT,
+      properties: {
+        [PRODUCT_EVENT_PROPERTY.RATING]: "meh",
+        [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: "reply",
+      },
+    }),
+    undefined,
+  );
 });
 
 test("a property valid for another event is dropped from this one", () => {

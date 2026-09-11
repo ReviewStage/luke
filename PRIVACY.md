@@ -252,9 +252,11 @@ record. The counts are event names and values from a fixed list, and each one
 says which of the three apps it came from. A voice session's start is counted
 with which of three sources opened it — our voice service on your account,
 your own OpenAI key, or the accountless introduction — and never with a key
-or a session id. Nothing you type or say and nothing
-from a session can appear in one: no titles, branches, file paths, prompts, or
-error text.
+or a session id. A thumbs up or down you give one of Luke's messages is
+counted with the verdict and whether the message was a reply or a briefing,
+and never with the message, its id, or a note you left. Nothing you type or
+say and nothing from a session can appear in one: no titles, branches, file
+paths, prompts, or error text.
 
 **Screen recordings.** Luke records what his own panel draws, and never your
 screen, your editor, your terminal, or any other app. A recording shows whatever

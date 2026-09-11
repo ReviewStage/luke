@@ -187,6 +187,7 @@ private struct SignedInView: View {
     /// reads the messages alone before a registration lands.
     @State private var conversation = ConversationStore(
         client: ConversationReadClient(serviceURL: AccountConstants.serviceURL),
+        ratingClient: MessageRatingClient(serviceURL: AccountConstants.serviceURL),
         deviceId: { DeviceRegistrar.storedDeviceId() }
     )
 

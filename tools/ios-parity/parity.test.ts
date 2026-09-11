@@ -31,11 +31,13 @@ import {
   PRODUCT_EVENT_BATCH_LIMIT,
   PRODUCT_EVENT_CLIENT,
   PRODUCT_EVENT_CLIENT_HEADER,
+  PRODUCT_RATED_MESSAGE_KIND,
   PRODUCT_SESSION_ACTION,
   PRODUCT_SETTING_VALUE,
 } from "@sidecar/analytics";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import {
+  conversationMessageRatingPath,
   DEVICE_PLATFORM,
   DEVICE_TOKEN_BOUNDS,
   HOSTED_API_ERROR,
@@ -60,6 +62,7 @@ import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
+  MESSAGE_RATING,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
   TURN_ORIGIN,
@@ -456,6 +459,32 @@ test("the read paths and page bound are the hosted contract's", () => {
   assert.equal(`/${swiftStaticString(source, "turnsPath")}`, HOSTED_SERVICE_PATH.BRAIN_TURNS);
   assert.equal(`/${swiftStaticString(source, "changesPath")}`, HOSTED_SERVICE_PATH.CHANGES);
   assert.equal(swiftStaticNumber(source, "maximumPageLimit"), READ_PAGE_BOUNDS.MAX_LIMIT);
+});
+
+test("MessageRating is MESSAGE_RATING", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/MessageRatingClient.swift`), "MessageRating"),
+    MESSAGE_RATING,
+    "a verdict the phone cannot name is refused by the rating route and cannot draw the control's state",
+  );
+});
+
+test("ProductRatedMessageKind is PRODUCT_RATED_MESSAGE_KIND", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductRatedMessageKind"),
+    PRODUCT_RATED_MESSAGE_KIND,
+    "a message kind outside the allowlist is refused with its batch",
+  );
+});
+
+test("the rating path is conversationMessageRatingPath around the message's id", () => {
+  const source = swift(`${KIT}/MessageRatingClient.swift`);
+  const id = "2b000000-0000-4000-8000-000000000012";
+  assert.equal(
+    `/${swiftStaticString(source, "pathHead")}/${id}/${swiftStaticString(source, "pathTail")}`,
+    conversationMessageRatingPath(id),
+    "a path the service does not answer records no rating",
+  );
 });
 
 test("a case with no raw value contributes its own name", () => {

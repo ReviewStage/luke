@@ -220,22 +220,69 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: false)])
     }
 
-    func testTheSignalsHeadsSeedOnlyAThreadThatHoldsNothing() {
+    func testTheSignalsTurnsHeadSeedsOnlyAThreadThatHoldsNothingAndEventsNever() {
         var thread = ConversationThread()
         thread.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: "t1"))
         XCTAssertNil(thread.messagesCursor)
-        XCTAssertEqual(thread.eventsCursor, "e1")
+        XCTAssertNil(thread.eventsCursor)
         XCTAssertEqual(thread.turnsCursor, "t1")
         thread.adoptHeads(from: ChangesAnswer(seen: true, messages: "m2", events: "e2", turns: "t2"))
-        XCTAssertEqual(thread.eventsCursor, "e1")
+        XCTAssertNil(thread.eventsCursor)
         XCTAssertEqual(thread.turnsCursor, "t1")
         var fresh = ConversationThread()
         fresh.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e1", turns: nil))
         XCTAssertNil(fresh.turnsCursor)
         fresh.apply(ConversationMessagesAnswer(conversations: mainOnly, groups: [], next: "m1", hasMore: false))
         fresh.adoptHeads(from: ChangesAnswer(seen: true, messages: "m1", events: "e2", turns: "t2"))
-        XCTAssertEqual(fresh.eventsCursor, "e1")
+        XCTAssertNil(fresh.eventsCursor)
         XCTAssertNil(fresh.turnsCursor)
+    }
+
+    private func ratingEvent(_ seq: Int, _ rating: String?, messageId: String = "m1") -> ConversationReadEvent {
+        ConversationReadEvent(
+            id: "r\(seq)", conversationId: Self.main, seq: seq, messageId: messageId, kind: .rating,
+            deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            payload: rating.map { .object(["rating": .string($0)]) } ?? .object([:]),
+            createdAt: Date(timeIntervalSince1970: 100 + Double(seq))
+        )
+    }
+
+    func testTheLatestRatingEventIsTheMessagesVerdict() {
+        var thread = ConversationThread()
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly,
+                groups: [group(turnId: "t1", turn: nil, messages: [row("m1", seq: 1, at: 100), row("m2", seq: 2, at: 101)])],
+                next: "c1",
+                hasMore: false
+            )
+        )
+        XCTAssertEqual(thread.ratings, [:])
+        thread.apply(ConversationEventsAnswer(events: [ratingEvent(1, "up"), ratingEvent(2, "down")], next: "e2", hasMore: false))
+        XCTAssertEqual(thread.ratings, ["m1": .down])
+        thread.apply(ConversationEventsAnswer(events: [ratingEvent(1, "up")], next: "e2", hasMore: false))
+        XCTAssertEqual(thread.ratings, ["m1": .down])
+        thread.apply(ConversationEventsAnswer(events: [ratingEvent(3, "sideways"), ratingEvent(4, nil)], next: "e4", hasMore: false))
+        XCTAssertEqual(thread.ratings, ["m1": .down])
+        thread.record(ratingEvent(5, "up", messageId: "m2"))
+        XCTAssertEqual(thread.ratings, ["m1": .down, "m2": .up])
+        XCTAssertEqual(thread.eventsCursor, "e4")
+    }
+
+    func testARatingLeavesWithTheConversationThatHeldItsMessage() {
+        var thread = ConversationThread()
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly,
+                groups: [group(turnId: "t1", turn: nil, messages: [row("m1", seq: 1, at: 100)])],
+                next: "c1",
+                hasMore: false
+            )
+        )
+        thread.record(ratingEvent(1, "up"))
+        XCTAssertEqual(thread.ratings, ["m1": .up])
+        thread.apply(ConversationMessagesAnswer(conversations: [], groups: [], next: "c2", hasMore: false))
+        XCTAssertEqual(thread.ratings, [:])
     }
 
     func testAThreadReadWithoutASignalAdoptsNoHeadLater() {
