@@ -1,4 +1,4 @@
-import type { SessionProviderPlugin } from "@sidecar/session";
+import type { ProviderSessionObservation, SessionProviderPlugin } from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
@@ -311,6 +311,8 @@ export function pluginFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
+    /** The roster the brain's reads answer for, when a host holds one the plugin did not read itself. */
+    reported?: () => readonly ProviderSessionObservation[];
   } = {},
 ): SessionProviderPlugin {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -320,6 +322,7 @@ export function pluginFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    ...(overrides.reported ? { reported: overrides.reported } : undefined),
   });
 }
 export const LUKE_PROJECT: TestProject = {

@@ -1,4 +1,4 @@
-import { WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
+import { type ProviderSessionObservation, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
@@ -7,6 +7,7 @@ import {
   conductorConversationEnds,
   readConductorConversation,
   readConductorTranscript,
+  readConductorTranscriptSince,
 } from "./conversation.js";
 import { type ConductorPassCache, conductorObservations } from "./observe.js";
 import {
@@ -23,6 +24,12 @@ export interface ConductorPluginOptions {
   minimumRefreshIntervalMs?: number;
   sleep?: (ms: number) => Promise<void>;
   onDiagnostic?: AdapterDiagnosticCallback;
+  /**
+   * The roster the brain's transcript reads answer for, when a host holds
+   * one the plugin did not read itself: the hosted brain reads against the
+   * stored snapshot its turns were shown. Absent, the latest pass's own.
+   */
+  reported?: () => readonly ProviderSessionObservation[];
 }
 
 /**
@@ -36,13 +43,15 @@ export interface ConductorPluginOptions {
  * thing a press opens and a write reaches, and a workspace holding two chats
  * in two states is two facts, not one.
  *
- * No observation pass reads a word of a conversation. Its two reads are the
- * `conversation` handler, reached at a developer's own press on a chat's
- * screen, and the `transcript` handler, reached by the brain's own read tool
- * in a turn, and between them they keep nothing but where in each transcript
- * the last read got to. Neither takes a cursor from a pass: the incremental
- * `transcriptSince` read stays unanswered, so an observation pass judges a
- * cloud chat from what Conductor reports about it.
+ * No observation pass reads a word of a conversation. Its three reads are
+ * the `conversation` handler, reached at a developer's own press on a chat's
+ * screen, the `transcript` handler, reached by the brain's own read tool in a
+ * turn, and the `transcriptSince` handler, reached by the brain's observation
+ * turn for a chat the roster diff named, each behind the cursor Conductor's
+ * own last answer handed back; between them they keep nothing but where in
+ * each transcript the last read got to. None takes anything from a pass: the
+ * pass still judges a cloud chat from what Conductor reports about it, and
+ * the brain's own reads are what open its messages.
  */
 export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPlugin {
   /**
@@ -68,6 +77,8 @@ export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPl
     collect: (request, now) => conductorObservations(request, now, cache),
   });
 
+  const reported = options.reported ?? (() => pass.latest());
+
   return {
     provider: CONDUCTOR_PROVIDER,
     observe: () => pass.run(),
@@ -90,7 +101,10 @@ export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPl
     actions: conductorActions(pass),
 
     reads: {
-      transcript: (providerSessionId) => readConductorTranscript(pass, ends, providerSessionId),
+      transcript: (providerSessionId) =>
+        readConductorTranscript(pass, ends, reported, providerSessionId),
+      transcriptSince: (providerSessionId, cursor) =>
+        readConductorTranscriptSince(pass, ends, reported, providerSessionId, cursor),
       conversation: ({ request, observation }) =>
         readConductorConversation(pass, ends, observation.providerSessionId, request),
     },

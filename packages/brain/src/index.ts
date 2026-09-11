@@ -29,7 +29,12 @@ export {
 export { BrainGenerationClock } from "./generation-clock.js";
 export { HostedModelAdapter } from "./hosted-model-adapter.js";
 export { runMemoryHousekeeping } from "./housekeeping.js";
-export { BRAIN_INPUT_MARKER } from "./input-items.js";
+export {
+  askInputText,
+  BRAIN_INPUT_MARKER,
+  standingContextText,
+  wakeInputText,
+} from "./input-items.js";
 export { brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
 export { UNKNOWN_ACTION_STATUS } from "./journal.js";
@@ -46,10 +51,14 @@ export {
 } from "./openai-model-adapter.js";
 export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 export {
+  addModelUsage,
+  BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
+  type BrainRequestFailure,
   type BrainRequestRecord,
+  type BrainRequestStatus,
   type BrainRunUsage,
   type BrainSubmission,
 } from "./requests.js";
@@ -83,6 +92,7 @@ export {
   type ToolCallSettlement,
   type ToolRefusalStatus,
   type TurnCompaction,
+  toolCallSettlementOf,
 } from "./run-events.js";
 export {
   CONTEXT_ITEM_KIND,
@@ -99,7 +109,18 @@ export {
   type ActionToolModule,
   actionToolNamed,
 } from "./tools/action-tools.js";
+export {
+  ANNOUNCE_TOOL,
+  type AnnounceToolContext,
+  type AnnounceToolModule,
+} from "./tools/announce-tool.js";
+export { READ_TOOLS, type ReadToolContext, type ReadToolModule } from "./tools/read-tools.js";
 export { type ToolContext, type ToolModule, toolArguments } from "./tools/tool-module.js";
+export {
+  WORKSPACE_TOOLS,
+  type WorkspaceToolContext,
+  type WorkspaceToolModule,
+} from "./tools/workspace-tools.js";
 export {
   BRAIN_TOOL,
   type BrainToolRegistration,
@@ -120,15 +141,19 @@ export {
 } from "./turn.js";
 export { TurnEvents, type TurnEventsOptions } from "./turn-events.js";
 export {
+  AssistantMessageBuilder,
   STEP_START_PART,
   settledToolPart,
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
+  userMessage,
+  userMetadataOf,
 } from "./ui-messages.js";
 export {
   BRAIN_WAKE_KIND,
   type BrainDelivery,
+  type BrainTranscriptDelta,
   type BrainTurnNotice,
   type BrainTurnReport,
   type BrainWakeEvent,

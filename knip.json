@@ -48,9 +48,11 @@
         "src/entry-server.tsx",
         "server/db/migrate.ts",
         "scripts/*.ts",
-        "tests/**/*.test.ts"
+        "tests/**/*.test.ts",
+        "agent/**/*.ts",
+        "evals/**/*.ts"
       ],
-      "project": ["api/**", "src/**", "server/**", "scripts/**", "tests/**"]
+      "project": ["api/**", "src/**", "server/**", "scripts/**", "tests/**", "agent/**", "evals/**"]
     },
     "packages/*": {
       "entry": [

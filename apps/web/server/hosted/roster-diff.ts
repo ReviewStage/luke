@@ -24,7 +24,7 @@ import {
  */
 
 /** How a diff names a session: its identity and what the next snapshot showed of it. */
-interface RosterDiffSession {
+export interface RosterDiffSession {
   readonly providerId: CloudAgentProviderId;
   readonly providerSessionId: string;
   readonly title: string;

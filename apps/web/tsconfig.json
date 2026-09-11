@@ -10,6 +10,8 @@
     "tests/**/*.ts",
     "scripts/**/*.ts",
     "drizzle.config.ts",
-    "vite.config.ts"
+    "vite.config.ts",
+    "agent/**/*.ts",
+    "evals/**/*.ts"
   ]
 }
