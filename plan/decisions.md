@@ -2514,3 +2514,46 @@ snapshot cannot re-derive, re-deriving may cost a read deliberately avoided, or 
 may not map onto a roster as it maps onto a transcript. **A deliberate difference with a stated cause
 is fine and is what G5 needs to write the sentence correctly; an undocumented one is not.** Answered
 in the LUKE-127 wrap; a follow-up ticket if it is worth changing, never a reopened PR.
+
+
+## 2026-09-11 — Why the hosted wake path drops rather than defers: the snapshot is shared
+
+**Answered by C3, and the answer is the cause rather than a defence.** The roster snapshot advances
+when the diff is **written**, in one transaction with it (`advanceRosterSnapshot`: CAS on the
+observed-at instant under the pass row lock; a pass that found nothing changed moves only the
+snapshot). **It cannot advance on consumption, and the reason is not the diff's content.**
+
+**The snapshot is the roster every reader draws, not the brain's private cursor:**
+`readHostedRoster` for the brain's standing context (`host.ts`), the opener's own wake descriptions
+(`observation-app.ts`), the voice session's roster seed (`voice-mint` / `remote-voice-mint`), and the
+pass itself as its previous. **If it moved only when eve accepted, the voice would be seeded with a
+roster as old as eve's outage.**
+
+**So `CLAUDE.md`'s two-cursor rule does not transfer by moving this cursor later — it transfers by
+adding a second one.** A transcript's capture cursor is the brain's alone, which is why the desktop
+could put the capture on it. Here the shared snapshot means the two-cursor shape needs **a second
+per-account roster**, not a different time to move the first. **The difference from the rule is
+deliberate, and this is its cause** — which is what G5 needs to write the guide sentence correctly
+rather than as a contradiction.
+
+**C3's correction to its own bound:** the degraded cost is **20 changed passes** of eve refusal, not
+20 minutes, since an unchanged pass writes no diff.
+
+**Filed as LUKE-166**, C3's design and not mine: keep one more sealed roster per account — the roster
+as of the last diff the opener **consumed** — derive the one pending diff as current snapshot minus
+consumed roster on every visit, and move the consumed roster in the same transaction that today
+consumes the diffs and keeps the cursors. A dropped or undrained diff then **re-derives itself,
+wider**, `MAXIMUM_PENDING_ROSTER_DIFFS` bounds nothing that can happen, and **the `roster_diffs`
+table can go**. Cost: one snapshot-sized sealed row per account and an in-memory diff per visit, with
+**no extra provider read** — the diff is fully re-derivable from two snapshots (`roster-diff.ts`).
+
+**The one semantic change, recorded as needing deliberate acceptance:** a session that appeared and
+vanished inside an undrained window **nets to nothing** rather than producing an `appeared` +
+`vanished` pair. C3 argues that is right for a session no longer there to wake a conversation about.
+The honest statement of the cost is that a session which appeared, did something worth briefing, and
+vanished would never be mentioned — and the reason to accept it anyway is that **this arises only in
+the degraded window, where today's behaviour is to drop the diff entirely. Netting is strictly better
+than dropping.** It is a clear win over the unhealthy path rather than a pure win over the healthy
+one, and the ticket says so in those terms.
+
+**LUKE-127's PRs stand; nothing is reopened.**
