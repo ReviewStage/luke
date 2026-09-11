@@ -28,21 +28,21 @@ import { instant } from "./instant.js";
  * The conversation storage the LUKE-95 rework settles on: one row per
  * message in the AI SDK's `UIMessage` shape, its parts and metadata as plain
  * `jsonb`, beside the conversation it belongs to and the turn that wrote it.
- * Nothing here is sealed: sealing survives only for the provider keys in the
- * vault, and the content stored here is readable by an operator.
+ * Nothing here is sealed: the payload envelope survives for the notebook,
+ * fact, and roster tables and the vault's own cipher for the provider keys,
+ * and the content stored here is readable by an operator.
  *
- * These tables stand beside the v1 tables in `conversation-schema.ts` while
- * the readers move over; the hosted brain writes here through the store
- * writer and the read routes answer from these rows. Every
- * row is keyed by the user it belongs to and cascades with the user row, so
- * deleting an account is still one statement, and a conversation's children
- * cascade with their parent. Clear is a soft delete here, `deleted_at`
- * stamped on the row, so a cleared conversation's rows stand until the purge.
+ * The hosted brain writes here through the store writer and the read routes
+ * answer from these rows. Every row is keyed by the user it belongs to and
+ * cascades with the user row, so deleting an account is still one statement,
+ * and a conversation's children cascade with their parent. Clear is a soft
+ * delete here, `deleted_at` stamped on the row, so a cleared conversation's
+ * rows stand until the purge.
  *
  * The two sequence counters on a conversation row are what number its
- * messages and its events; they are allocated under the per-account lease,
- * counted up, and never reused. Instants are `timestamp with time zone`,
- * because these rows are written and read by the service alone and a
+ * messages and its events; they are allocated under the conversation's own
+ * row lock, counted up, and never reused. Instants are `timestamp with time
+ * zone`, because these rows are written and read by the service alone and a
  * Postgres instant needs no second clock beside it.
  */
 
@@ -84,7 +84,7 @@ export const conversations = pgTable(
     lastActivityAt: instant("last_activity_at").notNull().defaultNow(),
     /** Stamped by Clear; a row so stamped is purged later and read by nothing meanwhile. */
     deletedAt: instant("deleted_at"),
-    /** The next message sequence to hand out; counted up under the account lease and never reused. */
+    /** The next message sequence to hand out; counted up under the conversation's row lock and never reused. */
     nextMessageSeq: bigint("next_message_seq", { mode: "number" }).notNull().default(1),
     nextEventSeq: bigint("next_event_seq", { mode: "number" }).notNull().default(1),
   },
@@ -151,8 +151,8 @@ export const messages = pgTable(
 /**
  * One run of the brain over a conversation: what opened it, where it stands,
  * what it ran under, and what it cost. `usage` holds the same four counts
- * the v1 run row and the desktop's trace keep, spelled the same way, and
- * `response_ids` every response OpenAI answered the turn with, in order.
+ * the desktop's trace keeps, spelled the same way, and `response_ids` every
+ * response OpenAI answered the turn with, in order.
  */
 export const turns = pgTable(
   "turns",
@@ -182,21 +182,6 @@ export const turns = pgTable(
   },
   (table) => [index("turns_by_user").on(table.userId)],
 );
-
-/**
- * The one lease per account under which turns are drained and sequences
- * allocated: who holds it, since when, when it last beat, and when it lapses
- * unrenewed. One row per user, so the user id is the key.
- */
-export const conversationLease = pgTable("conversation_lease", {
-  userId: text("user_id")
-    .primaryKey()
-    .references(() => user.id, { onDelete: "cascade" }),
-  owner: text("owner").notNull(),
-  acquiredAt: instant("acquired_at").notNull(),
-  heartbeatAt: instant("heartbeat_at").notNull(),
-  expiresAt: instant("expires_at").notNull(),
-});
 
 /**
  * What happened to a message after it was written, one row per happening,

@@ -1,28 +1,4 @@
 import type { ToolSet } from "ai";
-import {
-  type BrainPersistedState,
-  type BrainStateLoad,
-  type BrainStateRepository,
-  type ConversationAppendOutcome,
-  type ConversationEntry,
-  type ConversationRecord,
-  EnvelopeTracker,
-  type SessionKey,
-  type StoredTranscriptEvent,
-  type TranscriptEvent,
-} from "../../core.js";
-import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
-import {
-  appendConversationLines,
-  conversationClearedAt,
-  listConversationLines,
-} from "./conversation-lines.js";
-import {
-  type ConversationCreation,
-  createConversation,
-  deleteConversation,
-  listConversations,
-} from "./conversations.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
@@ -59,7 +35,6 @@ import {
   rosterSnapshotObservedAt,
   writeRosterSnapshot,
 } from "./roster-snapshot.js";
-import { type RunAboutFields, recordRunAbout, runAbout } from "./run-about.js";
 import {
   type ClearOutcome,
   clearMainConversation,
@@ -67,12 +42,6 @@ import {
 } from "./soft-delete.js";
 import { openSpeechOffers, type SpeechOffer } from "./speech.js";
 import { type StandingConversation, standingConversations } from "./standing-conversations.js";
-import {
-  listCompactionBoundaries,
-  listTranscript,
-  type StoredCompactionBoundary,
-  type TranscriptListOptions,
-} from "./transcript.js";
 import {
   deleteWorkspaceFile,
   listWorkspaceFiles,
@@ -84,33 +53,18 @@ import {
 } from "./workspace-files.js";
 
 /**
- * The hosted conversation store: the storage contracts the desktop's SQLite
- * store implements, over Postgres and keyed by user, so a brain host composes
- * against it the way the desktop composes against its worker. Every method
- * names the user whose rows it reaches, and nothing here resolves a user: the
- * bearer seam above decides who is asking, and the store takes the answer.
- * Each user-derived value crosses the payload envelope on its way to a row
- * and back, bound to the user's id.
+ * The hosted store, over Postgres and keyed by user: the conversation rows
+ * the store writer writes and the read routes answer, beside the notebook,
+ * the remembered facts, the roster snapshot, and the speech offers. Every
+ * method names the user whose rows it reaches, and nothing here resolves a
+ * user: the bearer seam above decides who is asking, and the store takes the
+ * answer. The notebook, the facts, and the roster still cross the payload
+ * envelope on their way to a row and back, bound to the user's id; the
+ * conversation rows are plain `jsonb`, readable by an operator.
  */
 export interface HostedStore {
   /**
-   * The brain's envelope as a repository. Each save is a compare-and-set
-   * against the generation this handle last observed standing — loaded,
-   * readable or not, or saved — and carries only what changed, or the whole
-   * envelope when the generation itself changes. A generation whose rows
-   * could not be read is still observed by its id, so the store's repair of
-   * it lands; a save from a handle whose picture is stale answers false and
-   * changes nothing.
-   */
-  brainStateRepository(userId: string, sessionKey: SessionKey): BrainStateRepository;
-  conversations: {
-    list(userId: string): Promise<readonly ConversationRecord[]>;
-    create(userId: string, creation: ConversationCreation): Promise<ConversationRecord>;
-    /** The hard delete: the conversation and every row under it, with no archive behind them. */
-    delete(userId: string, sessionKey: SessionKey): Promise<boolean>;
-  };
-  /**
-   * The v2 rows: cursor reads a device polls, over the `messages`, `events`,
+   * The conversation rows: cursor reads a device polls, over the `messages`, `events`,
    * and `turns` tables, and the Clear that stamps the main conversation
    * rather than erasing it. Every read skips a conversation the Clear
    * stamped, so a cleared main is gone from the call after it.
@@ -167,35 +121,6 @@ export interface HostedStore {
     /** The newest rating on one of the caller's messages, or nothing; ratings are written through `rateMessage` over the store writer. */
     latest(userId: string, messageId: string): Promise<StoredRatingRecord | undefined>;
   };
-  lines: {
-    append(
-      userId: string,
-      sessionKey: SessionKey,
-      entries: readonly ConversationEntry[],
-      now: number,
-    ): Promise<ConversationAppendOutcome<ConversationEntry>>;
-    list(
-      userId: string,
-      sessionKey: SessionKey,
-      now: number,
-    ): Promise<readonly ConversationEntry[]>;
-    cutoff(userId: string, sessionKey: SessionKey): Promise<number | undefined>;
-  };
-  transcript: {
-    list(
-      userId: string,
-      sessionKey: SessionKey,
-      options?: TranscriptListOptions,
-    ): Promise<readonly StoredTranscriptEvent[]>;
-    boundaries(
-      userId: string,
-      sessionKey: SessionKey,
-    ): Promise<readonly StoredCompactionBoundary[]>;
-  };
-  runs: {
-    recordAbout(userId: string, runId: string, about: RunAboutFields): Promise<boolean>;
-    about(userId: string, runId: string): Promise<RunAboutFields | undefined>;
-  };
   facts: {
     list(userId: string): Promise<readonly StoredFact[]>;
     replace(
@@ -243,33 +168,6 @@ export interface HostedStore {
 export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
   const sealFor = (userId: string) => userSeal(keys, userId);
   return {
-    brainStateRepository(userId, sessionKey) {
-      const seal = sealFor(userId);
-      const tracker = new EnvelopeTracker();
-      return {
-        load: async (): Promise<BrainStateLoad> => {
-          const loaded = await loadBrainEnvelope(db, seal, userId, sessionKey);
-          tracker.observe(loaded);
-          return loaded.state
-            ? { state: loaded.state }
-            : { unreadable: loaded.unreadable === true };
-        },
-        save: async (
-          state: BrainPersistedState,
-          transcript?: readonly TranscriptEvent[],
-        ): Promise<boolean> => {
-          const save = tracker.saveFor(state, transcript);
-          const landed = await saveBrainEnvelope(db, seal, userId, sessionKey, save);
-          if (landed) tracker.landed(state);
-          return landed;
-        },
-      };
-    },
-    conversations: {
-      list: (userId) => listConversations(db, userId),
-      create: (userId, creation) => createConversation(db, userId, creation),
-      delete: (userId, sessionKey) => deleteConversation(db, userId, sessionKey),
-    },
     messages: {
       list: (userId, conversationId, tools, cursor) =>
         listMessages(db, userId, conversationId, tools, cursor),
@@ -296,22 +194,6 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     },
     ratings: {
       latest: (userId, messageId) => latestMessageRating(db, userId, messageId),
-    },
-    lines: {
-      append: (userId, sessionKey, entries, now) =>
-        appendConversationLines(db, sealFor(userId), userId, sessionKey, entries, now),
-      list: (userId, sessionKey, now) =>
-        listConversationLines(db, sealFor(userId), userId, sessionKey, now),
-      cutoff: (userId, sessionKey) => conversationClearedAt(db, userId, sessionKey),
-    },
-    transcript: {
-      list: (userId, sessionKey, options) =>
-        listTranscript(db, sealFor(userId), userId, sessionKey, options),
-      boundaries: (userId, sessionKey) => listCompactionBoundaries(db, userId, sessionKey),
-    },
-    runs: {
-      recordAbout: (userId, runId, about) => recordRunAbout(db, userId, runId, about),
-      about: (userId, runId) => runAbout(db, userId, runId),
     },
     facts: {
       list: (userId) => listFacts(db, sealFor(userId), userId),

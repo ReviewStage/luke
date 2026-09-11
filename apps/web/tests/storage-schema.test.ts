@@ -7,13 +7,13 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
-import { and, eq, getTableName, type SQL, sql } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import { and, eq, getTableName, is, type SQL, sql } from "drizzle-orm";
+import { PgTable, pgSchema, text } from "drizzle-orm/pg-core";
 import { afterAll, test } from "vitest";
 import { user } from "../server/db/auth-schema";
+import * as schema from "../server/db/schema";
 import {
   CONVERSATION_KIND,
-  conversationLease,
   conversations,
   events,
   messages,
@@ -25,17 +25,40 @@ import {
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
- * The v2 conversation tables have no reader yet, so what these tests hold to
- * is the shape the migration built: every row cascades with its account, a
- * child goes with its parent, the idempotency key and the observed-session
- * key refuse the duplicate and admit the neighbour, a fresh conversation
- * numbers its messages and events from one, one claim stands per briefing,
- * a prompt or tool set is one row however often it is written, and an
- * observed session keeps one cursor per account.
+ * What these tests hold to is the shape the migrations built: every row
+ * cascades with its account, a child goes with its parent, the idempotency
+ * key and the observed-session key refuse the duplicate and admit the
+ * neighbour, a fresh conversation numbers its messages and events from one,
+ * one claim stands per briefing, a prompt or tool set is one row however
+ * often it is written, an observed session keeps one cursor per account, and
+ * the v1 conversation tables and the briefing table are gone.
  */
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
+
+/** Every table `server/db/schema.ts` declares, by its Postgres name. */
+const DECLARED_TABLES = Object.values(schema)
+  .flatMap((value) => (is(value, PgTable) ? [getTableName(value)] : []))
+  .sort();
+
+/** Postgres's own catalogue of tables, read through the same typed query surface as the rows. */
+const informationSchemaTables = pgSchema("information_schema").table("tables", {
+  tableSchema: text("table_schema").notNull(),
+  tableName: text("table_name").notNull(),
+});
+
+async function publicTableNames(): Promise<readonly string[]> {
+  const rows = await database.db
+    .select({ name: informationSchemaTables.tableName })
+    .from(informationSchemaTables)
+    .where(eq(informationSchemaTables.tableSchema, "public"));
+  return rows.map((row) => row.name).sort();
+}
+
+test("the migrations end at the declared schema: every declared table stands, and nothing undeclared, the v1 conversation tables and the briefing table included, remains", async () => {
+  assert.deepEqual(await publicTableNames(), DECLARED_TABLES);
+});
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -129,7 +152,7 @@ async function countRows(table: PgTable, where: SQL): Promise<number> {
   return row?.count ?? 0;
 }
 
-/** One account's full set of rows: a main conversation with a turn and a message, a child of it, and the lease. */
+/** One account's full set of rows: a main conversation with a turn and a message, a child of it, and a provider cursor. */
 async function populateAccount(userId: string): Promise<{ main: string; child: string }> {
   const main = await insertConversation(userId);
   const turnId = await insertTurn(userId, main);
@@ -149,18 +172,10 @@ async function populateAccount(userId: string): Promise<{ main: string; child: s
     providerSessionId: "session-1",
     cursor: "after-1",
   });
-  const now = new Date();
-  await database.db.insert(conversationLease).values({
-    userId,
-    owner: "drainer-1",
-    acquiredAt: now,
-    heartbeatAt: now,
-    expiresAt: now,
-  });
   return { main, child };
 }
 
-test("every v2 row cascades with its account and no other account's", async () => {
+test("every conversation row cascades with its account and no other account's", async () => {
   const userId = await database.createUser();
   const other = await database.createUser();
   await populateAccount(userId);
@@ -168,14 +183,7 @@ test("every v2 row cascades with its account and no other account's", async () =
 
   await database.db.delete(user).where(eq(user.id, userId));
 
-  for (const table of [
-    conversations,
-    messages,
-    turns,
-    events,
-    providerCursors,
-    conversationLease,
-  ]) {
+  for (const table of [conversations, messages, turns, events, providerCursors]) {
     assert.equal(
       await countRows(table, eq(table.userId, userId)),
       0,
@@ -209,7 +217,6 @@ test("deleting a parent conversation takes its descendants, their turns, and the
   assert.equal(await countRows(conversations, eq(conversations.id, bystander)), 1);
   assert.equal(await countRows(messages, eq(messages.conversationId, bystander)), 1);
   assert.equal(await countRows(turns, eq(turns.conversationId, bystander)), 1);
-  assert.equal(await countRows(conversationLease, eq(conversationLease.userId, userId)), 1);
 });
 
 test("a message's client id is unique within its conversation and free in another", async () => {

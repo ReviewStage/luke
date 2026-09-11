@@ -148,6 +148,13 @@
       "when": 1789107380481,
       "tag": "0020_e6b_devices_timestamptz",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789119212646,
+      "tag": "0021_g4_drop_v1_conversation_tables",
+      "breakpoints": true
     }
   ]
 }

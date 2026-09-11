@@ -61,7 +61,7 @@ async function columnTypes(client: PGlite): Promise<readonly (readonly [string, 
   return result.rows.map((row) => [row.column_name, row.data_type]);
 }
 
-test("the migration keeps every recorded instant, whatever zone the migrating session sits in, and leaves v1's own columns as they were", async () => {
+test("the migration keeps every recorded instant, whatever zone the migrating session sits in, and leaves the older columns as they were", async () => {
   const client = new PGlite();
   const entries = await journal();
   const migration = entries.find((entry) => entry.tag === DEVICES_INSTANTS_MIGRATION);

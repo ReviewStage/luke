@@ -1,8 +1,6 @@
 // Better Auth owns its generated schema; Luke-owned tables can join this
 // aggregate from their own schema modules without being overwritten by it.
 export * from "./auth-schema.js";
-export * from "./briefing-schema.js";
-export * from "./conversation-schema.js";
 export * from "./devices-schema.js";
 export * from "./favorite-schema.js";
 export * from "./preferences-schema.js";

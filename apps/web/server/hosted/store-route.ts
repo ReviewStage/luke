@@ -9,7 +9,7 @@ import { resolveHostedUserId } from "./vault-route.js";
  * A hosted route over the conversation store: the same bearer resolution
  * every hosted endpoint makes, and the store composed once over the
  * deployment's database under its payload key ring. The ring is what the
- * store's sealed v1 columns open under; a deployment without the secret has
+ * store's sealed columns open under; a deployment without the secret has
  * no store to read and answers unavailable, the same kill switch the
  * observation tick keeps.
  */

@@ -92,7 +92,8 @@ const PAYLOAD_ENVELOPE_SEPARATOR = ":";
  * what an earlier key sealed. `boundTo` is authenticated but not stored — the
  * row's own user id — so an envelope lifted onto another user's row does not
  * open there. The vault's key format is left exactly as it was: this is the
- * variant beside it, for the conversation tables.
+ * variant beside it, for the notebook, the remembered facts, and the roster
+ * snapshot with its diffs.
  */
 export function sealPayload(plaintext: string, ring: PayloadKeyRing, boundTo: string): string {
   const secret = ring.keys.get(ring.current);
