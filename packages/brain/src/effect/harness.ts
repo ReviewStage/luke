@@ -13,7 +13,7 @@
  * with no clock of the harness's own to keep in step.
  */
 import { timersFromRuntime } from "@sidecar/runtime/effect";
-import { Effect, TestClock } from "effect";
+import { Chunk, Effect, TestClock } from "effect";
 import {
   type Harness,
   type HarnessOverrides,
@@ -42,12 +42,26 @@ export const effectHarness = (
   });
 
 /**
- * Sets the ambient `TestClock` to `untilMs`, firing every timer due by it, and
- * drains the harness's own microtask chains after — the same absolute-instant
- * shape `FakeClock#advance` took, so a converted test reads the same way.
+ * Advances the ambient `TestClock` to `untilMs`, one due timer at a time
+ * rather than jumping straight there, settling the harness's own microtask
+ * chains between each — the same shape `FakeClock#advance` took. Jumping
+ * straight to `untilMs` in one `TestClock.setTime` call would already read
+ * `now` as `untilMs` by the time a callback's own promise chain settles far
+ * enough to reschedule, so a short requeue computed from that already-jumped
+ * `now` would read as due only after the target and never fire within this
+ * advance; holding `now` at each due instant in turn, as the old
+ * `FakeClock#advance` did, is what keeps a requeue's own delay landing
+ * inside the same budget it would have under the old clock.
  */
 export const advanceHarness = (untilMs: number): Effect.Effect<void> =>
-  Effect.andThen(
-    TestClock.setTime(untilMs),
-    Effect.promise(() => settle()),
-  );
+  Effect.gen(function* () {
+    for (;;) {
+      const due = Chunk.toReadonlyArray(yield* TestClock.sleeps())
+        .filter((instant) => instant <= untilMs)
+        .sort((a, b) => a - b)[0];
+      if (due === undefined) break;
+      yield* TestClock.setTime(due);
+      yield* Effect.promise(() => settle());
+    }
+    yield* TestClock.setTime(untilMs);
+  });
