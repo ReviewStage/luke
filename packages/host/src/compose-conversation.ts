@@ -228,11 +228,31 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     if (loop.isCurrent(generation)) publish();
   }
 
+  /** The pass under way, so a caller can wait for one that began after its own write. */
+  let inFlight: Promise<void> = Promise.resolve();
+
   const loop = new ObservationLoop({
     gate,
     intervalMs: CONVERSATION_POLL_INTERVAL_MS,
-    run: poll,
+    run: (generation) => {
+      inFlight = poll(generation);
+      return inFlight;
+    },
   });
+
+  /**
+   * Runs a poll that began after this call and waits for it to publish. A pass
+   * already under way may have read before the caller's write landed, so it
+   * is waited out first; the loop then either runs a fresh pass to its end
+   * or, when it had already queued one behind the pass that just finished,
+   * answers at once, and that queued pass — which began after the write — is
+   * what the last wait is for.
+   */
+  async function pollAfter(): Promise<void> {
+    await inFlight.catch(() => undefined);
+    await loop.refresh();
+    await inFlight.catch(() => undefined);
+  }
 
   function reset(): void {
     sync.reset();
@@ -245,9 +265,10 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       const answer = await client.clear();
       if (answer === undefined) return gatewayOk({ cleared: false });
       // The next read lists the main the Clear opened and not the one it
-      // stamped, and the picture drops what the list no longer names; asking
-      // for that read now is what empties this Mac's thread without waiting a poll.
-      await loop.refresh();
+      // stamped, and the picture drops what the list no longer names; a pass
+      // that began after the Clear landed is what empties this Mac's thread
+      // before the answer says it did.
+      await pollAfter();
       return gatewayOk({ cleared: true });
     },
   };

@@ -74,6 +74,8 @@ interface FakeClient extends ConversationReadsClient, ConversationHeadsClient {
   readonly calls: string[];
   changesAnswer: ChangesAnswer | undefined;
   messagesAnswer: ConversationReadResult<ConversationMessagesAnswer>;
+  /** A gate a messages read waits at before answering, so a test can hold a poll open. */
+  messagesGate: Promise<void>;
   clearAnswer: { opened: string; cleared: number } | undefined;
 }
 
@@ -82,6 +84,7 @@ function fakeClient(): FakeClient {
     calls: [],
     changesAnswer: undefined,
     messagesAnswer: ok(messagesAnswer("hello")),
+    messagesGate: Promise.resolve(),
     clearAnswer: { opened: "3c000000-0000-4000-8000-000000000009", cleared: 1 },
     poll: async (request: ChangesRequest) => {
       client.calls.push(`changes:${request.deviceId}`);
@@ -89,7 +92,9 @@ function fakeClient(): FakeClient {
     },
     messages: async (page: ReadPageQuery = {}) => {
       client.calls.push(`messages:${page.after ?? ""}`);
-      return client.messagesAnswer;
+      const answer = client.messagesAnswer;
+      await client.messagesGate;
+      return answer;
     },
     events: async (page: ReadPageQuery = {}) => {
       client.calls.push(`events:${page.after ?? ""}`);
@@ -230,6 +235,39 @@ test("Clear carries the service's soft delete and reads again at once; a Clear t
   assert.deepEqual(composer.snapshot().groups, []);
   client.clearAnswer = undefined;
   assert.equal(await clear(composer), false);
+});
+
+test("a Clear answers only after a poll that began after it has published, even with a poll already under way", async () => {
+  const { composer, client, views } = harness();
+  await composer.loop.refresh();
+  assert.equal(views().at(-1)?.groups.length, 1);
+  // A poll reads the thread as it stood before the Clear and is held there.
+  let release: () => void = () => undefined;
+  client.messagesGate = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  client.messagesAnswer = ok(messagesAnswer("hello", "messages-later"));
+  const held = composer.loop.refresh();
+  // The Clear lands while that poll is out, and the service now lists a new, empty main.
+  const emptied = ok({
+    conversations: [
+      { id: "3c000000-0000-4000-8000-000000000009", kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    ],
+    groups: [],
+    next: "after-clear",
+    hasMore: false,
+  });
+  const clearing = clear(composer).then((cleared) => {
+    assert.equal(cleared, true);
+    // Whatever the held poll published, the answer waited for a pass that read after the Clear.
+    assert.deepEqual(composer.snapshot().groups, []);
+    assert.deepEqual(views().at(-1)?.groups, []);
+  });
+  client.messagesAnswer = emptied;
+  client.messagesGate = Promise.resolve();
+  release();
+  await held;
+  await clearing;
 });
 
 test("a run that sends nothing polls nothing and is settled from the start, and a closed gate refuses Clear", async () => {
