@@ -113,6 +113,7 @@ export {
   remoteMintAnswerSchema,
 } from "./mint-wire.js";
 export {
+  OBSERVE_QUERY,
   type ObserveAnswer,
   type ObservedSession,
   type ObservedSessionControl,

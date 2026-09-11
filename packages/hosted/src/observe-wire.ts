@@ -15,6 +15,19 @@ import { writtenText } from "./service-wire.js";
  */
 
 /**
+ * The one query the observe endpoint takes. The roster it answers is the
+ * snapshot the service's own scheduled pass last stored; a foreground device
+ * that wants the provider asked again right now says so with `fresh=true`,
+ * which spends the endpoint's per-user rate brake where a stored read does
+ * not.
+ */
+export const OBSERVE_QUERY = {
+  FRESH: "fresh",
+  /** The value the flag takes; anything else reads the stored snapshot. */
+  FRESH_VALUE: "true",
+} as const;
+
+/**
  * One control a session's provider advertised for it, as the observe endpoint
  * reports it: the id an action names, and the label and kind the row draws. What
  * the control targets never travels — the action endpoint re-observes and builds
@@ -32,9 +45,9 @@ export interface ObservedSessionControl {
  * One cloud session as reported by the observe endpoint. The fields are a
  * bounded subset of `ProviderSessionObservation`: what mobile can show in a
  * roster row, and which actions that row may offer. The service maps the
- * adapter's observation onto this shape and stores nothing — a new request is
- * a new observation pass, and every action endpoint re-observes for itself
- * rather than trusting these advertisements.
+ * stored snapshot's observation onto this shape; every action endpoint
+ * validates against that same snapshot's own advertisements rather than
+ * trusting these copies.
  *
  * The detail fields are the session vocabulary's own, and the reader holds
  * them to that vocabulary's own bounds: `change` to an HTTPS address, `link`
@@ -86,6 +99,8 @@ export interface ObservedSession
 /** The observe endpoint answer: the caller's cloud sessions across all providers. */
 export interface ObserveAnswer {
   sessions: ObservedSession[];
+  /** When the roster answered was observed, in Unix milliseconds; absent for a roster no pass has stored. */
+  observedAt?: number;
 }
 
 const OBSERVED_SESSION_STATUS_NAMES = Object.values(SESSION_STATUS);
@@ -148,6 +163,9 @@ const observedSessionSchema: Schema<ObservedSession> = s.map(
 
 /** A malformed session entry is skipped, not fatal. */
 export const observeAnswerSchema: Schema<ObserveAnswer> = s.record(
-  { sessions: s.array(observedSessionSchema, { skipRefused: true }) },
+  {
+    sessions: s.array(observedSessionSchema, { skipRefused: true }),
+    observedAt: s.dropRefused(s.number()),
+  },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );

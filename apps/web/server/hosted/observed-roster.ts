@@ -31,6 +31,12 @@ export const OBSERVED_ROSTER_VERSION = 1;
 
 interface ObservedRosterProvider {
   readonly providerId: CloudAgentProviderId;
+  /**
+   * A fingerprint of the key the pass observed under, so a snapshot read
+   * under a key since replaced or removed is not served or admitted against
+   * as if it were this key's roster.
+   */
+  readonly keyFingerprint: string;
   readonly observations: readonly ProviderSessionObservation[];
   readonly projects: readonly WorkspaceProject[];
 }
@@ -38,6 +44,14 @@ interface ObservedRosterProvider {
 export interface ObservedRoster {
   readonly version: typeof OBSERVED_ROSTER_VERSION;
   readonly providers: readonly ObservedRosterProvider[];
+}
+
+/** One provider's slice of the roster, or nothing where the snapshot holds none for it. */
+export function rosterProvider(
+  roster: ObservedRoster,
+  providerId: CloudAgentProviderId,
+): ObservedRosterProvider | undefined {
+  return roster.providers.find((provider) => provider.providerId === providerId);
 }
 
 export function encodeObservedRoster(roster: ObservedRoster): string {
@@ -151,6 +165,7 @@ const observedRosterSchema: Schema<ObservedRoster> = s.record(
     providers: s.array(
       s.record({
         providerId: cloudProviderIdSchema,
+        keyFingerprint: storedText,
         observations: s.array(observationSchema),
         projects: s.array(projectSchema),
       }),

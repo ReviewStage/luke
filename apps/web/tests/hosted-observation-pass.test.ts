@@ -17,6 +17,7 @@ import { CLOUD_OBSERVE_FAILURE } from "../server/hosted/cloud-observe";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import {
   keyedCloudProviderIds,
+  keyFingerprint,
   observeAndSnapshot,
   storedRoster,
 } from "../server/hosted/observation-pass";
@@ -76,7 +77,7 @@ test("a whole pass stores the roster with its projects, dated by the pass, and t
   assert.equal(outcome.complete, true);
   assert.equal(outcome.changed, false);
   assert.equal(outcome.observedAt, TEST_TIME);
-  const stored = await storedRoster(store, "user-1");
+  const stored = await storedRoster(store, "user-1", KEY_ROWS, SECRET);
   assert.ok(stored?.roster);
   assert.equal(stored.observedAt, TEST_TIME);
   const [provider] = stored.roster.providers;
@@ -344,11 +345,57 @@ test("when the earlier-started pass wins, the later one closes its own unfinishe
   });
 });
 
+test("a snapshot observed under a key since replaced is another key's roster: not served, and replaced with no diff against it; the same key saved again keeps it", async () => {
+  const store = memoryObservationStore();
+  const first = await observeAndSnapshot({
+    userId: "user-1",
+    rows: KEY_ROWS,
+    secret: SECRET,
+    store,
+    seams: { fetch: api().fetch, now: () => TEST_TIME },
+    now: TEST_TIME,
+  });
+  assert.equal(first.roster?.providers[0]?.keyFingerprint, keyFingerprint(TEST_API_KEY, SECRET));
+  assert.ok((await storedRoster(store, "user-1", KEY_ROWS, SECRET))?.roster);
+
+  // The Mac re-saves the same key on every launch, under a fresh nonce.
+  const resaved: VaultKeyRow[] = [
+    { providerId: "conductor", ciphertext: encryptProviderKey(TEST_API_KEY, SECRET) },
+  ];
+  assert.notEqual(resaved[0]?.ciphertext, KEY_ROWS[0]?.ciphertext);
+  assert.ok((await storedRoster(store, "user-1", resaved, SECRET))?.roster);
+
+  const replaced: VaultKeyRow[] = [
+    { providerId: "conductor", ciphertext: encryptProviderKey("another-key", SECRET) },
+  ];
+  assert.deepEqual(await storedRoster(store, "user-1", replaced, SECRET), {
+    observedAt: TEST_TIME,
+  });
+  assert.equal((await storedRoster(store, "user-1", [], SECRET))?.roster, undefined);
+  const unreadable: VaultKeyRow[] = [{ providerId: "conductor", ciphertext: "not-a-ciphertext" }];
+  assert.equal((await storedRoster(store, "user-1", unreadable, SECRET))?.roster, undefined);
+
+  const second = await observeAndSnapshot({
+    userId: "user-1",
+    rows: replaced,
+    secret: SECRET,
+    store,
+    seams: { fetch: api(TEST_CONDUCTOR_STATUS.ERROR).fetch, now: () => TEST_TIME + 1_000 },
+    now: TEST_TIME + 1_000,
+  });
+  assert.equal(second.complete, true);
+  assert.equal(second.changed, false);
+  assert.deepEqual(await store.roster.pendingDiffs("user-1"), []);
+  assert.ok((await storedRoster(store, "user-1", replaced, SECRET))?.roster);
+});
+
 test("a snapshot this build cannot open or read is replaced by the next whole pass, with no diff against it", async () => {
   for (const body of [UNOPENABLE_BODY, "not json", JSON.stringify({ version: 99 })]) {
     const store = memoryObservationStore();
     store.snapshots.set("user-1", { body, observedAt: TEST_TIME - 60_000 });
-    assert.deepEqual(await storedRoster(store, "user-1"), { observedAt: TEST_TIME - 60_000 });
+    assert.deepEqual(await storedRoster(store, "user-1", KEY_ROWS, SECRET), {
+      observedAt: TEST_TIME - 60_000,
+    });
 
     const outcome = await observeAndSnapshot({
       userId: "user-1",
@@ -362,7 +409,11 @@ test("a snapshot this build cannot open or read is replaced by the next whole pa
     assert.equal(outcome.complete, true, body);
     assert.equal(outcome.changed, false, body);
     assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME, body);
-    assert.equal((await storedRoster(store, "user-1"))?.roster?.providers.length, 1, body);
+    assert.equal(
+      (await storedRoster(store, "user-1", KEY_ROWS, SECRET))?.roster?.providers.length,
+      1,
+      body,
+    );
     assert.deepEqual(await store.roster.pendingDiffs("user-1"), [], body);
   }
 });

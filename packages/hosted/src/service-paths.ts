@@ -28,8 +28,9 @@ export const HOSTED_SERVICE_PATH = {
   ACTION_RENAME_WORKSPACE: "/api/actions/rename-workspace",
   /**
    * List the projects a new workspace can be created in (GET): each entry is
-   * one a provider itself reported on a fresh observation pass, so a creation
-   * ask can only ever name a reported project. Stateless like observe.
+   * one a provider reported on the same stored snapshot a creation is
+   * admitted against, so a creation ask can only ever name a project this
+   * answer offered. Read like observe, from the snapshot.
    */
   PROJECTS: "/api/projects",
   /**
@@ -83,9 +84,11 @@ export const HOSTED_SERVICE_PATH = {
    */
   DEVICES: "/api/devices",
   /**
-   * Observe cloud sessions on demand for the signed-in user. GET: decrypts the
-   * caller's vault keys, runs each provider's cloud adapter once, and returns a
-   * bounded roster. Stateless: no session state is stored between requests.
+   * The signed-in user's cloud sessions (GET): the bounded roster the
+   * service's own scheduled pass last stored for them, run every minute for
+   * accounts seen within the week, or a live pass where no snapshot stands
+   * yet. `OBSERVE_QUERY.FRESH` asks the provider again right now, under the
+   * endpoint's per-user rate brake.
    */
   OBSERVE: "/api/observe",
   /**

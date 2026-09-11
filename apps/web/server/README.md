@@ -551,11 +551,18 @@ model runs on the tick, no notification leaves, and the diff is written and
 left. Message cursors are not recorded by the pass, because observation never
 reads a chat's messages; the brain host's own reads will write them.
 
-`api/observe.ts` and the action routes under `api/actions/` still run their
-own live pass per request for now; serving the stored snapshot and admitting
-actions against it lands in a follow-up once the schedule has run in
-production. `api/sessions/messages.ts` keeps its own fresh pass before the
-read either way.
+`api/observe.ts` answers the stored snapshot, mapped onto the wire rows and
+dated with `observedAt`; a user with no snapshot yet is answered from a live
+pass that seeds one, and `?fresh=true` asks the provider again under the
+endpoint's per-user rate brake. The action routes under `api/actions/` admit
+each ask against the same stored snapshot instead of running a pass, seeding
+one the same way for a user who has none, and `api/projects.ts` lists the
+projects from that snapshot, so a creation can only ever name a project the
+phone was offered. A snapshot observed under a key since replaced is treated
+as none, so a new key never serves or admits against the old key's roster;
+the same key saved again, as the Mac does on every launch, keeps it.
+`api/sessions/messages.ts` is unchanged and still runs its own fresh pass
+before the read.
 
 ## Devices
 
