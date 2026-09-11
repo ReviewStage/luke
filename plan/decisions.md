@@ -2427,3 +2427,41 @@ row, it sits beside the authorization it must be checked against, and it leaves 
 untouched. The desktop half lands in **E5's attach** whichever shape wins.
 
 **No schema change either way:** the column exists; it is the writer that does not.
+
+
+## 2026-09-11 — Resolved: the device id rides a handshake header, and both halves are ours
+
+**The GPT-Live rollout chose the header**, for the reasons offered: the device is a fact about the
+connecting client, it belongs beside the bearer it is checked against, and the create frame stays
+the session document alone. They also handed us **both halves** — the desktop has no notion of a
+device id today, so the client side belongs to the account/device model rather than to the voice
+path — and stated they will stay out of it.
+
+**The shape, as they ruled it:**
+
+**(a) The header is named once in `@sidecar/hosted`**, beside `VOICE_SERVICE_FRAME` and
+`VOICE_SERVICE_PATH`. The hosted wire boundary owns every name both ends must spell; **a string
+literal in either app is wrong** even when the two literals agree, because the agreement is the
+thing that has to be structural.
+
+**(b) It rides only the handshake that creates the row.** A `session.attach` re-attach — after
+`maxDuration` — carries none, because the row already has it. A header on the re-attach would be a
+second place the truth could differ from itself.
+
+**(c) `register()` verifies the device row belongs to the authenticated account and refuses
+otherwise**, as already ruled here. Never store-and-ignore, never the client's word.
+
+**(d) A missing header leaves `device_id` null and the briefing path refusing** — the inert default
+already built into LUKE-132 part b — **never a guessed device.** The accountless **introduction
+route carries none and can therefore never claim**, which is correct rather than a limitation: the
+introduction speaks from the build's own script and has no briefing to claim.
+
+**Where it is built: E5**, both halves. Desktop touchpoints named by the rollout:
+`HostedLiveSessionSource` in `packages/voice` — whose `openSocket(url, headers)` **already takes
+headers**, and whose assembler options already plumb them — and whatever bootstrap hands the desktop
+its device id. **`packages/voice` stays free of `ws` and the package graph stays acyclic**, which is
+the standing rule in `packages/AGENTS.md` rather than a new constraint.
+
+**Nothing was blocked while this was open**, because part b was built refusing on null from the
+start. That is the general shape worth keeping: when the open question is *how a value arrives*,
+build the refusal first and the arrival second.
