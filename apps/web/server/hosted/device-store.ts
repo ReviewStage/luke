@@ -1,9 +1,9 @@
 import { and, eq, ne } from "drizzle-orm";
 import { devices } from "../db/devices-schema.js";
-import type { createDatabase } from "../db/index.js";
 import type { DeviceSeams } from "./devices.js";
+import type { HostedStoreDatabase } from "./store/database.js";
 
-type DeviceDatabase = Pick<ReturnType<typeof createDatabase>, "transaction" | "delete">;
+type DeviceDatabase = Pick<HostedStoreDatabase, "transaction" | "delete">;
 
 /**
  * The device seams over a database. A push token is unique across rows
@@ -47,6 +47,7 @@ export function deviceSeams(database: DeviceDatabase): DeviceSeams {
             platform: registration.platform,
             lastSeenAt: now,
             activeUntil: null,
+            quietUntil: null,
             pushToken: null,
             pushEnvironment: null,
             ...pushColumns,
@@ -60,6 +61,7 @@ export function deviceSeams(database: DeviceDatabase): DeviceSeams {
               platform: registration.platform,
               lastSeenAt: now,
               activeUntil: null,
+              quietUntil: null,
               ...pushColumns,
               updatedAt: now,
             },
@@ -95,6 +97,9 @@ export function deviceSeams(database: DeviceDatabase): DeviceSeams {
             updatedAt: now,
             ...(heartbeat.activeUntil !== undefined
               ? { activeUntil: heartbeat.activeUntil }
+              : undefined),
+            ...(heartbeat.quietUntil !== undefined
+              ? { quietUntil: heartbeat.quietUntil }
               : undefined),
             ...(heartbeat.push === null ? { pushToken: null, pushEnvironment: null } : undefined),
             ...(heartbeat.push

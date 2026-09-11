@@ -102,9 +102,12 @@ export {
 export { type ToolContext, type ToolModule, toolArguments } from "./tools/tool-module.js";
 export {
   BRAIN_TOOL,
+  type BrainToolRegistration,
   brainToolCatalog,
+  brainToolRegistry,
   hostedBrainToolCatalog,
   resolveTurnToolPolicy,
+  TOOL_GROUP,
 } from "./tools.js";
 export type { BrainTurnTraceRecord } from "./trace.js";
 export {

@@ -37,7 +37,9 @@ import {
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
+  eventsForMessages,
   latestMessageRating,
+  latestTurnPosition,
   listEvents,
   listMessages,
   listTurns,
@@ -47,6 +49,8 @@ import {
   type StoredRatingRecord,
   type StoredTurnRecord,
   type TurnCursor,
+  type TurnCursorPosition,
+  turnsNamed,
 } from "./message-reads.js";
 import {
   advanceRosterSnapshot,
@@ -70,6 +74,7 @@ import {
   clearMainConversation,
   purgeClearedConversations,
 } from "./soft-delete.js";
+import { type StandingConversation, standingConversations } from "./standing-conversations.js";
 import {
   listCompactionBoundaries,
   listTranscript,
@@ -133,10 +138,23 @@ export interface HostedStore {
       conversationId: string,
       cursor?: SequenceCursor,
     ): Promise<readonly StoredEventRecord[]>;
+    /** The events about the given messages, across their standing conversations, in each conversation's sequence. */
+    forMessages(
+      userId: string,
+      messageIds: readonly string[],
+    ): Promise<readonly StoredEventRecord[]>;
   };
   turns: {
     /** The account's turns in the order they last changed, so a settlement is answered again. */
     list(userId: string, cursor?: TurnCursor): Promise<readonly StoredTurnRecord[]>;
+    /** The turn rows the given ids name, over standing conversations, in the order they last changed. */
+    named(userId: string, turnIds: readonly string[]): Promise<readonly StoredTurnRecord[]>;
+    /** The cursor of the turn that changed last, or of the last one at or before `notAfter`; nothing while no such turn stands. */
+    latest(userId: string, notAfter?: TurnCursorPosition): Promise<TurnCursorPosition | undefined>;
+  };
+  directory: {
+    /** The view's conversations: the standing main and every standing observed conversation, with their counters. */
+    standing(userId: string): Promise<readonly StandingConversation[]>;
   };
   main: {
     /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
@@ -263,9 +281,15 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     },
     events: {
       list: (userId, conversationId, cursor) => listEvents(db, userId, conversationId, cursor),
+      forMessages: (userId, messageIds) => eventsForMessages(db, userId, messageIds),
     },
     turns: {
       list: (userId, cursor) => listTurns(db, userId, cursor),
+      named: (userId, turnIds) => turnsNamed(db, userId, turnIds),
+      latest: (userId, notAfter) => latestTurnPosition(db, userId, notAfter),
+    },
+    directory: {
+      standing: (userId) => standingConversations(db, userId),
     },
     main: {
       clear: (userId, now) => clearMainConversation(db, userId, now),
@@ -330,7 +354,12 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
 
 export { BRIEFING_STATE } from "./briefings.js";
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
-export type { StoredMessageRecord } from "./message-reads.js";
+export {
+  MAXIMUM_READ_PAGE,
+  type StoredEventRecord,
+  type StoredMessageRecord,
+  type StoredTurnRecord,
+} from "./message-reads.js";
 export {
   RATING_REFUSAL,
   type RatingStore,
@@ -344,6 +373,7 @@ export {
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
 export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
+export type { StandingConversation } from "./standing-conversations.js";
 
 export {
   type CommentaryAppend,

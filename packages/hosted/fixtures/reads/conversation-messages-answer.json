@@ -1,0 +1,156 @@
+{
+  "conversations": [
+    {
+      "id": "3c000000-0000-4000-8000-000000000001",
+      "kind": "main"
+    },
+    {
+      "id": "3c000000-0000-4000-8000-000000000002",
+      "kind": "observed",
+      "session": {
+        "providerId": "conductor",
+        "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "turnId": "1a000000-0000-4000-8000-000000000001",
+      "conversationId": "3c000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "main"
+      },
+      "turn": {
+        "id": "1a000000-0000-4000-8000-000000000001",
+        "origin": "typed",
+        "status": "settled",
+        "queuedAt": 1757505600000,
+        "startedAt": 1757505600100,
+        "settledAt": 1757505603000
+      },
+      "messages": [
+        {
+          "message": {
+            "id": "2b000000-0000-4000-8000-000000000011",
+            "role": "user",
+            "metadata": {
+              "author": "developer",
+              "channel": "typed"
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "Tell the fixture session to run the tests."
+              }
+            ]
+          },
+          "seq": 1,
+          "createdAt": 1757505600000,
+          "tools": []
+        },
+        {
+          "message": {
+            "id": "2b000000-0000-4000-8000-000000000012",
+            "role": "assistant",
+            "metadata": {
+              "author": "brain"
+            },
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-send_session_message",
+                "toolCallId": "call_1a0000000000000001",
+                "state": "output-available",
+                "input": {
+                  "provider_id": "conductor",
+                  "provider_session_id": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+                  "text": "Run the tests."
+                },
+                "output": {
+                  "status": "accepted",
+                  "target": {
+                    "providerId": "conductor",
+                    "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+                    "title": "Fixture session"
+                  }
+                }
+              },
+              {
+                "type": "text",
+                "text": "Sent.",
+                "state": "done"
+              }
+            ]
+          },
+          "seq": 2,
+          "createdAt": 1757505602000,
+          "tools": [
+            {
+              "toolCallId": "call_1a0000000000000001",
+              "toolName": "send_session_message",
+              "state": "output-available",
+              "kind": "action",
+              "outcome": "accepted"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "turnId": "1a000000-0000-4000-8000-000000000003",
+      "conversationId": "3c000000-0000-4000-8000-000000000002",
+      "source": {
+        "kind": "observed",
+        "session": {
+          "providerId": "conductor",
+          "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50"
+        }
+      },
+      "turn": {
+        "id": "1a000000-0000-4000-8000-000000000003",
+        "origin": "roster_diff",
+        "status": "settled",
+        "queuedAt": 1757505720000,
+        "startedAt": 1757505720200,
+        "settledAt": 1757505722400
+      },
+      "messages": [
+        {
+          "message": {
+            "id": "2b000000-0000-4000-8000-000000000032",
+            "role": "assistant",
+            "metadata": {
+              "author": "brain"
+            },
+            "parts": [
+              {
+                "type": "tool-announce",
+                "toolCallId": "call_3a0000000000000002",
+                "state": "output-available",
+                "input": {
+                  "briefing": "The fixture session is waiting on a permission prompt."
+                },
+                "output": {}
+              }
+            ]
+          },
+          "seq": 32,
+          "createdAt": 1757505722000,
+          "tools": [
+            {
+              "toolCallId": "call_3a0000000000000002",
+              "toolName": "announce",
+              "state": "output-available",
+              "kind": "announce",
+              "unspoken": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "next": "eyJwb3NpdGlvbnMiOlt7ImNvbnZlcnNhdGlvbklkIjoiM2MwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwic2VxIjoyfSx7ImNvbnZlcnNhdGlvbklkIjoiM2MwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwic2VxIjozMn1dfQ",
+  "hasMore": false
+}

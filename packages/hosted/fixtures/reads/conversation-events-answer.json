@@ -1,0 +1,35 @@
+{
+  "events": [
+    {
+      "id": "4d000000-0000-4000-8000-000000000001",
+      "conversationId": "3c000000-0000-4000-8000-000000000002",
+      "seq": 1,
+      "messageId": "2b000000-0000-4000-8000-000000000032",
+      "kind": "speech.offered",
+      "createdAt": 1757505722400
+    },
+    {
+      "id": "4d000000-0000-4000-8000-000000000002",
+      "conversationId": "3c000000-0000-4000-8000-000000000002",
+      "seq": 2,
+      "messageId": "2b000000-0000-4000-8000-000000000032",
+      "kind": "speech.claimed",
+      "deviceId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "createdAt": 1757505723000
+    },
+    {
+      "id": "4d000000-0000-4000-8000-000000000003",
+      "conversationId": "3c000000-0000-4000-8000-000000000002",
+      "seq": 3,
+      "messageId": "2b000000-0000-4000-8000-000000000032",
+      "kind": "rating",
+      "deviceId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "payload": {
+        "rating": "up"
+      },
+      "createdAt": 1757505790000
+    }
+  ],
+  "next": "eyJwb3NpdGlvbnMiOlt7ImNvbnZlcnNhdGlvbklkIjoiM2MwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwic2VxIjowfSx7ImNvbnZlcnNhdGlvbklkIjoiM2MwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwic2VxIjozfV19",
+  "hasMore": false
+}

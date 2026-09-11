@@ -17,6 +17,7 @@ export const HOSTED_HTTP_STATUS = {
   ACCEPTED: 202,
   BAD_REQUEST: 400,
   PAYLOAD_TOO_LARGE: 413,
+  INTERNAL_ERROR: 500,
   BAD_GATEWAY: 502,
   SERVICE_UNAVAILABLE: 503,
 } as const;
@@ -31,6 +32,8 @@ export function jsonResponse<Body extends object>(status: number, body: Body): R
 export interface HostedErrorFields {
   quota?: HostedQuota;
   upstreamStatus?: number;
+  /** The stored row a read could not hold to the vocabulary, named so an operator can find it. */
+  unreadableRow?: { conversationId: string; seq: number };
 }
 
 export function errorResponse(
@@ -41,6 +44,7 @@ export function errorResponse(
   const body: { error: HostedApiError } & HostedErrorFields = { error };
   if (extra.quota !== undefined) body.quota = extra.quota;
   if (extra.upstreamStatus !== undefined) body.upstreamStatus = extra.upstreamStatus;
+  if (extra.unreadableRow !== undefined) body.unreadableRow = extra.unreadableRow;
   return jsonResponse(status, body);
 }
 

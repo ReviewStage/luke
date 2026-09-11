@@ -57,12 +57,16 @@ export interface DeviceRegistration {
 /**
  * What a heartbeat writes beside the last-seen instant. `push` is a change
  * only when present: a new address replaces the one on file, `null` clears
- * it, and absent leaves it. `activeUntil` likewise moves presence only when
- * the device reported one.
+ * it, and absent leaves it. `activeUntil` and `quietUntil` likewise move only
+ * when the device reported them; the heartbeat carries no quiet instant, the
+ * change-signal poll does.
  */
 export interface DeviceHeartbeat {
   deviceId: string;
-  activeUntil: Date | undefined;
+  /** `null` clears the presence on file, which is how a device reports it went idle. */
+  activeUntil: Date | null | undefined;
+  /** The instant a meeting hold the device observes ends; `null` clears it, absent leaves it. */
+  quietUntil?: Date | null;
   push: DevicePushAddress | null | undefined;
 }
 

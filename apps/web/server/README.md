@@ -459,6 +459,48 @@ sequences come from the row's counters, each allocation landing on the first
 position no row holds, so the unique `(conversation_id, seq)` constraint is
 the backstop for a writer outside the lock and nothing the writer retries.
 
+The per-resource reads are how a device reads those rows, and there is no
+feed: `api/conversation/messages.ts`, `api/conversation/events.ts`, and
+`api/brain/turns.ts` each answer one resource behind a cursor of the
+device's own (`?after=`, `?limit=`), and `api/changes.ts` is the one change
+signal a device polls between them. The handlers are
+`server/hosted/resource-reads.ts` and `server/hosted/change-signal.ts`, over
+the store alone and never a table, composed by `server/hosted/store-route.ts`
+under the same bearer and the same kill switch the observation tick keeps.
+The messages read is the Conversation view: the store's `listMessages` over
+the standing main and every standing observed conversation, read back under
+the brain catalog's registry (`server/hosted/brain-tool-set.ts`, every
+catalog tool with its input validated by the wire schema the model was
+offered), then `@sidecar/session`'s `selectConversationView` over the page's
+rows with the catalog's own classification of which tools announce and which
+act, so an observed conversation's message crosses into the answer only cut
+to its announcement and action parts. A page holding a row the registry
+cannot read is refused whole with `unreadable-row` and the row's conversation
+and sequence, never answered without it. A cursor is an opaque string the
+service mints and a device echoes: for messages and events one position per
+standing conversation, in conversation-id order so two cursors over the same
+positions are one string, and for turns the store's own `(changedAt, id)` to
+the microsecond; the shapes are `@sidecar/hosted`'s `reads-wire.ts`, pinned
+by the fixtures under `packages/hosted/fixtures/reads/` the Swift mirror
+reads against. A message still being written — the running turn's journal — is answered on
+every read until `finished_at` is set, its parts as they then stand, and the
+cursor stops just before it until then, so a device holds a stale copy of no
+row; only the rows the cursor passes spend the page's bound, and the preview past
+the cursor is a few rows per conversation, so an open journal cannot hold the
+other conversations' rows behind it and a page never outgrows the bound the
+wire declares. An empty turns
+page moves that cursor back to the last turn at or before it, since a Clear
+can take the turn a cursor named, and never forward past a turn unread. Every device that reads to the end holds the same rows in the
+same order, which the unique `(conversation_id, seq)` pairs make true rather
+than hoped for; a Clear leaves the next read, the cursor, and the answer's
+list of standing conversations at once, and a device drops what the list no
+longer names. The change signal answers each resource's head as the cursor a
+caught-up device would hold — from the conversation rows' counters and one
+ordered look at the turns, never the rows themselves — beside the roster
+snapshot's instant, and the same call is the device's heartbeat: its row
+takes the last-seen instant and the `activeUntil` and `quietUntil` it
+reported. The service records those two and decides nothing from them here.
+
 Voice is stored beside them the way a call platform stores a call, under
 `server/db/voice-schema.ts`: `voice_sessions` and `voice_transcript_segments`.
 A session row is one live session — the Live API's own session id, unique so
@@ -579,9 +621,13 @@ one per installation; a registration or heartbeat that presents a token
 another row holds takes it off that row in the same transaction. The
 installation id and a push token are not credentials. Rows go with the
 account, at sign-out, and when Apple answers that the token is gone. The
-handler is `server/hosted/devices.ts` and the writes `server/hosted/device-store.ts`;
-`active_until` is written by nothing today, and the push token reaches the
-sender below in a later change.
+handler is `server/hosted/devices.ts` and the writes `server/hosted/device-store.ts`.
+Beside the presence window stands `quiet_until`, the instant a meeting hold
+the device observes ends; both arrive on the change-signal poll
+(`api/changes.ts`), which moves the row exactly as the heartbeat does, and
+both are written by nothing on the Mac today. A quiet instant holds speech
+and nothing more: a delivery reads it to wait, never to decide, reword, or
+act. The push token reaches the sender below in a later change.
 
 `server/hosted/apns.ts` is the sender behind those rows. It needs the
 deployment's Apple push credential, an APNs auth key from the developer

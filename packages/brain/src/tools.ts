@@ -207,6 +207,31 @@ export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSche
 }
 
 /**
+ * A tool as a reader's registry holds it: its name, its words, and the wire
+ * schema its input is declared in once. The catalog's descriptor carries that
+ * schema only as the emitted JSON a model is shown; a store reading a tool
+ * part back needs the declaration itself, so the input it finds in a row is
+ * read under the same rule the model was offered rather than under a copy.
+ */
+export interface BrainToolRegistration {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Schema<unknown>;
+}
+
+/** Every catalog tool with its wire schema, keyed by name, in the catalog's order. */
+export function brainToolRegistry(): ReadonlyMap<string, BrainToolRegistration> {
+  const modules: readonly BrainToolRegistration[] = [
+    ...ACTION_TOOLS,
+    ...BRAIN_TOOLS,
+    ...notebookMemoryToolShapes(),
+  ];
+  return new Map(
+    modules.map(({ name, description, inputSchema }) => [name, { name, description, inputSchema }]),
+  );
+}
+
+/**
  * Every tool a hosted request may select by name, in the Responses
  * function-tool form: the catalog's own schemas, act and brain tool alike.
  * The service selects schemas from this catalog and nothing a caller sends;

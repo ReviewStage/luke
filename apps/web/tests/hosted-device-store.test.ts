@@ -130,6 +130,7 @@ test("a first registration inserts the row under the account with the minted id"
     platform: DEVICE_PLATFORM.MACOS,
     lastSeenAt: NOW,
     activeUntil: null,
+    quietUntil: null,
     pushToken: null,
     pushEnvironment: null,
     createdAt: NOW,
@@ -143,9 +144,10 @@ test("a first registration inserts the row under the account with the minted id"
       platform: DEVICE_PLATFORM.MACOS,
       lastSeenAt: NOW,
       activeUntil: null,
+      quietUntil: null,
       updatedAt: NOW,
     },
-    "a registration without a token leaves the one on file",
+    "a registration without a token leaves the one on file, and clears the instants a previous sign-in reported",
   );
 });
 
@@ -240,6 +242,36 @@ test("a heartbeat carries presence, a new push address, or a cleared one", async
     lastSeenAt: NOW,
     updatedAt: NOW,
     activeUntil: new Date(NOW.getTime() + 120_000),
+  });
+
+  const quiet = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
+  await deviceSeams(quiet.database).touchDevice(
+    "user-1",
+    {
+      deviceId: DEVICE_ID,
+      activeUntil: null,
+      quietUntil: new Date(NOW.getTime() + 1_800_000),
+      push: undefined,
+    },
+    NOW,
+  );
+  assert.deepEqual(quiet.writes[1]?.set, {
+    lastSeenAt: NOW,
+    updatedAt: NOW,
+    activeUntil: null,
+    quietUntil: new Date(NOW.getTime() + 1_800_000),
+  });
+
+  const unquieted = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
+  await deviceSeams(unquieted.database).touchDevice(
+    "user-1",
+    { deviceId: DEVICE_ID, activeUntil: undefined, quietUntil: null, push: undefined },
+    NOW,
+  );
+  assert.deepEqual(unquieted.writes[1]?.set, {
+    lastSeenAt: NOW,
+    updatedAt: NOW,
+    quietUntil: null,
   });
 
   const retokened = deviceDatabase({ updatedRows: 1, deletedRows: 0 });

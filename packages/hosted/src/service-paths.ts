@@ -99,6 +99,23 @@ export const HOSTED_SERVICE_PATH = {
    * conversation screen asks; no observation pass ever issues this read.
    */
   SESSION_MESSAGES: "/api/sessions/messages",
+  /**
+   * The Conversation's messages behind a device's own cursor (GET): the view
+   * over the account's main and observed conversations, selected on the
+   * service and grouped by turn. `after` is the cursor the previous answer
+   * handed back, `limit` the page bound.
+   */
+  CONVERSATION_MESSAGES: "/api/conversation/messages",
+  /** The events about the Conversation's messages behind a device's own cursor (GET). */
+  CONVERSATION_EVENTS: "/api/conversation/events",
+  /** The account's turns in the order they last changed, behind a device's own cursor (GET). */
+  BRAIN_TURNS: "/api/brain/turns",
+  /**
+   * The change signal (POST): where every resource's read stands now, so a
+   * device reads only what moved. The same call moves the device row's
+   * last-seen instant and carries its presence and quiet instants.
+   */
+  CHANGES: "/api/changes",
 } as const;
 
 /**

@@ -95,6 +95,9 @@ public enum HostedAPIError: String, Sendable {
     case requestTooLarge = "request-too-large"
     case promptTooLarge = "prompt-too-large"
     case unknownTool = "unknown-tool"
+    /// A stored row the service could not read back, so the page it stood on
+    /// was refused whole rather than answered without it.
+    case unreadableRow = "unreadable-row"
     case methodNotAllowed = "method-not-allowed"
     /// The row the path names is not one this account holds; another account's and none at all read alike.
     case notFound = "not-found"
