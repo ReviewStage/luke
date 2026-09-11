@@ -79,6 +79,13 @@ struct LukeApp: App {
                 .environment(events)
                 .environment(conversation)
                 .environment(push)
+                // A launch restored from the keychain passes no sign-in edge,
+                // and the scene may already be active when it is first seen.
+                .task {
+                    if accountPreferencesEnabled, case .signedIn = session.state {
+                        push.reconcileRegistration(registering: devices)
+                    }
+                }
                 .onChange(of: session.state) { previous, current in
                     accountEdge(from: previous, to: current)
                     switch current {

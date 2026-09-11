@@ -117,25 +117,20 @@ struct ConversationView: View {
             .animation(.easeOut(duration: 0.5), value: liftedRow)
             .onChange(of: conversation.groups.count) {
                 now = Date()
-                // While a tap is still to land on its row, the poll that
-                // brings the message must not carry the screen past it.
+                // Rows landing re-aim the scroll at the row a tap opened at,
+                // never past it to the end; a tap still seeking holds the
+                // screen where it is.
                 switch conversation.opening {
-                case .seeking, .found: return
-                case .missing, nil: break
-                }
-                withAnimation { proxy.scrollTo(Self.endId, anchor: .bottom) }
-            }
-            .onChange(of: conversation.opening, initial: true) { _, opening in
-                switch opening {
-                case .found(let rowId):
-                    withAnimation { proxy.scrollTo(rowId, anchor: .center) }
-                    liftedRow = rowId
-                case .missing:
-                    withAnimation { proxy.scrollTo(Self.endId, anchor: .bottom) }
-                case .seeking, nil:
-                    break
+                case .seeking: return
+                case .found(let rowId): scroll(proxy, to: rowId)
+                case .missing, nil: scroll(proxy, to: Self.endId)
                 }
             }
+            .onChange(of: conversation.opening) { _, opening in follow(opening, proxy) }
+            // A row found before the screen was pushed is scrolled to once the
+            // lazy stack has laid out, on the run loop turn after appearing,
+            // rather than at appearance, when the row's id is not yet placed.
+            .onAppear { DispatchQueue.main.async { follow(conversation.opening, proxy) } }
             .task(id: liftedRow) {
                 guard liftedRow != nil else { return }
                 try? await Task.sleep(for: Self.liftDuration)
@@ -193,6 +188,22 @@ struct ConversationView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 4)
             .accessibilityElement(children: .combine)
+    }
+
+    private func follow(_ opening: ConversationStore.Opening?, _ proxy: ScrollViewProxy) {
+        switch opening {
+        case .found(let rowId):
+            scroll(proxy, to: rowId)
+            liftedRow = rowId
+        case .missing:
+            scroll(proxy, to: Self.endId)
+        case .seeking, nil:
+            break
+        }
+    }
+
+    private func scroll(_ proxy: ScrollViewProxy, to id: String) {
+        withAnimation { proxy.scrollTo(id, anchor: id == Self.endId ? .bottom : .center) }
     }
 
     /// What stands where a tapped briefing would have: the thread has moved

@@ -34,10 +34,10 @@ public final class ConversationStore {
         case seeking(messageId: String)
         /// The message stands at this row, for the screen to scroll to.
         case found(rowId: String)
-        /// A poll ran to its end and the message is not in the thread — the
-        /// conversation cleared, the message past the view's window, or a push
-        /// for an account this phone has since left — so the screen opens at
-        /// its end and says so rather than scrolling nowhere.
+        /// A poll has read the messages to their end and the message is not
+        /// among them — the conversation cleared, the message past the view's
+        /// window, or a push for an account this phone has since left — so the
+        /// screen opens at its end and says so rather than scrolling nowhere.
         case missing
     }
 
@@ -50,6 +50,10 @@ public final class ConversationStore {
     public private(set) var ratings: [String: MessageRating] = [:]
     public private(set) var failure: Failure?
     public private(set) var opening: Opening?
+    /// Whether the last messages read reached the end of what the service
+    /// holds, or stopped at the page bound with more behind the cursor: only
+    /// a drained read can say a message is not there.
+    private var messagesDrained = false
 
     /// How long the screen rests between polls while it stays in the foreground.
     public static let pollInterval: Duration = .seconds(5)
@@ -127,8 +131,9 @@ public final class ConversationStore {
 
     /// Asks the screen to open at one message: resolved at once where the
     /// thread already holds it, otherwise at the end of the next poll that
-    /// runs to completion, which either brings the message or settles that
-    /// it is not there.
+    /// runs to completion with the messages read to their end, which either
+    /// brings the message or settles that it is not there; a poll that
+    /// stopped at its page bound leaves the seeking to the next.
     public func open(at messageId: String) {
         opening = anchor(forMessage: messageId) ?? .seeking(messageId: messageId)
     }
@@ -146,7 +151,7 @@ public final class ConversationStore {
 
     private func resolveOpening() {
         guard case .seeking(let messageId) = opening else { return }
-        opening = anchor(forMessage: messageId) ?? (thread.opened ? .missing : opening)
+        opening = anchor(forMessage: messageId) ?? (thread.opened && messagesDrained ? .missing : opening)
     }
 
     /// One poll: the signal, then whatever moved. Every answer is applied
@@ -213,6 +218,7 @@ public final class ConversationStore {
             thread.apply(answer)
             groups = thread.turnGroups
             ratings = thread.ratings
+            messagesDrained = !answer.hasMore
             guard answer.hasMore else { return }
         }
     }
