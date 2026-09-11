@@ -1734,3 +1734,36 @@ last word is what makes it acceptable: at sixty-five releases something says so,
 tell a bound from a loss.
 
 **Ten mutation checks across C3's three PRs**, each naming a way the record could have lied.
+
+
+## 2026-09-11 — The carried set is the record's own words, and the failure direction is now always a duplicate (orchestrator, from C3's (c))
+
+C3 took the record-content boundary. **A release is carried once a hold-release message of the
+conversation names it**: the opening words the relay writes for each re-decision list every briefing
+by the instant the brain decided it and its words, so `releasedBriefings` reads those messages first
+(source `hold_release`, bounded at 256, their text parsed as the brain's own `[hold released]` item
+through a wire record read) and takes only the `speech.expired(hold_released)` releases they do not
+name, oldest first, paged by `seq`. **`latestStartedTurnQueuedAt` is gone** rather than left as a
+second way to answer the same question, and the read stays inside `speech.ts` over messages and
+events.
+
+**No clock and no assumption, and C3 stated the property better than the request did: the failure
+direction is always a duplicate re-decision, never silence.** A message the relay has not written yet
+can only make the next drain re-list; a turn eve took but never ran leaves its releases uncarried for
+the next drain. Both land on the benign side. **The 256 bound fails the same way** — past it the
+oldest carried set falls out of view and those releases re-list.
+
+**The one coupling it introduces, and the test required for it:** the carried set is recovered by
+**parsing a message the system itself wrote**, so the boundary is coupled to that text's format.
+**Required: a round-trip test that the item the relay writes parses back to exactly the set it
+listed**, and one sentence in the body saying the coupling exists.
+
+**Why it matters even though the failure is benign: a re-decision is not free.** The brain decides
+again against the roster as it then is and may announce the same news a second time — **not a
+delivery duplicate** (C5's claim and D3's push refusal stop that) **but a judgment duplicate**, and
+the developer hears it twice. A round-trip test turns a silent wording change into a failing check,
+and it is the only thing that can: a reader comparing writer and parser by eye will believe them.
+
+**Eleven mutation checks across C3's three PRs**, and the shape of the newest is the one to copy —
+"carried filter dropped **fails three tests**": not one test naming the mechanism, three naming the
+consequences.
