@@ -13,7 +13,7 @@ import {
   parseNotebook,
   removeNotebookEntry,
 } from "@sidecar/memory";
-import { Effect, Option, Schema } from "effect";
+import { Data, Effect, Either, Option, Schema } from "effect";
 import { BRAIN_WORKSPACE_SEEDS } from "../workspace-seeds.js";
 import type { StoreDatabase } from "./database.js";
 import { columnsDecoded } from "./rows.js";
@@ -203,6 +203,21 @@ export const NOTEBOOK_REFUSAL = {
   FULL: `Luke already remembers ${maximumRememberedFacts} things; replace or forget one first`,
 } as const;
 
+/** Why a notebook write did not land, carrying the entries as they stood when it was refused. */
+class NotebookRefusal extends Data.TaggedError("NotebookRefusal")<{
+  readonly reason: (typeof NOTEBOOK_REFUSAL)[keyof typeof NOTEBOOK_REFUSAL];
+  readonly entries: readonly NotebookEntry[];
+}> {}
+
+function notebookMutationOf(
+  result: Either.Either<{ entries: readonly NotebookEntry[] }, NotebookRefusal>,
+): NotebookMutation {
+  return Either.match(result, {
+    onLeft: (refusal) => ({ ok: false, entries: refusal.entries, reason: refusal.reason }),
+    onRight: ({ entries }) => ({ ok: true, entries }),
+  });
+}
+
 /**
  * Remembers one thing: a line under USER.md's remembered heading and an
  * entry beside it. Naming an entry to replace removes that line first; words
@@ -222,23 +237,37 @@ export const rememberNotebookEntryEffect = (
   Effect.gen(function* () {
     const words = notebookEntryText(ask.words);
     const current = yield* reconcileNotebookEffect(root, now);
-    if (!words) return { ok: false, entries: current.entries, reason: NOTEBOOK_REFUSAL.EMPTY };
+    if (!words)
+      return notebookMutationOf(
+        Either.left(
+          new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.EMPTY, entries: current.entries }),
+        ),
+      );
     const replaced = ask.replaces
       ? current.entries.find((entry) => entry.id === ask.replaces)
       : undefined;
     if (ask.replaces !== undefined && !replaced) {
-      return { ok: false, entries: current.entries, reason: NOTEBOOK_REFUSAL.UNKNOWN_ID };
+      return notebookMutationOf(
+        Either.left(
+          new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.UNKNOWN_ID, entries: current.entries }),
+        ),
+      );
     }
     const retained = current.entries.filter((entry) => entry.id !== replaced?.id);
     let content = replaced ? removeNotebookEntry(current.content, replaced.words) : current.content;
     const duplicate = retained.some((entry) => entry.words === words);
     if (!duplicate) {
       if (!replaced && current.entries.length >= maximumRememberedFacts) {
-        return { ok: false, entries: current.entries, reason: NOTEBOOK_REFUSAL.FULL };
+        return notebookMutationOf(
+          Either.left(
+            new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.FULL, entries: current.entries }),
+          ),
+        );
       }
       content = appendNotebookEntry(content, words);
     }
-    if (content === current.content) return { ok: true, entries: current.entries };
+    if (content === current.content)
+      return notebookMutationOf(Either.right({ entries: current.entries }));
     const sql = yield* Client.SqlClient;
     const entries = yield* sql.withTransaction(
       Effect.gen(function* () {
@@ -250,7 +279,7 @@ export const rememberNotebookEntryEffect = (
         return yield* selectEntriesEffect;
       }),
     );
-    return { ok: true, entries };
+    return notebookMutationOf(Either.right({ entries }));
   });
 
 export const forgetNotebookEntryEffect = (
@@ -261,7 +290,12 @@ export const forgetNotebookEntryEffect = (
   Effect.gen(function* () {
     const current = yield* reconcileNotebookEffect(root, now);
     const entry = current.entries.find((candidate) => candidate.id === id);
-    if (!entry) return { ok: false, entries: current.entries, reason: NOTEBOOK_REFUSAL.UNKNOWN_ID };
+    if (!entry)
+      return notebookMutationOf(
+        Either.left(
+          new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.UNKNOWN_ID, entries: current.entries }),
+        ),
+      );
     const content = removeNotebookEntry(current.content, entry.words);
     const sql = yield* Client.SqlClient;
     const entries = yield* sql.withTransaction(
@@ -272,7 +306,7 @@ export const forgetNotebookEntryEffect = (
         return yield* selectEntriesEffect;
       }),
     );
-    return { ok: true, entries };
+    return notebookMutationOf(Either.right({ entries }));
   });
 
 const personalFactRows = SqlSchema.findAll({
