@@ -2162,3 +2162,46 @@ replay is minutes; the work was hours, and the delay caused it.**
 7. **Do not interrupt the Effect lane over `packages/providers`. RULED.** G3's notes already carry
    the two instructions that matter either way: **deletion wins a conflict with a rewrite**, and G3
    reads who imports a module **now** rather than who imported it when the plan was written.
+
+
+## 2026-09-11 — Under C′ the `prompts` table is dropped, not reshaped (orchestrator, from C4)
+
+**Dean ruled C′ — store the hash, not the text, because nobody is replaying yet. C4 then showed that
+the honest C′ has no `prompts` table at all**, and the argument is stronger than the question I
+asked:
+
+- **`turns.prompt_hash` has no foreign key to it** — B2 declared none — so the table **anchors
+  nothing.**
+- With the text gone, the row says only *"this account first saw this fingerprint at this instant"*,
+  which is **derivable in one query from `turns`** (`min(started_at)` grouped by `user_id`,
+  `prompt_hash`), a table that already carries the hash and already cascades with the account.
+- **Nothing in this build reads it by hash** except C4's own tests and the eval.
+- **It does not help a future replay**, because replay needs the text — the one thing C′ declines to
+  store. If replay is wanted later, that is the moment to add a text table under that day's ruling.
+- Keeping it means a migration, a schema comment and a store method for a row that duplicates a
+  column, **and a table named `prompts` that holds no prompt** — a name that lies.
+
+**Ruling: `0022` becomes `DROP TABLE prompts`.** `tool_sets` keeps its row and its write.
+`recordPrompt` / `readPrompt` and the store's prompts group go; `host.prompt()` computes
+`promptHashOf(text)` and stores nothing. **G4's schema-equality assertion holds the drop to the
+declaration**, which is that assertion doing work within hours of landing.
+
+**Taken as the consequence of Dean's ruling rather than escalated again**, and told to him plainly
+with a veto offered: no reading of "store the hash, not the text" wants a table named `prompts`
+holding no prompt, and C4 says either shape is under an hour, so the reversal cost is bounded.
+
+**Three conditions.** Keep `0022` and re-read the number before pushing. **The `turns.prompt_hash`
+column comment must say there is nothing behind it** — *a content address for the composed prompt;
+the prompt's own text is not stored, because it embeds the developer's notebook and nothing replays
+it* — because a reader meeting that column will otherwise hunt for a table and conclude something is
+missing. And **grep the prose**: `apps/web/server/README.md` and the root README may describe the
+table, and a doc describing a dropped table is the same defect as a comment promising what the code
+does not do.
+
+**`storage-plan.md` is now contradicted**, as C4 flagged: *"prompts and tool_sets are
+content-addressed by hash and referenced from the turn"* is true of **`tool_sets` alone**. G5 takes
+it from here.
+
+**And C4's acceptance rewrite supersedes the ticket's:** *"two turns under the same prompt carry one
+`prompt_hash`; a changed workspace file yields a new one on the next session's first turn"* — the
+same property, asserted on the rows that hold it, with the session-scope correction folded in.
