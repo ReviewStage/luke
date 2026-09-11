@@ -65,11 +65,12 @@ test("every mark past the first rests exactly on it", () => {
   assert.equal(seat(4), 0);
 });
 
-// The thinking capsule's left side, in the stylesheet's numbers: the growth,
-// the face, the gap between wing elements, the dots' strip (three 5px dots
-// with 4px gaps), and the room the grown voice capsule keeps to the shape's
-// turning corner, which the wait must keep too.
+// The thinking capsule's left side, in the stylesheet's numbers: the two
+// growths, the face, the gap between wing elements, the dots' strip (three 5px
+// dots with 4px gaps), and the room the grown voice capsule keeps to the
+// shape's turning corner, which the wait must keep too.
 const THINKING_GROWTH = 31;
+const VOICE_GROWTH = 26;
 const FACE_WIDTH = 18;
 const WING_GAP = 8;
 const DOTS_WIDTH = 5 * 3 + 4 * 2;
@@ -80,6 +81,15 @@ test("the grown capsule holds the face, the gap, and the wait's dots", () => {
   // grown shape are drawn on the desktop, and no clip saves them.
   const used = WING_INSET + FACE_WIDTH + WING_GAP + DOTS_WIDTH;
   assert.ok(used <= CAPSULE_SIDE_WIDTH + THINKING_GROWTH - CORNER_KEEP);
+});
+
+test("a run answered aloud grows the capsule for the dots and the meter both", () => {
+  // The same invariant for the side that holds all three, which is why the
+  // stylesheet spends both growths rather than the wider of them: the meter's
+  // room alone leaves the dots on the desktop.
+  const used = WING_INSET + FACE_WIDTH + WING_GAP + DOTS_WIDTH + WING_GAP + METER_WIDTH;
+  assert.ok(used > CAPSULE_SIDE_WIDTH + VOICE_GROWTH - CORNER_KEEP);
+  assert.ok(used <= CAPSULE_SIDE_WIDTH + VOICE_GROWTH + THINKING_GROWTH - CORNER_KEEP);
 });
 
 const providers = (...ids: string[]): ProviderTally[] =>

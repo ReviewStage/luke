@@ -92,16 +92,20 @@ export function restingMotion(context: FaceContext): FaceMotion | undefined {
 }
 
 /**
- * Whether the wait's dots ride beside the face: only while the thinking rest
- * is what actually holds it, decided from the same resting priority the face
- * plays, so speech taking the face back takes the dots with it — and a face
- * the gate displaced leaves no orphaned dots. Read from the
+ * Whether the wait's dots ride beside the face: whenever a run of Luke's is
+ * still going, whatever the face is doing about the exchange. The two report
+ * different things and are independent — the dots are the brain's wait, the
+ * face is the conversation — because the session is full duplex and a run may
+ * be under way through the whole of a held talk key, where the listening rest
+ * holds the face and the panel would otherwise say nothing about the wait at
+ * all. The one thing that can take the dots is the face going: the gate
+ * displacing it leaves no orphaned dots. Read from the
  * context rather than from the played motion, because reduced motion plays
  * nothing at all while the dots still stand, paused, the way the
  * Conversation tab's do.
  */
 export function thinkingDotsShown(context: FaceContext, faceDrawn: boolean): boolean {
-  return faceDrawn && context.thinking && restingMotion(context) === FACE_MOTION.SUCCESS;
+  return faceDrawn && context.thinking;
 }
 
 /**
