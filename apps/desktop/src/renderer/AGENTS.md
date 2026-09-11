@@ -103,8 +103,9 @@ The voice window is a GPT Live peer and nothing more. `voice/live-peer.ts`
 builds the `RTCPeerConnection` in the WebRTC guide's order — the audio line
 first (for a session a press opened, the preferred microphone track added
 with `enabled` false; for one opened for Luke's own speech, the peer's own
-silent track, synthesized from an `AudioContext` destination node nothing
-feeds, so no capture device stands behind a session nobody pressed for), the
+silent track, synthesized from an `AudioContext` constant source at offset
+zero feeding a destination node, so no capture device stands behind a session
+nobody pressed for), the
 `oai-events` data channel created before the offer,
 ICE gathered under a bound, the offer handed to the host through
 `ACT_KIND.VOICE_CREATE_LIVE_SESSION`, the host's SDP answer set — and never
