@@ -291,6 +291,18 @@ microphone, and nothing whatever to watch. Everything else is a gesture, fired
 at a change or drawn by weight from the pool between stillnesses, and a
 gesture that carries meaning may only be offered while its meaning is true.
 
+The wings beside the housing answer the two speakers separately, because the
+session is full duplex and either may be heard under the other. Luke's side
+holds his face and, while he is heard, his meter beside it, which is what
+grows the capsule; the developer's side holds the provider marks or, while
+the microphone is heard, the developer's meter in exactly the resting mark's
+room, which grows nothing. Nothing displaces the face but the sign-in gate:
+the face listens to the developer's voice as a face and its mouth follows
+Luke's own track alone. `wingPlacement` in `notch-wings.tsx` is the one
+decision, and the stage carries the same two facts as `data-luke-speaking`
+and `data-listening` for the capsule's growth, the errand's colour, and the
+wait's room.
+
 Two rules follow from playing a motion once, and both belong to the artwork
 table rather than the app. Every motion the app plays begins and ends at the
 resting pose, because one that starts elsewhere snaps there on the way in and

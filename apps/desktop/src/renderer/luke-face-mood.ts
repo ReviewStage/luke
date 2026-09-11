@@ -1,5 +1,6 @@
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import type { VoiceSpeakers } from "#shared/messages/voice-view";
 
 /**
  * Everything Luke reacts to. It is deliberately the same material the count
@@ -38,53 +39,18 @@ export interface FaceContext {
   total: number;
 }
 
-/** Whose turn the meter is drawing, when there is a turn to read. */
-export const SPEECH_TURN = {
-  DEVELOPER: "developer",
-  LUKE: "luke",
-} as const;
-
-export type SpeechTurn = (typeof SPEECH_TURN)[keyof typeof SPEECH_TURN];
-
 /**
- * What the face should read from a conversation.
- *
- * Once a call is up the turn says outright who is talking, and amplitude cannot:
- * the same meter draws Luke answering and the developer asking, so a face
- * following the bars would talk back at someone mid-sentence. Amplitude is only
- * consulted when there is no turn to read — a microphone opened from Settings
- * with no call behind it, and the fixture, which has no turn at all.
+ * What the face should read from a conversation: the two speakers as the
+ * voice window reports them. His mouth follows Luke's own track alone, since
+ * the session is full duplex and the developer's voice under his answer says
+ * nothing about whether he is talking; the microphone is the developer's,
+ * and the face reads it as being listened to whether or not Luke is
+ * answering over it.
  */
-export function speechFaceInputs(input: {
-  turn?: SpeechTurn;
-  hasAudioSignal: boolean;
-  fixtureSpeaking: boolean;
-  voiceActive: boolean;
-}): Pick<FaceContext, "speaking" | "microphoneLive"> {
-  if (input.turn === SPEECH_TURN.LUKE) return { speaking: true, microphoneLive: false };
-  if (input.turn === SPEECH_TURN.DEVELOPER) return { speaking: false, microphoneLive: true };
-  return {
-    // Guarded rather than reset: a microphone that has been closed cannot still
-    // be carrying speech, whatever the last frame the meter read said.
-    speaking: input.hasAudioSignal && (input.fixtureSpeaking || input.voiceActive),
-    microphoneLive: input.hasAudioSignal,
-  };
-}
-
-/**
- * Whether Luke stands aside and lets the meter have his place.
- *
- * While you hold the turn, the one thing worth showing is that you are being
- * heard. The capsule has room for exactly one of them, and a face listening is
- * a weaker way of saying it than bars moving to your own voice — so for that
- * stretch the meter is drawn where the face was, and the face returns the
- * moment the turn does.
- *
- * Guarded on the meter existing: hiding one and drawing neither would leave the
- * capsule saying nothing at all, which is worse than either.
- */
-export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: boolean }): boolean {
-  return input.turn === SPEECH_TURN.DEVELOPER && input.hasAudioSignal;
+export function speechFaceInputs(
+  speakers: VoiceSpeakers,
+): Pick<FaceContext, "speaking" | "microphoneLive"> {
+  return { speaking: speakers.lukeSpeaking, microphoneLive: speakers.listening };
 }
 
 /**
@@ -129,7 +95,7 @@ export function restingMotion(context: FaceContext): FaceMotion | undefined {
  * Whether the wait's dots ride beside the face: only while the thinking rest
  * is what actually holds it, decided from the same resting priority the face
  * plays, so speech taking the face back takes the dots with it — and a face
- * the meter or the gate displaced leaves no orphaned dots. Read from the
+ * the gate displaced leaves no orphaned dots. Read from the
  * context rather than from the played motion, because reduced motion plays
  * nothing at all while the dots still stand, paused, the way the
  * Conversation tab's do.
@@ -293,10 +259,10 @@ export function useFaceHover(face: RefObject<HTMLElement | null>): boolean {
   useEffect(() => {
     const moved = (event: MouseEvent) => {
       const rect = face.current?.getBoundingClientRect();
-      // No box is no reading, not a leave. The meter takes the face's place
-      // for a turn, and a pointer that never moved off the capsule must not be
-      // told it left — the trick would rearm and fire again, unasked, the
-      // moment the face returned. Only a measured miss rearms it.
+      // No box is no reading, not a leave. The gate takes the face's place
+      // while sign-in stands, and a pointer that never moved off the capsule
+      // must not be told it left — the trick would rearm and fire again,
+      // unasked, the moment the face returned. Only a measured miss rearms it.
       if (rect === undefined || rect.width === 0) return;
       setHovered(
         event.clientX >= rect.left - HOVER_REACH_PX &&

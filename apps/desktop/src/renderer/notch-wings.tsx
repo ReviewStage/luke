@@ -2,10 +2,14 @@ import { ProviderMark, WingFace, wingMarkCapacity, wingPileOffset } from "@sidec
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  SILENT_VOICE_LEVELS,
+  type VoiceLevels,
+  type VoiceSpeakers,
+} from "#shared/messages/voice-view";
 import { errandOriginProps } from "./luke-errand";
 import {
   type FaceContext,
-  faceYieldsToMeter,
   speechFaceInputs,
   thinkingDotsShown,
   useFaceHover,
@@ -22,35 +26,46 @@ import {
 } from "./session-motion";
 import { ThinkingDots } from "./thinking-dots";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
+import { NO_VOICE_ACTIVITY, type VoiceActivity } from "./use-voice-view";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
+
+/**
+ * A stream measured in the wing itself, for whichever speaker's meter it
+ * belongs to. Only the introduction takeover, which holds a session of its
+ * own, hands one in; the panel has no stream and is handed the relayed
+ * levels and edges instead.
+ */
+interface MeasuredVoice {
+  voice: WaveformVoice;
+  analyser: AnalyserNode;
+}
 
 /**
  * The strips beside the camera housing. They are rendered once for both window
  * modes and anchored to the notch rather than to a stage, so growing the window
  * re-lays out nothing here: the face keeps its place beside the housing on one
- * side and the marks keep theirs on the other, the meter unfolds into the
- * space the expanded panel adds, and the marks spread out of their resting
- * pile on the surface's own spring.
+ * side and the marks keep theirs on the other, Luke's meter unfolds beside his
+ * face into the space the expanded panel adds, the developer's takes the
+ * marks' place on the other side while the microphone is heard, and the marks
+ * spread out of their resting pile on the surface's own spring.
  */
 interface NotchWingsProps {
   tally: SessionTally;
+  measured?: MeasuredVoice | undefined;
+  /** How loud each speaker is, in the unit interval, as last relayed. */
+  levels?: VoiceLevels;
   /**
-   * A stream to measure here. Only the introduction takeover, which holds a
-   * session of its own, hands one in; the panel has no stream and is handed
-   * the level and the voice's edges below instead.
+   * Who is being heard, as the voice window reports it: the session is full
+   * duplex, so both may stand at once and each wing answers its own.
    */
-  analyser?: AnalyserNode | undefined;
-  /** How loud whoever is talking is, in the unit interval, as last relayed. */
-  level?: number;
-  voice?: WaveformVoice | undefined;
+  speakers: VoiceSpeakers;
   /**
-   * Whether whoever holds the turn is audibly speaking right now, on the
-   * debounced edge the voice window measures beside the stream. The face and
-   * the meter both answer it, so it is decided once, there, and relayed.
+   * Whether each speaker is audibly talking right now, on the debounced edge
+   * the voice window measures beside the stream, relayed so the bars settle
+   * where that edge landed rather than on a frame of their own.
    */
-  voiceActive?: boolean;
+  voiceActive?: VoiceActivity;
   fixtureSpeaking: boolean;
-  hasAudioSignal: boolean;
   voiceOpening: boolean;
   /**
    * Whether a run of Luke's is still going, read from the same records the
@@ -132,14 +147,52 @@ export function wingSlots(
   return providers.slice(0, capacity).map((provider) => ({ id: provider.providerId, provider }));
 }
 
+/**
+ * What each wing draws. Luke's side holds his face and, while he is heard,
+ * his meter beside it; the developer's side holds the marks or, while the
+ * microphone is heard, the developer's meter in their place. The two sides
+ * answer their own speaker, so both meters stand when both are talking, and
+ * nothing here yields to the other side.
+ */
+export interface WingPlacement {
+  /** Luke's meter, beside his face on the left wing. */
+  lukeMeter: boolean;
+  /** The developer's meter, in the marks' place on the right wing. */
+  developerMeter: boolean;
+  face: boolean;
+  marks: boolean;
+}
+
+export function wingPlacement(input: {
+  speakers: VoiceSpeakers;
+  voiceOpening: boolean;
+  accountGated: boolean;
+}): WingPlacement {
+  // The developer's meter stands from the press, not from the handshake:
+  // while the call is opening it already stands where it will stand once
+  // live, so the key answers on the frame it lands rather than when the
+  // network does. Both meters hold on the speaker's standing rather than the
+  // level, which arrives a relay later and would blink a meter out for that
+  // frame.
+  const developerMeter = input.speakers.listening || input.voiceOpening;
+  return {
+    lukeMeter: input.speakers.lukeSpeaking,
+    developerMeter,
+    // The gate takes the whole strip for its label, and the marks share
+    // their side with the developer's meter, which has it while the
+    // microphone is heard.
+    face: !input.accountGated,
+    marks: !input.accountGated && !developerMeter,
+  };
+}
+
 export function NotchWings({
   tally,
-  analyser,
-  level = 0,
-  voice,
+  measured,
+  levels = SILENT_VOICE_LEVELS,
+  speakers,
   voiceActive: relayedVoiceActive,
   fixtureSpeaking,
-  hasAudioSignal,
   voiceOpening,
   thinking,
   announcementsHeld,
@@ -148,33 +201,31 @@ export function NotchWings({
   housingWidth,
   accountGated,
 }: NotchWingsProps): React.JSX.Element {
-  // A measured stream reports its own edges; a relayed level arrives with them.
+  // A measured stream reports its own edges, for the one meter it feeds; a
+  // relayed level arrives with both speakers' edges.
   const [measuredVoiceActive, setMeasuredVoiceActive] = useState(false);
-  const voiceActive = relayedVoiceActive ?? measuredVoiceActive;
-  // The meter is the developer's from the press, not from the handshake: while
-  // the call is opening it already stands where it will stand once live, so the
-  // key answers on the frame it lands rather than when the network does. It
-  // also holds through the turn itself rather than following the level,
-  // which arrives a relay later than the turn opens and would blink the
-  // meter out for that frame.
-  const meterVoice = voice ?? (voiceOpening ? WAVEFORM_VOICE.DEVELOPER : undefined);
-  const meterShown = hasAudioSignal || voiceOpening || meterVoice === WAVEFORM_VOICE.DEVELOPER;
-  // While the developer holds the turn the meter takes the face's place, which
-  // is the only place the capsule has.
-  const yieldToMeter = faceYieldsToMeter({
-    ...(meterVoice ? { turn: meterVoice } : undefined),
-    hasAudioSignal: meterShown,
-  });
+  const voiceActive: VoiceActivity = relayedVoiceActive ?? {
+    ...NO_VOICE_ACTIVITY,
+    ...(measured ? { [measured.voice]: measuredVoiceActive } : undefined),
+  };
+  const placement = wingPlacement({ speakers, voiceOpening, accountGated });
+  const meterFor = (voice: WaveformVoice) => (
+    <span className="wing-meter" data-turn={voice}>
+      <Waveform
+        {...(measured?.voice === voice ? { analyser: measured.analyser } : undefined)}
+        level={levels[voice]}
+        speaking={fixtureSpeaking}
+        voice={voice}
+        voiceActive={voiceActive[voice]}
+        onVoiceActivity={setMeasuredVoiceActive}
+      />
+    </span>
+  );
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
   const faceContext: FaceContext = {
-    ...speechFaceInputs({
-      ...(voice ? { turn: voice } : undefined),
-      hasAudioSignal,
-      fixtureSpeaking,
-      voiceActive,
-    }),
+    ...speechFaceInputs(speakers),
     thinking,
     announcementsHeld,
     settled: sessionsSettled,
@@ -184,13 +235,13 @@ export function NotchWings({
     total: tally.total,
   };
   const face = useFaceMotion(faceContext, usePrefersReducedMotion(), useFaceHover(faceElement));
-  const faceDrawn = !yieldToMeter && !accountGated;
 
   // The wing is bounded by the shape its state draws, so its capacity is too:
   // the panel's side holds more marks than the peek's, and every other state
   // keeps the peek's capacity because that is the set the next peek unfolds.
-  // The marks have this wing to themselves — no face, no meter — so nothing
-  // else has to be reserved for.
+  // The marks share this wing with nothing while they are drawn — the
+  // developer's meter has it to itself instead — so nothing else has to be
+  // reserved for.
   const capacity =
     presentation === PANEL_PRESENTATION.PANEL
       ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2)
@@ -226,57 +277,44 @@ export function NotchWings({
 
   return (
     <>
-      <div className="wing wing-left" data-audio={String(meterShown)}>
+      <div className="wing wing-left">
         {/* Ordered so the element nearest the notch is the one the capsule
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
-          {meterShown && (
-            /* Keyed on whose turn it is, so each voice's meter is a fresh
-               mount: the arrival choreography lives in a starting style, and
-               only a mount reads one. Luke's turn is what grows the capsule,
-               and a meter the developer's turn already had on screen would
-               otherwise relocate beside the returning face on the frame the
-               turn flips — drawn on the desktop, ahead of an edge still most
-               of its travel away. */
-            <span className="wing-meter" data-turn={meterVoice} key={meterVoice}>
-              <Waveform
-                {...(analyser ? { analyser } : undefined)}
-                level={level}
-                speaking={fixtureSpeaking}
-                voice={meterVoice}
-                voiceActive={voiceActive}
-                onVoiceActivity={setMeasuredVoiceActive}
-              />
-            </span>
-          )}
+          {/* Luke's own meter, beside his face while he is heard. A fresh
+              mount for every reply: the arrival choreography lives in a
+              starting style, and only a mount reads one. His voice is what
+              grows the capsule, and the meter trails the edge growing under
+              it rather than being drawn on the desktop ahead of it. */}
+          {placement.lukeMeter && meterFor(WAVEFORM_VOICE.LUKE)}
           {/* The wait's dots, trailing outward from the face they ripple off:
               the same three the Conversation bubble draws beside the same
               repeating hop. Drawn only while the thinking rest is what holds
               the face, so speech taking the face back takes them with it, and
-              the meter or the gate displacing the face leaves none orphaned.
-              The peek and the panel unfold their slot the way they unfold the
-              meter's; the capsule grows its own room for it, the way it grows
-              for Luke's reply meter. */}
-          {thinkingDotsShown(faceContext, faceDrawn) && (
+              the gate displacing the face leaves none orphaned. The peek and
+              the panel unfold their slot the way they unfold the meter's; the
+              capsule grows its own room for it, the way it grows for Luke's
+              reply meter. */}
+          {thinkingDotsShown(faceContext, placement.face) && (
             <span className="wing-thinking">
               <ThinkingDots />
             </span>
           )}
-          {/* Luke himself. He is drawn in every state but one: he steps out of
-              the way of your own voice, which is the only thing that displaces
-              him.
+          {/* Luke himself. He is drawn in every state but the gate: your own
+              voice is answered on the other wing, so it never displaces him,
+              and he listens to it as a face.
 
               Keyed on the play so that each one is a new drawing: a motion plays
               once now, and an element already wearing an animation does not
               replay it on being handed the same one. The wrapper is what the
               hover is measured against, so it holds still across those
               remounts — and hovering it is a moment the face reacts to. */}
-          {faceDrawn ? (
+          {placement.face ? (
             /* The wrapper is also where an errand sets off from, for the same
                reason the hover is measured against it: it holds still while a
                motion transforms layers inside the drawing, so a mark peeling
                off it starts exactly where the face is drawn. It is not
-               rendered at all while the meter has this place, which is how an
+               rendered at all while the gate has this place, which is how an
                errand knows there is no face to leave from. */
             <span className="wing-face" ref={faceElement} {...errandOriginProps()}>
               <WingFace key={face.play} motion={face.motion} repeat={face.repeat} />
@@ -287,17 +325,25 @@ export function NotchWings({
 
       <div className="wing wing-right">
         <div className="wing-inner">
+          {/* Your own meter, in the marks' place while the microphone is
+              heard: the one thing worth showing then is that you are being
+              heard, and bars moving to your own voice say it better than the
+              marks do. It takes exactly the room the resting mark had beside
+              the housing, so the capsule grows nothing for it, and the marks
+              return the moment the microphone closes. */}
+          {placement.developerMeter && meterFor(WAVEFORM_VOICE.DEVELOPER)}
           {/* What Luke is watching: which apps hold the work. The capsule's
               side has room for one, so at rest it draws the app whose session
               needs a person soonest and the rest wait behind it; the peek and
               the panel lay the whole strip out flat. Drawn in every state but
-              the gate, which takes this place for the label below. Decorative:
+              two: the gate, which takes this place for the label below, and
+              the microphone's, which hands it to the meter above. Decorative:
               the panel's own rows and filter chips are where the roster is
               read and filtered. */}
           <span
             className="wing-marks"
             ref={marksRef}
-            data-drawn={String(!accountGated)}
+            data-drawn={String(placement.marks)}
             {...{ [WING_SPREAD_ATTRIBUTE]: String(spread) }}
           >
             {drawnSlots.map(({ item, leaving }, index) => (

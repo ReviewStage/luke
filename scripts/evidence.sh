@@ -61,15 +61,20 @@ capture_evidence expanded --expanded --capture-evidence "$SIDECAR_EXPANDED_EVIDE
 capture_evidence compact --compact --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
 capture_evidence peek --compact --peek --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"
 capture_evidence slot --expanded --slot --capture-evidence "$SIDECAR_SLOT_EVIDENCE_PATH"
-# Peeked rather than at rest: the capsule has no room for the meter beside the
-# face, so it reports a live microphone through the face's colour alone. The
-# peek is the narrowest state that shows both, which is what has to be checked.
+# Luke speaking, peeked: his meter beside his talking face on the left wing
+# with the marks laid out flat on the right, and his words captioned under
+# the shape. The peek is the narrowest state that lays the whole strip out,
+# which is what has to be checked.
 capture_evidence speaking --profile speaking --compact --peek --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 # The speaking run with the Mac's output off: the captions are forced on and
 # the volume hint stands in its own band below the caption block with its Got
 # it button. The state is the profile's own — a capture run reads no system
 # volume — so the frame is deterministic like every other.
 capture_evidence muted --profile muted --compact --peek --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
+# Both speakers heard at once, the full-duplex frame: Luke's meter beside his
+# face on the left wing and the developer's meter in the marks' place on the
+# right, both drawn from the profile's staged levels.
+capture_evidence duplex --profile duplex --compact --peek --capture-evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -119,6 +124,7 @@ validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 700 294
 validate_evidence "$SIDECAR_SLOT_EVIDENCE_PATH" 700 560
 validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 700 294
 validate_evidence "$SIDECAR_MUTED_EVIDENCE_PATH" 700 294
+validate_evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH" 700 294
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"
@@ -126,3 +132,4 @@ printf 'Peek visual evidence: %s\n' "$SIDECAR_PEEK_EVIDENCE_PATH"
 printf 'Key slot visual evidence: %s\n' "$SIDECAR_SLOT_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 printf 'Muted visual evidence: %s\n' "$SIDECAR_MUTED_EVIDENCE_PATH"
+printf 'Duplex visual evidence: %s\n' "$SIDECAR_DUPLEX_EVIDENCE_PATH"

@@ -2,6 +2,7 @@ import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
+import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
 import {
   IDLE_VOICE_VIEW,
   SILENT_VOICE_LEVELS,
@@ -70,55 +71,115 @@ export function voiceActiveFor(input: {
 }
 
 /**
- * Whose voice the one meter is drawing. The waveform follows whoever is
- * actually talking: Luke while he speaks, the developer while the microphone
- * is heard and Luke is not, nobody otherwise. Both speakers can stand at once
- * and only one meter is drawn, so Luke's answer wins the place.
+ * The conversation a capture run stages, since no voice window stands in one:
+ * which speakers are heard, and whether the Mac's output is off. Decided by
+ * the launch profile alone, so every frame of an evidence run is the same
+ * frame.
  */
-export function waveformVoice(speakers: VoiceSpeakers): WaveformVoice | undefined {
-  if (speakers.lukeSpeaking) return WAVEFORM_VOICE.LUKE;
-  if (speakers.listening) return WAVEFORM_VOICE.DEVELOPER;
-  return undefined;
+export interface FixtureVoice {
+  speakers: VoiceSpeakers;
+  muted: boolean;
 }
 
-/** The loudness under that meter: the drawn voice's own, and nothing where no voice holds it. */
-export function drawnLevel(voice: WaveformVoice | undefined, levels: VoiceLevels): number {
-  if (voice === WAVEFORM_VOICE.LUKE) return levels.luke;
-  if (voice === WAVEFORM_VOICE.DEVELOPER) return levels.developer;
-  return 0;
+const FIXTURE_VOICES: ReadonlyMap<RunProfile, FixtureVoice> = new Map([
+  [RUN_PROFILE.SPEAKING, { speakers: { listening: false, lukeSpeaking: true }, muted: false }],
+  [RUN_PROFILE.MUTED, { speakers: { listening: false, lukeSpeaking: true }, muted: true }],
+  [RUN_PROFILE.DUPLEX, { speakers: { listening: true, lukeSpeaking: true }, muted: false }],
+]);
+
+const RUN_PROFILES: ReadonlySet<string> = new Set(Object.values(RUN_PROFILE));
+
+function isRunProfile(profile: string): profile is RunProfile {
+  return RUN_PROFILES.has(profile);
+}
+
+/** What the profile stages, or nothing for the idle run and any word this build does not know. */
+export function fixtureVoice(profile: string): FixtureVoice | undefined {
+  return isRunProfile(profile) ? FIXTURE_VOICES.get(profile) : undefined;
 }
 
 /**
  * The failure drawn in the same strip the captions use. A fault is worth
  * reading where the words it interrupted would have landed — at the shape's
  * foot, under the field that asked — not on a settings page nobody is
- * looking at. It yields to a live turn, because words being said are the
- * thing to read over words that already failed, and a capture run never
- * draws one: a fixture has no call to fail.
+ * looking at. It yields to either speaker being heard, because words being
+ * said are the thing to read over words that already failed, and a capture
+ * run never draws one: a fixture has no call to fail.
  */
 export function voiceErrorToShow(input: {
   fixtureSpeaking: boolean;
-  voice: WaveformVoice | undefined;
+  speakers: VoiceSpeakers;
   error: string | undefined;
 }): string | undefined {
-  if (input.fixtureSpeaking || input.voice !== undefined) return undefined;
+  if (input.fixtureSpeaking || input.speakers.listening || input.speakers.lukeSpeaking) {
+    return undefined;
+  }
   return input.error;
 }
 
 /**
- * The notice drawn in the same strip, yielding only to Luke's own turn — his
- * words own the box whether or not the captions draw them. The developer's
- * turn is no reason to hide it: an open microphone draws nothing on the
- * strip, and a refusal answered during it is exactly what the strip should
- * answer with.
+ * The notice drawn in the same strip, yielding only to Luke's own voice — his
+ * words own the box whether or not the captions draw them. The developer
+ * being heard is no reason to hide it: an open microphone draws nothing on
+ * the strip, and a refusal answered during it is exactly what the strip
+ * should answer with.
  */
 export function voiceNoticeToShow(input: {
   fixtureSpeaking: boolean;
-  voice: WaveformVoice | undefined;
+  speakers: VoiceSpeakers;
   notice: string | undefined;
 }): string | undefined {
-  if (input.fixtureSpeaking || input.voice === WAVEFORM_VOICE.LUKE) return undefined;
+  if (input.fixtureSpeaking || input.speakers.lukeSpeaking) return undefined;
   return input.notice;
+}
+
+/**
+ * Whether each speaker is audibly talking, read off their relayed level with
+ * the same hangover the voice window's own meters keep, so each meter's bars
+ * settle on the edge the voice window measured rather than on a frame of
+ * their own.
+ */
+export type VoiceActivity = { readonly [voice in WaveformVoice]: boolean };
+
+export const NO_VOICE_ACTIVITY: VoiceActivity = { developer: false, luke: false };
+
+/**
+ * A fresh object per report even at a repeated loudness, so a hangover
+ * re-arms on every arrival rather than only on a changed number.
+ */
+interface LevelReport {
+  levels: VoiceLevels;
+}
+
+/**
+ * One speaker's edge over the relayed levels. Live is the speaker's own
+ * standing — a voice whose meter is not drawn is not active, whatever the
+ * last level said — and a press whose call is still opening counts as live
+ * for the developer, whose device is already heard.
+ */
+function useVoiceActive(report: LevelReport, voice: WaveformVoice, live: boolean): boolean {
+  const level = report.levels[voice];
+  const [active, setActive] = useState(false);
+  const lastLoudAt = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const decided = voiceActiveFor({
+      level,
+      now: performance.now(),
+      lastLoudAt: lastLoudAt.current,
+    });
+    lastLoudAt.current = decided.lastLoudAt;
+    if (decided.remainingMs === 0) {
+      setActive(false);
+      return;
+    }
+    setActive(true);
+    const timer = window.setTimeout(() => setActive(false), decided.remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [report, level]);
+  useEffect(() => {
+    if (!live) setActive(false);
+  }, [live]);
+  return live && active;
 }
 
 export interface VoiceViewState {
@@ -128,17 +189,10 @@ export interface VoiceViewState {
   speaking: boolean;
   /** Whether the developer's microphone is being heard, which can stand with {@link speaking}. */
   listening: boolean;
-  voiceTurn: WaveformVoice | undefined;
   /** How loud each speaker is, in the unit interval, as last relayed. */
   levels: VoiceLevels;
-  /** How loud the voice the one meter draws is, which is {@link voiceTurn}'s own reading. */
-  level: number;
-  /**
-   * Whether whoever holds the turn is audibly speaking, read off the relayed
-   * level with the same hangover the voice window's own meter keeps, so the
-   * face and the meter answer the same edge the turn ends on.
-   */
-  voiceActive: boolean;
+  /** Which speakers are audibly talking, on the relayed levels' own hangover. */
+  voiceActive: VoiceActivity;
   /** Every run the brain holds, for Conversation to draw a pending ask beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
@@ -162,41 +216,19 @@ export function useVoiceView(): VoiceViewState {
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.
   const view = state?.voice.view ?? IDLE_VOICE_VIEW;
-  // Each report is a fresh object even at a repeated loudness, so the hangover
-  // below re-arms on every arrival rather than only on a changed number.
-  const [levelReport, setLevelReport] = useState({ levels: SILENT_VOICE_LEVELS });
-  const levels = levelReport.levels;
-  const voiceTurn = waveformVoice(view);
-  const level = drawnLevel(voiceTurn, levels);
-
+  const [levelReport, setLevelReport] = useState<LevelReport>({ levels: SILENT_VOICE_LEVELS });
   useEffect(
     () => window.sidecar.onVoiceLevelChanged((reported) => setLevelReport({ levels: reported })),
     [],
   );
-  const [voiceActive, setVoiceActive] = useState(false);
-  const lastLoudAt = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    const decided = voiceActiveFor({
-      level,
-      now: performance.now(),
-      lastLoudAt: lastLoudAt.current,
-    });
-    lastLoudAt.current = decided.lastLoudAt;
-    if (decided.remainingMs === 0) {
-      setVoiceActive(false);
-      return;
-    }
-    setVoiceActive(true);
-    const timer = window.setTimeout(() => setVoiceActive(false), decided.remainingMs);
-    return () => window.clearTimeout(timer);
-  }, [levelReport, level]);
-  // A turn ending takes the voice with it, whatever the last level said. A
-  // press whose call is still opening is a live turn: its device is already
-  // heard, and the bars follow it as they will once the channel is up.
-  const turnLive = voiceTurn !== undefined || view.talkOpening;
-  useEffect(() => {
-    if (!turnLive) setVoiceActive(false);
-  }, [turnLive]);
+  const voiceActive: VoiceActivity = {
+    developer: useVoiceActive(
+      levelReport,
+      WAVEFORM_VOICE.DEVELOPER,
+      view.listening || view.talkOpening,
+    ),
+    luke: useVoiceActive(levelReport, WAVEFORM_VOICE.LUKE, view.lukeSpeaking),
+  };
 
   // The panel's own strip lines, on the same clock the voice window's strip
   // keeps, because they share the box the developer reads them in. The strip
@@ -235,10 +267,8 @@ export function useVoiceView(): VoiceViewState {
     view: panelVoiceView(view, stripLines),
     speaking: view.lukeSpeaking,
     listening: view.listening,
-    voiceTurn,
-    levels,
-    level,
-    voiceActive: turnLive && voiceActive,
+    levels: levelReport.levels,
+    voiceActive,
     brainRequests,
     stopSpeaking,
     requestMicrophoneAccess,

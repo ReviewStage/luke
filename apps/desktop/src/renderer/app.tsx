@@ -22,9 +22,14 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
+import {
+  type AppStateSnapshot,
+  RUN_PROFILE,
+  sessionReplayBootstrap,
+} from "#shared/messages/app-state";
 import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages/session";
 import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
+import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
 import { useAppActionCarrier } from "./app-action-carrier";
 import type { CalendarGateControl } from "./calendar-gate";
@@ -68,7 +73,7 @@ import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSessionList } from "./use-session-list";
 import { useStateWithRef } from "./use-state-with-ref";
-import { useVoiceView } from "./use-voice-view";
+import { fixtureVoice, useVoiceView } from "./use-voice-view";
 import {
   outputSilent,
   type VolumeHintDismissal,
@@ -532,16 +537,17 @@ export function App(): React.JSX.Element {
     publishGuide,
   });
 
-  // The muted evidence run is the speaking run with the hint drawn over it: a
-  // capture has no system output to read, so the state is asked for directly.
-  const fixtureMuted = state?.run.profile === "muted";
-  const fixtureSpeaking = state?.run.profile === "speaking" || fixtureMuted;
+  // A capture run stages its conversation from the launch profile, since no
+  // voice window stands in one: who is heard, and for the muted run the hint
+  // drawn over Luke's words, which a capture has no system output to read.
+  const fixture = fixtureVoice(state?.run.profile ?? RUN_PROFILE.IDLE);
+  const fixtureSpeaking = fixture !== undefined;
+  const fixtureMuted = fixture?.muted ?? false;
   const {
     view: voiceView,
     speaking,
     listening,
-    voiceTurn,
-    level: voiceLevel,
+    levels: voiceLevels,
     voiceActive,
     brainRequests,
     stopSpeaking,
@@ -550,6 +556,9 @@ export function App(): React.JSX.Element {
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening, liveConversationEntries, spokenAskPending } =
     voiceView;
+  // Who the wings, the face, and the strip answer to: the staged pair in a
+  // capture run, the voice window's report otherwise.
+  const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
   // Whether a run of Luke's is still going, from the same records Conversation
   // draws its wait from: the strip's face, the stage's growth for the dots
   // beside it, and the thread's wait all read one answer.
@@ -570,7 +579,7 @@ export function App(): React.JSX.Element {
     lukeCaptions,
     voiceError,
     voiceNotice,
-    voiceTurn,
+    speakers,
     fixtureSpeaking,
     volumeHint,
     leavingPanel,
@@ -850,7 +859,6 @@ export function App(): React.JSX.Element {
   // run reads them against the time it happened to run at.
   const now = state.run.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
   const shownStopHotkey = state.hotkeys.stop;
-  const hasAudioSignal = fixtureSpeaking || voiceTurn !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
@@ -938,9 +946,11 @@ export function App(): React.JSX.Element {
   return (
     <div
       className="app-stage"
-      // Whose turn it is, so the capsule can make room for a meter it has to
-      // draw beside the face rather than in place of it.
-      data-voice={voiceTurn}
+      // Who is being heard, so the capsule can make room for Luke's meter
+      // beside his face, and the errand and the wait read the same two facts
+      // the face rests on.
+      data-luke-speaking={String(speakers.lukeSpeaking)}
+      data-listening={String(speakers.listening)}
       // Whether a run of Luke's is still going, so the capsule can make room
       // for the wait's dots the same way; a live turn's own growth wins, and
       // the wing draws no dots there either.
@@ -1131,11 +1141,10 @@ export function App(): React.JSX.Element {
       />
       <NotchWings
         tally={sessions.tally}
-        level={voiceLevel}
+        levels={voiceLevels}
+        speakers={speakers}
         voiceActive={voiceActive}
-        {...(voiceTurn ? { voice: voiceTurn } : undefined)}
         fixtureSpeaking={fixtureSpeaking}
-        hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
         thinking={thinking}
         announcementsHeld={announcementsHeld}

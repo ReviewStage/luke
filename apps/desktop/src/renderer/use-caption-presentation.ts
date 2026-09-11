@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { captionBlockSize, captionSegments, captionStackOverflow } from "./caption-layout";
 import { parsePixels } from "./session-motion";
 import {
@@ -18,7 +19,6 @@ import {
 } from "./strip-hold";
 import { useMeasuredHeight } from "./use-measured-height";
 import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
-import type { WaveformVoice } from "./waveform";
 
 /**
  * Sizes the caption block to the words it currently holds. The text wraps, so
@@ -49,7 +49,8 @@ export interface UseCaptionPresentationOptions {
   lukeCaptions: readonly string[] | undefined;
   voiceError: string | undefined;
   voiceNotice: string | undefined;
-  voiceTurn: WaveformVoice | undefined;
+  /** Who is being heard, which decides what the strip may show over a fault or a notice. */
+  speakers: VoiceSpeakers;
   fixtureSpeaking: boolean;
   /** Whether the hint stands in its own band below the block. */
   volumeHint: boolean;
@@ -81,7 +82,7 @@ export interface CaptionPresentation {
 export function useCaptionPresentation(
   options: UseCaptionPresentationOptions,
 ): CaptionPresentation {
-  const { lukeCaptions, voiceTurn, fixtureSpeaking, volumeHint, leavingPanel } = options;
+  const { lukeCaptions, speakers, fixtureSpeaking, volumeHint, leavingPanel } = options;
   const [textElement, textHeight] = useMeasuredHeight();
   const element = useRef<HTMLSpanElement>(null);
   const [padding, setPadding] = useState(0);
@@ -101,17 +102,17 @@ export function useCaptionPresentation(
   // live words, so it can never be drawn over a reply being spoken.
   const errorNotice = voiceErrorToShow({
     fixtureSpeaking,
-    voice: voiceTurn,
+    speakers,
     error: options.voiceError,
   });
   // A state notice borrows the strip on the failure's own terms — leaving on
-  // the same clock, in its quieter tone — but yields only to Luke's own turn:
+  // the same clock, in its quieter tone — but yields only to Luke's own voice:
   // the developer's open microphone draws nothing on the strip, and the one
   // refusal that happens during it belongs there. The failure outranks it: a
   // fault is the more urgent thing to read.
   const noticeShown = voiceNoticeToShow({
     fixtureSpeaking,
-    voice: voiceTurn,
+    speakers,
     notice: options.voiceNotice,
   });
   // What the caption block is being handed live this frame: Luke's words, a

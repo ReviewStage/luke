@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { wingMarkCapacity, wingPileOffset } from "@sidecar/panel";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_MIN_WIDTH } from "@sidecar/surface";
 import { test } from "vitest";
-import { peekSideWidth, signInLabelFit, wingSlots } from "./notch-wings";
+import { peekSideWidth, signInLabelFit, wingPlacement, wingSlots } from "./notch-wings";
 import type { ProviderTally } from "./session-model";
 
 const panelSideWidth = (housingWidth: number) => (PANEL_WIDTH - housingWidth) / 2;
@@ -44,6 +44,17 @@ test("the one mark drawn at rest stays inside the capsule's side", () => {
   // The invariant the whole opacity-at-rest change hangs on: a resting mark
   // drawn past the capsule is drawn on the desktop, and no clip saves it.
   const right = WING_INSET + wingPileOffset(0) + MARK_WIDTH;
+  assert.ok(right <= CAPSULE_SIDE_WIDTH - RESTING_KEEP);
+});
+
+/** Five 2px bars with 2px between them, the width the meter is drawn at. */
+const METER_WIDTH = 18;
+
+test("the developer's meter fits the resting mark's side without growing it", () => {
+  // The right wing's decision for the capsule: the meter takes the mark's
+  // place beside the housing, and the side already holds it inside the
+  // shape's turning corner, so the capsule grows nothing on that side.
+  const right = WING_INSET + METER_WIDTH;
   assert.ok(right <= CAPSULE_SIDE_WIDTH - RESTING_KEEP);
 });
 
@@ -111,4 +122,56 @@ test("a label wider than the capsule's side stands down to fit it", () => {
 
 test("text not yet measured is not scaled", () => {
   assert.equal(signInLabelFit(0), 1);
+});
+
+const QUIET = { listening: false, lukeSpeaking: false };
+const UNGATED = { voiceOpening: false, accountGated: false };
+
+test("nobody heard draws the face and the marks and neither meter", () => {
+  assert.deepEqual(wingPlacement({ speakers: QUIET, ...UNGATED }), {
+    lukeMeter: false,
+    developerMeter: false,
+    face: true,
+    marks: true,
+  });
+});
+
+test("Luke's voice draws his meter beside a face that stays", () => {
+  assert.deepEqual(
+    wingPlacement({ speakers: { listening: false, lukeSpeaking: true }, ...UNGATED }),
+    { lukeMeter: true, developerMeter: false, face: true, marks: true },
+  );
+});
+
+test("the microphone draws the developer's meter in the marks' place, and the face stays", () => {
+  assert.deepEqual(
+    wingPlacement({ speakers: { listening: true, lukeSpeaking: false }, ...UNGATED }),
+    { lukeMeter: false, developerMeter: true, face: true, marks: false },
+  );
+});
+
+test("both speakers draw both meters at once", () => {
+  assert.deepEqual(
+    wingPlacement({ speakers: { listening: true, lukeSpeaking: true }, ...UNGATED }),
+    { lukeMeter: true, developerMeter: true, face: true, marks: false },
+  );
+});
+
+test("a press still opening its call already has the developer's meter", () => {
+  const placement = wingPlacement({ speakers: QUIET, voiceOpening: true, accountGated: false });
+  assert.equal(placement.developerMeter, true);
+  assert.equal(placement.marks, false);
+  assert.equal(placement.lukeMeter, false);
+});
+
+test("the gate bares the strip of the face and the marks alone", () => {
+  const gated = wingPlacement({
+    speakers: { listening: true, lukeSpeaking: true },
+    voiceOpening: false,
+    accountGated: true,
+  });
+  assert.equal(gated.face, false);
+  assert.equal(gated.marks, false);
+  assert.equal(gated.lukeMeter, true);
+  assert.equal(gated.developerMeter, true);
 });
