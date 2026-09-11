@@ -1,6 +1,5 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { Schema } from "effect";
-import { SESSION_APPLICATION_ID } from "./session-identity.js";
 
 export const PROVIDER_LOCATION_KIND = {
   LOCAL: "local",
@@ -86,34 +85,15 @@ export function isCloudAgentProviderId(value: UnparsedWireValue): value is Cloud
 }
 
 /**
- * The provider id the local Conductor workspace creator answers to. It names
- * no observed session provider — `isProviderId` stays false for it — because a
- * local Conductor chat is already observed by the agent that runs it. The id
- * exists only so the repositories Conductor holds can offer their creation
- * projects apart from the cloud Conductor adapter, which owns
- * `PROVIDER_ID.CONDUCTOR`: a creation request resolves to exactly one adapter,
- * so a local repository and a cloud project must route under ids of their own,
- * even as both wear Conductor's name and mark.
+ * Every provider that can offer a workspace through the desktop app. Today
+ * that is the observed session providers alone; the type keeps its own name
+ * because a workspace provider is a different question from an observed one,
+ * and a provider that creates workspaces without observing sessions would be
+ * added here beside `ProviderId` rather than found within it.
  */
-export const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID = "conductor-local";
+export type WorkspaceProviderId = ProviderId;
 
-export const SUPERSET_WORKSPACE_PROVIDER_ID = SESSION_APPLICATION_ID.SUPERSET;
-
-/**
- * Every provider that can offer a workspace through the desktop app: the
- * observed session providers, Superset's own workspace provider, and local
- * Conductor's — the last two name no observed session provider, so they are
- * added beside `ProviderId` rather than found within it.
- */
-export type WorkspaceProviderId =
-  | ProviderId
-  | typeof SUPERSET_WORKSPACE_PROVIDER_ID
-  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
-
-export const WorkspaceProviderIdSchema = Schema.Union(
-  ProviderIdSchema,
-  Schema.Literal(SUPERSET_WORKSPACE_PROVIDER_ID, CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID),
-);
+export const WorkspaceProviderIdSchema = ProviderIdSchema;
 
 /**
  * The order any list of providers reads in. It is the registry's own order

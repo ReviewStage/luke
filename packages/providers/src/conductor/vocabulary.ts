@@ -2,6 +2,7 @@ import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentia
 import {
   ACTION_KIND,
   type AdvertisedControl,
+  AGENT_IDENTITY,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionProvider,
@@ -25,6 +26,26 @@ export const CONDUCTOR_ENVIRONMENT = {
 } as const;
 
 export const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
+
+const CONDUCTOR_AGENT_TYPE = {
+  CLAUDE: "claude",
+  CODEX: "codex",
+  CURSOR: "cursor",
+  OPENCODE: "opencode",
+} as const;
+
+type ConductorAgentType = (typeof CONDUCTOR_AGENT_TYPE)[keyof typeof CONDUCTOR_AGENT_TYPE];
+
+/**
+ * The agents Conductor names in its own vocabulary, each mapped to the
+ * identity Luke already draws that agent's sessions under.
+ */
+export const CONDUCTOR_AGENT_BY_TYPE = {
+  [CONDUCTOR_AGENT_TYPE.CLAUDE]: AGENT_IDENTITY.CLAUDE_CODE,
+  [CONDUCTOR_AGENT_TYPE.CODEX]: AGENT_IDENTITY.CODEX,
+  [CONDUCTOR_AGENT_TYPE.CURSOR]: AGENT_IDENTITY.CURSOR,
+  [CONDUCTOR_AGENT_TYPE.OPENCODE]: AGENT_IDENTITY.OPENCODE,
+} as const satisfies Readonly<Record<ConductorAgentType, SessionProvider>>;
 
 /**
  * The kinds of agent Conductor's session-creation endpoint documents, named

@@ -9,9 +9,6 @@ import { DatabaseSync } from "node:sqlite";
  */
 const CODEX_STATE_DATABASE_PATH = ["state_5.sqlite"] as const;
 
-/** Where Superset keeps one organization's host database, under its own home. */
-const SUPERSET_HOST_DATABASE_PATH = ["host", "fixture-organization", "host.db"] as const;
-
 /**
  * Applies a fixture's DDL to a database file that does not exist yet.
  *
@@ -36,8 +33,4 @@ async function applyFixtureDatabase(databasePath: string, sql: string): Promise<
 
 export function codexStateDb(home: string, sql: string): Promise<void> {
   return applyFixtureDatabase(path.join(home, ...CODEX_STATE_DATABASE_PATH), sql);
-}
-
-export function supersetHostDb(home: string, sql: string): Promise<void> {
-  return applyFixtureDatabase(path.join(home, ...SUPERSET_HOST_DATABASE_PATH), sql);
 }

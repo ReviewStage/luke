@@ -227,8 +227,7 @@ a decision about that package's doors.
 Importing a package resolves its whole export graph, not the one name asked
 for. A package that holds both a wire vocabulary and a Node flow gives the
 vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
-`@sidecar/credentials/snapshot`,
-`@sidecar/providers/superset/sign-in-stage`, `@sidecar/runtime/vocabulary`,
+`@sidecar/credentials/snapshot`, `@sidecar/runtime/vocabulary`,
 `@sidecar/brain/store`), or
 the renderer bundle fails to resolve `node:http` behind a string constant it
 wanted to draw. What that door holds back has since grown: the loopback

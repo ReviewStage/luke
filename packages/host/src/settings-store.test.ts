@@ -1111,27 +1111,6 @@ test("ignores a stored default provider this build does not know", async (t) => 
   );
 });
 
-test("stores Superset workspace and agent defaults without touching credentials", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-
-  await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, "superset");
-  await store.setEntry(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, "superset", "project-1");
-  const { settings } = await store.setEntry(
-    APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-    "superset",
-    { agent: "codex" },
-  );
-
-  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, "superset");
-  assert.equal(appSettingsView(settings).workspaceProjectDefaults?.superset, "project-1");
-  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults?.superset, { agent: "codex" });
-  assert.deepEqual(
-    appSettingsView(await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset,
-    { agent: "codex" },
-  );
-});
-
 test("lets the first creation choose each provider's project until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
@@ -1258,18 +1237,14 @@ test("an entry the field cannot hold is refused rather than quietly dropped", ()
     }),
     { valid: true, value: { agent: "codex", model: "gpt-5.6-sol" } },
   );
+  // A provider this build lists no workspace agents for takes no entry, however
+  // well-formed; the map's own guard drops it rather than keeping a pairing no
+  // creation could spend.
   assert.equal(
     settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
       agent: "codex",
-      model: "gpt-5.6-sol",
     }).valid,
     false,
-  );
-  assert.deepEqual(
-    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
-      agent: "codex",
-    }),
-    { valid: true, value: { agent: "codex" } },
   );
 });
 
@@ -1456,9 +1431,6 @@ test("a workspaces reset forgets the provider and project defaults but never the
   await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
   await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, pairing);
-  await store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
-    agent: "codex",
-  });
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
 
@@ -1469,7 +1441,6 @@ test("a workspaces reset forgets the provider and project defaults but never the
   // defaults — no reset here may reach either one.
   assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults, {
     [PROVIDER_ID.CONDUCTOR]: pairing,
-    superset: { agent: "codex" },
   });
 });
 

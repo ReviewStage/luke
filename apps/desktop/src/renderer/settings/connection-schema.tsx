@@ -16,11 +16,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
-import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  isProviderId,
-  workspaceAgentModels,
-} from "@sidecar/session";
+import { isProviderId, workspaceAgentModels } from "@sidecar/session";
 import { APP_SETTING_SCHEMA, type SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView, CalendarAccount } from "@sidecar/settings/wire";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
@@ -487,42 +483,6 @@ export const CONNECTION_SCHEMA: readonly ConnectionSpec[] = [
       order: 110 + index * 10,
     }),
   ),
-  // Right below the cloud Conductor key row: the local app on this Mac,
-  // recognized read-only from its own index with no key and nothing to connect,
-  // so the block has no Connect and no disconnect — it stands only while
-  // repositories are actually detected, and its whole control is the
-  // default-project row every workspace creator draws. Its own block so the two
-  // Conductors read as the different places they are.
-  {
-    id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-    layout: CONNECTION_LAYOUT.BLOCK,
-    page: SETTINGS_VIEW.CONNECTIONS,
-    section: CONNECTION_SECTION.PROVIDERS,
-    order: 115,
-    offered: (visibility) =>
-      visibility.workspaceProjects.some(
-        (option) => option.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-      ),
-    name: (visibility) =>
-      visibility.workspaceProjects.find(
-        (option) => option.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-      )?.name ?? "Conductor (local)",
-    mark: <ProviderMark providerId={CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID} />,
-    status: () => ({ connected: true }),
-    actions: () => [],
-    children: (input) => {
-      const workspaceProvider = workspaceOption(input, CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID);
-      if (!workspaceProvider) return null;
-      return (
-        <WorkspaceProjectRow
-          provider={workspaceProvider}
-          settings={input.settings}
-          writes={input.writes}
-        />
-      );
-    },
-    haystack: ["local", "workspaces create this Mac no key integration"],
-  },
   // The issue tracker: connected by signing in with Linear, never by a pasted
   // credential, and drawn at all only in a build that carries the OAuth client
   // the sign-in runs on — a row whose one action cannot run is not a row.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { LIVE_VOICE } from "@sidecar/live";
-import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
+import { PROVIDER_ID } from "@sidecar/session";
 import { test } from "vitest";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import {
@@ -32,7 +32,6 @@ test("account preferences validate the shared fields and reject local-only paylo
       workspaceProjectDefaults: { conductor: "project-1" },
       workspaceAgentDefaults: {
         conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" },
-        [SUPERSET_WORKSPACE_PROVIDER_ID]: { agent: "composer" },
       },
     }),
     {
@@ -41,7 +40,6 @@ test("account preferences validate the shared fields and reject local-only paylo
       workspaceProjectDefaults: { conductor: "project-1" },
       workspaceAgentDefaults: {
         conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" },
-        [SUPERSET_WORKSPACE_PROVIDER_ID]: { agent: "composer" },
       },
     },
   );

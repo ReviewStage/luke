@@ -42,7 +42,6 @@
 import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   HOSTED_AGENT_ID,
   type HostedAgentId,
   HostedAgentIdSchema,
@@ -55,7 +54,6 @@ import {
   SESSION_APPLICATION_ID,
   type SessionApplicationId,
   SessionApplicationIdSchema,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
 import {
   APPLE_CALENDAR_MARK_LAYERS,
@@ -405,7 +403,7 @@ function SupersetMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
       className={className}
-      data-mark={SUPERSET_WORKSPACE_PROVIDER_ID}
+      data-mark={SESSION_APPLICATION_ID.SUPERSET}
       viewBox="0 0 180 72"
       aria-hidden="true"
       focusable="false"
@@ -445,22 +443,14 @@ export type MarkId =
   | IssueTrackerId
   | typeof APPLE_CALENDAR_ID
   | typeof GOOGLE_CALENDAR_ID
-  | typeof CREDENTIAL_PROVIDER_ID.OPENAI
-  | typeof SUPERSET_WORKSPACE_PROVIDER_ID
-  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
+  | typeof CREDENTIAL_PROVIDER_ID.OPENAI;
 
 export const MarkIdSchema = Schema.Union(
   ProviderIdSchema,
   HostedAgentIdSchema,
   SessionApplicationIdSchema,
   IssueTrackerIdSchema,
-  Schema.Literal(
-    APPLE_CALENDAR_ID,
-    GOOGLE_CALENDAR_ID,
-    CREDENTIAL_PROVIDER_ID.OPENAI,
-    SUPERSET_WORKSPACE_PROVIDER_ID,
-    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  ),
+  Schema.Literal(APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID, CREDENTIAL_PROVIDER_ID.OPENAI),
 );
 
 const PROVIDER_MARKS = {
@@ -470,9 +460,6 @@ const PROVIDER_MARKS = {
   [SESSION_APPLICATION_ID.CLAUDE]: ClaudeMark,
   [PROVIDER_ID.CODEX]: CodexMark,
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
-  // Local Conductor creation wears the same mark as the cloud provider: both
-  // are Conductor making a workspace, told apart only by where it lands.
-  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: ConductorMark,
   [HOSTED_AGENT_ID.COPILOT]: CopilotMark,
   [HOSTED_AGENT_ID.CURSOR]: CursorMark,
   [HOSTED_AGENT_ID.GEMINI_CLI]: GeminiCliMark,
@@ -482,7 +469,7 @@ const PROVIDER_MARKS = {
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OMP]: OmpMark,
   [HOSTED_AGENT_ID.OPENCODE]: OpenCodeMark,
-  [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
+  [SESSION_APPLICATION_ID.SUPERSET]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 
 const readsMarkId = Schema.is(MarkIdSchema);

@@ -1,9 +1,4 @@
-import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  PROVIDER_ID,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  type WorkspaceProviderId,
-} from "@sidecar/session";
+import { PROVIDER_ID, type WorkspaceProviderId } from "@sidecar/session";
 
 /**
  * How a row says a pressed search result may land on it, and the ids the rows
@@ -47,17 +42,11 @@ export const SETTINGS_SEARCH_ROW = {
  * it does not name draws its row unfound rather than mislanding a press, and
  * widening it is one line beside the capability that widened.
  */
-type DefaultProjectProviderId =
-  | typeof PROVIDER_ID.CONDUCTOR
-  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  | typeof PROVIDER_ID.CODEX
-  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
+type DefaultProjectProviderId = typeof PROVIDER_ID.CONDUCTOR | typeof PROVIDER_ID.CODEX;
 
 const DEFAULT_PROJECT_ROW_ID = {
   [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
-  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
   [PROVIDER_ID.CODEX]: "default-project-codex",
-  [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
 } as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
 
 /** The anchor a provider's Default project row wears, if the table names it. */

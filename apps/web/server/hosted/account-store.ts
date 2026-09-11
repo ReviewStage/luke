@@ -164,6 +164,10 @@ const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   voice: Schema.NullOr(Schema.String),
   voiceSpeed: Schema.NullOr(Schema.Number),
+  // Deliberately an unvalidated string, not a provider id: a shipped phone
+  // echoes whatever workspace provider it last held, including ids this build
+  // no longer knows, and the desktop already reads an unknown one as unset.
+  // Narrowing this column would refuse that phone's every preference write.
   defaultWorkspaceProvider: Schema.NullOr(Schema.String),
   updatedAt: Schema.DateFromSelf,
 });

@@ -1,10 +1,5 @@
 import { isWireString, type UnparsedWireValue, wireRecord } from "@sidecar/wire";
-import {
-  isProviderId,
-  PROVIDER_ID,
-  type ProviderId,
-  type SUPERSET_WORKSPACE_PROVIDER_ID,
-} from "./provider-identity.js";
+import { isProviderId, PROVIDER_ID, type ProviderId } from "./provider-identity.js";
 
 /**
  * One model an agent runs: the id its provider's endpoints take, and the name
@@ -47,29 +42,11 @@ export interface WorkspaceAgentSelection {
 }
 
 /**
- * The agent kind a user chose for new workspaces on a provider whose agent
- * kinds are observed presets rather than a build-fixed table, and which
- * documents no model choice (Superset today). The `never` fields are the
- * boundary stated as a type: no model or effort can ride beside a kind the
- * provider's endpoints take alone.
- */
-export interface WorkspaceAgentKindSelection {
-  agent: string;
-  model?: never;
-  effort?: never;
-}
-
-/**
  * The chosen defaults for new workspaces, one entry per workspace provider
- * that documents an agent choice at all: a provider with a build-fixed models
- * table holds a full selection, and Superset holds the kind alone. Local
- * Conductor's creation link documents no agent, model, or name, so it can
- * hold no entry.
+ * that documents an agent choice at all, each a full selection from that
+ * provider's build-fixed models table.
  */
-export type WorkspaceAgentDefaults = Readonly<
-  Partial<Record<ProviderId, WorkspaceAgentSelection>> &
-    Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>>
->;
+export type WorkspaceAgentDefaults = Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
 
 /**
  * The agent kinds, models, and effort levels each provider's creation
@@ -199,29 +176,4 @@ export function parseWorkspaceAgentSelection(
   const selection: WorkspaceAgentSelection =
     effort !== undefined ? { agent, model, effort } : { agent, model };
   return isListedWorkspaceAgentModel(providerId, selection) ? selection : undefined;
-}
-
-/**
- * The shape of an observed agent preset's name: agent kinds this build cannot
- * list come from a provider's own configuration, so the bound is on form
- * alone, and whether a kind is actually offered is answered where the
- * observation lives.
- */
-const WORKSPACE_AGENT_KIND_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/u;
-
-/**
- * Guards a kind-only selection arriving over IPC or read back from disk, for
- * the one workspace provider whose agents carry no models table. A value
- * carrying a model or an effort is refused rather than trimmed: the provider
- * documents no model choice, so such a value is not a selection it takes.
- */
-export function parseWorkspaceAgentKindSelection(
-  value: UnparsedWireValue,
-): WorkspaceAgentKindSelection | undefined {
-  const record = wireRecord(value);
-  if (!record) return undefined;
-  const { agent, model, effort } = record;
-  if (model !== undefined || effort !== undefined) return undefined;
-  if (!isWireString(agent) || !WORKSPACE_AGENT_KIND_PATTERN.test(agent)) return undefined;
-  return { agent };
 }
