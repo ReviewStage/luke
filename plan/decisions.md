@@ -1532,3 +1532,48 @@ two different facts about a device that the file should not conflate.
 **D3 deliberately did not edit it**, which was right: a privacy document corrected in passing inside
 a push PR is worse than one corrected on purpose. **Two independent staleness findings in one
 morning is the argument for not letting that file wait for G5.**
+
+
+## 2026-09-11 — One shared secret cannot name two callers, and the record must not pretend otherwise (orchestrator, from C8 reading C3's #1069)
+
+**C8 read C3's door PR against part b's needs and found the interaction that decides how Dean's
+ruling lands.** All five of part b's requirements are met by #1069 —
+`EveCaller.DEPLOYMENT { secret, account }` beside the account caller with `BRAIN_HOST_HEADER.ACCOUNT`
+named once; `actedForAccount` as the one accessor, with `ownedAuth` **and** `admitConversation` both
+comparing against it; the relay writing under `admitted.target` so `store.turns.named(userId)` finds
+the turn; the initiator check comparing **acted-for** accounts, so a main whose eve session the
+desktop opened admits the voice function's follow-up for the same account and the reverse;
+`EveSessions<Turn>` taking `BRAIN_HOST_TURN.SPOKEN` as its type parameter; and `deploymentActor`
+admitting exactly the open and follow-up routes, which is all part b calls (Stop is an instructions
+append, events are projected from the store).
+
+**The catch: `deploymentActor` refuses outright, with `NOT_DEPLOYMENT_ACT`, any request under its
+secret whose turn kind is not in its own set** — the right fail-closed property, and it means **two
+actors composed with the SAME secret cannot coexist in the walk.** The observer, first, refuses a
+spoken turn carrying `CRON_SECRET` before a voice actor behind it could admit it.
+
+**Ruling: C8's structure, with one change.** C8 proposed one deployment authenticator over a table
+from **turn kind → authenticator name** (`observation → luke-scheduled-observer`,
+`spoken → the voice service's name`). **Take the table as turn kind → ADMITTED, and keep ONE
+authenticator name, with the turn kind carried in the record as the role.**
+
+**Why: the authenticator name is an identity claim.** Under one shared secret, anything holding it
+can send any kind, so a `spoken` turn proves only that *something holding `CRON_SECRET`* acted in
+the spoken role. Writing "the voice service" into the session record would claim what the credential
+cannot support — **an overclaim, and this rework has spent the day removing overclaims rather than
+manufacturing them**: a `speech.*` kind made uncompilable, a push refused over a claim, an append
+requiring a claim token, all so the record says exactly what is known. "A deployment caller, acting
+in the spoken role" is true; "the voice service opened this" is not.
+
+**If Dean rules a distinct secret, the name becomes a real identity claim**, #1069 fits as written,
+and part b composes a second `deploymentActor` behind the first — C8's own reading, and right.
+
+**Everything else of C8's stands:** one authenticator rather than two under one secret; refuse-
+outright kept for every other route and kind; and **`brainHostChannelInput` taking the actor table
+rather than `observerSecret` alone, so part b adds a row rather than a parameter** — the difference
+between part b being a line and being a signature change in someone else's file.
+
+**And this is now an argument bearing on Dean's own choice, which neither worker quite made: the two
+options differ in what the record can honestly say.** Recommendation unchanged — one secret with
+honest naming, because a silently-missing secret is worse than a coarser record, and the coarser
+record is still true.
