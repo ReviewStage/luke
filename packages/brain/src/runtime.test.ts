@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
+  COMPACTION_SOURCE,
   CONTEXT_INPUT_KIND,
   type ContextEngine,
   MODEL_FAILURE,
@@ -9,17 +11,21 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
+  promiseAgentRuntime,
   RUN_END_REASON,
   RUNTIME_EVENT,
   type RuntimeEvent,
   type RuntimeRun,
   type RuntimeRunRequest,
+  type RuntimeRunRequestEffect,
   type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { Effect, Fiber } from "effect";
 import { test } from "vitest";
+import { COMPACTION_POLICY } from "./compaction.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
@@ -87,13 +93,17 @@ class FakeModel implements ModelAdapter {
   }
 }
 
-function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
+function toolLoop(model: FakeModel, loopGuard?: { enabled: boolean }): ToolLoopAgentRuntime {
   return new ToolLoopAgentRuntime({
     model,
     itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(TOOL_LOOP_IDENTITY),
     ...(loopGuard ? { loopGuard } : undefined),
   });
+}
+
+function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
+  return promiseAgentRuntime(toolLoop(model, loopGuard));
 }
 
 interface Harness {
@@ -696,4 +706,129 @@ test("a cancel that lands while the run is telling its end leaves that end stand
   assert.deepEqual(await run.done, { reason: RUN_END_REASON.COMPLETED, text: "done" });
   assert.equal(kinds(h.events).filter((kind) => kind === RUNTIME_EVENT.ENDED).length, 1);
   assert.equal(kinds(h.events).filter((kind) => kind === RUNTIME_EVENT.CANCELLED).length, 0);
+});
+
+/** The same request, with the listener as the effect the runtime's own seam takes. */
+function effectRequest(
+  request: RuntimeRunRequest,
+  events: RuntimeEvent[],
+): RuntimeRunRequestEffect {
+  return {
+    ...request,
+    onEvent: (event) =>
+      Effect.sync(() => {
+        events.push(event);
+      }),
+  };
+}
+
+/** An engine that holds its `ingest` until the test releases it, over a real one behind it. */
+function heldIngestEngine(inner: ResponsesContextEngine) {
+  let reached: (() => void) | undefined;
+  const entered = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let release: (() => void) | undefined;
+  let applied = 0;
+  const engine: ContextEngine = {
+    checkpointFormat: inner.checkpointFormat,
+    bootstrap: (checkpoint, lost) => inner.bootstrap(checkpoint, lost),
+    ingest: (input) =>
+      new Promise<void>((resolve) => {
+        reached?.();
+        release = () => {
+          applied += 1;
+          inner.ingest(input);
+          resolve();
+        };
+      }),
+    assemble: (assembly) => inner.assemble(assembly),
+    adopt: (items) => inner.adopt(items),
+    afterTurn: () => inner.afterTurn(),
+    mark: () => inner.mark(),
+    rollback: (mark) => inner.rollback(mark),
+    checkpoint: () => inner.checkpoint(),
+    dispose: () => inner.dispose(),
+  };
+  return { engine, entered, release: () => release?.(), applied: () => applied };
+}
+
+it.effect(
+  "an engine hook still waiting when the run is cancelled is abandoned: the run answers cancelled, and what the hook applies afterwards tells no end of its own",
+  () =>
+    Effect.gen(function* () {
+      const h = harness();
+      const held = heldIngestEngine(new ResponsesContextEngine(TOOL_LOOP_IDENTITY));
+      const events: RuntimeEvent[] = [];
+      const run = toolLoop(h.model).start(
+        effectRequest(h.request({ context: held.engine }), events),
+      );
+      const running = yield* Effect.fork(run.done);
+      yield* Effect.promise(() => held.entered);
+
+      run.cancel();
+
+      assert.deepEqual(yield* Fiber.join(running), { reason: RUN_END_REASON.CANCELLED });
+      // The model was never asked: the run ended inside the hook it was waiting on.
+      assert.equal(h.model.requests.length, 0);
+      assert.equal(held.applied(), 0);
+      assert.deepEqual(kinds(events), [RUNTIME_EVENT.CANCELLED, RUNTIME_EVENT.ENDED]);
+
+      held.release();
+      yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
+
+      assert.equal(held.applied(), 1);
+      assert.deepEqual(kinds(events), [RUNTIME_EVENT.CANCELLED, RUNTIME_EVENT.ENDED]);
+    }),
+);
+
+test("the runtime's compact is the only fold there is: a run never folds the context, and the seam that does asks the model with no tools", async () => {
+  const h = harness();
+  let folds = 0;
+  const inner = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
+  inner.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
+  const engine: ContextEngine = {
+    checkpointFormat: inner.checkpointFormat,
+    bootstrap: (checkpoint, lost) => inner.bootstrap(checkpoint, lost),
+    ingest: (input) => inner.ingest(input),
+    assemble: (assembly) => inner.assemble(assembly),
+    adopt: (items) => inner.adopt(items),
+    afterTurn: () => inner.afterTurn(),
+    mark: () => inner.mark(),
+    rollback: (mark) => inner.rollback(mark),
+    checkpoint: () => inner.checkpoint(),
+    dispose: () => inner.dispose(),
+    foldBehindSummary: async (summarize) => {
+      folds += 1;
+      const summary = await summarize(inner.checkpoint().items);
+      return summary === undefined ? 0 : 3;
+    },
+  };
+  const r = runtime(h.model);
+  h.model.answers.push(answered({ text: "hi" }));
+
+  const end = await r.start(h.request({ context: engine })).done;
+
+  assert.deepEqual(end, { reason: RUN_END_REASON.COMPLETED, text: "hi" });
+  assert.equal(folds, 0);
+
+  h.model.answers.push(answered({ text: "a checkpoint summary" }));
+  const outcome = await r.compact(engine, {
+    prompt: "instructions",
+    signal: new AbortController().signal,
+  });
+
+  assert.equal(folds, 1);
+  assert.ok(outcome.compacted);
+  if (outcome.compacted) {
+    assert.equal(outcome.source, COMPACTION_SOURCE.LOCAL_SUMMARY);
+    assert.equal(outcome.dropped, 3);
+  }
+  // The summary is asked for with no tools and its own output budget, so a fold
+  // can never carry an action the run could not.
+  assert.deepEqual(h.model.requests.at(-1)?.options.tools, []);
+  assert.equal(
+    h.model.requests.at(-1)?.options.maximumOutputTokens,
+    COMPACTION_POLICY.SUMMARY_OUTPUT_TOKENS,
+  );
 });

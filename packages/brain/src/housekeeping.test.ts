@@ -3,11 +3,13 @@ import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME, memoryFlushPrompt } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import {
+  type AgentRuntime,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
+  promiseAgentRuntime,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
@@ -81,12 +83,14 @@ function adapterOf(model: FakeModel): ModelAdapter {
   };
 }
 
-function runtimeOver(model: FakeModel): ToolLoopAgentRuntime {
-  return new ToolLoopAgentRuntime({
-    model: adapterOf(model),
-    itemFormat: RESPONSES_ITEM_FORMAT,
-    createContext: () => new ResponsesContextEngine(IDENTITY),
-  });
+function runtimeOver(model: FakeModel): AgentRuntime {
+  return promiseAgentRuntime(
+    new ToolLoopAgentRuntime({
+      model: adapterOf(model),
+      itemFormat: RESPONSES_ITEM_FORMAT,
+      createContext: () => new ResponsesContextEngine(IDENTITY),
+    }),
+  );
 }
 
 function fakeWorkspace(files: Map<string, string>) {

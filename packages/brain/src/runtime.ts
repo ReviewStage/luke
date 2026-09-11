@@ -1,6 +1,6 @@
 import { type ItemFormatIdentity, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
   type CompactionOptions,
@@ -20,20 +20,16 @@ import {
   type RuntimeCompaction,
   type RuntimeEvent,
   type RuntimeIdentity,
-  type RuntimeRun,
+  RuntimeResumeRefused,
+  type RuntimeRunEffect,
   type RuntimeRunEnd,
-  type RuntimeRunRequest,
+  type RuntimeRunRequestEffect,
   type ToolInvocation,
   type ToolResult,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type UnknownActionResult } from "@sidecar/wire";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { compactContext } from "./compaction.js";
-import {
-  type BrainExecutionRuntime,
-  defaultBrainExecutionRuntime,
-  runOnBrainRuntime,
-} from "./effect/execution.js";
 import { whenAborted } from "./effect/settled.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
 import { outputStatus } from "./tool-results.js";
@@ -77,8 +73,6 @@ export interface ToolLoopRuntimeOptions {
   itemFormat: ItemFormatIdentity;
   createContext: (format: CheckpointFormat) => ContextEngine;
   loopGuard?: LoopGuardConfig;
-  /** The runtime every run of this one is a fiber on; the process's own when a caller hands none. */
-  execution?: BrainExecutionRuntime;
 }
 
 interface EndSignal {
@@ -92,15 +86,15 @@ export function incompleteDetail(incomplete: ModelIncomplete): string {
   return `${incomplete.status ?? "incomplete"}: ${incomplete.reason}`;
 }
 
-export class ToolLoopAgentRuntime implements AgentRuntime {
+export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
   readonly #options: ToolLoopRuntimeOptions;
   readonly #checkpoint: CheckpointFormat;
-  readonly #execution: BrainExecutionRuntime;
-  #capabilities: Promise<ModelCapabilities | undefined> | undefined;
+  /** One ask at a time, so a second caller reads the answer the first kept rather than spending a call of its own. */
+  readonly #asking = Effect.unsafeMakeSemaphore(1);
+  #capabilities: { readonly answer: ModelCapabilities | undefined } | undefined;
 
   constructor(options: ToolLoopRuntimeOptions) {
     this.#options = options;
-    this.#execution = options.execution ?? defaultBrainExecutionRuntime();
     this.#checkpoint = {
       runtime: TOOL_LOOP_RUNTIME.ID,
       runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
@@ -123,41 +117,67 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     return this.#options.model.quietUntil();
   }
 
-  /** Asked once and kept: a hosted adapter reads the service for it, and the answer does not change within a build. */
-  capabilities(): Promise<ModelCapabilities | undefined> {
-    this.#capabilities ??= this.#options.model.capabilities().then(
-      (answer) =>
-        answer.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED ? answer.capabilities : undefined,
-      () => undefined,
+  /**
+   * Asked once and kept: a hosted adapter reads the service for it, and the
+   * answer does not change within a build. An adapter that threw answers
+   * nothing rather than failing the turn that asked, exactly as the host's
+   * compaction policy reads a model that cannot say.
+   */
+  capabilities(): Effect.Effect<ModelCapabilities | undefined> {
+    return this.#asking.withPermits(1)(
+      Effect.suspend(() => {
+        const kept = this.#capabilities;
+        if (kept) return Effect.succeed(kept.answer);
+        return Effect.promise(() => this.#options.model.capabilities()).pipe(
+          Effect.map((answer) =>
+            answer.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED ? answer.capabilities : undefined,
+          ),
+          Effect.catchAllDefect(() => Effect.succeed(undefined)),
+          Effect.tap((answer) =>
+            Effect.sync(() => {
+              this.#capabilities = { answer };
+            }),
+          ),
+        );
+      }),
     );
-    return this.#capabilities;
   }
 
   /** The runtime's own compaction: the engine's fold behind a summary the model writes, kept to the model's window. */
-  async compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction> {
-    return compactContext(context, this.#options.model, {
-      ...options,
-      capabilities: await this.capabilities(),
-    });
+  compact(context: ContextEngine, options: CompactionOptions): Effect.Effect<RuntimeCompaction> {
+    return Effect.flatMap(this.capabilities(), (capabilities) =>
+      Effect.promise(() =>
+        compactContext(context, this.#options.model, { ...options, capabilities }),
+      ),
+    );
   }
 
-  async openContext(
+  openContext(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResult: UnknownActionResult,
     lifecycle?: ContextLifecycle,
-  ): Promise<ContextOpening> {
-    const context = this.#options.createContext(this.#checkpoint);
-    return { context, bootstrap: await context.bootstrap(checkpoint, lostResult, lifecycle) };
+  ): Effect.Effect<ContextOpening> {
+    return Effect.suspend(() => {
+      const context = this.#options.createContext(this.#checkpoint);
+      return Effect.map(
+        Effect.promise(async () => await context.bootstrap(checkpoint, lostResult, lifecycle)),
+        (bootstrap) => ({ context, bootstrap }),
+      );
+    });
   }
 
-  async resume(
+  resume(
     checkpoint: RuntimeCheckpoint,
-    request: Omit<RuntimeRunRequest, "context">,
+    request: Omit<RuntimeRunRequestEffect, "context">,
     lostResult: UnknownActionResult,
-  ): Promise<RuntimeRun | { readonly refused: string }> {
-    const { context, bootstrap } = await this.openContext(checkpoint, lostResult);
-    if (!bootstrap.loaded) return { refused: bootstrap.reason ?? "checkpoint not loaded" };
-    return this.start({ ...request, context });
+  ): Effect.Effect<RuntimeRunEffect, RuntimeResumeRefused> {
+    return Effect.flatMap(this.openContext(checkpoint, lostResult), ({ context, bootstrap }) =>
+      bootstrap.loaded
+        ? Effect.succeed(this.start({ ...request, context }))
+        : Effect.fail(
+            new RuntimeResumeRefused({ reason: bootstrap.reason ?? "checkpoint not loaded" }),
+          ),
+    );
   }
 
   /**
@@ -167,15 +187,11 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
    * answers revoked and late words are refused, so nothing prepared inside
    * the run can act after it.
    */
-  start(request: RuntimeRunRequest): RuntimeRun {
+  start(request: RuntimeRunRequestEffect): RuntimeRunEffect {
     const internal = new AbortController();
     const signal = AbortSignal.any([request.signal, internal.signal]);
     const end: EndSignal = { deadline: false, ended: false };
     const steered: ContextInput[] = [];
-    // The end is decided synchronously: a cancel closes admission the instant
-    // it is asked for, a terminal path closes it before any listener hears
-    // the end, and the fallback in `#run` closes it when the execution threw.
-    const done = runOnBrainRuntime(this.#execution, this.#run(request, signal, end, steered));
     return {
       runId: request.runId,
       steer: (input) => {
@@ -188,7 +204,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         end.ended = true;
         internal.abort();
       },
-      done,
+      done: this.#run(request, signal, end, steered),
     };
   }
 
@@ -204,15 +220,12 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
    * still tells its end exactly once.
    */
   #run(
-    request: RuntimeRunRequest,
+    request: RuntimeRunRequestEffect,
     signal: AbortSignal,
     end: EndSignal,
     steered: ContextInput[],
   ): Effect.Effect<RuntimeRunEnd> {
-    const emit = (event: RuntimeEvent): Effect.Effect<void> =>
-      Effect.promise(async () => {
-        await request.onEvent(event);
-      });
+    const emit = request.onEvent;
     // Every end a listener hears is uninterruptible: a run whose signal fired
     // as it was finishing still tells the end it reached rather than losing it
     // to the interruption that arrived in the middle of the telling. The end
@@ -263,7 +276,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
    * ends of its own accord.
    */
   #loop(
-    request: RuntimeRunRequest,
+    request: RuntimeRunRequestEffect,
     signal: AbortSignal,
     end: EndSignal,
     steered: ContextInput[],
@@ -445,7 +458,7 @@ function absorb(
 /** One call, handed to the executor; a tool that threw instead of answering is told as unknown rather than left dangling. */
 function executeToolCall(
   call: ToolInvocation,
-  tools: RuntimeRunRequest["tools"],
+  tools: RuntimeRunRequestEffect["tools"],
   runId: string,
   signal: AbortSignal,
   revoked: () => boolean,
