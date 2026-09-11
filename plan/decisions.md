@@ -1656,3 +1656,38 @@ Deployment Protection. **G4's is the first gate this rework has added rather tha
 And one method worth keeping: **measuring rather than reasoning.** G4's counts made its own migration
 safe as a fact, and they corrected my claim that no worker could reach that database — which then let
 C4 measure its own `prompts` count and took an item off Dean's list.
+
+
+## 2026-09-11 — A named invariant, found three times independently: monotone state is forward-only, by compare-and-set
+
+Recorded so the fourth author finds it rather than rediscovering it from a race test.
+
+**The rule: a late writer may not move a monotone value back.** Not "should not" — the write is
+refused by a compare-and-set against the value the reader began from, so a slow path that finishes
+after a faster one has no way to retreat the state.
+
+**Three instances, three authors, three pieces of state:**
+
+- **C1's session claim** — a conversation's eve session is claimed **forward-only by compare-and-set
+  on eve's sortable ids**, so a stale start cannot reclaim a rotated session.
+- **The conversation cutoff** (CLAUDE.md, and B6's index) — *"only ever raised by a deletion, so a
+  late line from before it is refused whatever the disk did."*
+- **C3's observation bookmark** (Bugbot on #1070) — an opening that outran its tick could put the
+  bookmark **back behind a later pass's**, which does not fail, does not error, and quietly
+  **re-observes what was already seen.** Fixed as a CAS keep over the bookmark the read began from,
+  race-tested three ways.
+
+The failure shape is the same every time and it is why the rule is worth naming: **moving a cursor
+backwards is silent.** Nothing throws, no check goes red, and the symptom is duplicated work or
+re-read history that looks like a provider misbehaving.
+
+**Also from C3's (c), and the reason the inbox principle is now enforced rather than stated:**
+`listTurns` **and** `latestTurnPosition` skip queued rows, so the turns read and the **change-signal
+head** answer a turn only once the relay moved it to running. The head mattering as much as the read
+is the half I did not ask for: a head that advanced on a queued turn would have every client polling
+for a turn none of them can see — a poll storm whose cause is invisible from the client side.
+
+**And the detail that proves the change was real:** two storage-reads cursor tests used a **queued
+row** as their fixture. Left alone they would have asserted the read's behaviour on a row the read
+now skips — passing, and testing nothing. Moved to started rows **with assertions unchanged**, which
+shows the behaviour on real rows did not change and only the queued case did.
