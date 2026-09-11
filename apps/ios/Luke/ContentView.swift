@@ -34,16 +34,25 @@ private enum SocialProvider: String {
 struct ContentView: View {
     @Environment(AccountSession.self) private var session
     @Environment(ProductEventSender.self) private var events
+    @Environment(PushCoordinator.self) private var push
     @State private var pendingProvider: SocialProvider?
     @State private var signInError: String?
     @State private var contextProvider = WindowAnchorProvider()
 
     var body: some View {
-        switch session.state {
-        case .signedOut:
-            signedOutCard
-        case .signedIn(let identity):
-            SignedInView(identity: identity)
+        Group {
+            switch session.state {
+            case .signedOut:
+                signedOutCard
+            case .signedIn(let identity):
+                SignedInView(identity: identity)
+            }
+        }
+        // A push tapped on a phone the account has left opens nothing: the
+        // briefing is the account's record, not the device's, so the tap is
+        // dropped rather than kept for whoever signs in next.
+        .onChange(of: push.pendingOpen, initial: true) { _, tap in
+            if tap != nil, case .signedOut = session.state { push.pendingOpen = nil }
         }
     }
 
@@ -171,6 +180,7 @@ struct ContentView: View {
 private struct SignedInView: View {
     @Environment(AccountSession.self) private var session
     @Environment(ProductEventSender.self) private var events
+    @Environment(PushCoordinator.self) private var push
     let identity: AccountIdentity
     @State private var profileShown = false
     @State private var creatorShown = false
@@ -204,16 +214,20 @@ private struct SignedInView: View {
             .tabItem { Label("Sessions", systemImage: "list.bullet") }
             .tag(AppTab.sessions)
 
-            NavigationStack {
+            NavigationStack(path: $store.lukePath) {
                 VoiceView()
                     .toolbar { profileToolbar }
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
-                            NavigationLink {
-                                ConversationView(conversation: conversation)
-                            } label: {
+                            NavigationLink(value: LukeRoute.conversation) {
                                 Label("Conversation", systemImage: "text.bubble")
                             }
+                        }
+                    }
+                    .navigationDestination(for: LukeRoute.self) { route in
+                        switch route {
+                        case .conversation:
+                            ConversationView(conversation: conversation)
                         }
                     }
             }
@@ -234,6 +248,15 @@ private struct SignedInView: View {
                 .tag(AppTab.create)
         }
         .environment(store)
+        // A briefing's notification tapped: the Conversation opens at that
+        // briefing, by the one id the payload carried. `initial` covers a tap
+        // that launched the app, which lands before this view stands.
+        .onChange(of: push.pendingOpen, initial: true) { _, tap in
+            guard let tap else { return }
+            push.pendingOpen = nil
+            conversation.open(at: tap.messageId)
+            store.openConversation()
+        }
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
         }

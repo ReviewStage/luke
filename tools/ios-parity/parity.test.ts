@@ -37,6 +37,7 @@ import {
 } from "@sidecar/analytics";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import {
+  BRIEFING_PUSH_PAYLOAD_KEY,
   conversationMessageRatingPath,
   DEVICE_PLATFORM,
   DEVICE_TOKEN_BOUNDS,
@@ -181,6 +182,14 @@ test("PushEnvironment is PUSH_ENVIRONMENT", () => {
     swiftEnumRawValues(swift(`${KIT}/DeviceClient.swift`), "PushEnvironment"),
     PUSH_ENVIRONMENT,
     "a gateway name the service does not know refuses the registration whole",
+  );
+});
+
+test("a briefing's tap reads the payload key the push writes", () => {
+  assert.equal(
+    swiftStaticString(swift(`${KIT}/BriefingPush.swift`), "messageIdKey"),
+    BRIEFING_PUSH_PAYLOAD_KEY.MESSAGE_ID,
+    "a key the phone does not read opens the Conversation at no briefing",
   );
 });
 

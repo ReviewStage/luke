@@ -111,6 +111,38 @@ finishes processing, the build is offered to internal testers at once and to
 external groups after Beta App Review. The Watch app installs on a paired
 watch with the iPhone build; it needs no record or upload of its own.
 
+## Notifications
+
+A briefing nobody is placed to say reaches the phone as a push notification
+from the service (`apps/web/server/hosted/speech-push.ts`), carrying Luke's
+words and the message's own id and nothing else; `PRIVACY.md` says so in as
+many words. The phone's side is `Luke/PushNotifications.swift`, the one door
+to Apple's push machinery, and `LukeKit`'s `BriefingPushTap` and
+`PushEnvironment.fromProvisioningProfile`:
+
+- **The entitlement.** `Luke/Luke.entitlements` carries `aps-environment`,
+  and both app configurations sign with it. The App ID in the developer
+  portal needs the Push Notifications capability, which automatic signing
+  adds on the first device build. The watch signs with none: a phone
+  forwards its notifications to a paired watch itself.
+- **The token.** Where alerts are allowed, every signed-in launch and
+  foreground calls `registerForRemoteNotifications`, and the token Apple
+  hands back reaches this installation's device row through
+  `DeviceRegistrar`, named to the gateway the embedded provisioning profile
+  says issued it (sandbox for a development build or the simulator,
+  production for TestFlight and the App Store). A permission withdrawn in
+  Settings clears the token from the row on the next foreground, so no
+  briefing is settled as pushed to a phone that would show nothing.
+- **The tap.** The Conversation opens at the briefing the payload's message
+  id names, the row lifted for a moment; where the message is not in the
+  thread, the Conversation opens at its end and says so under the last row.
+  A tap on a phone signed out of the account opens nothing.
+
+The simulator receives no real push. To see one land, the service needs the
+four `APNS_*` variables set, and a device build signed under the team that
+holds the App ID; `xcrun simctl push` can deliver a payload file to the
+simulator to exercise the tap alone.
+
 ## Voice actions
 
 The voice screen carries the same actions the desktop's conversation does,

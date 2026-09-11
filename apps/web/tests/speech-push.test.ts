@@ -4,6 +4,7 @@ import { asc, eq } from "drizzle-orm";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
+  BRIEFING_PUSH_PAYLOAD_KEY,
   CONVERSATION_EVENT_KIND,
   DEVICE_PLATFORM,
   type DevicePlatform,
@@ -282,8 +283,9 @@ test("the rule: no active device pushes at once, an active device is given the g
   );
 });
 
-test("the notification carries the briefing and nothing else: one alert body, the default sound, the ordinary level, no custom key, no thread, no collapse id", () => {
-  const notification = briefingNotification(BRIEFING, {
+test("the notification carries the briefing and the message's id and nothing else: one alert body, the default sound, the ordinary level, one custom key, no thread, no collapse id", () => {
+  const messageId = randomUUID();
+  const notification = briefingNotification(BRIEFING, messageId, {
     deviceId: "device",
     token: "ab".repeat(32),
     environment: PUSH_ENVIRONMENT.SANDBOX,
@@ -298,10 +300,11 @@ test("the notification carries the briefing and nothing else: one alert body, th
         sound: "default",
         "interruption-level": APNS_INTERRUPTION_LEVEL.ACTIVE,
       },
-      custom: {},
+      custom: { [BRIEFING_PUSH_PAYLOAD_KEY.MESSAGE_ID]: messageId },
     },
   });
   assert.deepEqual(JSON.parse(apnsWireBody(notification.payload)), {
+    [BRIEFING_PUSH_PAYLOAD_KEY.MESSAGE_ID]: messageId,
     aps: {
       alert: { body: BRIEFING },
       sound: "default",
@@ -339,6 +342,11 @@ test("Mac inactive: the briefing is pushed once to the most recently seen device
   assert.deepEqual(
     sent.map((notification) => notification.payload.aps.alert),
     [{ body: BRIEFING }],
+  );
+  // The tap opens the Conversation at this offer's message, so the id sent is the offer's own.
+  assert.deepEqual(
+    sent.map((notification) => notification.payload.custom),
+    [{ [BRIEFING_PUSH_PAYLOAD_KEY.MESSAGE_ID]: row.messageId }],
   );
   assert.deepEqual(await speechEvents(row.messageId), [
     { kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null },

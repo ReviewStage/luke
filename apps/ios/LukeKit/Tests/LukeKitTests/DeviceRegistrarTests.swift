@@ -141,7 +141,7 @@ final class DeviceRegistrarTests: XCTestCase {
 
     private func registrar(
         store: UserDefaults,
-        http: RecordingHTTP,
+        http: any HTTPClient,
         session: RegistrarTokenSource = RegistrarTokenSource(),
         platform: DevicePlatform = .iOS
     ) -> DeviceRegistrar {
@@ -279,6 +279,69 @@ final class DeviceRegistrarTests: XCTestCase {
 
         XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT", "PUT", "PUT"])
         XCTAssertEqual(http.sent[2].body["pushToken"] as? String, String(repeating: "cd", count: 32))
+        XCTAssertEqual(http.sent[3].body.keys.sorted(), ["deviceId"])
+    }
+
+    func testAWithdrawnTokenRidesTheNextHeartbeatAsAClearUntilAcknowledgedAndOnceOnly() async {
+        let http = RecordingHTTP(answers: [
+            (200, ["deviceId": deviceId]),
+            (200, ["seen": true]),
+            (200, ["seen": true]),
+            (500, [:]),
+            (200, ["seen": true]),
+            (200, ["seen": true]),
+        ])
+        let subject = registrar(store: makeStore(), http: http)
+        await subject.register().value
+        subject.pushTokenDidArrive(Data(repeating: 0xab, count: 32), environment: .sandbox)
+        await subject.heartbeat().value
+        // Withdrawn: the service does not hear the first clear, hears the
+        // second, and a withdrawal found already acknowledged sends nothing.
+        subject.pushTokenWithdrawn()
+        await subject.heartbeat().value
+        subject.pushTokenWithdrawn()
+        await subject.heartbeat().value
+
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT", "PUT", "PUT", "PUT", "PUT"])
+        XCTAssertEqual(http.sent[1].body["pushToken"] as? String, String(repeating: "ab", count: 32))
+        XCTAssertEqual(http.sent[2].body.keys.sorted(), ["deviceId"])
+        XCTAssertTrue(http.sent[3].body["pushToken"] is NSNull)
+        XCTAssertNil(http.sent[3].body["pushEnvironment"])
+        XCTAssertTrue(http.sent[4].body["pushToken"] is NSNull)
+        XCTAssertEqual(http.sent[5].body.keys.sorted(), ["deviceId"])
+    }
+
+    func testAWithdrawalBeforeARowRegistersAndThenClearsOnAHeartbeatOfItsOwn() async {
+        let http = RecordingHTTP(answers: [
+            (200, ["deviceId": deviceId]),
+            (200, ["seen": true]),
+        ])
+        let subject = registrar(store: makeStore(), http: http)
+        await subject.pushTokenWithdrawn().value
+
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT"])
+        XCTAssertNil(http.sent[0].body["pushToken"])
+        XCTAssertTrue(http.sent[1].body["pushToken"] is NSNull)
+    }
+
+    func testATokenArrivingAgainReplacesAPendingClear() async {
+        let http = RecordingHTTP(answers: [
+            (200, ["deviceId": deviceId]),
+            (200, ["seen": true]),
+            (200, ["seen": true]),
+            (200, ["seen": true]),
+        ])
+        let subject = registrar(store: makeStore(), http: http)
+        await subject.register().value
+        // Both the withdrawal and the arrival queue a heartbeat; the token
+        // arrived before either ran, so neither carries the clear.
+        subject.pushTokenWithdrawn()
+        subject.pushTokenDidArrive(Data(repeating: 0xcd, count: 32), environment: .production)
+        await subject.heartbeat().value
+
+        XCTAssertEqual(http.sent.map(\.method), ["POST", "PUT", "PUT", "PUT"])
+        XCTAssertEqual(http.sent[1].body["pushToken"] as? String, String(repeating: "cd", count: 32))
+        XCTAssertEqual(http.sent[2].body.keys.sorted(), ["deviceId"])
         XCTAssertEqual(http.sent[3].body.keys.sorted(), ["deviceId"])
     }
 

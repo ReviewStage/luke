@@ -20,11 +20,23 @@ public final class DeviceRegistrar {
     private let client: DeviceClient
     private let session: any AccountTokenProviding
     private let platform: DevicePlatform
-    /// The push address Apple issued this run, carried into every
-    /// registration and sent as a change to a row already standing until the
-    /// service has acknowledged it once.
-    private var push: DevicePushAddress?
-    private var pushAcknowledged = false
+    /// What this run knows of the row's push token: nothing yet, the address
+    /// Apple issued, or that the token is to be cleared because the developer
+    /// withdrew notification permission. An address is carried into every
+    /// registration and, like a clear, sent as a change to a row already
+    /// standing until the service has acknowledged it once.
+    private enum PushStanding: Equatable {
+        case unknown
+        case address(DevicePushAddress, acknowledged: Bool)
+        case withdrawn(acknowledged: Bool)
+
+        var address: DevicePushAddress? {
+            if case .address(let address, _) = self { return address }
+            return nil
+        }
+    }
+
+    private var push: PushStanding = .unknown
     /// Bumped by every forget so an answer to a call made under the departing
     /// account installs nothing — the row it names is gone.
     private var generation = 0
@@ -87,10 +99,24 @@ public final class DeviceRegistrar {
     /// already registered, and with every registration until acknowledged.
     public func pushTokenDidArrive(_ token: Data, environment: PushEnvironment) {
         let address = DevicePushAddress(token: DeviceClient.hexToken(token), environment: environment)
-        guard address != push else { return }
-        push = address
-        pushAcknowledged = false
+        guard address != push.address else { return }
+        push = .address(address, acknowledged: false)
         enqueue { await self.heartbeatNow() }
+    }
+
+    /// The token on the row is no longer one a briefing should be sent to —
+    /// the developer withdrew notification permission in the system's
+    /// Settings — so it is cleared: a push settled to a phone that would show
+    /// nothing is a briefing lost. A registration cannot carry the clear, so
+    /// it rides the next heartbeat and every one after until the service
+    /// has acknowledged it, and a token arriving again replaces it. Asked at
+    /// every foreground the permission is found withdrawn, and answered by
+    /// nothing once the clear has landed in this run.
+    @discardableResult
+    public func pushTokenWithdrawn() -> Task<Void, Never> {
+        if push == .withdrawn(acknowledged: true) { return Task {} }
+        push = .withdrawn(acknowledged: false)
+        return enqueue { await self.heartbeatNow() }
     }
 
     /// Forgets the row on the departing account's own token, handed in because
@@ -107,7 +133,8 @@ public final class DeviceRegistrar {
     @discardableResult
     public func forget(accessToken: String) -> Task<Void, Never> {
         generation += 1
-        pushAcknowledged = false
+        // The next account's row has heard neither the address nor a clear.
+        push = push.address.map { .address($0, acknowledged: false) } ?? .unknown
         let deviceId = deviceId
         store.removeObject(forKey: Key.deviceId)
         let forgetting = Task { @MainActor in
@@ -132,24 +159,32 @@ public final class DeviceRegistrar {
                 try await self.client.register(
                     platform: self.platform,
                     installationId: installationId,
-                    push: push,
+                    push: push.address,
                     accessToken: $0
                 )
             }
             guard generation == self.generation else { return }
             store.set(deviceId, forKey: Key.deviceId)
-            if push != nil, push == self.push { pushAcknowledged = true }
+            if let address = push.address, push == self.push { self.push = .address(address, acknowledged: true) }
         } catch {}
     }
 
     private func heartbeatNow() async {
-        guard let deviceId else {
+        if deviceId == nil {
             await registerNow()
-            return
+            // A registration leaves the row's token as it stands, so a clear
+            // still pending follows it on a heartbeat of its own.
+            guard push == .withdrawn(acknowledged: false) else { return }
         }
+        guard let deviceId else { return }
         let generation = generation
         let push = push
-        let change: PushTokenChange = if let push, !pushAcknowledged { .replaced(push) } else { .unchanged }
+        let change: PushTokenChange =
+            switch push {
+            case .address(let address, acknowledged: false): .replaced(address)
+            case .withdrawn(acknowledged: false): .cleared
+            case .unknown, .address, .withdrawn: .unchanged
+            }
         do {
             let seen = try await session.authorized {
                 try await self.client.heartbeat(deviceId: deviceId, pushToken: change, accessToken: $0)
@@ -159,7 +194,12 @@ public final class DeviceRegistrar {
                 await registerNow()
                 return
             }
-            if case .replaced = change, push == self.push { pushAcknowledged = true }
+            guard push == self.push else { return }
+            switch change {
+            case .replaced(let address): self.push = .address(address, acknowledged: true)
+            case .cleared: self.push = .withdrawn(acknowledged: true)
+            case .unchanged: break
+            }
         } catch {}
     }
 

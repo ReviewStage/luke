@@ -28,6 +28,19 @@ public final class ConversationStore {
         case unavailable
     }
 
+    /// Where the screen was asked to open: at one message, by a push's tap.
+    public enum Opening: Equatable, Sendable {
+        /// The message is not in the thread this device holds yet; a poll may bring it.
+        case seeking(messageId: String)
+        /// The message stands at this row, for the screen to scroll to.
+        case found(rowId: String)
+        /// A poll ran to its end and the message is not in the thread — the
+        /// conversation cleared, the message past the view's window, or a push
+        /// for an account this phone has since left — so the screen opens at
+        /// its end and says so rather than scrolling nowhere.
+        case missing
+    }
+
     public private(set) var thread = ConversationThread()
     /// The turn groups in the view's order, recomputed after every page
     /// applied, so the screen never reads a thread that has opened as one
@@ -36,6 +49,7 @@ public final class ConversationStore {
     /// The developer's latest verdict on each message, by message id.
     public private(set) var ratings: [String: MessageRating] = [:]
     public private(set) var failure: Failure?
+    public private(set) var opening: Opening?
 
     /// How long the screen rests between polls while it stays in the foreground.
     public static let pollInterval: Duration = .seconds(5)
@@ -111,6 +125,30 @@ public final class ConversationStore {
     /// the screen's skeleton.
     public var opened: Bool { thread.opened }
 
+    /// Asks the screen to open at one message: resolved at once where the
+    /// thread already holds it, otherwise at the end of the next poll that
+    /// runs to completion, which either brings the message or settles that
+    /// it is not there.
+    public func open(at messageId: String) {
+        opening = anchor(forMessage: messageId) ?? .seeking(messageId: messageId)
+    }
+
+    /// The screen has done what the opening asked — scrolled to the row, or
+    /// said the message is missing — so later polls scroll the thread's end again.
+    public func openingSettled() {
+        opening = nil
+    }
+
+    private func anchor(forMessage messageId: String) -> Opening? {
+        let turns = groups.map { ConversationTurnRows(group: $0, roster: []) }
+        return ConversationTurnRows.anchor(forMessage: messageId, in: turns).map { .found(rowId: $0) }
+    }
+
+    private func resolveOpening() {
+        guard case .seeking(let messageId) = opening else { return }
+        opening = anchor(forMessage: messageId) ?? (thread.opened ? .missing : opening)
+    }
+
     /// One poll: the signal, then whatever moved. Every answer is applied
     /// only while the account that asked still holds the session: a tick
     /// spans several requests, and one landing after a sign-out and another
@@ -136,6 +174,7 @@ public final class ConversationStore {
                 try await readMessagePages(fenced)
             }
             failure = nil
+            resolveOpening()
         } catch is AccountSessionError {
             return
         } catch ConversationReadError.unreadableRow(let row) {

@@ -2,6 +2,7 @@ import type { ToolSet } from "ai";
 import { desc, inArray } from "drizzle-orm";
 import {
   BRAIN_TOOL,
+  BRIEFING_PUSH_PAYLOAD_KEY,
   DEVICE_PLATFORM,
   type DevicePlatform,
   isDevicePlatform,
@@ -62,14 +63,17 @@ import {
  * and every send after it would settle another offer for nothing; the rest
  * stand for the next tick, as do the offers past the pass's own budget.
  *
- * The notification carries the briefing and nothing else. Its words are
- * Luke's own, what he chose to say, and they are readable on a locked
- * screen, so the payload names no session, branch, path, error line, or
- * identifier of any kind beyond what those words themselves contain, and
- * carries no thread or collapse key that would travel a message id to
- * Apple. One device is addressed — the account's most recently seen device
- * holding a push token — because a phone forwards its notifications to a
- * paired watch itself, and two pushes would be one briefing told twice.
+ * The notification carries the briefing and one identifier of Luke's own.
+ * Its words are Luke's, what he chose to say, and they are readable on a
+ * locked screen, so the payload names no session, branch, path, or error
+ * line beyond what those words themselves contain, and carries no thread or
+ * collapse key. The one custom key is the pushed message's id, an opaque
+ * UUID unique to that message, so the phone's tap opens the Conversation at
+ * this briefing and not at whichever arrived after it; it correlates
+ * nothing across pushes and means nothing to Apple. One device is addressed
+ * — the account's most recently seen device holding a push token — because
+ * a phone forwards its notifications to a paired watch itself, and two
+ * pushes would be one briefing told twice.
  */
 
 /**
@@ -147,12 +151,18 @@ export interface PushableDevice {
 
 /**
  * The notification one briefing travels as: the words as the alert body,
- * the default sound, and the ordinary interruption level — never
- * time-sensitive, which would break through a Focus the developer set. No
- * title, subtitle, thread, or custom key: the system draws the app's own
- * name, and everything else about the briefing stays on the record.
+ * the default sound, the ordinary interruption level — never
+ * time-sensitive, which would break through a Focus the developer set — and
+ * the message's id as the one custom key, which is what the tap opens the
+ * Conversation at. No title, subtitle, or thread: the system draws the
+ * app's own name, and everything else about the briefing stays on the
+ * record.
  */
-export function briefingNotification(briefing: string, device: PushableDevice): ApnsNotification {
+export function briefingNotification(
+  briefing: string,
+  messageId: string,
+  device: PushableDevice,
+): ApnsNotification {
   return {
     token: device.token,
     environment: device.environment,
@@ -162,7 +172,7 @@ export function briefingNotification(briefing: string, device: PushableDevice): 
         sound: "default",
         "interruption-level": APNS_INTERRUPTION_LEVEL.ACTIVE,
       },
-      custom: {},
+      custom: { [BRIEFING_PUSH_PAYLOAD_KEY.MESSAGE_ID]: messageId },
     },
   };
 }
@@ -339,7 +349,9 @@ export async function pushSpeech(
       account.target.deviceId,
     );
     if (!marked.ok) continue;
-    const delivery = await seams.send(briefingNotification(briefing, account.target));
+    const delivery = await seams.send(
+      briefingNotification(briefing, offer.messageId, account.target),
+    );
     if (delivery === APNS_DELIVERY.DELIVERED) {
       outcome.pushed += 1;
       continue;

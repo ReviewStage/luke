@@ -43,6 +43,19 @@ final class ConversationTurnRowsTests: XCTestCase {
         )
     }
 
+    func testAMessageAnchorsAtItsOwnRowOrItsFirstPartsRowAndAnUnknownOneNowhere() throws {
+        let turns = try fixtureGroups().map { ConversationTurnRows(group: $0, roster: []) }
+        let ask = "2b000000-0000-4000-8000-000000000011"
+        let reply = "2b000000-0000-4000-8000-000000000012"
+        let briefing = "2b000000-0000-4000-8000-000000000032"
+        XCTAssertEqual(ConversationTurnRows.anchor(forMessage: ask, in: turns), ask)
+        XCTAssertEqual(ConversationTurnRows.anchor(forMessage: reply, in: turns), "\(reply):1")
+        XCTAssertEqual(ConversationTurnRows.anchor(forMessage: briefing, in: turns), "\(briefing):0")
+        XCTAssertEqual(turns.flatMap(\.rows).map(\.id).filter { $0 == "\(briefing):0" }.count, 1)
+        XCTAssertNil(ConversationTurnRows.anchor(forMessage: "2b000000-0000-4000-8000-0000000000ff", in: turns))
+        XCTAssertNil(ConversationTurnRows.anchor(forMessage: "2b000000", in: turns))
+    }
+
     func testATurnIsDatedByItsFirstAndLastDatedRowsAndAThoughtAloneByNone() throws {
         let group = try fixtureGroups()[0]
         let rows = ConversationTurnRows(group: group, roster: [])
