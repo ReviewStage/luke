@@ -1,5 +1,5 @@
-import { handleControlAction } from "../../hosted/action-session.js";
-import { hostedVaultRoute } from "../../hosted/vault-route.js";
+import { actionsApp } from "../../actions-app.js";
+import { routeFromHttpApp } from "../../route-effect.js";
 
-/** Runs a control the session's latest observation advertised. */
-export default hostedVaultRoute(handleControlAction);
+/** Every action endpoint, which is the group in `server/actions-app.ts`; this file only answers on this path. */
+export default routeFromHttpApp(actionsApp());

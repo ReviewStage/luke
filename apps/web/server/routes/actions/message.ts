@@ -1,5 +1,5 @@
-import { handleMessageAction } from "../../hosted/action-session.js";
-import { hostedVaultRoute } from "../../hosted/vault-route.js";
+import { actionsApp } from "../../actions-app.js";
+import { routeFromHttpApp } from "../../route-effect.js";
 
-/** Sends a message to an observed cloud session. */
-export default hostedVaultRoute(handleMessageAction);
+/** Every action endpoint, which is the group in `server/actions-app.ts`; this file only answers on this path. */
+export default routeFromHttpApp(actionsApp());

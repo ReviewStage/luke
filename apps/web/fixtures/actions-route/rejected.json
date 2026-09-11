@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"result\":\"rejected\",\"reason\":\"No provider key stored. Add a key for this provider in settings.\"}"
+}
