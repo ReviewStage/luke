@@ -13,6 +13,7 @@ import {
 } from "../../core.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
+import { askRecord } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import { offerBriefing } from "./announce.js";
 import { turnKindOf } from "./auth.js";
@@ -134,6 +135,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       consume: async (target, event) => (await seams.writer()).consume(target, event),
       enqueueTurn: async (target, enqueue) => (await seams.writer()).enqueueTurn(target, enqueue),
     },
+    asks: askRecord(seams.run),
     offer: async (target, turnId) =>
       offerBriefing(
         { run: seams.run, writer: await seams.writer(), now: seams.now },

@@ -7,6 +7,8 @@ import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
 
+export { conversationOwnedBy } from "./recorded-session.js";
+
 /**
  * The host's own check of who a session is for. eve authenticates a request
  * and pins the caller who created a session as its initiator, but it knows
@@ -98,19 +100,6 @@ const findRuntimeSessionOwner = SqlSchema.findOne({
     ),
 });
 
-const findConversationOwner = SqlSchema.findOne({
-  Request: Schema.String,
-  Result: OwnerRowSchema,
-  execute: (conversationId) =>
-    statement(
-      (sql) => sql`
-        select user_id
-        from conversations
-        where id = ${conversationId} and deleted_at is null
-      `,
-    ),
-});
-
 const ClaimSchema = Schema.Struct({
   userId: Schema.String,
   conversationId: Schema.String,
@@ -186,17 +175,6 @@ export function runtimeSessionOwner(
 ): Effect.Effect<string | undefined, ConversationFailure, SqlClient.SqlClient> {
   return Effect.map(findRuntimeSessionOwner(runtimeSessionId), (found) =>
     Option.getOrUndefined(Option.map(found, (row) => row.userId)),
-  );
-}
-
-/** Whether a conversation stands and belongs to the account. */
-export function conversationOwnedBy(
-  userId: string,
-  conversationId: string,
-): Effect.Effect<boolean, ConversationFailure, SqlClient.SqlClient> {
-  return Effect.map(
-    findConversationOwner(conversationId),
-    (found) => Option.isSome(found) && found.value.userId === userId,
   );
 }
 

@@ -184,6 +184,51 @@ export const turns = pgTable(
 );
 
 /**
+ * A developer's ask between its accept and its turn. eve folds asks that
+ * arrive while a turn runs into the next turn and names no turn at accept
+ * time, so the ask stands on its own row from the accept, keyed by the
+ * client's id once per conversation, and learns its turn when eve's
+ * `turn.started` names the delivery it was handed as. The id is what the
+ * caller reads and stops the ask by; `turn_id` is `hostTurnId` once known,
+ * the one turn-id scheme, so a read by either id resolves through one path.
+ * The question is kept until eve has taken it, so a retry with the same
+ * client id can dispatch again where the first dispatch never reached eve.
+ * A Stop asked of a queued ask stamps `cancel_requested_at`, for the start
+ * that names its delivery to honour. CLAUDE.md calls the local record of
+ * these "the requests"; this is the hosted tier's. An ask goes with its
+ * conversation.
+ */
+export const asks = pgTable(
+  "asks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    /** The client's own id for the ask: the idempotency key, unique in its conversation. */
+    clientId: text("client_id").notNull(),
+    origin: text("origin").$type<TurnOrigin>().notNull(),
+    question: text("question").notNull(),
+    /** The eve session the ask was handed to, once eve accepted it. */
+    sessionId: text("session_id"),
+    /** The delivery eve named for a follow-up; an ask that opened its session has none, its turn is the session's first. */
+    deliveryId: text("delivery_id"),
+    /** The turn the ask ran in, as the store keys it, once known. */
+    turnId: uuid("turn_id"),
+    createdAt: instant("created_at").notNull().defaultNow(),
+    cancelRequestedAt: instant("cancel_requested_at"),
+  },
+  (table) => [
+    uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),
+    index("asks_by_user").on(table.userId),
+    index("asks_conversation_delivery").on(table.conversationId, table.deliveryId),
+  ],
+);
+
+/**
  * What happened to a message after it was written, one row per happening,
  * numbered by the conversation's own event sequence under the same unique
  * pair as messages, so every device converges on the same events in the same

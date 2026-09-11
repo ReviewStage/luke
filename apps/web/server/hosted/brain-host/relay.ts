@@ -26,6 +26,7 @@ import {
   userMessage,
   userMetadataOf,
 } from "../../core.js";
+import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import type { StoreWriter } from "./announce.js";
 import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND, type BrainHostTurn } from "./bounds.js";
@@ -132,6 +133,8 @@ export interface RelayStanding {
 
 export interface StreamRelaySeams {
   readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn">;
+  /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
+  readonly asks: AskDeliveryBinding;
   /** Puts a turn's briefing on offer, once its announce call is on the journal; answers whether the offer landed. */
   readonly offer: (target: ConversationTarget, turnId: string) => Promise<boolean>;
   readonly now: () => number;
@@ -246,7 +249,7 @@ export class StreamRelay {
   async handle(event: MessageStreamEvent, standing: RelayStanding): Promise<void> {
     switch (event.type) {
       case "turn.started":
-        return this.#turnStarted(event.data.turnId, standing);
+        return this.#turnStarted(event.data.turnId, event.meta.deliveryIds ?? [], standing);
       case "message.received":
         return this.#received(event.data.turnId, event.data.message, standing);
       case "step.started":
@@ -330,7 +333,11 @@ export class StreamRelay {
     }
   }
 
-  async #turnStarted(eveTurnId: string, standing: RelayStanding): Promise<void> {
+  async #turnStarted(
+    eveTurnId: string,
+    deliveryIds: readonly string[],
+    standing: RelayStanding,
+  ): Promise<void> {
     // A start eve emits again finds its turn already under way and leaves what it accumulated standing.
     if (standing.state.get().turns[eveTurnId]) return;
     const kind = standing.turn;
@@ -350,8 +357,9 @@ export class StreamRelay {
     // hold, refused or thrown, keeps nothing in relay state, so the start eve
     // emits again queues the row again rather than finding a turn under way.
     try {
+      const turnId = hostTurnId(standing.sessionId, eveTurnId);
       const queued = await this.#seams.writer.enqueueTurn(standing.target, {
-        turnId: hostTurnId(standing.sessionId, eveTurnId),
+        turnId,
         origin: TURN_ORIGIN_OF_HOST_TURN[kind],
         ...(standing.model !== undefined ? { model: standing.model } : undefined),
       });
@@ -360,6 +368,10 @@ export class StreamRelay {
         standing.state.update((state) => this.#without(state, eveTurnId));
         return;
       }
+      // eve folds the asks that waited into one turn and stamps their deliveries on its events,
+      // so the start is where each ask learns the turn it ran in; a start emitted again names
+      // the same deliveries and binds nothing new.
+      await this.#seams.asks.bindDeliveries(standing.target, deliveryIds, turnId);
       const written = await this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TURN_STARTED,
         origin,

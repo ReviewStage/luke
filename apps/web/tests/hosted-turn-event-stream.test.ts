@@ -40,6 +40,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import {
   handleTurnEventStream,
   projectTurnEvents,
@@ -71,6 +72,7 @@ const writer = await storeWriter({
 });
 const relay = new StreamRelay({
   writer,
+  asks: askRecord(database.run),
   offer: (target, turnId) =>
     offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
   now: () => NOW,

@@ -43,6 +43,9 @@ function sessionPath(sessionId: string): string {
   return `${EVE_SESSION_PATH}/${encodeURIComponent(sessionId)}`;
 }
 
+/** eve's id for a session's first turn, the one the opening message runs: `turn_<sequence>` from zero. */
+export const EVE_FIRST_TURN_ID = "turn_0";
+
 /** The code eve's follow-up route answers for a session it does not run now, beside its 409. */
 const EVE_SESSION_NOT_ACTIVE = "session_not_active";
 

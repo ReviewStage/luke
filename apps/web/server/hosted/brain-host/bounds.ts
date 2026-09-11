@@ -118,6 +118,8 @@ export const BRAIN_HOST_TURN_KIND = {
 export const BRAIN_HOST_ENVIRONMENT = {
   /** Selects the scripted fixture model in place of OpenAI; set only by the fixture eval. */
   MODEL_FIXTURE: "LUKE_BRAIN_MODEL_FIXTURE",
+  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/v1/*` rewrite. */
+  EVE_ORIGIN: "LUKE_EVE_ORIGIN",
 } as const;
 
 /** The one fixture the model environment may name, and the model id its turns are recorded under. */
