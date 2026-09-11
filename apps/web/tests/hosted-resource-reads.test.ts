@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as SqlClient from "@effect/sql/SqlClient";
 import {
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
@@ -35,16 +36,10 @@ import {
   type WireBoundaryInput,
   type WireRecord,
 } from "@sidecar/wire";
-import { and, eq, sql } from "drizzle-orm";
+import { Effect, Schema as EffectSchema } from "effect";
 import { afterAll, test } from "vitest";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  events,
-  messages,
-  providerCursors,
-  turns,
-} from "../server/db/schema";
+import type { StoredUIMessage } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { handleChanges } from "../server/hosted/change-signal";
 import {
@@ -54,6 +49,17 @@ import {
   type ResourceReadOptions,
 } from "../server/hosted/resource-reads";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation as insertConversationRow,
+  insertEvent as insertEventRow,
+  insertMessage as insertMessageRow,
+  insertProviderCursor,
+  insertTurn as insertTurnRow,
+  readConversationById,
+  readEventsByMessage,
+  readMessageById,
+  readMessagesByConversation,
+} from "./support/store-rows";
 
 /**
  * The three reads over the real store and migrations: two devices paging at
@@ -83,7 +89,7 @@ const ROSTER_LOOK = {
   source: OBSERVATION_SOURCE.ROSTER_LOOK,
 } as const;
 
-type MessageParts = (typeof messages.$inferInsert)["parts"];
+type MessageParts = StoredUIMessage["parts"];
 
 function toolPart(
   name: string,
@@ -102,42 +108,48 @@ function toolPart(
   } as unknown as MessageParts[number];
 }
 
+async function bumpConversationCounter(
+  conversationId: string,
+  column: "next_message_seq" | "next_event_seq",
+  seq: number,
+): Promise<void> {
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update conversations set ${sql(column)} = greatest(${sql(column)}, ${seq + 1})
+        where id = ${conversationId}
+      `;
+    }),
+  );
+}
+
 /** A conversation opened an hour before the fixture's rows, as a main stands before anything is written under it. */
 async function insertConversation(
   userId: string,
-  row: Partial<typeof conversations.$inferInsert> = {},
+  row: Omit<Parameters<typeof insertConversationRow>[1], "userId"> = {},
 ): Promise<string> {
-  const [inserted] = await database.db
-    .insert(conversations)
-    .values({
-      userId,
-      kind: CONVERSATION_KIND.MAIN,
-      createdAt: new Date(NOW - 3_600_000),
-      ...row,
-    })
-    .returning({ id: conversations.id });
-  assert.ok(inserted);
-  return inserted.id;
+  return insertConversationRow(database.run, {
+    kind: CONVERSATION_KIND.MAIN,
+    createdAt: new Date(NOW - 3_600_000),
+    ...row,
+    userId,
+  });
 }
 
 async function insertTurn(
   userId: string,
   conversationId: string,
-  row: Partial<typeof turns.$inferInsert> = {},
+  row: Partial<Omit<Parameters<typeof insertTurnRow>[1], "userId" | "conversationId">> = {},
 ): Promise<string> {
-  const [inserted] = await database.db
-    .insert(turns)
-    .values({
-      userId,
-      conversationId,
-      origin: TURN_ORIGIN.TYPED,
-      status: TURN_STATUS.SETTLED,
-      queuedAt: new Date(NOW),
-      ...row,
-    })
-    .returning({ id: turns.id });
-  assert.ok(inserted);
-  return inserted.id;
+  return insertTurnRow(database.run, {
+    origin: TURN_ORIGIN.TYPED,
+    status: TURN_STATUS.SETTLED,
+    queuedAt: new Date(NOW),
+    ...row,
+    userId,
+    conversationId,
+  });
 }
 
 /**
@@ -150,29 +162,24 @@ async function insertMessage(
   userId: string,
   conversationId: string,
   seq: number,
-  row: Partial<typeof messages.$inferInsert> = {},
+  row: Partial<
+    Omit<Parameters<typeof insertMessageRow>[1], "userId" | "conversationId" | "seq">
+  > = {},
 ): Promise<string> {
-  const [inserted] = await database.db
-    .insert(messages)
-    .values({
-      userId,
-      conversationId,
-      seq,
-      clientId: `client-${seq}`,
-      role: MESSAGE_ROLE.USER,
-      parts: [{ type: "text", text: `ask ${seq}` }],
-      metadata: TYPED_ASK,
-      createdAt: new Date(NOW + seq * 1000),
-      finishedAt: new Date(NOW + seq * 1000 + 500),
-      ...row,
-    })
-    .returning({ id: messages.id });
-  assert.ok(inserted);
-  await database.db
-    .update(conversations)
-    .set({ nextMessageSeq: sql`greatest(${conversations.nextMessageSeq}, ${seq + 1})` })
-    .where(eq(conversations.id, conversationId));
-  return inserted.id;
+  const id = await insertMessageRow(database.run, {
+    clientId: `client-${seq}`,
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: `ask ${seq}` }],
+    metadata: TYPED_ASK,
+    createdAt: new Date(NOW + seq * 1000),
+    finishedAt: new Date(NOW + seq * 1000 + 500),
+    ...row,
+    userId,
+    conversationId,
+    seq,
+  });
+  await bumpConversationCounter(conversationId, "next_message_seq", seq);
+  return id;
 }
 
 async function insertEvent(
@@ -180,26 +187,32 @@ async function insertEvent(
   conversationId: string,
   messageId: string,
   seq: number,
-  row: Partial<typeof events.$inferInsert> = {},
+  row: Partial<
+    Omit<Parameters<typeof insertEventRow>[1], "userId" | "conversationId" | "messageId" | "seq">
+  > = {},
 ): Promise<string> {
-  const [inserted] = await database.db
-    .insert(events)
-    .values({
-      userId,
-      conversationId,
-      messageId,
-      seq,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-      createdAt: new Date(NOW + seq * 1000),
-      ...row,
-    })
-    .returning({ id: events.id });
-  assert.ok(inserted);
-  await database.db
-    .update(conversations)
-    .set({ nextEventSeq: sql`greatest(${conversations.nextEventSeq}, ${seq + 1})` })
-    .where(eq(conversations.id, conversationId));
-  return inserted.id;
+  const id = await insertEventRow(database.run, {
+    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+    createdAt: new Date(NOW + seq * 1000),
+    ...row,
+    userId,
+    conversationId,
+    messageId,
+    seq,
+  });
+  await bumpConversationCounter(conversationId, "next_event_seq", seq);
+  return id;
+}
+
+function readProviderCursorRows(userId: string) {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select * from provider_cursors where user_id = ${userId} order by provider_session_id
+      `;
+    }),
+  );
 }
 
 const READ_QUERY = {
@@ -496,7 +509,7 @@ test("a message's replay slot never leaves the service, and the stored row keeps
     [{ type: "reasoning", text: "Read the tail first.", state: "done" }],
   );
 
-  const [stored] = await database.db.select().from(messages).where(eq(messages.id, reply));
+  const stored = await readMessageById(database.run, reply);
   assert.ok(stored);
   // SAFETY: the parts column is jsonb, read back as the JSON the test wrote.
   const storedParts = wireParts(unparsedWire(stored.parts as WireBoundaryInput));
@@ -650,19 +663,22 @@ test("a message still in flight is answered on every read and passed only once i
   assert.equal(again.hasMore, false);
   assert.equal(mainPosition(again.next), 5);
 
-  await database.db
-    .update(messages)
-    .set({
-      parts: [
-        toolPart("send_session_message", "call_7a0000000000000001", {
-          ...SESSION_FIELDS,
-          text: "Run the tests.",
-        }),
-        { type: "text", text: "Sent." },
-      ],
-      finishedAt: new Date(NOW + 45_000),
-    })
-    .where(eq(messages.id, journal));
+  const finishedParts = JSON.stringify([
+    toolPart("send_session_message", "call_7a0000000000000001", {
+      ...SESSION_FIELDS,
+      text: "Run the tests.",
+    }),
+    { type: "text", text: "Sent." },
+  ]);
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update messages set parts = ${finishedParts}::jsonb, finished_at = ${new Date(NOW + 45_000)}
+        where id = ${journal}
+      `;
+    }),
+  );
   const finished = await device.poll();
   assert.deepEqual(
     finished.groups.flatMap((group) => group.messages.map((message) => message.seq)),
@@ -788,25 +804,16 @@ test("a cleared main is absent from the next read: its groups leave the device, 
 test("a Clear empties the thread of observed rows from before the new main and keeps the ones after it, and the observed conversation itself stands untouched", async () => {
   const userId = await database.createUser();
   const { observed, turns: ids } = await populate(userId);
-  await database.db.insert(providerCursors).values({
+  await insertProviderCursor(database.run, {
     userId,
     providerId: SESSION.providerId,
     providerSessionId: SESSION.providerSessionId,
     cursor: "msg_0000000000000042",
   });
   const before = {
-    conversation: await database.db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, observed)),
-    messages: await database.db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, observed)),
-    cursors: await database.db
-      .select()
-      .from(providerCursors)
-      .where(eq(providerCursors.userId, userId)),
+    conversation: await readConversationById(database.run, observed),
+    messages: await readMessagesByConversation(database.run, observed),
+    cursors: await readProviderCursorRows(userId),
   };
   assert.equal(before.messages.length, 3);
 
@@ -849,27 +856,23 @@ test("a Clear empties the thread of observed rows from before the new main and k
   assert.equal(head?.messages, fresh.cursor);
 
   const after = {
-    conversation: await database.db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, observed)),
-    messages: await database.db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, observed)),
-    cursors: await database.db
-      .select()
-      .from(providerCursors)
-      .where(eq(providerCursors.userId, userId)),
+    conversation: await readConversationById(database.run, observed),
+    messages: await readMessagesByConversation(database.run, observed),
+    cursors: await readProviderCursorRows(userId),
   };
-  assert.equal(after.conversation[0]?.deletedAt, null);
+  assert.equal(after.conversation[0]?.deleted_at, null);
   assert.deepEqual(after.cursors, before.cursors);
   assert.deepEqual(
-    after.messages.filter((row) => row.seq <= 3),
+    after.messages.filter((row) => Number(row.seq) <= 3),
     before.messages,
   );
   assert.equal(after.messages.length, 4);
-  assert.equal(after.conversation[0]?.nextMessageSeq, 5);
+  assert.equal(
+    EffectSchema.decodeUnknownSync(
+      EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+    )(after.conversation[0]?.next_message_seq),
+    5,
+  );
   const whole = await database.store.messages.list(userId, observed, CATALOG_TOOL_SET);
   assert.equal(whole.ok, true);
   assert.deepEqual(whole.ok ? whole.value.map((record) => record.seq) : [], [1, 2, 3, 4]);
@@ -878,10 +881,13 @@ test("a Clear empties the thread of observed rows from before the new main and k
 test("a message carries its latest rating on a device's first page, a re-rating changes the next page, and the events record keeps every rating as its own row", async () => {
   const userId = await database.createUser();
   const { main, turns: ids } = await populate(userId);
-  const [sent] = await database.db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(and(eq(messages.conversationId, main), eq(messages.seq, 2)));
+  const MessageIdRowSchema = EffectSchema.Struct({
+    id: EffectSchema.String,
+    seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+  });
+  const sent = (await readMessagesByConversation(database.run, main))
+    .map((row) => EffectSchema.decodeUnknownSync(MessageIdRowSchema)(row))
+    .find((row) => row.seq === 2);
   assert.ok(sent);
   const first = await insertEvent(userId, main, sent.id, 1, {
     kind: CONVERSATION_EVENT_KIND.RATING,
@@ -908,11 +914,15 @@ test("a message carries its latest rating on a device's first page, a re-rating 
     note: "Sent the wrong session.",
   });
 
-  const record = await database.db
-    .select({ id: events.id, seq: events.seq, kind: events.kind, payload: events.payload })
-    .from(events)
-    .where(and(eq(events.messageId, sent.id), eq(events.kind, CONVERSATION_EVENT_KIND.RATING)))
-    .orderBy(events.seq);
+  const EventRowSchema = EffectSchema.Struct({
+    id: EffectSchema.String,
+    seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+    kind: EffectSchema.String,
+    payload: EffectSchema.Unknown,
+  });
+  const record = (await readEventsByMessage(database.run, sent.id))
+    .map((row) => EffectSchema.decodeUnknownSync(EventRowSchema)(row))
+    .filter((row) => row.kind === CONVERSATION_EVENT_KIND.RATING);
   assert.deepEqual(
     record.map((row) => [row.id, row.seq, row.payload]),
     [
@@ -951,9 +961,12 @@ test("a row the catalog cannot read refuses the page whole, naming the row, whet
   });
 
   // Scoped to this test's conversation: on CI every store suite shares one database, and an unscoped delete of seq 5 took a neighbour's row twice today.
-  await database.db
-    .delete(messages)
-    .where(and(eq(messages.conversationId, main), eq(messages.seq, 5)));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from messages where conversation_id = ${main} and seq = 5`;
+    }),
+  );
   await insertMessage(userId, main, 5, {
     role: MESSAGE_ROLE.ASSISTANT,
     metadata: BRAIN_REPLY,
@@ -1037,10 +1050,15 @@ test("turns are answered in the order they last changed, again when a stamp move
   assert.equal(all.next, all.turns[3]?.cursor);
 
   const settledAt = new Date(NOW + 90_000);
-  await database.db
-    .update(turns)
-    .set({ status: TURN_STATUS.SETTLED, settledAt, model: "gpt-5" })
-    .where(eq(turns.id, ids.typed));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update turns set status = ${TURN_STATUS.SETTLED}, settled_at = ${settledAt}, model = ${"gpt-5"}
+        where id = ${ids.typed}
+      `;
+    }),
+  );
   const changed = await answered(
     await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: all.next ?? "" }))),
     brainTurnsAnswerSchema,
@@ -1092,7 +1110,12 @@ test("the latest turn position stops at a given cursor, so an empty page never m
   assert.ok(roster && gone && later && idle);
   assert.deepEqual(await database.store.turns.latest(userId), idle.cursor);
   assert.deepEqual(await database.store.turns.latest(userId, gone.cursor), gone.cursor);
-  await database.db.delete(turns).where(eq(turns.id, extra));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from turns where id = ${extra}`;
+    }),
+  );
   assert.deepEqual(await database.store.turns.latest(userId, gone.cursor), roster.cursor);
   assert.deepEqual(await database.store.turns.latest(userId, later.cursor), later.cursor);
 });
@@ -1113,10 +1136,15 @@ test("a queued turn is the opener's inbox and not the record: the turns read and
   assert.ok(head);
   assert.deepEqual(await database.store.turns.latest(userId), head.cursor);
 
-  await database.db
-    .update(turns)
-    .set({ status: TURN_STATUS.RUNNING, startedAt: new Date(NOW + 61_000) })
-    .where(eq(turns.id, queued));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${new Date(NOW + 61_000)}
+        where id = ${queued}
+      `;
+    }),
+  );
   const started = await database.store.turns.list(userId, { after: head.cursor });
   assert.deepEqual(
     started.map((turn) => [turn.id, turn.status]),
@@ -1128,10 +1156,12 @@ test("a queued turn is the opener's inbox and not the record: the turns read and
 test("a turns cursor naming a turn a Clear took moves back to the last turn at or before it, and to nothing when no turn stands", async () => {
   const userId = await database.createUser();
   const { turns: ids, observed } = await populate(userId);
-  await database.db
-    .update(turns)
-    .set({ settledAt: new Date(NOW + 90_000) })
-    .where(eq(turns.id, ids.typed));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`update turns set settled_at = ${new Date(NOW + 90_000)} where id = ${ids.typed}`;
+    }),
+  );
   const all = await answered(
     await handleBrainTurns(options(userId, request(READ_PATH.TURNS))),
     brainTurnsAnswerSchema,
@@ -1156,7 +1186,12 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
   assert.deepEqual(settled.turns, []);
   assert.equal(settled.next, moved.next);
 
-  await database.db.delete(conversations).where(eq(conversations.id, observed));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from conversations where id = ${observed}`;
+    }),
+  );
   const none = await answered(
     await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
     brainTurnsAnswerSchema,

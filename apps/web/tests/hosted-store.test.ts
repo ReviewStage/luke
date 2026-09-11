@@ -1,22 +1,14 @@
 import assert from "node:assert/strict";
-import { eq, getTableName, sql } from "drizzle-orm";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import {
-  devices,
-  observationPass,
-  personalFact,
-  providerKey,
-  rosterConsumed,
-  rosterSnapshot,
-  user,
-  workspaceFile,
-} from "../server/db/schema";
-import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { CONSUMED_ROSTER } from "../server/hosted/store";
-import { userSeal } from "../server/hosted/store/database";
+import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
 import { keepConsumedRoster, readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
+import { countRowsForUser, deleteUser, insertDevice } from "./support/store-rows";
 
 /** Synthetic fixtures: no real title, branch, or transcript anywhere. */
 
@@ -78,11 +70,7 @@ test("workspace files are read and written whole per user and path, seeded once,
   }
   assert.equal(await workspace.delete(userId, "memory/2026-09-09.md"), true);
   assert.equal(await workspace.delete(userId, "memory/2026-09-09.md"), false);
-  const rows = await database.db
-    .select()
-    .from(workspaceFile)
-    .where(eq(workspaceFile.userId, userId));
-  assert.equal(rows.length, 1);
+  assert.equal(await countRowsForUser(database.run, "workspace_file", userId), 1);
 
   const other = await database.createUser();
   assert.equal(await workspace.read(other, "AGENTS.md"), undefined);
@@ -104,15 +92,15 @@ test("the roster snapshot is one sealed row per user, replaced whole, and its in
     body: JSON.stringify({ sessions: ["b"] }),
     observedAt: NOW + 1,
   });
-  const rows = await database.db
-    .select()
-    .from(rosterSnapshot)
-    .where(eq(rosterSnapshot.userId, userId));
-  assert.equal(rows.length, 1);
-  await database.db
-    .update(rosterSnapshot)
-    .set({ sealedBody: "1:not-an-envelope" })
-    .where(eq(rosterSnapshot.userId, userId));
+  assert.equal(await countRowsForUser(database.run, "roster_snapshot", userId), 1);
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update roster_snapshot set sealed_body = '1:not-an-envelope' where user_id = ${userId}
+      `;
+    }),
+  );
   await assert.rejects(database.store.roster.read(userId));
   assert.equal(await database.store.roster.observedAt(userId), NOW + 1);
 });
@@ -171,13 +159,15 @@ test("a pass advances the snapshot only over the one it read against, and the op
     roster: later,
   });
 
-  const [row] = await database.db
-    .select()
-    .from(rosterConsumed)
-    .where(eq(rosterConsumed.userId, userId));
+  const [row] = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select * from roster_consumed where user_id = ${userId}`;
+    }),
+  );
   assert.ok(row);
-  assert.notEqual(row.sealedBody, later.body);
-  assert.equal(row.observedAt, NOW + 5);
+  assert.notEqual(row.sealed_body, later.body);
+  assert.equal(Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.observed_at), NOW + 5);
 
   // A bookmark sealed under another account stands but cannot be opened here: answered as such, with the instant a replacement must be kept over.
   const other = await database.createUser();
@@ -218,26 +208,30 @@ test("a pass record moves the attempt every time, the whole read only on success
   const keyed = await database.createUser();
   const unseen = await database.createUser();
   for (const id of [keyed, unseen]) {
-    await database.db
-      .insert(providerKey)
-      .values({ userId: id, providerId: "conductor", ciphertext: "sealed" });
+    await database.run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`
+          insert into provider_key (user_id, provider_id, ciphertext)
+          values (${id}, ${"conductor"}, ${"sealed"})
+        `;
+      }),
+    );
   }
-  await database.db.insert(devices).values([
-    {
-      id: `device-${keyed}`,
-      userId: keyed,
-      installationId: `install-${keyed}`,
-      platform: "ios",
-      lastSeenAt: new Date(NOW),
-    },
-    {
-      id: `device-${unseen}`,
-      userId: unseen,
-      installationId: `install-${unseen}`,
-      platform: "ios",
-      lastSeenAt: new Date(NOW - 1),
-    },
-  ]);
+  await insertDevice(database.run, {
+    id: `device-${keyed}`,
+    userId: keyed,
+    installationId: `install-${keyed}`,
+    platform: "ios",
+    lastSeenAt: new Date(NOW),
+  });
+  await insertDevice(database.run, {
+    id: `device-${unseen}`,
+    userId: unseen,
+    installationId: `install-${unseen}`,
+    platform: "ios",
+    lastSeenAt: new Date(NOW - 1),
+  });
   // Keyless and unseen like `userId`, but outside the accounts the sweep is
   // told of: what another test file's account looks like on a shared Postgres.
   const bystander = await database.createUser();
@@ -282,26 +276,25 @@ test("deleting the user row cascades through every notebook, fact, and roster ta
     );
   }
 
-  await database.db.delete(user).where(eq(user.id, userId));
+  await deleteUser(database.run, userId);
 
   // roster_diff stands unwritten and unread until its drop lands; nothing seeds it, so nothing here can prove it.
   for (const table of [
-    personalFact,
-    workspaceFile,
-    rosterSnapshot,
-    rosterConsumed,
-    observationPass,
+    "personal_fact",
+    "workspace_file",
+    "roster_snapshot",
+    "roster_consumed",
+    "observation_pass",
   ]) {
-    const gone = await database.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(table)
-      .where(eq(table.userId, userId));
-    assert.equal(gone[0]?.count, 0, `${getTableName(table)} still holds rows for the deleted user`);
-    const kept = await database.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(table)
-      .where(eq(table.userId, other));
-    assert.ok((kept[0]?.count ?? 0) > 0, `${getTableName(table)} lost the other user's rows`);
+    assert.equal(
+      await countRowsForUser(database.run, table, userId),
+      0,
+      `${table} still holds rows for the deleted user`,
+    );
+    assert.ok(
+      (await countRowsForUser(database.run, table, other)) > 0,
+      `${table} lost the other user's rows`,
+    );
   }
 });
 
@@ -344,9 +337,13 @@ test("an observed conversation is opened on its session's first diff and stands 
       .sort(),
     [opened, another].sort(),
   );
-  const [row] = await database.db
-    .select({ kind: conversations.kind, providerSessionId: conversations.providerSessionId })
-    .from(conversations)
-    .where(eq(conversations.id, opened));
+  const [row] = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select kind, provider_session_id as "providerSessionId" from conversations where id = ${opened}
+      `;
+    }),
+  );
   assert.deepEqual(row, { kind: CONVERSATION_KIND.OBSERVED, providerSessionId: "s-observed-1" });
 });

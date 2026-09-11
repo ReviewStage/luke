@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
-import { eq } from "drizzle-orm";
 import { test } from "vitest";
-import {
-  VOICE_CLOSE_REASON,
-  VOICE_DELEGATION_MODE,
-  voiceSessions,
-} from "../server/db/voice-schema";
+import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-schema";
 import { registerDevice } from "../server/hosted/device-store";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { readVoiceSessionByLiveSessionId } from "./support/store-rows";
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 
@@ -26,18 +22,23 @@ test("a registered session names its account, keeps its first owner, and answers
     assert.equal(await record.owned({ userId: owner, sessionId: "live_r" }), true);
     assert.equal(await record.owned({ userId: other, sessionId: "live_r" }), false);
     assert.equal(await record.owned({ userId: owner, sessionId: "live_never" }), false);
-    const rows = await opened.db
-      .select({
-        userId: voiceSessions.userId,
-        delegationMode: voiceSessions.delegationMode,
-        closedAt: voiceSessions.closedAt,
-        usage: voiceSessions.usage,
-      })
-      .from(voiceSessions)
-      .where(eq(voiceSessions.liveSessionId, "live_r"));
-    assert.deepEqual(rows, [
-      { userId: owner, delegationMode: VOICE_DELEGATION_MODE.CLIENT, closedAt: null, usage: null },
-    ]);
+    const rows = await readVoiceSessionByLiveSessionId(opened.run, "live_r");
+    assert.deepEqual(
+      rows.map((row) => ({
+        userId: row.user_id,
+        delegationMode: row.delegation_mode,
+        closedAt: row.closed_at,
+        usage: row.usage,
+      })),
+      [
+        {
+          userId: owner,
+          delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+          closedAt: null,
+          usage: null,
+        },
+      ],
+    );
   } finally {
     await opened.close();
   }
@@ -51,15 +52,12 @@ test("usage snapshots overwrite one another unconfirmed, the close confirms the 
     await record.register({ userId: owner, sessionId: "live_u" });
     await record.noteUsage({ sessionId: "live_u", seconds: 10 });
     await record.noteUsage({ sessionId: "live_u", seconds: 25 });
-    const read = () =>
-      opened.db
-        .select({
-          closedAt: voiceSessions.closedAt,
-          closeReason: voiceSessions.closeReason,
-          usage: voiceSessions.usage,
-        })
-        .from(voiceSessions)
-        .where(eq(voiceSessions.liveSessionId, "live_u"));
+    const read = async () =>
+      (await readVoiceSessionByLiveSessionId(opened.run, "live_u")).map((row) => ({
+        closedAt: row.closed_at,
+        closeReason: row.close_reason,
+        usage: row.usage,
+      }));
 
     assert.deepEqual(await read(), [
       { closedAt: null, closeReason: null, usage: { seconds: 25, confirmed: false } },
@@ -83,15 +81,7 @@ test("usage snapshots overwrite one another unconfirmed, the close confirms the 
       [{ seconds: 26.5, confirmed: true }],
     );
     await record.noteUsage({ sessionId: "live_unknown", seconds: 1 });
-    assert.equal(
-      (
-        await opened.db
-          .select()
-          .from(voiceSessions)
-          .where(eq(voiceSessions.liveSessionId, "live_unknown"))
-      ).length,
-      0,
-    );
+    assert.equal((await readVoiceSessionByLiveSessionId(opened.run, "live_unknown")).length, 0);
   } finally {
     await opened.close();
   }
@@ -122,12 +112,7 @@ test("a session names the device the handshake claimed only where the account ho
     await record.register({ userId: other, sessionId: "live_d_foreign", deviceId });
     await record.register({ userId: owner, sessionId: "live_d_none" });
     const named = async (sessionId: string) =>
-      (
-        await opened.db
-          .select({ deviceId: voiceSessions.deviceId })
-          .from(voiceSessions)
-          .where(eq(voiceSessions.liveSessionId, sessionId))
-      )[0]?.deviceId;
+      (await readVoiceSessionByLiveSessionId(opened.run, sessionId))[0]?.device_id;
 
     assert.equal(await named("live_d_owned"), deviceId);
     assert.equal(await named("live_d_foreign"), null);

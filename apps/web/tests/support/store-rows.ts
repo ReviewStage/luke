@@ -1,6 +1,7 @@
+import assert from "node:assert/strict";
 import * as SqlClient from "@effect/sql/SqlClient";
 import { MessageRoleSchema } from "@sidecar/wire";
-import { Effect, Schema } from "effect";
+import { Cause, Effect, Option, Runtime, Schema } from "effect";
 import type { StoredUIMessage } from "../../server/core";
 import { CONVERSATION_KIND } from "../../server/db/storage-schema";
 import type { HostedStoreRun } from "../../server/hosted/store";
@@ -24,7 +25,9 @@ export interface ConversationRow {
   readonly providerSessionId?: string | null;
   readonly parentConversationId?: string | null;
   readonly spawnedByMessageId?: string | null;
+  readonly forkOfSeq?: number | null;
   readonly runtimeSessionId?: string | null;
+  readonly createdAt?: Date;
   readonly deletedAt?: Date | null;
   readonly nextMessageSeq?: number;
   readonly nextEventSeq?: number;
@@ -37,14 +40,14 @@ export function insertConversation(run: HostedStoreRun, row: ConversationRow): P
       const rows = yield* sql`
       insert into conversations (
         user_id, kind, provider_id, provider_session_id,
-        parent_conversation_id, spawned_by_message_id, runtime_session_id, deleted_at,
-        next_message_seq, next_event_seq
+        parent_conversation_id, spawned_by_message_id, fork_of_seq, runtime_session_id,
+        created_at, deleted_at, next_message_seq, next_event_seq
       )
       values (
         ${row.userId}, ${row.kind ?? CONVERSATION_KIND.MAIN},
         ${row.providerId ?? null}, ${row.providerSessionId ?? null},
-        ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null},
-        ${row.runtimeSessionId ?? null}, ${row.deletedAt ?? null},
+        ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null}, ${row.forkOfSeq ?? null},
+        ${row.runtimeSessionId ?? null}, ${row.createdAt ?? new Date()}, ${row.deletedAt ?? null},
         ${row.nextMessageSeq ?? 1}, ${row.nextEventSeq ?? 1}
       )
       returning id
@@ -146,18 +149,27 @@ export interface TurnInsertRow {
   readonly origin: string;
   readonly status: string;
   readonly queuedAt?: Date;
+  readonly startedAt?: Date | null;
   readonly settledAt?: Date | null;
+  readonly responseIds?: readonly string[] | null;
+  readonly usage?: unknown;
 }
 
 export function insertTurn(run: HostedStoreRun, row: TurnInsertRow): Promise<string> {
+  const responseIds = row.responseIds ?? null;
+  const usage = row.usage === undefined ? null : JSON.stringify(row.usage);
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql`
-      insert into turns (user_id, conversation_id, origin, status, queued_at, settled_at)
+      insert into turns (
+        user_id, conversation_id, origin, status, queued_at, started_at, settled_at,
+        response_ids, usage
+      )
       values (
         ${row.userId}, ${row.conversationId}, ${row.origin}, ${row.status},
-        ${row.queuedAt ?? new Date()}, ${row.settledAt ?? null}
+        ${row.queuedAt ?? new Date()}, ${row.startedAt ?? null}, ${row.settledAt ?? null},
+        ${responseIds}, ${usage}::jsonb
       )
       returning id
     `;
@@ -261,6 +273,19 @@ export function readMessagesByConversationTyped(
         select * from messages where conversation_id = ${conversationId} order by seq
       `;
       return rows.map((row) => decodeMessageRow(row));
+    }),
+  );
+}
+
+export function readMessageById(
+  run: HostedStoreRun,
+  id: string,
+): Promise<MessageRowFull | undefined> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`select * from messages where id = ${id}`;
+      return rows[0] === undefined ? undefined : decodeMessageRow(rows[0]);
     }),
   );
 }
@@ -378,7 +403,7 @@ export function readDeviceById(run: HostedStoreRun, id: string): Promise<DeviceR
 export function setVoiceSessionDeviceId(
   run: HostedStoreRun,
   liveSessionId: string,
-  deviceId: string,
+  deviceId: string | null,
 ): Promise<void> {
   return run(
     Effect.gen(function* () {
@@ -425,6 +450,127 @@ export function readEventsByMessage(run: HostedStoreRun, messageId: string) {
   );
 }
 
+export interface VoiceSessionInsertRow {
+  readonly userId: string;
+  readonly liveSessionId: string;
+  readonly delegationMode: string;
+  readonly deviceId?: string | null | undefined;
+  readonly closedAt?: Date | null | undefined;
+  readonly closeReason?: string | null | undefined;
+  readonly usage?: unknown;
+}
+
+export function insertVoiceSession(
+  run: HostedStoreRun,
+  row: VoiceSessionInsertRow,
+): Promise<string> {
+  const usage = row.usage === undefined ? null : JSON.stringify(row.usage);
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+      insert into voice_sessions (
+        user_id, device_id, live_session_id, delegation_mode, closed_at, close_reason, usage
+      )
+      values (
+        ${row.userId}, ${row.deviceId ?? null}, ${row.liveSessionId}, ${row.delegationMode},
+        ${row.closedAt ?? null}, ${row.closeReason ?? null}, ${usage}::jsonb
+      )
+      returning id
+    `;
+      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
+    }),
+  );
+}
+
+const VoiceSessionRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("device_id"),
+  ),
+  liveSessionId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("live_session_id")),
+  delegationMode: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("delegation_mode")),
+  startedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("started_at")),
+  closedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("closed_at"),
+  ),
+  closeReason: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("close_reason"),
+  ),
+  usage: Schema.NullOr(Schema.Unknown),
+});
+export type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
+const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
+
+export function readVoiceSessionByIdTyped(
+  run: HostedStoreRun,
+  id: string,
+): Promise<VoiceSessionRow | undefined> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`select * from voice_sessions where id = ${id}`;
+      return rows[0] === undefined ? undefined : decodeVoiceSessionRow(rows[0]);
+    }),
+  );
+}
+
+export function readVoiceSessionsByUserTyped(
+  run: HostedStoreRun,
+  userId: string,
+): Promise<readonly VoiceSessionRow[]> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`select * from voice_sessions where user_id = ${userId}`;
+      return rows.map((row) => decodeVoiceSessionRow(row));
+    }),
+  );
+}
+
+export interface VoiceSegmentInsertRow {
+  readonly voiceSessionId: string;
+  readonly seq: number;
+  readonly role: string;
+  readonly text: string;
+  readonly startMs: number;
+  readonly endMs: number;
+}
+
+export function insertVoiceTranscriptSegment(
+  run: HostedStoreRun,
+  row: VoiceSegmentInsertRow,
+): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      insert into voice_transcript_segments (voice_session_id, seq, role, text, start_ms, end_ms)
+      values (${row.voiceSessionId}, ${row.seq}, ${row.role}, ${row.text}, ${row.startMs}, ${row.endMs})
+    `;
+    }),
+  );
+}
+
+export function deleteVoiceSession(run: HostedStoreRun, id: string): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from voice_sessions where id = ${id}`;
+    }),
+  );
+}
+
+export function deleteDevice(run: HostedStoreRun, id: string): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from devices where id = ${id}`;
+    }),
+  );
+}
+
 export function readVoiceSessionByLiveSessionId(run: HostedStoreRun, liveSessionId: string) {
   return run(
     Effect.gen(function* () {
@@ -444,3 +590,164 @@ export function readVoiceTranscriptSegmentsBySession(run: HostedStoreRun, voiceS
     }),
   );
 }
+
+export function deleteUser(run: HostedStoreRun, id: string): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from "user" where id = ${id}`;
+    }),
+  );
+}
+
+/** A count of a table's rows for one user, by the table's own name; every table this reaches keys its rows by `user_id`. */
+export function countRowsForUser(
+  run: HostedStoreRun,
+  table: string,
+  userId: string,
+): Promise<number> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+      select count(*)::int as count from ${sql(table)} where user_id = ${userId}
+    `;
+      return Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count;
+    }),
+  );
+}
+
+/** A count of a table's rows matching one column's equality, by the table and column's own names. */
+export function countRowsWhere(
+  run: HostedStoreRun,
+  table: string,
+  column: string,
+  value: string,
+): Promise<number> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+      select count(*)::int as count from ${sql(table)} where ${sql(column)} = ${value}
+    `;
+      return Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count;
+    }),
+  );
+}
+
+export interface ToolSetRow {
+  readonly hash: string;
+  readonly schemas: unknown;
+}
+
+export function insertToolSet(run: HostedStoreRun, row: ToolSetRow): Promise<void> {
+  const schemas = JSON.stringify(row.schemas);
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`insert into tool_sets (hash, schemas) values (${row.hash}, ${schemas}::jsonb)`;
+    }),
+  );
+}
+
+export function insertToolSetIgnoringConflict(run: HostedStoreRun, row: ToolSetRow): Promise<void> {
+  const schemas = JSON.stringify(row.schemas);
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      insert into tool_sets (hash, schemas) values (${row.hash}, ${schemas}::jsonb)
+      on conflict (hash) do nothing
+    `;
+    }),
+  );
+}
+
+export function readToolSetsByHash(run: HostedStoreRun, hash: string) {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select * from tool_sets where hash = ${hash}`;
+    }),
+  );
+}
+
+export interface ProviderCursorRow {
+  readonly userId: string;
+  readonly providerId: string;
+  readonly providerSessionId: string;
+  readonly cursor: string;
+}
+
+export function insertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      insert into provider_cursors (user_id, provider_id, provider_session_id, cursor)
+      values (${row.userId}, ${row.providerId}, ${row.providerSessionId}, ${row.cursor})
+    `;
+    }),
+  );
+}
+
+export function upsertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow): Promise<void> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+      insert into provider_cursors (user_id, provider_id, provider_session_id, cursor)
+      values (${row.userId}, ${row.providerId}, ${row.providerSessionId}, ${row.cursor})
+      on conflict (user_id, provider_id, provider_session_id) do update set cursor = excluded.cursor
+    `;
+    }),
+  );
+}
+
+export function readProviderCursorsByUser(run: HostedStoreRun, userId: string) {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+      select provider_session_id, cursor from provider_cursors
+      where user_id = ${userId} order by provider_session_id
+    `;
+    }),
+  );
+}
+
+/**
+ * The driver's own refusal code (Postgres's `SQLSTATE`, e.g. `23505` for a
+ * unique violation) off a rejected `database.run(...)` promise: the runtime
+ * rejects with a `FiberFailure` wrapping the `SqlError`'s `Cause`, and the
+ * `SqlError` itself carries the driver's error as its own `cause`, the way
+ * Drizzle's wrapped error once did.
+ */
+const DriverErrorSchema = Schema.Struct({
+  cause: Schema.Struct({ code: Schema.String }),
+});
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary: the value node:assert's own `rejects` caught, parsed immediately below by Runtime.isFiberFailure and then Schema.
+function sqlErrorCode(error: unknown): string | undefined {
+  if (!Runtime.isFiberFailure(error)) return undefined;
+  const failure = Cause.squash(error[Runtime.FiberFailureCauseId]);
+  return Option.map(
+    Schema.decodeUnknownOption(DriverErrorSchema)(failure),
+    (decoded) => decoded.cause.code,
+  ).pipe(Option.getOrUndefined);
+}
+
+/** A statement's promise is refused for exactly the Postgres code named, whatever wraps it now. */
+export async function assertRefusedWithCode(
+  promise: Promise<unknown>,
+  code: string,
+): Promise<void> {
+  await assert.rejects(promise, (error) => {
+    assert.equal(sqlErrorCode(error), code);
+    return true;
+  });
+}
+
+export const POSTGRES_ERROR = {
+  UNIQUE_VIOLATION: "23505",
+} as const;

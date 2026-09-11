@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -14,6 +15,7 @@ import {
   OBSERVATION_SOURCE,
   readStoredUIMessages,
   SPEECH_EXPIRY_REASON,
+  type StoredUIMessage,
   selectConversationView,
   TURN_ORIGIN,
   TURN_STATUS,
@@ -21,8 +23,7 @@ import {
   type WireRecord,
   wakeInputText,
 } from "../server/core";
-import { devices } from "../server/db/devices-schema";
-import { CONVERSATION_KIND, conversations, events, messages, turns } from "../server/db/schema";
+import { CONVERSATION_KIND } from "../server/db/schema";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   claimSpeech,
@@ -42,6 +43,16 @@ import {
   sweepSpeech,
 } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation,
+  insertEvent,
+  insertMessage,
+  insertTurn,
+  readEventsByMessage,
+  readMessageById,
+  readTurnsByConversation,
+  setConversationDeletedAt,
+} from "./support/store-rows";
 
 /**
  * A briefing's delivery as events, against the real migrations on PGlite.
@@ -80,7 +91,7 @@ interface Announced {
   readonly messageId: string;
 }
 
-type MessageParts = (typeof messages.$inferInsert)["parts"];
+type MessageParts = StoredUIMessage["parts"];
 
 function announcePart(callId: string, input: WireRecord): MessageParts[number] {
   // SAFETY: a stored tool part in the SDK's own shape; the read under the catalog registry is the validation.
@@ -96,45 +107,33 @@ function announcePart(callId: string, input: WireRecord): MessageParts[number] {
 /** An observed conversation with one settled roster-diff turn whose answer announced a briefing, as the relay leaves them. */
 async function announced(userId?: string): Promise<Announced> {
   const owner = userId ?? (await database.createUser());
-  const [conversation] = await database.db
-    .insert(conversations)
-    .values({
-      userId: owner,
-      kind: CONVERSATION_KIND.OBSERVED,
-      providerId: SESSION.providerId,
-      providerSessionId: `${SESSION.providerSessionId}-${randomUUID()}`,
-    })
-    .returning({ id: conversations.id });
-  assert.ok(conversation);
-  const [turn] = await database.db
-    .insert(turns)
-    .values({
-      userId: owner,
-      conversationId: conversation.id,
-      origin: TURN_ORIGIN.ROSTER_DIFF,
-      status: TURN_STATUS.SETTLED,
-      queuedAt: new Date(clock),
-      settledAt: new Date(clock),
-    })
-    .returning({ id: turns.id });
-  assert.ok(turn);
-  const [message] = await database.db
-    .insert(messages)
-    .values({
-      userId: owner,
-      conversationId: conversation.id,
-      seq: 1,
-      turnId: turn.id,
-      clientId: turn.id,
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [announcePart(`call_${randomUUID()}`, { briefing: "One fixture agent finished." })],
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
-      createdAt: new Date(clock),
-      finishedAt: new Date(clock),
-    })
-    .returning({ id: messages.id });
-  assert.ok(message);
-  return { userId: owner, conversationId: conversation.id, turnId: turn.id, messageId: message.id };
+  const conversationId = await insertConversation(database.run, {
+    userId: owner,
+    kind: CONVERSATION_KIND.OBSERVED,
+    providerId: SESSION.providerId,
+    providerSessionId: `${SESSION.providerSessionId}-${randomUUID()}`,
+  });
+  const turnId = await insertTurn(database.run, {
+    userId: owner,
+    conversationId,
+    origin: TURN_ORIGIN.ROSTER_DIFF,
+    status: TURN_STATUS.SETTLED,
+    queuedAt: new Date(clock),
+    settledAt: new Date(clock),
+  });
+  const messageId = await insertMessage(database.run, {
+    userId: owner,
+    conversationId,
+    seq: 1,
+    turnId,
+    clientId: turnId,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [announcePart(`call_${randomUUID()}`, { briefing: "One fixture agent finished." })],
+    metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    createdAt: new Date(clock),
+    finishedAt: new Date(clock),
+  });
+  return { userId: owner, conversationId, turnId, messageId };
 }
 
 async function offered(userId?: string): Promise<Announced> {
@@ -145,53 +144,42 @@ async function offered(userId?: string): Promise<Announced> {
 }
 
 async function speechEvents(messageId: string) {
-  return database.db
-    .select({ kind: events.kind, deviceId: events.deviceId, payload: events.payload })
-    .from(events)
-    .where(eq(events.messageId, messageId))
-    .orderBy(asc(events.seq));
+  const rows = await readEventsByMessage(database.run, messageId);
+  return rows.map((row) => ({ kind: row.kind, deviceId: row.device_id, payload: row.payload }));
 }
 
 async function reportQuiet(userId: string, deviceId: string, quietUntil: number | null) {
-  await database.db
-    .insert(devices)
-    .values({
-      id: deviceId,
-      userId,
-      installationId: `install-${deviceId}-${userId}`,
-      platform: DEVICE_PLATFORM.MACOS,
-      quietUntil: quietUntil === null ? null : new Date(quietUntil),
-    })
-    .onConflictDoUpdate({
-      target: devices.id,
-      set: {
-        userId,
-        installationId: `install-${deviceId}-${userId}`,
-        quietUntil: quietUntil === null ? null : new Date(quietUntil),
-      },
-    });
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const at = quietUntil === null ? null : new Date(quietUntil);
+      const installationId = `install-${deviceId}-${userId}`;
+      yield* sql`
+        insert into devices (id, user_id, installation_id, platform, quiet_until)
+        values (${deviceId}, ${userId}, ${installationId}, ${DEVICE_PLATFORM.MACOS}, ${at})
+        on conflict (id) do update
+          set user_id = excluded.user_id,
+              installation_id = excluded.installation_id,
+              quiet_until = excluded.quiet_until
+      `;
+    }),
+  );
 }
 
 async function queuedTurns(conversationId: string) {
-  return database.db
-    .select({ origin: turns.origin, status: turns.status })
-    .from(turns)
-    .where(and(eq(turns.conversationId, conversationId), eq(turns.status, TURN_STATUS.QUEUED)));
+  const rows = await readTurnsByConversation(database.run, conversationId);
+  return rows
+    .filter((row) => row.status === TURN_STATUS.QUEUED)
+    .map((row) => ({ origin: row.origin, status: row.status }));
 }
 
 /** Whether the Conversation view, over the announcement's row and its events as stored, marks it unspoken. */
 async function viewMarksUnspoken(row: Announced): Promise<boolean> {
-  const [stored] = await database.db
-    .select({
-      id: messages.id,
-      role: messages.role,
-      parts: messages.parts,
-      metadata: messages.metadata,
-    })
-    .from(messages)
-    .where(eq(messages.id, row.messageId));
+  const stored = await readMessageById(database.run, row.messageId);
+  assert.ok(stored);
+  const { id, role, parts, metadata } = stored;
   const read = await readStoredUIMessages(
-    unparsedWire(JSON.parse(JSON.stringify([stored]))),
+    unparsedWire(JSON.parse(JSON.stringify([{ id, role, parts, metadata }]))),
     CATALOG_TOOL_SET,
   );
   assert.ok(read.ok);
@@ -296,7 +284,7 @@ test("at most one authorization to speak per briefing, never that it was heard: 
   // The index is the backstop behind the writer's own check: a second claim
   // row that reaches the table without the writer is refused by the schema.
   await assert.rejects(
-    database.db.insert(events).values({
+    insertEvent(database.run, {
       userId: row.userId,
       conversationId: row.conversationId,
       seq: 99,
@@ -662,30 +650,21 @@ test("two held offers on one conversation release with one turn between them, an
   clock = NOW;
   const first = await offered();
   const { userId, conversationId } = first;
-  const [message] = await database.db
-    .insert(messages)
-    .values({
-      userId,
-      conversationId,
-      seq: 2,
-      turnId: first.turnId,
-      clientId: `client-${randomUUID()}`,
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [
-        announcePart(`call_${randomUUID()}`, { briefing: "Another fixture agent finished." }),
-      ],
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
-      createdAt: new Date(clock),
-      finishedAt: new Date(clock),
-    })
-    .returning({ id: messages.id });
-  assert.ok(message);
-  assert.equal((await offerSpeech(store, userId, message.id, clock)).ok, true);
+  const messageId = await insertMessage(database.run, {
+    userId,
+    conversationId,
+    seq: 2,
+    turnId: first.turnId,
+    clientId: `client-${randomUUID()}`,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [announcePart(`call_${randomUUID()}`, { briefing: "Another fixture agent finished." })],
+    metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    createdAt: new Date(clock),
+    finishedAt: new Date(clock),
+  });
+  assert.equal((await offerSpeech(store, userId, messageId, clock)).ok, true);
   const cleared = await offered(userId);
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: new Date(clock) })
-    .where(eq(conversations.id, cleared.conversationId));
+  await setConversationDeletedAt(database.run, cleared.conversationId, new Date(clock));
 
   const quietUntil = NOW + 30 * 60_000;
   await reportQuiet(userId, MAC, quietUntil);
