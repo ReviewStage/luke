@@ -1,4 +1,10 @@
-import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
+import {
+  type HttpApp,
+  type HttpMethod,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "@effect/platform";
 import { Effect } from "effect";
 import {
   handleAgentAction,
@@ -31,6 +37,13 @@ const ACTIONS_ROUTE_PATH = {
   WORKSPACE: "/api/actions/workspace",
 } as const;
 
+/**
+ * The method the web handler answers with no body, taking the status and the
+ * headers from the `HttpServerResponse` rather than from the answer beneath
+ * it, exactly as `server/auth-app.ts`'s passthrough does.
+ */
+const BODYLESS_METHOD = { HEAD: "HEAD" } as const satisfies Record<string, HttpMethod.HttpMethod>;
+
 /** One action endpoint's handler, the shape every `handle*Action` export already has. */
 export type HostedActionHandler = (route: HostedVaultRoute) => Promise<Response>;
 
@@ -44,10 +57,25 @@ export interface ActionsGroupHandlers {
 }
 
 /**
+ * A HEAD answer's status and headers, carried on the `HttpServerResponse`
+ * because `HttpApp`'s web handler builds a HEAD response from those alone
+ * rather than from the raw `Response` underneath — the same reason
+ * `server/auth-app.ts`'s passthrough carries a HEAD answer this way.
+ */
+function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse {
+  return HttpServerResponse.empty({
+    status: answer.status,
+    statusText: answer.statusText,
+    headers: [...answer.headers],
+  });
+}
+
+/**
  * Carries the handler's own `Response` back unchanged, the way
  * `server/auth-app.ts`'s passthrough does: the request handed to the handler
  * is the very `Request` this edge was invoked with, and nothing is read out
- * of the answer to mirror onto the `HttpServerResponse` beside it.
+ * of the answer to mirror onto the `HttpServerResponse` beside it, aside from
+ * the HEAD exception above.
  */
 function actionPassthrough(handle: HostedActionHandler): HttpApp.Default {
   const route = hostedVaultRoute(handle);
@@ -55,7 +83,9 @@ function actionPassthrough(handle: HostedActionHandler): HttpApp.Default {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const answer = yield* Effect.promise(() => route.fetch(request));
-    return HttpServerResponse.raw(answer);
+    return incoming.method === BODYLESS_METHOD.HEAD
+      ? bodylessAnswer(answer)
+      : HttpServerResponse.raw(answer);
   });
 }
 

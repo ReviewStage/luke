@@ -151,6 +151,20 @@ test("the group answers what the named endpoint's handler answered", async () =>
   }
 });
 
+test("a HEAD request keeps the handler's status line and headers and carries no body", async () => {
+  const stub = stubbedHandler(rejectedAnswer);
+  const handlers = handlersWith("message", stub.handle);
+  const answered = await routeFromHttpApp(buildActionsApp(handlers)).fetch(
+    new Request(`${ACTIONS_ORIGIN}/api/actions/message`, { method: "HEAD" }),
+  );
+  const carried = await recordedResponse(answered);
+  const direct = await recordedResponse(rejectedAnswer());
+
+  assert.equal(carried.status, direct.status);
+  assert.deepEqual(carried.headers, direct.headers);
+  assert.equal(carried.body, "");
+});
+
 test("a path the group declares no route for is refused without reaching any handler", async () => {
   const stub = stubbedHandler(acceptedAnswer);
   const handlers = handlersWith("message", stub.handle);
