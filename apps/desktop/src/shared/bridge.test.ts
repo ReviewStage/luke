@@ -142,6 +142,8 @@ test("an app act pushed to the renderer never carries a memory write", () => {
 
 const VOICE_VIEW = {
   voiceStatus: "speaking",
+  listening: true,
+  lukeSpeaking: true,
   voiceError: undefined,
   voiceNotice: "Listening on the built-in microphone.",
   talkOpening: false,
@@ -150,13 +152,21 @@ const VOICE_VIEW = {
   spokenAskPending: false,
 };
 
-test("a voice view carries its seven fields and nothing malformed", () => {
+test("a voice view carries both speakers beside its status and nothing malformed", () => {
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, undefined]), true);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }, undefined]), false);
   assert.equal(
     BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, spokenAskPending: "yes" }, undefined]),
+    false,
+  );
+  assert.equal(
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, lukeSpeaking: undefined }, undefined]),
+    false,
+  );
+  assert.equal(
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, listening: "yes" }, undefined]),
     false,
   );
 });
@@ -185,19 +195,26 @@ test("an exchange kind rides a voice view only on an edge that opened one", () =
   );
 });
 
-test("a voice level is one finite number in the unit interval", () => {
+test("a voice level report is both speakers, each a finite number in the unit interval", () => {
   const guard = BRIDGE.onVoiceLevelChanged.result;
   assert.ok(guard);
-  assert.equal(guard(0), true);
-  assert.equal(guard(0.5), true);
-  assert.equal(guard(1), true);
-  assert.equal(guard(1.5), false);
-  assert.equal(guard(-0.1), false);
-  assert.equal(guard(Number.NaN), false);
-  assert.equal(guard("loud"), false);
-  assert.equal(BRIDGE.reportVoiceLevel.args([0.25]), true);
+  assert.equal(guard({ developer: 0, luke: 1 }), true);
+  assert.equal(guard({ developer: 0.5, luke: 0.5 }), true);
+  assert.equal(guard({ developer: 1.5, luke: 0.5 }), false);
+  assert.equal(guard({ developer: -0.1, luke: 0 }), false);
+  assert.equal(guard({ developer: Number.NaN, luke: 0 }), false);
+  assert.equal(guard({ developer: 0.5 }), false);
+  assert.equal(guard(0.5), false);
+  assert.equal(BRIDGE.reportVoiceLevel.args([{ developer: 0.25, luke: 0 }]), true);
   assert.equal(BRIDGE.reportVoiceLevel.args([]), false);
-  assert.equal(BRIDGE.reportVoiceLevel.args([0.25, 0.5]), false);
+  assert.equal(BRIDGE.reportVoiceLevel.args([0.25]), false);
+  assert.equal(
+    BRIDGE.reportVoiceLevel.args([
+      { developer: 0.25, luke: 0 },
+      { developer: 0, luke: 0.25 },
+    ]),
+    false,
+  );
 });
 
 test("shortcut capture is reported as one boolean", () => {

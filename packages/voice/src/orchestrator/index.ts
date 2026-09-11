@@ -3,6 +3,7 @@ export type {
   LiveVoiceCall,
   LiveVoiceCallEvents,
   LiveVoiceCallOpening,
+  LiveVoiceSpeakers,
 } from "./live-voice-call.js";
 export {
   type LiveVoiceBridge,

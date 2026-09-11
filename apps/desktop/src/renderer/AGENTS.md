@@ -23,7 +23,7 @@ first" for a component to answer. The channels that remain beside it are
 events rather than state: a one-shot addressed to a named receiver that a
 late subscriber must not receive and cannot reconstruct, or a reading that
 expires before the next version of the document could carry it — which is
-what the voice level is, twenty readings a second each good for fifty
+what the voice levels are, twenty readings a second each good for fifty
 milliseconds.
 
 That one subscription is an `Atom` over the stream of the bridge's deliveries,
@@ -144,7 +144,10 @@ under the bound), reports its transport and its one idle decision to the
 host, and reads Luke as speaking from the remote track's level, never from
 a transcript event; that level is activity on the session too, so a briefing
 the developer only listens to re-arms the idle window rather than being
-reported idle under it. `voice/live-captions.ts` draws both speakers from the
+reported idle under it. The session is full duplex, so what it reports is
+both speakers beside the status rather than the one claim a status can name,
+and the two meters each relay their own loudness — the pair, never whichever
+voice the panel happens to draw. `voice/live-captions.ts` draws both speakers from the
 transcript deltas over the same `TranscriptLedger` the host groups its record
 with, so the captions and the lines agree on what an utterance is. No
 credential reaches this window, nothing here appends to the model, and the

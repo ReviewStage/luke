@@ -7,7 +7,6 @@ import { brainRequestPending } from "@sidecar/brain/requests-wire";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
-import { LIVE_STATUS } from "@sidecar/live";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import type { ObservedWorkspaceProject } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
@@ -540,6 +539,7 @@ export function App(): React.JSX.Element {
   const {
     view: voiceView,
     speaking,
+    listening,
     voiceTurn,
     level: voiceLevel,
     voiceActive,
@@ -760,7 +760,7 @@ export function App(): React.JSX.Element {
       // have done a frame earlier: a fall-through past a reply just begun
       // closes the layer below instead. Not worth a round trip on every
       // Escape.
-      if (voiceView.voiceStatus === LIVE_STATUS.LISTENING || speaking) {
+      if (listening || speaking) {
         stopSpeaking();
         return;
       }
@@ -821,10 +821,10 @@ export function App(): React.JSX.Element {
     connections.cancelSignIn,
     connections.consentWaiting,
     connections.signInWaitNow,
+    listening,
     speaking,
     stopSpeaking,
     tab,
-    voiceView.voiceStatus,
   ]);
 
   // The rows say how long ago each session was seen, and a label left alone

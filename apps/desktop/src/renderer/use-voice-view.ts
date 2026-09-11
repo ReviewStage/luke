@@ -1,13 +1,15 @@
 import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
-import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import {
   IDLE_VOICE_VIEW,
+  SILENT_VOICE_LEVELS,
   VOICE_COMMAND,
   VOICE_COMMAND_OUTCOME,
   type VoiceCommandOutcome,
+  type VoiceLevels,
+  type VoiceSpeakers,
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { useAct } from "./act";
@@ -68,14 +70,22 @@ export function voiceActiveFor(input: {
 }
 
 /**
- * Whose voice the meter is drawing. The waveform follows whoever is actually
- * talking: the developer while the microphone is heard, Luke while he speaks,
- * nobody otherwise.
+ * Whose voice the one meter is drawing. The waveform follows whoever is
+ * actually talking: Luke while he speaks, the developer while the microphone
+ * is heard and Luke is not, nobody otherwise. Both speakers can stand at once
+ * and only one meter is drawn, so Luke's answer wins the place.
  */
-export function waveformVoice(status: LiveStatus): WaveformVoice | undefined {
-  if (status === LIVE_STATUS.SPEAKING) return WAVEFORM_VOICE.LUKE;
-  if (status === LIVE_STATUS.LISTENING) return WAVEFORM_VOICE.DEVELOPER;
+export function waveformVoice(speakers: VoiceSpeakers): WaveformVoice | undefined {
+  if (speakers.lukeSpeaking) return WAVEFORM_VOICE.LUKE;
+  if (speakers.listening) return WAVEFORM_VOICE.DEVELOPER;
   return undefined;
+}
+
+/** The loudness under that meter: the drawn voice's own, and nothing where no voice holds it. */
+export function drawnLevel(voice: WaveformVoice | undefined, levels: VoiceLevels): number {
+  if (voice === WAVEFORM_VOICE.LUKE) return levels.luke;
+  if (voice === WAVEFORM_VOICE.DEVELOPER) return levels.developer;
+  return 0;
 }
 
 /**
@@ -116,8 +126,12 @@ export interface VoiceViewState {
   view: VoiceView;
   /** Whether Luke is speaking — his reply under way — as of the last report. */
   speaking: boolean;
+  /** Whether the developer's microphone is being heard, which can stand with {@link speaking}. */
+  listening: boolean;
   voiceTurn: WaveformVoice | undefined;
-  /** How loud whoever is talking is, in the unit interval, as last relayed. */
+  /** How loud each speaker is, in the unit interval, as last relayed. */
+  levels: VoiceLevels;
+  /** How loud the voice the one meter draws is, which is {@link voiceTurn}'s own reading. */
   level: number;
   /**
    * Whether whoever holds the turn is audibly speaking, read off the relayed
@@ -150,18 +164,20 @@ export function useVoiceView(): VoiceViewState {
   const view = state?.voice.view ?? IDLE_VOICE_VIEW;
   // Each report is a fresh object even at a repeated loudness, so the hangover
   // below re-arms on every arrival rather than only on a changed number.
-  const [levelReport, setLevelReport] = useState({ level: 0 });
-  const level = levelReport.level;
+  const [levelReport, setLevelReport] = useState({ levels: SILENT_VOICE_LEVELS });
+  const levels = levelReport.levels;
+  const voiceTurn = waveformVoice(view);
+  const level = drawnLevel(voiceTurn, levels);
 
   useEffect(
-    () => window.sidecar.onVoiceLevelChanged((reported) => setLevelReport({ level: reported })),
+    () => window.sidecar.onVoiceLevelChanged((reported) => setLevelReport({ levels: reported })),
     [],
   );
   const [voiceActive, setVoiceActive] = useState(false);
   const lastLoudAt = useRef<number | undefined>(undefined);
   useEffect(() => {
     const decided = voiceActiveFor({
-      level: levelReport.level,
+      level,
       now: performance.now(),
       lastLoudAt: lastLoudAt.current,
     });
@@ -173,11 +189,11 @@ export function useVoiceView(): VoiceViewState {
     setVoiceActive(true);
     const timer = window.setTimeout(() => setVoiceActive(false), decided.remainingMs);
     return () => window.clearTimeout(timer);
-  }, [levelReport]);
+  }, [levelReport, level]);
   // A turn ending takes the voice with it, whatever the last level said. A
   // press whose call is still opening is a live turn: its device is already
   // heard, and the bars follow it as they will once the channel is up.
-  const turnLive = waveformVoice(view.voiceStatus) !== undefined || view.talkOpening;
+  const turnLive = voiceTurn !== undefined || view.talkOpening;
   useEffect(() => {
     if (!turnLive) setVoiceActive(false);
   }, [turnLive]);
@@ -217,8 +233,10 @@ export function useVoiceView(): VoiceViewState {
 
   return {
     view: panelVoiceView(view, stripLines),
-    speaking: view.voiceStatus === LIVE_STATUS.SPEAKING,
-    voiceTurn: waveformVoice(view.voiceStatus),
+    speaking: view.lukeSpeaking,
+    listening: view.listening,
+    voiceTurn,
+    levels,
     level,
     voiceActive: turnLive && voiceActive,
     brainRequests,

@@ -137,9 +137,9 @@ export function voiceRuntimeReports(
     // Relayed to the panels rather than written to the document: a loudness is
     // a reading that expires before the next one arrives, so no panel
     // bootstraps from it and no version of the document should carry one.
-    reportVoiceLevel(context, level) {
+    reportVoiceLevel(context, levels) {
       if (!voiceWindow.owns(context.sender)) return;
-      panels.broadcast(channels.onVoiceLevelChanged, level);
+      panels.broadcast(channels.onVoiceLevelChanged, levels);
     },
     setShortcutCapturing(context, capturing) {
       if (!panels.owns(context.sender)) return;

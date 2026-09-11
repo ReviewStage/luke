@@ -6,7 +6,12 @@ import {
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus, liveExchangeActive } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { Deferred, Effect, Exit, Fiber, FiberId, Runtime, type Scope } from "effect";
-import type { LiveCaptionRow, LiveVoiceCall, LiveVoiceCallEvents } from "./live-voice-call.js";
+import type {
+  LiveCaptionRow,
+  LiveVoiceCall,
+  LiveVoiceCallEvents,
+  LiveVoiceSpeakers,
+} from "./live-voice-call.js";
 import { NoticeStrip } from "./notice-strip.js";
 
 /**
@@ -22,8 +27,13 @@ export interface LiveVoiceSurroundings {
   microphoneGranted: boolean;
 }
 
-/** What a panel needs to draw the live conversation, reported whole on every edge. */
-export interface LiveVoiceView {
+/**
+ * What a panel needs to draw the live conversation, reported whole on every
+ * edge. Both speakers are carried beside the status, which names one of them
+ * at a time: the status is what the media duck and the exchange count read,
+ * and the two flags are what a full-duplex panel draws.
+ */
+export interface LiveVoiceView extends LiveVoiceSpeakers {
   voiceStatus: LiveStatus;
   voiceError: string | undefined;
   voiceNotice: string | undefined;
@@ -60,6 +70,9 @@ export interface LiveVoiceOrchestratorOptions {
   runtime?: Runtime.Runtime<never>;
 }
 
+/** Nobody heard on either side, which is what a call that is gone carries. */
+const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
+
 const MICROPHONE_REFUSED_NOTE =
   "The talk key needs the microphone. Allow it in System Settings, " +
   "under Privacy & Security, Microphone — or type to Luke instead.";
@@ -72,7 +85,9 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.talkOpening === right.talkOpening &&
     left.lukeCaptions === right.lukeCaptions &&
     left.liveConversationEntries === right.liveConversationEntries &&
-    left.spokenAskPending === right.spokenAskPending
+    left.spokenAskPending === right.spokenAskPending &&
+    left.listening === right.listening &&
+    left.lukeSpeaking === right.lukeSpeaking
   );
 }
 
@@ -116,6 +131,7 @@ export class LiveVoiceOrchestrator {
     microphoneGranted: false,
   };
   #status: LiveStatus = LIVE_STATUS.IDLE;
+  #speakers: LiveVoiceSpeakers = SILENT;
   #rows: readonly LiveCaptionRow[] = [];
   #lukeCaptions: readonly string[] | undefined;
   #liveEntries: readonly ConversationEntry[] = [];
@@ -290,6 +306,7 @@ export class LiveVoiceOrchestrator {
         if (this.#call) {
           this.#call = undefined;
           this.#status = LIVE_STATUS.IDLE;
+          this.#speakers = SILENT;
           this.#rows = [];
           this.#openedByPress = false;
           this.#endCall();
@@ -354,7 +371,7 @@ export class LiveVoiceOrchestrator {
       this.#openedByPress = input.byPress;
       this.#strip.clear();
       const call = this.#createCall({
-        onStatus: (status) => this.#onStatus(call, status),
+        onStatus: (status, speakers) => this.#onStatus(call, status, speakers),
         onCaptions: (rows) => this.#onCaptions(call, rows),
         onError: (message) => this.#strip.showError(message),
       });
@@ -404,12 +421,19 @@ export class LiveVoiceOrchestrator {
     }).pipe(Effect.onExit(() => Effect.asVoid(Deferred.succeed(opened, undefined))));
   }
 
-  #onStatus(call: LiveVoiceCall, status: LiveStatus): void {
+  #onStatus(call: LiveVoiceCall, status: LiveStatus, speakers: LiveVoiceSpeakers): void {
     if (this.#call !== call) return;
     this.#status = status;
-    if (status === LIVE_STATUS.LISTENING) this.#lastListening = true;
-    else if (status === LIVE_STATUS.MUTED || status === LIVE_STATUS.SPEAKING) {
-      this.#lastListening = call.listening;
+    this.#speakers = speakers;
+    // Only a standing session's status says anything about the microphone:
+    // the rest leave the last live reading where it was, which is what a
+    // session lost mid-hold was carrying.
+    if (
+      status === LIVE_STATUS.LISTENING ||
+      status === LIVE_STATUS.MUTED ||
+      status === LIVE_STATUS.SPEAKING
+    ) {
+      this.#lastListening = speakers.listening;
     }
     if (status === LIVE_STATUS.IDLE || status === LIVE_STATUS.FAILED) {
       this.#call = undefined;
@@ -450,6 +474,8 @@ export class LiveVoiceOrchestrator {
   #compose(): LiveVoiceView {
     return {
       voiceStatus: this.#status,
+      listening: this.#speakers.listening,
+      lukeSpeaking: this.#speakers.lukeSpeaking,
       voiceError: this.#strip.error,
       voiceNotice: this.#strip.notice,
       talkOpening: this.#talkOpening,

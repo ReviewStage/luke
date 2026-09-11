@@ -23,6 +23,7 @@ import type {
   LiveVoiceCall,
   LiveVoiceCallEvents,
   LiveVoiceCallOpening,
+  LiveVoiceSpeakers,
 } from "@sidecar/voice/orchestrator";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { Deferred, Duration, Effect, Exit, type Fiber, FiberId, Runtime, type Scope } from "effect";
@@ -139,6 +140,12 @@ export class LiveCall implements LiveVoiceCall {
   #closing = false;
   #micLive = false;
   #lukeSpeaking = false;
+  /**
+   * The pair last handed to the policy. The status alone cannot stand in for
+   * it: the microphone opening under Luke's own sentence moves a speaker and
+   * leaves the status where it was.
+   */
+  #reportedSpeakers: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
   #pendingSwitch: PendingSwitch | undefined;
   #idleTimer: Fiber.RuntimeFiber<void> | undefined;
   #idleReported = false;
@@ -564,9 +571,20 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   #setStatus(status: LiveStatus): void {
-    if (this.#status === status) return;
+    const speakers: LiveVoiceSpeakers = {
+      listening: this.listening,
+      lukeSpeaking: this.#lukeSpeaking,
+    };
+    if (
+      this.#status === status &&
+      this.#reportedSpeakers.listening === speakers.listening &&
+      this.#reportedSpeakers.lukeSpeaking === speakers.lukeSpeaking
+    ) {
+      return;
+    }
     this.#status = status;
-    this.#options.events.onStatus(status);
+    this.#reportedSpeakers = speakers;
+    this.#options.events.onStatus(status, speakers);
   }
 
   /**

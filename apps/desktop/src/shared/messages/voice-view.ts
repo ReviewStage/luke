@@ -4,6 +4,7 @@ import { type ConversationEntry, storedConversationEntry } from "@sidecar/sessio
 import {
   isOptionalWireString,
   isRecord,
+  isUnitLevel,
   isWireBoolean,
   isWireString,
   type UnparsedWireValue,
@@ -16,7 +17,19 @@ import {
  * main process forwards it unchanged to every panel, so each display draws the
  * same voice state at the same instant and holds nothing it cannot lose.
  */
-export interface VoiceView {
+export interface VoiceSpeakers {
+  /** Whether the developer's microphone is being heard. */
+  listening: boolean;
+  /** Whether Luke is audible on the remote track. */
+  lukeSpeaking: boolean;
+}
+
+export interface VoiceView extends VoiceSpeakers {
+  /**
+   * The one claim the status names, which the media duck, the exchange count,
+   * and the captions read; who is actually being heard is the two flags
+   * above, since a full-duplex session can carry both at once.
+   */
   voiceStatus: LiveStatus;
   voiceError: string | undefined;
   voiceNotice: string | undefined;
@@ -36,6 +49,23 @@ export interface VoiceView {
    * before anything is written.
    */
   spokenAskPending: boolean;
+}
+
+/**
+ * How loud each speaker is right now, in the unit interval. Two readings
+ * rather than one because either may be talking under the other, and a panel
+ * that draws one of them must not be handed the other's loudness.
+ */
+export interface VoiceLevels {
+  developer: number;
+  luke: number;
+}
+
+/** Nobody heard, which is what a panel draws before any reading arrives. */
+export const SILENT_VOICE_LEVELS: VoiceLevels = { developer: 0, luke: 0 };
+
+export function isVoiceLevels(value: UnparsedWireValue): value is VoiceLevels & WireRecord {
+  return isRecord(value) && isUnitLevel(value.developer) && isUnitLevel(value.luke);
 }
 
 /**
@@ -77,6 +107,8 @@ export function isVoiceCommandOutcome(value: UnparsedWireValue): value is VoiceC
  */
 export const IDLE_VOICE_VIEW: VoiceView = {
   voiceStatus: LIVE_STATUS.IDLE,
+  listening: false,
+  lukeSpeaking: false,
   voiceError: undefined,
   voiceNotice: undefined,
   talkOpening: false,
@@ -104,6 +136,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isWireBoolean(value.spokenAskPending)) return false;
+  if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;
   const captions = value.lukeCaptions;
   if (captions !== undefined && !(Array.isArray(captions) && captions.every(isWireString))) {
     return false;
