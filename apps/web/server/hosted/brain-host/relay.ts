@@ -29,7 +29,12 @@ import {
 import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import type { StoreWriter } from "./announce.js";
-import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND, type BrainHostTurn } from "./bounds.js";
+import {
+  BRAIN_HOST_TURN,
+  BRAIN_HOST_TURN_KIND,
+  type BrainHostTurn,
+  RECEIVED_LINE,
+} from "./bounds.js";
 import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
 
 /**
@@ -400,7 +405,8 @@ export class StreamRelay {
   async #received(eveTurnId: string, text: string, standing: RelayStanding): Promise<void> {
     const turn = standing.state.get().turns[eveTurnId];
     if (!turn) return;
-    const { trigger } = BRAIN_HOST_TURN_KIND[turn.kind];
+    const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
+    if (receivedLine === RECEIVED_LINE.TRANSCRIPT) return;
     const written = await this.#tell(eveTurnId, standing, {
       kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
       message: userMessage(
