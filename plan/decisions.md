@@ -410,3 +410,38 @@ names the consumer in the module comment so the next reader does not go looking 
 in a payload schema; and the two-devices-claim test is named for the **guarantee** (at most one
 authorization to speak per run, never that the words were heard) rather than for the index, which
 is its backstop and not its mechanism.
+
+
+## 2026-09-11 — Correction: the adapter's stability obligation is structural, and C1 already discharged it (orchestrator)
+
+Amending my own entry above, the one that told C2b an adapter "must carry a call id and a
+reasoning item id through a retry unchanged" and warned that **a reasoning event whose item names
+no id is dropped whole**. Both halves are true of the writer read in isolation. **Both are
+irrelevant in the composition**, and a reader who stops at that entry will believe reasoning is
+being dropped when it is not.
+
+**`apps/web/server/hosted/brain-host/ids.ts` (C1) is where the obligation actually lives.** It
+mints the ids eve's stream names only relatively, as **name-based version-8 uuids** over fixed
+coordinates — SHA-256 of a fixed namespace and a JSON-joined coordinate — and its own comment
+states the requirement I thought I was imposing on a future adapter: *"a retried step that
+re-emits an event under a new event id lands on the row the first attempt opened rather than
+beside it."* The relay therefore never hands the writer a no-id reasoning item.
+
+- `hostTurnId(sessionId, eveTurnId)` — the store's turn id.
+- `receivedMessageId(sessionId, eveTurnId)` — the user message's client id, **one per turn,
+  "since eve delivers one message per turn."**
+- `answerMessageId(sessionId, eveTurnId)` — the assistant message's client id.
+- `reasoningItemId(sessionId, eveTurnId, stepIndex, ordinal)` — a reasoning item's id.
+
+**So the rule for C3, C5, C7 and C8 is: mint through `ids.ts`, never invent a coordinate.** The
+one soft spot, raised with C2b and not yet answered: three of `reasoningItemId`'s coordinates are
+eve's own and the **`ordinal` is ours** — the relay's count within the step — so a *partial*
+replay of a step's reasoning items would shift it. C2b is answering that from eve's behaviour
+rather than from the code's shape.
+
+**And one independent confirmation for the `asks` decision now with Dean.** `receivedMessageId`'s
+"one message per turn" is the same fact from the other end: a folded turn has **one** received
+message, so the route cannot write a user message per ask, and two client ids cannot map onto it.
+C2b derived that from eve's stream; C1's id module assumed it in a comment. Two paths to the same
+constraint is the strongest evidence available that the ask record has to exist somewhere, and
+that `turns` is not that somewhere.
