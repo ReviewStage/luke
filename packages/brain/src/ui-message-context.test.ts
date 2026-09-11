@@ -16,7 +16,7 @@ import {
   TOOL_PART_STATE,
   type ToolPartState,
 } from "@sidecar/session";
-import type { StoredUIMessage } from "@sidecar/session/ui-messages";
+import { REPLAY_PROVIDER_KEY, type StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   isRecord,
   isWireString,
@@ -50,6 +50,7 @@ import {
   UI_MESSAGE_ENGINE_REFUSAL,
   UIMessageContextEngine,
 } from "./ui-message-context.js";
+import { REASONING_PROVIDER_KEY } from "./ui-messages.js";
 
 const RUNTIME = { id: "tool-loop", version: 1 };
 const LOST_RESULT = { status: UNKNOWN_ACTION_STATUS, reason: "the result was lost" } as const;
@@ -781,4 +782,8 @@ test("a mark rolls the rows back, a foreign mark is refused, and dispose empties
   });
   context.dispose();
   assert.deepEqual(context.checkpoint().items, []);
+});
+
+test("the slot the brain writes the replay item under is the slot the client shape strips", () => {
+  assert.equal(REASONING_PROVIDER_KEY, REPLAY_PROVIDER_KEY);
 });

@@ -21,6 +21,7 @@ import {
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
+  isRecord,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -29,6 +30,8 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
   type WireRecord,
 } from "@sidecar/wire";
 import { eq, sql } from "drizzle-orm";
@@ -402,6 +405,71 @@ async function populate(userId: string) {
     [later, read],
   ];
   return { main, observed, turns: { typed, roster, later, idle }, messages: { look }, expected };
+}
+
+/** The provider slot a reasoning part keeps its opaque replay item under, as the brain writes it. */
+const REPLAY_SLOT = {
+  openai: { itemId: "rs_fixture_0f3a1c22", reasoningEncryptedContent: "Zml4dHVyZS1vcGFxdWU=" },
+};
+
+test("a message's replay slot never leaves the service, and the stored row keeps it", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(userId);
+  const typed = await insertTurn(userId, main);
+  await insertMessage(userId, main, 1, { turnId: typed });
+  const reply = await insertMessage(userId, main, 2, {
+    turnId: typed,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    parts: [
+      { type: "step-start" },
+      {
+        type: "reasoning",
+        text: "Read the tail first.",
+        state: "done",
+        providerMetadata: REPLAY_SLOT,
+      },
+      {
+        type: "text",
+        text: "It is waiting.",
+        state: "done",
+        providerMetadata: { openai: { itemId: "msg_1" } },
+      },
+    ],
+  });
+
+  const answer = await answered(
+    await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES))),
+    conversationMessagesAnswerSchema,
+  );
+  const parts = answer.groups.flatMap((group) =>
+    group.messages.flatMap((row) => wireParts(row.message.parts)),
+  );
+  assert.equal(parts.length, 4);
+  assert.deepEqual(
+    parts.map((part) => "providerMetadata" in part),
+    [false, false, false, false],
+  );
+  assert.deepEqual(
+    parts.filter((part) => part.type === "reasoning"),
+    [{ type: "reasoning", text: "Read the tail first.", state: "done" }],
+  );
+
+  const [stored] = await database.db.select().from(messages).where(eq(messages.id, reply));
+  assert.ok(stored);
+  // SAFETY: the parts column is jsonb, read back as the JSON the test wrote.
+  const storedParts = wireParts(unparsedWire(stored.parts as WireBoundaryInput));
+  assert.deepEqual(storedParts[1]?.providerMetadata, REPLAY_SLOT);
+  assert.deepEqual(storedParts[2]?.providerMetadata, { openai: { itemId: "msg_1" } });
+});
+
+/** A message's parts as JSON records, the way a device parses them; anything else fails the test. */
+function wireParts(parts: UnparsedWireValue): WireRecord[] {
+  assert.ok(Array.isArray(parts));
+  return parts.map((part) => {
+    assert.ok(isRecord(part));
+    return part;
+  });
 }
 
 test("the gate order is method, bearer, and query, and every refusal is one shape", async () => {

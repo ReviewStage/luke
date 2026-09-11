@@ -107,4 +107,10 @@ the same millisecond apart. An answer carries a cursor as the validated
 string, not the decoded record, since the string is what goes back on the
 wire. The message inside a group is admitted as a record and nothing
 narrower: holding it to the vocabulary is `readStoredUIMessages`'s step,
-above this package, under the registry the reader holds.
+above this package, under the registry the reader holds. What the route
+puts in that record is `@sidecar/session/ui-messages`'s `ClientUIMessage`,
+the one shape a read route may answer with: minted by `clientUIMessage`
+alone, which cuts the provider's replay slot (`providerMetadata.openai`, the
+opaque reasoning item and its id) from every part, so a device receives the
+reasoning's summary text and never the item, whichever route carries the
+message. The stored row keeps the slot for the model's own replay.
