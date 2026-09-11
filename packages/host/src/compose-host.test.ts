@@ -42,7 +42,6 @@ function fixtureHost(stateRoot: string) {
     createWorker: () => {
       throw new Error("a fixture run keeps nothing on disk");
     },
-    registerProviderHooks: false,
     now: () => 0,
     createId: () => "id",
     report: () => undefined,

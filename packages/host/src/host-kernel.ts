@@ -25,13 +25,6 @@ export interface HostSeams {
   environment: NodeJS.ProcessEnv;
   cipher: SecretCipher;
   createWorker: () => StorePort;
-  /**
-   * Whether the observation hooks are registered with the providers' own
-   * user-level configurations at start. A validation run on a temporary
-   * state root says no, so nothing of the developer's real provider
-   * configuration moves; the transcripts are observed either way.
-   */
-  registerProviderHooks?: boolean;
   now: () => number;
   createId: () => string;
   report: (message: string) => void;

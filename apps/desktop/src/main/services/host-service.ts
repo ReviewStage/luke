@@ -86,7 +86,6 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
       }
       return new Worker(storeWorkerPath(config.resourceDirectory), { name: "brain-store" });
     },
-    registerProviderHooks: runMode.observesProviders,
     now: Date.now,
     createId: () => randomUUID(),
     report: config.report,

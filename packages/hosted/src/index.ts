@@ -11,6 +11,14 @@ export {
 } from "./account-call.js";
 export type { AccountToken } from "./account-token.js";
 export {
+  HOSTED_ACTION_FAILURE,
+  HostedActionClient,
+  type HostedActionClientOptions,
+  type HostedActionFailure,
+  type HostedActionOutcome,
+  type HostedActionTarget,
+} from "./action-client.js";
+export {
   type HostedActionAnswer,
   type HostedActionWorkspaceAnswer,
   hostedActionAnswerSchema,
@@ -152,6 +160,11 @@ export {
   RESPONSES_MESSAGE_ROLE,
   serializedRequestBytes,
 } from "./responses-input.js";
+export {
+  HostedRosterClient,
+  type HostedRosterClientOptions,
+  snapshotRoster,
+} from "./roster-client.js";
 export {
   conversationMessageRatingPath,
   HOSTED_SERVICE_PATH,

@@ -325,8 +325,10 @@ under the "read the recent tail" terms above, and the pass itself still reads
 none. We keep the latest roster it read, encrypted at rest with the same
 server-only secret as your keys, and beside it what changed since the pass
 before — a session that appeared or vanished, a status that moved, an error
-line that changed — so the phone and watch can show your sessions without
-asking Conductor again, and so Luke can later be woken by a change rather
+line that changed — so the Mac app, the phone, and the watch can show your
+sessions without asking Conductor again (the Mac app reads this stored roster
+from our service on your account about once a minute, and draws its rows from
+nothing else), and so Luke can later be woken by a change rather
 than by a clock. The roster and its changes are replaced on every pass;
 nothing older is kept.
 Observation stops, and the stored roster and changes are deleted, when you
@@ -361,8 +363,8 @@ and email you signed it with, and any screenshots you attached.
   whose microphone is closed. A typed turn sends your words, each voice
   session carries the recent Conversation lines and the session summary
   described above as it opens, and both kinds of turn send the session fields
-  listed above — on the Mac app, read locally from your machine; on iOS and
-  Apple Watch, drawn from the same cloud observation your vault keys already
+  listed above — on the Mac app, iOS, and Apple Watch alike, drawn from the
+  same cloud observation your vault keys already
   allow (titles, status, repository, and branch of your cloud sessions, as
   described under Provider API keys above). When you use voice through your
   Luke account, the Mac reaches OpenAI through our own voice service, which
