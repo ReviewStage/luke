@@ -28,6 +28,10 @@ milliseconds.
 
 That one subscription is an `Atom` over the stream of the bridge's deliveries,
 held in the registry `renderer-runtime.ts` makes and each root provides. The
+runtime beside that registry is the bundle's one Effect edge, and not the
+atoms' alone: `rendererRuntimeNow` hands it to work that is a fiber of its own
+rather than an atom's — the voice window's call — so nothing here builds a
+second runtime to fork on. The
 stream's scope is what installs the subscription, before anything is asked
 for, so the one read a root awaits is a bootstrap rather than a race, and the
 version rule above is a step of the stream rather than a comparison a reader
@@ -96,8 +100,20 @@ nobody pressed for), the `oai-events` data channel created before the offer,
 ICE gathered under a bound, the offer handed to the host through
 `ACT_KIND.VOICE_CREATE_LIVE_SESSION`, the host's SDP answer set — and never
 sends `session.start`, because the host's request is what started the
-session. `voice/live-call.ts` is a table of handlers keyed by
-`LIVE_SERVER_EVENT` over `parseLiveServerEvent`: it waits for
+session. It hands the peer over acquired into the caller's `Scope` rather
+than to be closed by hand, so the connection and the device that rode its
+offer are released when that scope closes, and a scope closes once. `voice/live-call.ts` is that scope's owner and a table of handlers keyed by
+`LIVE_SERVER_EVENT` over `parseLiveServerEvent`. The session's life is one
+fiber on the runtime above, holding the scope the peer was acquired into: the
+fiber ends when the call does, or when it is interrupted, and either way the
+peer is released exactly once. Every bound the call keeps — the start, the
+graceful close, the microphone acknowledgment, the speaking hangover, the
+caption tick, the idle window — is an `Effect.sleep` forked into that same
+scope, so nothing is left armed behind a session that ended and a test drives
+all six by advancing a `TestClock` rather than by standing a timer seam in.
+The four verbs the policy above the peer holds still answer promises, and each
+runs its effect on the runtime the call was handed rather than on one of its
+own. It waits for
 `session.started`, sends only the mute, the unmute, and the close the data
 channel permissions allow it, opens the capture device for an unmute when
 none stands and puts it on the line before the switch goes, flips the track

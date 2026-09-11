@@ -13,14 +13,17 @@
 
 import * as Atom from "@effect-atom/atom/Atom";
 import * as Registry from "@effect-atom/atom/Registry";
+import * as Result from "@effect-atom/atom/Result";
 import { scheduleTask } from "@effect-atom/atom-react/RegistryContext";
-import { Layer } from "effect";
+import { Layer, type Runtime } from "effect";
 
 /**
  * No service stands yet: what the runtime is for is holding the fibers the
- * atoms fork, and a layer arrives here when a surface needs one.
+ * atoms fork, and a layer arrives here when a surface needs one. It is kept
+ * alive because it is the bundle's one edge: a runtime the registry disposed
+ * between two readings would be a second runtime to whatever it handed out.
  */
-export const rendererRuntime = Atom.runtime(Layer.empty);
+export const rendererRuntime = Atom.keepAlive(Atom.runtime(Layer.empty));
 
 /**
  * The registry both roots provide, so a hook reading an atom and a callback
@@ -29,3 +32,12 @@ export const rendererRuntime = Atom.runtime(Layer.empty);
  * delivery's redraws into one.
  */
 export const rendererRegistry = Registry.make({ scheduleTask });
+
+/**
+ * The same runtime, for work that is a fiber of its own rather than an atom's:
+ * the voice window's call forks its session's life and every bound of it here,
+ * so a fiber outside the atoms still runs on the one runtime this bundle has.
+ * The layer is built synchronously, so there is nothing to wait for.
+ */
+export const rendererRuntimeNow = (): Runtime.Runtime<never> =>
+  Result.getOrThrow(rendererRegistry.get(rendererRuntime));

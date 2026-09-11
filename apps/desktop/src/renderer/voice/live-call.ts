@@ -18,7 +18,6 @@ import {
   TRANSCRIPT_SPEAKER,
   unmuteEvent,
 } from "@sidecar/live";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -26,14 +25,24 @@ import type {
   LiveVoiceCallOpening,
 } from "@sidecar/voice/orchestrator";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
+import {
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  type Fiber,
+  FiberId,
+  Runtime,
+  type Scope,
+} from "effect";
 import { LiveCaptions } from "./live-captions";
 import {
+  acquireLivePeer,
   LIVE_PEER_OUTCOME,
   type LivePeer,
   type LivePeerConnection,
-  openLivePeer,
   stopDevice,
-  teardown,
 } from "./live-peer";
 
 /** How long a created session may take to announce itself started before the peer gives up on it. */
@@ -74,16 +83,19 @@ export interface LiveCallOptions {
   onLocalStream: (stream: MediaStream | undefined) => void;
   /** The development trace's tap, handed each event as it crossed the channel. */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
-  now: () => number;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
+  /**
+   * The renderer's own runtime edge, which this bundle has one of: every wait
+   * and every bound of the call is a fiber forked on it, and the clock the
+   * captions are stamped from is its clock, so a test drives both by advancing
+   * a `TestClock` rather than by standing a timer seam in.
+   */
+  runtime: Runtime.Runtime<never>;
 }
 
 /** One pending microphone switch, settled by its acknowledgment or the error naming it. */
 interface PendingSwitch {
   eventId: string;
-  resolve: (acknowledged: boolean) => void;
-  timer: ScheduledTimer;
+  acknowledged: Deferred.Deferred<boolean>;
 }
 
 type ServerEventHandler<Type extends LiveServerEvent["type"]> = (
@@ -102,10 +114,31 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  * reports its transport and its idle to the host, and reads Luke as speaking
  * from the remote track's playback level rather than from transcript events.
  * Every append is the host's, over its sideband.
+ *
+ * The session's life is one fiber on the renderer's runtime, holding the scope
+ * the peer was acquired into: the fiber ends when the call does, and the peer
+ * is released then — or when the fiber is interrupted — exactly once, because
+ * a scope closes once. Every bound the call keeps is an `Effect.sleep` forked
+ * into that same scope, so nothing is left armed behind a session that ended.
+ *
+ * @deprecated The four verbs answer promises because {@link LiveVoiceCall} is
+ * what the policy above the peer still holds, so each runs its effect on the
+ * runtime the call was handed rather than on one of its own. P9-08 deletes the
+ * promise-facing seam once the hooks and the orchestrator take the fiber.
  */
 export class LiveCall implements LiveVoiceCall {
   readonly #options: LiveCallOptions;
+  readonly #runtime: Runtime.Runtime<never>;
   readonly #captions: LiveCaptions;
+  /** The session's life: while it stands, so does the scope the peer was acquired into. */
+  #lifecycle: Fiber.RuntimeFiber<void> | undefined;
+  /** The open still negotiating, so a second ask reads its answer rather than a session that is not standing yet. */
+  #opening: Deferred.Deferred<boolean> | undefined;
+  #scope: Scope.Scope | undefined;
+  /** Completed by every end of the call, which is what lets the lifecycle fiber unwind. */
+  readonly #ending = Deferred.unsafeMake<void>(FiberId.none);
+  readonly #announcedStart = Deferred.unsafeMake<boolean>(FiberId.none);
+  readonly #announcedClose = Deferred.unsafeMake<void>(FiberId.none);
   #peer: LivePeer | undefined;
   #status: LiveStatus = LIVE_STATUS.IDLE;
   #started = false;
@@ -113,24 +146,23 @@ export class LiveCall implements LiveVoiceCall {
   #closing = false;
   #micLive = false;
   #lukeSpeaking = false;
-  #startWaiter: ((started: boolean) => void) | undefined;
-  #closeWaiter: (() => void) | undefined;
   #pendingSwitch: PendingSwitch | undefined;
-  #idleTimer: ScheduledTimer | undefined;
+  #idleTimer: Fiber.RuntimeFiber<void> | undefined;
   #idleReported = false;
-  #speakingHangover: ScheduledTimer | undefined;
-  #captionTick: ScheduledTimer | undefined;
+  #speakingHangover: Fiber.RuntimeFiber<void> | undefined;
+  #captionTick: Fiber.RuntimeFiber<void> | undefined;
   /** Counts the mutes, so an unmute still opening its device learns the key came up while it waited. */
   #muteEpoch = 0;
   /** The mute under way, so a press landing before its release has settled waits for the device to be let go of first. */
-  #muting: Promise<boolean> | undefined;
+  #muting: Deferred.Deferred<boolean> | undefined;
   #ids = 0;
 
   constructor(options: LiveCallOptions) {
     this.#options = options;
+    this.#runtime = options.runtime;
     this.#captions = new LiveCaptions({
       onRows: (rows) => this.#onRows(rows),
-      now: options.now,
+      now: () => this.#now(),
     });
   }
 
@@ -150,37 +182,18 @@ export class LiveCall implements LiveVoiceCall {
     return this.standing && this.#micLive;
   }
 
-  async open(opening: LiveVoiceCallOpening): Promise<boolean> {
-    if (this.#peer) return this.standing;
-    this.#setStatus(LIVE_STATUS.CONNECTING);
-    const opened = await openLivePeer({
-      createPeerConnection: this.#options.createPeerConnection,
-      ...(opening.byPress ? { openMicrophone: this.#options.openMicrophone } : undefined),
-      createSession: this.#options.acts.createSession,
-      onRemoteStream: (stream) => this.#options.onRemoteStream(stream),
-      schedule: this.#options.schedule,
-      cancel: this.#options.cancel,
-    });
-    if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {
-      this.#options.events.onError(opened.message);
-      this.#setStatus(LIVE_STATUS.FAILED);
-      return false;
-    }
-    const peer = opened.peer;
-    this.#peer = peer;
-    this.#options.onLocalStream(peer.microphoneStream);
-    peer.connection.onconnectionstatechange = () => this.#onTransport(peer);
-    peer.channel.onmessage = (message) => this.#onMessage(message);
-    peer.channel.onclose = () => this.#onChannelClosed();
-    const started = await this.#awaitStart();
-    if (!started) {
-      if (!this.#ended) {
-        this.#options.events.onError(SESSION_START_TIMEOUT_MESSAGE);
-        this.#tearDown(LIVE_STATUS.FAILED);
-      }
-      return false;
-    }
-    return true;
+  open(opening: LiveVoiceCallOpening): Promise<boolean> {
+    const negotiating = this.#opening;
+    if (negotiating) return this.#run(Deferred.await(negotiating));
+    if (this.#lifecycle) return Promise.resolve(this.standing);
+    const opened = Deferred.unsafeMake<boolean>(FiberId.none);
+    this.#opening = opened;
+    this.#lifecycle = Runtime.runFork(this.#runtime)(
+      Effect.scoped(this.#lifecycleEffect(opening, opened)).pipe(
+        Effect.ensuring(this.#settleOpening(opened, false)),
+      ),
+    );
+    return this.#run(Deferred.await(opened));
   }
 
   /**
@@ -190,46 +203,8 @@ export class LiveCall implements LiveVoiceCall {
    * stopped and off the line, since the mute that release sent found nothing
    * to release.
    */
-  async unmute(): Promise<boolean> {
-    while (this.#muting) await this.#muting;
-    const peer = this.#peer;
-    if (!peer || !this.#started || this.#ended) return false;
-    if (!peer.microphoneStream) {
-      const epoch = this.#muteEpoch;
-      let stream: MediaStream;
-      try {
-        stream = await this.#options.openMicrophone();
-      } catch {
-        return false;
-      }
-      const track = stream.getAudioTracks()[0];
-      if (!track || epoch !== this.#muteEpoch || this.#ended) {
-        stopDevice(stream);
-        return false;
-      }
-      track.enabled = false;
-      try {
-        await peer.sender.replaceTrack(track);
-      } catch {
-        stopDevice(stream);
-        return false;
-      }
-      if (epoch !== this.#muteEpoch || this.#ended) {
-        await this.#takeOffLine(peer, stream);
-        return false;
-      }
-      peer.microphone = track;
-      peer.microphoneStream = stream;
-      this.#options.onLocalStream(stream);
-    }
-    if (this.#micLive) return true;
-    const acknowledged = await this.#switchMicrophone(unmuteEvent);
-    if (!acknowledged || !this.#peer?.microphone) return false;
-    this.#peer.microphone.enabled = true;
-    this.#micLive = true;
-    this.#armIdle();
-    this.#refreshStatus();
-    return true;
+  unmute(): Promise<boolean> {
+    return this.#run(this.#unmuteEffect());
   }
 
   /**
@@ -243,24 +218,21 @@ export class LiveCall implements LiveVoiceCall {
    * The answer stays the session's own word on the switch.
    */
   mute(): Promise<boolean> {
-    if (this.#muting) return this.#muting;
+    const held = this.#muting;
+    if (held) return this.#run(Deferred.await(held));
     const peer = this.#peer;
     if (!peer || !this.#started || this.#ended) return Promise.resolve(false);
     this.#muteEpoch += 1;
-    this.#muting = this.#muteAndRelease(peer).finally(() => {
-      this.#muting = undefined;
-    });
-    return this.#muting;
-  }
-
-  async #muteAndRelease(peer: LivePeer): Promise<boolean> {
-    const unmuting = this.#pendingSwitch !== undefined;
-    const acknowledged = this.#micLive || unmuting ? await this.#switchMicrophone(muteEvent) : true;
-    await this.#releaseDevice(peer);
-    this.#micLive = false;
-    this.#armIdle();
-    this.#refreshStatus();
-    return acknowledged;
+    const muting = Deferred.unsafeMake<boolean>(FiberId.none);
+    this.#muting = muting;
+    return this.#run(
+      Effect.onExit(this.#muteAndRelease(peer), (exit) =>
+        Effect.sync(() => {
+          this.#muting = undefined;
+          Deferred.unsafeDone(muting, exit);
+        }),
+      ),
+    );
   }
 
   /**
@@ -268,34 +240,14 @@ export class LiveCall implements LiveVoiceCall {
    * handler already stands, `session.close` goes, and everything stays open
    * until `session.closed` arrives or the bound passes.
    */
-  async close(): Promise<void> {
-    const peer = this.#peer;
-    if (!peer || this.#ended) return;
-    if (this.#closing) return;
-    this.#closing = true;
-    this.#setStatus(LIVE_STATUS.CLOSING);
-    // A channel that cannot carry the close leaves the hang-up to the host,
-    // whose sideband can still close the session gracefully.
-    if (!this.#started || peer.channel.readyState !== "open") {
-      this.#options.acts.endSession();
-      this.#tearDown(LIVE_STATUS.IDLE);
-      return;
-    }
-    const closed = new Promise<void>((resolve) => {
-      this.#closeWaiter = resolve;
-    });
-    this.#send(closeEvent(this.#nextId()));
-    const timer = this.#schedule(() => this.#closeWaiter?.(), SESSION_CLOSE_TIMEOUT_MS);
-    await closed;
-    this.#cancel(timer);
-    this.#closeWaiter = undefined;
-    if (!this.#ended) this.#tearDown(LIVE_STATUS.IDLE);
+  close(): Promise<void> {
+    return this.#run(this.#closeEffect());
   }
 
   /** Luke audible on the remote track, from the level meter: the one source of the speaking status, held through his pauses. */
   reportRemoteAudioLevel(active: boolean): void {
     if (this.#speakingHangover !== undefined) {
-      this.#cancel(this.#speakingHangover);
+      this.#disarm(this.#speakingHangover);
       this.#speakingHangover = undefined;
     }
     if (active) {
@@ -305,11 +257,11 @@ export class LiveCall implements LiveVoiceCall {
       return;
     }
     if (!this.#lukeSpeaking) return;
-    this.#speakingHangover = this.#schedule(() => {
+    this.#speakingHangover = this.#arm(SPEAKING_HANGOVER_MS, () => {
       this.#speakingHangover = undefined;
       this.#lukeSpeaking = false;
       this.#refreshStatus();
-    }, SPEAKING_HANGOVER_MS);
+    });
   }
 
   /** Speech energy on the microphone, from the level meter: what resets the idle window. */
@@ -325,12 +277,12 @@ export class LiveCall implements LiveVoiceCall {
   readonly #handlers: ServerEventHandlers = {
     [LIVE_SERVER_EVENT.SESSION_STARTED]: () => {
       this.#started = true;
-      this.#startWaiter?.(true);
+      Deferred.unsafeDone(this.#announcedStart, Exit.succeed(true));
       this.#refreshStatus();
       this.#armIdle();
     },
     [LIVE_SERVER_EVENT.SESSION_CLOSED]: () => {
-      this.#closeWaiter?.();
+      Deferred.unsafeDone(this.#announcedClose, Exit.void);
       this.#tearDown(LIVE_STATUS.IDLE);
     },
     [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED]: (event) => this.#acknowledge(event.client_event_id),
@@ -350,6 +302,152 @@ export class LiveCall implements LiveVoiceCall {
     },
   };
 
+  /**
+   * The session's whole life, in the scope the peer belongs to: the scope
+   * closes when this returns, whether the open failed, the call ended, or the
+   * fiber was interrupted.
+   */
+  #lifecycleEffect(
+    opening: LiveVoiceCallOpening,
+    opened: Deferred.Deferred<boolean>,
+  ): Effect.Effect<void, never, Scope.Scope> {
+    return Effect.gen(this, function* () {
+      this.#scope = yield* Effect.scope;
+      const standing = yield* this.#openEffect(opening);
+      yield* this.#settleOpening(opened, standing);
+      if (standing) yield* Deferred.await(this.#ending);
+    });
+  }
+
+  /**
+   * The open's answer, and the end of its being in flight: an ask arriving
+   * from here reads the call's own standing, since the peer either stands or
+   * never will.
+   */
+  #settleOpening(opened: Deferred.Deferred<boolean>, standing: boolean): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.#opening = undefined;
+      return Effect.asVoid(Deferred.succeed(opened, standing));
+    });
+  }
+
+  #openEffect(opening: LiveVoiceCallOpening): Effect.Effect<boolean, never, Scope.Scope> {
+    return Effect.gen(this, function* () {
+      this.#setStatus(LIVE_STATUS.CONNECTING);
+      const opened = yield* acquireLivePeer({
+        createPeerConnection: this.#options.createPeerConnection,
+        ...(opening.byPress ? { openMicrophone: this.#options.openMicrophone } : undefined),
+        createSession: this.#options.acts.createSession,
+        onRemoteStream: (stream) => this.#options.onRemoteStream(stream),
+      });
+      if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {
+        this.#options.events.onError(opened.message);
+        this.#setStatus(LIVE_STATUS.FAILED);
+        return false;
+      }
+      const peer = opened.peer;
+      this.#peer = peer;
+      this.#options.onLocalStream(peer.microphoneStream);
+      peer.connection.onconnectionstatechange = () => this.#onTransport(peer);
+      peer.channel.onmessage = (message) => this.#onMessage(message);
+      peer.channel.onclose = () => this.#onChannelClosed();
+      const started = yield* this.#awaitStart();
+      if (started) return true;
+      if (!this.#ended) {
+        this.#options.events.onError(SESSION_START_TIMEOUT_MESSAGE);
+        this.#tearDown(LIVE_STATUS.FAILED);
+      }
+      return false;
+    });
+  }
+
+  #awaitStart(): Effect.Effect<boolean> {
+    if (this.#started) return Effect.succeed(true);
+    return Effect.race(
+      Deferred.await(this.#announcedStart),
+      Effect.as(Effect.sleep(Duration.millis(SESSION_START_TIMEOUT_MS)), false),
+    );
+  }
+
+  #unmuteEffect(): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      for (let muting = this.#muting; muting; muting = this.#muting) yield* Deferred.await(muting);
+      const peer = this.#peer;
+      if (!peer || !this.#started || this.#ended) return false;
+      if (!peer.microphoneStream) {
+        const epoch = this.#muteEpoch;
+        const stream = yield* Effect.tryPromise(() => this.#options.openMicrophone()).pipe(
+          Effect.orElseSucceed(() => undefined),
+        );
+        if (!stream) return false;
+        const track = stream.getAudioTracks()[0];
+        if (!track || epoch !== this.#muteEpoch || this.#ended) {
+          stopDevice(stream);
+          return false;
+        }
+        track.enabled = false;
+        const attached = yield* Effect.tryPromise(() => peer.sender.replaceTrack(track)).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        );
+        if (!attached) {
+          stopDevice(stream);
+          return false;
+        }
+        if (epoch !== this.#muteEpoch || this.#ended) {
+          yield* this.#takeOffLine(peer, stream);
+          return false;
+        }
+        peer.microphone = track;
+        peer.microphoneStream = stream;
+        this.#options.onLocalStream(stream);
+      }
+      if (this.#micLive) return true;
+      const acknowledged = yield* this.#switchMicrophone(unmuteEvent);
+      if (!acknowledged || !this.#peer?.microphone) return false;
+      this.#peer.microphone.enabled = true;
+      this.#micLive = true;
+      this.#armIdle();
+      this.#refreshStatus();
+      return true;
+    });
+  }
+
+  #muteAndRelease(peer: LivePeer): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      const unmuting = this.#pendingSwitch !== undefined;
+      const acknowledged =
+        this.#micLive || unmuting ? yield* this.#switchMicrophone(muteEvent) : true;
+      yield* this.#releaseDevice(peer);
+      this.#micLive = false;
+      this.#armIdle();
+      this.#refreshStatus();
+      return acknowledged;
+    });
+  }
+
+  #closeEffect(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const peer = this.#peer;
+      if (!peer || this.#ended || this.#closing) return;
+      this.#closing = true;
+      this.#setStatus(LIVE_STATUS.CLOSING);
+      // A channel that cannot carry the close leaves the hang-up to the host,
+      // whose sideband can still close the session gracefully.
+      if (!this.#started || peer.channel.readyState !== "open") {
+        this.#options.acts.endSession();
+        this.#tearDown(LIVE_STATUS.IDLE);
+        return;
+      }
+      this.#send(closeEvent(this.#nextId()));
+      yield* Effect.race(
+        Deferred.await(this.#announcedClose),
+        Effect.sleep(Duration.millis(SESSION_CLOSE_TIMEOUT_MS)),
+      );
+      if (!this.#ended) this.#tearDown(LIVE_STATUS.IDLE);
+    });
+  }
+
   #onMessage(message: MessageEvent): void {
     // SAFETY: a data channel message's data is the text the channel carried, decoded by the grammar's own reader.
     const payload = decodeLivePayload(message.data as UnparsedWireValue);
@@ -362,30 +460,23 @@ export class LiveCall implements LiveVoiceCall {
     handler?.(event);
   }
 
-  #awaitStart(): Promise<boolean> {
-    if (this.#started) return Promise.resolve(true);
-    return new Promise<boolean>((resolve) => {
-      const timer = this.#schedule(() => {
-        this.#startWaiter = undefined;
-        resolve(false);
-      }, SESSION_START_TIMEOUT_MS);
-      this.#startWaiter = (started) => {
-        this.#cancel(timer);
-        this.#startWaiter = undefined;
-        resolve(started);
-      };
-    });
-  }
-
-  #switchMicrophone(build: (eventId: string) => LiveClientEvent): Promise<boolean> {
-    if (this.#pendingSwitch) this.#settleSwitch(false);
-    const eventId = this.#nextId();
-    return new Promise<boolean>((resolve) => {
-      const timer = this.#schedule(() => {
-        if (this.#pendingSwitch?.eventId === eventId) this.#settleSwitch(false);
-      }, MICROPHONE_ACK_TIMEOUT_MS);
-      this.#pendingSwitch = { eventId, resolve, timer };
+  #switchMicrophone(build: (eventId: string) => LiveClientEvent): Effect.Effect<boolean> {
+    return Effect.suspend(() => {
+      if (this.#pendingSwitch) this.#settleSwitch(false);
+      const eventId = this.#nextId();
+      const acknowledged = Deferred.unsafeMake<boolean>(FiberId.none);
+      this.#pendingSwitch = { eventId, acknowledged };
       this.#send(build(eventId));
+      return Effect.race(
+        Deferred.await(acknowledged),
+        Effect.as(Effect.sleep(Duration.millis(MICROPHONE_ACK_TIMEOUT_MS)), false),
+      ).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            if (this.#pendingSwitch?.eventId === eventId) this.#settleSwitch(false);
+          }),
+        ),
+      );
     });
   }
 
@@ -398,8 +489,7 @@ export class LiveCall implements LiveVoiceCall {
     const pending = this.#pendingSwitch;
     if (!pending) return;
     this.#pendingSwitch = undefined;
-    this.#cancel(pending.timer);
-    pending.resolve(acknowledged);
+    Deferred.unsafeDone(pending.acknowledged, Exit.succeed(acknowledged));
   }
 
   #send(event: LiveClientEvent): void {
@@ -420,39 +510,39 @@ export class LiveCall implements LiveVoiceCall {
     if (state === undefined) return;
     this.#options.acts.reportTransport(state);
     if (state === LIVE_TRANSPORT_STATE.FAILED && !this.#ended) {
-      this.#startWaiter?.(false);
+      Deferred.unsafeDone(this.#announcedStart, Exit.succeed(false));
       this.#tearDown(LIVE_STATUS.FAILED);
     }
   }
 
   #onChannelClosed(): void {
     if (this.#ended) return;
-    this.#startWaiter?.(false);
-    this.#closeWaiter?.();
+    Deferred.unsafeDone(this.#announcedStart, Exit.succeed(false));
+    Deferred.unsafeDone(this.#announcedClose, Exit.void);
     this.#tearDown(LIVE_STATUS.IDLE);
   }
 
   #onRows(rows: readonly LiveCaptionRow[]): void {
     this.#options.events.onCaptions(rows);
-    if (this.#captionTick !== undefined) this.#cancel(this.#captionTick);
+    if (this.#captionTick !== undefined) this.#disarm(this.#captionTick);
     if (rows.every((row) => row.settled) || this.#ended) {
       this.#captionTick = undefined;
       return;
     }
-    this.#captionTick = this.#schedule(() => {
+    this.#captionTick = this.#arm(CAPTION_SETTLE_TICK_MS, () => {
       this.#captionTick = undefined;
       this.#captions.tick();
-    }, CAPTION_SETTLE_TICK_MS);
+    });
   }
 
   #armIdle(): void {
-    if (this.#idleTimer !== undefined) this.#cancel(this.#idleTimer);
-    this.#idleTimer = this.#schedule(() => {
+    if (this.#idleTimer !== undefined) this.#disarm(this.#idleTimer);
+    this.#idleTimer = this.#arm(LIVE_IDLE_WINDOW_MS, () => {
       this.#idleTimer = undefined;
       if (!this.standing || this.#idleReported) return;
       this.#idleReported = true;
       this.#options.acts.reportActivity(true);
-    }, LIVE_IDLE_WINDOW_MS);
+    });
   }
 
   #refreshStatus(): void {
@@ -481,25 +571,29 @@ export class LiveCall implements LiveVoiceCall {
    * closed as the last thing before the handlers go: a peer closed locally
    * fires no state change of its own, and a host left thinking a session
    * stands would keep speaking into it, so the report is what lets the host
-   * end a session whose peer is already gone.
+   * end a session whose peer is already gone. The connection itself is the
+   * scope's to close, which completing {@link #ending} is what asks for; a
+   * device this call opened after the offer is stopped here, and stopping a
+   * track twice is a no-op, so the two cannot fight over the one the offer
+   * rode.
    */
   #tearDown(status: LiveStatus): void {
     if (this.#ended) return;
     this.#ended = true;
     const peer = this.#peer;
-    if (this.#idleTimer !== undefined) this.#cancel(this.#idleTimer);
+    if (this.#idleTimer !== undefined) this.#disarm(this.#idleTimer);
     this.#idleTimer = undefined;
-    if (this.#captionTick !== undefined) this.#cancel(this.#captionTick);
+    if (this.#captionTick !== undefined) this.#disarm(this.#captionTick);
     this.#captionTick = undefined;
-    if (this.#speakingHangover !== undefined) this.#cancel(this.#speakingHangover);
+    if (this.#speakingHangover !== undefined) this.#disarm(this.#speakingHangover);
     this.#speakingHangover = undefined;
     this.#settleSwitch(false);
-    this.#startWaiter?.(false);
+    Deferred.unsafeDone(this.#announcedStart, Exit.succeed(false));
     if (peer) {
       peer.channel.onmessage = null;
       peer.channel.onclose = null;
       peer.connection.onconnectionstatechange = null;
-      teardown(peer.connection, peer.microphoneStream);
+      stopDevice(peer.microphoneStream);
       this.#options.acts.reportTransport(LIVE_TRANSPORT_STATE.CLOSED);
     }
     this.#micLive = false;
@@ -507,25 +601,28 @@ export class LiveCall implements LiveVoiceCall {
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
     this.#setStatus(status);
+    Deferred.unsafeDone(this.#ending, Exit.void);
   }
 
   /** Takes the device off the sending line and stops it, so the system's indicator goes out with the key. */
-  async #releaseDevice(peer: LivePeer): Promise<void> {
-    const stream = peer.microphoneStream;
-    if (!stream) return;
-    peer.microphone = undefined;
-    peer.microphoneStream = undefined;
-    await this.#takeOffLine(peer, stream);
-    this.#options.onLocalStream(undefined);
+  #releaseDevice(peer: LivePeer): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const stream = peer.microphoneStream;
+      if (!stream) return Effect.void;
+      peer.microphone = undefined;
+      peer.microphoneStream = undefined;
+      return this.#takeOffLine(peer, stream).pipe(
+        Effect.andThen(Effect.sync(() => this.#options.onLocalStream(undefined))),
+      );
+    });
   }
 
-  async #takeOffLine(peer: LivePeer, stream: MediaStream): Promise<void> {
-    try {
-      await peer.sender.replaceTrack(null);
-    } catch {
+  #takeOffLine(peer: LivePeer, stream: MediaStream): Effect.Effect<void> {
+    return Effect.tryPromise(() => peer.sender.replaceTrack(null)).pipe(
       // A line already closed has nothing to take the track off; the device is stopped either way.
-    }
-    stopDevice(stream);
+      Effect.ignore,
+      Effect.andThen(Effect.sync(() => stopDevice(stream))),
+    );
   }
 
   #nextId(): string {
@@ -533,11 +630,33 @@ export class LiveCall implements LiveVoiceCall {
     return `peer-${this.#ids}`;
   }
 
-  #schedule(callback: () => void, delayMs: number): ScheduledTimer {
-    return this.#options.schedule(callback, delayMs);
+  #now(): number {
+    return Runtime.runSync(this.#runtime)(Clock.currentTimeMillis);
   }
 
-  #cancel(timer: ScheduledTimer): void {
-    this.#options.cancel(timer);
+  #run<A>(effect: Effect.Effect<A>): Promise<A> {
+    return Runtime.runPromise(this.#runtime)(effect);
+  }
+
+  /**
+   * A bound, forked into the session's own scope so it goes with the call.
+   * Nothing hands a handle back to be cancelled: what a caller holds is the
+   * fiber, and re-arming interrupts the one it replaces.
+   */
+  #arm(delayMs: number, work: () => void): Fiber.RuntimeFiber<void> {
+    const scope = this.#scope;
+    return Runtime.runFork(this.#runtime)(
+      Effect.andThen(Effect.sleep(Duration.millis(delayMs)), Effect.sync(work)),
+      scope ? { scope } : undefined,
+    );
+  }
+
+  /**
+   * Interrupts a bound without waiting for the interruption to finish: what it
+   * has to guarantee is that the work does not run afterwards, never that the
+   * fiber has already ended.
+   */
+  #disarm(fiber: Fiber.RuntimeFiber<void>): void {
+    fiber.unsafeInterruptAsFork(FiberId.none);
   }
 }
