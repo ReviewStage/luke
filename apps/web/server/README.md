@@ -30,7 +30,7 @@ The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GITHUB_CLIENT_SECRET`.
 
 `vercel.json` uses a legacy `routes` entry for `/api/auth/(.*)` because Vercel's
-zero-config `api/` detection treats `[...all].ts` as a single dynamic segment and
+zero-config `api/` detection treats `[...all].js` as a single dynamic segment and
 adds a hard 404 for deeper API paths. A `rewrites` entry runs after that detected
 filesystem routing phase, so it cannot reach the Better Auth handler; keep this
 rule in `routes`, ahead of the detected routes.
@@ -66,8 +66,14 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests
 `user:email`, because Luke requires an email address for its account snapshot.
 
-`api/feedback.mjs` deliberately remains plain ESM so Vercel's builder has nothing
-to transpile.
+Every function Vercel deploys is plain ESM. The route sources live under
+`server/routes/`, mirroring the `api/` tree, and `scripts/bundle-functions.ts`
+bundles them into `api/**/*.js` (gitignored) as the last step of `pnpm build`,
+with the workspace packages inlined and this app's declared runtime dependencies
+left external. Handed TypeScript, the builder compiled every function's whole
+import graph separately, and those thirty-odd passes were most of a deploy's
+build time. `api/feedback.mjs` is the one hand-written function and stays plain
+ESM for the same reason.
 
 ## Signing in on a Preview deployment
 
@@ -122,7 +128,7 @@ reports the intercepted API call rather than the metrics.
 
 ## Hosted voice
 
-`api/voice/mint.ts` runs Luke's voice on the deployment's own OpenAI key for a
+`server/routes/voice/mint.ts` runs Luke's voice on the deployment's own OpenAI key for a
 signed-in desktop. It is an exact-path file, so Vercel's zero-config `api/`
 detection routes it without a `routes` entry; only the bracketed auth
 catch-all needs one. The logic lives in `server/hosted/` behind injected
@@ -147,13 +153,13 @@ never spends the production key. `LUKE_REALTIME_MODEL` optionally overrides
 the model, under the same name the desktop honours; a blank value is treated
 as absent.
 
-`api/account/delete.ts` erases the signed-in user on the same bearer
+`server/routes/account/delete.ts` erases the signed-in user on the same bearer
 resolution: the desktop's Delete account confirm is the only caller. Deleting
 the `user` row is the entire act: sessions, provider accounts, OAuth grants,
 and usage counters all reference it with `onDelete: "cascade"`, so nothing of
 the account outlives the request.
 
-`api/events.ts` records what a signed-in desktop counted about its own use, on
+`server/routes/events.ts` records what a signed-in desktop counted about its own use, on
 the same bearer resolution. The desktop never talks to the analytics processor:
 it posts an allowlisted batch here, and this is the one place a `distinct_id`
 is attached, from the resolved account and never from the body, which has no
@@ -165,7 +171,7 @@ It needs `POSTHOG_PROJECT_API_KEY`; without it the endpoint answers 503 and
 product analytics is simply off, which is the intended state for Preview
 deployments. `POSTHOG_HOST` optionally overrides the ingestion host.
 `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` are what let
-`api/account/delete.ts` ask PostHog to erase the person before the account row
+`server/routes/account/delete.ts` ask PostHog to erase the person before the account row
 goes. It is a private endpoint, so it takes a personal key rather than the project
 token, and `POSTHOG_API_HOST` overrides *its* host, which is not the ingestion
 host. Without that pair the delete simply has no erasure seam to run. Every
@@ -187,7 +193,7 @@ backstop and should be configured with it.
 
 ## Hosted voice service
 
-`api/voice/sessions.ts` and `api/voice/introduction.ts` are the hosted voice
+`server/routes/voice/sessions.ts` and `server/routes/voice/introduction.ts` are the hosted voice
 service: two Vercel Functions serving WebSockets on Fluid compute, the part of
 this deployment that holds the GPT Live project key and owns each hosted voice
 session (`live-contract.ts` in `@sidecar/hosted` is the desktop's contract
@@ -226,8 +232,8 @@ on `session.started`. The seed is bounded to one developer message of at most
 ### One connection is one invocation
 
 A WebSocket connection to a Vercel Function closes when the function reaches
-its maximum duration — `vercel.json` gives both functions 800 seconds, the
-longest generally available — while the WebRTC session between the desktop
+its maximum duration — `server/function-durations.ts` gives both functions
+800 seconds, the longest generally available — while the WebRTC session between the desktop
 and OpenAI stands on. So a socket may also open with `session.attach` naming
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
@@ -288,12 +294,13 @@ the model. Nothing else: no separate service, secret, or origin. Tests run again
 
 ## Hosted brain inference
 
-`api/brain/capabilities.ts` and the three routes under `api/brain/v2/` run
+`server/routes/brain/capabilities.ts` and the three routes under
+`server/routes/brain/v2/` run
 Luke's brain on the deployment's own OpenAI key for a signed-in client that
 carries none of its own. They are exact-path files like the voice route,
 resolved to a user through the same bearer seam, and the three POST routes are
-the only hosted routes with a raised function duration: `vercel.json` gives
-the inference and the token count 120 seconds so the 90-second upstream
+the only hosted routes with a raised function duration:
+`server/function-durations.ts` gives the inference and the token count 120 seconds so the 90-second upstream
 ceiling the brain shares with its keyed client can pass, and the embedding 60.
 
 One HTTP request is one model call and nothing more. A client GETs the
@@ -331,7 +338,7 @@ untouched by these routes and keep their contracts for released clients.
 
 ## Provider key vault
 
-`api/vault/key.ts` and `api/vault/keys.ts` store, list, and delete the provider
+`server/routes/vault/key.ts` and `server/routes/vault/keys.ts` store, list, and delete the provider
 API keys a signed-in user syncs for server-side observation. Keys are encrypted
 at rest using AES-256-GCM before they touch the database; the plaintext never
 reaches a database column and there is no endpoint that reads it back.
@@ -358,7 +365,7 @@ with its checkpoint items, cursors, inbox, runs, and action receipts, the
 conversation lines, the retained transcript and its compaction boundaries, the
 identity workspace and daily notes, the remembered facts, the latest roster
 snapshot with its diffs and pass record, and the briefings. Every row is
-keyed by `user_id` and cascades with the user row, so `api/account/delete.ts`
+keyed by `user_id` and cascades with the user row, so `server/routes/account/delete.ts`
 erases them with the account. The roster tables are read and written by the
 scheduled observation below and the routes that serve it; nothing reads the
 conversation tables yet. `server/hosted/store/` is the store the brain host
@@ -460,9 +467,9 @@ position no row holds, so the unique `(conversation_id, seq)` constraint is
 the backstop for a writer outside the lock and nothing the writer retries.
 
 The per-resource reads are how a device reads those rows, and there is no
-feed: `api/conversation/messages.ts`, `api/conversation/events.ts`, and
-`api/brain/turns.ts` each answer one resource behind a cursor of the
-device's own (`?after=`, `?limit=`), and `api/changes.ts` is the one change
+feed: `server/routes/conversation/messages.ts`, `server/routes/conversation/events.ts`, and
+`server/routes/brain/turns.ts` each answer one resource behind a cursor of the
+device's own (`?after=`, `?limit=`), and `server/routes/changes.ts` is the one change
 signal a device polls between them. The handlers are
 `server/hosted/resource-reads.ts` and `server/hosted/change-signal.ts`, over
 the store alone and never a table, composed by `server/hosted/store-route.ts`
@@ -548,8 +555,9 @@ LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
 
 ## Scheduled Conductor observation
 
-`api/observation/tick.ts` is what Vercel's cron calls: `vercel.json` schedules
-it every minute (`* * * * *`) and gives it a 60-second function duration. The
+`server/routes/observation/tick.ts` is what Vercel's cron calls: `vercel.json`
+schedules it every minute (`* * * * *`) and `server/function-durations.ts`
+gives it a 60-second function duration. The
 logic lives in `server/hosted/observation-tick.ts` and
 `server/hosted/observation-pass.ts`; the route hands them the deployment's
 seams and the account query. Vercel crons run only on production deployments.
@@ -593,22 +601,22 @@ model runs on the tick, no notification leaves, and the diff is written and
 left. Message cursors are not recorded by the pass, because observation never
 reads a chat's messages; the brain host's own reads will write them.
 
-`api/observe.ts` answers the stored snapshot, mapped onto the wire rows and
+`server/routes/observe.ts` answers the stored snapshot, mapped onto the wire rows and
 dated with `observedAt`; a user with no snapshot yet is answered from a live
 pass that seeds one, and `?fresh=true` asks the provider again under the
-endpoint's per-user rate brake. The action routes under `api/actions/` admit
+endpoint's per-user rate brake. The action routes under `server/routes/actions/` admit
 each ask against the same stored snapshot instead of running a pass, seeding
-one the same way for a user who has none, and `api/projects.ts` lists the
+one the same way for a user who has none, and `server/routes/projects.ts` lists the
 projects from that snapshot, so a creation can only ever name a project the
 phone was offered. A snapshot observed under a key since replaced is treated
 as none, so a new key never serves or admits against the old key's roster;
 the same key saved again, as the Mac does on every launch, keeps it.
-`api/sessions/messages.ts` is unchanged and still runs its own fresh pass
+`server/routes/sessions/messages.ts` is unchanged and still runs its own fresh pass
 before the read.
 
 ## Devices
 
-`api/devices.ts` keeps one `devices` row per app installation on every
+`server/routes/devices.ts` keeps one `devices` row per app installation on every
 platform Luke runs on — `macos`, `ios`, and `watchos` — registered (POST) at
 sign-in, moved along (PUT) by a heartbeat that carries the row's last-seen
 instant and optionally a presence window or a push token change, and
@@ -624,7 +632,7 @@ account, at sign-out, and when Apple answers that the token is gone. The
 handler is `server/hosted/devices.ts` and the writes `server/hosted/device-store.ts`.
 Beside the presence window stands `quiet_until`, the instant a meeting hold
 the device observes ends; both arrive on the change-signal poll
-(`api/changes.ts`), which moves the row exactly as the heartbeat does, and
+(`server/routes/changes.ts`), which moves the row exactly as the heartbeat does, and
 both are written by nothing on the Mac today. A quiet instant holds speech
 and nothing more: a delivery reads it to wait, never to decide, reword, or
 act. The push token reaches the sender below in a later change.

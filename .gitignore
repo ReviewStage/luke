@@ -6,6 +6,7 @@ node_modules/
 apps/*/out/
 apps/*/dist/
 apps/*/dist-server/
+apps/web/api/**/*.js
 apps/*/.vite/
 *.tsbuildinfo
 pnpm-debug.log*

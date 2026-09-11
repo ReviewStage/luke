@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
   type AccountPassOutcome,
@@ -186,16 +187,13 @@ test("a pass that outruns its deadline is counted failed and the tick moves on",
 test("the budget leaves headroom under the function cap, and the cron entry names the tick", () => {
   assert.ok(OBSERVATION_TICK.BUDGET_MS < OBSERVATION_TICK.MAX_DURATION_SECONDS * 1000);
   assert.ok(OBSERVATION_TICK.PASS_DEADLINE_MS < OBSERVATION_TICK.BUDGET_MS);
-  // SAFETY: the file is this repository's own vercel.json, read for the two entries checked below.
+  // SAFETY: the file is this repository's own vercel.json, read for the cron entry checked below.
   const vercel = JSON.parse(
     readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
-  ) as {
-    functions: Record<string, { maxDuration: number }>;
-    crons: Array<{ path: string; schedule: string }>;
-  };
+  ) as { crons: Array<{ path: string; schedule: string }> };
   assert.deepEqual(vercel.crons, [{ path: OBSERVATION_TICK_PATH, schedule: "* * * * *" }]);
   assert.equal(
-    vercel.functions[`${OBSERVATION_TICK_PATH.slice(1)}.ts`]?.maxDuration,
+    FUNCTION_MAX_DURATION_SECONDS.get(OBSERVATION_TICK_PATH),
     OBSERVATION_TICK.MAX_DURATION_SECONDS,
   );
 });
