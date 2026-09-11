@@ -10,9 +10,9 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../server/core";
-import { type BrainV2Options, handleBrainEmbed } from "../server/hosted/brain-v2";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
+import { type BrainCall, brainAnswer } from "./support/brain-call";
 
 const NOW = Date.parse("2026-09-08T12:00:00.000Z");
 const OPEN_SPEND: HostedSpend = {
@@ -40,7 +40,7 @@ function upstream(answer: () => Response) {
   return { fetch, calls };
 }
 
-function options(overrides: Partial<BrainV2Options> & { request: Request }): BrainV2Options {
+function options(overrides: Partial<BrainCall> & { request: Request }): BrainCall {
   return {
     apiKey: "sk-hosted-secret",
     resolveUserId: async () => "user-1",
@@ -61,7 +61,7 @@ test("an embed request posts the texts under the build-fixed model, spends the a
     }),
   );
   let spent = 0;
-  const response = await handleBrainEmbed(
+  const response = await brainAnswer(
     options({
       request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["a", "b"] }),
       fetch,
@@ -92,7 +92,7 @@ test("an embed request posts the texts under the build-fixed model, spends the a
 });
 
 test("a malformed embed request, a spent allowance, and a malformed upstream answer each refuse without a vector", async () => {
-  const malformed = await handleBrainEmbed(
+  const malformed = await brainAnswer(
     options({ request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: [] }) }),
   );
   assert.equal(malformed.status, 400);
@@ -101,7 +101,7 @@ test("a malformed embed request, a spent allowance, and a malformed upstream ans
     ((await malformed.json()) as { error: string }).error,
     HOSTED_API_ERROR.INVALID_REQUEST,
   );
-  const exhausted = await handleBrainEmbed(
+  const exhausted = await brainAnswer(
     options({
       request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["a"] }),
       spend: async () => ({ allowed: false, quota: OPEN_SPEND.quota }),
@@ -109,7 +109,7 @@ test("a malformed embed request, a spent allowance, and a malformed upstream ans
   );
   assert.equal(exhausted.status, 429);
   const { fetch } = upstream(() => Response.json({ object: "list", model: "m", data: [] }));
-  const empty = await handleBrainEmbed(
+  const empty = await brainAnswer(
     options({
       request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["a"] }),
       fetch,

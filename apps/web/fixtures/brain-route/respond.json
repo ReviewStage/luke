@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"id\":\"resp_1\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"id\":\"msg_1\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"Nothing needs you.\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":42}}"
+}

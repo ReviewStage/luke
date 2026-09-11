@@ -1,0 +1,15 @@
+{
+  "status": 429,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ],
+    [
+      "retry-after",
+      "12"
+    ]
+  ],
+  "body": "{\"error\":\"upstream-throttled\",\"upstreamStatus\":429}"
+}

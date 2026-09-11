@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { HOSTED_BRAIN_DEFAULTS } from "../server/brain-app";
 import {
   ACTION_TOOL,
   BRAIN_OPENAI_DEFAULTS,
@@ -21,15 +22,9 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../server/core";
-import {
-  type BrainV2Options,
-  HOSTED_BRAIN_DEFAULTS,
-  handleBrainCapabilities,
-  handleBrainCountTokens,
-  handleBrainRespondV2,
-} from "../server/hosted/brain-v2";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
+import { type BrainCall, brainAnswer } from "./support/brain-call";
 
 const NOW = Date.parse("2026-09-07T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";
@@ -91,7 +86,7 @@ function upstream(answers: readonly (() => Response)[]) {
   return { fetch, calls };
 }
 
-function options(overrides: Partial<BrainV2Options> & { request: Request }): BrainV2Options {
+function options(overrides: Partial<BrainCall> & { request: Request }): BrainCall {
   return {
     apiKey: API_KEY,
     resolveUserId: async () => "user-1",
@@ -108,7 +103,7 @@ async function errorOf(response: Response): Promise<string> {
 }
 
 test("capabilities name the contract, the model, the operations, the registered tools, and the bounds", async () => {
-  const response = await handleBrainCapabilities(
+  const response = await brainAnswer(
     options({ request: request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, null, { method: "GET" }) }),
   );
   assert.equal(response.status, 200);
@@ -125,7 +120,7 @@ test("capabilities name the contract, the model, the operations, the registered 
   }
   assert.ok(capabilities.tools.includes(BRAIN_TOOL.ANNOUNCE));
   // A model override names the model; the method, the key, and the bearer are checked as everywhere.
-  const overridden = await handleBrainCapabilities(
+  const overridden = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, null, { method: "GET" }),
       model: "gpt-override",
@@ -133,18 +128,18 @@ test("capabilities name the contract, the model, the operations, the registered 
   );
   // SAFETY: response.json returns a runtime value; the reader below validates it as wire.
   assert.equal(((await overridden.json()) as { model: string }).model, "gpt-override");
-  const posted = await handleBrainCapabilities(
+  const posted = await brainAnswer(
     options({ request: request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, null) }),
   );
   assert.equal(posted.status, 405);
-  const off = await handleBrainCapabilities(
+  const off = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, null, { method: "GET" }),
       apiKey: " ",
     }),
   );
   assert.equal(off.status, 503);
-  const anonymous = await handleBrainCapabilities(
+  const anonymous = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, null, { method: "GET" }),
       resolveUserId: async () => undefined,
@@ -159,7 +154,7 @@ test("a respond request runs the prepared prompt over the schemas its names sele
     () => Response.json({ id: "resp_1", status: "completed", output, usage: { input_tokens: 42 } }),
   ]);
   let spent = 0;
-  const response = await handleBrainRespondV2(
+  const response = await brainAnswer(
     options({
       request: request(
         HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
@@ -200,7 +195,7 @@ test("a request's prompt cache key is forwarded upstream and kept nowhere", asyn
   const { fetch, calls } = upstream([
     () => Response.json({ id: "resp_1", status: "completed", output: [message("ok")] }),
   ]);
-  const response = await handleBrainRespondV2(
+  const response = await brainAnswer(
     options({
       request: request(
         HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
@@ -217,7 +212,7 @@ test("a request's prompt cache key is forwarded upstream and kept nowhere", asyn
 test("each refusal answers its own error before anything is spent: prompt envelope, unknown tool, bounds, shape, size", async () => {
   let spent = 0;
   const refusalOf = async (body: WireRecord | string) => {
-    const response = await handleBrainRespondV2(
+    const response = await brainAnswer(
       options({
         request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, body),
         spend: async () => {
@@ -279,7 +274,7 @@ test("each refusal answers its own error before anything is spent: prompt envelo
 });
 
 test("a spent allowance answers 429 with the quota, and an upstream fault or an unreplayable answer is 502 with no upstream words", async () => {
-  const exhausted = await handleBrainRespondV2(
+  const exhausted = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
       spend: async () => ({ allowed: false, quota: OPEN_SPEND.quota }),
@@ -292,7 +287,7 @@ test("a spent allowance answers 429 with the quota, and an upstream fault or an 
   assert.equal(body.error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
 
   const failing = upstream([() => new Response("upstream secret words", { status: 500 })]);
-  const failed = await handleBrainRespondV2(
+  const failed = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
       fetch: failing.fetch,
@@ -303,7 +298,7 @@ test("a spent allowance answers 429 with the quota, and an upstream fault or an 
   const unreplayable = upstream([
     () => Response.json({ status: "completed", output: [{ type: "web_search_call", id: "ws_1" }] }),
   ]);
-  const refused = await handleBrainRespondV2(
+  const refused = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
       fetch: unreplayable.fetch,
@@ -316,7 +311,7 @@ test("count-tokens posts the prepared request without an output budget and answe
   const { fetch, calls } = upstream([
     () => Response.json({ object: "response.input_tokens", input_tokens: 1_234 }),
   ]);
-  const response = await handleBrainCountTokens(
+  const response = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS, {
         contract: HOSTED_BRAIN_CONTRACT_VERSION,
@@ -340,7 +335,7 @@ test("count-tokens posts the prepared request without an output budget and answe
     [BRAIN_TOOL.ANNOUNCE],
   );
   const malformed = upstream([() => Response.json({ input_tokens: -1 })]);
-  const bad = await handleBrainCountTokens(
+  const bad = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS, {
         contract: HOSTED_BRAIN_CONTRACT_VERSION,
@@ -360,7 +355,7 @@ test("a provider rate limit behind the service answers 429 as the provider's thr
     () => new Response("", { status: 429, headers: { "retry-after": "86400" } }),
     () => new Response("", { status: 429 }),
   ]);
-  const throttled = await handleBrainRespondV2(
+  const throttled = await brainAnswer(
     options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
   );
   assert.equal(throttled.status, 429);
@@ -371,14 +366,14 @@ test("a provider rate limit behind the service answers 429 as the provider's thr
   assert.equal(body.error, HOSTED_API_ERROR.UPSTREAM_THROTTLED);
   assert.equal(body.upstreamStatus, 429);
   assert.ok(!("quota" in body));
-  const bounded = await handleBrainRespondV2(
+  const bounded = await brainAnswer(
     options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
   );
   assert.equal(
     bounded.headers.get("retry-after"),
     String(BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS / 1000),
   );
-  const bare = await handleBrainRespondV2(
+  const bare = await brainAnswer(
     options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
   );
   assert.equal(bare.headers.get("retry-after"), String(BRAIN_RATE_LIMIT_COOLDOWN_MS / 1000));

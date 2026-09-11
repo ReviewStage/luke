@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Effect } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { brainCapabilitiesApp, handleBrainCapabilities } from "../server/hosted/brain-v2.js";
+import { brainApp } from "../server/brain-app.js";
 import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
@@ -31,6 +31,7 @@ const PLACEHOLDER_DATABASE_URL = "postgresql://route:effect@127.0.0.1:5432/luke"
 
 beforeEach(() => {
   vi.stubEnv("DATABASE_URL", PLACEHOLDER_DATABASE_URL);
+  vi.stubEnv(OPENAI_API_KEY, API_KEY);
 });
 
 afterEach(async () => {
@@ -38,6 +39,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
+const OPENAI_API_KEY = "OPENAI_API_KEY";
 const CAPABILITIES = "https://luke.test/api/brain/capabilities";
 const BODIES = "https://luke.test/api/bodies";
 const BODY_BOUND_BYTES = 64;
@@ -45,25 +47,18 @@ const API_KEY = "sk-test";
 const USER_ID = "user-1";
 const AUTHORIZATION = "Bearer token";
 
-function capabilitiesRoute(apiKey: string | undefined, userId: string | undefined) {
+/**
+ * The group as one function serves it. The key is the environment's, which is
+ * what `HostedEnvironment` reads as the runtime's services are built, so a
+ * case naming another key ends the runtime before it asks for the next.
+ */
+function capabilitiesRoute(userId: string | undefined) {
   return routeFromHttpApp(
-    brainCapabilitiesApp({
-      apiKey,
+    brainApp({
       resolveUserId: () => Promise.resolve(userId),
+      spend: () => Promise.reject(new Error("capabilities spend nothing")),
     }),
   );
-}
-
-function capabilitiesPromised(
-  request: Request,
-  apiKey: string | undefined,
-  userId: string | undefined,
-): Promise<Response> {
-  return handleBrainCapabilities({
-    request,
-    apiKey,
-    resolveUserId: () => Promise.resolve(userId),
-  });
 }
 
 interface RecordedResponse {
@@ -85,32 +80,31 @@ function capabilitiesRequest(method: string): Request {
 }
 
 const CASES = [
-  { method: "GET", apiKey: API_KEY, userId: USER_ID },
-  { method: "POST", apiKey: API_KEY, userId: USER_ID },
-  { method: "GET", apiKey: undefined, userId: USER_ID },
-  { method: "GET", apiKey: API_KEY, userId: undefined },
+  { method: "GET", apiKey: API_KEY, userId: USER_ID, status: HOSTED_HTTP_STATUS.OK },
+  {
+    method: "POST",
+    apiKey: API_KEY,
+    userId: USER_ID,
+    status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+  },
+  {
+    method: "GET",
+    apiKey: undefined,
+    userId: USER_ID,
+    status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  },
+  { method: "GET", apiKey: API_KEY, userId: undefined, status: HOSTED_HTTP_STATUS.UNAUTHORIZED },
 ] as const;
-
-test("the route built from an HttpApp answers what the promise-shaped route answers", async () => {
-  for (const entry of CASES) {
-    const route = capabilitiesRoute(entry.apiKey, entry.userId);
-    const converted = await recorded(await route.fetch(capabilitiesRequest(entry.method)));
-    const promised = await recorded(
-      await capabilitiesPromised(capabilitiesRequest(entry.method), entry.apiKey, entry.userId),
-    );
-    assert.deepEqual(converted, promised);
-  }
-});
 
 test("the route reads a bearer the request carries", async () => {
   const seen: (string | undefined)[] = [];
   const route = routeFromHttpApp(
-    brainCapabilitiesApp({
-      apiKey: API_KEY,
+    brainApp({
       resolveUserId: (authorization) => {
         seen.push(authorization);
         return Promise.resolve(USER_ID);
       },
+      spend: () => Promise.reject(new Error("capabilities spend nothing")),
     }),
   );
   const response = await route.fetch(capabilitiesRequest("GET"));
@@ -152,18 +146,22 @@ test("the bounded body read refuses what the promise-shaped read refuses", async
   }
 });
 
-test("the cases under test cover the statuses the gate and the body read answer", async () => {
+test("the route built from an HttpApp answers the gate's own refusals", async () => {
   const gate: number[] = [];
   for (const entry of CASES) {
-    const route = capabilitiesRoute(entry.apiKey, entry.userId);
-    gate.push((await route.fetch(capabilitiesRequest(entry.method))).status);
+    vi.stubEnv(OPENAI_API_KEY, entry.apiKey ?? "");
+    gate.push(
+      (await capabilitiesRoute(entry.userId).fetch(capabilitiesRequest(entry.method))).status,
+    );
+    await disposeWebRuntime();
   }
-  assert.deepEqual(gate, [
-    HOSTED_HTTP_STATUS.OK,
-    HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-    HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
-    HOSTED_HTTP_STATUS.UNAUTHORIZED,
-  ]);
+  assert.deepEqual(
+    gate,
+    CASES.map((entry) => entry.status),
+  );
+});
+
+test("the body read answers the statuses the promise-shaped read answers", async () => {
   const bodies: number[] = [];
   for (const body of BODIES_UNDER_TEST) {
     bodies.push((await bodyRoute().fetch(bodyRequest(body))).status);

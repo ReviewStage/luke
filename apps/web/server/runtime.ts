@@ -2,11 +2,16 @@ import { FetchHttpClient } from "@effect/platform";
 import type { Effect } from "effect";
 import { Layer, ManagedRuntime } from "effect";
 import { webSqlClient } from "./db/sql-client.js";
+import { hostedEnvironment } from "./hosted/environment.js";
 
 /**
  * The services every web function's effects run against. A function reaches
  * this layer only through the runtime below, so a service added here is built
  * once per instance rather than once per invocation.
+ *
+ * What the deployment's environment says about the hosted tier is read here
+ * too, once per instance rather than at each invocation: `HostedEnvironment`
+ * is the one place `OPENAI_API_KEY` and the brain model override are read.
  *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
@@ -15,7 +20,7 @@ import { webSqlClient } from "./db/sql-client.js";
  * `repository-checks.sh` keeps that specifier out of `api/`, where the stubs
  * that re-export a bundle stand, rather than out of the bundle itself.
  */
-const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient);
+const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient, hostedEnvironment);
 
 /** What an effect run at this edge may require. */
 export type WebServices = Layer.Layer.Success<typeof webServices>;
