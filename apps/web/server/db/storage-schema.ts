@@ -28,8 +28,9 @@ import { instant } from "./instant.js";
  * The conversation storage the LUKE-95 rework settles on: one row per
  * message in the AI SDK's `UIMessage` shape, its parts and metadata as plain
  * `jsonb`, beside the conversation it belongs to and the turn that wrote it.
- * Nothing here is sealed: sealing survives only for the provider keys in the
- * vault, and the content stored here is readable by an operator.
+ * Nothing here is sealed: the payload envelope survives for the notebook,
+ * fact, and roster tables and the vault's own cipher for the provider keys,
+ * and the content stored here is readable by an operator.
  *
  * The hosted brain writes here through the store writer and the read routes
  * answer from these rows. Every row is keyed by the user it belongs to and
@@ -150,8 +151,8 @@ export const messages = pgTable(
 /**
  * One run of the brain over a conversation: what opened it, where it stands,
  * what it ran under, and what it cost. `usage` holds the same four counts
- * the v1 run row and the desktop's trace keep, spelled the same way, and
- * `response_ids` every response OpenAI answered the turn with, in order.
+ * the desktop's trace keeps, spelled the same way, and `response_ids` every
+ * response OpenAI answered the turn with, in order.
  */
 export const turns = pgTable(
   "turns",

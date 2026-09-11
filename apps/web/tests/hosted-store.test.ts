@@ -15,29 +15,17 @@ import { payloadKeyRing } from "../server/hosted/encryption";
 import { MAXIMUM_PENDING_ROSTER_DIFFS } from "../server/hosted/store";
 import { userSeal } from "../server/hosted/store/database";
 import { readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
-import {
-  type HostedStoreTestDatabase,
-  openHostedStoreTestDatabase,
-  TEST_PAYLOAD_SECRET,
-} from "./support/hosted-store-database";
+import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 
 /** Synthetic fixtures: no real title, branch, or transcript anywhere. */
 
 const NOW = 1_800_000_000_000;
 
-const opening = openHostedStoreTestDatabase();
-afterAll(async () => {
-  await (await opening).close();
-});
-
-async function accountFor(): Promise<{ database: HostedStoreTestDatabase; userId: string }> {
-  const database = await opening;
-  const userId = await database.createUser();
-  return { database, userId };
-}
+const database = await openHostedStoreTestDatabase();
+afterAll(() => database.close());
 
 test("facts are listed in order and replaced whole, a kept id keeping its first instant, and sealed at rest", async () => {
-  const { database, userId } = await accountFor();
+  const userId = await database.createUser();
   assert.deepEqual(await database.store.facts.list(userId), []);
   const first = await database.store.facts.replace(
     userId,
@@ -66,7 +54,7 @@ test("facts are listed in order and replaced whole, a kept id keeping its first 
 });
 
 test("workspace files are read and written whole per user and path, seeded once, and refuse a path outside the workspace", async () => {
-  const { database, userId } = await accountFor();
+  const userId = await database.createUser();
   const workspace = database.store.workspace;
   assert.equal(await workspace.read(userId, "AGENTS.md"), undefined);
   assert.equal(await workspace.seed(userId, "AGENTS.md", "# seed", NOW), true);
@@ -100,7 +88,7 @@ test("workspace files are read and written whole per user and path, seeded once,
 });
 
 test("the roster snapshot is one sealed row per user, replaced whole, and its instant is readable without its body", async () => {
-  const { database, userId } = await accountFor();
+  const userId = await database.createUser();
   assert.equal(await database.store.roster.read(userId), undefined);
   assert.equal(await database.store.roster.observedAt(userId), undefined);
   await database.store.roster.write(userId, {
@@ -129,7 +117,7 @@ test("the roster snapshot is one sealed row per user, replaced whole, and its in
 });
 
 test("a pass advances the snapshot and its diff together, diffs wait sealed until consumed once, and the pending bound drops the oldest", async () => {
-  const { database, userId } = await accountFor();
+  const userId = await database.createUser();
   const { roster } = database.store;
   assert.equal(
     await roster.advance(
@@ -209,7 +197,7 @@ test("a pass advances the snapshot and its diff together, diffs wait sealed unti
 });
 
 test("a pass record moves the attempt every time, the whole read only on success, and forgetting reaches the keyless and the unseen", async () => {
-  const { database, userId } = await accountFor();
+  const userId = await database.createUser();
   const { roster } = database.store;
   assert.equal(await roster.pass(userId), undefined);
   await roster.recordPass(userId, { attemptedAt: NOW });
@@ -270,9 +258,9 @@ test("a pass record moves the attempt every time, the whole read only on success
   assert.equal((await roster.pass(keyed))?.attemptedAt, NOW);
 });
 
-test("deleting the user row cascades through every sealed table and leaves another user's rows standing", async () => {
-  const { database, userId } = await accountFor();
-  const { userId: other } = await accountFor();
+test("deleting the user row cascades through every notebook, fact, and roster table and leaves another user's rows standing", async () => {
+  const userId = await database.createUser();
+  const other = await database.createUser();
   for (const id of [userId, other]) {
     await database.store.facts.replace(id, [{ id: "f-1", words: "a fact" }], NOW);
     await database.store.workspace.write(id, "USER.md", "# user", NOW);
@@ -287,8 +275,7 @@ test("deleting the user row cascades through every sealed table and leaves anoth
 
   await database.db.delete(user).where(eq(user.id, userId));
 
-  const tables = [personalFact, workspaceFile, rosterSnapshot, rosterDiff, observationPass];
-  for (const table of tables) {
+  for (const table of [personalFact, workspaceFile, rosterSnapshot, rosterDiff, observationPass]) {
     const gone = await database.db
       .select({ count: sql<number>`count(*)::int` })
       .from(table)
@@ -303,7 +290,7 @@ test("deleting the user row cascades through every sealed table and leaves anoth
 });
 
 test("a sealed row under one user does not open as another, and opens whole under its own", async () => {
-  const { database, userId } = await accountFor();
+  const userId = await database.createUser();
   const other = await database.createUser();
   const keys = payloadKeyRing(TEST_PAYLOAD_SECRET);
   const snapshot = { body: JSON.stringify({ sessions: ["a"] }), observedAt: NOW };

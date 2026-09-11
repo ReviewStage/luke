@@ -7,10 +7,11 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
-import { and, eq, getTableName, type SQL, sql } from "drizzle-orm";
-import { type PgTable, pgSchema, text } from "drizzle-orm/pg-core";
+import { and, eq, getTableName, is, type SQL, sql } from "drizzle-orm";
+import { PgTable, pgSchema, text } from "drizzle-orm/pg-core";
 import { afterAll, test } from "vitest";
 import { user } from "../server/db/auth-schema";
+import * as schema from "../server/db/schema";
 import {
   CONVERSATION_KIND,
   conversations,
@@ -36,63 +37,27 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-/** The tables the v1 hosted store and the briefing feed kept, every one dropped by the migration that follows the last reader's removal. */
-const DROPPED_TABLES = [
-  "conversation",
-  "conversation_session",
-  "runtime_checkpoint",
-  "observation_cursor",
-  "observation_capture_cursor",
-  "observation_inbox_entry",
-  "conversation_run",
-  "action_receipt",
-  "conversation_line",
-  "transcript_event",
-  "compaction_boundary",
-  "conversation_lease",
-  "briefing",
-] as const;
-
-/** The tables that stand after the drop: the v2 conversation tables and the sealed notebook, fact, and roster tables beside them. */
-const STANDING_TABLES = [
-  "conversations",
-  "messages",
-  "turns",
-  "events",
-  "prompts",
-  "tool_sets",
-  "provider_cursors",
-  "workspace_file",
-  "personal_fact",
-  "roster_snapshot",
-  "roster_diff",
-  "observation_pass",
-] as const;
+/** Every table `server/db/schema.ts` declares, by its Postgres name. */
+const DECLARED_TABLES = Object.values(schema)
+  .flatMap((value) => (is(value, PgTable) ? [getTableName(value)] : []))
+  .sort();
 
 /** Postgres's own catalogue of tables, read through the same typed query surface as the rows. */
 const informationSchemaTables = pgSchema("information_schema").table("tables", {
-  tableSchema: text("table_schema"),
-  tableName: text("table_name"),
+  tableSchema: text("table_schema").notNull(),
+  tableName: text("table_name").notNull(),
 });
 
-async function publicTableNames(): Promise<ReadonlySet<string>> {
+async function publicTableNames(): Promise<readonly string[]> {
   const rows = await database.db
     .select({ name: informationSchemaTables.tableName })
     .from(informationSchemaTables)
     .where(eq(informationSchemaTables.tableSchema, "public"));
-  return new Set(rows.map((row) => row.name).filter((name) => name !== null));
+  return rows.map((row) => row.name).sort();
 }
 
-test("the migrations drop every v1 conversation table and the briefing table, and leave the v2 and sealed tables standing", async () => {
-  const names = await publicTableNames();
-  assert.deepEqual(
-    DROPPED_TABLES.filter((name) => names.has(name)),
-    [],
-  );
-  assert.deepEqual(
-    STANDING_TABLES.filter((name) => !names.has(name)),
-    [],
-  );
+test("the migrations end at the declared schema: every declared table stands, and nothing undeclared, the v1 conversation tables and the briefing table included, remains", async () => {
+  assert.deepEqual(await publicTableNames(), DECLARED_TABLES);
 });
 
 const UNIQUE_VIOLATION = "23505";
@@ -210,7 +175,7 @@ async function populateAccount(userId: string): Promise<{ main: string; child: s
   return { main, child };
 }
 
-test("every v2 row cascades with its account and no other account's", async () => {
+test("every conversation row cascades with its account and no other account's", async () => {
   const userId = await database.createUser();
   const other = await database.createUser();
   await populateAccount(userId);

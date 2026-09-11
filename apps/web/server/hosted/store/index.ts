@@ -64,7 +64,7 @@ import {
  */
 export interface HostedStore {
   /**
-   * The v2 rows: cursor reads a device polls, over the `messages`, `events`,
+   * The conversation rows: cursor reads a device polls, over the `messages`, `events`,
    * and `turns` tables, and the Clear that stamps the main conversation
    * rather than erasing it. Every read skips a conversation the Clear
    * stamped, so a cleared main is gone from the call after it.

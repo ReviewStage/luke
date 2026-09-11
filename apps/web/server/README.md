@@ -453,13 +453,6 @@ The roster tables are read and written by the scheduled observation below and
 the routes that serve it. `server/hosted/store/` is the store the brain host
 composes against.
 
-The v1 tables — the conversation directory, the standing generation with its
-checkpoint items, cursors, inbox, runs, and action receipts, the conversation
-lines, the retained transcript and its compaction boundaries — mirrored the
-desktop's SQLite store and were dropped, with the briefing table and the
-never-written `conversation_lease`, once every reader had moved to the rows
-below; `drizzle/0021_g4_drop_v1_conversation_tables.sql` is the drop.
-
 The notebook, the facts, and the roster keep their `sealed_*` columns: the
 payload envelope in `server/hosted/encryption.ts`, AES-256-GCM under the
 vault's `PROVIDER_KEY_ENCRYPTION_SECRET`, written as `<keyId>:base64(nonce ||
