@@ -2831,10 +2831,23 @@ are merely unread — which would defeat LUKE-170's undefined-versus-null fix. T
 LUKE-170 rather than claimed now.
 
 
-## 2026-09-11 — Wire: `quietUntil` on the device report carries three states
+## 2026-09-11 — Wire: `quietUntil` on the device report carries three states (CONFIRMED, not changed)
 
-**Ruled, from LUKE-170.** The device report's `quietUntil` is declared with two states and the system
-needs three. It becomes an **optional** field carrying `instant | null`:
+**Corrected within the hour by C2a, against my own entry.** I recorded this as a wire contract
+*change* I was ruling in. **It is not a change: the contract has carried all three states since the
+change signal was declared.** `packages/hosted/src/reads-wire.ts:648` declares
+`ChangesRequest.quietUntil` as an **exact optional** `number | null`, line 659 declares it once as
+`EffectSchema.optionalWith(presenceInstantSchemaEffect, { exact: true })` **with no default**, and the
+doc comment above it says *"null to clear the one on file, and absent to leave it"* **in as many
+words.**
+
+**The typecheck error was the host's request object, not the wire.** `device-registration.ts` spread
+the report into the poll request, and under **`exactOptionalPropertyTypes`** a key **present and
+holding `undefined`** is refused for an exact optional field. The fix is to leave the key off when the
+instant is unknown.
+
+**So this entry stands as a confirmation of the three states, and as the hop-by-hop proof that they
+survive.** The states:
 
 | state | meaning | the service does |
 |---|---|---|
@@ -2845,10 +2858,19 @@ needs three. It becomes an **optional** field carrying `instant | null`:
 Declared **once** as a `@sidecar/wire` schema, per CLAUDE.md — never as two literals agreeing at the
 two ends.
 
-**Why this is a ruling rather than an escalation.** The service **already implements all three
-states**: `device-store.ts:139-141` treats `undefined` as *leave* and `null` as *write*. The behaviour
-exists; only the **type** failed to express it. This makes the contract say what the code already
-does.
+**Verified hop by hop against `origin/main`, absent and `null` distinct the whole way:** the host
+report (`quietUntilFrom` answering `number | null | undefined`); the host request, which builds the
+poll with a conditional spread so the key is **never present-and-undefined**; the client transport
+(`changes-client.ts`'s `changesRecord()` including the key only when defined, with a test asserting on
+the **serialised body** that an unknown instant travels as absent — the assertion at the right layer
+already existed); the schema parse (exact optional, no default); the route
+(`change-signal.ts:94-96`, spreading into the heartbeat only when defined, `null` passing through as
+`null`); and the store (`device-store.ts:139-141`, adding the `SET` clause only when defined, already
+exercised for both `undefined` and `null`). **No hop coerces absent to `null`.**
+
+**The one new flattening risk was the fix's own spread — and the compiler stopped it.**
+`exactOptionalPropertyTypes` is what turned "I might reintroduce the bug I am fixing" into a build
+error. Worth knowing which guarantee did the work here: not a test, and not review.
 
 **Backward compatible in the direction that matters.** An older desktop that always sends `null`
 keeps exactly today's behaviour — it clears when there is no meeting, including when it does not yet
