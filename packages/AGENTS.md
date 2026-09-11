@@ -46,7 +46,16 @@ bridge: `addDisposable` carries a disposable into a `Scope`,
 ends. A `Scope` closing already guarantees what `DisposableStore` was written
 for — the reverse order and the failures aggregated into one shape — so the
 store, `toDisposable`, and `disposeAll` are deprecated in place and P12-06
-deletes them with the bridge.
+deletes them with the bridge. `packages/wire/src/effect/event.ts` is the same
+bridge for the other half: `streamFromEvent` subscribes when a stream's scope
+opens and unsubscribes when it closes, buffering without a bound because a
+listener cannot refuse a value and a `fire` returns having delivered, and
+`eventFromStream` answers an `Event` pumped by a fiber forked into the scope,
+which keeps every rule a listener can observe — the subscription order, a
+listener subscribed mid-round hearing the next value rather than that one, a
+thrower stopping none of the rest — and can only differ in having nobody above
+the pump to throw a failed round at, so that round is logged instead. `Event`
+and `Emitter` are deprecated in place and P12-06 deletes them too.
 
 Every tool the brain's catalog lists is a module under
 `packages/brain/src/tools/` (the memory provider's two reads are declared in
