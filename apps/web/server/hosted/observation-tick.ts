@@ -69,6 +69,13 @@ export interface ObservationTickOptions {
   listAccounts: (limit: number, seenAfter: number) => Promise<ObservedAccount[]>;
   /** Drops the snapshot, diffs, and pass record of every account without a cloud key or not seen since `seenAfter`. */
   forgetIneligible: (seenAfter: number) => Promise<void>;
+  /**
+   * Removes every conversation a Clear stamped past its retention window,
+   * answering how many went. Retention rides on the observation tick because
+   * it is the one schedule the service runs; the purge is not an observation
+   * and reads nothing of any account.
+   */
+  purgeCleared: (now: number) => Promise<number>;
   /** One read-only pass over the account's cloud providers, written down as the pass module does. */
   observe: (userId: string) => Promise<AccountPassOutcome>;
   now?: () => number;
@@ -87,6 +94,8 @@ interface ObservationTickAnswer {
   changed: number;
   /** Whether the tick stopped on its budget with accounts still listed. */
   exhausted: boolean;
+  /** Cleared conversations the tick purged past their retention window. */
+  purged: number;
 }
 
 const FAILED_PASS: AccountPassOutcome = { complete: false, changed: false };
@@ -136,6 +145,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
   const seenAfter = startedAt - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
 
   await options.forgetIneligible(seenAfter);
+  const purged = await options.purgeCleared(startedAt);
   const accounts = await options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
 
   const answer: ObservationTickAnswer = {
@@ -144,6 +154,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
     failed: 0,
     changed: 0,
     exhausted: false,
+    purged,
   };
   for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
     if (now() - startedAt + passDeadlineMs > budgetMs) {

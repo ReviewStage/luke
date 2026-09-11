@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
+  index,
   jsonb,
   pgTable,
   primaryKey,
@@ -94,6 +95,19 @@ export const conversations = pgTable(
       table.providerId,
       table.providerSessionId,
     ),
+    // One main stands per account at a time: Clear stamps the old one and opens the next in one
+    // transaction, and a first-use creation lands one; this index is what refuses a second standing
+    // main whatever path raced to it, so reads never silently pick one of two. The predicate is
+    // DDL, which takes no bound parameter, so the kind is inlined rather than passed.
+    uniqueIndex("conversations_standing_main")
+      .on(table.userId)
+      .where(
+        sql`${table.kind} = ${sql.raw(`'${CONVERSATION_KIND.MAIN}'`)} and ${table.deletedAt} is null`,
+      ),
+    // The purge runs every minute over the stamped rows alone.
+    index("conversations_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} is not null`),
   ],
 );
 
@@ -141,30 +155,34 @@ export const messages = pgTable(
  * the v1 run row and the desktop's trace keep, spelled the same way, and
  * `response_ids` every response OpenAI answered the turn with, in order.
  */
-export const turns = pgTable("turns", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  conversationId: uuid("conversation_id")
-    .notNull()
-    .references(() => conversations.id, { onDelete: "cascade" }),
-  origin: text("origin").$type<TurnOrigin>().notNull(),
-  status: text("status").$type<TurnStatus>().notNull(),
-  model: text("model"),
-  reasoningEffort: text("reasoning_effort"),
-  /** The content address of the prompt the turn ran under. */
-  promptHash: text("prompt_hash"),
-  /** The content address of the tool set the turn was offered. */
-  toolSetHash: text("tool_set_hash"),
-  responseIds: text("response_ids").array(),
-  usage: jsonb("usage").$type<BrainRunUsage>(),
-  queuedAt: instant("queued_at").notNull().defaultNow(),
-  startedAt: instant("started_at"),
-  settledAt: instant("settled_at"),
-  failure: text("failure"),
-  cancelRequestedAt: instant("cancel_requested_at"),
-});
+export const turns = pgTable(
+  "turns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    origin: text("origin").$type<TurnOrigin>().notNull(),
+    status: text("status").$type<TurnStatus>().notNull(),
+    model: text("model"),
+    reasoningEffort: text("reasoning_effort"),
+    /** The content address of the prompt the turn ran under. */
+    promptHash: text("prompt_hash"),
+    /** The content address of the tool set the turn was offered. */
+    toolSetHash: text("tool_set_hash"),
+    responseIds: text("response_ids").array(),
+    usage: jsonb("usage").$type<BrainRunUsage>(),
+    queuedAt: instant("queued_at").notNull().defaultNow(),
+    startedAt: instant("started_at"),
+    settledAt: instant("settled_at"),
+    failure: text("failure"),
+    cancelRequestedAt: instant("cancel_requested_at"),
+  },
+  (table) => [index("turns_by_user").on(table.userId)],
+);
 
 /**
  * The one lease per account under which turns are drained and sequences

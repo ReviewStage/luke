@@ -251,8 +251,8 @@ test("an observed session has one conversation per account, and unobserved kinds
   await assertUniqueViolation(insertConversation(userId, observed));
   await insertConversation(other, observed);
   await insertConversation(userId, { ...observed, providerSessionId: "session-2" });
-  await insertConversation(userId);
-  await insertConversation(userId);
+  await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  await insertConversation(userId, { kind: CONVERSATION_KIND.THREAD });
 
   assert.equal(await countRows(conversations, eq(conversations.userId, userId)), 4);
   assert.equal(await countRows(conversations, eq(conversations.userId, other)), 1);

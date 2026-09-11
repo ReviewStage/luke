@@ -9,9 +9,12 @@ import { fileURLToPath } from "node:url";
  * the invariant the writer establishes, stated over the server's import graph.
  * A module that could write one of the three tables has to import it from the
  * schema by name, so the set of server modules that do is the set that could
- * write, and that set is the writer alone. The aggregate schema module
- * re-exports them for the query builder and imports nothing, and a reader
- * that lands later joins this list by name, in the open.
+ * write, and that set is the writer and the one reader that selects from
+ * the same three tables. The import graph cannot tell a select from an
+ * insert, so the reader stands in the list by name, in the open, beside the
+ * statement that it writes none of them. The aggregate schema module
+ * re-exports them for the query builder and imports nothing, and another
+ * reader that lands later joins this list the same way.
  */
 
 const SERVER_ROOTS = ["server", "api"].map((root) =>
@@ -20,7 +23,14 @@ const SERVER_ROOTS = ["server", "api"].map((root) =>
 
 const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns", "events"]);
 
-const WRITERS: ReadonlySet<string> = new Set(["server/hosted/store/writer.ts"]);
+const WRITER = "server/hosted/store/writer.ts";
+
+/** The read module: `listMessages`, `listEvents`, and `listTurns` select from the three tables and insert into none. */
+const READER = "server/hosted/store/message-reads.ts";
+
+const TABLE_IMPORTERS: ReadonlySet<string> = new Set([WRITER, READER]);
+
+const WRITE_STATEMENT = /\.(insert|update|delete)\(\s*(messages|turns|events)\s*\)/;
 
 /**
  * The modules that import the whole schema as a namespace, which reaches
@@ -72,7 +82,7 @@ function importedTables(source: string): readonly string[] {
   return tables;
 }
 
-test("the writer is the one server module that imports the messages, turns, or events table, and the schema is imported whole by the two that build queries over it", async () => {
+test("the writer and the reader are the two server modules that import the messages, turns, or events table, only the writer writes them, and the schema is imported whole by the two that build queries over it", async () => {
   const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
   const importers = new Map<string, readonly string[]>();
   const namespaceImporters = new Set<string>();
@@ -85,7 +95,10 @@ test("the writer is the one server module that imports the messages, turns, or e
       if (importsSchemaNamespace(source)) namespaceImporters.add(relative);
     }
   }
-  assert.deepEqual(new Set(importers.keys()), WRITERS);
-  assert.deepEqual(new Set(importers.get("server/hosted/store/writer.ts")), WRITTEN_TABLES);
+  assert.deepEqual(new Set(importers.keys()), TABLE_IMPORTERS);
+  assert.deepEqual(new Set(importers.get(WRITER)), WRITTEN_TABLES);
+  assert.deepEqual(new Set(importers.get(READER)), WRITTEN_TABLES);
+  const reader = await readFile(path.join(repositoryRoot, READER), "utf8");
+  assert.equal(WRITE_STATEMENT.test(reader), false);
   assert.deepEqual(namespaceImporters, SCHEMA_NAMESPACE_IMPORTERS);
 });

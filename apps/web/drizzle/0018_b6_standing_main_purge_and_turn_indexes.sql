@@ -1,0 +1,3 @@
+CREATE UNIQUE INDEX "conversations_standing_main" ON "conversations" USING btree ("user_id") WHERE "conversations"."kind" = 'main' and "conversations"."deleted_at" is null;--> statement-breakpoint
+CREATE INDEX "conversations_deleted_at" ON "conversations" USING btree ("deleted_at") WHERE "conversations"."deleted_at" is not null;--> statement-breakpoint
+CREATE INDEX "turns_by_user" ON "turns" USING btree ("user_id");
