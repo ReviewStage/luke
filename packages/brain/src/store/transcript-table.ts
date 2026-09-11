@@ -245,22 +245,12 @@ function transcriptEventFromRow(
 
 /**
  * The synchronous doors onto the effects above, for the callers that still
- * hold a handle rather than a client: the envelope's save, the recoverable
- * deletion, and the store's own tests.
+ * hold a handle rather than a client: the recoverable deletion and the
+ * store's own tests.
  *
  * @deprecated Each goes with the caller that holds it; P5-11 runs every
  * remaining one on the worker's own runtime edge.
  */
-export function appendTranscript(
-  database: StoreDatabase,
-  key: SessionKey,
-  sessionId: string | undefined,
-  events: readonly TranscriptEvent[],
-): number {
-  return database.run(appendTranscriptEffect(key, sessionId, events));
-}
-
-/** @deprecated The synchronous door onto {@link listTranscriptEffect}; see {@link appendTranscript}. */
 export function listTranscript(
   database: StoreDatabase,
   key: SessionKey,
@@ -269,7 +259,7 @@ export function listTranscript(
   return database.run(listTranscriptEffect(key, options));
 }
 
-/** @deprecated The synchronous door onto {@link searchTranscriptEffect}; see {@link appendTranscript}. */
+/** @deprecated The synchronous door onto {@link searchTranscriptEffect}; see {@link listTranscript}. */
 export function searchTranscript(
   database: StoreDatabase,
   key: SessionKey,
@@ -279,7 +269,7 @@ export function searchTranscript(
   return database.run(searchTranscriptEffect(key, query, limit));
 }
 
-/** @deprecated The synchronous door onto {@link listCompactionBoundariesEffect}; see {@link appendTranscript}. */
+/** @deprecated The synchronous door onto {@link listCompactionBoundariesEffect}; see {@link listTranscript}. */
 export function listCompactionBoundaries(
   database: StoreDatabase,
   key: SessionKey,

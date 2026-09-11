@@ -322,11 +322,6 @@ export function raiseConversationCutoff(
   database.run(raiseConversationCutoffEffect(key, clearedAt));
 }
 
-/** @deprecated The synchronous door onto {@link touchConversationEffect}; see {@link listConversations}. */
-export function touchConversation(database: StoreDatabase, key: SessionKey, now: number): void {
-  database.run(touchConversationEffect(key, now));
-}
-
 /** @deprecated The synchronous door onto {@link archiveConversationEffect}; see {@link listConversations}. */
 export function archiveConversation(
   database: StoreDatabase,

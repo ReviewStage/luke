@@ -21,7 +21,11 @@ import type {
 import type { ConversationEntry } from "@sidecar/session";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { type DeletionOptions, type DeletionOutcome, deleteConversation } from "./archives.js";
-import { type EnvelopeRead, loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
+import {
+  type EnvelopeRead,
+  loadBrainEnvelopeEffect,
+  saveBrainEnvelopeEffect,
+} from "./brain-envelope.js";
 import {
   deleteChildCompletion,
   deleteChildRun,
@@ -109,9 +113,9 @@ type StoreOperation = (store: OpenStore, params: never) => StoreAnswer;
 
 export const STORE_OPERATIONS = {
   "brain.load": (s, p: { sessionKey: SessionKey }): EnvelopeRead =>
-    loadBrainEnvelope(s.db, p.sessionKey),
+    s.db.run(loadBrainEnvelopeEffect(p.sessionKey)),
   "brain.save": (s, p: { sessionKey: SessionKey; save: BrainStateSave }): boolean =>
-    saveBrainEnvelope(s.db, p.sessionKey, p.save),
+    s.db.run(saveBrainEnvelopeEffect(p.sessionKey, p.save)),
 
   "conversation.append": (
     s,
