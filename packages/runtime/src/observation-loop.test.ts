@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { describe, it } from "@effect/vitest";
+import { Effect, TestClock } from "effect";
 import { test } from "vitest";
 import { ObservationLoop, ObservationSupervisor } from "./observation-loop.js";
 
@@ -123,4 +125,59 @@ test("a pass that outlives its stop does not run the after-run hook", async () =
   enabled = true;
   await loop.refresh();
   assert.deepEqual(hooks, [1]);
+});
+
+describe("the cadence", () => {
+  it.effect("runs a pass at every spaced instant until the loop stops", () =>
+    Effect.gen(function* () {
+      const runtime = yield* Effect.runtime<never>();
+      const clock = yield* Effect.clock;
+      const passes: number[] = [];
+      const loop = new ObservationLoop({
+        gate: () => true,
+        intervalMs: 30_000,
+        run: async () => {
+          passes.push(clock.unsafeCurrentTimeMillis());
+        },
+        runtime,
+      });
+
+      loop.start();
+      assert.equal(passes.length, 1);
+
+      yield* TestClock.adjust("30 seconds");
+      yield* TestClock.adjust("30 seconds");
+      assert.deepEqual(passes, [0, 30_000, 60_000]);
+
+      loop.stop();
+      yield* TestClock.adjust("5 minutes");
+      assert.deepEqual(passes, [0, 30_000, 60_000]);
+    }),
+  );
+
+  it.effect("keeps its cadence over a pass that failed and reports it", () =>
+    Effect.gen(function* () {
+      const runtime = yield* Effect.runtime<never>();
+      const reports: string[] = [];
+      const passes: number[] = [];
+      const loop = new ObservationLoop({
+        gate: () => true,
+        intervalMs: 30_000,
+        run: async () => {
+          passes.push(passes.length);
+          if (passes.length === 2) throw new Error("provider unreachable");
+        },
+        report: (message) => reports.push(message),
+        runtime,
+      });
+
+      loop.start();
+      yield* TestClock.adjust("30 seconds");
+      yield* TestClock.adjust("30 seconds");
+
+      assert.equal(reports.length, 1);
+      assert.deepEqual(passes, [0, 1, 2]);
+      loop.stop();
+    }),
+  );
 });

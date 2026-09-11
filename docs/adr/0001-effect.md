@@ -127,7 +127,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Two strangler shims are on that allowlist for as long as they live.
+Three strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -140,6 +140,15 @@ allowlist for the same reason and on the same terms: the `now`, `schedule`, and
 Effect, so the reading of now is run there and the delay is forked on the
 runtime the bridge was handed, never on one it built. It goes in P12-03 with
 the seam, the `FakeClock`, and `drainMicrotasks`.
+
+`ObservationLoop`'s `start` and `stop` in
+`packages/runtime/src/observation-loop.ts` are the third: the loop's cadence is
+a `Schedule` forked into a `Scope` the loop owns, but the composers that arm it
+are still promises calling two synchronous methods, so the scope is made and
+closed there rather than built around them. `stop` closes the scope without
+awaiting it, dropping it first so a pass the interruption has not reached yet
+finds the loop disarmed; P7-10 deletes both once every composer that arms a
+loop is a `Layer` and the scope is the host's own.
 
 ## Strangler shims and their deletions
 
@@ -157,6 +166,7 @@ design decision stated as such:
 | `streamFromEvent`/`eventFromStream` | P1-06 | P12-06 |
 | `cloudFetchFromHttpClient` | P1-07 | P12-04 |
 | `timersFromRuntime` | P2-01 | P12-03 |
+| `ObservationLoop`'s `start`/`stop` over its own `Scope` | P2-04 | P7-10 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
