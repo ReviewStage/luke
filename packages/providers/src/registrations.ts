@@ -5,11 +5,9 @@ import {
   type CredentialProviderId,
 } from "@sidecar/credentials/vocabulary";
 import { PROVIDER_ID, type ProviderId, type SessionProviderPlugin } from "@sidecar/session";
-import { Effect } from "effect";
 import { CLAUDE_HOOK_EVENT, installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
 import { CODEX_HOOK_EVENT, installCodexObservationHooks } from "./codex/hooks.js";
 import { conductorPlugin } from "./conductor/index.js";
-import { builtProviders } from "./effect/registry.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { localSessionAdapters } from "./local-adapters.js";
 import type {
@@ -80,10 +78,10 @@ function observationHookRegistration(
 
 /**
  * Every registration this package ships, in the order the provider catalog
- * lists them. It is one layer each in `providersLayer`, which is where a
- * duplicate id is refused.
+ * lists them. It is one layer each in `providersLayer` (`@sidecar/providers/effect`),
+ * which is where a duplicate id is refused.
  */
-function providerDeclarations(
+export function providerDeclarations(
   options: ProviderRegistrationOptions,
 ): readonly ProviderRegistration[] {
   const now = options.now ?? Date.now;
@@ -133,37 +131,4 @@ function providerDeclarations(
     // unmatched tool_execution_start, and session_exit. No observation hook.
     { plugin: locals.omp },
   ];
-}
-
-/**
- * A registration the built registry has to hold. The record below states
- * every provider id the catalog names, so an id the merge did not produce is
- * a registry that never assembled rather than a lookup answering nothing.
- */
-function standing(
-  registry: ReadonlyMap<string, ProviderRegistration>,
-  providerId: ProviderId,
-): ProviderRegistration {
-  const registration = registry.get(providerId);
-  if (registration === undefined) throw new Error(`no registration for ${providerId}`);
-  return registration;
-}
-
-/**
- * @deprecated The registry is `providersLayer` in `./effect/registry.js`, and
- * the host takes it as a `Layer` in P7-01 and P7-02, which delete this door.
- * Until then the composers that hold it are promises reading a record, so the
- * layers are built and read here — the shim is the edge for as long as it
- * exists, and the build is synchronous because every registration is.
- */
-export function providerRegistrations(options: ProviderRegistrationOptions) {
-  const registry = Effect.runSync(
-    Effect.orDie(Effect.scoped(builtProviders(providerDeclarations(options)))),
-  );
-  return {
-    [PROVIDER_ID.CLAUDE_CODE]: standing(registry, PROVIDER_ID.CLAUDE_CODE),
-    [PROVIDER_ID.CODEX]: standing(registry, PROVIDER_ID.CODEX),
-    [PROVIDER_ID.CONDUCTOR]: standing(registry, PROVIDER_ID.CONDUCTOR),
-    [PROVIDER_ID.OMP]: standing(registry, PROVIDER_ID.OMP),
-  } satisfies Readonly<Record<ProviderId, ProviderRegistration>>;
 }
