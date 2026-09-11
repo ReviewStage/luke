@@ -1,3 +1,6 @@
+import type { HttpApp } from "@effect/platform";
+import { HttpServerRequest } from "@effect/platform";
+import { Effect } from "effect";
 import {
   BRAIN_DEFAULTS,
   BRAIN_EMBEDDING_MODEL,
@@ -40,6 +43,12 @@ import {
   jsonResponse,
   readJsonBody,
 } from "./http.js";
+import {
+  HOSTED_REFUSAL,
+  hostedJsonResponse,
+  hostedMethod,
+  hostedRefusalResponse,
+} from "./http-effect.js";
 import { postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 
@@ -104,6 +113,31 @@ function hostedBrainCapabilities(model: string | undefined): HostedBrainCapabili
 
 function modelOf(override: string | undefined): string {
   return trimmedText(override) ?? HOSTED_BRAIN_DEFAULTS.MODEL;
+}
+
+export interface BrainCapabilitiesSeams {
+  /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
+  apiKey: string | undefined;
+  /** A deployment-configured model override; the shared default otherwise. */
+  model?: string | undefined;
+  resolveUserId: (authorization: string | undefined) => Promise<string | undefined>;
+}
+
+/**
+ * The capabilities read as the `HttpApp` a web function is built from: the
+ * same GET, the same gate, and the same answer `handleBrainCapabilities`
+ * gives, said in the vocabulary the rest of the routes convert into.
+ */
+export function brainCapabilitiesApp(seams: BrainCapabilitiesSeams): HttpApp.Default {
+  return Effect.gen(function* () {
+    yield* hostedMethod(HTTP_METHOD.GET);
+    const apiKey = trimmedText(seams.apiKey);
+    if (!apiKey) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const userId = yield* Effect.promise(() => seams.resolveUserId(request.headers.authorization));
+    if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, hostedBrainCapabilities(seams.model));
+  }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
 }
 
 /** GET: what this service speaks, so a desktop can refuse to run against one that lacks it. */
