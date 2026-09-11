@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+
 /**
  * The ids the app's own user-facing settings are named by. They live here
  * rather than beside the desktop's settings schema because two things outside
@@ -30,10 +32,12 @@ export const APP_SETTING_ID = {
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
 
+export const AppSettingIdSchema = Schema.Literal(...Object.values(APP_SETTING_ID));
+
 export const APP_SETTING_ID_LIST: readonly AppSettingId[] = Object.values(APP_SETTING_ID);
 
-const APP_SETTING_IDS: ReadonlySet<string> = new Set(APP_SETTING_ID_LIST);
+const readsAppSettingId = Schema.is(AppSettingIdSchema);
 
 export function isAppSettingId(value: string): value is AppSettingId {
-  return APP_SETTING_IDS.has(value);
+  return readsAppSettingId(value);
 }
