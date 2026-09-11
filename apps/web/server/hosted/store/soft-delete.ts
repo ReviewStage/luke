@@ -1,6 +1,7 @@
-import { and, eq, inArray, isNull, lte } from "drizzle-orm";
-import { CONVERSATION_KIND, conversations, user } from "../../db/schema.js";
-import type { HostedStoreDatabase } from "./database.js";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
+import { CONVERSATION_KIND } from "../../db/schema.js";
 
 /**
  * Clear as a soft delete, and the purge that follows it. Nothing is erased
@@ -29,61 +30,110 @@ export interface ClearOutcome {
   readonly opened: string;
 }
 
+type ClearFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const IdRowSchema = Schema.Struct({ id: Schema.String });
+
+/** Postgres reserves the word `user`, so the identity table's name is quoted wherever it is written by hand. */
+const lockUser = (userId: string) =>
+  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+
+const StampMainSchema = Schema.Struct({ userId: Schema.String, deletedAt: Schema.DateFromSelf });
+
+const stampMain = SqlSchema.findAll({
+  Request: StampMainSchema,
+  Result: IdRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        update conversations
+        set deleted_at = ${write.deletedAt}
+        where user_id = ${write.userId} and kind = ${CONVERSATION_KIND.MAIN} and deleted_at is null
+        returning id
+      `,
+    ),
+});
+
+const StampChildrenSchema = Schema.Struct({
+  parents: Schema.Array(Schema.String),
+  deletedAt: Schema.DateFromSelf,
+});
+
+const stampChildren = SqlSchema.findAll({
+  Request: StampChildrenSchema,
+  Result: IdRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        update conversations
+        set deleted_at = ${write.deletedAt}
+        where ${sql.in("parent_conversation_id", write.parents)} and deleted_at is null
+        returning id
+      `,
+    ),
+});
+
 /** Stamps every not-yet-stamped child of the given rows, level by level, and answers every id stamped. */
-async function stampDescendants(
-  db: HostedStoreDatabase,
+function stampDescendants(
   parents: readonly string[],
   deletedAt: Date,
-): Promise<string[]> {
-  const stamped: string[] = [];
-  let frontier = parents;
-  while (frontier.length > 0) {
-    const children = await db
-      .update(conversations)
-      .set({ deletedAt })
-      .where(
-        and(inArray(conversations.parentConversationId, frontier), isNull(conversations.deletedAt)),
-      )
-      .returning({ id: conversations.id });
-    frontier = children.map((child) => child.id);
-    stamped.push(...frontier);
-  }
-  return stamped;
-}
-
-export function clearMainConversation(
-  db: HostedStoreDatabase,
-  userId: string,
-  now: Date,
-): Promise<ClearOutcome> {
-  return db.transaction(async (tx) => {
-    await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
-    const stamped = await tx
-      .update(conversations)
-      .set({ deletedAt: now })
-      .where(
-        and(
-          eq(conversations.userId, userId),
-          eq(conversations.kind, CONVERSATION_KIND.MAIN),
-          isNull(conversations.deletedAt),
-        ),
-      )
-      .returning({ id: conversations.id });
-    const mainIds = stamped.map((row) => row.id);
-    const descendants = await stampDescendants(tx, mainIds, now);
-    const [opened] = await tx
-      .insert(conversations)
-      .values({
-        userId,
-        kind: CONVERSATION_KIND.MAIN,
-        createdAt: now,
-        lastActivityAt: now,
-      })
-      .returning({ id: conversations.id });
-    if (opened === undefined) throw new Error("the Clear opened no main conversation");
-    return { cleared: [...mainIds, ...descendants], opened: opened.id };
+): Effect.Effect<string[], ClearFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const stamped: string[] = [];
+    let frontier = parents;
+    while (frontier.length > 0) {
+      const children = yield* stampChildren({ parents: [...frontier], deletedAt });
+      frontier = children.map((child) => child.id);
+      stamped.push(...frontier);
+    }
+    return stamped;
   });
 }
+
+const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.DateFromSelf });
+
+const openMain = SqlSchema.findOne({
+  Request: OpenMainSchema,
+  Result: IdRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into conversations (user_id, kind, created_at, last_activity_at)
+        values (${write.userId}, ${CONVERSATION_KIND.MAIN}, ${write.now}, ${write.now})
+        returning id
+      `,
+    ),
+});
+
+export function clearMainConversation(
+  userId: string,
+  now: Date,
+): Effect.Effect<ClearOutcome, ClearFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* lockUser(userId);
+        const stamped = yield* stampMain({ userId, deletedAt: now });
+        const mainIds = stamped.map((row) => row.id);
+        const descendants = yield* stampDescendants(mainIds, now);
+        const opened = yield* openMain({ userId, now });
+        if (Option.isNone(opened)) throw new Error("the Clear opened no main conversation");
+        return { cleared: [...mainIds, ...descendants], opened: opened.value.id };
+      }),
+    ),
+  );
+}
+
+const purgeRows = SqlSchema.findAll({
+  Request: Schema.DateFromSelf,
+  Result: IdRowSchema,
+  execute: (edge) =>
+    statement((sql) => sql`delete from conversations where deleted_at <= ${edge} returning id`),
+});
 
 /**
  * Removes every conversation stamped at or before the retention window's
@@ -91,14 +141,9 @@ export function clearMainConversation(
  * Answers how many conversations went, descendants counted where they were
  * stamped themselves and not where the cascade alone took them.
  */
-export async function purgeClearedConversations(
-  db: HostedStoreDatabase,
+export function purgeClearedConversations(
   now: Date,
-): Promise<number> {
+): Effect.Effect<number, ClearFailure, SqlClient.SqlClient> {
   const edge = new Date(now.getTime() - CLEARED_CONVERSATION_RETENTION_MS);
-  const removed = await db
-    .delete(conversations)
-    .where(lte(conversations.deletedAt, edge))
-    .returning({ id: conversations.id });
-  return removed.length;
+  return Effect.map(purgeRows(edge), (rows) => rows.length);
 }
