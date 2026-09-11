@@ -41,14 +41,15 @@ published with. Each companion package joins the same catalog at the newest
 release whose peer range accepts that `effect`: `@effect/platform` at `0.97.2`,
 which peers `^3.22.2`.
 
-`@sidecar/wire` is the one workspace reaching either today, and it declares
-both as dependencies rather than development ones, because the bridges under
-`packages/wire/src/effect/` are product code: `scope.ts` carries a disposable
-into a `Scope` and back, and `http.ts` offers an `HttpClient` over a
-`CloudFetch` and a `CloudFetch` over an `HttpClient`. The
-spike test at `packages/wire/src/effect-spike.test.ts`, which exercises
-`Schema.Struct` decoding, `Effect.gen`, `Layer`, and `Context.Tag` under the
-repository's own test runner, stands beside them.
+`@sidecar/wire` reaches both and declares them as dependencies rather than
+development ones, because the bridges under `packages/wire/src/effect/` are
+product code: `scope.ts` carries a disposable into a `Scope` and back, and
+`http.ts` offers an `HttpClient` over a `CloudFetch` and a `CloudFetch` over an
+`HttpClient`. The spike test at `packages/wire/src/effect-spike.test.ts`, which
+exercises `Schema.Struct` decoding, `Effect.gen`, `Layer`, and `Context.Tag`
+under the repository's own test runner, stands beside them. `@sidecar/runtime`
+declares `effect` on the same terms, for the delay and the clock bridge under
+`packages/runtime/src/effect/` behind `@sidecar/runtime/effect`.
 
 The spike compiled under both TypeScript lines the repository carries:
 `typescript@7.0.2` with `@types/node@26.2.0` (every package) and
@@ -126,12 +127,19 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-One strangler shim is on that allowlist for as long as it lives.
+Two strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
 a client instead. It is the migration's own scaffolding rather than a second
 runtime for the product to live on, and it goes in P12-04 with the seam.
+
+`timersFromRuntime` in `packages/runtime/src/effect/timers.ts` is on the
+allowlist for the same reason and on the same terms: the `now`, `schedule`, and
+`cancel` closures its callers hold answer a number and a handle rather than an
+Effect, so the reading of now is run there and the delay is forked on the
+runtime the bridge was handed, never on one it built. It goes in P12-03 with
+the seam, the `FakeClock`, and `drainMicrotasks`.
 
 ## Strangler shims and their deletions
 
