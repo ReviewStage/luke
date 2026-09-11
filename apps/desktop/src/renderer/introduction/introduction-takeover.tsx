@@ -1,6 +1,6 @@
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
-import { INTRODUCTION_SEED_BOUNDS, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
+import { boundedIntroductionTitles, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { WingFace as LukeFace, MicrophoneIcon } from "@sidecar/panel";
 import { SESSION_URGENCY, type Session } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS } from "@sidecar/session/fixtures";
@@ -670,9 +670,7 @@ function IntroductionFlight({
           // however long the drawn list scrolls, only the first few titles
           // leave the machine, each cut to the length the service admits.
           titlesRef.current = found
-            ? staged
-                .slice(0, INTRODUCTION_SEED_BOUNDS.TITLES)
-                .map((row) => row.title.slice(0, INTRODUCTION_SEED_BOUNDS.TITLE_CHARS))
+            ? boundedIntroductionTitles(staged.map((row) => row.title))
             : [];
           holdTimer = setTimeout(() => dispatch(INTRODUCTION_EVENT.DETECTED), DETECT_HOLD_MS);
         };
@@ -727,9 +725,12 @@ function IntroductionFlight({
             dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
             return;
           }
-          await call.unmute();
+          // A greeting nobody can answer is not the introduction: an unmute
+          // the session refused, or a track that never arrived, stands the
+          // takeover down rather than consuming the one introduction.
+          const heard = await call.unmute();
           if (gone) return;
-          dispatch(INTRODUCTION_EVENT.SESSION_STARTED);
+          dispatch(heard ? INTRODUCTION_EVENT.SESSION_STARTED : INTRODUCTION_EVENT.VOICE_FAILED);
         });
         return () => {
           gone = true;
