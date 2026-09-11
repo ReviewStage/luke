@@ -1971,3 +1971,35 @@ survivable.**
 `check.sh` run before bootstrapping reads as FIFTEEN FAILURES that look like your own broken
 imports.** That is the shape that sends someone hunting in their own diff, and a number makes it
 recognisable where the rule alone did not.
+
+
+## 2026-09-11 — The guarantees survived a rewrite by people who never read the PRs that made them
+
+**#1104 rewrote the hosted store's writers and speech onto `@effect/sql` and Schema.** Fifth
+cross-workstream shape change to land under this rework's held branches, and **the first to rewrite
+the modules themselves** rather than the harness, the routes, or the tables around them.
+
+**Verified on main before telling anyone, because this is the case the whole discipline was for:**
+
+- **`writer.ts:240`** still types a plain event write's kind as
+  **`Exclude<ConversationEventKind, SpeechEventKind>`** — a `speech.*` kind on it still does not
+  compile. **C5a's one door is intact.**
+- **`speech.ts:349`** still has **`unless` required** on a speech write, and the push transition
+  still carries **`unless: [SPEECH_CLAIMED, ...NOT_OPEN_KINDS]`** — **D3a's "a push never lands over
+  a claim" is intact.**
+- **`speech.ts:531`** still answers **`NOT_CLAIMANT`** unless `claimedByDeviceId === deviceId`, so
+  **claim-before-append still means something** and C8 part b's commitment still has a floor.
+- The writer's dedupe identities are intact: tool parts by **`callId`**, steps by the journal's own
+  **count of boundaries** (`held >= event.step`), reasoning by the part's **id**.
+
+**A workstream that never read C5a, D3a or C2b-1 rewrote their modules onto a different SQL layer,
+and every guarantee held — because they were types and required parameters rather than comments and
+discipline.** That is the argument this record has been making all day, tested by an actual refactor
+within hours of the guarantees being written. C5a's own body put the case for it: *"a guarantee that
+exists only as an implementation detail is one refactor from disappearing."* The refactor came.
+
+**Told the four affected lanes** (C2b-2b, C3, C4, C8 part b) to rehearse again, and — the part that
+matters for a conflict resolution — **their job in `writer.ts` and `speech.ts` is to re-apply their
+own change on top, not to re-establish the invariants**, which are on main. **If a resolution seems
+to want one added back or dropped, stop and report**: that is the signal something was lost that
+this check did not catch.
