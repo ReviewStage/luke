@@ -255,9 +255,27 @@ test("a session opened for another account's conversation is refused at the door
     ForbiddenError,
   );
   const owner = await auth(
-    opening("user-a", { [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID }),
+    opening("user-a", {
+      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
+      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+    }),
   );
   assert.equal(owner?.principalId, "user-a");
+});
+
+test("a session opened for the caller's own conversation but no kind of turn is refused at the door, before eve dispatches a run it would compose no prompt for", async () => {
+  const auth = ownedAuth([bearerOf("user-a")], ownershipOf({}, { [CONVERSATION_ID]: "user-a" }));
+  await assert.rejects(
+    async () => auth(opening("user-a", { [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID })),
+    { name: ForbiddenError.name, message: BRAIN_HOST_REFUSAL.NO_TURN_KIND },
+  );
+  const admitted = await auth(
+    opening("user-a", {
+      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
+      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.OBSERVATION,
+    }),
+  );
+  assert.equal(admitted?.principalId, "user-a");
 });
 
 test("a session opened for no conversation, or a malformed one, is refused at the door before eve dispatches a run; the routes that open none still admit the caller", async () => {

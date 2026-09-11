@@ -17,10 +17,12 @@ import { BRAIN_HOST_REFUSAL } from "./bounds.js";
  * nobody is refused too, not admitted: that is a session whose first event
  * has not yet recorded it, which a client reaches once the record stands, or
  * one a conversation has since rotated away from, which nobody reaches again.
- * A request to open a session must name a conversation of the caller's at
- * the door as well: eve dispatches a durable run before the host's first
- * resolver could refuse it, and a run no conversation records is one nobody
- * can attach to, meter, or retire. Whose a session or a conversation must
+ * A request to open a session must name a conversation of the caller's and
+ * the kind of turn its opening message runs, at the door as well: eve
+ * dispatches a durable run before the host's first resolver could refuse it,
+ * a run no conversation records is one nobody can attach to, meter, or
+ * retire, and a session opened under no turn kind would compose no prompt at
+ * its start and then run every later turn under none. Whose a session or a conversation must
  * be is the account the caller acts for — the bearer's own, or the one the
  * deployment's principal names — read through the one accessor for it.
  */
@@ -85,15 +87,18 @@ export function ownedAuth(
     if (sessionId !== undefined && (await ownership.sessionOwner(sessionId)) !== account) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
     }
-    const conversationId = conversationIdOf(sessionAuthFor(caller, request));
+    const auth = sessionAuthFor(caller, request);
+    const conversationId = conversationIdOf(auth);
+    const opening = opensSession(request);
     if (conversationId === undefined) {
-      if (opensSession(request)) {
-        throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
-      }
+      if (opening) throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
       return caller;
     }
     if (!(await ownership.ownsConversation(account, conversationId))) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_OWNER });
+    }
+    if (opening && turnKindOf(auth) === undefined) {
+      throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NO_TURN_KIND });
     }
     return caller;
   };
