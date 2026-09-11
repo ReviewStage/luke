@@ -197,12 +197,18 @@ beside the hand-rolled base while both are still in use — the `Scope`,
 `Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
 `CloudFetch`, and the JSON Schema emitter with its `readEither` and
 `toSchemaRead` — kept off the main barrel so a caller that only wants the
-wire vocabulary never resolves `effect`. A door is not what keeps `effect` out
-of a bundle generally, and `@sidecar/session` is where that stops being true:
-its fixed value sets are declared as `Schema.Literal` beside the `as const`
-object they derive from, and each `is*` guard over one is that schema's own
-`Schema.is`, so a renderer naming a single guard resolves `Schema`,
-`SchemaAST`, and `ParseResult`. That is the deliberate cost
+wire vocabulary never resolves `effect`. `@sidecar/runtime/effect` is that door
+one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and repeated
+work into a `Scope`, which is what cancels it, and `timersFromRuntime` answers
+the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so a caller
+still injected with those closures reads the clock the rest of the process
+reads. Neither the barrel nor the vocabulary door names any of them, so the
+packages below the runtime resolve no `effect` either. A door is not what keeps
+`effect` out of a bundle generally, and `@sidecar/session` is where that stops
+being true: its fixed value sets are declared as `Schema.Literal` beside the
+`as const` object they derive from, and each `is*` guard over one is that
+schema's own `Schema.is`, so a renderer naming a single guard resolves
+`Schema`, `SchemaAST`, and `ParseResult`. That is the deliberate cost
 `docs/adr/0001-effect.md` records against the desktop's bundle budget: one copy
 per bundle, paid once, and what the door still keeps out is a Node-reaching
 companion like `@effect/platform`.
@@ -220,7 +226,10 @@ names a state pulls none of it. `@sidecar/runtime/testing` is the scaffolding
 every test in this repository shares — a self-cleaning temporary directory, a
 stated microtask drain, and a clock the test drives — behind its own door
 because it reaches `node:fs` and `node:os`, and in this package because the
-clock stands in for the runtime's own `ScheduledTimer`.
+clock stands in for the runtime's own `ScheduledTimer`. Both of those are
+deprecated in place, since a `TestClock` advanced by hand is the same thing
+said in the library every other seam is moving to, and P12-03 deletes them
+with the bridge that answers the seam from a runtime.
 
 `@sidecar/brain` is the reason the rule exists twice in one package: the barrel
 is a door the web functions and the renderer open, and the store beneath it

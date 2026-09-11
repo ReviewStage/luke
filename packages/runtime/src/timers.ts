@@ -4,6 +4,11 @@
  * whatever it keys its own map by — so the handle is only ever handed back,
  * never read. One type at the bottom of the graph, so a schedule made in one
  * package is cancellable in another.
+ *
+ * @deprecated Effect's `Clock` and a fiber forked into a `Scope` say all of
+ * this, and `@sidecar/runtime/effect`'s `timersFromRuntime` answers the seam
+ * from a runtime while its callers migrate; P12-03 deletes this type, that
+ * bridge, and the `FakeClock` beside them.
  */
 export type ScheduledTimer = number | object;
 
