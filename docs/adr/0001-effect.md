@@ -253,6 +253,18 @@ it are still promises reading a record, so the layers are built and the
 is a `runSync` over a scope that closes at once, holding nothing; P7-01 and
 P7-02 hand the layer to the host itself and delete the door.
 
+`GatewayServer` in `packages/gateway/src/server.ts` is on the same allowlist,
+as the class `@sidecar/host`'s `GatewayService`, the in-process transports, and
+the socket binding still hold: the server itself is `layerGatewayServer`, an
+`RpcServer` over the protocol's group with its ledger and revision checks as
+middleware and its event log a service, but the host composes it from a promise
+and the transports subscribe to it with callbacks, so the class builds a
+`ManagedRuntime` over those layers, runs a request as a promise on it, and runs
+an emit, a reconnect, and the close of admissions synchronously against the
+services it made ahead of the runtime. P7-01 hands the host the layers and the
+services as `Context` tags and P7-02 composes the host as a `Layer`, at which
+point the class and its runtime go.
+
 `StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
 allowlist as the two OpenClaw ports' reach into the store. The store's worker
 is an Rpc server: `store-operations.ts` declares every operation once as an
@@ -576,6 +588,7 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
+| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | P7-01, P7-02 |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08 |

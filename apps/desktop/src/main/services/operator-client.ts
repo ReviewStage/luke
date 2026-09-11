@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { GATEWAY_CLIENT_ROLE, type GatewayServer, InProcessTransport } from "@sidecar/gateway";
+import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
+import type { GatewayServer } from "@sidecar/gateway/server";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import { SUPERSET_SIGN_IN_STAGE } from "@sidecar/providers/superset/sign-in-stage";

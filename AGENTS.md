@@ -422,15 +422,20 @@ Canonical commands:
   on its `Rpc`, the error codes as a tagged-error family whose wire form is
   still the bare `{ code, message }` object, and the serialization that
   carries the Rpc model's messages as the recorded envelopes), because it
-  reaches `@effect/rpc`. The host side (`GatewayServer`, composed as `@sidecar/host`'s
-  `GatewayService`) owns the idempotency ledger (every mutating method
-  carries an idempotency key; the same key finds the first answer, the same
-  key with other parameters is a conflict, never a second effect), the
-  revision checks (a request built over a replaced conversation lifetime or
-  configuration is refused before its handler runs), and the event log,
-  numbered from one, whose bounded replay window a reconnecting client is
-  replayed from or, past it, handed a fresh snapshot rather than a silent
-  skip. The client side (`GatewayClient`, the desktop's operator) mints
+  reaches `@effect/rpc`, and so does the host's server
+  (`@sidecar/gateway/server`), an `RpcServer` over that group. The host side
+  (`layerGatewayServer`, which `@sidecar/host`'s `GatewayService` still holds
+  through the `GatewayServer` adaptor) owns the idempotency ledger as a
+  middleware (every mutating method carries an idempotency key; the same key
+  finds the first answer, a retry still deciding joins that decision, the
+  same key with other parameters is a conflict, never a second effect), the
+  revision checks as a middleware (a request built over a replaced
+  conversation lifetime or configuration is refused before its handler
+  runs), and the event log, numbered from one, a bounded ring beside a
+  stream whose replay window a reconnecting client is replayed from or, past
+  it, handed a fresh snapshot rather than a silent skip; who is asking is
+  read from the registry the transport filled at its authenticated
+  handshake, never from a request's own headers. The client side (`GatewayClient`, the desktop's operator) mints
   request ids, keys mutations, follows the sequence, and fills a gap from the
   host's log before delivering anything later. Every attachment adopts the
   host's event stream anew (its sequence and snapshot), so a replaced host's

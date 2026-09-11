@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { test } from "vitest";
+import { type GatewayMethodTable, gatewayError, gatewayOk } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -23,13 +24,7 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "./protocol.js";
-import {
-  type GatewayMethodTable,
-  GatewayServer,
-  type GatewayServerOptions,
-  gatewayError,
-  gatewayOk,
-} from "./server.js";
+import { GatewayServer, type GatewayServerOptions } from "./server.js";
 import { TextLoopbackTransport } from "./testing.js";
 
 /**

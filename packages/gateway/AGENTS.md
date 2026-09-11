@@ -84,16 +84,93 @@ always dropped one. Every one of those rules is measured against the same
 goldens: `rpc.test.ts` carries a recorded request, answer, error, and event
 through the serialization and back to identical bytes.
 
-## Four doors, because two of them reach beyond the vocabulary
+## The server is an `RpcServer`, and its guarantees are its middleware
 
-The barrel carries the protocol, the server, the client, the in-process
-transport, and the node registry — nothing that reaches a socket, and
-nothing that reaches `@effect/rpc`. `./websocket` is the binding that reaches
-a socket (`ws`, `node:http`, `node:crypto`), and `./rpc` is the door that
+`server.ts`, behind the `./server` door, is the host's side of the protocol:
+`layerGatewayServer(options)` is `@effect/rpc`'s `RpcServer.layer` over
+`GatewayServerRpcs`, which is `GatewayRpcs` under three `RpcMiddleware` tags,
+added innermost first so a request meets them in this order. `GatewayAdmission`
+refuses a protocol version the host does not speak, a caller its role may not
+call the method with, every mutation but the shutdown once `GatewayAdmissions`
+has closed the door, and a mutation carrying no idempotency key.
+`GatewayRevisionCheck` refuses a request built over a configuration revision
+or a conversation lifetime since replaced, reading the `expectedRevision`
+headers, before any handler runs. `GatewayLedger` is the idempotency ledger,
+and it wraps the handler: one Effect `Cache` per mutating method, keyed by the
+idempotency key, holding the answered `Exit` and the parameters it was asked
+with, so a retry finds the first answer, a retry that lands while the first is
+still deciding joins that one lookup through the cache's own single flight,
+and a retry under the same key with other parameters is answered
+`idempotency_conflict` once the one answer stands, never a second effect. The
+cache's lookup is fixed when the cache is made, so the key carries the
+request's own `next` and its parameters while equality and hashing read the
+idempotency key alone. Each cache remembers as many keys as
+`idempotencyCapacity` and lets the least recently asked go first. Every
+middleware fails with the refusal family the envelope already carries, so what
+crosses back is the same `{ code, message }` object the goldens hold.
+
+Who is asking is never read from a request. `GatewayClients` is the registry
+of connected clients by the number the Rpc runtime knows each as, filled by
+the transport at its authenticated handshake; the admission middleware reads
+the identity back from that number, and a handler is handed it as its
+`client`, with the connection it can be asked back through and, as `request`,
+what the envelope said beside its own id — the id is the transport's to echo,
+never the handler's to read. A method of the group the host has no handler
+for is answered `unknown_method` by the server's own handler, so no tag
+without a handler reaches the runtime's defect, and a handler that throws is
+the request's own `internal` refusal. Hello and reconnect are the server's
+own handlers.
+
+`GatewayEventLog` is the event log: a `Ref` holding a `Chunk` ring of the
+newest events, bounded to the replay window, and a `PubSub` every emit
+publishes to. The sequence is the newest event's own number, so the ring is
+the one record of where the log stands: `replayFrom(lastSequence)` answers
+the events after it while the ring still starts at or before the one after
+it, a snapshot at the current sequence when the ring has moved past, and an
+empty replay to a client already at the sequence. `events` subscribes first
+and streams from then on, so a transport that subscribes before it reads
+misses none, and `revision()` is a synchronous stamp of the sequence beside
+the configuration revision, because `gatewayEnvelopeSerialization` stamps an
+answer's revision inside its encoder, which the runtime calls as a plain
+function.
+
+The layer takes its `Protocol` from whoever carries the frames.
+`layerGatewayInProcessProtocol` is the one this build ships, the client and
+the host in one process: `GatewayInProcessProtocol.connect` admits a client
+into the registry and answers a door whose `carry` takes one request envelope
+as text and answers the response envelope as text, both through the same
+serialization a socket would use. The runtime numbers requests itself, so
+this seam keeps each envelope's own id against the number it was handed in
+under and writes it back onto the answer, which is the one thing it does to a
+frame; a client it has closed answers `disconnected`, and a request the
+serialization does not read answers `invalid_params`. `server.test.ts` is
+where all of this is measured: every recorded request envelope in
+`fixtures/protocol/` is carried through that door and its answer compared
+byte for byte with the recorded one, including the replayed key, the
+conflicting key, the stale revision, and a reconnection inside and past the
+window.
+
+The `GatewayServer` class is what `@sidecar/host`'s `GatewayService`, the
+in-process transports, and the socket binding still hold, and it is a
+strangler shim (`@deprecated`, deleted by P7-01 and P7-02, on the ADR's
+allowlist): it makes the log, the admissions door, and the registry ahead of
+a `ManagedRuntime` over the layers above, runs a request as a promise through
+the in-process protocol, and runs an emit, a reconnect, and the close of
+admissions synchronously, delivering each emitted event to its own listeners
+on the same tick beside the stream the log publishes.
+
+## Five doors, because three of them reach beyond the vocabulary
+
+The barrel carries the protocol, the handler vocabulary (`./methods`: the
+outcome a handler answers, its context, and the table type), the client, the
+in-process transport, and the node registry — nothing that reaches a socket,
+and nothing that reaches `@effect/rpc`. `./websocket` is the binding that
+reaches a socket (`ws`, `node:http`, `node:crypto`); `./rpc` is the door that
 reaches `@effect/rpc` (the `RpcGroup`, the `GatewayMutates` annotation, and
-the envelope serialization), so a bundle that only wants the vocabulary — the
-renderer names the live session's shapes through the barrel — never has to
-resolve either, and
+the envelope serialization); and `./server` is the host's server, which
+composes that runtime over the group, so a bundle that only wants the
+vocabulary — the renderer names the live session's shapes through the barrel
+— never has to resolve any of them, and
 `./testing` holds the text transport, which exists to prove the same protocol
 answers when every envelope goes through JSON and back.
 

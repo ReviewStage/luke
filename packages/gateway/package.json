@@ -7,6 +7,7 @@
     ".": "./src/index.js",
     "./protocol": "./src/protocol.js",
     "./rpc": "./src/rpc.js",
+    "./server": "./src/server.js",
     "./testing": "./src/testing.js",
     "./websocket": "./src/websocket.js"
   },

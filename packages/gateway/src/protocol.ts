@@ -460,7 +460,8 @@ export const GATEWAY_REFUSALS = [
 
 export type GatewayRefusal = InstanceType<(typeof GATEWAY_REFUSALS)[number]>;
 
-function gatewayRefusalFromError(error: GatewayError): GatewayRefusal {
+/** The refusal class an error's code names, carrying its message: how an outcome a handler wrote as a code becomes a typed failure. */
+export function gatewayRefusalFromError(error: GatewayError): GatewayRefusal {
   const message = error.message;
   switch (error.code) {
     case GATEWAY_ERROR.UNSUPPORTED_VERSION:

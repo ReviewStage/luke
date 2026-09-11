@@ -4,6 +4,7 @@ import { test } from "vitest";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
 import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
+import { type GatewayMethodTable, gatewayError, gatewayOk } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -18,7 +19,7 @@ import {
   nodeInvocationAnswerToWire,
   nodeInvocationFromWire,
 } from "./protocol.js";
-import { type GatewayMethodTable, GatewayServer, gatewayError, gatewayOk } from "./server.js";
+import { GatewayServer } from "./server.js";
 import { TextLoopbackTransport } from "./testing.js";
 import { InProcessTransport } from "./transport.js";
 import {

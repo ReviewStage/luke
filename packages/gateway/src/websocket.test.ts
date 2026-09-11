@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
+import { gatewayError, gatewayOk } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -13,7 +14,7 @@ import {
   type GatewayClientIdentity,
   type GatewayEvent,
 } from "./protocol.js";
-import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
+import { GatewayServer } from "./server.js";
 import {
   bearerAuthentication,
   connectWebSocketGateway,

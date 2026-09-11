@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
-import type { GatewayServer } from "@sidecar/gateway";
+import type { GatewayServer } from "@sidecar/gateway/server";
 import { composeHost, type HostSeams, storeWorkerPath } from "@sidecar/host";
 import { type LateRef, lateRef } from "@sidecar/wire";
 import type { DesktopConfig } from "./desktop-config";
