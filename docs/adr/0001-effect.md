@@ -278,6 +278,17 @@ rejection nobody waits on must still have its handler. P12-02 deletes the door
 once the turn runner, the generation, and maintenance each wait in a fiber of
 their own.
 
+`BrainAgent`'s own construction in `packages/brain/src/agent.ts` is on the
+allowlist too: `onRunEvent` still answers the `Event<BrainRunEvent>` its
+subscribers hold, now bridged from a `PubSub` by `eventFromStream`, and
+building that bridge takes a `Scope` the agent owns rather than one an edge
+handed it, so the scope is made and the bridge built with a `runSync` at
+construction. Closing that scope in `stop()` runs to a promise instead,
+since interrupting the bridge's own daemon pump — parked waiting on the
+pubsub whenever nothing has fired since the last event — is not guaranteed
+to settle synchronously. P5-14 deletes both runs once a turn runs on a fiber
+of the agent's own and a subscriber can read the `Stream` directly.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -309,6 +320,7 @@ design decision stated as such:
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
 | `runAct` Promise door over the act `Atom.fn` | P9-02 | P9-08 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
+| `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P5-14 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
