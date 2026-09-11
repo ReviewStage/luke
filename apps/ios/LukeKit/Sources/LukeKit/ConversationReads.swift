@@ -28,6 +28,7 @@ public enum TurnOrigin: String, Sendable {
     case rosterDiff = "roster_diff"
     case holdRelease = "hold_release"
     case child
+    case childCompletion = "child_completion"
 }
 
 /// Where a turn stands — `TURN_STATUS` in `@sidecar/wire`.

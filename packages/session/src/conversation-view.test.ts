@@ -413,7 +413,7 @@ test("a child's completion is a message of main's, under its own turn", async ()
   assert.equal(groups.length, 1);
   const [group] = groups;
   assert.equal(group?.turnId, TURN.CHILD);
-  assert.equal(group?.turn?.origin, TURN_ORIGIN.CHILD);
+  assert.equal(group?.turn?.origin, TURN_ORIGIN.CHILD_COMPLETION);
   assert.deepEqual(group?.source, { kind: CONVERSATION_VIEW_SOURCE.MAIN });
   assert.equal(authorOf(group?.messages[0]?.message), MESSAGE_AUTHOR.CHILD);
 });

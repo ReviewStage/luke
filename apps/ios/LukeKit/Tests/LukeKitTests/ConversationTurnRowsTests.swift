@@ -166,6 +166,16 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertFalse(ConversationTurnRows(group: try actedGroup(status: .failed), roster: []).pending)
     }
 
+    func testAChildCompletionTurnDecodesAndIsLukesOwn() throws {
+        let view = try RepositoryFixtures.json(RepositoryFixtures.conversationView, "child-completion.json")
+        let turns = try XCTUnwrap(view["turns"] as? [[String: Any]])
+        let decoded = try JSONDecoder().decode(
+            [ConversationViewTurn].self, from: JSONSerialization.data(withJSONObject: turns)
+        )
+        XCTAssertEqual(decoded.map(\.origin), [.childCompletion])
+        XCTAssertEqual(ConversationTurnRows.judgment(of: decoded[0]), .own)
+    }
+
     func testJudgmentFollowsTheTurnsOrigin() {
         func turn(_ origin: TurnOrigin) -> ConversationViewTurn {
             ConversationViewTurn(id: "t", origin: origin, status: .settled, queuedAt: Date())
@@ -175,6 +185,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.rosterDiff)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.holdRelease)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.child)), .own)
+        XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.childCompletion)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: nil), .ask)
         XCTAssertFalse(ConversationTurnRows.pending(nil))
     }
