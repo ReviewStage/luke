@@ -51,6 +51,7 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import type { ObservedRoster } from "../server/hosted/observed-roster";
 import { encodeRosterDiff, rosterDiff } from "../server/hosted/roster-diff";
 import { type HostedStoreRun, storeWriter } from "../server/hosted/store";
+import { releasedBriefings } from "../server/hosted/store/index";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -903,6 +904,37 @@ test("a re-decision carries every release no hold-release message has named, how
     },
   );
   assert.equal(carried.ok, true);
+  // Three sentences for a recurrence, in the order a row travels: the fixture's rows stand, the drain reads them, eve receives them. A failure here says which of the three it was.
+  const expected = Array.from({ length: 12 }, (_, index) => `Fixture briefing ${index + 1}.`);
+  const target = { userId, conversationId: released.conversationId };
+  const releaseEvents = await database.db
+    .select({ seq: events.seq })
+    .from(events)
+    .where(
+      and(
+        eq(events.conversationId, released.conversationId),
+        eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED),
+      ),
+    )
+    .orderBy(events.seq);
+  assert.deepEqual(
+    releaseEvents.map((row) => row.seq),
+    [...Array.from({ length: 12 }, (_, index) => index + 1), 40],
+  );
+  const rows = await database.db
+    .select({ seq: messages.seq })
+    .from(messages)
+    .where(eq(messages.conversationId, released.conversationId))
+    .orderBy(messages.seq);
+  assert.deepEqual(
+    rows.map((row) => row.seq),
+    [...Array.from({ length: 12 }, (_, index) => index + 1), 40, 41],
+  );
+  const read = await database.run(releasedBriefings(target, { limit: 64 }));
+  assert.deepEqual(
+    read.map((briefing) => briefing.briefing),
+    expected,
+  );
   const { eve, handed } = fakeEve();
   const opener = seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) });
   const outcome = await openHoldReleaseTurns(opener, userId);
@@ -914,7 +946,7 @@ test("a re-decision carries every release no hold-release message has named, how
   );
   assert.deepEqual(
     listed.map((briefing) => briefing.briefing),
-    Array.from({ length: 12 }, (_, index) => `Fixture briefing ${index + 1}.`),
+    expected,
   );
   assert.deepEqual(await queuedRows(released.conversationId), []);
 });
