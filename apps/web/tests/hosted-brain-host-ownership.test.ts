@@ -361,16 +361,32 @@ test("another account's conversation and another account's session are refused a
   const { host } = hostOverTestDatabase();
   assert.equal(await start(host, ownSeat(userA, target.conversationId), SESSION.OLDER), true);
   const auth = channelAuth([userA, userB]);
-  const opening = (bearer: string) =>
+  const opening = (bearer: string, headers: Readonly<Record<string, string>> = {}) =>
     request(
       "/eve/v1/session",
       bearer,
-      { [BRAIN_HOST_HEADER.CONVERSATION]: target.conversationId },
+      {
+        [BRAIN_HOST_HEADER.CONVERSATION]: target.conversationId,
+        [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+        ...headers,
+      },
       "POST",
     );
 
   assert.deepEqual(await auth(opening(userB)), forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER));
   assert.deepEqual(await auth(opening(userA)), { admitted: userA });
+  // An open naming the caller's own conversation but no kind of turn is refused before eve dispatches: the session it would start composes its prompt from that kind and has none to run under otherwise.
+  assert.deepEqual(
+    await auth(
+      request(
+        "/eve/v1/session",
+        userA,
+        { [BRAIN_HOST_HEADER.CONVERSATION]: target.conversationId },
+        "POST",
+      ),
+    ),
+    forbidden(BRAIN_HOST_REFUSAL.NO_TURN_KIND),
+  );
   assert.deepEqual(
     await auth(request(`/eve/v1/session/${SESSION.OLDER}/stream`, userB)),
     forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER),
