@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { Either, Schema } from "effect";
 import { test } from "vitest";
-import { CHILD_RUN_STATUS, ChildRunStatusSchema } from "./child-records.js";
 import {
   ARCHIVE_REASON,
   ArchiveReasonSchema,
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
+  CHILD_RUN_STATUS,
   ChildCleanupSchema,
   ChildContextModeSchema,
+  ChildRunStatusSchema,
   COMPACTION_SOURCE,
   CONVERSATION_KIND,
   CompactionSourceSchema,

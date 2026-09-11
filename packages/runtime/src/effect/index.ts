@@ -1,4 +1,9 @@
 export {
+  ChildCleanupSchema,
+  ChildContextModeSchema,
+  ChildRunStatusSchema,
+} from "../child-records.effect.js";
+export {
   CHILD_COMPLETION_REFUSAL,
   CHILD_SPAWN_REFUSAL,
   ChildCancellationIncomplete,
@@ -41,6 +46,8 @@ export {
   SkillLoadRefused,
 } from "../skills.effect.js";
 export {
+  ArchiveReasonSchema,
+  CompactionSourceSchema,
   decodeConversationArchiveRecord,
   decodeConversationRecord,
   STORAGE_DECODE_REFUSAL,

@@ -5,7 +5,6 @@ import {
   isWireString,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-import { Schema } from "effect";
 import { type AgentId, isIdentifier, type SessionKey } from "./identifiers.js";
 
 /**
@@ -30,12 +29,8 @@ export const CHILD_CONTEXT_MODE = {
 
 export type ChildContextMode = (typeof CHILD_CONTEXT_MODE)[keyof typeof CHILD_CONTEXT_MODE];
 
-export const ChildContextModeSchema = Schema.Literal(...Object.values(CHILD_CONTEXT_MODE));
-
-const readsChildContextMode = Schema.is(ChildContextModeSchema);
-
 export function isChildContextMode(value: UnparsedWireValue): value is ChildContextMode {
-  return readsChildContextMode(value);
+  return value === CHILD_CONTEXT_MODE.ISOLATED || value === CHILD_CONTEXT_MODE.FORK;
 }
 
 /** What happens to a child's conversation once it has completed. */
@@ -48,12 +43,8 @@ export const CHILD_CLEANUP = {
 
 export type ChildCleanup = (typeof CHILD_CLEANUP)[keyof typeof CHILD_CLEANUP];
 
-export const ChildCleanupSchema = Schema.Literal(...Object.values(CHILD_CLEANUP));
-
-const readsChildCleanup = Schema.is(ChildCleanupSchema);
-
 export function isChildCleanup(value: UnparsedWireValue): value is ChildCleanup {
-  return readsChildCleanup(value);
+  return value === CHILD_CLEANUP.KEEP || value === CHILD_CLEANUP.DELETE;
 }
 
 /**
@@ -75,26 +66,23 @@ export const CHILD_RUN_STATUS = {
 
 export type ChildRunStatus = (typeof CHILD_RUN_STATUS)[keyof typeof CHILD_RUN_STATUS];
 
-export const ChildRunStatusSchema = Schema.Literal(...Object.values(CHILD_RUN_STATUS));
-
-const readsChildRunStatus = Schema.is(ChildRunStatusSchema);
+const CHILD_RUN_STATUS_LIST: readonly ChildRunStatus[] = Object.values(CHILD_RUN_STATUS);
 
 function isChildRunStatus(value: UnparsedWireValue): value is ChildRunStatus {
-  return readsChildRunStatus(value);
+  // SAFETY: value is a string; list membership is the vocabulary check.
+  return isWireString(value) && CHILD_RUN_STATUS_LIST.includes(value as ChildRunStatus);
 }
 
-const TerminalChildRunStatusSchema = Schema.Literal(
+const CHILD_RUN_TERMINAL_STATUS: ReadonlySet<ChildRunStatus> = new Set([
   CHILD_RUN_STATUS.COMPLETED,
   CHILD_RUN_STATUS.FAILED,
   CHILD_RUN_STATUS.TIMED_OUT,
   CHILD_RUN_STATUS.CANCELLED,
   CHILD_RUN_STATUS.UNKNOWN,
-);
-
-const readsTerminalChildRunStatus = Schema.is(TerminalChildRunStatusSchema);
+]);
 
 export function isTerminalChildRunStatus(status: ChildRunStatus): boolean {
-  return readsTerminalChildRunStatus(status);
+  return CHILD_RUN_TERMINAL_STATUS.has(status);
 }
 
 /** The effective tool policy a child ran under, as metadata on its record: names, never schemas. */
@@ -245,12 +233,16 @@ export const COMPLETION_DELIVERY_STATUS = {
 type CompletionDeliveryStatus =
   (typeof COMPLETION_DELIVERY_STATUS)[keyof typeof COMPLETION_DELIVERY_STATUS];
 
-const CompletionDeliveryStatusSchema = Schema.Literal(...Object.values(COMPLETION_DELIVERY_STATUS));
-
-const readsCompletionDeliveryStatus = Schema.is(CompletionDeliveryStatusSchema);
+const COMPLETION_DELIVERY_STATUS_LIST: readonly CompletionDeliveryStatus[] = Object.values(
+  COMPLETION_DELIVERY_STATUS,
+);
 
 function isCompletionDeliveryStatus(value: UnparsedWireValue): value is CompletionDeliveryStatus {
-  return readsCompletionDeliveryStatus(value);
+  return (
+    isWireString(value) &&
+    // SAFETY: value is a string; list membership is the vocabulary check.
+    COMPLETION_DELIVERY_STATUS_LIST.includes(value as CompletionDeliveryStatus)
+  );
 }
 
 /**

@@ -9,14 +9,17 @@
  */
 
 export {
+  ChildCleanupSchema,
+  ChildContextModeSchema,
+  ChildRunStatusSchema,
+} from "./child-records.effect.js";
+export {
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
   type ChildCleanup,
-  ChildCleanupSchema,
   type ChildCompletionRecord,
   type ChildContextMode,
-  ChildContextModeSchema,
   type ChildPolicyMetadata,
   type ChildRunRecord,
   type ChildSpawnReceipt,
@@ -124,16 +127,15 @@ export {
   memoryToolNamed,
   sameMemoryScope,
 } from "./memory.js";
+export { ArchiveReasonSchema, CompactionSourceSchema } from "./storage.effect.js";
 export {
   ARCHIVE_ENCODING,
   ARCHIVE_REASON,
   type ArchiveEncoding,
   type ArchiveReason,
-  ArchiveReasonSchema,
   COMPACTION_SOURCE,
   type CompactionBoundary,
   type CompactionSource,
-  CompactionSourceSchema,
   type ConversationAppendOutcome,
   type ConversationArchiveRecord,
   type ConversationRecord,
