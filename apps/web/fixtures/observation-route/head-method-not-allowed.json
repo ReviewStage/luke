@@ -1,0 +1,11 @@
+{
+  "status": 405,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": ""
+}

@@ -64,17 +64,37 @@ const PATH = {
   OBSERVATION_TICK: "/api/observation/tick",
 } as const;
 
+const HTTP_METHOD = { HEAD: "HEAD" } as const;
+
+/**
+ * A HEAD answer's status and headers, carried on the `HttpServerResponse`
+ * because the platform's web handler builds a HEAD response from those alone
+ * rather than from the raw answer beneath them — the same reason
+ * `auth-app.ts`'s passthrough carries a HEAD this way.
+ */
+function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse {
+  return HttpServerResponse.empty({
+    status: answer.status,
+    statusText: answer.statusText,
+    headers: [...answer.headers],
+  });
+}
+
 /**
  * A promise-shaped handler's answer, carried to the `HttpApp` the group
  * composes: the handler already answers the hosted vocabulary's own bytes, so
- * nothing here reads or rewrites the response beside forwarding it.
+ * nothing here reads or rewrites the response beside forwarding it, except a
+ * HEAD, whose status and headers the web handler reads off the
+ * `HttpServerResponse` rather than the raw answer it wraps.
  */
 function promisePassthrough(handle: (request: Request) => Promise<Response>): HttpApp.Default {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const answer = yield* Effect.promise(() => handle(request));
-    return HttpServerResponse.raw(answer);
+    return incoming.method === HTTP_METHOD.HEAD
+      ? bodylessAnswer(answer)
+      : HttpServerResponse.raw(answer);
   });
 }
 

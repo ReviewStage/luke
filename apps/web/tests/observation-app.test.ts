@@ -163,11 +163,24 @@ test("a path the group declares no route for is refused with the hosted not-foun
   await settleResponseGolden(GOLDEN_ROOT, "route-not-found", carried);
 });
 
+test("a HEAD on a declared path keeps the handler's own status and drops the body", async () => {
+  const answered = await routeFromHttpApp(observationApp()).fetch(
+    new Request(`${ORIGIN}/api/projects`, { method: "HEAD" }),
+  );
+  const carried = await recordedResponse(answered);
+
+  // handleProjects only answers GET; HEAD is refused exactly as DELETE is above.
+  assert.equal(carried.status, 405);
+  assert.equal(carried.body, "");
+  await settleResponseGolden(GOLDEN_ROOT, "head-method-not-allowed", carried);
+});
+
 test("the recorded set is exactly the exchanges declared", async () => {
   const named = [
     ...EXCHANGES.map((exchange) => exchange.name),
     "method-not-allowed",
     "route-not-found",
+    "head-method-not-allowed",
   ].sort();
   assert.deepEqual(await recordedGoldenNames(GOLDEN_ROOT), named);
 });
