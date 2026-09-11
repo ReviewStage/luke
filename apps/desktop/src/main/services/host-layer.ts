@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
+import { NodeFileSystem } from "@effect/platform-node";
 import { type HostSeams, storeWorkerPath } from "@sidecar/host";
 import {
   type DuplicateGatewayMethod,
@@ -65,5 +66,8 @@ function hostSeamsFor(dependencies: HostSeamDependencies): HostSeams {
 export function hostAssemblyLayerFor(
   dependencies: HostSeamDependencies,
 ): Layer.Layer<HostAssemblyTag, DuplicateGatewayMethod> {
-  return Layer.provide(hostAssemblyLayer, hostKernelLayerFromSeams(hostSeamsFor(dependencies)));
+  return Layer.provide(
+    hostAssemblyLayer,
+    Layer.merge(hostKernelLayerFromSeams(hostSeamsFor(dependencies)), NodeFileSystem.layer),
+  );
 }

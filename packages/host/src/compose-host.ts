@@ -1,3 +1,5 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
+import { NodeFileSystem } from "@effect/platform-node";
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   carried,
@@ -49,7 +51,13 @@ import {
   hostStandingLayer,
 } from "./effect/host.js";
 import { HostKernelTag, HostService, hostKernelLayerFromSeams } from "./effect/kernel.js";
-import { type Environment, HostSeamsObject, Reporter, RunMode } from "./effect/seams.js";
+import {
+  type Environment,
+  HostSeamsObject,
+  Reporter,
+  RunMode,
+  type SecretCipher,
+} from "./effect/seams.js";
 import type { HostSeams } from "./host-kernel.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
@@ -123,7 +131,14 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
 export const hostAssemblyLayer: Layer.Layer<
   HostAssemblyTag,
   DuplicateGatewayMethod,
-  HostKernelTag | HostService | HostSeamsObject | RunMode | Reporter | Environment
+  | HostKernelTag
+  | HostService
+  | HostSeamsObject
+  | RunMode
+  | Reporter
+  | Environment
+  | SecretCipher
+  | FileSystem.FileSystem
 > = Layer.scoped(
   HostAssemblyTag,
   Effect.gen(function* () {
@@ -134,7 +149,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const { report } = yield* Reporter;
     const { now } = kernel;
 
-    const settings = composeSettings({ kernel });
+    const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings });
     const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
     const issues = composeIssues({ kernel, settings, observationGate });
@@ -423,7 +438,14 @@ export const hostAssemblyLayer: Layer.Layer<
 export const hostLayer: Layer.Layer<
   HostTag,
   DuplicateGatewayMethod,
-  HostKernelTag | HostService | HostSeamsObject | RunMode | Reporter | Environment
+  | HostKernelTag
+  | HostService
+  | HostSeamsObject
+  | RunMode
+  | Reporter
+  | Environment
+  | SecretCipher
+  | FileSystem.FileSystem
 > = Layer.provide(hostStandingLayer, hostAssemblyLayer);
 
 /**
@@ -436,7 +458,7 @@ export const hostLayer: Layer.Layer<
 export const hostLayerFromSeams = (
   options: HostSeams,
 ): Layer.Layer<HostTag, DuplicateGatewayMethod> =>
-  Layer.provide(hostLayer, hostKernelLayerFromSeams(options));
+  Layer.provide(hostLayer, Layer.merge(hostKernelLayerFromSeams(options), NodeFileSystem.layer));
 
 /**
  * What the composers' stops left when the scope closed, one line each: a
@@ -467,7 +489,10 @@ const reportUncleanStops = (exit: Exit.Exit<void>, report: (message: string) => 
  */
 export function composeHost(options: HostSeams): Host {
   const runtime = ManagedRuntime.make(
-    Layer.provideMerge(hostAssemblyLayer, hostKernelLayerFromSeams(options)),
+    Layer.provideMerge(
+      hostAssemblyLayer,
+      Layer.merge(hostKernelLayerFromSeams(options), NodeFileSystem.layer),
+    ),
   );
   const assembly = runtime.runSync(HostAssemblyTag);
   const standing = runtime.runSync(Scope.make());

@@ -1,5 +1,4 @@
 import type * as FileSystem from "@effect/platform/FileSystem";
-import { NodeFileSystem } from "@effect/platform-node";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_CONNECTION,
@@ -42,7 +41,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Either, ManagedRuntime, Redacted } from "effect";
+import { Either, Redacted, Runtime } from "effect";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
@@ -125,6 +124,13 @@ export interface SettingsStoreOptions {
    * key is. Only the app knows which kind of run this is. True by default.
    */
   credentialsUsable?: boolean;
+  /**
+   * What `#readPersisted` and `#write` below run their `FileSystem` effects
+   * on: the composer's own runtime, captured once with `Effect.runtime` over
+   * the `FileSystem` the host's assembly layer already resolves, rather than a
+   * `FileSystem` layer this class stands up for itself.
+   */
+  runtime: Runtime.Runtime<FileSystem.FileSystem>;
 }
 
 export interface PersistedSettings extends StoredAppSettings {
@@ -543,17 +549,17 @@ export class SettingsStore {
   readonly #credentialsUsable: boolean;
   /**
    * The runtime `#readPersisted` and `#write` below run their `FileSystem`
-   * effects on.
+   * effects on: the composer's own, handed in rather than a layer this class
+   * stands up for itself.
    *
    * @deprecated The strangler shim on the `docs/adr/0001-effect.md` allowlist:
-   * `compose-settings.ts` still constructs this class from a plain object
-   * rather than a `Scope` of its own to hand a `NodeFileSystem` layer through,
-   * so the class builds its own `ManagedRuntime` here, the same shape
-   * `AgentTraceWriter` in `@sidecar/devtrace` uses for the same reason. Both
-   * go once their composer is a `Layer` that can hold the runtime itself, in
-   * P7-05's `compose-settings.ts` conversion.
+   * this class still answers `get`/`set`/`snapshot`/... as Promises rather
+   * than Effects, so its own `FileSystem` reads and writes still have to be
+   * run to a promise somewhere, and this is where. It goes once the store's
+   * own methods are stated as Effects, which the plan does not currently
+   * schedule; this is where that is recorded.
    */
-  readonly #runtime: ManagedRuntime.ManagedRuntime<FileSystem.FileSystem, never>;
+  readonly #runtime: Runtime.Runtime<FileSystem.FileSystem>;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
@@ -704,7 +710,7 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
-    this.#runtime = ManagedRuntime.make(NodeFileSystem.layer);
+    this.#runtime = options.runtime;
   }
 
   async snapshot(): Promise<AppSettings> {
@@ -1447,7 +1453,7 @@ export class SettingsStore {
 
   async #readPersisted(): Promise<PersistedSettings> {
     const directory = this.#directory();
-    const source = await this.#runtime.runPromise(readSettingsFileText(directory));
+    const source = await Runtime.runPromise(this.#runtime)(readSettingsFileText(directory));
     if (!source) return defaultPersistedSettings();
     // A corrupt settings file is replaced by the next write rather than
     // failing app start, so a refusal here falls back to defaults exactly as
@@ -1461,7 +1467,7 @@ export class SettingsStore {
   /** Only ever called from inside `#serialize`, so writes cannot interleave. */
   async #write(persisted: PersistedSettings): Promise<void> {
     const directory = this.#directory();
-    await this.#runtime.runPromise(
+    await Runtime.runPromise(this.#runtime)(
       writeSettingsFileAtomic(directory, `${JSON.stringify(persisted, undefined, 2)}\n`),
     );
   }

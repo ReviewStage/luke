@@ -148,39 +148,3 @@ export const settingsOverrides: Effect.Effect<SettingsEnvironmentOverrides, neve
       apiKeys,
     });
   });
-
-const held = (environment: NodeJS.ProcessEnv, name: string): Option.Option<string> =>
-  Option.fromNullable(environment[name]);
-
-/**
- * The same overrides from the record the desktop's one `HostSeams` object
- * still carries, for the composers and the store's own tests that hand one in.
- *
- * @deprecated The `Layer.succeed(oldObject)` shim at the settings store's own
- * door; P12-05 deletes it with `createHostKernel`.
- */
-export function settingsOverridesFromEnvironment(
-  environment: NodeJS.ProcessEnv,
-): SettingsEnvironmentOverrides {
-  const apiKeys = new Map<CredentialProviderId, Redacted.Redacted<string>>();
-  for (const provider of CREDENTIAL_PROVIDER_LIST) {
-    const usable = usableApiKey(
-      provider,
-      provider.environmentVariables.map((variable) =>
-        Option.map(held(environment, variable), Redacted.make),
-      ),
-    );
-    if (Option.isSome(usable)) apiKeys.set(provider.id, usable.value);
-  }
-
-  return overridesFrom({
-    voice: held(environment, SETTINGS_OVERRIDE_VARIABLE.LIVE_VOICE),
-    googleCalendarClientId: held(environment, SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_ID),
-    googleCalendarClientSecret: Option.map(
-      held(environment, SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_SECRET),
-      Redacted.make,
-    ),
-    linearClientId: held(environment, SETTINGS_OVERRIDE_VARIABLE.LINEAR_CLIENT_ID),
-    apiKeys,
-  });
-}

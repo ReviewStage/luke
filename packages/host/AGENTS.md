@@ -35,9 +35,11 @@ honours which override stays with the override rather than with the provider:
 the account service's is refused at the packaging boundary by
 `accountBaseUrlFor`, and a key this machine's shell exported is read in a
 packaged build exactly as it always was.
-`settingsOverridesFromEnvironment` is the record adaptor beside the effect,
-for the composers and tests that still hand in the one `HostSeams`
-environment, and P12-05 deletes it with `createHostKernel`.
+The settings composer reads these through the `Environment` seam directly, as
+`settingsOverrides`; its own tests read the same effect over a `ConfigProvider`
+built from the environment record they still hand in, and
+`settingsOverridesFromEnvironment`, the record face beside the effect, is gone
+with that last caller.
 
 ## It draws nothing, and imports no Electron
 

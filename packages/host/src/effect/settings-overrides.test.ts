@@ -12,7 +12,6 @@ import {
   SETTINGS_OVERRIDE_VARIABLE,
   SETTINGS_OVERRIDE_VARIABLE_NAMES,
   settingsOverrides,
-  settingsOverridesFromEnvironment,
 } from "./settings-overrides.js";
 
 const CONDUCTOR = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
@@ -120,26 +119,6 @@ describe("the settings store's environment overrides", () => {
       assert.equal(unsendable.apiKeys.size, 0);
       assert.equal(blank.apiKeys.size, 0);
       assert.equal(keyOf(passedOver.apiKeys, CONDUCTOR), CONDUCTOR_TOKEN);
-    }),
-  );
-
-  it.effect("answer the same from the record the one seams object still carries", () =>
-    Effect.gen(function* () {
-      const entries = {
-        [SETTINGS_OVERRIDE_VARIABLE.LIVE_VOICE]: LIVE_VOICE.MARIN,
-        [SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_ID]: "client-id",
-        [SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_SECRET]: "client-secret",
-        [SETTINGS_OVERRIDE_VARIABLE.LINEAR_CLIENT_ID]: "linear-client-id",
-        CONDUCTOR_API_TOKEN: CONDUCTOR_TOKEN,
-      };
-
-      const fromProvider = yield* read(entries);
-      const fromRecord = settingsOverridesFromEnvironment(entries);
-
-      assert.deepEqual(fromRecord.voice, fromProvider.voice);
-      assert.deepEqual(fromRecord.googleCalendarSignIn, fromProvider.googleCalendarSignIn);
-      assert.deepEqual(fromRecord.linearSignIn, fromProvider.linearSignIn);
-      assert.equal(keyOf(fromRecord.apiKeys, CONDUCTOR), keyOf(fromProvider.apiKeys, CONDUCTOR));
     }),
   );
 });
