@@ -1,0 +1,15 @@
+{
+  "status": 405,
+  "statusText": "",
+  "headers": [
+    [
+      "cache-control",
+      "no-store"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"method-not-allowed\"}"
+}

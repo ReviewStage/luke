@@ -1,0 +1,15 @@
+{
+  "status": 503,
+  "statusText": "",
+  "headers": [
+    [
+      "cache-control",
+      "no-store"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"unavailable\"}"
+}

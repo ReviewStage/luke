@@ -30,6 +30,24 @@ export async function recordedResponse(response: Response): Promise<RecordedResp
   };
 }
 
+const FRAMING_HEADER = { CONTENT_LENGTH: "content-length" } as const;
+
+/**
+ * A response recorded the way a converted route's answer is compared: the
+ * framing header is held to the body it frames rather than recorded beside
+ * it, since the platform's own web handler computes it from the very bytes
+ * the golden holds, and recording it would record the same fact twice.
+ */
+export async function recordedAnswer(response: Response): Promise<RecordedResponse> {
+  const recorded = await recordedResponse(response);
+  const framed = recorded.headers.find(([name]) => name === FRAMING_HEADER.CONTENT_LENGTH);
+  if (framed) assert.equal(Number(framed[1]), new TextEncoder().encode(recorded.body).byteLength);
+  return {
+    ...recorded,
+    headers: recorded.headers.filter(([name]) => name !== FRAMING_HEADER.CONTENT_LENGTH),
+  };
+}
+
 /** The recorded response against the file named for it, which `LUKE_UPDATE_FIXTURES=1` writes. */
 export async function settleResponseGolden(
   root: string,

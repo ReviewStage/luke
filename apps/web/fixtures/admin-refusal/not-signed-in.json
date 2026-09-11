@@ -1,0 +1,15 @@
+{
+  "status": 401,
+  "statusText": "",
+  "headers": [
+    [
+      "cache-control",
+      "no-store"
+    ],
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"not-signed-in\"}"
+}

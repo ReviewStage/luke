@@ -17,6 +17,20 @@ export const ADMIN_HTTP_STATUS = {
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
+/**
+ * The addresses the dashboard's reads and its one write are served at. They
+ * live with the rest of the wire vocabulary because both sides speak them:
+ * the page composes its calls from them, and the group that answers those
+ * calls declares its routes from them.
+ */
+export const ADMIN_ROUTE_PATH = {
+  METRICS: "/api/admin/metrics",
+  USERS: "/api/admin/users",
+  USER: "/api/admin/user",
+  FAVORITE: "/api/admin/favorite",
+  DAY: "/api/admin/day",
+} as const;
+
 export const ADMIN_ERROR = {
   /** No signed-in browser session; the page should offer sign-in. */
   NOT_SIGNED_IN: "not-signed-in",
@@ -33,6 +47,12 @@ export const ADMIN_ERROR = {
   INVALID_DAY: "invalid-day",
   /** The named account has no user row — deleted, or the id never existed. */
   USER_NOT_FOUND: "user-not-found",
+  /**
+   * A path the dashboard's route group declares no route for. Nothing routes
+   * one here — each address is its own exact-path function — so this is what
+   * the group says about itself rather than an answer the page asks for.
+   */
+  NOT_FOUND: "not-found",
   /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
   UNAVAILABLE: "unavailable",
 } as const;
