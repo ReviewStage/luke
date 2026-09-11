@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"model\":\"text-embedding-3-small\",\"dimensions\":2,\"vectors\":[[1,0],[0,1]]}"
+}

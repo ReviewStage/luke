@@ -1,10 +1,10 @@
-import { hostedBrainRoute } from "../../../hosted/brain-route.js";
-import { handleBrainEmbed } from "../../../hosted/brain-v2.js";
+import { brainApp } from "../../../brain-app.js";
+import { hostedBrainSeams } from "../../../hosted/brain-route.js";
+import { routeFromHttpApp } from "../../../route-effect.js";
 
 /**
  * Embeds a batch of notebook chunks for a signed-in client's memory index,
- * on the key this deployment holds. The logic lives in
- * `server/hosted/brain-v2.ts`; this file only hands it the deployment's real
- * seams.
+ * on the key this deployment holds. The contract lives behind the group in
+ * `server/brain-app.ts`; this file only hands it the deployment's real seams.
  */
-export default hostedBrainRoute(handleBrainEmbed);
+export default routeFromHttpApp(brainApp(hostedBrainSeams()));

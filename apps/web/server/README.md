@@ -150,8 +150,8 @@ half is a small `SqlClient` over `@electric-sql/pglite`, because no
 a function default-exports. It reads the runtime through `runWeb` and then
 holds the handler for the instance's life, so it is a caller of the edge rather
 than a second one, and a warm invocation reaches the services the cold one
-built. `server/routes/brain/capabilities.ts` and `server/routes/auth/[...all].ts`
-are the routes converted this way; every other route still default-exports the
+built. The brain group's four routes and `server/routes/auth/[...all].ts` are
+the routes converted this way; every other route still default-exports the
 promise-shaped handler beside it.
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
@@ -491,7 +491,22 @@ refused upstream still counts; an upstream that rate limits answers a bounded
 `LUKE_BRAIN_MODEL` optionally overrides the model, under the name the
 desktop's keyed client honours; a blank value is treated as absent, and
 nothing in a request can name one. Without `OPENAI_API_KEY` the routes answer
-503 like the rest of the hosted tier. The existing mint and device routes are
+503 like the rest of the hosted tier. Neither is read at an invocation:
+`server/hosted/environment.ts` resolves both from `Config` as the runtime's
+services are built, once per warm instance, and drops a blank there, so the
+group sees one absence and the key travels as a `Redacted` the whole way.
+
+`server/brain-app.ts` is the group those four functions serve. Each path is
+its own function and the group declares all four, so a function answers its
+own path and the hosted vocabulary's `not-found` anywhere else; every path is
+declared for every method, because the method an operation documents is the
+endpoint's own `method-not-allowed` and a router keyed by method would have
+turned that into a `not-found` the desktop's clients do not read. A refusal
+travels on the failure channel and the answer on the success one, and the
+group merges them into the one response it hands the platform.
+`fixtures/brain-route/` records what each operation and each refusal answers
+— the status, the headers, and the body bytes — recorded from the
+promise-shaped routes the group replaced and unchanged by the conversion. The existing mint and device routes are
 untouched by these routes and keep their contracts for released clients.
 
 ## The turn event stream

@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"contract\":2,\"model\":\"gpt-5.6-terra\",\"operations\":[\"respond\",\"count-tokens\",\"embed\"],\"tools\":[\"send_session_message\",\"run_session_control\",\"open_session\",\"create_workspace\",\"add_workspace_agent\",\"rename_workspace\",\"rename_session\",\"update_issue_state\",\"comment_on_issue\",\"change_app_setting\",\"show_panel\",\"open_feedback_composer\",\"run_update_action\",\"remember_fact\",\"forget_fact\",\"list_sessions\",\"read_transcript\",\"announce\",\"read_workspace_file\",\"write_workspace_file\",\"load_skill\",\"sessions_spawn\",\"subagents\",\"sessions_list\",\"sessions_history\",\"memory_search\",\"memory_get\"],\"bounds\":{\"promptChars\":200000,\"inputItems\":2000,\"requestBytes\":2097152,\"maximumOutputTokens\":16000},\"reasoningEfforts\":[\"low\",\"medium\",\"high\"]}"
+}

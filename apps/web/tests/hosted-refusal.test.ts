@@ -11,8 +11,10 @@ import {
   InvalidTokenRefusal,
   MethodNotAllowedRefusal,
   NotFoundRefusal,
+  PromptTooLargeRefusal,
   RequestTooLargeRefusal,
   UnavailableRefusal,
+  UnknownToolRefusal,
 } from "../server/hosted/http-effect.js";
 
 /**
@@ -72,6 +74,16 @@ const REFUSALS = [
     refusal: HOSTED_REFUSAL.NOT_FOUND,
     schema: NotFoundRefusal,
     status: HOSTED_HTTP_STATUS.NOT_FOUND,
+  },
+  {
+    refusal: HOSTED_REFUSAL.PROMPT_TOO_LARGE,
+    schema: PromptTooLargeRefusal,
+    status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  },
+  {
+    refusal: HOSTED_REFUSAL.UNKNOWN_TOOL,
+    schema: UnknownToolRefusal,
+    status: HOSTED_HTTP_STATUS.BAD_REQUEST,
   },
   {
     refusal: HOSTED_REFUSAL.REQUEST_TOO_LARGE,
