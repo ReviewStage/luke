@@ -210,27 +210,36 @@ that door one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and
 repeated work into a `Scope`, which is what cancels it, `timersFromRuntime`
 answers the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so
 a caller still injected with those closures reads the clock the rest of the
-process reads, and `makePendingInputQueue` with `admitInput` and
-`queueDebounceSchedule` are the reply queue's Effect surface. The vocabulary
-door names none of them, so a package that opens only it resolves no `effect`,
-while the barrel now does: `ObservationLoop` keeps its cadence on a `Schedule`
-forked into a `Scope` of its own rather than on an interval, so a caller that
-opens the barrel resolves `effect` behind it. `@sidecar/memory/effect` is the
-same door one package over: `housekeepingEffect` reads a completed or
-nothing-to-store result as a success and an interrupted or failed one as a
-`MemoryHousekeepingFellShort` carrying the outcome's own code, and
-`markerWriteSchedule` states the port's marker-write attempt bound as a
-`Schedule` a caller composes with `Effect.retry` rather than counting
-attempts by hand; the ranking and chunking ports beside it stay untouched,
-since neither reaches outside its own arguments or fails in a way Effect's
-channel would change.
+process reads, `makePendingInputQueue` with `admitInput` and
+`queueDebounceSchedule` are the reply queue's Effect surface, and
+`gatherPromptFactsEffect`, `discoverSkillsEffect` with `loadSkillEffect`, and
+the workspace file effects (`seedWorkspaceEffect`, `readBootstrapFilesEffect`,
+`recentDailyNotesEffect`, `readWorkspaceFileEffect`, `writeWorkspaceFileEffect`)
+are the identity workspace's. The vocabulary door names none of them, so a
+package that opens only it resolves no `effect`, while the barrel now does:
+`ObservationLoop` keeps its cadence on a `Schedule` forked into a `Scope` of
+its own rather than on an interval, so a caller that opens the barrel resolves
+`effect` behind it. `@sidecar/memory/effect` is the same door one package
+over: `housekeepingEffect` reads a completed or nothing-to-store result as a
+success and an interrupted or failed one as a `MemoryHousekeepingFellShort`
+carrying the outcome's own code, and `markerWriteSchedule` states the port's
+marker-write attempt bound as a `Schedule` a caller composes with
+`Effect.retry` rather than counting attempts by hand; the ranking and
+chunking ports beside it stay untouched, since neither reaches outside its
+own arguments or fails in a way Effect's channel would change.
 
 A file ported from OpenClaw `b7528507` imports nothing from `effect`, so a
 later port of an upstream change stays a diff of that source; Effect reaches
-it through a sibling named for it (`queue.ts` and `queue.effect.ts`), which
-wraps the ported exports, states the port's refusals as tagged errors carrying
-the codes it already decides, and hands a caller any delay table the port
-states as a `Schedule`. `repository-checks.sh` names the ported files and
+it through a sibling named for it (`queue.ts` and `queue.effect.ts`;
+`workspace.ts`, `prompt.ts`, and `skills.ts` the same way), which wraps the
+ported exports, states the port's refusals as tagged errors carrying the codes
+it already decides — reusing the port's own `as const` refusal set where it
+has one (`WORKSPACE_FILE_REFUSAL`), and stating a fresh one in the sibling
+where the port only decides the distinction without naming it (`QUEUE_REFUSAL`,
+`SKILL_LOAD_REFUSAL`) — and hands a caller any delay table the port states as
+a `Schedule`. A pure function with no file, clock, or failure mode, like
+`buildSystemPrompt`, gets no sibling: an `Effect.sync` around it would wrap
+nothing. `repository-checks.sh` names the ported files and
 refuses an `effect` import in any of them. A door is not what keeps `effect`
 out of a bundle generally: `@sidecar/wire`'s own barrel resolves `Schema`,
 `SchemaAST`, and `ParseResult` beneath the `s.*` builder, and
