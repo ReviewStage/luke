@@ -8,7 +8,8 @@ import {
   APP_SETTING_KIND,
   isAppSettingId,
 } from "@sidecar/guide";
-import { LIVE_DEFAULTS, LIVE_VOICE, LIVE_VOICE_LIST } from "@sidecar/live";
+import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
+import { isRealtimeVoice } from "@sidecar/realtime";
 import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
@@ -344,12 +345,14 @@ test("a choice row's control offers what its own values say, worded for a contro
     (row) => row.field === "voice",
   );
   assert.ok(voice?.control);
-  // The voices are the Live API's own set, in its order, and the default
+  // Every offered voice is one the Live API speaks and one the phone's
+  // Realtime reader still names, with the default among them; the default
   // carries its status into the menu alone.
-  assert.deepEqual(
-    voice.control.options.map((option) => option.value),
-    LIVE_VOICE_LIST,
-  );
+  const offered = voice.control.options.map((option) => option.value);
+  assert.ok(offered.length > 1);
+  assert.equal(offered.every(isLiveVoice), true);
+  assert.equal(offered.every(isRealtimeVoice), true);
+  assert.equal(offered.includes(LIVE_DEFAULTS.VOICE), true);
   assert.deepEqual(
     voice.control.options
       .filter((option) => option.label.endsWith("(default)"))

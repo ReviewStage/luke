@@ -178,11 +178,9 @@ extension DeviceSettingsSnapshot {
 
         var voice = RealtimeVoice.default
         if let rawVoice = wire[AccountPreferenceWireField.voice] {
-            guard let name = rawVoice as? String else { return nil }
-            // The desktop chooses from GPT Live's voices, more than this app's
-            // Realtime set names; one it does not know is the default here, not
-            // a refusal of the whole snapshot the workspace defaults ride in.
-            voice = RealtimeVoice(rawValue: name) ?? .default
+            guard let name = rawVoice as? String, let parsed = RealtimeVoice(rawValue: name)
+            else { return nil }
+            voice = parsed
         }
 
         var speed = RealtimeVoiceSpeed.default

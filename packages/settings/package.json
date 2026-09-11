@@ -24,6 +24,7 @@
     "@sidecar/credentials": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/live": "workspace:*",
+    "@sidecar/realtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "@sidecar/wire": "workspace:*"

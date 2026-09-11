@@ -778,6 +778,9 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../realtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session

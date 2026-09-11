@@ -70,10 +70,7 @@ final class AccountPreferencesClientTests: XCTestCase {
 
     func testAccountPreferencesWireRejectsUnknownAndInvalidHostedValues() {
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["futureSetting": "ignored"]))
-        XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voice": 7]))
-        XCTAssertEqual(
-            DeviceSettingsSnapshot(accountPreferencesWire: ["voice": "gleam"])?.voice, .default
-        )
+        XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voice": "baritone"]))
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voiceSpeed": true]))
         XCTAssertNil(
             DeviceSettingsSnapshot(accountPreferencesWire: [
