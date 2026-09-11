@@ -172,7 +172,9 @@ gate is worse than a failing one, because nobody knows to look.
 
 ## 2026-09-11 — Voice-only on the desktop, and what it does and does not touch (orchestrator, from the GPT-Live rollout)
 
-Charles's PR 20 (`live/20-voice-only`) makes Luke **voice only on the desktop**: the typed
+**PENDING, NOT LANDED — this describes PR 20, which is not on main.** `CONVERSATION_ENTRY_KIND.TYPED_ASK` and `SPOKEN_ASK` still exist, and `followTypedAsk` is still in `packages/host`'s `compose-host.ts` and `compose-live.ts`. Read every sentence below as future tense until the rollout says PR 20 has merged; C8 in particular must not go looking for a seam that is still there.
+
+Charles's PR 20 (`live/20-voice-only`) will make Luke **voice only on the desktop**: the typed
 composer goes, with `BRAIN_SUBMIT_ASK`, `BRAIN_REQUEST_ORIGIN.TYPED`, and the typed thinking
 mirror; `CONVERSATION_ENTRY_KIND.TYPED_ASK` is deleted outright and `SPOKEN_ASK` becomes `ASK`.
 It touches no `apps/web/server`, no drizzle, no iOS.
@@ -198,3 +200,44 @@ the desktop tab drawing the local brain store's lines (`publication.ts`'s reply 
 live-record's transcript line). The desktop tab does not render E4's service-backed view on main
 yet. The Postgres split is unchanged — the assistant message is the brain's reply, the spoken
 words are `voice_transcript_segments`, and nothing spoken becomes a message.
+
+
+## 2026-09-11 — Corrections from an audit of this file against main (orchestrator)
+
+A worker read this file end to end against main at `15ea0016` and checked every claim in the
+tree. Most verified. Four things needed fixing, and they are fixed here.
+
+**1. The voice-only entry was written in the present tense and is not on main.** Corrected above
+with a PENDING banner. My error: I recorded a rollout's plan as though it were a merge.
+
+**2. "`timestamptz` on every v2 instant" is true of the v2 TABLES and not of every instant this
+rework added.** E6's `active_until` and `last_seen_at` and D2b's `quiet_until` sit on the v1
+`devices` table as plain `timestamp`, following that table's style.
+
+**Ruling: those three columns should become `timestamptz`, and before C5 or D3 build on them.**
+When I set the v2 rule I told B1 that "v1's bigint and `devices`' naive timestamp stay as they
+are because nothing in this rework touches them." That rationale is no longer true — this rework
+added two of those three columns. And the hazard is not hypothetical for `quiet_until`
+specifically: it is an instant compared against *now* to decide whether Luke speaks during a
+meeting, which is exactly the naive-vs-aware footgun I cited when setting the rule. A wrong
+comparison means Luke speaks into a meeting or stays silent after one. C5 reads it to hold
+speech and D3 to decide a push; fixing it before they are built is far cheaper than after.
+Filed as its own ticket.
+
+**3. A stale header comment** in `apps/web/server/db/storage-schema.ts` (~line 34) says "nothing
+reads or writes these yet", which D2, E4, and F1 falsified. Sweep-in for whichever PR next
+touches that file (C1 or C2a); not worth a PR of its own.
+
+**4. `latestMessageRating` (`hosted/store/message-reads.ts`, exposed as `store.ratings.latest`)
+has no production caller** — only its own test. D2c's fold made it permanently unnecessary. It
+is a dead read wearing a live name, which is the same hazard as a dead-code deletion in reverse:
+the next person to need a rating will find it and use it, reintroducing the per-client events
+sweep the fold removed. **Delete it in G2** with the other cleanups, or sooner if a PR is in
+that file.
+
+**And one clarification the D2d entry needs, which is not a contradiction.** That entry says the
+turns and events routes "carry no parts", which is true. It does not follow that they carry no
+user content: **the events read carries a rating's free-text note (up to 500 characters) to every
+device of the account.** That is the developer's own words going to the developer's own devices,
+which is fine — but nobody should read "no parts" as "no developer text", least of all anyone
+later deciding what may be logged, cached, or handed to a third party.
