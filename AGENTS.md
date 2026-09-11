@@ -1118,7 +1118,10 @@ Canonical commands:
   then closes the microphone the same way; no timing heuristic turns one
   into the other. A
   session Luke opens for his own speech carries no capture device at all,
-  only a sending line with no track that the next press fills. The one place a press stands in for a release is the Electron
+  only a sending line carrying synthesized silence that the next press swaps
+  its device onto, and the release swaps the silence back: GPT Live paces its
+  output against the input timeline, so the line is never left without a
+  track, and the silence stands behind no device. The one place a press stands in for a release is the Electron
   fallback, where the native talk-key helper could not start and the system
   reports presses alone: there one press starts the hold and the next ends
   it, and the shortcuts row says so. An unreadable route means the browser's
@@ -1304,9 +1307,10 @@ Canonical commands:
   settled spoken by the session's own output transcript settles it. When no
   session stands, a briefing or a beat asks the voice window for one, and the
   window opens it with no microphone: the offer carries a sending audio line
-  with no track and no capture device is opened, so nothing can be heard
-  until the talk key is held, and the same session is the one the developer
-  joins by holding it. There is no speak-only call and no second kind of
+  of synthesized silence and no capture device is opened, so nothing can be
+  heard until the talk key is held, the model's input timeline runs from the
+  offer on so the briefing is spoken rather than held for a press, and the
+  same session is the one the developer joins by holding it. There is no speak-only call and no second kind of
   session. What the
   session is seeded with at creation is bounded: Luke's own Conversation
   record (the 20 most recent lines, in their roles, each cut to its length

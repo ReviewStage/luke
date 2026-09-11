@@ -3,7 +3,7 @@ import { Duration, Effect, type Scope } from "effect";
 /**
  * The WebRTC peer the voice window is, as the WebRTC guide builds one: the
  * audio line first (the microphone's track where a press opened the session,
- * a sending line with no track otherwise), the `oai-events` data channel
+ * the peer's own silent track otherwise), the `oai-events` data channel
  * created before the offer, ICE gathered under a bound, the offer handed to
  * the host that holds the key, and the host's answer applied. The HTTP
  * request the host makes is what starts the session, so nothing here sends
@@ -11,10 +11,19 @@ import { Duration, Effect, type Scope } from "effect";
  * browser's objects the peer touches, so a test can stand a fake in for each
  * without a browser.
  *
+ * The line always carries a track. GPT Live is full duplex and paces its
+ * output against the input timeline, and the conversations guide asks that
+ * input audio keep running through silence: on WebRTC, that the negotiated
+ * input track stay active. A sender with no track stalls that timeline, so a
+ * reply appended while the talk key was up was held until the next press put
+ * a track back, then unloaded whole. The silence is synthesized here rather
+ * than captured, so no device stands behind it and the system's microphone
+ * indicator still answers to the key alone.
+ *
  * The peer is acquired into the caller's `Scope` rather than handed over to be
- * closed by hand: the connection and the device that rode its offer are
- * released when that scope closes, which is the one end a session has, and a
- * scope closes once.
+ * closed by hand: the connection, the silence, and the device that rode its
+ * offer are released when that scope closes, which is the one end a session
+ * has, and a scope closes once.
  */
 
 /** How long ICE gathering may run before the offer goes with what it has. */
@@ -43,8 +52,6 @@ export interface LivePeerConnection {
   readonly localDescription: { readonly sdp: string } | null;
   createDataChannel(label: string): LiveDataChannel;
   addTrack(track: MediaStreamTrack, stream: MediaStream): LiveTrackSender;
-  /** A sending audio line with no track, filled by the first unmute a press asks for. */
-  addTransceiver(kind: "audio", init: { direction: "sendrecv" }): { sender: LiveTrackSender };
   createOffer(): Promise<RTCSessionDescriptionInit>;
   setLocalDescription(description: RTCSessionDescriptionInit): Promise<void>;
   setRemoteDescription(description: RTCSessionDescriptionInit): Promise<void>;
@@ -54,14 +61,25 @@ export interface LivePeerConnection {
   ontrack: ((event: RTCTrackEvent) => void) | null;
 }
 
+/**
+ * A synthesized audio track that carries silence for as long as it stands:
+ * what the sending line holds whenever the developer's device is not on it.
+ */
+export interface LiveSilence {
+  readonly track: MediaStreamTrack;
+  readonly stream: MediaStream;
+  release(): void;
+}
+
 export interface LivePeerSeams {
   createPeerConnection: () => LivePeerConnection;
+  createSilence: () => LiveSilence;
   /**
    * The preferred capture device, handed over only for a session a press
    * opened, since the press is the user action the WebRTC guide asks the
-   * microphone be requested from; absent, the session opens with no device
-   * and its first unmute opens one. A refusal opens the session the same
-   * way, with no track until the first unmute.
+   * microphone be requested from; absent, the session opens on the silent
+   * track and its first unmute opens a device. A refusal opens the session
+   * the same way, on silence until the first unmute.
    */
   openMicrophone?: () => Promise<MediaStream>;
   /** The host: the peer's offer becomes the one session, answered with the SDP the peer sets. */
@@ -77,6 +95,8 @@ export interface LivePeer {
   /** The developer's track while the talk key holds the device open, disabled until the session is unmuted; absent otherwise. */
   microphone: MediaStreamTrack | undefined;
   microphoneStream: MediaStream | undefined;
+  /** What the sending line carries whenever the developer's device is not on it, so the input timeline never stalls. */
+  silence: MediaStreamTrack;
   sender: LiveTrackSender;
 }
 
@@ -120,10 +140,10 @@ const gatherIce = (connection: LivePeerConnection): Effect.Effect<void> =>
 
 /**
  * The device the offer rides, for a session a press opened. A refusal is not a
- * failure — the session opens with a trackless line the first unmute fills.
- * The device a later press opens is the call's own, released by the mute that
- * ends that press; this one is the scope's, so a call ending mid-press releases
- * whichever of them the peer is holding.
+ * failure — the session opens on the silent track and the first unmute puts a
+ * device on the line. The device a later press opens is the call's own,
+ * released by the mute that ends that press; this one is the scope's, so a
+ * call ending mid-press releases whichever of them the peer is holding.
  */
 const acquireDevice = (
   seams: LivePeerSeams,
@@ -140,8 +160,9 @@ const acquireDevice = (
  * Opens the peer in the guide's order. A press's microphone rides the offer
  * with its track disabled until the session acknowledges the unmute; a
  * session opened for Luke's own speech, or one whose microphone the system
- * refuses, carries a sending line with no track, which the first unmute
- * fills, so no capture device is open behind a session nobody pressed for.
+ * refuses, rides on the silent track, which the first unmute swaps a device
+ * in for, so no capture device is open behind a session nobody pressed for
+ * and the input timeline runs from the offer on either way.
  *
  * A refusal answers rather than fails, so the call can say what went wrong,
  * and releases nothing by hand: whatever was acquired goes when the scope
@@ -159,6 +180,10 @@ export const acquireLivePeer = (
       const stream = event.streams[0] ?? new MediaStream([event.track]);
       seams.onRemoteStream(stream);
     };
+    const silence = yield* Effect.acquireRelease(
+      Effect.try({ try: () => seams.createSilence(), catch: messageOf }),
+      (silence) => Effect.sync(() => silence.release()),
+    );
     const microphoneStream = yield* acquireDevice(seams);
     const microphone = microphoneStream?.getAudioTracks()[0];
     const sender = yield* Effect.try({
@@ -167,7 +192,7 @@ export const acquireLivePeer = (
           microphone.enabled = false;
           return connection.addTrack(microphone, microphoneStream);
         }
-        return connection.addTransceiver("audio", { direction: "sendrecv" }).sender;
+        return connection.addTrack(silence.track, silence.stream);
       },
       catch: messageOf,
     });
@@ -203,6 +228,7 @@ export const acquireLivePeer = (
         channel,
         microphone,
         microphoneStream,
+        silence: silence.track,
         sender,
       },
     } satisfies LivePeerOpening;
@@ -215,4 +241,31 @@ export const acquireLivePeer = (
 /** Stops every track of a capture device, so the system's indicator goes with it. */
 export function stopDevice(stream: MediaStream | undefined): void {
   for (const track of stream?.getTracks() ?? []) track.stop();
+}
+
+/**
+ * The browser's silence: a destination node with nothing feeding it renders
+ * zeros for as long as its context runs, and the track it yields is a live
+ * audio track the sender encodes like any other. The context is resumed
+ * rather than trusted to start, since a suspended one renders nothing and a
+ * track that produces no frames is the stall this exists to prevent.
+ */
+export function createBrowserSilence(): LiveSilence {
+  const context = new AudioContext({ latencyHint: "interactive" });
+  const destination = context.createMediaStreamDestination();
+  void context.resume().catch(() => undefined);
+  const stream = destination.stream;
+  const track = stream.getAudioTracks()[0];
+  if (!track) {
+    void context.close().catch(() => undefined);
+    throw new Error("the destination node yielded no audio track");
+  }
+  return {
+    track,
+    stream,
+    release: () => {
+      track.stop();
+      void context.close().catch(() => undefined);
+    },
+  };
 }

@@ -18,6 +18,7 @@ import { rendererRegistry, rendererRuntimeNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
 import { LiveCall } from "./live-call";
+import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { startVoiceLevelMeter } from "./voice-level-meter";
 
@@ -84,6 +85,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
         },
         createPeerConnection: () => new RTCPeerConnection(),
+        createSilence: createBrowserSilence,
         // The press's device, chosen by facts read natively: the Mac's own
         // microphone where a Bluetooth headset would otherwise pay for the
         // capture with its music codec, the browser's default everywhere

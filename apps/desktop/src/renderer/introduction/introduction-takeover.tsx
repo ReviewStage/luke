@@ -36,6 +36,7 @@ import { useSignInFaceCycle } from "../sign-in-gate";
 import { appStateNow } from "../use-app-state";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
 import { LiveCall } from "../voice/live-call";
+import { createBrowserSilence } from "../voice/live-peer";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
 import { startVoiceLevelMeter } from "../voice/voice-level-meter";
 import { outputSilent } from "../volume-hint";
@@ -528,6 +529,7 @@ function IntroductionFlight({
         reportActivity: () => undefined,
       },
       createPeerConnection: () => new RTCPeerConnection(),
+      createSilence: createBrowserSilence,
       openMicrophone: () =>
         openPreferredMicrophone({
           route: () => act(ACT_KIND.MICROPHONE_ROUTE),

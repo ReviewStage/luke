@@ -101,15 +101,23 @@ release.
 The voice window is a GPT Live peer and nothing more. `voice/live-peer.ts`
 builds the `RTCPeerConnection` in the WebRTC guide's order — the audio line
 first (for a session a press opened, the preferred microphone track added
-with `enabled` false; for one opened for Luke's own speech, a `sendrecv`
-transceiver with no track, so no capture device stands behind a session
-nobody pressed for), the `oai-events` data channel created before the offer,
+with `enabled` false; for one opened for Luke's own speech, the peer's own
+silent track, synthesized from an `AudioContext` destination node nothing
+feeds, so no capture device stands behind a session nobody pressed for), the
+`oai-events` data channel created before the offer,
 ICE gathered under a bound, the offer handed to the host through
 `ACT_KIND.VOICE_CREATE_LIVE_SESSION`, the host's SDP answer set — and never
 sends `session.start`, because the host's request is what started the
-session. It hands the peer over acquired into the caller's `Scope` rather
-than to be closed by hand, so the connection and the device that rode its
-offer are released when that scope closes, and a scope closes once. `voice/live-call.ts` is that scope's owner and a table of handlers keyed by
+session. The line carries a track at every moment of the session's life,
+because GPT Live is full duplex and paces its output against the input
+timeline: the conversations guide asks that input audio keep running through
+silence and that the negotiated WebRTC input track stay active, and a sender
+left with no track stalled that timeline, so a reply the host appended while
+the talk key was up was held until the next press restored a track and then
+unloaded whole. It hands the peer over acquired into the caller's `Scope`
+rather than to be closed by hand, so the connection, the silence, and the
+device that rode its offer are released when that scope closes, and a scope
+closes once. `voice/live-call.ts` is that scope's owner and a table of handlers keyed by
 `LIVE_SERVER_EVENT` over `parseLiveServerEvent`. The session's life is one
 fiber on the runtime above, holding the scope the peer was acquired into: the
 fiber ends when the call does, or when it is interrupted, and either way the
@@ -126,13 +134,16 @@ channel permissions allow it, opens the capture device for an unmute when
 none stands and puts it on the line before the switch goes, flips the track
 only on the `muted` or `unmuted` acknowledgment, and after every mute —
 acknowledged, refused, or timed out, in that the key being up is the
-developer's decision — takes the track off the line with `replaceTrack(null)`
-and stops the device, so the microphone is open exactly while the talk key
-is held; it hangs up the way the conversations guide says
+developer's decision — swaps the silent track back onto the line with
+`replaceTrack` and stops the device, so the microphone is open exactly while
+the talk key is held and the model's input timeline never stops; it hangs up
+the way the conversations guide says
 (`session.closed` registered, `session.close` sent, everything held open
 under the bound), reports its transport and its one idle decision to the
 host, and reads Luke as speaking from the remote track's level, never from
-a transcript event. `voice/live-captions.ts` draws both speakers from the
+a transcript event; that level is activity on the session too, so a briefing
+the developer only listens to re-arms the idle window rather than being
+reported idle under it. `voice/live-captions.ts` draws both speakers from the
 transcript deltas over the same `TranscriptLedger` the host groups its record
 with, so the captions and the lines agree on what an utterance is. No
 credential reaches this window, nothing here appends to the model, and the

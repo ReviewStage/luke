@@ -35,6 +35,7 @@ import {
   LIVE_PEER_OUTCOME,
   type LiveDataChannel,
   type LivePeerConnection,
+  type LiveSilence,
   type LiveTrackSender,
 } from "./live-peer";
 
@@ -58,7 +59,6 @@ const advance = (delayMs: number): Effect.Effect<void> =>
 /** What the fake peer did, in the order it did it, so the guide's order can be asserted. */
 type PeerStep =
   | "add-track"
-  | "add-transceiver"
   | "create-channel"
   | "create-offer"
   | "set-local"
@@ -111,12 +111,27 @@ class FakeStream {
   }
 }
 
+/** The peer's silence, as a track the fakes can tell from any device's. */
+class FakeSilence implements LiveSilence {
+  readonly silentTrack = new FakeTrack();
+  released = false;
+  // SAFETY: the peer hands the track to the connection and compares it by identity; nothing else is read off it.
+  readonly track = this.silentTrack as unknown as MediaStreamTrack;
+  // SAFETY: the peer hands the stream to the connection beside its track and reads nothing off it.
+  readonly stream = new FakeStream([this.silentTrack]) as unknown as MediaStream;
+  release(): void {
+    this.released = true;
+  }
+}
+
 class FakePeerConnection implements LivePeerConnection {
   connectionState = "new";
   iceGatheringState = "gathering";
   localDescription: { sdp: string } | null = null;
   readonly steps: PeerStep[] = [];
   readonly channels: FakeChannel[] = [];
+  /** The tracks put on the line: the one the offer rode, then every swap. */
+  readonly added: MediaStreamTrack[] = [];
   readonly replaced: (MediaStreamTrack | null)[] = [];
   remoteSdp: string | undefined;
   onicegatheringstatechange: ((event: Event) => void) | null = null;
@@ -136,14 +151,10 @@ class FakePeerConnection implements LivePeerConnection {
     return channel;
   }
 
-  addTrack(): LiveTrackSender {
+  addTrack(track: MediaStreamTrack): LiveTrackSender {
     this.steps.push("add-track");
+    this.added.push(track);
     return this.sender;
-  }
-
-  addTransceiver(): ReturnType<LivePeerConnection["addTransceiver"]> {
-    this.steps.push("add-transceiver");
-    return { sender: this.sender };
   }
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
@@ -185,6 +196,7 @@ function build(
 ) {
   let microphoneGranted = options.microphone !== false;
   const peer = new FakePeerConnection();
+  const silence = new FakeSilence();
   /** One device per open, so a release's stop and a later press's fresh device can each be told apart. */
   const tracks: FakeTrack[] = [new FakeTrack()];
   let microphoneOpens = 0;
@@ -220,6 +232,7 @@ function build(
       reportActivity: (idle) => activity.push(idle),
     },
     createPeerConnection: () => peer,
+    createSilence: () => silence,
     openMicrophone: async () => {
       microphoneOpens += 1;
       if (holdMicrophone) await new Promise<void>((resolve) => (holdMicrophone = resolve));
@@ -260,6 +273,7 @@ function build(
   };
   return {
     peer,
+    silence,
     get track(): FakeTrack {
       const first = tracks[0];
       assert.ok(first);
@@ -311,6 +325,7 @@ it.effect(
       const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
       assert.deepEqual(f.peer.steps, ["add-track", "create-channel", "create-offer", "set-local"]);
+      assert.deepEqual(f.peer.added, [f.track]);
       assert.equal(f.track.enabled, false);
       assert.equal(f.offers.length, 0);
       f.peer.gathered();
@@ -406,8 +421,8 @@ it.effect(
         error: { type: "invalid_request_error", message: "no" },
       });
       assert.equal(yield* Fiber.join(muting), false);
-      // Refused or not, the key is up: the device leaves the line and stops.
-      assert.deepEqual(f.peer.replaced, [null]);
+      // Refused or not, the key is up: the device leaves the line, silence in its place, and stops.
+      assert.deepEqual(f.peer.replaced, [f.silence.track]);
       assert.equal(f.track.stopped, true);
       assert.equal(f.call.listening, false);
       assert.equal(f.local.at(-1), undefined);
@@ -437,13 +452,13 @@ it.effect(
       assert.equal(f.track.stopped, false);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
       assert.equal(yield* Fiber.join(muting), true);
-      assert.deepEqual(f.peer.replaced, [null]);
+      assert.deepEqual(f.peer.replaced, [f.silence.track]);
       assert.equal(f.track.stopped, true);
       assert.equal(f.local.at(-1), undefined);
       assert.equal(f.call.listening, false);
       // A second release finds no device and sends nothing.
       assert.equal(yield* f.call.mute(), true);
-      assert.deepEqual(f.peer.replaced, [null]);
+      assert.deepEqual(f.peer.replaced, [f.silence.track]);
       assert.equal(f.sentTypes().length, 2);
     }),
 );
@@ -465,7 +480,7 @@ it.effect("a mute the server never acknowledges still releases the device at the
     yield* settle;
     yield* advance(MICROPHONE_ACK_TIMEOUT_MS);
     assert.equal(yield* Fiber.join(muting), false);
-    assert.deepEqual(f.peer.replaced, [null]);
+    assert.deepEqual(f.peer.replaced, [f.silence.track]);
     assert.equal(f.track.stopped, true);
     assert.equal(f.local.at(-1), undefined);
   }),
@@ -497,7 +512,7 @@ it.effect(
       assert.equal(f.tracks.length, 2);
       const fresh = f.tracks[1];
       assert.ok(fresh);
-      assert.deepEqual(f.peer.replaced, [null, fresh]);
+      assert.deepEqual(f.peer.replaced, [f.silence.track, fresh]);
       assert.equal(fresh.enabled, false);
       assert.deepEqual(f.sentTypes().at(-1), LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
@@ -547,7 +562,7 @@ it.effect(
       let attach: (() => void) | undefined;
       f.peer.sender.replaceTrack = (track) => {
         f.peer.replaced.push(track);
-        return track === null
+        return track === f.silence.track
           ? Promise.resolve()
           : new Promise<void>((resolve) => {
               attach = resolve;
@@ -559,7 +574,7 @@ it.effect(
       assert.equal(yield* f.call.mute(), true);
       attach?.();
       assert.equal(yield* Fiber.join(unmuting), false);
-      assert.deepEqual(f.peer.replaced, [f.track, null]);
+      assert.deepEqual(f.peer.replaced, [f.track, f.silence.track]);
       assert.equal(f.track.stopped, true);
       assert.deepEqual(f.sentTypes(), []);
       assert.equal(f.local.length, 1);
@@ -598,7 +613,7 @@ it.effect(
       assert.equal(f.microphoneOpens(), 2);
       const fresh = f.tracks[1];
       assert.ok(fresh);
-      assert.deepEqual(f.peer.replaced, [null, fresh]);
+      assert.deepEqual(f.peer.replaced, [f.silence.track, fresh]);
       assert.deepEqual(f.sentTypes().at(-1), LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
       assert.equal(yield* Fiber.join(second), true);
@@ -621,20 +636,21 @@ it.effect(
       assert.equal(f.track.stopped, false);
       assert.equal(yield* f.call.mute(), true);
       assert.deepEqual(f.sentTypes(), []);
-      assert.deepEqual(f.peer.replaced, [null]);
+      assert.deepEqual(f.peer.replaced, [f.silence.track]);
       assert.equal(f.track.stopped, true);
       assert.equal(f.local.at(-1), undefined);
     }),
 );
 
 it.effect(
-  "a session opened for Luke's own speech carries no device: a trackless line and no microphone open",
+  "a session opened for Luke's own speech carries no device: the silent track rides the offer and no microphone opens",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const opening = yield* Effect.fork(f.call.open({ byPress: false }));
       yield* settle;
-      assert.deepEqual(f.peer.steps.slice(0, 2), ["add-transceiver", "create-channel"]);
+      assert.deepEqual(f.peer.steps.slice(0, 2), ["add-track", "create-channel"]);
+      assert.deepEqual(f.peer.added, [f.silence.track]);
       assert.equal(f.microphoneOpens(), 0);
       f.peer.gathered();
       yield* settle;
@@ -669,6 +685,67 @@ it.effect("a muted session with no device still reports idle once the window pas
 );
 
 it.effect(
+  "Luke's own speech on the remote track re-arms the idle window and takes back an idle already reported",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const opening = yield* Effect.fork(f.call.open({ byPress: false }));
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
+      yield* advance(LIVE_IDLE_WINDOW_MS - 1);
+      f.call.reportRemoteAudioLevel(true);
+      yield* advance(LIVE_IDLE_WINDOW_MS - 1);
+      assert.deepEqual(f.activity, []);
+      // The hangover holds the speaking status, not the idle window: quiet playback is quiet.
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(1);
+      assert.deepEqual(f.activity, [true]);
+      f.call.reportRemoteAudioLevel(true);
+      assert.deepEqual(f.activity, [true, false]);
+    }),
+);
+
+it.effect(
+  "the sending line always carries a track: across presses and releases the sender is handed the device or the silence, never nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const opening = yield* Effect.fork(f.call.open({ byPress: false }));
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
+      for (const _ of [0, 1]) {
+        const unmuting = yield* Effect.fork(f.call.unmute());
+        yield* settle;
+        f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+        yield* Fiber.join(unmuting);
+        const muting = yield* Effect.fork(f.call.mute());
+        yield* settle;
+        f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+        yield* Fiber.join(muting);
+      }
+      const [first, second] = f.tracks;
+      assert.ok(first);
+      assert.ok(second);
+      assert.deepEqual(f.peer.added, [f.silence.track]);
+      assert.deepEqual(f.peer.replaced, [first, f.silence.track, second, f.silence.track]);
+      assert.equal(f.peer.replaced.includes(null), false);
+      // Each device is stopped by the release that owed it; the silence stands for the session's life.
+      assert.deepEqual(
+        f.tracks.map((track) => track.stopped),
+        [true, true],
+      );
+      assert.equal(f.silence.silentTrack.stopped, false);
+      assert.equal(f.silence.released, false);
+    }),
+);
+
+it.effect(
   "a stop during an unmute still awaiting its acknowledgment gives the unmute up and mutes anyway",
   () =>
     Effect.gen(function* () {
@@ -696,13 +773,14 @@ it.effect(
 );
 
 it.effect(
-  "a microphone the system refused rides as a trackless line and is filled by the first unmute",
+  "a microphone the system refused leaves the silent track on the line until an unmute can swap a device in",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ microphone: false });
       const opening = yield* Effect.fork(f.call.open({ byPress: true }));
       yield* settle;
-      assert.deepEqual(f.peer.steps.slice(0, 2), ["add-transceiver", "create-channel"]);
+      assert.deepEqual(f.peer.steps.slice(0, 2), ["add-track", "create-channel"]);
+      assert.deepEqual(f.peer.added, [f.silence.track]);
       f.peer.gathered();
       yield* settle;
       f.started();
@@ -716,7 +794,7 @@ it.effect(
 );
 
 it.effect(
-  "granted after the session opened, the first unmute fills the trackless line before the switch goes",
+  "granted after the session opened, the first unmute swaps a device onto the silent line before the switch goes",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ microphone: false });
@@ -1013,10 +1091,12 @@ it.effect(
       const connection = new FakePeerConnection();
       connection.iceGatheringState = "complete";
       const track = new FakeTrack();
+      const silence = new FakeSilence();
       const scope = yield* Scope.make();
       const opened = yield* Scope.extend(
         acquireLivePeer({
           createPeerConnection: () => connection,
+          createSilence: () => silence,
           // SAFETY: the peer reads only the audio tracks and their `enabled` and `stop` off the stream.
           openMicrophone: async () => new FakeStream([track]) as unknown as MediaStream,
           createSession: async () => ({ sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" }),
@@ -1025,14 +1105,19 @@ it.effect(
         scope,
       );
       assert.equal(opened.outcome, LIVE_PEER_OUTCOME.OPENED);
+      if (opened.outcome === LIVE_PEER_OUTCOME.OPENED) {
+        assert.equal(opened.peer.silence, silence.track);
+      }
       assert.equal(connection.steps.includes("close"), false);
       assert.equal(track.stopped, false);
+      assert.equal(silence.released, false);
       yield* Scope.close(scope, Exit.void);
       assert.deepEqual(
         connection.steps.filter((step) => step === "close"),
         ["close"],
       );
       assert.equal(track.stopped, true);
+      assert.equal(silence.released, true);
       yield* Scope.close(scope, Exit.void);
       assert.deepEqual(
         connection.steps.filter((step) => step === "close"),
@@ -1051,6 +1136,7 @@ it.effect("an interrupted lifecycle releases the peer its scope was holding", ()
         Effect.andThen(
           acquireLivePeer({
             createPeerConnection: () => connection,
+            createSilence: () => new FakeSilence(),
             createSession: async () => ({ sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" }),
             onRemoteStream: () => undefined,
           }),
