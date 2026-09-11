@@ -348,7 +348,11 @@ rather than declaring a second one. The vocabulary door re-exports that
 schema from the sibling in a block of its own, so a schema this way in is the
 only thing that leaves through both the vocabulary door and the `effect`
 door; the guard itself still has exactly one way in, which is what
-`repository-checks.sh`'s barrel/vocabulary check keeps true.
+`repository-checks.sh`'s barrel/vocabulary check keeps true. A second check
+beside it walks the vocabulary door's own relative-import graph rather than
+its export list, so a later re-export cannot quietly carry
+`@effect/platform-node` or `@effect/sql*` in a few files deep the way a grep
+scoped to one directory would miss.
 
 A barrel over modules that are all one vocabulary is written as `export *` per
 module (`@sidecar/session`), because a hand-listed re-export of a package whose
