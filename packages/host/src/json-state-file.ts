@@ -39,7 +39,7 @@ export interface JsonStateFile<T> {
  * and no writer here waits on anything a promise could carry.
  *
  * @deprecated The synchronous face over `node:fs`, kept for the composers
- * that still call it directly (`onboarding-state.ts`, `device-registration.ts`,
+ * that still call it directly (`onboarding-state.ts`, `compose-devices.ts`,
  * and the desktop's own last-run-version file) rather than a `Layer`.
  * `jsonStateFileEffect` in `@sidecar/host/effect` is the replacement, over
  * `FileSystem` and a `Schema.Struct`; each composer converts in its own PR.

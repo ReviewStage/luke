@@ -8,15 +8,15 @@ import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Duration, Effect, type Runtime, TestClock } from "effect";
 import { test } from "vitest";
-import { DEVICE_POLL_INTERVAL_MS, type DevicePresenceReport } from "./device-presence.js";
 import {
   DEVICE_STATE_FILE,
-  DeviceRegistration,
-  type DeviceRegistrationClient,
+  type DeviceCadenceClient,
   type DeviceState,
+  deviceCadence,
   deviceStateFile,
   deviceStateFrom,
-} from "./device-registration.js";
+} from "./compose-devices.js";
+import { DEVICE_POLL_INTERVAL_MS, type DevicePresenceReport } from "./device-presence.js";
 
 const INSTALLATION_ID = "0F8FAD5B-D9CB-469F-A165-70867728950E";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -28,7 +28,7 @@ interface Call {
   departing?: string;
 }
 
-/** The heads a poll answers, which the registration never reads; the fake answers the same ones every time. */
+/** The heads a poll answers, which the cadence never reads; the fake answers the same ones every time. */
 const HEADS = { messages: "e30", events: "e30" } as const;
 
 const PRESENT: DevicePresenceReport = { activeUntil: 1_757_505_720_000, quietUntil: null };
@@ -38,7 +38,7 @@ function fakeClient(answers: {
   poll?: () => { seen: boolean } | undefined;
 }) {
   const calls: Call[] = [];
-  const client: DeviceRegistrationClient = {
+  const client: DeviceCadenceClient = {
     register: async (request) => {
       calls.push({ kind: "register", body: request });
       return answers.register ? answers.register() : { deviceId: DEVICE_ID };
@@ -60,15 +60,15 @@ function fakeClient(answers: {
   return { client, calls };
 }
 
-function registration(
+function cadence(
   directory: string,
-  client: DeviceRegistrationClient,
+  client: DeviceCadenceClient,
   runtime: Runtime.Runtime<never>,
   mint: () => string = () => INSTALLATION_ID,
   presence: () => DevicePresenceReport = () => PRESENT,
   reported: string[] = [],
 ) {
-  return new DeviceRegistration({
+  return deviceCadence({
     client,
     state: deviceStateFile(() => directory),
     mintInstallationId: mint,
@@ -105,7 +105,7 @@ it.effect(
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
       const runtime = yield* Effect.runtime<never>();
       const { client, calls } = fakeClient({});
-      const subject = registration(directory, client, runtime);
+      const subject = cadence(directory, client, runtime);
 
       yield* Effect.promise(() => subject.start());
 
@@ -142,7 +142,7 @@ it.effect(
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
       const runtime = yield* Effect.runtime<never>();
       const first = fakeClient({});
-      const subject = registration(directory, first.client, runtime);
+      const subject = cadence(directory, first.client, runtime);
       yield* Effect.promise(() => subject.start());
       yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
 
@@ -155,10 +155,10 @@ it.effect(
       assert.equal(subject.standing, false);
       const settled = first.calls.length;
       yield* nextBeat();
-      assert.equal(first.calls.length, settled, "a stopped registration keeps no cadence");
+      assert.equal(first.calls.length, settled, "a stopped cadence keeps no beat");
 
       const relaunched = fakeClient({ register: () => ({ deviceId: OTHER_DEVICE_ID }) });
-      const next = registration(directory, relaunched.client, runtime, () => {
+      const next = cadence(directory, relaunched.client, runtime, () => {
         throw new Error("a stored installation id is never minted again");
       });
       yield* Effect.promise(() => next.start());
@@ -176,7 +176,7 @@ it.effect("a stop without a departing account ends the cadence and forgets nothi
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
     const runtime = yield* Effect.runtime<never>();
     const { client, calls } = fakeClient({});
-    const subject = registration(directory, client, runtime);
+    const subject = cadence(directory, client, runtime);
     yield* Effect.promise(() => subject.start());
 
     yield* Effect.promise(() => subject.stop({ forget: false }));
@@ -208,7 +208,7 @@ it.effect(
         register: () => ({ deviceId: ids.shift() ?? OTHER_DEVICE_ID }),
         poll: () => ({ seen: seen.shift() ?? true }),
       });
-      const subject = registration(
+      const subject = cadence(
         directory,
         client,
         runtime,
@@ -244,7 +244,7 @@ it.effect(
       const runtime = yield* Effect.runtime<never>();
       let answer: { deviceId: string } | undefined;
       const { client, calls } = fakeClient({ register: () => answer });
-      const subject = registration(directory, client, runtime);
+      const subject = cadence(directory, client, runtime);
 
       yield* Effect.promise(() => subject.start());
       assert.equal(subject.deviceId(), undefined);
@@ -261,7 +261,7 @@ it.effect(
 
       let release: (() => void) | undefined;
       let polls = 0;
-      const slow: DeviceRegistrationClient = {
+      const slow: DeviceCadenceClient = {
         ...client,
         poll: () => {
           polls += 1;
@@ -271,7 +271,7 @@ it.effect(
           });
         },
       };
-      const racing = registration(directory, slow, runtime);
+      const racing = cadence(directory, slow, runtime);
       yield* Effect.promise(() => racing.start());
       yield* nextBeat();
       yield* Effect.promise(() => racing.stop({ forget: false }));
@@ -292,7 +292,7 @@ it.effect("a beat that fails is reported and the cadence keeps its own beat", (t
     const reported: string[] = [];
     let failing = false;
     const { client, calls } = fakeClient({});
-    const subject = registration(
+    const subject = cadence(
       directory,
       client,
       runtime,
@@ -329,7 +329,7 @@ it.effect(
       let release: (() => void) | undefined;
       const ids = [DEVICE_ID, OTHER_DEVICE_ID];
       const { client, calls } = fakeClient({});
-      const gated: DeviceRegistrationClient = {
+      const gated: DeviceCadenceClient = {
         ...client,
         register: (request) =>
           new Promise((resolve) => {
@@ -342,7 +342,7 @@ it.effect(
             resolve({ deviceId });
           }),
       };
-      const subject = registration(directory, gated, runtime);
+      const subject = cadence(directory, gated, runtime);
       const departing = subject.start();
       yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
 

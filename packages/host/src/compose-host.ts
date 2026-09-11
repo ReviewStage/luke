@@ -140,7 +140,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const issues = composeIssues({ kernel, settings, observationGate });
     const observation = composeObservation({ kernel, settings, account, issues, observationGate });
     const calendars = composeCalendars({ kernel, settings, observationGate });
-    const devices = composeDevices({ kernel, account, calendars });
+    const devices = yield* composeDevices({ account, calendars });
     const conversation = composeConversation({
       kernel,
       settings,
