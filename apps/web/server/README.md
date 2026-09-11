@@ -532,6 +532,29 @@ reads the upstream socket as the `LiveSideband` the service consumes, and
 `observedSideband` hands each event to the record once, ahead of every
 listener, replay included.
 
+### The brain answered in process
+
+`server/voice/live-brain.ts` is the `LiveBrain` the hosted composition hands
+the live session service, and it reaches Luke's judgment in process and never
+over HTTP. The voice function resolved the account at its handshake and
+dropped the bearer there, so it holds nothing eve's door or this deployment's
+routes would take; what it holds is the ask door itself, `acceptAsk` in
+`server/hosted/brain-ask.ts`, the same function the ask route is a thin
+adapter over, called with the resolved account, the spoken origin, and the
+service's submission id as the client id, under the eve client the
+composition built for the account as the deployment principal
+(`EVE_CALLER.DEPLOYMENT`, admitted for spoken turns by `DEPLOYMENT_TURNS`).
+The run the service keys an exchange by is the ask's id, since eve names a
+turn only once it starts; the brain follows the ask through `askStanding` on
+a schedule, projects its turn's events with the same `projectTurnEvents` C7's
+stream serves, and translates each back to the ask's id. There is no HTTP hop
+and so no second function ceiling to re-attach across. A turn that does not
+end inside the follow bound, or an ask the record no longer holds, is told as
+a failed end so the exchange settles rather than waiting forever. On the eve
+path the reply arrives whole at the turn's end; what the follow carries
+mid-turn is the slow step and the actions settling. A refusal at the door is
+spoken as the build's own note for it, never composed with the ask.
+
 ### One connection is one invocation
 
 A WebSocket connection to a Vercel Function closes when the function reaches

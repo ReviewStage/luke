@@ -426,7 +426,6 @@ test("the deployment is a principal of its own type acting for the named account
   );
   for (const forbidden of [
     scheduled("user-a", BRAIN_HOST_TURN.TYPED),
-    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN),
     scheduled("user-a", undefined),
     scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}/cancel`),
     scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
@@ -434,6 +433,29 @@ test("the deployment is a principal of its own type acting for the named account
   ]) {
     assert.equal(await refusal(() => actor(forbidden)), BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT);
   }
+});
+
+test("the spoken row is the one the voice function's asks admit: a spoken turn under the secret is minted for the named account in the spoken role, because the voice function resolved that account at its handshake and holds no bearer by the time a delegation arrives; the typed row stays refused, since a typed ask is only ever a developer's own", async () => {
+  const actor = deploymentActor(DEPLOYMENT);
+  assert.deepEqual(
+    Object.entries(DEPLOYMENT_TURNS)
+      .filter(([, admitted]) => admitted)
+      .map(([turn]) => turn),
+    [BRAIN_HOST_TURN.SPOKEN, BRAIN_HOST_TURN.OBSERVATION],
+  );
+  const spoken = await actor(scheduled("user-a", BRAIN_HOST_TURN.SPOKEN));
+  assert.ok(spoken);
+  assert.equal(spoken.principalType, BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT);
+  assert.equal(spoken.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.SPOKEN);
+  assert.equal(actedForAccount(spoken), "user-a");
+  const followUp = await actor(
+    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
+  );
+  assert.equal(actedForAccount(followUp ?? null), "user-a");
+  assert.equal(
+    await refusal(() => actor(scheduled("user-a", BRAIN_HOST_TURN.TYPED))),
+    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  );
 });
 
 test("the account a principal acts for is its own for a person and the named one for the deployment, and a request's account header reaches no person's attributes", () => {
