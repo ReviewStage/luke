@@ -340,11 +340,8 @@ body,
   user-select: none;
 }
 
-/* The places a selection is wanted: a credential being pasted, and an ask
-   being written — the one field whose contents are worth re-reading and
-   reworking before they are sent. */
-.settings-input,
-.ask-luke-input {
+/* The one place a selection is wanted: a credential being pasted. */
+.settings-input {
   -webkit-user-select: text;
   user-select: text;
 }
@@ -2063,8 +2060,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .settings-header,
 .quit-button,
 .empty-state,
-.panel-header,
-.ask-luke-row {
+.panel-header {
   --row-delay: 0s;
 
   opacity: 0;
@@ -2094,8 +2090,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-presentation="panel"] .settings-header,
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
-.app-stage[data-presentation="panel"] .panel-header,
-.app-stage[data-presentation="panel"] .ask-luke-row {
+.app-stage[data-presentation="panel"] .panel-header {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *

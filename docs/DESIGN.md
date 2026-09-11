@@ -160,17 +160,15 @@ which chord is a product decision and is argued about here rather than in
 
 - **Option-Space talks.** It is where a macOS user already reaches for a voice
   assistant: Superwhisper, the ChatGPT desktop app, and Alfred all sit there.
-- **Option-S stops.** S is for stop, and Option-letter is the family the other
-  two keys live in. It is a sibling of Escape rather than of the talk key: it
+- **Option-S stops.** S is for stop, and Option-letter is the family the talk
+  key lives in. It is a sibling of Escape rather than of the talk key: it
   asks for quiet and nothing in its place, where speaking over a reply with
   the talk key held interrupts Luke and carries the conversation on.
-- **Option-L asks.** Hold Option-Space to speak to Luke, tap Option-L to type
-  to him — one modifier for both halves of the same conversation. Deliberately
-  not Command-L, which is the address bar in every browser and a taken chord in
-  most editors, and which a global registration would swallow machine-wide.
-  Option-L costs the system only the ¬ character.
+- **There is no ask key.** Luke is voice only: there is no field to type to
+  him in, so no chord summons one. Option-L, which once did, is given back to
+  the machine.
 
-No two of them may be able to land on one chord. `hotkeyCandidates` is where
+The two may not be able to land on one chord. `hotkeyCandidates` is where
 that is enforced, and says why.
 
 ## Copy: delete what describes, keep what instructs

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { maximumTypedAskLength } from "@sidecar/session";
+import { maximumAskLength } from "@sidecar/session";
 import type { WireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import { ONE_ACT_OF_EACH_KIND } from "../../testing/acts";
@@ -80,10 +80,7 @@ test("a row's write names one observed session and carries its words or its cont
   // The message is the developer's own words, refused where no bound could
   // admit them: nothing at all, or past the message bound the host applies.
   assert.equal(send({ identity: IDENTITY, text: "   " }), undefined);
-  assert.equal(
-    send({ identity: IDENTITY, text: "x".repeat(maximumTypedAskLength + 1) }),
-    undefined,
-  );
+  assert.equal(send({ identity: IDENTITY, text: "x".repeat(maximumAskLength + 1) }), undefined);
   assert.equal(send({ identity: IDENTITY }), undefined);
   assert.equal(
     send({ identity: { providerId: "nope", providerSessionId: "s" }, text: "hi" }),
@@ -105,22 +102,6 @@ test("a row's write names one observed session and carries its words or its cont
     press({ identity: IDENTITY, controlId: "cancel-run", control: { id: "archive" } }),
     undefined,
   );
-});
-
-test("a brain ask is one submission with an id, bounded words, and an origin", () => {
-  const submit = (submission: WireValue) =>
-    parsedAct({ kind: ACT_KIND.BRAIN_SUBMIT_ASK, payload: { submission } });
-  const submission = { submissionId: "sub-1", question: "what needs me?", origin: "typed" };
-  assert.ok(submit(submission));
-  assert.ok(submit({ ...submission, origin: "spoken" }));
-  assert.ok(submit({ ...submission, question: "x".repeat(maximumTypedAskLength) }));
-  assert.equal(
-    submit({ ...submission, question: "x".repeat(maximumTypedAskLength + 1) }),
-    undefined,
-  );
-  assert.equal(submit({ ...submission, submissionId: "" }), undefined);
-  assert.equal(submit({ ...submission, origin: "dreamt" }), undefined);
-  assert.equal(submit("what needs me?"), undefined);
 });
 
 test("the live session acts carry the peer's offer verbatim, a transport state the peer connection names, and one boolean", () => {
@@ -155,7 +136,7 @@ test("a voice command is one of the three commands and carries nothing else", ()
   for (const command of ["stop-speaking", "request-microphone-access", "clear-conversation"]) {
     assert.ok(parsedAct({ kind: ACT_KIND.VOICE_COMMAND, payload: { command } }));
   }
-  // A typed ask is a brain submission, not a command to the voice window.
+  // Nothing typed is a command to the voice window: Luke is voice only.
   assert.equal(
     parsedAct({ kind: ACT_KIND.VOICE_COMMAND, payload: { command: "ask-text" } }),
     undefined,
@@ -214,14 +195,6 @@ test("an outcome is one of the three answers and nothing else", () => {
 test("an answer's guard is the kind's own, so a shape another kind would take is refused", () => {
   assert.equal(ACT[ACT_KIND.SUPERSET_DISCONNECT].result({ status: "accepted" }), true);
   assert.equal(ACT[ACT_KIND.SUPERSET_DISCONNECT].result({ status: "rejected" }), false);
-  assert.equal(
-    ACT[ACT_KIND.BRAIN_SUBMIT_ASK].result({ outcome: "accepted", runId: "run-1", acceptedAt: 1 }),
-    true,
-  );
-  assert.equal(
-    ACT[ACT_KIND.BRAIN_SUBMIT_ASK].result({ outcome: "rejected", reason: "tired" }),
-    false,
-  );
   assert.equal(
     ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result({ sessionId: "sess_1", sdpAnswer: "v=0\r\n" }),
     true,

@@ -140,16 +140,3 @@ test("an agent rebuilt between asks is followed once each, and a listener let go
   second.events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "unheard" });
   assert.deepEqual(heard, ["from-first", "from-second"]);
 });
-
-test("a run the agent accepted from a window is heard once the agent is followed, without a spoken ask", () => {
-  const fake = fakeAgent();
-  const brain = brainAgentLiveBrain({ agent: () => fake.agent, rosterView: () => "" });
-  const heard: LiveBrainRunEvent[] = [];
-  brain.onRunEvent((event) => heard.push(event));
-  fake.events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "typed-1" });
-  assert.deepEqual(heard, []);
-  brain.followCurrent();
-  brain.followCurrent();
-  fake.events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "typed-1" });
-  assert.deepEqual(heard, [{ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "typed-1" }]);
-});

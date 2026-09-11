@@ -281,7 +281,7 @@ for (const held of Object.values(HELD_READ)) {
     const accepted = await hostedAgent.submitAsk({
       submissionId: "s-1",
       question: "still there?",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     });
     assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
     const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";

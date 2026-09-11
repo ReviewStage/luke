@@ -10,13 +10,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import type { UIMessage } from "ai";
-import {
-  BRAIN_REQUEST_ORIGIN,
-  type BrainRequestFailure,
-  type BrainRequestOrigin,
-  type BrainRequestStatus,
-  type BrainRunUsage,
-} from "./requests.js";
+import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
 import { BRAIN_TOOL } from "./tools.js";
 import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
@@ -78,7 +72,11 @@ export type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
 
 /** Who or what opened a turn, as the turn's record takes it: attribution, never a permission. */
 export const BRAIN_TURN_ORIGIN = {
-  /** A developer's ask typed into a composer. */
+  /**
+   * A developer's ask typed into a composer. No turn of this build opens
+   * under it — Luke is voice only — but the stored rows an earlier build
+   * wrote carry it, and the hosted store's row shape still spells it.
+   */
   TYPED: "typed",
   /** A developer's ask spoken, relayed by the voice service. */
   SPOKEN: "spoken",
@@ -94,16 +92,11 @@ export const BRAIN_TURN_ORIGIN = {
 
 export type BrainTurnOrigin = (typeof BRAIN_TURN_ORIGIN)[keyof typeof BRAIN_TURN_ORIGIN];
 
-/** The origin a turn's trigger and, for an ask, its ask's origin amount to. */
-export function turnOriginOf(
-  trigger: BrainTurnTrigger,
-  askOrigin: BrainRequestOrigin | undefined,
-): BrainTurnOrigin {
+/** The origin a turn's trigger amounts to: an ask is the developer's spoken one, and a child's task is the child's. */
+export function turnOriginOf(trigger: BrainTurnTrigger): BrainTurnOrigin {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.ASK:
-      return askOrigin === BRAIN_REQUEST_ORIGIN.SPOKEN
-        ? BRAIN_TURN_ORIGIN.SPOKEN
-        : BRAIN_TURN_ORIGIN.TYPED;
+      return BRAIN_TURN_ORIGIN.SPOKEN;
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
       return BRAIN_TURN_ORIGIN.CHILD;
     case BRAIN_TURN_TRIGGER.CHILD_COMPLETION:

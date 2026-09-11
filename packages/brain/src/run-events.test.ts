@@ -155,7 +155,7 @@ function stored(messages: readonly (UIMessage | undefined)[]): UnparsedWireValue
   return JSON.parse(JSON.stringify(messages)) as UnparsedWireValue;
 }
 
-const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED };
+const SPOKEN_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE };
 const BRAIN_AUTHORED = { author: MESSAGE_AUTHOR.BRAIN };
 
 const SUMMARIZED_REASONING = {
@@ -226,7 +226,7 @@ test("a developer turn tells the documented sequence, every event stamped with t
   const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
   assert.deepEqual(bare(started), {
     kind: BRAIN_RUN_EVENT.TURN_STARTED,
-    origin: BRAIN_TURN_ORIGIN.TYPED,
+    origin: BRAIN_TURN_ORIGIN.SPOKEN,
     trigger: BRAIN_TURN_TRIGGER.ASK,
     at: NOW,
   });
@@ -251,7 +251,7 @@ test("a developer turn tells the documented sequence, every event stamped with t
   // it is on record, each saying what the storage vocabulary lets it say.
   const [opening, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
   assert.equal(opening?.message.role, MESSAGE_ROLE.USER);
-  assert.deepEqual(opening?.message.metadata, TYPED_ASK);
+  assert.deepEqual(opening?.message.metadata, SPOKEN_ASK);
   assert.deepEqual(
     opening?.message.parts.map((part) => part.type),
     [UI_PART_TYPE.TEXT],
@@ -756,7 +756,7 @@ test("a rider withdrawn mid-turn ends where it was withdrawn, numbered in the tu
   await h.agent.stop();
 });
 
-test("a spoken ask's turn is prepared with the spoken origin and told under it, and a typed ask's with the typed one", async () => {
+test("every ask's turn is prepared with the spoken origin and told under it", async () => {
   const prepared: BrainTurnDescription[] = [];
   const h = harness({
     prepareTurn: (turn) => {
@@ -782,18 +782,18 @@ test("a spoken ask's turn is prepared with the spoken origin and told under it, 
     {
       kind: BRAIN_TURN_KIND.TURN,
       trigger: BRAIN_TURN_TRIGGER.ASK,
-      askOrigin: BRAIN_REQUEST_ORIGIN.TYPED,
+      askOrigin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     },
   ]);
   assert.deepEqual(
     ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED).map((event) => event.origin),
-    [BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_ORIGIN.TYPED],
+    [BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_ORIGIN.SPOKEN],
   );
   assert.deepEqual(
     ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED)
       .filter((event) => event.message.role === MESSAGE_ROLE.USER)
       .map((event) => event.message.metadata),
-    [{ author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE }, TYPED_ASK],
+    [SPOKEN_ASK, SPOKEN_ASK],
   );
   await h.agent.stop();
 });
@@ -810,22 +810,18 @@ test("a listener that throws ends no run", async () => {
   await h.agent.stop();
 });
 
-test("every trigger has one origin: an ask's by where the ask came from, the rest by the trigger alone", () => {
+test("every trigger has one origin: an ask is the developer's spoken one, the rest by the trigger alone", () => {
   assert.deepEqual(
     [
-      turnOriginOf(BRAIN_TURN_TRIGGER.ASK, BRAIN_REQUEST_ORIGIN.TYPED),
-      turnOriginOf(BRAIN_TURN_TRIGGER.ASK, BRAIN_REQUEST_ORIGIN.SPOKEN),
-      turnOriginOf(BRAIN_TURN_TRIGGER.ASK, undefined),
-      turnOriginOf(BRAIN_TURN_TRIGGER.CHILD_TASK, BRAIN_REQUEST_ORIGIN.CHILD),
-      turnOriginOf(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, undefined),
-      turnOriginOf(BRAIN_TURN_TRIGGER.HOLD_RELEASED, undefined),
-      turnOriginOf(BRAIN_TURN_TRIGGER.WAKE, undefined),
-      turnOriginOf(BRAIN_TURN_TRIGGER.ROSTER, undefined),
+      turnOriginOf(BRAIN_TURN_TRIGGER.ASK),
+      turnOriginOf(BRAIN_TURN_TRIGGER.CHILD_TASK),
+      turnOriginOf(BRAIN_TURN_TRIGGER.CHILD_COMPLETION),
+      turnOriginOf(BRAIN_TURN_TRIGGER.HOLD_RELEASED),
+      turnOriginOf(BRAIN_TURN_TRIGGER.WAKE),
+      turnOriginOf(BRAIN_TURN_TRIGGER.ROSTER),
     ],
     [
-      BRAIN_TURN_ORIGIN.TYPED,
       BRAIN_TURN_ORIGIN.SPOKEN,
-      BRAIN_TURN_ORIGIN.TYPED,
       BRAIN_TURN_ORIGIN.CHILD,
       BRAIN_TURN_ORIGIN.CHILD_COMPLETION,
       BRAIN_TURN_ORIGIN.HOLD_RELEASE,
@@ -835,11 +831,11 @@ test("every trigger has one origin: an ask's by where the ask came from, the res
   );
 });
 
-test("a user row's metadata follows the trigger: asks by channel, everything the brain writes for itself by source", () => {
+test("a user row's metadata follows the trigger: a spoken ask on the voice channel, an ask with no origin on the hosted host's typed one, everything the brain writes for itself by source", () => {
   assert.deepEqual(
     [
-      userMetadataOf(BRAIN_TURN_TRIGGER.ASK, BRAIN_REQUEST_ORIGIN.TYPED),
       userMetadataOf(BRAIN_TURN_TRIGGER.ASK, BRAIN_REQUEST_ORIGIN.SPOKEN),
+      userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
       userMetadataOf(BRAIN_TURN_TRIGGER.WAKE, undefined),
       userMetadataOf(BRAIN_TURN_TRIGGER.ROSTER, undefined),
       userMetadataOf(BRAIN_TURN_TRIGGER.HOLD_RELEASED, undefined),
@@ -847,8 +843,8 @@ test("a user row's metadata follows the trigger: asks by channel, everything the
       userMetadataOf(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, undefined),
     ],
     [
-      TYPED_ASK,
       { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+      { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
       { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOOK },
       { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ROSTER_LOOK },
       { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
@@ -919,9 +915,9 @@ test("a turn's teller numbers its events from one, knows once its start was told
   assert.equal(events.opened, false);
   events.actionsSettled("turn-1");
   assert.equal(events.opened, false);
-  events.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK);
+  events.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK);
   assert.equal(events.opened, true);
-  events.words("hello", TYPED_ASK);
+  events.words("hello", SPOKEN_ASK);
   events.adopt("rider-1");
   assert.equal(registry.get("rider-1"), events);
   assert.deepEqual(
@@ -936,7 +932,7 @@ test("a turn's teller numbers its events from one, knows once its start was told
   assert.ok(words?.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
   assert.equal(words.message.id, "m-1");
   assert.equal(words.message.role, MESSAGE_ROLE.USER);
-  assert.deepEqual(words.message.metadata, TYPED_ASK);
+  assert.deepEqual(words.message.metadata, SPOKEN_ASK);
 });
 
 test("the assistant message gathers reasoning, text, and tool parts in order, settling each call in place and adding no part for silence", () => {

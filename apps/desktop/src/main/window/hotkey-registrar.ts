@@ -1,23 +1,16 @@
-import { PRODUCT_EVENT, PRODUCT_PANEL_SOURCE, type RecordProductEvent } from "@sidecar/analytics";
-import {
-  askHotkeyCandidates,
-  stopHotkeyCandidates,
-  voiceHotkeyCandidates,
-} from "@sidecar/settings";
+import { stopHotkeyCandidates, voiceHotkeyCandidates } from "@sidecar/settings";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { type BrowserWindow, globalShortcut, type WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import type { WindowMode } from "#shared/messages/session";
 import { type TalkKeyEdges, talkKeyWatcher } from "../native/talk-key";
 
 /**
- * The three Luke keys, in the order they outrank one another. Talk takes any
- * chord it can sit on; ask yields to talk; stop yields to both — it alone has
- * Escape standing behind it.
+ * The two Luke keys, in the order they outrank one another. Talk takes any
+ * chord it can sit on; stop yields to it — it alone has Escape standing
+ * behind it.
  */
 export const HOTKEY_RANK = {
   TALK: "talk",
-  ASK: "ask",
   STOP: "stop",
 } as const;
 
@@ -27,7 +20,7 @@ export type HotkeyRank = (typeof HOTKEY_RANK)[keyof typeof HOTKEY_RANK];
  * The pecking order, stated once. Every operation below reads it rather than
  * spelling out who yields to whom.
  */
-const RANK_ORDER: readonly HotkeyRank[] = [HOTKEY_RANK.TALK, HOTKEY_RANK.ASK, HOTKEY_RANK.STOP];
+const RANK_ORDER: readonly HotkeyRank[] = [HOTKEY_RANK.TALK, HOTKEY_RANK.STOP];
 
 /** Only the shortcut surface this needs, so a test can supply one. */
 export interface ShortcutSurface {
@@ -43,24 +36,17 @@ export interface TalkKeyHandle {
 
 /**
  * The windows the keys talk to: the voice host answers a talk or stop press,
- * the primary panel is what the ask key summons, and every window is told
- * which chord to teach when one of them moves.
+ * and every window is told which chord to teach when one of them moves.
  */
 export interface HotkeyHost {
   voiceHost(): BrowserWindow | undefined;
-  /** The one drawn panel an ask press summons; the voice host draws nothing. */
-  primaryPanel(): BrowserWindow | undefined;
-  displayIdFor(sender: WebContents): number | undefined;
-  /** How the panel stands now, so a key that summons into an open one knows. */
-  modeFor(displayId: number): WindowMode;
-  setMode(displayId: number, mode: WindowMode, requestFocus: boolean): void;
   /**
    * One key's registration moved, so what the renderers are teaching is
    * written again. The raw accelerator is what travels, as in bootstrap: the
    * renderer draws the chord as its separate keys and says it as one word,
    * and only the accelerator produces both. An absence travels too, for the
    * guide's sake: a chord that answers nothing must not be one Luke claims
-   * to have. Announced per rank rather than as the three together, because
+   * to have. Announced per rank rather than as the two together, because
    * the talk key's own reapply leaves it unregistered while its helper
    * starts: a whole-set announcement would tell every panel the chord had
    * gone and tell it back a moment later.
@@ -75,11 +61,10 @@ export interface HotkeyRegistrarOptions {
   /**
    * Whether the named key currently has something to serve. Answered per rank
    * because the ranks can diverge: the introduction holds a voice for the talk
-   * key alone, and claiming the ask and stop chords beside it would take two
-   * system keys from every other app for nothing.
+   * key alone, and claiming the stop chord beside it would take a system key
+   * from every other app for nothing.
    */
   hasCredentials: (rank: HotkeyRank) => boolean;
-  recordProductEvent: RecordProductEvent;
   shortcut?: ShortcutSurface;
   createTalkKeyWatcher?: (edges: TalkKeyEdges) => TalkKeyHandle;
 }
@@ -107,7 +92,7 @@ interface KeyState {
 }
 
 /**
- * Owns the talk, ask, and stop keys and the pecking order between them.
+ * Owns the talk and stop keys and the pecking order between them.
  *
  * The registered chord, the stored choice, and the talk-key helper are one
  * reservation table here: `reserve` is the answer the settings
@@ -119,7 +104,6 @@ export class HotkeyRegistrar {
   readonly #host: HotkeyHost;
   readonly #registersGlobalKeys: boolean;
   readonly #hasCredentials: (rank: HotkeyRank) => boolean;
-  readonly #recordProductEvent: RecordProductEvent;
   readonly #shortcut: ShortcutSurface;
   readonly #createTalkKeyWatcher: (edges: TalkKeyEdges) => TalkKeyHandle;
 
@@ -155,7 +139,6 @@ export class HotkeyRegistrar {
     this.#host = options.host;
     this.#registersGlobalKeys = options.registersGlobalKeys;
     this.#hasCredentials = options.hasCredentials;
-    this.#recordProductEvent = options.recordProductEvent;
     this.#shortcut = options.shortcut ?? globalShortcut;
     this.#createTalkKeyWatcher = options.createTalkKeyWatcher ?? talkKeyWatcher;
     this.#keys = new Map<HotkeyRank, KeyState>([
@@ -164,15 +147,6 @@ export class HotkeyRegistrar {
         {
           candidates: voiceHotkeyCandidates,
           onPress: () => this.#toggleFallbackTalk(),
-          chosen: undefined,
-          accelerator: undefined,
-        },
-      ],
-      [
-        HOTKEY_RANK.ASK,
-        {
-          candidates: askHotkeyCandidates,
-          onPress: () => this.#summonAskField(),
           chosen: undefined,
           accelerator: undefined,
         },
@@ -202,10 +176,6 @@ export class HotkeyRegistrar {
     return this.#held;
   }
 
-  get ask(): string | undefined {
-    return this.#key(HOTKEY_RANK.ASK).accelerator;
-  }
-
   get stop(): string | undefined {
     return this.#key(HOTKEY_RANK.STOP).accelerator;
   }
@@ -221,7 +191,7 @@ export class HotkeyRegistrar {
   /**
    * Whether `chord` is spoken for by a key that outranks `forKey`. A rank's
    * whole candidate list is reserved, not just the chord it holds now: the talk
-   * key's helper may fall back to any of them on a later launch, and the ask
+   * key's helper may fall back to any of them on a later launch, and the stop
    * key re-registers behind it.
    */
   reserve(chord: string, forKey: HotkeyRank): HotkeyRank | undefined {
@@ -230,13 +200,12 @@ export class HotkeyRegistrar {
 
   /**
    * Re-registers `fromRank` and every rank below it, in order. Moving the talk
-   * key lets everything go, because `unregisterAll` is exactly that; a lower
-   * rank lets go only of itself and the ranks under it, so a change that is
-   * none of the talk key's business cannot make its registration flicker — and
-   * stop lets only itself go, because nothing yields to it. Each rank is then
-   * taken afresh from the top down, because the chord a lower key may have is
-   * decided by where the higher ones landed: a talk key moving onto Option-S
-   * must win it, and one moving off must give it back.
+   * key lets everything go, because `unregisterAll` is exactly that; stop lets
+   * only itself go, because nothing yields to it, so a change that is none of
+   * the talk key's business cannot make its registration flicker. Each rank is
+   * then taken afresh from the top down, because the chord a lower key may
+   * have is decided by where the higher one landed: a talk key moving onto
+   * Option-S must win it, and one moving off must give it back.
    */
   async reapply(fromRank: HotkeyRank): Promise<void> {
     const ranks = RANK_ORDER.slice(RANK_ORDER.indexOf(fromRank));
@@ -292,7 +261,7 @@ export class HotkeyRegistrar {
   /**
    * Every chord the ranks above `rank` could sit on, not just the ones they
    * have announced: the talk key's helper falls back through its own candidates
-   * on its own clock and the ask key re-registers behind it, so a chord a
+   * on its own clock and the stop key re-registers behind it, so a chord a
    * higher rank merely might take is already not this one's to have — the Luke
    * keys must never compete.
    */
@@ -342,28 +311,6 @@ export class HotkeyRegistrar {
     voiceHost.send(
       this.#fallbackTalking ? channels.onVoiceHotkeyPress : channels.onVoiceHotkeyRelease,
     );
-  }
-
-  /**
-   * The panel stands up focused, then the renderer is asked to put the caret in
-   * the field — or, when the caret is already there, it reads the same press as
-   * the dismissal, so one key summons and puts away like every launcher does.
-   * The panel is the primary one, where every other app-level action lands.
-   */
-  #summonAskField(): void {
-    const host = this.#host.primaryPanel();
-    const displayId = host ? this.#host.displayIdFor(host.webContents) : undefined;
-    if (displayId === undefined) return;
-    const opening = this.#host.modeFor(displayId) !== "expanded";
-    this.#host.setMode(displayId, "expanded", true);
-    this.#sendTo(host?.webContents, channels.onLifecycle, "ask:focus");
-    // The key summons the field wherever the panel already stood, so only the
-    // press that actually opened one is an opening.
-    if (opening) {
-      this.#recordProductEvent(PRODUCT_EVENT.PANEL_OPEN, {
-        panel_source: PRODUCT_PANEL_SOURCE.HOTKEY,
-      });
-    }
   }
 
   /**

@@ -1194,7 +1194,7 @@ test("a stop during a held initial bootstrap settles at once; the open finishing
     const pending = agent.submitAsk({
       submissionId: "held-boot",
       question: "hello",
-      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     });
     await settle();
     let stopped = false;

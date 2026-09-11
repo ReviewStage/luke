@@ -173,17 +173,13 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   const entries = settingsSearchEntries(everythingDrawn());
 
   // "shortcut" lands only on the Keyboard shortcuts page, so one group holds
-  // the three key rows.
+  // the two key rows.
   const shortcuts = searchSettings(entries, "shortcut");
   assert.ok(shortcuts);
   assert.equal(shortcuts.groups.length, 1);
   assert.equal(shortcuts.groups[0]?.page, SETTINGS_VIEW.SHORTCUTS);
-  assert.deepEqual(labels(shortcuts.groups[0]?.items ?? []), [
-    "Talk to Luke",
-    "Ask Luke",
-    "Stop Luke",
-  ]);
-  assert.equal(shortcuts.matched, 3);
+  assert.deepEqual(labels(shortcuts.groups[0]?.items ?? []), ["Talk to Luke", "Stop Luke"]);
+  assert.equal(shortcuts.matched, 2);
 
   // "key" lands on Voice and two later pages; the groups keep the front
   // page's navigation order.

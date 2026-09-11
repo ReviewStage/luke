@@ -3,18 +3,17 @@ import { GATEWAY_CLIENT_ROLE, GatewayClient, InProcessTransport } from "@sidecar
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import type { ConversationOperations } from "../conversation-operations.js";
 import { createGatewayOperator, type GatewayOperator } from "../operator.js";
-import { createGatewayService, type GatewayServiceDependencies } from "../service.js";
+import { createGatewayService } from "../service.js";
 
 /**
- * Test support: the operator a window's ask crosses, stood over one brain
- * and one thread and nothing else, so a test of the brain's own lifecycle
- * submits the way production does — through the host's submit method, its
- * bound and its Conversation write — without composing the rest of the host.
- * Every other capability is an inert stand-in a test of it would not use.
+ * Test support: the operator a client's ask crosses, stood over one brain and
+ * nothing else, so a test of the brain's own lifecycle submits the way
+ * production does — through the host's submit method and its bound — without
+ * composing the rest of the host. Every other capability is an inert stand-in
+ * a test of it would not use.
  */
 export function operatorOverBrain(options: {
   current: () => BrainAgent | undefined;
-  recordConversationEntry: GatewayServiceDependencies["recordConversationEntry"];
 }): GatewayOperator {
   let ids = 0;
   const service = createGatewayService({
@@ -33,7 +32,6 @@ export function operatorOverBrain(options: {
     conversations: {} as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,
-    recordConversationEntry: options.recordConversationEntry,
     now: Date.now,
     createId: () => `id-${++ids}`,
   });

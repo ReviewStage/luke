@@ -52,16 +52,6 @@ export function stopHotkeyCandidates(
   return hotkeyCandidates(chosen, DEFAULT_STOP_HOTKEYS, taken);
 }
 
-/** The key that summons the ask field from whatever app is frontmost. */
-export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
-
-export function askHotkeyCandidates(
-  chosen: string | undefined,
-  taken: readonly (string | undefined)[],
-): readonly string[] {
-  return hotkeyCandidates(chosen, DEFAULT_ASK_HOTKEYS, taken);
-}
-
 /**
  * The modifiers a talk key may carry, written the way Electron accelerators
  * name them. Their order here is the order macOS writes a chord in — ⌃⌥⇧⌘ —

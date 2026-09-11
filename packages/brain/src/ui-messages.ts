@@ -70,7 +70,9 @@ export function toolPartType(name: string): ToolPart["type"] {
  * What a user row of a turn's own words says about itself: a developer's ask
  * by the channel it arrived on, and everything the brain wrote down for
  * itself by what opened the turn. The notes the host hands a turn beside its
- * words name their own sources, below.
+ * words name their own sources, below. On the desktop every ask is spoken;
+ * the typed channel is the hosted brain host's, whose typed turns carry no
+ * request origin.
  */
 export function userMetadataOf(
   trigger: BrainTurnTrigger,

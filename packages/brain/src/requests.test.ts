@@ -19,7 +19,7 @@ test("a request record survives the wire whole, with every optional field presen
   const full: BrainRequestRecord = {
     runId: "run-1",
     submissionId: "sub-1",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     question: "what needs me?",
     status: BRAIN_REQUEST_STATUS.FAILED,
     revision: 4,
@@ -88,7 +88,7 @@ test("a plain stop has no reply words and leaves the quiet line; one that had ac
   const stopped: BrainRequestRecord = {
     runId: "run-3",
     submissionId: "sub-3",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     question: "what needs me?",
     status: BRAIN_REQUEST_STATUS.CANCELLED,
     revision: 2,

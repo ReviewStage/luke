@@ -36,7 +36,6 @@ export const SETTINGS_SEARCH_ROW = {
   QUIT: "quit",
   MICROPHONE: "microphone",
   TALK_KEY: "talk-key",
-  ASK_KEY: "ask-key",
   STOP_KEY: "stop-key",
 } as const;
 

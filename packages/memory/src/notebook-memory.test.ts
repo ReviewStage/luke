@@ -397,7 +397,7 @@ test("conversation hits are keyword-only fallback: they fill spare slots from el
   await h.memory.sync();
   h.store.linesByKey.set(MAIN_SESSION_KEY, [
     {
-      kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+      kind: CONVERSATION_ENTRY_KIND.ASK,
       words: "we chose Tuesday deploys in main",
       recordedAt: NOW,
       eventId: "a",

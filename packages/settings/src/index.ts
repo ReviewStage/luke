@@ -63,9 +63,7 @@ export {
   VOICE_SOURCE_SECTION,
 } from "./settings-paths.js";
 export {
-  askHotkeyCandidates,
   capturedVoiceHotkey,
-  DEFAULT_ASK_HOTKEYS,
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   stopHotkeyCandidates,

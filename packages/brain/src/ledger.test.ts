@@ -207,7 +207,7 @@ test("a retry of a submission whose acceptance is still being written awaits the
       await h.agent.submitAsk({
         submissionId: "sub-1",
         question: "send",
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        origin: BRAIN_REQUEST_ORIGIN.CHILD,
       })
     ).outcome,
     BRAIN_SUBMISSION_OUTCOME.REJECTED,
@@ -685,7 +685,7 @@ test("a refused acceptance is never saved by an unrelated mark, and never comes 
   const retried = await relaunched.agent.submitAsk({
     submissionId: "rejected-b",
     question: "ASK_THAT_WAS_REJECTED",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(retried.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await settle();

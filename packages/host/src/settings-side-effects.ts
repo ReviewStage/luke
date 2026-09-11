@@ -44,7 +44,6 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.DISPLAYS]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.FORM_FACTOR]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.ASK_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) => dependencies.setVoice(settings.voice),

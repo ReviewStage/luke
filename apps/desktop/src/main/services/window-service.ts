@@ -310,28 +310,19 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     // the host says one does.
     hasCredentials: (rank) =>
       operator.voiceAvailable() || (rank === HOTKEY_RANK.TALK && introductionPlaying()),
-    recordProductEvent: (name, properties) => recordProductEvent(name, properties),
     host: {
       // While the introduction plays, its own call runs in the panel window
       // it took: the takeover holds the microphone and the beats, so the key
       // has to reach the surface that answers it.
       voiceHost: () => (introductionPlaying() ? panels.primaryPanel() : voiceWindow.current()),
-      primaryPanel: () => panels.primaryPanel(),
-      displayIdFor: (sender) => panels.displayIdFor(sender),
-      modeFor: (displayId) => panels.modeFor(displayId),
-      setMode: (displayId, mode, requestFocus) => {
-        panels.setMode(displayId, mode, requestFocus);
-      },
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
         const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;
-        const ask = rank === HOTKEY_RANK.ASK ? hotkeys.ask : current.ask;
         const stop = rank === HOTKEY_RANK.STOP ? hotkeys.stop : current.stop;
         const nextHotkeys: AppHotkeysSlice = {
           talkHeld: rank === HOTKEY_RANK.TALK ? hotkeys.held : current.talkHeld,
         };
         if (talk !== undefined) nextHotkeys.talk = talk;
-        if (ask !== undefined) nextHotkeys.ask = ask;
         if (stop !== undefined) nextHotkeys.stop = stop;
         state.update({ hotkeys: nextHotkeys });
       },
@@ -475,7 +466,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       panels.setShowOnAllDisplays(settings?.stored.showOnAllDisplays === true);
       panels.setFormFactor(settings?.stored.formFactor ?? DEFAULT_PANEL_FORM_FACTOR);
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
-      hotkeys.setChosen(HOTKEY_RANK.ASK, settings?.stored.askHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       // The standing is written before the first window opens, so the panel's
       // own renderer reads it in the state it bootstraps from and draws the

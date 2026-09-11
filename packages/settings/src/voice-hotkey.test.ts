@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
-  askHotkeyCandidates,
   capturedVoiceHotkey,
-  DEFAULT_ASK_HOTKEYS,
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   parseVoiceHotkey,
@@ -33,12 +31,11 @@ test("the stop key is Option-S, and yields any chord another Luke key could hold
   assert.deepEqual(DEFAULT_STOP_HOTKEYS, ["Alt+S"]);
   for (const accelerator of DEFAULT_STOP_HOTKEYS) {
     assert.ok(!DEFAULT_VOICE_HOTKEYS.includes(accelerator));
-    assert.ok(!DEFAULT_ASK_HOTKEYS.includes(accelerator));
   }
-  assert.deepEqual(stopHotkeyCandidates(undefined, [undefined, undefined]), DEFAULT_STOP_HOTKEYS);
-  // A talk or ask key moved onto Option-S wins it; the stop key stands down
-  // rather than racing, because it alone has Escape standing behind it.
-  assert.deepEqual(stopHotkeyCandidates(undefined, ["Alt+Space", "Alt+S"]), []);
+  assert.deepEqual(stopHotkeyCandidates(undefined, [undefined]), DEFAULT_STOP_HOTKEYS);
+  // A talk key moved onto Option-S wins it; the stop key stands down rather
+  // than racing, because it alone has Escape standing behind it.
+  assert.deepEqual(stopHotkeyCandidates(undefined, ["Alt+S"]), []);
 });
 
 test("a chosen stop chord goes first, with the default kept behind it", () => {
@@ -48,53 +45,14 @@ test("a chosen stop chord goes first, with the default kept behind it", () => {
   ]);
   // A chosen chord that is itself the default is not offered twice.
   assert.deepEqual(stopHotkeyCandidates("Alt+S", [undefined]), DEFAULT_STOP_HOTKEYS);
-  // The other keys outrank even a chosen chord: no two Luke keys compete.
-  assert.deepEqual(stopHotkeyCandidates("Control+Alt+X", ["Control+Alt+X"]), DEFAULT_STOP_HOTKEYS);
-});
-
-test("the ask key is the talk key's sibling, never its rival", () => {
-  // Two Luke keys must never compete for one chord: whichever registered
-  // first would silently cost the other its whole feature.
-  for (const accelerator of DEFAULT_ASK_HOTKEYS) {
-    assert.ok(!DEFAULT_VOICE_HOTKEYS.includes(accelerator));
-  }
-});
-
-test("an ask candidate the talk key holds is not asked for", () => {
-  // The talk key is configurable, so it can be moved onto an ask default; the
-  // chord it holds simply stops being a candidate rather than being fought over.
-  assert.deepEqual(askHotkeyCandidates(undefined, [undefined, undefined]), DEFAULT_ASK_HOTKEYS);
-  assert.deepEqual(askHotkeyCandidates(undefined, ["Alt+L", undefined]), ["Alt+Shift+L"]);
-  // The talk and stop keys' own defaults hold nothing the ask key wants.
-  assert.deepEqual(
-    askHotkeyCandidates(undefined, [...DEFAULT_VOICE_HOTKEYS, ...DEFAULT_STOP_HOTKEYS]),
-    DEFAULT_ASK_HOTKEYS,
-  );
-});
-
-test("a chosen ask chord goes first, with the defaults kept behind it", () => {
-  // Like the talk key's candidates: a chord another app claims while Luke is
-  // closed costs the user a different ask key rather than none.
-  assert.deepEqual(askHotkeyCandidates("Control+Alt+K", [undefined, undefined]), [
-    "Control+Alt+K",
-    ...DEFAULT_ASK_HOTKEYS,
-  ]);
-  // A chosen chord that is itself a default is not offered twice.
-  assert.deepEqual(askHotkeyCandidates("Alt+Shift+L", [undefined, undefined]), [
-    "Alt+Shift+L",
-    "Alt+L",
-  ]);
   // The talk key outranks even a chosen chord: two Luke keys never compete.
-  assert.deepEqual(
-    askHotkeyCandidates("Control+Alt+K", ["Control+Alt+K", undefined]),
-    DEFAULT_ASK_HOTKEYS,
-  );
+  assert.deepEqual(stopHotkeyCandidates("Control+Alt+X", ["Control+Alt+X"]), DEFAULT_STOP_HOTKEYS);
   // The registrar hands in the talk key's whole candidate list, so a chosen
   // chord on a talk-key default is filtered even before the helper has said
   // which of them it actually sits on.
   assert.deepEqual(
-    askHotkeyCandidates("Alt+Space", [...DEFAULT_VOICE_HOTKEYS, undefined]),
-    DEFAULT_ASK_HOTKEYS,
+    stopHotkeyCandidates("Alt+Space", [...DEFAULT_VOICE_HOTKEYS]),
+    DEFAULT_STOP_HOTKEYS,
   );
 });
 
@@ -157,8 +115,7 @@ test("a deleted key offers no candidate at all", () => {
   // for a key the user asked to have none would be the key coming back on
   // its own.
   assert.deepEqual(voiceHotkeyCandidates(VOICE_HOTKEY_NONE), []);
-  assert.deepEqual(askHotkeyCandidates(VOICE_HOTKEY_NONE, [undefined, undefined]), []);
-  assert.deepEqual(stopHotkeyCandidates(VOICE_HOTKEY_NONE, [undefined, undefined]), []);
+  assert.deepEqual(stopHotkeyCandidates(VOICE_HOTKEY_NONE, [undefined]), []);
   // The token shares the chord's field, so no recording may ever produce it:
   // the parser refusing the word is what keeps the two meanings apart.
   assert.equal(parseVoiceHotkey(VOICE_HOTKEY_NONE), undefined);

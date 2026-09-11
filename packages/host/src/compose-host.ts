@@ -250,12 +250,9 @@ export function composeHost(options: HostSeams): Host {
     },
     observedSessionCount: observation.observedSessionCount,
     nodes: kernel.nodes,
-    recordConversationEntry: (entry, recordedAt, sessionKey) =>
-      brain.store.recordConversationEntry(entry, recordedAt, sessionKey),
     now,
     createId: kernel.createId,
     methods: { ...mergeMethods(composers), ...bootstrapMethods },
-    onTypedAsk: (question, runId) => live.followTypedAsk(question, runId),
   });
   kernel.setService(service);
 

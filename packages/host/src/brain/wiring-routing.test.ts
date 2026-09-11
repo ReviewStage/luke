@@ -117,7 +117,6 @@ interface Composed {
   deliveries: BrainDelivery[];
   reads: SessionIdentity[];
   roster: Session[];
-  recorded: { sessionKey: SessionKey; kind: string }[];
   /** How many stores were built per conversation. */
   repositories: Map<SessionKey, number>;
   /** How many writes each conversation's envelope took. */
@@ -159,7 +158,6 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
   const ensured: Composed["ensured"] = [];
   const deliveries: BrainDelivery[] = [];
   const reads: SessionIdentity[] = [];
-  const recorded: Composed["recorded"] = [];
   const roster: Session[] = [session("abc"), session("def")];
   let ids = 0;
   let builds = 0;
@@ -194,10 +192,6 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
     parallelism: () => 8,
     createId: () => `id-${++ids}`,
     report: () => undefined,
-    recordConversationEntry: (entry, _at, sessionKey) => {
-      recorded.push({ sessionKey, kind: entry.kind });
-      return true;
-    },
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
@@ -279,7 +273,6 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
     deliveries,
     reads,
     roster,
-    recorded,
     repositories,
     writes,
     builds: () => builds,
@@ -331,7 +324,7 @@ test("a roster look opens one conversation per observed session, each reading on
   const accepted = await main.submitAsk({
     submissionId: "s-1",
     question: "what happened?",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await until(() => c.inputs.length >= 3);
@@ -621,7 +614,7 @@ test("one observed conversation waiting on its model neither blocks another nor 
   const accepted = await main.submitAsk({
     submissionId: "s-2",
     question: "are you there?",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";

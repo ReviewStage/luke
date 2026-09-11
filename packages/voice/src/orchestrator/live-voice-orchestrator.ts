@@ -381,7 +381,7 @@ export class LiveVoiceOrchestrator {
       liveConversationEntries: this.#liveEntries,
       spokenAskPending:
         this.#status === LIVE_STATUS.LISTENING &&
-        !this.#liveEntries.some((entry) => entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK),
+        !this.#liveEntries.some((entry) => entry.kind === CONVERSATION_ENTRY_KIND.ASK),
     };
   }
 

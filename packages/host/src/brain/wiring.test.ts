@@ -32,7 +32,6 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     childStore: () => childStore,
     createId: () => "id",
     report: () => undefined,
-    recordConversationEntry: () => true,
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {

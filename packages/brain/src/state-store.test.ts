@@ -24,7 +24,7 @@ function complete(): BrainPersistedState {
       {
         runId: "run-1",
         submissionId: "sub-1",
-        origin: BRAIN_REQUEST_ORIGIN.TYPED,
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
         question: "what's up?",
         status: BRAIN_REQUEST_STATUS.SUCCEEDED,
         revision: 3,

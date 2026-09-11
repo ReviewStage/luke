@@ -132,10 +132,7 @@ function lexicalScore(query: string, words: string): number {
 }
 
 function isAsk(entry: ConversationEntry): boolean {
-  return (
-    entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
-    entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK
-  );
+  return entry.kind === CONVERSATION_ENTRY_KIND.ASK;
 }
 
 /**

@@ -71,7 +71,6 @@ export interface AppHotkeysSlice {
    * one, and the panel says which of the two the developer actually has.
    */
   talkHeld: boolean;
-  ask?: string;
   stop?: string;
 }
 

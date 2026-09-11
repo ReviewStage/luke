@@ -1,21 +1,11 @@
 import assert from "node:assert/strict";
-import {
-  BRAIN_ASK_REFUSAL,
-  BRAIN_SUBMISSION_OUTCOME,
-  BRAIN_SUBMISSION_REJECTION,
-  type BrainSubmissionRejection,
-} from "@sidecar/brain/requests";
-import type { BrainAskSubmissionResult } from "@sidecar/brain/requests-wire";
+import { BRAIN_ASK_REFUSAL } from "@sidecar/brain/requests";
 import { LIVE_STATUS } from "@sidecar/live";
-import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "@sidecar/voice/orchestrator";
 import { test } from "vitest";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
-  ASK_UNSENT_REASON,
-  askDraftReason,
   CLEAR_FAILED_REASON,
   panelVoiceView,
-  submitTypedAsk,
   voiceActiveFor,
   voiceErrorToShow,
   voiceNoticeToShow,
@@ -90,92 +80,6 @@ test("a notice yields to Luke's turn alone, because the developer's draws nothin
     "Luke's words own the box whether or not the captions draw them",
   );
   assert.equal(voiceNoticeToShow({ ...notice, fixtureSpeaking: true }), undefined);
-});
-
-test("a refused or unanswered typed ask keeps its draft; an accepted one clears it", () => {
-  // The composer clears the field only on a falsy answer, so an accepted ask
-  // must answer nothing and every other outcome must answer a reason.
-  assert.equal(askDraftReason({ outcome: "accepted", runId: "run-1", acceptedAt: 1 }), undefined);
-  assert.equal(askDraftReason({ outcome: "rejected", reason: "absent" }), BRAIN_ASK_REFUSAL.absent);
-  assert.equal(
-    askDraftReason(undefined),
-    ASK_UNSENT_REASON,
-    "an ask nobody answered is the developer's words to retry, not to lose",
-  );
-});
-
-/**
- * A strip whose clock is held by the test: what it was asked to draw, and
- * when each line would have left on its own.
- */
-function panelStrip() {
-  const expiries: { at: number; fire: () => void }[] = [];
-  const strip = new NoticeStrip({
-    onChanged: () => undefined,
-    schedule: (fire, at) => {
-      expiries.push({ at, fire });
-      return expiries.length;
-    },
-    cancel: () => undefined,
-  });
-  const handed = () =>
-    panelVoiceView(IDLE_VOICE_VIEW, { error: strip.error, notice: strip.notice });
-  return { strip, expiries, handed };
-}
-
-function rejected(reason: BrainSubmissionRejection): BrainAskSubmissionResult {
-  return { outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED, reason };
-}
-
-test("a refused typed ask lands its reason on the strip the panel is handed, as a notice and never a caption", async () => {
-  for (const rejection of Object.values(BRAIN_SUBMISSION_REJECTION)) {
-    const { strip, handed } = panelStrip();
-    const reason = await submitTypedAsk({ strip, submit: async () => rejected(rejection) });
-    assert.equal(reason, BRAIN_ASK_REFUSAL[rejection]);
-    const view = handed();
-    assert.equal(
-      view.voiceNotice,
-      BRAIN_ASK_REFUSAL[rejection],
-      `${rejection}: the sentence is drawn where the reply would have landed`,
-    );
-    assert.equal(view.voiceError, undefined, "a refusal is the notice tone, not a fault");
-    assert.equal(
-      view.lukeCaptions,
-      undefined,
-      "nothing was said, so nothing is captioned: the captions preference does not decide a refusal",
-    );
-  }
-});
-
-test("an ask nobody answered is reported on the strip too, and leaves on the failure's own clock", async () => {
-  const { strip, expiries, handed } = panelStrip();
-  assert.equal(
-    await submitTypedAsk({
-      strip,
-      submit: () => Promise.reject(new Error("the bridge is gone")),
-    }),
-    ASK_UNSENT_REASON,
-  );
-  assert.equal(handed().voiceNotice, ASK_UNSENT_REASON);
-  assert.equal(expiries.at(-1)?.at, VOICE_ERROR_NOTICE_MS);
-  expiries.at(-1)?.fire();
-  assert.equal(handed().voiceNotice, undefined, "the strip takes no pointer, so time dismisses it");
-});
-
-test("an accepted ask clears the refusal the strip was still reading and answers the composer nothing", async () => {
-  const { strip, handed } = panelStrip();
-  await submitTypedAsk({ strip, submit: async () => rejected(BRAIN_SUBMISSION_REJECTION.ABSENT) });
-  assert.equal(handed().voiceNotice, BRAIN_ASK_REFUSAL.absent);
-  const reason = await submitTypedAsk({
-    strip,
-    submit: async () => ({
-      outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
-      runId: "run-1",
-      acceptedAt: 1,
-    }),
-  });
-  assert.equal(reason, undefined);
-  assert.equal(handed().voiceNotice, undefined, "a sent ask outdates the refusal before it");
 });
 
 test("the panel's own strip lines stand over the voice window's while they last, and otherwise the report is handed on whole", () => {

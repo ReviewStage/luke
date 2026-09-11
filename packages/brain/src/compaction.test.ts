@@ -406,7 +406,7 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
   const accepted = await agent.submitAsk({
     submissionId: "s1",
     question: "hello",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await settle();
@@ -473,7 +473,7 @@ test("a required compaction that fails ends the run recoverably and leaves the c
   const accepted = await agent.submitAsk({
     submissionId: "s1",
     question: "hello",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
   });
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await settle();

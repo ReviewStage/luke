@@ -9,4 +9,4 @@ export {
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
 } from "./live-voice-orchestrator.js";
-export { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
+export { NoticeStrip } from "./notice-strip.js";

@@ -101,8 +101,8 @@ export interface StoreWiring {
   forgetNotebookEntry: (id: string) => Promise<boolean>;
   /**
    * Records a line in one conversation from the main process — the ask a
-   * carried action was, a typed ask the brain accepted, a run's end — minting
-   * the line's id here, since this process is its writer.
+   * carried action was, an utterance the live record settled — minting the
+   * line's id here, since this process is its writer.
    */
   recordConversationEntry: (
     entry: ConversationEntry,

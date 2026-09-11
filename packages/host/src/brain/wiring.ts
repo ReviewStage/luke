@@ -77,7 +77,6 @@ import {
   RUN_ORIGIN,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import type { ConversationEntry } from "@sidecar/session";
 import {
   dispatchRead,
   SESSION_STATUS,
@@ -107,11 +106,6 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   /** The machine's parallelism, for the agent lane's width; absent means the host asks the OS. */
   parallelism?: () => number;
   traceTurn?: (record: BrainTurnTraceRecord) => void;
-  recordConversationEntry: (
-    entry: ConversationEntry,
-    recordedAt: number,
-    sessionKey: SessionKey,
-  ) => boolean | Promise<boolean>;
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings go with it. */
   onGenerationReplaced: (sessionKey: SessionKey) => void;
@@ -341,20 +335,15 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     if (held) return held;
     const host = new BrainHost({
       follow: (agent) =>
-        followBrainRequests(
-          agent,
-          {
-            recordConversationEntry: dependencies.recordConversationEntry,
-            broadcastRequests: (records) => {
-              latestRecords.set(sessionKey, records);
-              broadcast();
-            },
-            onPublication: (settled) => {
-              publications.set(sessionKey, settled);
-            },
+        followBrainRequests(agent, {
+          broadcastRequests: (records) => {
+            latestRecords.set(sessionKey, records);
+            broadcast();
           },
-          sessionKey,
-        ),
+          onPublication: (settled) => {
+            publications.set(sessionKey, settled);
+          },
+        }),
       publishEmpty: () => {
         latestRecords.delete(sessionKey);
         broadcast();

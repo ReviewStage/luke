@@ -98,7 +98,7 @@ sideband's socket seam is implemented over `ws` in `voice/live-sideband.ts`,
 so `@sidecar/voice` stays free of it, beside the graceful close the
 conversations guide prescribes. The live service is the one sink for
 everything Luke says unprompted: `compose-live.ts` takes every briefing from
-the brain, every typed ask's run to speak its reply, and the two onboarding
+the brain, every run's streamed reply to speak, and the two onboarding
 beats. A briefing or reply with no session standing makes the service say it
 wants one, and the voice window opens it muted. The one instruction the
 service sends on the developer's behalf is the stop key's, through

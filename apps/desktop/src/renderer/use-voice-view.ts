@@ -1,9 +1,4 @@
-import {
-  BRAIN_ASK_REFUSAL,
-  BRAIN_REQUEST_ORIGIN,
-  BRAIN_SUBMISSION_OUTCOME,
-} from "@sidecar/brain/requests";
-import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,44 +15,8 @@ import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
-/**
- * What the composer hears back from a typed ask: nothing when the brain
- * accepted it into a run, so the draft clears, and a reason when it did not,
- * so the developer's words stay theirs to retry. An ask nobody answered — the
- * bridge throwing, the main process gone — is refused too: words lost on a
- * silence would be the one outcome nobody chose.
- */
-export const ASK_UNSENT_REASON = "Luke could not take that ask. Try again.";
-
 /** No run standing, which is what a document with no brain answer yet reads as. */
 const EMPTY_BRAIN_REQUESTS: readonly BrainRequestSnapshot[] = [];
-
-export function askDraftReason(result: BrainAskSubmissionResult | undefined): string | undefined {
-  if (result === undefined) return ASK_UNSENT_REASON;
-  return result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED
-    ? undefined
-    : BRAIN_ASK_REFUSAL[result.reason];
-}
-
-/**
- * Carries one typed ask to the brain and answers the composer with the reason
- * it was refused, or nothing when it was accepted. A refusal is the one
- * outcome nobody hears: the reply that would have said it never starts, so
- * the sentence is landed where the reply would have — on the caption strip,
- * in the notice tone, on the strip's own clock — and a fixed sentence it is,
- * never composed with the ask. An accepted ask outdates whatever refusal the
- * strip was still reading, since the reply beginning is now the answer.
- */
-export async function submitTypedAsk(input: {
-  submit: () => Promise<BrainAskSubmissionResult>;
-  strip: NoticeStrip;
-}): Promise<string | undefined> {
-  const reason = askDraftReason(
-    await input.submit().catch((): BrainAskSubmissionResult | undefined => undefined),
-  );
-  input.strip.showNotice(reason);
-  return reason;
-}
 
 /** What the strip says when the stored thread could not be deleted. */
 /** What the strip says of a Clear the service did not take: the thread stands exactly as it was. */
@@ -140,8 +99,8 @@ export function voiceErrorToShow(input: {
  * The notice drawn in the same strip, yielding only to Luke's own turn — his
  * words own the box whether or not the captions draw them. The developer's
  * turn is no reason to hide it: an open microphone draws nothing on the
- * strip, and the one refusal that happens during it — a typed ask against
- * the open turn — is exactly what the strip should answer with.
+ * strip, and a refusal answered during it is exactly what the strip should
+ * answer with.
  */
 export function voiceNoticeToShow(input: {
   fixtureSpeaking: boolean;
@@ -166,18 +125,8 @@ export interface VoiceViewState {
    * face and the meter answer the same edge the turn ends on.
    */
   voiceActive: boolean;
-  /**
-   * A typed ask to Luke, submitted to the brain in the main process and
-   * answered with whether it was accepted into a run: nothing when it was, a
-   * reason when it was not, so the composer keeps a refused draft. The reason
-   * is already on the strip in `view` by the time it is answered; the reply
-   * to an accepted ask arrives later, in the thread and in the voice.
-   */
-  askLuke: (text: string) => Promise<string | undefined>;
   /** Every run the brain holds, for Conversation to draw a pending ask beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
-  /** Cancels one run the developer no longer wants. */
-  cancelBrainAsk: (runId: string) => void;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   stopSpeaking: () => void;
   requestMicrophoneAccess: () => void;
@@ -244,30 +193,10 @@ export function useVoiceView(): VoiceViewState {
     return created;
   });
   useEffect(() => () => strip.stop(), [strip]);
-  // One submission id per press of Send: the id is what makes a retry of
-  // this very ask the same run and a second deliberate ask a new one.
-  const askLuke = useCallback(
-    (text: string): Promise<string | undefined> =>
-      submitTypedAsk({
-        strip,
-        submit: () =>
-          act(ACT_KIND.BRAIN_SUBMIT_ASK, {
-            submission: {
-              submissionId: crypto.randomUUID(),
-              question: text,
-              origin: BRAIN_REQUEST_ORIGIN.TYPED,
-            },
-          }),
-      }),
-    [strip],
-  );
   // Every version of the document carries the whole list the standing brain
   // holds: a run absent from it is one no current brain can find, so its row
   // must go.
   const brainRequests = state?.brain.runs ?? EMPTY_BRAIN_REQUESTS;
-  const cancelBrainAsk = useCallback((runId: string) => {
-    void act(ACT_KIND.BRAIN_CANCEL_ASK, { runId }).catch(() => undefined);
-  }, []);
   const stopSpeaking = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
   }, []);
@@ -291,9 +220,7 @@ export function useVoiceView(): VoiceViewState {
     voiceTurn: waveformVoice(view.voiceStatus),
     level,
     voiceActive: turnLive && voiceActive,
-    askLuke,
     brainRequests,
-    cancelBrainAsk,
     stopSpeaking,
     requestMicrophoneAccess,
     clearConversationLines,

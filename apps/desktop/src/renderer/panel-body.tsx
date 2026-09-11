@@ -1,4 +1,4 @@
-import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import {
   ACCOUNT_STATUS,
   type AccountProvider,
@@ -12,7 +12,6 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
@@ -206,16 +205,10 @@ export interface PanelBodyProps {
   spokenAskPending: boolean;
   /** Clears that same thread on the service, for every Mac signed in to the account. */
   onClearConversationConversation: () => void;
-  /** The brain's runs, so Conversation draws Luke's turn while one is going and the composer offers its stop. */
+  /** The brain's runs, so Conversation draws Luke's turn while one is going. */
   brainRequests: readonly BrainRequestSnapshot[];
-  /** Stops every run still going, at the composer's press. */
-  onStopThinking: () => void;
-  /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
-  ask: AskHandler;
-  /** Reports someone being part-way through an ask, so the panel holds for them. */
-  onAskEngaged: (engaged: boolean) => void;
-  /** The registered summon key the field should teach, if the system granted one. */
-  askShortcut?: string;
+  /** Reports someone being part-way through the session search, so the panel holds for them. */
+  onFieldEngaged: (engaged: boolean) => void;
   /**
    * Whether there is anything for the sheet to decide. Decided by the panel
    * rather than here, because whoever offers the button also has to be the one
@@ -266,10 +259,7 @@ export function PanelBody({
   spokenAskPending,
   onClearConversationConversation,
   brainRequests,
-  onStopThinking,
-  ask,
-  onAskEngaged,
-  askShortcut,
+  onFieldEngaged,
   offerOptions,
   optionsOpen,
   onOptionsToggle,
@@ -283,9 +273,6 @@ export function PanelBody({
   onTabChange,
   settings,
 }: PanelBodyProps): React.JSX.Element {
-  // Whether a run of Luke's is still going, read from the same records
-  // Conversation draws the wait from, so the disc and the wait cannot disagree.
-  const thinking = brainRequests.some(brainRequestPending);
   const sessionListRef = useSessionReorderMotion();
   const rows = useRoster(list.sessions, sessionListRef);
   // The sheet floats over the list, so its height never reaches the panel's
@@ -393,10 +380,6 @@ export function PanelBody({
           spokenAskPending={spokenAskPending}
           requests={brainRequests}
           now={now}
-          ask={ask}
-          onAskEngaged={onAskEngaged}
-          onStop={onStopThinking}
-          {...(askShortcut ? { askShortcut } : undefined)}
         />
       ) : (
         <SessionsPanel
@@ -418,7 +401,7 @@ export function PanelBody({
               view={view}
               onViewChange={onViewChange}
               onClose={onSearchClose}
-              onEngagedChange={onAskEngaged}
+              onEngagedChange={onFieldEngaged}
             />
           ) : null}
           <div className="session-list" ref={sessionListRef}>
@@ -483,18 +466,6 @@ export function PanelBody({
               })
             )}
           </div>
-          {/* Luke's own composer holds the panel's foot, under whatever the
-              list shows — even an empty one, because "what needs me?" is a
-              question worth typing before any session has appeared. It arrives
-              at the tail of the same fan the rows ride. */}
-          <AskLuke
-            ask={ask}
-            onEngagedChange={onAskEngaged}
-            rowIndex={rows.length + 1}
-            thinking={thinking}
-            onStop={onStopThinking}
-            {...(askShortcut ? { shortcut: askShortcut } : undefined)}
-          />
         </SessionsPanel>
       )}
     </div>

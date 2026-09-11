@@ -51,11 +51,9 @@ export function isTerminalBrainRequestStatus(status: BrainRequestStatus): boolea
   return BRAIN_REQUEST_TERMINAL_STATUS.has(status);
 }
 
-/** Where the ask came from, which decides who records its words in the thread. */
+/** Where the ask came from: the developer's own voice, or a requester's spawn. */
 export const BRAIN_REQUEST_ORIGIN = {
-  /** Typed into a composer; the words travel with the submission and the host records them. */
-  TYPED: "typed",
-  /** Spoken; the voice service's own transcript is the record, and the question here is the mouth's relay. */
+  /** Spoken; the voice service's own transcript is the record, and the question here is the host's relay of it. */
   SPOKEN: "spoken",
   /** A child's delegated task, handed to the child's own conversation by its requester's spawn. */
   CHILD: "child",
@@ -191,7 +189,7 @@ export interface BrainRequestRecord {
   usage?: BrainRunUsage;
   /** The id of every response OpenAI answered the run with, in order, as OpenAI stores them. */
   responseIds?: readonly string[];
-  /** When the host recorded the ask itself in the thread, for an origin whose words the host records. */
+  /** When a host recorded the ask itself in its thread; the desktop's host never does, since the transcript is the record. */
   askRecordedAt?: number;
   /** When the host recorded the run's end in the thread, so it is recorded exactly once. */
   conversationRecordedAt?: number;

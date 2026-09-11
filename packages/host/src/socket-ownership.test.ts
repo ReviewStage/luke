@@ -40,7 +40,7 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
   return {
     runId: "run-1",
     submissionId: "sub-1",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
     question: "what needs me?",
     status: BRAIN_REQUEST_STATUS.RUNNING,
     revision: 1,
@@ -109,10 +109,6 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,
-    recordConversationEntry: (entry) => {
-      lines.push(entry);
-      return true;
-    },
     now: () => NOW,
     createId: () => `id-${++ids}`,
   });
@@ -148,14 +144,14 @@ function recordOf(value: WireValue | undefined) {
   return value;
 }
 
-test("an ask and its Conversation line survive the client that submitted them dying, and the next client reads them from the host", async () => {
+test("an ask survives the client that submitted it dying, and the next client reads it from the host", async () => {
   const f = fakeHost();
   const { host, port } = await listen(f.service);
   try {
     const first = await client(port, "desktop-1");
     const submitted = await first.gateway.call(
       GATEWAY_METHOD.RUN_SUBMIT,
-      { submissionId: "sub-1", question: "what needs me?", origin: BRAIN_REQUEST_ORIGIN.TYPED },
+      { submissionId: "sub-1", question: "what needs me?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
       { idempotencyKey: "sub-1" },
     );
     assert.ok(submitted.ok);
@@ -164,9 +160,8 @@ test("an ask and its Conversation line survive the client that submitted them dy
     first.connection.close();
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
-    assert.equal(f.lines.length, 1);
-    assert.equal(f.lines[0]?.kind, CONVERSATION_ENTRY_KIND.TYPED_ASK);
-    // The next client's hello snapshot and reads find the run and the line.
+    // The next client's hello snapshot and reads find the run and the host's lines.
+    f.lines.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
     const second = await client(port, "desktop-2");
     const hello = await second.gateway.call(GATEWAY_METHOD.HELLO);
     assert.ok(hello.ok);
@@ -222,7 +217,7 @@ test("the explicit shutdown closes admissions, cancels what runs, and counts unr
       const desktop = await client(port, "desktop");
       const submitted = await desktop.gateway.call(
         GATEWAY_METHOD.RUN_SUBMIT,
-        { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.TYPED },
+        { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
         { idempotencyKey: "sub-q" },
       );
       assert.ok(submitted.ok);
@@ -259,7 +254,7 @@ test("the explicit shutdown closes admissions, cancels what runs, and counts unr
       // The door is closed: a new ask is refused as shutting down, a read still answers.
       const refused = await desktop.gateway.call(
         GATEWAY_METHOD.RUN_SUBMIT,
-        { submissionId: "sub-late", question: "more", origin: BRAIN_REQUEST_ORIGIN.TYPED },
+        { submissionId: "sub-late", question: "more", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
         { idempotencyKey: "sub-late" },
       );
       assert.equal(refused.ok, false);

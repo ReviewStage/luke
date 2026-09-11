@@ -91,8 +91,6 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
 ]);
 const SLOW_STEP_GENERAL_NOTE = "Luke is still working on it; this takes a moment.";
 
-const TYPED_ASK_MIRROR_NOTE = "The developer typed this ask into Luke's composer:";
-
 /** Said once, under the delegation, when the developer's ask could not be put on record: an ask off the record is answered nowhere. */
 export const ASK_UNRECORDED_NOTE =
   "I couldn't write that ask down, so I'm not going to answer it here.";
@@ -405,24 +403,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * A typed ask goes to the brain as today; here its run is followed so the
-   * reply is spoken like a delegation's, with no delegation id since no
-   * delegation asked it, into the standing session or the one opened for it,
-   * and the ask itself is mirrored into a standing session so the voice knows
-   * what was asked before it speaks the answer.
-   */
-  followTypedAsk(words: string, runId: string): void {
-    if (!this.#exchanges.has(runId)) this.#exchanges.set(runId, newExchange(runId, [], undefined));
-    const session = this.#speakable();
-    if (!session) return;
-    const [summary] = chunkForAppend(`${TYPED_ASK_MIRROR_NOTE} ${words}`);
-    if (summary === undefined) return;
-    session.channel.enqueue(async () => {
-      await session.channel.send(thinkingAppend(this.#input(null, summary)));
-    });
-  }
-
-  /**
    * The stop key: the model is told to stop speaking and wait, once, through
    * the standing session's own queue. Answers whether a session was there to
    * tell; the microphone is the peer's to mute and is not touched here.
@@ -486,7 +466,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
-  /** Whether a reply is still coming that this session would speak: a delegation's under it, or a typed ask's, which any standing session says. */
+  /** Whether a reply is still coming that this session would speak: a delegation's under it, or one whose own session has since closed, which any standing session says. */
   #exchangeInFlight(session: StandingSession): boolean {
     for (const exchange of this.#exchanges.values()) {
       if (exchange.end !== undefined) continue;

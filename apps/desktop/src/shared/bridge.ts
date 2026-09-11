@@ -288,8 +288,7 @@ export const BRIDGE = {
   }),
   /**
    * A panel's validated command, forwarded by the main process to the voice
-   * window alone; a typed ask arrives with its words and the request id its
-   * outcome is answered under, every other command with neither.
+   * window alone, carrying the command and nothing else.
    */
   onVoiceCommand: entry({
     kind: "subscribe",
