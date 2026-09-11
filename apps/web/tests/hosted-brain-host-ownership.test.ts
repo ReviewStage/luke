@@ -69,9 +69,9 @@ const writer = await storeWriter({
 
 /** The door's reads exactly as `productionBrainHostSeams` composes them, over the test database instead of the deployment's. */
 const ownership: SessionOwnership = {
-  sessionOwner: (sessionId) => runtimeSessionOwner(database.db, sessionId),
+  sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
   ownsConversation: (userId, conversationId) =>
-    conversationOwnedBy(database.db, userId, conversationId),
+    database.run(conversationOwnedBy(userId, conversationId)),
 };
 
 /** A seam a refused call must never reach; reaching it is the failure, named. */

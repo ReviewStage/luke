@@ -136,7 +136,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     },
     offer: async (target, turnId) =>
       offerBriefing(
-        { db: seams.db(), run: seams.run, writer: await seams.writer(), now: seams.now },
+        { run: seams.run, writer: await seams.writer(), now: seams.now },
         target,
         turnId,
       ),
@@ -196,9 +196,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
   return {
     admit: (auth, sessionId) =>
-      admitConversation(seams.db(), auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
+      seams.run(admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT })),
     admitStarting: (auth, sessionId) =>
-      admitConversation(seams.db(), auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING }),
+      seams.run(admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING })),
 
     turnKindOf(auth) {
       const kind = turnKindOf(auth.current);
@@ -266,15 +266,17 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       // Admitted again as the call runs, not only as the tools were resolved:
       // a conversation that rotated to a newer session mid-turn refuses the
       // old session's calls here, so no effect lands without a turn record.
-      const standing = await admitConversation(seams.db(), context.session.auth, {
-        id: context.session.id,
-        standing: SESSION_STANDING.CURRENT,
-      });
+      const standing = await seams.run(
+        admitConversation(context.session.auth, {
+          id: context.session.id,
+          standing: SESSION_STANDING.CURRENT,
+        }),
+      );
       if (!standing.ok) return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.refusal };
       const { userId } = binding.target;
       const roster = () => rosterOf(userId);
       const transcripts = hostedTranscriptReads({
-        db: seams.db(),
+        run: seams.run,
         userId,
         roster,
         pluginFor: pluginFor(userId),
@@ -312,7 +314,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     },
 
     sessionStarted: (admitted, sessionId) =>
-      claimRuntimeSession(seams.db(), admitted.target, sessionId, new Date(seams.now())),
+      seams.run(claimRuntimeSession(admitted.target, sessionId, new Date(seams.now()))),
 
     relay: (event, admitted, session, state) => {
       const model = seams.scriptedModel()

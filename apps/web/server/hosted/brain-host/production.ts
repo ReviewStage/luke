@@ -117,9 +117,9 @@ export function productionBrainHostSeams(): BrainHostSeams {
     store,
     writer,
     ownership: {
-      sessionOwner: (sessionId) => runtimeSessionOwner(db(), sessionId),
+      sessionOwner: (sessionId) => runWeb(runtimeSessionOwner(sessionId)),
       ownsConversation: (userId, conversationId) =>
-        conversationOwnedBy(db(), userId, conversationId),
+        runWeb(conversationOwnedBy(userId, conversationId)),
     },
     // The auth service opens the database as it is imported, so it is reached
     // only when a bearer is checked and never by discovery of these files.

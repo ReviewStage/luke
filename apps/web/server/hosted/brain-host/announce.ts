@@ -1,4 +1,4 @@
-import type { HostedStoreDatabase, HostedStoreRun } from "../store/database.js";
+import type { HostedStoreRun } from "../store/database.js";
 import {
   type ConversationTarget,
   findMessageByClientId,
@@ -21,7 +21,6 @@ import {
 export type StoreWriter = Awaited<ReturnType<typeof storeWriter>>;
 
 export interface BriefingOfferSeams {
-  readonly db: HostedStoreDatabase;
   /** The runner the speech module's own reads are answered through. */
   readonly run: HostedStoreRun;
   readonly writer: Pick<StoreWriter, "recordEvent">;

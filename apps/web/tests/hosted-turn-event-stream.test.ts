@@ -72,7 +72,7 @@ const writer = await storeWriter({
 const relay = new StreamRelay({
   writer,
   offer: (target, turnId) =>
-    offerBriefing({ db: database.db, run: database.run, writer, now: () => NOW }, target, turnId),
+    offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: () => undefined,
 });
