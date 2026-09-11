@@ -1,89 +1,90 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { it } from "@effect/vitest";
+import { fakeCloudApi, recordedRoutes } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { HostedChangesClient } from "./changes-client.js";
 import { encodeSequenceReadCursor } from "./reads-wire.js";
 
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const EMPTY_CURSOR = encodeSequenceReadCursor([]);
 
-interface RecordedRequest {
-  url: string;
-  init: RequestInit;
-}
-
-function service(answers: Array<() => Response>) {
-  const requests: RecordedRequest[] = [];
-  let call = 0;
-  const fetchLike = async (url: string, init: RequestInit): Promise<Response> => {
-    requests.push({ url, init });
-    const answer = answers[Math.min(call, answers.length - 1)];
-    call += 1;
-    if (!answer) throw new Error("no scripted answer");
-    return answer();
-  };
-  return { requests, fetchLike };
-}
-
-function client(options: Partial<ConstructorParameters<typeof HostedChangesClient>[0]> = {}) {
+function client(
+  fetch: ReturnType<typeof fakeCloudApi>["fetch"],
+  options: Partial<ConstructorParameters<typeof HostedChangesClient>[0]> = {},
+) {
   return new HostedChangesClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: async () => undefined,
+    fetch,
     ...options,
   });
 }
 
-test("a poll is a bearer-authenticated POST carrying the device and each instant as stated, and reads the heads back", async () => {
-  const { requests, fetchLike } = service([
-    () =>
-      new Response(JSON.stringify({ seen: true, messages: EMPTY_CURSOR, events: EMPTY_CURSOR }), {
-        status: 200,
-      }),
-  ]);
+it.effect(
+  "a poll is a bearer-authenticated POST carrying the device and each instant as stated, and reads the heads back",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "POST /api/changes": {
+          answer: () => ({ seen: true, messages: EMPTY_CURSOR, events: EMPTY_CURSOR }),
+        },
+      });
 
-  const answer = await client({ fetch: fetchLike }).poll({
-    deviceId: DEVICE_ID,
-    activeUntil: 1_757_505_900_000,
-    quietUntil: null,
-  });
-  assert.deepEqual(answer, { seen: true, messages: EMPTY_CURSOR, events: EMPTY_CURSOR });
+      const answer = yield* Effect.promise(() =>
+        client(api.fetch).poll({
+          deviceId: DEVICE_ID,
+          activeUntil: 1_757_505_900_000,
+          quietUntil: null,
+        }),
+      );
 
-  const [request] = requests;
-  assert.equal(request?.url, "https://tryluke.dev/api/changes");
-  assert.equal(request?.init.method, "POST");
-  const headers = new Headers(request?.init.headers);
-  assert.equal(headers.get("authorization"), "Bearer token-1");
-  assert.deepEqual(JSON.parse(String(request?.init.body)), {
-    deviceId: DEVICE_ID,
-    activeUntil: 1_757_505_900_000,
-    quietUntil: null,
-  });
-});
+      assert.deepEqual(answer, { seen: true, messages: EMPTY_CURSOR, events: EMPTY_CURSOR });
+      assert.deepEqual(recordedRoutes(api.requests()), ["POST /api/changes"]);
+      assert.deepEqual(api.credentials(), ["token-1"]);
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        deviceId: DEVICE_ID,
+        activeUntil: 1_757_505_900_000,
+        quietUntil: null,
+      });
+    }),
+);
 
-test("an instant left out travels as left out, so the service leaves the one on file", async () => {
-  const { requests, fetchLike } = service([
-    () =>
-      new Response(JSON.stringify({ seen: false, messages: EMPTY_CURSOR, events: EMPTY_CURSOR }), {
-        status: 200,
-      }),
-  ]);
-  const answer = await client({ fetch: fetchLike }).poll({ deviceId: DEVICE_ID });
-  assert.equal(answer?.seen, false);
-  assert.deepEqual(JSON.parse(String(requests[0]?.init.body)), { deviceId: DEVICE_ID });
-});
+it.effect("an instant left out travels as left out, so the service leaves the one on file", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "POST /api/changes": {
+        answer: () => ({ seen: false, messages: EMPTY_CURSOR, events: EMPTY_CURSOR }),
+      },
+    });
 
-test("a request the service would refuse by shape never travels, and a malformed answer reads as nothing", async () => {
-  const refused = service([]);
-  assert.equal(
-    await client({ fetch: refused.fetchLike }).poll({ deviceId: "mac", activeUntil: 1 }),
-    undefined,
-  );
-  assert.equal(refused.requests.length, 0);
+    const answer = yield* Effect.promise(() => client(api.fetch).poll({ deviceId: DEVICE_ID }));
 
-  const malformed = service([() => new Response(JSON.stringify({ seen: "yes" }), { status: 200 })]);
-  assert.equal(
-    await client({ fetch: malformed.fetchLike }).poll({ deviceId: DEVICE_ID }),
-    undefined,
-  );
-  assert.equal(malformed.requests.length, 1);
-});
+    assert.equal(answer?.seen, false);
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { deviceId: DEVICE_ID });
+  }),
+);
+
+it.effect(
+  "a request the service would refuse by shape never travels, and a malformed answer reads as nothing",
+  () =>
+    Effect.gen(function* () {
+      const refused = fakeCloudApi({});
+      assert.equal(
+        yield* Effect.promise(() =>
+          client(refused.fetch).poll({ deviceId: "mac", activeUntil: 1 }),
+        ),
+        undefined,
+      );
+      assert.deepEqual(refused.requests(), []);
+
+      const malformed = fakeCloudApi({
+        "POST /api/changes": { answer: () => ({ seen: "yes" }) },
+      });
+      assert.equal(
+        yield* Effect.promise(() => client(malformed.fetch).poll({ deviceId: DEVICE_ID })),
+        undefined,
+      );
+      assert.equal(malformed.requests().length, 1);
+    }),
+);

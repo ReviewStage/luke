@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   ACTION_KIND,
   CLOUD_AGENT_PROVIDER_ID,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
 } from "@sidecar/session";
+import { fakeCloudApi, recordedRoutes } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type { ObservedSession } from "./observe-wire.js";
 import { HostedRosterClient, snapshotRoster } from "./roster-client.js";
@@ -43,58 +46,53 @@ const UNDATED: ObservedSession = {
   status: SESSION_STATUS.COMPLETE,
 };
 
-interface RecordedRequest {
-  url: string;
-  init: RequestInit;
-}
-
-function service(answer: () => Response) {
-  const requests: RecordedRequest[] = [];
-  const fetchLike = async (url: string, init: RequestInit): Promise<Response> => {
-    requests.push({ url, init });
-    return answer();
-  };
-  return { requests, fetchLike };
-}
-
-test("the roster is a bearer GET of the stored snapshot, never asked fresh", async () => {
-  const { requests, fetchLike } = service(
-    () =>
-      new Response(JSON.stringify({ sessions: [WORKING, UNDATED], observedAt: OBSERVED_AT }), {
-        status: 200,
-      }),
-  );
-  const client = new HostedRosterClient({
+function client(
+  fetch: ReturnType<typeof fakeCloudApi>["fetch"],
+  options: Partial<ConstructorParameters<typeof HostedRosterClient>[0]> = {},
+) {
+  return new HostedRosterClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: async () => undefined,
-    fetch: fetchLike,
+    fetch,
+    ...options,
   });
+}
 
-  const answer = await client.observe();
+it.effect("the roster is a bearer GET of the stored snapshot, never asked fresh", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "GET /api/observe": {
+        answer: () =>
+          JSON.parse(JSON.stringify({ sessions: [WORKING, UNDATED], observedAt: OBSERVED_AT })),
+      },
+    });
 
-  const [request] = requests;
-  assert.equal(request?.url, "https://tryluke.dev/api/observe");
-  assert.equal(request?.init.method, "GET");
-  assert.equal(new Headers(request?.init.headers).get("authorization"), "Bearer token-1");
-  assert.equal(answer?.observedAt, OBSERVED_AT);
-  assert.deepEqual(
-    answer?.sessions.map((session) => session.sessionId),
-    [WORKING.sessionId, UNDATED.sessionId],
-  );
-});
+    const answer = yield* Effect.promise(() => client(api.fetch).observe());
 
-test("a read that answers nothing is nothing, not an empty roster", async () => {
-  const client = new HostedRosterClient({
-    serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: async () => undefined,
-    refreshAccount: async () => undefined,
-    fetch: async () => {
-      throw new Error("must not travel without an account");
-    },
-  });
-  assert.equal(await client.observe(), undefined);
-});
+    assert.deepEqual(recordedRoutes(api.requests()), ["GET /api/observe"]);
+    assert.deepEqual(api.credentials(), ["token-1"]);
+    assert.equal(answer?.observedAt, OBSERVED_AT);
+    assert.deepEqual(
+      answer?.sessions.map((session) => session.sessionId),
+      [WORKING.sessionId, UNDATED.sessionId],
+    );
+  }),
+);
+
+it.effect("a read that answers nothing is nothing, not an empty roster", () =>
+  Effect.gen(function* () {
+    const answer = yield* Effect.promise(() =>
+      client(
+        () => {
+          throw new Error("must not travel without an account");
+        },
+        { readAccessToken: async () => undefined },
+      ).observe(),
+    );
+    assert.equal(answer, undefined);
+  }),
+);
 
 /** The one conductor observation a snapshot of one row comes to, or nothing where the row was left out. */
 function observationOf(session: ObservedSession, observedAt: number | undefined) {
