@@ -2057,3 +2057,34 @@ only C2b could answer — and that is the line I crossed.
 
 Recorded beside the broadcast lesson, because both are the same failure in different clothes:
 **a message of mine carrying more authority than its evidence.**
+
+
+## 2026-09-11 — When a held PR should adopt the store's new idiom and when it should not (orchestrator)
+
+Ruled because two lanes touch the store mid-migration and I had told them opposite things without
+saying why.
+
+- **C2b-2b writes its `AskRecord` in the NEW idiom** (`@effect/sql` + Schema, its own module under
+  `store/` beside `ratings` and `soft-delete`, composed at the route from the web runtime). **New
+  code over a NEW table**: there is no existing shape to preserve, so the new idiom costs nothing and
+  choosing the old one would add to the migration debt deliberately.
+- **C4 keeps `content-addressed.ts` in Drizzle.** It reads and writes tables **B2 already created**,
+  in a module **written before #1104 landed**, and `database.ts` still allows a Drizzle module. The
+  Effect lane is migrating these systematically and will sweep it. Moving it now would add an idiom
+  migration to a PR already carrying a schema change, a seal, a migration and a renumber — **the
+  scope growth the size bound exists to prevent**, putting new risk into the one part of #1045 that
+  is currently beyond doubt.
+
+**Both say it in the body**, for the same reason C2b-2b says its lock sentence: a reviewer who has
+just read #1104 will see a Drizzle module in a store half-moved to `@effect/sql` and ask.
+*"`database.ts` still allows it, the module predates #1104, and the Effect lane will sweep it"* is
+one line.
+
+**And the clause that holds even under B+:** B+ rewrites that module — new key, sealed column, the
+read — and it **still stays Drizzle**, because the rewrite is about *what the row holds and who it
+belongs to*, and changing the SQL layer in the same commit would mix a trust fix with an idiom
+migration. **The trust fix is the part that has to be reviewable.**
+
+**The general form, for the G lane and anything else that lands mid-migration: adopt the new idiom
+where you are writing new code against new tables; leave it where you are changing what existing
+rows mean.** An idiom migration and a semantic change in one diff are two reviews wearing one hat.
