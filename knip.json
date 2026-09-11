@@ -73,6 +73,10 @@
       ],
       "project": ["src/**"]
     },
+    "packages/gateway": {
+      "entry": ["src/**/*.test.ts", "src/rpc.ts"],
+      "project": ["src/**"]
+    },
     "packages/brain": {
       "entry": [
         "src/**/*.test.ts",

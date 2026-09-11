@@ -13,6 +13,8 @@ import {
   type GatewayClientIdentity,
   type GatewayEvent,
   gatewayReconnectAnswerFromWire,
+  gatewayRequestFromWire,
+  gatewayRequestToWire,
   NODE_CAPABILITY_STATUS,
 } from "./protocol.js";
 import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
@@ -368,18 +370,21 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 }
 
-test("the loopback transport refuses a request or answer that does not survive the wire", async () => {
-  const h = harness();
-  const transport = new TextLoopbackTransport(h.server, OPERATOR);
-  // SAFETY: a method name outside the vocabulary, as a foreign client might send; the transport must refuse it.
-  const foreign = await transport.request({
+test("a method outside the vocabulary is refused by the writer before it reaches the wire, and by the reader when it arrives", () => {
+  const envelope = {
     protocolVersion: GATEWAY_PROTOCOL_VERSION,
     id: "x",
-    method: "not.a.method" as typeof GATEWAY_METHOD.RUN_LIST,
+    method: "not.a.method",
     params: {},
-  });
-  assert.equal(foreign.ok, false);
-  if (!foreign.ok) assert.equal(foreign.error.code, GATEWAY_ERROR.INVALID_PARAMS);
+  };
+  // SAFETY: a method name outside the vocabulary, as a foreign client might send; the writer must refuse it rather than carry it.
+  assert.throws(() =>
+    gatewayRequestToWire({
+      ...envelope,
+      method: envelope.method as typeof GATEWAY_METHOD.RUN_LIST,
+    }),
+  );
+  assert.equal(gatewayRequestFromWire(envelope), undefined);
 });
 
 test("a delayed answer still lands, and a late acknowledgement after it changes nothing more", async () => {

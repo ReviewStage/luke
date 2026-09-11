@@ -3,11 +3,31 @@
 ## The vocabulary is the contract
 
 `protocol.ts` says what a request, an answer, and an event are, and refuses
-every shape it does not know. Nothing in it performs anything. A method is an
+every shape it does not know. Nothing in it performs anything. Each envelope
+is one Effect `Schema` (`GatewayRequestSchema`, `GatewayResponseSchema`,
+`GatewayEventSchema`, and the reconnect answer and node invocation shapes
+beside them) that both reads the envelope off the wire and writes it back, so
+the `*FromWire` readers and `*ToWire` writers are that one declaration read in
+each direction rather than two statements of it, and a value the type already
+guarantees is never revalidated behind them. A method is an
 entry in one table that also says whether it mutates, so a method added here
 cannot be forgotten in a set beside it: `isMutatingGatewayMethod` reads the
 same entry the name came from, and the server demands an idempotency key from
-exactly the methods that flag says change something. Widening the method
+exactly the methods that flag says change something. The same table is what
+`rpc.ts` derives the protocol's `RpcGroup` from: `GatewayRpcs` holds one
+`Rpc` per entry, named by the entry's wire name, taking a record of
+parameters, answering a wire value or nothing, and failing with one of the
+refusal family, and each carries its entry's `mutates` flag as the
+`GatewayMutates` annotation, which `gatewayRpcMutates` reads back so a server
+keys its idempotency ledger on the entry the name came from and never on a
+list beside it. The error codes are a family of `Schema.TaggedError` classes,
+one per code (`NotFoundRefusal`, `UnsupportedVersionRefusal`, and the rest of
+`GATEWAY_REFUSALS`), each fixing its own `code` so a constructor takes the
+message alone; `GatewayRefusalSchema` is the family as the wire carries it,
+decoding an envelope's `{ code, message }` to the class its code names and
+encoding a refusal back to exactly that object, so a class's tag never
+reaches the wire. `gatewayVersionRefusal` is the one refusal the protocol
+decides before any method is named. Widening the method
 vocabulary or the event set is a product decision, not an implementation
 detail. What a method's own parameters may say belongs here too, beside the
 entry that names it, so the host that answers it and the client that sends it
@@ -44,12 +64,36 @@ exchange asserts that a message was said at all. A rewrite of what composes an
 envelope is measured against those bytes, and recording them again
 (`LUKE_UPDATE_FIXTURES=1`) is a claim that the protocol itself moved.
 
-## Three doors, because one of them reaches `ws`
+The Rpc model speaks those same bytes through `gatewayEnvelopeSerialization`,
+the `RpcSerialization` in `rpc.ts`, and never through `@effect/rpc`'s own
+framings: a request travels as the request envelope, with what the Rpc model
+keeps as a request's headers — the protocol version, the idempotency key, the
+expected revisions, each under a `GATEWAY_REQUEST_HEADER` name — folded into
+the envelope's own fields on the way out and read back into headers on the
+way in; an exit travels as the answer envelope, its failure's first typed
+refusal as the error object, a defect or an interruption as `internal`, and
+the revision stamped from the reader the host hands the serialization, as the
+server has always stamped it; and an event travels as its own record, read
+back as a chunk of the one event stream under
+`GATEWAY_EVENT_STREAM_REQUEST_ID`, since a stream's chunk is the only
+unsolicited message the Rpc model has. A frame that carries several chunks
+carries one document per line. A message the envelope has no shape for — a
+ping, an ack, an interrupt, a defect with no request to answer — is written as
+nothing, and a frame the envelope does not read is dropped, as the socket has
+always dropped one. Every one of those rules is measured against the same
+goldens: `rpc.test.ts` carries a recorded request, answer, error, and event
+through the serialization and back to identical bytes.
+
+## Four doors, because two of them reach beyond the vocabulary
 
 The barrel carries the protocol, the server, the client, the in-process
-transport, and the node registry — nothing that reaches a socket.
-`./websocket` is the binding that does (`ws`, `node:http`, `node:crypto`), so
-a bundle that only wants the vocabulary never has to resolve them, and
+transport, and the node registry — nothing that reaches a socket, and
+nothing that reaches `@effect/rpc`. `./websocket` is the binding that reaches
+a socket (`ws`, `node:http`, `node:crypto`), and `./rpc` is the door that
+reaches `@effect/rpc` (the `RpcGroup`, the `GatewayMutates` annotation, and
+the envelope serialization), so a bundle that only wants the vocabulary — the
+renderer names the live session's shapes through the barrel — never has to
+resolve either, and
 `./testing` holds the text transport, which exists to prove the same protocol
 answers when every envelope goes through JSON and back.
 

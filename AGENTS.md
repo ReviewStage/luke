@@ -414,7 +414,12 @@ Canonical commands:
   the transports, and the node registry — and the socket binding keeps a door
   of its own (`@sidecar/gateway/websocket`), because it reaches `ws` and
   `node:http` and a bundle that only wants the vocabulary must not resolve
-  them. The host side (`GatewayServer`, composed as `@sidecar/host`'s
+  them, as does the protocol's Rpc form (`@sidecar/gateway/rpc`: the same
+  method table as an `RpcGroup`, each entry's `mutates` flag as an annotation
+  on its `Rpc`, the error codes as a tagged-error family whose wire form is
+  still the bare `{ code, message }` object, and the serialization that
+  carries the Rpc model's messages as the recorded envelopes), because it
+  reaches `@effect/rpc`. The host side (`GatewayServer`, composed as `@sidecar/host`'s
   `GatewayService`) owns the idempotency ledger (every mutating method
   carries an idempotency key; the same key finds the first answer, the same
   key with other parameters is a conflict, never a second effect), the

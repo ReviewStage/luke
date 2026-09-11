@@ -1,9 +1,5 @@
-import { isIdentifier } from "@sidecar/runtime/vocabulary";
 import {
   isRecord,
-  isWireBoolean,
-  isWireNumber,
-  isWireString,
   RATING_EVENT_PAYLOAD_FIELDS,
   RECORD_EXTRA_KEYS,
   type RecordOf,
@@ -11,8 +7,9 @@ import {
   TEXT_ENDS,
   type UnparsedWireValue,
   type WireRecord,
-  type WireValue,
+  WireValueSchema,
 } from "@sidecar/wire";
+import { Option, Schema } from "effect";
 
 /**
  * The Gateway protocol: what a client asks the host and what the host tells
@@ -31,7 +28,7 @@ export const GATEWAY_PROTOCOL_VERSION = 1;
  * none, because reading twice is reading. The flag rides on the entry so a
  * method added here cannot be forgotten in a set beside it.
  */
-interface GatewayMethodEntry {
+interface MethodEntry {
   readonly name: string;
   readonly mutates: boolean;
 }
@@ -111,7 +108,7 @@ const GATEWAY_METHODS = {
   ONBOARDING_STATE: { name: "onboarding.state", mutates: false },
   ONBOARDING_SKIP_CALENDAR: { name: "onboarding.skipCalendar", mutates: true },
   ONBOARDING_COMPLETE_CALENDAR: { name: "onboarding.completeCalendar", mutates: true },
-} as const satisfies Record<string, GatewayMethodEntry>;
+} as const satisfies Record<string, MethodEntry>;
 
 export const GATEWAY_METHOD =
   // SAFETY: the entries are this same table's, so every key answers its own entry's name.
@@ -120,6 +117,23 @@ export const GATEWAY_METHOD =
   ) as { readonly [K in keyof typeof GATEWAY_METHODS]: (typeof GATEWAY_METHODS)[K]["name"] };
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
+
+export const GatewayMethodSchema = Schema.Literal(...Object.values(GATEWAY_METHOD));
+
+/** One method as the table names it: its wire name and whether it changes something. */
+export interface GatewayMethodEntry {
+  readonly name: GatewayMethod;
+  readonly mutates: boolean;
+}
+
+/** Every entry of the one table, in its order, for whatever derives a vocabulary from it rather than keeping a list beside it. */
+export const GATEWAY_METHOD_ENTRIES: readonly GatewayMethodEntry[] = Object.values(GATEWAY_METHODS);
+
+/** What a method takes: a record the host reads under its own declared shape, admitted here only as a record. */
+export const GatewayParamsSchema = WireValueSchema.pipe(Schema.filter(isRecord));
+
+/** What a method answers: a wire value, or nothing at all, which the envelope carries as an absent field. */
+export const GatewayResultSchema = Schema.UndefinedOr(WireValueSchema);
 
 /**
  * The live voice session's vocabulary, declared beside the four methods and
@@ -260,34 +274,50 @@ export const conversationRateMessageResultSchema = s.record(CONVERSATION_RATE_ME
 export type ConversationRateMessageResult = RecordOf<typeof CONVERSATION_RATE_MESSAGE_RESULT>;
 
 const GATEWAY_METHODS_BY_NAME: ReadonlyMap<string, GatewayMethodEntry> = new Map(
-  Object.values(GATEWAY_METHODS).map((entry) => [entry.name, entry]),
+  GATEWAY_METHOD_ENTRIES.map((entry) => [entry.name, entry]),
 );
 
+const readsGatewayMethod = Schema.is(GatewayMethodSchema);
+
 export function isGatewayMethod(value: UnparsedWireValue): value is GatewayMethod {
-  return isWireString(value) && GATEWAY_METHODS_BY_NAME.has(value);
+  return readsGatewayMethod(value);
 }
 
 export function isMutatingGatewayMethod(method: GatewayMethod): boolean {
   return GATEWAY_METHODS_BY_NAME.get(method)?.mutates === true;
 }
 
-/** What a caller may say it expects to still stand when its request lands. */
-export interface GatewayExpectedRevision {
-  /** The conversation whose lifetime the caller read, and the generation it read there. */
-  sessionKey?: string;
-  sessionRevision?: string;
-  /** The configuration revision the caller read. */
-  configurationRevision?: number;
-}
+/** An id the protocol carries: a request's, an event's, a node's, a key's. Never empty, and otherwise the minter's own. */
+const GatewayIdentifierSchema = Schema.NonEmptyString;
 
-export interface GatewayRequest {
-  protocolVersion: number;
-  id: string;
-  method: GatewayMethod;
-  params: WireRecord;
-  idempotencyKey?: string;
-  expectedRevision?: GatewayExpectedRevision;
-}
+/** What a caller may say it expects to still stand when its request lands. */
+export const GatewayExpectedRevisionSchema = Schema.Struct({
+  /** The conversation whose lifetime the caller read, and the generation it read there. */
+  sessionKey: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
+  sessionRevision: Schema.optionalWith(Schema.String, { exact: true }),
+  /** The configuration revision the caller read. */
+  configurationRevision: Schema.optionalWith(Schema.Number, { exact: true }),
+});
+
+export type GatewayExpectedRevision = typeof GatewayExpectedRevisionSchema.Type;
+
+/**
+ * The envelopes, each declared once as the schema that both reads it off the
+ * wire and writes it back. Key order is the contract, and a struct encodes
+ * its keys in the order declared here, so what `fixtures/protocol` records
+ * is what these declarations say; an explicitly absent field leaves rather
+ * than travelling as null, and the readers refuse a shape they never sent.
+ */
+export const GatewayRequestSchema = Schema.Struct({
+  protocolVersion: Schema.Number,
+  id: GatewayIdentifierSchema,
+  method: GatewayMethodSchema,
+  params: GatewayParamsSchema,
+  idempotencyKey: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
+  expectedRevision: Schema.optionalWith(GatewayExpectedRevisionSchema, { exact: true }),
+});
+
+export type GatewayRequest = typeof GatewayRequestSchema.Type;
 
 export const GATEWAY_ERROR = {
   UNSUPPORTED_VERSION: "unsupported_version",
@@ -308,27 +338,229 @@ export const GATEWAY_ERROR = {
 
 export type GatewayErrorCode = (typeof GATEWAY_ERROR)[keyof typeof GATEWAY_ERROR];
 
-const GATEWAY_ERROR_LIST: readonly GatewayErrorCode[] = Object.values(GATEWAY_ERROR);
+export const GatewayErrorCodeSchema = Schema.Literal(...Object.values(GATEWAY_ERROR));
+
+const readsGatewayErrorCode = Schema.is(GatewayErrorCodeSchema);
 
 export function isGatewayErrorCode(value: UnparsedWireValue): value is GatewayErrorCode {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && GATEWAY_ERROR_LIST.includes(value as GatewayErrorCode);
+  return readsGatewayErrorCode(value);
 }
 
-export interface GatewayError {
-  code: GatewayErrorCode;
-  message: string;
+/** An error as the envelope carries it: the code, and a sentence for a person. */
+export const GatewayErrorSchema = Schema.Struct({
+  code: GatewayErrorCodeSchema,
+  message: Schema.String,
+});
+
+export type GatewayError = typeof GatewayErrorSchema.Type;
+
+/** One refusal's code, fixed by its class: the constructor takes the message alone. */
+function refusalCode<Code extends GatewayErrorCode>(code: Code) {
+  return Schema.Literal(code).pipe(
+    Schema.propertySignature,
+    Schema.withConstructorDefault(() => code),
+  );
+}
+
+/**
+ * Every error code as its own tagged error, so a handler that refuses has a
+ * typed failure to fail with rather than a bare code. Each class's `code` is
+ * the exact string `GATEWAY_ERROR` already names, and the family crosses the
+ * wire as `GatewayRefusalSchema` writes it: today's `{ code, message }` object,
+ * with no tag beside them, so a client of an earlier build reads the same
+ * envelope it always did.
+ */
+export class UnsupportedVersionRefusal extends Schema.TaggedError<UnsupportedVersionRefusal>()(
+  "UnsupportedVersionRefusal",
+  { code: refusalCode(GATEWAY_ERROR.UNSUPPORTED_VERSION), message: Schema.String },
+) {}
+
+export class UnknownMethodRefusal extends Schema.TaggedError<UnknownMethodRefusal>()(
+  "UnknownMethodRefusal",
+  { code: refusalCode(GATEWAY_ERROR.UNKNOWN_METHOD), message: Schema.String },
+) {}
+
+export class InvalidParamsRefusal extends Schema.TaggedError<InvalidParamsRefusal>()(
+  "InvalidParamsRefusal",
+  { code: refusalCode(GATEWAY_ERROR.INVALID_PARAMS), message: Schema.String },
+) {}
+
+export class MissingIdempotencyKeyRefusal extends Schema.TaggedError<MissingIdempotencyKeyRefusal>()(
+  "MissingIdempotencyKeyRefusal",
+  { code: refusalCode(GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY), message: Schema.String },
+) {}
+
+export class IdempotencyConflictRefusal extends Schema.TaggedError<IdempotencyConflictRefusal>()(
+  "IdempotencyConflictRefusal",
+  { code: refusalCode(GATEWAY_ERROR.IDEMPOTENCY_CONFLICT), message: Schema.String },
+) {}
+
+export class RevisionMismatchRefusal extends Schema.TaggedError<RevisionMismatchRefusal>()(
+  "RevisionMismatchRefusal",
+  { code: refusalCode(GATEWAY_ERROR.REVISION_MISMATCH), message: Schema.String },
+) {}
+
+export class NotFoundRefusal extends Schema.TaggedError<NotFoundRefusal>()("NotFoundRefusal", {
+  code: refusalCode(GATEWAY_ERROR.NOT_FOUND),
+  message: Schema.String,
+}) {}
+
+export class RefusedRefusal extends Schema.TaggedError<RefusedRefusal>()("RefusedRefusal", {
+  code: refusalCode(GATEWAY_ERROR.REFUSED),
+  message: Schema.String,
+}) {}
+
+export class UnauthorizedRefusal extends Schema.TaggedError<UnauthorizedRefusal>()(
+  "UnauthorizedRefusal",
+  { code: refusalCode(GATEWAY_ERROR.UNAUTHORIZED), message: Schema.String },
+) {}
+
+export class NodeUnavailableRefusal extends Schema.TaggedError<NodeUnavailableRefusal>()(
+  "NodeUnavailableRefusal",
+  { code: refusalCode(GATEWAY_ERROR.NODE_UNAVAILABLE), message: Schema.String },
+) {}
+
+export class UnknownCapabilityRefusal extends Schema.TaggedError<UnknownCapabilityRefusal>()(
+  "UnknownCapabilityRefusal",
+  { code: refusalCode(GATEWAY_ERROR.UNKNOWN_CAPABILITY), message: Schema.String },
+) {}
+
+export class DisconnectedRefusal extends Schema.TaggedError<DisconnectedRefusal>()(
+  "DisconnectedRefusal",
+  { code: refusalCode(GATEWAY_ERROR.DISCONNECTED), message: Schema.String },
+) {}
+
+export class ShuttingDownRefusal extends Schema.TaggedError<ShuttingDownRefusal>()(
+  "ShuttingDownRefusal",
+  { code: refusalCode(GATEWAY_ERROR.SHUTTING_DOWN), message: Schema.String },
+) {}
+
+export class InternalRefusal extends Schema.TaggedError<InternalRefusal>()("InternalRefusal", {
+  code: refusalCode(GATEWAY_ERROR.INTERNAL),
+  message: Schema.String,
+}) {}
+
+/** Every refusal class this module declares, one per error code, for a membership check and the family's union. */
+export const GATEWAY_REFUSALS = [
+  UnsupportedVersionRefusal,
+  UnknownMethodRefusal,
+  InvalidParamsRefusal,
+  MissingIdempotencyKeyRefusal,
+  IdempotencyConflictRefusal,
+  RevisionMismatchRefusal,
+  NotFoundRefusal,
+  RefusedRefusal,
+  UnauthorizedRefusal,
+  NodeUnavailableRefusal,
+  UnknownCapabilityRefusal,
+  DisconnectedRefusal,
+  ShuttingDownRefusal,
+  InternalRefusal,
+] as const;
+
+export type GatewayRefusal = InstanceType<(typeof GATEWAY_REFUSALS)[number]>;
+
+function gatewayRefusalFromError(error: GatewayError): GatewayRefusal {
+  const message = error.message;
+  switch (error.code) {
+    case GATEWAY_ERROR.UNSUPPORTED_VERSION:
+      return new UnsupportedVersionRefusal({ message });
+    case GATEWAY_ERROR.UNKNOWN_METHOD:
+      return new UnknownMethodRefusal({ message });
+    case GATEWAY_ERROR.INVALID_PARAMS:
+      return new InvalidParamsRefusal({ message });
+    case GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY:
+      return new MissingIdempotencyKeyRefusal({ message });
+    case GATEWAY_ERROR.IDEMPOTENCY_CONFLICT:
+      return new IdempotencyConflictRefusal({ message });
+    case GATEWAY_ERROR.REVISION_MISMATCH:
+      return new RevisionMismatchRefusal({ message });
+    case GATEWAY_ERROR.NOT_FOUND:
+      return new NotFoundRefusal({ message });
+    case GATEWAY_ERROR.REFUSED:
+      return new RefusedRefusal({ message });
+    case GATEWAY_ERROR.UNAUTHORIZED:
+      return new UnauthorizedRefusal({ message });
+    case GATEWAY_ERROR.NODE_UNAVAILABLE:
+      return new NodeUnavailableRefusal({ message });
+    case GATEWAY_ERROR.UNKNOWN_CAPABILITY:
+      return new UnknownCapabilityRefusal({ message });
+    case GATEWAY_ERROR.DISCONNECTED:
+      return new DisconnectedRefusal({ message });
+    case GATEWAY_ERROR.SHUTTING_DOWN:
+      return new ShuttingDownRefusal({ message });
+    case GATEWAY_ERROR.INTERNAL:
+      return new InternalRefusal({ message });
+  }
+}
+
+/**
+ * The refusal family as the wire carries it. Decoding an envelope's error
+ * object answers the class its code names; encoding a refusal writes the
+ * `{ code, message }` object and nothing else, so the class's own tag never
+ * reaches the wire and the envelope goldens hold.
+ */
+export const GatewayRefusalSchema: Schema.Schema<GatewayRefusal, GatewayError> = Schema.transform(
+  GatewayErrorSchema,
+  Schema.typeSchema(Schema.Union(...GATEWAY_REFUSALS)),
+  {
+    strict: true,
+    decode: gatewayRefusalFromError,
+    encode: (refusal) => ({ code: refusal.code, message: refusal.message }),
+  },
+);
+
+/**
+ * The one refusal the protocol decides before any method is named: a request
+ * on another protocol version is refused outright, whatever it asked.
+ */
+export function gatewayVersionRefusal(
+  protocolVersion: number,
+): Option.Option<UnsupportedVersionRefusal> {
+  return protocolVersion === GATEWAY_PROTOCOL_VERSION
+    ? Option.none()
+    : Option.some(
+        new UnsupportedVersionRefusal({
+          message: `this host speaks protocol ${GATEWAY_PROTOCOL_VERSION}`,
+        }),
+      );
 }
 
 /** The revisions that stood when an answer was formed, so a client can name them on its next ask. */
-export interface GatewayRevision {
-  configuration: number;
-  sequence: number;
+export const GatewayRevisionSchema = Schema.Struct({
+  configuration: Schema.Number,
+  sequence: Schema.Number,
+});
+
+export type GatewayRevision = typeof GatewayRevisionSchema.Type;
+
+/**
+ * A value that may be absent, read as `undefined` and written as no field at
+ * all. `null` is a value here and travels; only `undefined` leaves.
+ */
+function absentOrWireValue() {
+  return Schema.optionalToRequired(WireValueSchema, Schema.UndefinedOr(WireValueSchema), {
+    decode: Option.getOrUndefined,
+    encode: (value) => (value === undefined ? Option.none() : Option.some(value)),
+  });
 }
 
-export type GatewayResponse =
-  | { id: string; ok: true; result: WireValue | undefined; revision: GatewayRevision }
-  | { id: string; ok: false; error: GatewayError; revision: GatewayRevision };
+export const GatewayResponseSchema = Schema.Union(
+  Schema.Struct({
+    id: GatewayIdentifierSchema,
+    ok: Schema.Literal(true),
+    result: absentOrWireValue(),
+    revision: GatewayRevisionSchema,
+  }),
+  Schema.Struct({
+    id: GatewayIdentifierSchema,
+    ok: Schema.Literal(false),
+    error: GatewayErrorSchema,
+    revision: GatewayRevisionSchema,
+  }),
+);
+
+export type GatewayResponse = typeof GatewayResponseSchema.Type;
 
 export const GATEWAY_EVENT = {
   RUNS_CHANGED: "runs.changed",
@@ -354,23 +586,26 @@ export const GATEWAY_EVENT = {
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
 
-const GATEWAY_EVENT_LIST: readonly GatewayEventKind[] = Object.values(GATEWAY_EVENT);
+export const GatewayEventKindSchema = Schema.Literal(...Object.values(GATEWAY_EVENT));
+
+const readsGatewayEventKind = Schema.is(GatewayEventKindSchema);
 
 export function isGatewayEventKind(value: UnparsedWireValue): value is GatewayEventKind {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && GATEWAY_EVENT_LIST.includes(value as GatewayEventKind);
+  return readsGatewayEventKind(value);
 }
 
-export interface GatewayEvent {
-  eventId: string;
+export const GatewayEventSchema = Schema.Struct({
+  eventId: GatewayIdentifierSchema,
   /** One more than the event before it, from 1, so a gap is a number a client can see. */
-  sequence: number;
-  kind: GatewayEventKind;
-  at: number;
-  sessionKey?: string;
-  runId?: string;
-  payload: WireValue;
-}
+  sequence: Schema.Number,
+  kind: GatewayEventKindSchema,
+  at: Schema.Number,
+  sessionKey: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
+  runId: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
+  payload: WireValueSchema,
+});
+
+export type GatewayEvent = typeof GatewayEventSchema.Type;
 
 /**
  * What a reconnecting client is handed for the sequence it last saw: every
@@ -386,9 +621,19 @@ export const GATEWAY_RECONNECT_KIND = {
 export type GatewayReconnectKind =
   (typeof GATEWAY_RECONNECT_KIND)[keyof typeof GATEWAY_RECONNECT_KIND];
 
-export type GatewayReconnectAnswer =
-  | { kind: typeof GATEWAY_RECONNECT_KIND.REPLAY; events: readonly GatewayEvent[] }
-  | { kind: typeof GATEWAY_RECONNECT_KIND.SNAPSHOT; sequence: number; snapshot: WireValue };
+export const GatewayReconnectAnswerSchema = Schema.Union(
+  Schema.Struct({
+    kind: Schema.Literal(GATEWAY_RECONNECT_KIND.REPLAY),
+    events: Schema.Array(GatewayEventSchema),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(GATEWAY_RECONNECT_KIND.SNAPSHOT),
+    sequence: Schema.Number,
+    snapshot: WireValueSchema,
+  }),
+);
+
+export type GatewayReconnectAnswer = typeof GatewayReconnectAnswerSchema.Type;
 
 /**
  * What a client and a host settle before any request crosses a connection:
@@ -451,67 +696,45 @@ export const NODE_CAPABILITY_STATUS = {
 export type NodeCapabilityStatus =
   (typeof NODE_CAPABILITY_STATUS)[keyof typeof NODE_CAPABILITY_STATUS];
 
-export type NodeCapabilityResult =
-  | { status: typeof NODE_CAPABILITY_STATUS.OK; value: WireValue | undefined }
-  | { status: typeof NODE_CAPABILITY_STATUS.UNAVAILABLE; capability: string; reason: string }
-  | { status: typeof NODE_CAPABILITY_STATUS.FAILED; capability: string; reason: string }
-  | { status: typeof NODE_CAPABILITY_STATUS.UNKNOWN; capability: string; reason: string };
+export const NodeCapabilityResultSchema = Schema.Union(
+  Schema.Struct({ status: Schema.Literal(NODE_CAPABILITY_STATUS.OK), value: absentOrWireValue() }),
+  Schema.Struct({
+    status: Schema.Literal(NODE_CAPABILITY_STATUS.UNAVAILABLE),
+    capability: Schema.String,
+    reason: Schema.String,
+  }),
+  Schema.Struct({
+    status: Schema.Literal(NODE_CAPABILITY_STATUS.FAILED),
+    capability: Schema.String,
+    reason: Schema.String,
+  }),
+  Schema.Struct({
+    status: Schema.Literal(NODE_CAPABILITY_STATUS.UNKNOWN),
+    capability: Schema.String,
+    reason: Schema.String,
+  }),
+);
 
-function expectedRevisionFromWire(
-  value: UnparsedWireValue,
-): GatewayExpectedRevision | undefined | false {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) return false;
-  const revision: GatewayExpectedRevision = {};
-  if (value.sessionKey !== undefined) {
-    if (!isIdentifier(value.sessionKey)) return false;
-    revision.sessionKey = value.sessionKey;
-  }
-  if (value.sessionRevision !== undefined) {
-    if (!isWireString(value.sessionRevision)) return false;
-    revision.sessionRevision = value.sessionRevision;
-  }
-  if (value.configurationRevision !== undefined) {
-    if (!isWireNumber(value.configurationRevision)) return false;
-    revision.configurationRevision = value.configurationRevision;
-  }
-  return revision;
-}
+export type NodeCapabilityResult = typeof NodeCapabilityResultSchema.Type;
 
-/**
- * The two envelopes on their way out, beside the readers that take them back
- * in. Every transport that carries the protocol as text writes them the same
- * way, so an explicitly absent field leaves rather than travelling as null:
- * the readers refuse a shape they never sent.
- */
+const readGatewayRequest = Schema.decodeUnknownOption(GatewayRequestSchema);
+const writeGatewayRequest = Schema.encodeSync(GatewayRequestSchema);
+const readGatewayResponse = Schema.decodeUnknownOption(GatewayResponseSchema);
+const writeGatewayResponse = Schema.encodeSync(GatewayResponseSchema);
+const readGatewayEvent = Schema.decodeUnknownOption(GatewayEventSchema);
+const writeGatewayEvent = Schema.encodeSync(GatewayEventSchema);
+const readGatewayReconnectAnswer = Schema.decodeUnknownOption(GatewayReconnectAnswerSchema);
+
 export function gatewayRequestToWire(request: GatewayRequest): WireRecord {
-  return {
-    protocolVersion: request.protocolVersion,
-    id: request.id,
-    method: request.method,
-    params: request.params,
-    ...(request.idempotencyKey !== undefined
-      ? { idempotencyKey: request.idempotencyKey }
-      : undefined),
-    ...(request.expectedRevision !== undefined
-      ? { expectedRevision: { ...request.expectedRevision } }
-      : undefined),
-  };
+  return writeGatewayRequest(request);
 }
 
 export function gatewayResponseToWire(response: GatewayResponse): WireRecord {
-  const revision = {
-    configuration: response.revision.configuration,
-    sequence: response.revision.sequence,
-  };
-  return response.ok
-    ? {
-        id: response.id,
-        ok: true,
-        ...(response.result !== undefined ? { result: response.result } : undefined),
-        revision,
-      }
-    : { id: response.id, ok: false, error: { ...response.error }, revision };
+  return writeGatewayResponse(response);
+}
+
+export function gatewayEventToWire(event: GatewayEvent): WireRecord {
+  return writeGatewayEvent(event);
 }
 
 /** A refusal the protocol itself answers, for a request no handler ever saw. */
@@ -525,98 +748,21 @@ export function gatewayRefusal(
 }
 
 export function gatewayRequestFromWire(value: UnparsedWireValue): GatewayRequest | undefined {
-  if (!isRecord(value)) return undefined;
-  if (!isWireNumber(value.protocolVersion) || !isIdentifier(value.id)) return undefined;
-  if (!isGatewayMethod(value.method) || !isRecord(value.params)) return undefined;
-  const expected = expectedRevisionFromWire(value.expectedRevision);
-  if (expected === false) return undefined;
-  if (value.idempotencyKey !== undefined && !isIdentifier(value.idempotencyKey)) return undefined;
-  return {
-    protocolVersion: value.protocolVersion,
-    id: value.id,
-    method: value.method,
-    params: value.params,
-    ...(value.idempotencyKey !== undefined ? { idempotencyKey: value.idempotencyKey } : undefined),
-    ...(expected ? { expectedRevision: expected } : undefined),
-  };
-}
-
-function revisionFromWire(value: UnparsedWireValue): GatewayRevision | undefined {
-  if (!isRecord(value) || !isWireNumber(value.configuration) || !isWireNumber(value.sequence)) {
-    return undefined;
-  }
-  return { configuration: value.configuration, sequence: value.sequence };
+  return Option.getOrUndefined(readGatewayRequest(value));
 }
 
 export function gatewayResponseFromWire(value: UnparsedWireValue): GatewayResponse | undefined {
-  if (!isRecord(value) || !isIdentifier(value.id) || !isWireBoolean(value.ok)) return undefined;
-  const revision = revisionFromWire(value.revision);
-  if (!revision) return undefined;
-  if (value.ok) return { id: value.id, ok: true, result: value.result, revision };
-  if (
-    !isRecord(value.error) ||
-    !isGatewayErrorCode(value.error.code) ||
-    !isWireString(value.error.message)
-  ) {
-    return undefined;
-  }
-  return {
-    id: value.id,
-    ok: false,
-    error: { code: value.error.code, message: value.error.message },
-    revision,
-  };
+  return Option.getOrUndefined(readGatewayResponse(value));
 }
 
 export function gatewayEventFromWire(value: UnparsedWireValue): GatewayEvent | undefined {
-  if (!isRecord(value) || !isIdentifier(value.eventId)) return undefined;
-  if (!isWireNumber(value.sequence) || !isGatewayEventKind(value.kind)) return undefined;
-  if (!isWireNumber(value.at) || value.payload === undefined) return undefined;
-  if (value.sessionKey !== undefined && !isIdentifier(value.sessionKey)) return undefined;
-  if (value.runId !== undefined && !isIdentifier(value.runId)) return undefined;
-  return {
-    eventId: value.eventId,
-    sequence: value.sequence,
-    kind: value.kind,
-    at: value.at,
-    ...(value.sessionKey !== undefined ? { sessionKey: value.sessionKey } : undefined),
-    ...(value.runId !== undefined ? { runId: value.runId } : undefined),
-    payload: value.payload,
-  };
+  return Option.getOrUndefined(readGatewayEvent(value));
 }
 
 export function gatewayReconnectAnswerFromWire(
   value: UnparsedWireValue,
 ): GatewayReconnectAnswer | undefined {
-  if (!isRecord(value)) return undefined;
-  if (value.kind === GATEWAY_RECONNECT_KIND.REPLAY) {
-    if (!Array.isArray(value.events)) return undefined;
-    const events: GatewayEvent[] = [];
-    for (const event of value.events) {
-      const parsed = gatewayEventFromWire(event);
-      if (!parsed) return undefined;
-      events.push(parsed);
-    }
-    return { kind: GATEWAY_RECONNECT_KIND.REPLAY, events };
-  }
-  if (value.kind === GATEWAY_RECONNECT_KIND.SNAPSHOT) {
-    if (!isWireNumber(value.sequence) || value.snapshot === undefined) return undefined;
-    return {
-      kind: GATEWAY_RECONNECT_KIND.SNAPSHOT,
-      sequence: value.sequence,
-      snapshot: value.snapshot,
-    };
-  }
-  return undefined;
-}
-
-export function nodeCapabilityResultToWire(result: NodeCapabilityResult): WireRecord {
-  return result.status === NODE_CAPABILITY_STATUS.OK
-    ? {
-        status: result.status,
-        ...(result.value !== undefined ? { value: result.value } : undefined),
-      }
-    : { status: result.status, capability: result.capability, reason: result.reason };
+  return Option.getOrUndefined(readGatewayReconnectAnswer(value));
 }
 
 /**
@@ -627,67 +773,53 @@ export function nodeCapabilityResultToWire(result: NodeCapabilityResult): WireRe
  * the node. The id binds the answer to the ask; a connection that closes
  * before answering leaves the ask unavailable and the effect uncertain.
  */
-export interface NodeInvocation {
-  invocationId: string;
-  nodeId: string;
-  capability: string;
-  params: WireRecord;
-}
+export const NodeInvocationSchema = Schema.Struct({
+  invocationId: GatewayIdentifierSchema,
+  nodeId: GatewayIdentifierSchema,
+  capability: Schema.String,
+  params: GatewayParamsSchema,
+});
 
-export interface NodeInvocationAnswer {
-  invocationId: string;
-  result: NodeCapabilityResult;
+export type NodeInvocation = typeof NodeInvocationSchema.Type;
+
+export const NodeInvocationAnswerSchema = Schema.Struct({
+  invocationId: GatewayIdentifierSchema,
+  result: NodeCapabilityResultSchema,
+});
+
+export type NodeInvocationAnswer = typeof NodeInvocationAnswerSchema.Type;
+
+const writeNodeCapabilityResult = Schema.encodeSync(NodeCapabilityResultSchema);
+const readNodeCapabilityResult = Schema.decodeUnknownOption(NodeCapabilityResultSchema);
+const writeNodeInvocation = Schema.encodeSync(NodeInvocationSchema);
+const readNodeInvocation = Schema.decodeUnknownOption(NodeInvocationSchema);
+const writeNodeInvocationAnswer = Schema.encodeSync(NodeInvocationAnswerSchema);
+const readNodeInvocationAnswer = Schema.decodeUnknownOption(NodeInvocationAnswerSchema);
+
+export function nodeCapabilityResultToWire(result: NodeCapabilityResult): WireRecord {
+  return writeNodeCapabilityResult(result);
 }
 
 export function nodeInvocationToWire(invocation: NodeInvocation): WireRecord {
-  return {
-    invocationId: invocation.invocationId,
-    nodeId: invocation.nodeId,
-    capability: invocation.capability,
-    params: invocation.params,
-  };
+  return writeNodeInvocation(invocation);
 }
 
 export function nodeInvocationFromWire(value: UnparsedWireValue): NodeInvocation | undefined {
-  if (!isRecord(value) || !isIdentifier(value.invocationId) || !isIdentifier(value.nodeId)) {
-    return undefined;
-  }
-  if (!isWireString(value.capability) || !isRecord(value.params)) return undefined;
-  return {
-    invocationId: value.invocationId,
-    nodeId: value.nodeId,
-    capability: value.capability,
-    params: value.params,
-  };
+  return Option.getOrUndefined(readNodeInvocation(value));
 }
 
 export function nodeInvocationAnswerToWire(answer: NodeInvocationAnswer): WireRecord {
-  return { invocationId: answer.invocationId, result: nodeCapabilityResultToWire(answer.result) };
+  return writeNodeInvocationAnswer(answer);
 }
 
 export function nodeInvocationAnswerFromWire(
   value: UnparsedWireValue,
 ): NodeInvocationAnswer | undefined {
-  if (!isRecord(value) || !isIdentifier(value.invocationId)) return undefined;
-  const result = nodeCapabilityResultFromWire(value.result);
-  return result ? { invocationId: value.invocationId, result } : undefined;
+  return Option.getOrUndefined(readNodeInvocationAnswer(value));
 }
 
 export function nodeCapabilityResultFromWire(
   value: UnparsedWireValue,
 ): NodeCapabilityResult | undefined {
-  if (!isRecord(value)) return undefined;
-  if (value.status === NODE_CAPABILITY_STATUS.OK) {
-    return { status: NODE_CAPABILITY_STATUS.OK, value: value.value };
-  }
-  if (
-    (value.status === NODE_CAPABILITY_STATUS.UNAVAILABLE ||
-      value.status === NODE_CAPABILITY_STATUS.FAILED ||
-      value.status === NODE_CAPABILITY_STATUS.UNKNOWN) &&
-    isWireString(value.capability) &&
-    isWireString(value.reason)
-  ) {
-    return { status: value.status, capability: value.capability, reason: value.reason };
-  }
-  return undefined;
+  return Option.getOrUndefined(readNodeCapabilityResult(value));
 }
