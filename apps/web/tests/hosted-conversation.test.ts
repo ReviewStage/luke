@@ -223,18 +223,17 @@ test("an answered read carries the page to the wire with the parsed fields", asy
 // --- Rate brake ---
 
 test("the conversation endpoint returns 429 after too many requests in the same window", async () => {
-  const now = () => 1_000_000;
   const userId = `ratelimit-${Date.now()}-${process.pid}`;
 
   for (let i = 0; i < 30; i++) {
     const response = await handleConversationRead(
-      conversationOptions({ resolveUserId: async () => userId, now }),
+      conversationOptions({ resolveUserId: async () => userId }),
     );
     assert.equal(response.status, 200, `request ${i + 1} should succeed`);
   }
 
   const limited = await handleConversationRead(
-    conversationOptions({ resolveUserId: async () => userId, now }),
+    conversationOptions({ resolveUserId: async () => userId }),
   );
   assert.equal(limited.status, 429);
   assert.equal((await limited.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

@@ -231,7 +231,7 @@ export async function handleTurnEventStream(options: TurnEventStreamOptions): Pr
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
   const now = options.now ?? Date.now;
-  if (streamRateLimited(userId, now())) {
+  if (await streamRateLimited(userId)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
   // An id that is not a uuid names no row and answers as none, the same as another account's.

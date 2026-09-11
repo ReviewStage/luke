@@ -91,7 +91,7 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   }
 
   const now = (options.now ?? Date.now)();
-  if (observeRateLimited(userId, now)) {
+  if (await observeRateLimited(userId)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
 

@@ -77,7 +77,6 @@ export interface ResourceReadOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
   store: Pick<HostedStore, "messages" | "events" | "turns" | "directory">;
-  now?: () => number;
 }
 
 type ReadGate = { readonly userId: string; readonly query: URLSearchParams } | Response;
@@ -95,7 +94,7 @@ async function readGate(options: ResourceReadOptions): Promise<ReadGate> {
   if (!userId) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
-  if (readRateLimited(userId, (options.now ?? Date.now)())) {
+  if (await readRateLimited(userId)) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
   return { userId, query: new URL(request.url).searchParams };

@@ -19,7 +19,7 @@
     "preview": "vite preview",
     "test": "vitest run && pnpm test:agent",
     "test:agent": "LUKE_BRAIN_MODEL_FIXTURE=scripted eve eval",
-    "test:store": "vitest run tests/effect-migrator.test.ts tests/sql-client.test.ts tests/hosted-store.test.ts tests/hosted-store-workspace-files.test.ts tests/hosted-device-store.test.ts tests/hosted-payload-envelope.test.ts tests/storage-schema.test.ts tests/voice-schema.test.ts tests/hosted-store-writer.test.ts tests/storage-reads.test.ts tests/voice-writer.test.ts tests/storage-ratings.test.ts tests/storage-speech.test.ts tests/hosted-resource-reads.test.ts tests/hosted-change-signal.test.ts tests/devices-instants.test.ts tests/hosted-turn-event-stream.test.ts tests/hosted-standing-main.test.ts tests/hosted-workspace-defaults.test.ts tests/voice-live-record.test.ts tests/speech-push.test.ts",
+    "test:store": "vitest run tests/effect-migrator.test.ts tests/sql-client.test.ts tests/hosted-store.test.ts tests/hosted-store-workspace-files.test.ts tests/hosted-device-store.test.ts tests/hosted-payload-envelope.test.ts tests/storage-schema.test.ts tests/voice-schema.test.ts tests/hosted-store-writer.test.ts tests/storage-reads.test.ts tests/voice-writer.test.ts tests/storage-ratings.test.ts tests/storage-speech.test.ts tests/hosted-resource-reads.test.ts tests/hosted-change-signal.test.ts tests/devices-instants.test.ts tests/hosted-turn-event-stream.test.ts tests/hosted-standing-main.test.ts tests/hosted-workspace-defaults.test.ts tests/voice-live-record.test.ts tests/speech-push.test.ts tests/hosted-quota.test.ts tests/hosted-voice-usage.test.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {

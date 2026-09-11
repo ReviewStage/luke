@@ -85,7 +85,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
   let roster = (await storedRoster(store, userId, rows, secret))?.roster;
   if (!roster) {
     const now = (options.now ?? Date.now)();
-    if (projectsRateLimited(userId, now)) {
+    if (await projectsRateLimited(userId)) {
       return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
     }
     roster = (await observeAndSnapshot({ userId, rows, secret, store, seams: options, now }))
