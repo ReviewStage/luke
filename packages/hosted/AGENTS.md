@@ -40,7 +40,25 @@ composition of `deviceWireIdSchema` into its own record), so their recorded
 goldens stay under `RecordedJsonSchemas` rather than moving to
 `RecordedEffectJsonSchemas` — the facade wrapper's own `jsonSchema()` already
 walks the same Effect AST `emitJsonSchema` does, so the bytes are identical
-either way. The clients here are `vault-client.ts`, the desktop's side of
+either way. `service-wire.ts`, `vault-wire.ts`, `rating-wire.ts`,
+`reads-wire.ts`, and `turn-events-wire.ts` go one step further than those
+four `fromEffect`-only modules: each export a still-facade sibling module or
+an outside caller reaches through `.read`/`.parse`/`.jsonSchema`
+(`service-wire.ts`'s `writtenText`, `countedNumber`, `hostedQuotaSchema`,
+`hostedErrorSchema`, and `wireUuidSchema`; `vault-wire.ts`'s three answer
+schemas; `rating-wire.ts`'s two request/answer schemas; `reads-wire.ts`'s
+cursor and per-resource answer schemas; `turn-events-wire.ts`'s cursor and
+event schemas) keeps that name as a `fromEffect` twin, but the Effect
+declaration underneath is also exported, under a distinct `<name>Effect`
+name, and recorded in `RecordedEffectJsonSchemas` instead of beside the
+facade name, so a later caller can move onto it directly without this module
+changing again; `rating-wire.ts`, `reads-wire.ts`, and `turn-events-wire.ts`
+reach `service-wire.ts`'s and `device-wire.ts`'s facade exports for their own
+Effect declarations through wire's `effectSchema()` bridge. The twin is what
+`vault-client.ts`, `conversation-client.ts`, `changes-client.ts`,
+`@sidecar/voice`, `@sidecar/brain`, and `apps/web` still call `.parse()`/
+`.read()` on; it is the strangler shim P12-08 deletes, once every one of
+those callers declares against the `Effect` export directly. The clients here are `vault-client.ts`, the desktop's side of
 the three vault routes, `device-client.ts`, its side of the one devices
 path, `changes-client.ts`, its side of the change-signal poll that carries
 the device's presence and quiet instants, `roster-client.ts`, its read of the
