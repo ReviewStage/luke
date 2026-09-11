@@ -11,11 +11,9 @@ import {
   chooseAside,
   type FaceContext,
   type FaceObservation,
-  faceYieldsToMeter,
   HOVER_ASIDES,
   noticedMotion,
   restingMotion,
-  SPEECH_TURN,
   speechFaceInputs,
   thinkingDotsShown,
 } from "./luke-face-mood";
@@ -87,7 +85,7 @@ test("the wait's dots stand only beside a face the thinking rest holds", () => {
   assert.equal(thinkingDotsShown(context(), true), false);
   // Speech took the face back, so it takes the dots with it.
   assert.equal(thinkingDotsShown(context({ thinking: true, microphoneLive: true }), true), false);
-  // The meter or the gate displaced the face; dots without one would be orphaned.
+  // The gate displaced the face; dots without one would be orphaned.
   assert.equal(thinkingDotsShown(context({ thinking: true }), false), false);
 });
 
@@ -263,41 +261,29 @@ test("every motion the renderer can play is one the artwork describes", () => {
   assert.deepEqual(withLids, [FACE_MOTION.SLEEPING]);
 });
 
-const NO_METER = { hasAudioSignal: false, fixtureSpeaking: false, voiceActive: false };
-
-test("the face follows whose turn it is, not the meter", () => {
-  const meter = { hasAudioSignal: true, fixtureSpeaking: false, voiceActive: true };
-
-  // The same bars draw both voices, so amplitude alone would have Luke talking
-  // back at someone mid-sentence.
-  assert.deepEqual(speechFaceInputs({ ...meter, turn: SPEECH_TURN.DEVELOPER }), {
+test("the face's mouth follows Luke's own track alone", () => {
+  // The session is full duplex: the developer talking under Luke's answer says
+  // nothing about whether he is talking, and his answer over the microphone
+  // does not close it.
+  assert.deepEqual(speechFaceInputs({ listening: true, lukeSpeaking: false }), {
     speaking: false,
     microphoneLive: true,
   });
-  assert.deepEqual(speechFaceInputs({ ...meter, turn: SPEECH_TURN.LUKE }), {
+  assert.deepEqual(speechFaceInputs({ listening: false, lukeSpeaking: true }), {
     speaking: true,
+    microphoneLive: false,
+  });
+  assert.deepEqual(speechFaceInputs({ listening: true, lukeSpeaking: true }), {
+    speaking: true,
+    microphoneLive: true,
+  });
+  assert.deepEqual(speechFaceInputs({ listening: false, lukeSpeaking: false }), {
+    speaking: false,
     microphoneLive: false,
   });
 });
 
-test("without a turn to read, the meter is what there is", () => {
-  // A microphone opened from Settings with no call behind it, and the fixture.
-  assert.deepEqual(
-    speechFaceInputs({ hasAudioSignal: true, fixtureSpeaking: false, voiceActive: true }),
-    { speaking: true, microphoneLive: true },
-  );
-  assert.deepEqual(
-    speechFaceInputs({ hasAudioSignal: true, fixtureSpeaking: true, voiceActive: false }),
-    { speaking: true, microphoneLive: true },
-  );
-  // A closed microphone cannot still be carrying speech.
-  assert.deepEqual(
-    speechFaceInputs({ hasAudioSignal: false, fixtureSpeaking: false, voiceActive: true }),
-    { speaking: false, microphoneLive: false },
-  );
-});
-
-test("a turn drives the resting motion the face plays", () => {
+test("the speakers drive the resting motion the face plays", () => {
   const sessions = {
     settled: true,
     attention: ["session-a"],
@@ -310,28 +296,17 @@ test("a turn drives the resting motion the face plays", () => {
 
   // Waiting sessions do not outrank a conversation in progress.
   assert.equal(
-    restingMotion({ ...sessions, ...speechFaceInputs({ ...NO_METER, turn: SPEECH_TURN.LUKE }) }),
+    restingMotion({ ...sessions, ...speechFaceInputs({ listening: false, lukeSpeaking: true }) }),
     FACE_MOTION.TALKING,
   );
   assert.equal(
-    restingMotion({
-      ...sessions,
-      ...speechFaceInputs({ ...NO_METER, turn: SPEECH_TURN.DEVELOPER }),
-    }),
+    restingMotion({ ...sessions, ...speechFaceInputs({ listening: true, lukeSpeaking: false }) }),
     FACE_MOTION.LISTENING,
   );
-});
-
-test("Luke steps aside only for your own voice, and only for a meter", () => {
+  // Both heard at once: Luke's own voice is what his face shows, and the
+  // developer's is answered on the other wing.
   assert.equal(
-    faceYieldsToMeter({ turn: SPEECH_TURN.DEVELOPER, hasAudioSignal: true }),
-    true,
-    "your turn is the one thing that displaces him",
+    restingMotion({ ...sessions, ...speechFaceInputs({ listening: true, lukeSpeaking: true }) }),
+    FACE_MOTION.TALKING,
   );
-  // His own reply is his to show: the talking face is what says he is answering.
-  assert.equal(faceYieldsToMeter({ turn: SPEECH_TURN.LUKE, hasAudioSignal: true }), false);
-  assert.equal(faceYieldsToMeter({ hasAudioSignal: true }), false);
-  // Standing aside for nothing would leave the capsule blank for the length of
-  // a turn, which says less than either of them alone.
-  assert.equal(faceYieldsToMeter({ turn: SPEECH_TURN.DEVELOPER, hasAudioSignal: false }), false);
 });

@@ -21,11 +21,27 @@ import type { UpdateSnapshot } from "./update";
 import type { VoiceView } from "./voice-view";
 
 /**
+ * The launch profiles a window answers to. A capture run stages a
+ * conversation it has no voice window for: Luke speaking, that with the
+ * Mac's output off, and both speakers heard at once. Any other word — the
+ * default included — stages nothing.
+ */
+export const RUN_PROFILE = {
+  IDLE: "idle",
+  SPEAKING: "speaking",
+  MUTED: "muted",
+  DUPLEX: "duplex",
+} as const;
+
+export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
+
+/**
  * What this launch is, as every window is told it and no event ever changes —
  * save the trace gate, which is the host's answer about this run rather than
  * the launch's own argument.
  */
 interface AppRunFacts {
+  /** The `--profile` argument as given, which is {@link RUN_PROFILE.IDLE} when absent. */
   profile: string;
   packaged: boolean;
   platform: string;

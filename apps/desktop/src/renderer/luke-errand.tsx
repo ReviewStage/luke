@@ -24,14 +24,15 @@ import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
  * before the face fades back in underneath it. Neither handover has a frame
  * where two are drawn or none is.
  *
- * The colour is answered in the stylesheet off the same `data-voice` the face
- * takes its own from, rather than measured here and carried: it is the one
- * report the capsule makes of whose turn it is — blue while Luke is talking,
- * green while he is listening — and an errand flies out of a reply, so it
- * would be the wrong moment of all moments to drop it. Keyed off the one
- * attribute, the two cannot disagree even mid-flight, which is what the
- * handover needs: a colour snapshotted at launch would swap to a different one
- * the instant the face came back underneath.
+ * The colour is answered in the stylesheet off the same two speaker facts the
+ * stage carries for the face's rests (`data-luke-speaking`, `data-listening`),
+ * rather than measured here and carried: it is the one report the capsule
+ * makes of who is heard — blue while Luke is talking, green while he is
+ * listening — and an errand flies out of a reply, so it would be the wrong
+ * moment of all moments to drop it. Keyed off the same attributes, the two
+ * cannot disagree even mid-flight, which is what the handover needs: a colour
+ * snapshotted at launch would swap to a different one the instant the face
+ * came back underneath.
  *
  * The errand is drawing and nothing else. It is armed by the tool-call carrier
  * alone — a row someone pressed themselves needs no attribution, and an action
@@ -281,11 +282,13 @@ export function errandBeats(tokens: ErrandTokens, wait: ErrandWait): ErrandBeats
 }
 
 /**
- * The turn the captions belong to. Mirrors `WAVEFORM_VOICE.LUKE` as the stage
- * spells it in `data-voice`, read here rather than imported because this only
- * ever asks the DOM a question about itself.
+ * Whether the captions belong to a reply still being spoken, as the stage
+ * spells it in `data-luke-speaking`, read here rather than imported because
+ * this only ever asks the DOM a question about itself.
  */
-const ERRAND_SPEAKING_VOICE = "luke";
+function lukeSpeakingOnStage(stage: HTMLElement): boolean {
+  return stage.dataset.lukeSpeaking === "true";
+}
 
 /** How many points the drift is drawn with. Enough that the bow reads as curved. */
 const DRIFT_SAMPLES = 8;
@@ -654,7 +657,7 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       if (stage.dataset.presentation !== PANEL_PRESENTATION.PANEL) return returnHome();
       const face = stage.querySelector<HTMLElement>(`[${ERRAND_ORIGIN_ATTRIBUTE}]`);
       const target = landingPlace(stage, errand.targets);
-      // No face is the meter standing in Luke's place, and no target is a
+      // No face is the gate standing in Luke's place, and no target is a
       // control this build does not draw. Either way there is no journey.
       if (face === null || !drawnVisibly(face) || target === undefined) return returnHome();
       // A control below the fold of a settings page is scrolled to first, so
@@ -675,7 +678,7 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
         target,
         captionRoom({
           drawn: stage.dataset.caption === "true",
-          speaking: stage.dataset.voice === ERRAND_SPEAKING_VOICE,
+          speaking: lukeSpeakingOnStage(stage),
           size: captionSize,
           max: parsePixels(token(MOTION_TOKEN.CAPTION_MAX)),
         }),

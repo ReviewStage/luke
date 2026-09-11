@@ -20,6 +20,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { DisplayDiagnostic } from "#shared/messages/session";
+import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "../act";
 import { NotchWings } from "../notch-wings";
 import { PANEL_PRESENTATION } from "../panel-state";
@@ -909,15 +910,19 @@ function IntroductionFlight({
     : rows;
   const stagedTally = sessionTally(stagedRows);
   const rowsNow = rowsPretend ? FIXTURE_EPOCH_MS : Date.now();
-  // Whose turn the strip's meter draws, on the app's own vocabulary. The face
-  // yields to the meter while the developer holds the floor — the real wings
-  // own that trade, exactly as they do in the panel.
-  const voiceTurn: WaveformVoice | undefined =
-    voiceStatus === LIVE_STATUS.SPEAKING
-      ? WAVEFORM_VOICE.LUKE
-      : voiceStatus === LIVE_STATUS.LISTENING
-        ? WAVEFORM_VOICE.DEVELOPER
-        : undefined;
+  // Who the strip hears, on the app's own vocabulary. The introduction's call
+  // names one status at a time, so one speaker stands and the real wings
+  // place that speaker's meter exactly as they do in the panel: Luke's beside
+  // his face, the developer's in the marks' place.
+  const speakers: VoiceSpeakers = {
+    listening: voiceStatus === LIVE_STATUS.LISTENING,
+    lukeSpeaking: voiceStatus === LIVE_STATUS.SPEAKING,
+  };
+  const voiceTurn: WaveformVoice | undefined = speakers.lukeSpeaking
+    ? WAVEFORM_VOICE.LUKE
+    : speakers.listening
+      ? WAVEFORM_VOICE.DEVELOPER
+      : undefined;
   const face: { motion?: FaceMotion; repeat: boolean; play: string } = reducedMotion
     ? { repeat: false, play: "still" }
     : beat === INTRODUCTION_BEAT.WAKE
@@ -981,16 +986,18 @@ function IntroductionFlight({
         </div>
       </div>
       {/* The real wings, the moment there is a strip to stand in: the same
-          face, meter, and marks the app draws, trading the face for the meter
-          while the developer holds the floor. At the gate the strip goes
-          deliberately bare, exactly as the app's own signed-out strip does. */}
+          face, meters, and marks the app draws, trading the marks for the
+          meter while the developer holds the floor. At the gate the strip
+          goes deliberately bare, exactly as the app's own signed-out strip
+          does. */}
       {landed ? (
         <NotchWings
           tally={stagedTally}
-          analyser={meterAnalyser}
-          {...(voiceTurn ? { voice: voiceTurn } : undefined)}
+          {...(meterAnalyser && voiceTurn
+            ? { measured: { voice: voiceTurn, analyser: meterAnalyser } }
+            : undefined)}
+          speakers={speakers}
           fixtureSpeaking={false}
-          hasAudioSignal={meterAnalyser !== undefined}
           voiceOpening={beat === INTRODUCTION_BEAT.CONNECT}
           // The introduction runs before any account, so no run of Luke's can
           // be under way behind its strip.

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { runModeFor } from "@sidecar/host";
 import { app, Menu, shell } from "electron";
+import { RUN_PROFILE } from "#shared/messages/app-state";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { registerDesktopIpc } from "./ipc/register-desktop-ipc";
 import { composeDesktop, type DesktopServices } from "./services/compose-desktop";
@@ -70,7 +71,7 @@ const config: DesktopConfig = {
   hostedServiceBaseUrl: ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, ""),
   launch: {
     captureOutput,
-    profile: argumentValue("--profile") ?? "idle",
+    profile: argumentValue("--profile") ?? RUN_PROFILE.IDLE,
     fixtureName,
     startPeeked: process.argv.includes("--peek"),
     startInSlot: process.argv.includes("--slot"),

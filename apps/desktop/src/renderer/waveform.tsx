@@ -25,6 +25,16 @@ export type WaveformVoice = (typeof WAVEFORM_VOICE)[keyof typeof WAVEFORM_VOICE]
 const LEVEL_EASING = 0.35;
 
 /**
+ * Whether the bars follow a voice frame by frame. A fixture meter never does,
+ * whichever speaker it is drawn as: its heights are the static ones the render
+ * set, so a capture is the same frame every time, and a loop easing them
+ * toward a silent level would overwrite exactly what makes it repeatable.
+ */
+export function waveformLive(input: { voice: WaveformVoice | undefined; speaking: boolean }) {
+  return input.voice !== undefined && !input.speaking;
+}
+
+/**
  * The meter draws what it is handed, from one of two sources. The panel hands
  * it the loudness the voice window measured and the main process relayed;
  * the introduction takeover, which holds a session of its own, hands it the
@@ -61,15 +71,16 @@ export function Waveform({
   // the wing and the face both act on — and only the per-frame drawing is
   // withheld.
   const reduced = usePrefersReducedMotion();
-  const live = voice !== undefined;
+  const live = waveformLive({ voice, speaking });
 
   useEffect(() => {
     // Fixture speech is intentionally static so screenshots and recordings are
-    // repeatable. Only a live turn needs animation frames.
+    // repeatable. Only a live voice needs animation frames.
     if (!analyser && (!live || reduced)) {
       // Bars a livelier moment already lifted go back to the stylesheet's rest,
-      // rather than freezing at whatever height the last frame drew.
-      for (const bar of bars.current) bar?.style.removeProperty("transform");
+      // rather than freezing at whatever height the last frame drew. A fixture
+      // keeps the heights the render set: they are the frame.
+      if (!speaking) for (const bar of bars.current) bar?.style.removeProperty("transform");
       return;
     }
     const samples = analyser ? new Uint8Array(analyser.fftSize) : undefined;
@@ -112,7 +123,7 @@ export function Waveform({
       // face is still on screen to be told so.
       if (analyser) report.current?.(false);
     };
-  }, [analyser, live, reduced]);
+  }, [analyser, live, reduced, speaking]);
 
   const isSpeaking = speaking || voiceActive;
 

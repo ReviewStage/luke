@@ -2,31 +2,32 @@ import assert from "node:assert/strict";
 import { BRAIN_ASK_REFUSAL } from "@sidecar/brain/requests";
 import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
+import { RUN_PROFILE } from "#shared/messages/app-state";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
   CLEAR_FAILED_REASON,
-  drawnLevel,
+  fixtureVoice,
   panelVoiceView,
   voiceActiveFor,
   voiceErrorToShow,
   voiceNoticeToShow,
-  waveformVoice,
 } from "./use-voice-view";
 import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice/voice-level-meter";
-import { WAVEFORM_VOICE } from "./waveform";
 
-test("the one meter follows whoever is actually talking, and Luke wins the place from both", () => {
-  assert.equal(waveformVoice({ listening: false, lukeSpeaking: true }), WAVEFORM_VOICE.LUKE);
-  assert.equal(waveformVoice({ listening: true, lukeSpeaking: false }), WAVEFORM_VOICE.DEVELOPER);
-  assert.equal(waveformVoice({ listening: true, lukeSpeaking: true }), WAVEFORM_VOICE.LUKE);
-  assert.equal(waveformVoice({ listening: false, lukeSpeaking: false }), undefined);
-});
+const NOBODY = { listening: false, lukeSpeaking: false };
+const LUKE = { listening: false, lukeSpeaking: true };
+const DEVELOPER = { listening: true, lukeSpeaking: false };
 
-test("the level drawn is the drawn voice's own reading", () => {
-  const levels = { developer: 0.4, luke: 0.9 };
-  assert.equal(drawnLevel(WAVEFORM_VOICE.LUKE, levels), levels.luke);
-  assert.equal(drawnLevel(WAVEFORM_VOICE.DEVELOPER, levels), levels.developer);
-  assert.equal(drawnLevel(undefined, levels), 0);
+test("a capture run stages its speakers from the launch profile alone", () => {
+  assert.deepEqual(fixtureVoice(RUN_PROFILE.SPEAKING), { speakers: LUKE, muted: false });
+  assert.deepEqual(fixtureVoice(RUN_PROFILE.MUTED), { speakers: LUKE, muted: true });
+  assert.deepEqual(fixtureVoice(RUN_PROFILE.DUPLEX), {
+    speakers: { listening: true, lukeSpeaking: true },
+    muted: false,
+  });
+  // The idle run, and a word this build does not know, stage nothing.
+  assert.equal(fixtureVoice(RUN_PROFILE.IDLE), undefined);
+  assert.equal(fixtureVoice("rehearsal"), undefined);
 });
 
 test("a panel that has heard nothing draws an idle voice with neither speaker", () => {
@@ -38,21 +39,21 @@ test("a panel that has heard nothing draws an idle voice with neither speaker", 
   assert.deepEqual(IDLE_VOICE_VIEW.liveConversationEntries, []);
 });
 
-test("a voice failure is drawn on the strip, but never over a live turn or a fixture", () => {
+test("a voice failure is drawn on the strip, but never over a speaker or a fixture", () => {
   const failure = {
     fixtureSpeaking: false,
-    voice: undefined,
+    speakers: NOBODY,
     error: "The voice service refused the call (status 401).",
   };
   assert.equal(voiceErrorToShow(failure), failure.error);
   assert.equal(voiceErrorToShow({ ...failure, error: undefined }), undefined);
   assert.equal(
-    voiceErrorToShow({ ...failure, voice: WAVEFORM_VOICE.LUKE }),
+    voiceErrorToShow({ ...failure, speakers: LUKE }),
     undefined,
     "words being said are the thing to read over words that already failed",
   );
   assert.equal(
-    voiceErrorToShow({ ...failure, voice: WAVEFORM_VOICE.DEVELOPER }),
+    voiceErrorToShow({ ...failure, speakers: DEVELOPER }),
     undefined,
     "the developer's own turn is not the moment to report an old fault",
   );
@@ -63,23 +64,27 @@ test("a voice failure is drawn on the strip, but never over a live turn or a fix
   );
 });
 
-test("a notice yields to Luke's turn alone, because the developer's draws nothing on the strip", () => {
+test("a notice yields to Luke's voice alone, because the developer's draws nothing on the strip", () => {
   const notice = {
     fixtureSpeaking: false,
-    voice: undefined,
+    speakers: NOBODY,
     notice: "The microphone is open. Finish saying it.",
   };
   assert.equal(voiceNoticeToShow(notice), notice.notice);
   assert.equal(voiceNoticeToShow({ ...notice, notice: undefined }), undefined);
   assert.equal(
-    voiceNoticeToShow({ ...notice, voice: WAVEFORM_VOICE.DEVELOPER }),
+    voiceNoticeToShow({ ...notice, speakers: DEVELOPER }),
     notice.notice,
     "the one refusal an open microphone causes is exactly what the strip should answer with",
   );
   assert.equal(
-    voiceNoticeToShow({ ...notice, voice: WAVEFORM_VOICE.LUKE }),
+    voiceNoticeToShow({ ...notice, speakers: LUKE }),
     undefined,
     "Luke's words own the box whether or not the captions draw them",
+  );
+  assert.equal(
+    voiceNoticeToShow({ ...notice, speakers: { listening: true, lukeSpeaking: true } }),
+    undefined,
   );
   assert.equal(voiceNoticeToShow({ ...notice, fixtureSpeaking: true }), undefined);
 });
