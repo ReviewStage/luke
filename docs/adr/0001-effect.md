@@ -312,6 +312,19 @@ delay back, to arm a cancellable fiber a fresh check can still collapse
 mid-wait. It goes once `update-service-host.ts`'s own composer is a `Layer`
 of its own rather than a promise calling these two synchronous methods.
 
+`AppStateStore`'s `snapshot`, `update`, and `touch` in
+`apps/desktop/src/main/app-state.ts` are on the same allowlist: the document
+they read and write is a `SubscriptionRef`, whose own `changes` Stream is what
+`compose-desktop.ts`'s one production subscriber forks over, but every other
+caller in main — the ipc handlers, the window, gateway, and update-service
+wiring — and this file's own tests still hold a synchronous object, so each of
+the three runs its Ref operation through `Effect.runSync` in place, which
+never suspends here because nothing behind a `SubscriptionRef` write is
+asynchronous. `subscribe`, the Set-backed callback face beside them, runs no
+effect of its own and is on no allowlist, but is the same shim wearing a
+smaller face, answering this file's own tests without touching the ref at
+all. P8-07 deletes all four once every caller reads `changes` directly.
+
 `shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
 allowlist: the coordinator's fixed quit order — admissions closed, the
 cancellation and the settling raced against one shared deadline, whatever a
@@ -769,6 +782,7 @@ design decision stated as such:
 | `UpdateService`'s `start`/`stop`/`#armPublishingRetry` over its own `Scope` | P8-03 | once `update-service-host.ts`'s composer is a `Layer` of its own |
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
 | `startConversationMaintenance`'s own `Scope` | P7-05 | P7-10 |
+| `AppStateStore`'s `snapshot`/`update`/`touch` over its own `SubscriptionRef`, and `subscribe` beside them | P8-02 | P8-07 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

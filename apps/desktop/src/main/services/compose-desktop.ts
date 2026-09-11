@@ -5,7 +5,7 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@sidecar/host/effect";
-import { Context, Effect, Layer, Runtime } from "effect";
+import { Context, Effect, Layer, Runtime, Stream } from "effect";
 import { powerMonitor } from "electron";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
@@ -73,18 +73,43 @@ export class DesktopTag extends Context.Tag("@luke/desktop/Desktop")<
  * their own bootstrap.
  */
 const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, HostAssemblyTag> => {
-  const { config, telemetry, native, operator, updates, windows } = services;
+  const { config, state, telemetry, native, operator, updates, windows } = services;
   const { report } = config;
   const channels = Layer.effectDiscard(Effect.sync(() => registerDesktopIpc(services)));
   const machine = layersInOrder([
     serviceLayer(telemetry, report),
     serviceLayer(native, report),
   ]).pipe(Layer.provideMerge(channels));
-  return layersInOrder([
+  // The one place the document becomes a push. Every window reads its state
+  // on one channel, so what a window is told and what `app:state-request`
+  // answers it are the same document read twice, and a window's own write is
+  // not raced against a broadcast: the version it is handed only ever rises.
+  // Forked after the windows service has started, so nothing publishes to a
+  // window that is not yet there to receive it. A push that throws is
+  // reported rather than left to end the fiber: a `Stream.runForEach` that
+  // failed once would never resume, and every later write would then reach
+  // no window for the rest of the session.
+  const stateBroadcast = Layer.scopedDiscard(
+    Effect.forkScoped(
+      Stream.runForEach(state.changes, () =>
+        Effect.catchAllDefect(
+          Effect.sync(() => windows.publishAppState()),
+          (defect) =>
+            Effect.sync(() => {
+              report(
+                `the app-state push to windows failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+              );
+            }),
+        ),
+      ),
+    ),
+  );
+  const throughWindows = layersInOrder([
     serviceLayer(operator, report),
     serviceLayer(updates, report),
     serviceLayer(windows, report),
   ]).pipe(Layer.provideMerge(hostStandingLayer), Layer.provideMerge(machine));
+  return stateBroadcast.pipe(Layer.provideMerge(throughWindows));
 };
 
 /**
@@ -169,14 +194,6 @@ export function composeDesktop(
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
         recycleVoiceWindow: () => windows.recycleVoiceWindow(),
       });
-
-      /**
-       * The one place the document becomes a push. Every window reads its state
-       * on one channel, so what a window is told and what `app:state-request`
-       * answers it are the same document read twice, and a window's own write is
-       * not raced against a broadcast: the version it is handed only ever rises.
-       */
-      state.subscribe(() => windows.publishAppState());
 
       // An action still waiting on a panel is refused before anything stops:
       // the panels are going, so nothing can answer one, and the drain would
