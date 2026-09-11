@@ -71,25 +71,23 @@ const MODULE_SCHEMAS = {
     changesAnswerSchema: readsWire.changesAnswerSchema,
     unreadableRowRefusalSchema: readsWire.unreadableRowRefusalSchema,
   } satisfies RecordedJsonSchemas<typeof readsWire>,
-  "service-wire": {
-    writtenText: serviceWire.writtenText,
-    countedNumber: serviceWire.countedNumber,
-    hostedQuotaSchema: serviceWire.hostedQuotaSchema,
-    hostedErrorSchema: serviceWire.hostedErrorSchema,
-    wireUuidSchema: serviceWire.wireUuidSchema,
-  } satisfies RecordedJsonSchemas<typeof serviceWire>,
   "turn-events-wire": {
     turnEventCursorSchema: turnEventsWire.turnEventCursorSchema,
     turnEventSchema: turnEventsWire.turnEventSchema,
   } satisfies RecordedJsonSchemas<typeof turnEventsWire>,
-  "vault-wire": {
-    vaultKeyStoreAnswerSchema: vaultWire.vaultKeyStoreAnswerSchema,
-    vaultKeysListAnswerSchema: vaultWire.vaultKeysListAnswerSchema,
-    vaultKeyDeleteAnswerSchema: vaultWire.vaultKeyDeleteAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof vaultWire>,
 } as const;
 
-/** Modules that declare their schemas as Effect's own rather than through the builder. */
+/**
+ * The modules that declare their schemas as Effect's own rather than through
+ * the builder. `brain-contract`, `live-contract`, `mint-wire`, `observe-wire`,
+ * and `projects-wire` export the Effect declaration under its historic name
+ * directly, since nothing outside their own golden test reads it through the
+ * facade. `service-wire`, `vault-wire`, `rating-wire`, `reads-wire`, and
+ * `turn-events-wire` keep a `fromEffect` twin under the historic name for the
+ * callers that still hold one, and record the Effect declaration underneath
+ * separately, under its own `<name>Effect` export — both emit the same node
+ * through the same AST, pinned here once rather than under both names.
+ */
 const EFFECT_MODULE_SCHEMAS = {
   "brain-contract": {
     hostedBrainCapabilitiesSchema: brainContract.hostedBrainCapabilitiesSchema,
@@ -115,6 +113,18 @@ const EFFECT_MODULE_SCHEMAS = {
   "projects-wire": {
     hostedProjectsAnswerSchema: projectsWire.hostedProjectsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof projectsWire>,
+  "service-wire": {
+    writtenTextEffect: serviceWire.writtenTextEffect,
+    countedNumberEffect: serviceWire.countedNumberEffect,
+    hostedQuotaSchemaEffect: serviceWire.hostedQuotaSchemaEffect,
+    hostedErrorSchemaEffect: serviceWire.hostedErrorSchemaEffect,
+    wireUuidSchemaEffect: serviceWire.wireUuidSchemaEffect,
+  } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
+  "vault-wire": {
+    vaultKeyStoreAnswerSchemaEffect: vaultWire.vaultKeyStoreAnswerSchemaEffect,
+    vaultKeysListAnswerSchemaEffect: vaultWire.vaultKeysListAnswerSchemaEffect,
+    vaultKeyDeleteAnswerSchemaEffect: vaultWire.vaultKeyDeleteAnswerSchemaEffect,
+  } satisfies RecordedEffectJsonSchemas<typeof vaultWire>,
 } as const;
 
 /**
