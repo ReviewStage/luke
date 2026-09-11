@@ -1,16 +1,11 @@
 import assert from "node:assert/strict";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
+import { pgSchema, text } from "drizzle-orm/pg-core";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { BRAIN_TURN_TRIGGER, WORKSPACE_FILE } from "../server/core";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  prompts,
-  toolSets,
-  turns,
-} from "../server/db/storage-schema";
+import { CONVERSATION_KIND, conversations, toolSets, turns } from "../server/db/storage-schema";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_TURN,
@@ -32,10 +27,11 @@ import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
- * What a turn ran under, on its row: the prompt the session composed and the
- * tool set the turn was offered, each stored once by content and named by
- * hash, through the same host functions the eve project's authored files
- * call, over the real migrations on PGlite. The interesting case is the
+ * What a turn ran under, on its row: the hash of the prompt the session
+ * composed, which is all the record keeps of the prompt, and the tool set the
+ * turn was offered, stored once by content and named by hash, through the
+ * same host functions the eve project's authored files call, over the real
+ * migrations on PGlite. The interesting case is the
  * second: a workspace file edited between two sessions yields a new hash on
  * the next session's first turn, which is what fails if the hash covers
  * something that should not vary or misses something that should. Synthetic
@@ -67,11 +63,12 @@ const seams: BrainHostSeams = {
   writer: async () => writer,
   userInfo: async () => undefined,
   ownership: {
-    sessionOwner: (sessionId) => runtimeSessionOwner(database.db, sessionId),
+    sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
     ownsConversation: (userId, conversationId) =>
-      conversationOwnedBy(database.db, userId, conversationId),
+      database.run(conversationOwnedBy(userId, conversationId)),
   },
   openAi: () => undefined,
+  deploymentSecret: () => undefined,
   scriptedModel: () => true,
   spend: unreached("spend"),
   vaultRows: async () => [],
@@ -198,15 +195,32 @@ async function turnRows(target: ConversationTarget) {
     .orderBy(asc(turns.id));
 }
 
-async function promptRows(hash: string) {
-  return database.db.select().from(prompts).where(eq(prompts.hash, hash));
+const PROMPTS_TABLE = "prompts";
+
+/** Postgres's own catalogue, read for the one table that must not stand. */
+const informationSchemaTables = pgSchema("information_schema").table("tables", {
+  tableSchema: text("table_schema").notNull(),
+  tableName: text("table_name").notNull(),
+});
+
+async function tablesNamed(name: string): Promise<readonly string[]> {
+  const rows = await database.db
+    .select({ name: informationSchemaTables.tableName })
+    .from(informationSchemaTables)
+    .where(
+      and(
+        eq(informationSchemaTables.tableSchema, "public"),
+        eq(informationSchemaTables.tableName, name),
+      ),
+    );
+  return rows.map((row) => row.name);
 }
 
 async function toolSetRows(hash: string) {
   return database.db.select().from(toolSets).where(eq(toolSets.hash, hash));
 }
 
-test("two sessions composed over unchanged workspace rows share one prompt row, and the row holds the prompt as sent", async () => {
+test("two sessions composed over unchanged workspace rows carry one prompt hash, the hash of the prompt as sent, and the prompt is stored nowhere", async () => {
   const host = brainHost(seams);
   const target = await ownedConversation();
   const first = await startSession(host, target, BRAIN_HOST_TURN.TYPED);
@@ -217,12 +231,10 @@ test("two sessions composed over unchanged workspace rows share one prompt row, 
   assert.equal(secondPrompt.hash, firstPrompt.hash);
   assert.equal(secondPrompt.text, firstPrompt.text);
   assert.equal(firstPrompt.hash, promptHashOf(firstPrompt.text));
-  const rows = await promptRows(firstPrompt.hash);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.text, firstPrompt.text);
+  assert.deepEqual(await tablesNamed(PROMPTS_TABLE), []);
 });
 
-test("a workspace file edited between two sessions yields a new hash and a second prompt row, the first still standing", async () => {
+test("a workspace file edited between two sessions yields a new hash", async () => {
   const host = brainHost(seams);
   const target = await ownedConversation();
   const before = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
@@ -237,11 +249,9 @@ test("a workspace file edited between two sessions yields a new hash and a secon
 
   assert.notEqual(after.hash, before.hash);
   assert.notEqual(after.text, before.text);
-  assert.equal((await promptRows(before.hash)).length, 1);
-  assert.equal((await promptRows(after.hash)).length, 1);
 });
 
-test("two accounts over the same seeded rows compose one prompt and share its row", async () => {
+test("two accounts over the same seeded rows compose one prompt hash", async () => {
   const host = brainHost(seams);
   const one = await composePrompt(
     host,
@@ -253,7 +263,6 @@ test("two accounts over the same seeded rows compose one prompt and share its ro
   );
 
   assert.equal(other.hash, one.hash);
-  assert.equal((await promptRows(one.hash)).length, 1);
 });
 
 test("two turns of one session record the session's prompt hash and one tool set, hashed from the declarations the tools resolver offers", async () => {

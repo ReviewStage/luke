@@ -14,7 +14,7 @@ import {
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import { askRecord } from "../store/asks.js";
-import type { ConversationTarget } from "../store/index.js";
+import { type ConversationTarget, promptHashOf } from "../store/index.js";
 import { offerBriefing } from "./announce.js";
 import { turnKindOf } from "./auth.js";
 import {
@@ -119,7 +119,7 @@ export interface BrainHost {
   turnKindOf(auth: SessionAuth): HostedTurnKind | undefined;
   /** The turn eve just started, keyed as the store keys it; nothing for a request that named no kind. */
   turnOf(auth: SessionAuth, sessionId: string, eveTurnId: string): HostedTurn | undefined;
-  /** The prompt a session runs under, composed from the workspace rows under the hosted policy and recorded once by its hash. */
+  /** The prompt a session runs under, composed from the workspace rows under the hosted policy, with the hash its turns are recorded under; the text itself is stored nowhere. */
   prompt(admitted: AdmittedConversation, trigger: BrainTurnTrigger): Promise<HostedSessionPrompt>;
   /** The standing context one turn opens with: roster, projects, facts, and the recent exchange, as data. */
   standingContext(admitted: AdmittedConversation): Promise<string>;
@@ -244,8 +244,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         policy: hostedTurnPolicy(trigger),
         ...(modelId !== undefined ? { model: modelId } : undefined),
       });
-      const hash = await store.prompts.record(built.text, new Date(seams.now()));
-      return { text: built.text, hash };
+      return { text: built.text, hash: promptHashOf(built.text) };
     },
 
     async standingContext(admitted) {

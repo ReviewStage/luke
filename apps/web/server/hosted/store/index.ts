@@ -1,7 +1,7 @@
 import type { ToolSet } from "ai";
 import { Effect, Option } from "effect";
 import type { SessionIdentity } from "../../core.js";
-import { type OfferedToolSchema, recordPrompt, recordToolSet } from "./content-addressed.js";
+import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
@@ -136,15 +136,10 @@ export interface HostedStore {
     ): Promise<readonly StoredFact[]>;
   };
   /**
-   * What a turn ran under, content-addressed: a prompt or a tool set is
-   * written once under the hash of what the model was offered, and the hash
-   * is what a turn row names, so a second turn under the same prompt finds
-   * its row standing and a changed workspace file yields a new one.
+   * The tool set a turn was offered, written once under the hash of what the
+   * model saw, which is what a turn row names. The prompt has no table: the
+   * turn row carries its hash and nothing else of it is kept.
    */
-  prompts: {
-    /** Writes the prompt's text where no row stands for its hash; answers the hash. */
-    record(text: string, now: Date): Promise<string>;
-  };
   toolSets: {
     /** Writes the offered declarations where no row stands for their hash; answers the hash. */
     record(schemas: readonly OfferedToolSchema[], now: Date): Promise<string>;
@@ -220,9 +215,6 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
     facts: {
       list: (userId) => run(listFacts(sealFor(userId), userId)),
       replace: (userId, facts, now) => run(replaceFacts(sealFor(userId), userId, facts, now)),
-    },
-    prompts: {
-      record: (text, now) => recordPrompt(db, text, now),
     },
     toolSets: {
       record: (schemas, now) => recordToolSet(db, schemas, now),

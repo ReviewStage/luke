@@ -787,9 +787,12 @@ is left exactly as it was. Ids, keys, sequences, instants, states, and fixed
 vocabulary words stand clear so they can be indexed.
 
 The conversation tables under `server/db/storage-schema.ts` are
-`conversations`, `messages`, `turns`, `events`, `prompts`, `tool_sets`, and
+`conversations`, `messages`, `turns`, `events`, `tool_sets`, and
 `provider_cursors`, the shape `plan/storage-plan.md` on the
-`orchestration/storage-plan` branch settles on. A conversation row names its
+`orchestration/storage-plan` branch settles on, less the `prompts` table it
+drew: a turn keeps the composed prompt's hash and nothing else of it, because
+the prompt embeds the developer's notebook and nothing replays it, while a
+tool set is the build's own and is kept whole under its hash. A conversation row names its
 kind (main, observed, child, or thread), the provider session it observes,
 the parent and spawning message a child came from, the runtime's own session
 id, its soft-delete instant, and the two counters that number its messages

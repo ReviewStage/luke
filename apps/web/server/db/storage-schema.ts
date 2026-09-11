@@ -168,7 +168,12 @@ export const turns = pgTable(
     status: text("status").$type<TurnStatus>().notNull(),
     model: text("model"),
     reasoningEffort: text("reasoning_effort"),
-    /** The content address of the prompt the turn ran under: the one its session composed at its start, a `prompts` row. */
+    /**
+     * A content address for the composed prompt the turn ran under, the one
+     * its session composed at its start; the prompt's own text is not stored,
+     * because it embeds the developer's notebook and nothing replays it, so
+     * there is no table behind this column.
+     */
     promptHash: text("prompt_hash"),
     /** The content address of the tool set the turn was offered, a `tool_sets` row. */
     toolSetHash: text("tool_set_hash"),
@@ -271,17 +276,12 @@ export const events = pgTable(
 );
 
 /**
- * The prompts turns ran under, content-addressed: the hash of the text is
- * the key, so the same prompt written by a thousand turns is one row, which
- * a turn's `prompt_hash` names.
+ * The tool sets turns were offered, content-addressed: the schemas as the
+ * model saw them, keyed by their hash, one row for every account under one
+ * catalog. The prompt a turn ran under has no table beside this one: the
+ * prompt is the developer's words, so the turn keeps only its fingerprint,
+ * while the tool set is the build's own, so it is kept whole.
  */
-export const prompts = pgTable("prompts", {
-  hash: text("hash").primaryKey(),
-  text: text("text").notNull(),
-  createdAt: instant("created_at").notNull().defaultNow(),
-});
-
-/** The tool sets turns were offered, content-addressed like prompts: the schemas as the model saw them, keyed by their hash. */
 export const toolSets = pgTable("tool_sets", {
   hash: text("hash").primaryKey(),
   schemas: jsonb("schemas").notNull(),
