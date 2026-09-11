@@ -103,13 +103,15 @@ export const ASK_UNRECORDED_NOTE =
 
 /**
  * What the stop key says to the model. Muting the microphone never stops the
- * output, as the live guide notes, so the stop key alone carries the guide's
- * corrective instruction, through `voice.stopSpeaking`: stop means stop. A
- * mute carries none of it, because under hold-to-talk the talk key's release
+ * output, as the live guide notes, and the live protocol has no cancel event,
+ * so the stop key alone carries the delegation guide's own steering shape:
+ * stop this, then wait. It says nothing about how long to wait, because an
+ * instruction append is standing text and a clause about the developer
+ * speaking again would hold every later result until they did. A mute
+ * carries none of it, because under hold-to-talk the talk key's release
  * mutes while Luke is routinely still answering.
  */
-export const STOP_SPEAKING_INSTRUCTION =
-  "Stop speaking now and wait quietly until the developer speaks again.";
+export const STOP_SPEAKING_INSTRUCTION = "Stop speaking now, then wait for the developer.";
 
 /** A briefing as the brain delivered it; the rest of the delivery rides along for a held re-decision. */
 export interface BriefingDelivery {
@@ -418,8 +420,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * The stop key: the model is told to stop speaking and wait, once, through
-   * the standing session's own queue. Answers whether a session was there to
+   * The stop key: the model is told to stop and then wait, once, through the
+   * standing session's own queue. Answers whether a session was there to
    * tell; the microphone is the peer's to mute and is not touched here.
    */
   stopSpeaking(): boolean {

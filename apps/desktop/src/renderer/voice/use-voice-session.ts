@@ -235,8 +235,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     [orchestrator],
   );
   // The stop key asks for quiet from any app, exactly as Escape asks for it
-  // from the panel: the microphone closes, and the host tells the model to
-  // stop speaking; a press over no session simply does nothing.
+  // from the panel: the microphone closes, and where Luke is speaking the
+  // host tells the model to stop; a press over no session simply does
+  // nothing.
   useEffect(
     () => window.sidecar.onStopHotkeyPress(() => void orchestrator.stopSpeaking()),
     [orchestrator],

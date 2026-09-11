@@ -128,7 +128,9 @@ beats. A briefing or reply with no session standing makes the service say it
 wants one, and the voice window opens it muted. The one instruction the
 service sends on the developer's behalf is the stop key's, through
 `voice.stopSpeaking`: one `session.instructions.append` telling the model to
-stop and wait, into the standing session's own queue. A muted microphone is
+stop and then wait, into the standing session's own queue, and asked for only
+while Luke is speaking, since the append is standing text a silent model would
+read as a rule for its next answer. A muted microphone is
 read as nothing but `micLive = false`; under hold-to-talk the talk key's
 release mutes while Luke is still answering, so no recency of his output
 turns a mute into a stop. Nothing else in the host

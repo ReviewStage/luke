@@ -84,8 +84,9 @@ acts; it constructs no call of its own.
 The policy behind that hook is not the renderer's at all. Whether a session
 stands, what the talk key and the stop key do to its microphone — the key is
 held to talk: `beginTalk` on the press opens a session if none stands and
-unmutes, `endTalk` on the release only mutes, `stopSpeaking` first asks the
-host over the bridge to tell the model to stop and then mutes the same way,
+unmutes, `endTalk` on the release only mutes, `stopSpeaking` mutes the same way and
+asks the host over the bridge to tell the model to stop first only while it is
+speaking,
 and a release or stop during the press's opening leaves the session muted —
 how the host's `voiceLiveSession.changed` is obeyed — wanted opens a session
 with no microphone, closing hangs up, a session lost while the key is still

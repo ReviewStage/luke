@@ -237,7 +237,7 @@ test("a press during a session opened for Luke's speech unmutes it once started,
   assert.equal(call.mutes, 1);
 });
 
-test("the stop key tells the host to stop before it mutes a standing session once, does nothing against none, and ends the hold so the release mutes nothing more", async () => {
+test("the stop key mutes a standing session once, does nothing against none, and ends the hold so the release mutes nothing more", async () => {
   const f = fixture();
   assert.equal(await f.orchestrator.stopSpeaking(), false);
   assert.deepEqual(f.stops, []);
@@ -245,11 +245,26 @@ test("the stop key tells the host to stop before it mutes a standing session onc
   f.latest()?.started();
   await pressed;
   assert.equal(await f.orchestrator.stopSpeaking(), true);
-  assert.deepEqual(f.stops, [0]);
   assert.equal(f.latest()?.mutes, 1);
   await f.orchestrator.endTalk();
-  assert.deepEqual(f.stops, [0]);
   assert.equal(f.latest()?.mutes, 1);
+});
+
+test("the stop key tells the host to stop only while Luke is speaking, and before it mutes", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  call.started();
+  await pressed;
+  assert.equal(call.status, LIVE_STATUS.LISTENING);
+  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.deepEqual(f.stops, []);
+  assert.equal(call.mutes, 1);
+  call.settle(LIVE_STATUS.SPEAKING);
+  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.deepEqual(f.stops, [1]);
+  assert.equal(call.mutes, 2);
 });
 
 test("the talk key's release mutes and never tells the host to stop", async () => {

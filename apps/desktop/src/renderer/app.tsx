@@ -749,16 +749,17 @@ export function App(): React.JSX.Element {
       if (event.key !== "Escape") return;
       // Muting an open microphone comes before any of it. Closing the panel
       // or a sheet mid-sentence would strand the microphone open, and the
-      // same stop asks Luke for quiet mid-sentence: a reply being spoken is
+      // same press asks Luke for quiet mid-sentence: a reply being spoken is
       // the most open thing there is, and Escape ends it without opening a
-      // turn in its place. The session that knows whether a reply is playing
-      // lives in the voice window, so the panel predicts from the snapshot it
-      // was last handed. That snapshot can be one frame stale — a reply that
-      // ended, or began, since the last report — and the cost is the press
-      // doing what it would have done a frame earlier: a stop asked of a
-      // reply just over is a no-op there, and a fall-through past a reply
-      // just begun closes the layer below instead. Neither is worth a round
-      // trip on every Escape.
+      // turn in its place. Which of the two the press does is the
+      // orchestrator's own reading of the call it holds — a listening call is
+      // muted and nothing is said to the model — so the panel asks for both
+      // and predicts only whether the key is claimed at all. The snapshot it
+      // predicts from can be one frame stale — a reply that ended, or began,
+      // since the last report — and the cost is the press doing what it would
+      // have done a frame earlier: a fall-through past a reply just begun
+      // closes the layer below instead. Not worth a round trip on every
+      // Escape.
       if (voiceView.voiceStatus === LIVE_STATUS.LISTENING || speaking) {
         stopSpeaking();
         return;

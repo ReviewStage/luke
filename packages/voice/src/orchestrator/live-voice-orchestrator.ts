@@ -49,7 +49,7 @@ export interface LiveVoiceBridge {
   requestMicrophone(): Promise<boolean>;
   /** The neutral note said when the hosted service's ceiling refuses a session. */
   hostedUnavailableNote(): Promise<string | undefined>;
-  /** Tells the host to stop Luke speaking, answering whether a session stood to tell; the stop key's ask alone. */
+  /** Tells the host to stop Luke speaking, answering whether a session stood to tell; the stop key's ask alone, and only while he speaks. */
   stopSpeaking(): Promise<boolean>;
 }
 
@@ -214,11 +214,14 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The stop key, and the panel's Escape: the host tells the model to stop,
-   * and then the microphone closes. The stop goes first so a press
-   * mid-sentence reaches the model as soon as it can, and the mute lands even
-   * where the host could not be reached. The talk key's release is `endTalk`
-   * and never carries the stop: under hold-to-talk it mutes while Luke is
+   * The stop key, and the panel's Escape: the microphone closes, and the host
+   * tells the model to stop first where Luke is actually speaking. The stop
+   * goes first so a press mid-sentence reaches the model as soon as it can,
+   * and the mute lands even where the host could not be reached. A press
+   * against a call that is merely listening sends none: the instruction is
+   * standing text in the session, so telling a silent model to stop steers
+   * the answer it has not given yet. The talk key's release is `endTalk` and
+   * never carries the stop either: under hold-to-talk it mutes while Luke is
    * routinely still answering. Pressed while a press's session is still
    * opening, it cancels that press's unmute, so the session opens muted.
    */
@@ -229,7 +232,7 @@ export class LiveVoiceOrchestrator {
     if (this.#opening) return true;
     const call = this.#call;
     if (!call?.standing) return false;
-    await this.#bridge.stopSpeaking();
+    if (call.status === LIVE_STATUS.SPEAKING) await this.#bridge.stopSpeaking();
     await this.#run(call.mute());
     return true;
   }
