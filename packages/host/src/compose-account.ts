@@ -10,7 +10,11 @@ import {
   type AccountSnapshot,
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
-import { AgentTraceWriter, tracedModelAdapter } from "@sidecar/devtrace";
+import {
+  AgentTraceWriter,
+  agentTraceDirectoryFromEnvironment,
+  tracedModelAdapter,
+} from "@sidecar/devtrace";
 import {
   carried,
   GATEWAY_EVENT,
@@ -113,7 +117,9 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
    * tap and constructs no writer.
    */
   const agentTraceDirectory =
-    options.packaged || !runMode.sendsNetwork ? undefined : options.environment.LUKE_TRACE_DIR;
+    options.packaged || !runMode.sendsNetwork
+      ? undefined
+      : agentTraceDirectoryFromEnvironment(options.environment);
   const agentTrace = agentTraceDirectory
     ? new AgentTraceWriter({ directory: agentTraceDirectory })
     : undefined;

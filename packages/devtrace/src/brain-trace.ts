@@ -5,6 +5,7 @@ import {
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import { text, type WireRecord } from "@sidecar/wire";
+import { Cause, Effect, Exit, Option } from "effect";
 import type { BrainRequestTraceRecord } from "./trace-writer.js";
 
 interface AnsweredSummary {
@@ -46,6 +47,16 @@ function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>
  * the adapter must not be able to break it. The input reaches the record as
  * its item count and JSON size alone; the other operations pass through
  * untouched.
+ *
+ * The request carries the same about-fields as a span's attributes, through
+ * `Effect.withSpan`, so a trace viewer with tracing wired in sees the same
+ * counts the JSONL record keeps.
+ *
+ * @deprecated The span is run to the promise `ModelAdapter#respond` answers
+ * here, a strangler shim on the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md`: the turn that calls this adapter still holds a
+ * promise, not a fiber. It goes with `BrainTransport#send`'s `runCall` once
+ * P5-14 moves a turn onto the brain's own runtime.
  */
 export function tracedModelAdapter(
   adapter: ModelAdapter,
@@ -73,10 +84,20 @@ export function tracedModelAdapter(
         // is a hash of a conversation's key and belongs in no file.
         ...(options.promptCacheKey !== undefined ? { promptCacheKeyed: true } : undefined),
       };
+      const traced = Effect.tryPromise({
+        try: () => adapter.respond(input, options),
+        catch: (error) => error,
+      }).pipe(Effect.withSpan("brain.request", { attributes: about }));
+      const exit = await Effect.runPromiseExit(traced);
       let answer: ModelResponse;
-      try {
-        answer = await adapter.respond(input, options);
-      } catch (error) {
+      if (Exit.isSuccess(exit)) {
+        answer = exit.value;
+      } else {
+        // The original rejection, never the span's own `FiberFailure` wrapper:
+        // a caller above this adapter may still tell one thrown value from
+        // another, and wrapping would answer that question with the wrong one.
+        const failure = Cause.failureOption(exit.cause);
+        const error = Option.isSome(failure) ? failure.value : Cause.squash(exit.cause);
         recordQuietly({
           ...about,
           outcome: MODEL_RESPONSE_OUTCOME.FAILED,
