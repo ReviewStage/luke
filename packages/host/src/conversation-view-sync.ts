@@ -6,6 +6,7 @@ import type {
   ConversationReadTurnGroup,
 } from "@sidecar/hosted";
 import {
+  CONVERSATION_VIEW_SOURCE,
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewMessage,
   type ConversationViewSnapshot,
@@ -27,9 +28,11 @@ import {
  * and nothing is appended blindly: a group is merged by its turn, a message is
  * replaced at its sequence (a row still being written is answered on every
  * read until it finishes, so the copy held is always the latest), a turn is
- * replaced by its id whenever a stamp on it moves, and the rows of a
- * conversation an answer no longer lists are dropped, which is how a Clear
- * made on any Mac reaches this one's screen within a poll. Every device that
+ * replaced by its id whenever a stamp on it moves, the rows of a
+ * conversation an answer no longer lists are dropped, and an observed
+ * conversation's rows from before the current main opened are dropped with
+ * them, which is how a Clear made on any Mac reaches this one's screen
+ * within a poll. Every device that
  * reads to the end holds the same rows in the same order, because the order
  * is the view's own — earliest message, then the turn's queue instant, then
  * the id — and never the order of arrival.
@@ -74,6 +77,14 @@ interface HeldSpeechEvent {
 interface HeldTurn {
   readonly conversationId: string;
   readonly turn: ConversationViewTurn;
+}
+
+/** Where the current main opened, as the answer's main entry carries it; nothing where no main is listed. */
+function mainOpenedAt(conversations: readonly ConversationReadConversation[]): number | undefined {
+  for (const conversation of conversations) {
+    if (conversation.kind === CONVERSATION_VIEW_SOURCE.MAIN) return conversation.openedAt;
+  }
+  return undefined;
 }
 
 function compareCodePoints(a: string, b: string): number {
@@ -132,6 +143,8 @@ export class ConversationViewSync {
   applyMessages(page: ReadMessagesPage): void {
     const standing = new Set(page.conversations.map((conversation) => conversation.id));
     let moved = this.#dropOutside(standing);
+    const openedAt = mainOpenedAt(page.conversations);
+    if (openedAt !== undefined && this.#dropObservedBefore(openedAt)) moved = true;
     for (const group of page.groups) {
       const held = this.#groups.get(group.turnId) ?? {
         conversationId: group.conversationId,
@@ -279,6 +292,25 @@ export class ConversationViewSync {
       return { ...tool, unspoken };
     });
     return changed ? { ...message, tools } : message;
+  }
+
+  /**
+   * The view's window starts where the current main opened. An observed
+   * conversation's crossing rows from before that instant belonged to the
+   * main a Clear stamped, and the service no longer sends them; a device that
+   * drew them before the Clear lets them go here, even though the
+   * conversation they came from still stands and keeps its own context.
+   */
+  #dropObservedBefore(openedAt: number): boolean {
+    let dropped = false;
+    for (const [turnId, group] of this.#groups) {
+      if (group.source.kind !== CONVERSATION_VIEW_SOURCE.OBSERVED) continue;
+      const latest = Math.max(...[...group.messages.values()].map((message) => message.createdAt));
+      if (latest >= openedAt) continue;
+      this.#groups.delete(turnId);
+      dropped = true;
+    }
+    return dropped;
   }
 
   #dropOutside(standing: ReadonlySet<string>): boolean {

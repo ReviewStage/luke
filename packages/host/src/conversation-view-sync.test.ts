@@ -104,16 +104,20 @@ function mainGroup(
   };
 }
 
+/** When the mains of these tests opened: well before any row they hold, so nothing is windowed out unless a test says so. */
+const MAIN_OPENED_AT = NOW - 60 * 60_000;
+
 function page(
   groups: readonly ReadTurnGroup[],
   next = "cursor",
   standing = [MAIN],
+  openedAt = MAIN_OPENED_AT,
 ): ReadMessagesPage {
   return {
     conversations: standing.map((id) =>
       id === OBSERVED
         ? { id, kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION }
-        : { id, kind: CONVERSATION_VIEW_SOURCE.MAIN },
+        : { id, kind: CONVERSATION_VIEW_SOURCE.MAIN, openedAt },
     ),
     groups,
     next,
@@ -352,4 +356,38 @@ test("an unreadable row is held on the snapshot until a page reads, and a reset 
   sync.reset();
   assert.deepEqual(sync.snapshot(), { groups: [], settled: false });
   assert.deepEqual(sync.cursors(), {});
+});
+
+test("a Clear that opened a new main takes the observed crossing rows from before it off the screen, and leaves the ones after it", () => {
+  const sync = new ConversationViewSync();
+  const observedGroup = (id: string, at: number): ReadTurnGroup => ({
+    turnId: id,
+    conversationId: OBSERVED,
+    source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
+    messages: [announcement(Number(id.slice(-2)), Number(id.slice(-2)), at, false)],
+  });
+  sync.applyMessages(
+    page(
+      [mainGroup(turnId(1), [ask(1, 1, "before", NOW)]), observedGroup(turnId(11), NOW + 500)],
+      "c1",
+      [MAIN, OBSERVED],
+    ),
+  );
+  assert.equal(sync.snapshot().groups.length, 2);
+  // The Clear: a new main opened after both rows, the observed conversation still standing.
+  const clearedAt = NOW + 10_000;
+  sync.applyMessages(page([], "c2", [NEW_MAIN, OBSERVED], clearedAt));
+  assert.deepEqual(sync.snapshot().groups, []);
+  // A crossing row written after the new main opened is the new main's window's, and stays.
+  sync.applyMessages(
+    page([observedGroup(turnId(12), clearedAt + 1)], "c3", [NEW_MAIN, OBSERVED], clearedAt),
+  );
+  assert.deepEqual(
+    sync.snapshot().groups.map((group) => group.turnId),
+    [turnId(12)],
+  );
+  // Reading the same window again drops nothing further.
+  const settled = sync.revision;
+  sync.applyMessages(page([], "c4", [NEW_MAIN, OBSERVED], clearedAt));
+  assert.equal(sync.revision, settled);
 });

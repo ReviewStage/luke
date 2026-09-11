@@ -43,7 +43,7 @@ const EMPTY_TURNS: BrainTurnsAnswer = { turns: [], hasMore: false };
 
 function messagesAnswer(text: string, next = "messages-head"): ConversationMessagesAnswer {
   return {
-    conversations: [{ id: MAIN, kind: CONVERSATION_VIEW_SOURCE.MAIN }],
+    conversations: [{ id: MAIN, kind: CONVERSATION_VIEW_SOURCE.MAIN, openedAt: NOW - 60_000 }],
     groups: [
       {
         turnId: TURN,
@@ -226,7 +226,11 @@ test("Clear carries the service's soft delete and reads again at once; a Clear t
   await composer.loop.refresh();
   client.messagesAnswer = ok({
     conversations: [
-      { id: "3c000000-0000-4000-8000-000000000009", kind: CONVERSATION_VIEW_SOURCE.MAIN },
+      {
+        id: "3c000000-0000-4000-8000-000000000009",
+        kind: CONVERSATION_VIEW_SOURCE.MAIN,
+        openedAt: NOW + 1,
+      },
     ],
     groups: [],
     next: "after-clear",
@@ -255,7 +259,11 @@ test("a Clear answers only after a poll that began after it has published, even 
   // The Clear lands while that poll is out, and the service now lists a new, empty main.
   const emptied = ok({
     conversations: [
-      { id: "3c000000-0000-4000-8000-000000000009", kind: CONVERSATION_VIEW_SOURCE.MAIN },
+      {
+        id: "3c000000-0000-4000-8000-000000000009",
+        kind: CONVERSATION_VIEW_SOURCE.MAIN,
+        openedAt: NOW + 1,
+      },
     ],
     groups: [],
     next: "after-clear",
