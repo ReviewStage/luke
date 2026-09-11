@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { WebContents } from "electron";
+import { test } from "vitest";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActKind } from "#shared/messages/acts";
 import { ONE_ACT_OF_EACH_KIND } from "../testing/acts";
 import { ActRefused, type ActRows, type ActSender, createActRouter } from "./act-router";

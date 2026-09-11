@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
+import { test } from "vitest";
 import { captionBlockSize, captionSegments, captionStackOverflow } from "./caption-layout";
 import { VOLUME_HINT_BAND_HEIGHT } from "./volume-hint";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
-import test from "node:test";
+import { test } from "vitest";
 import {
   AD_HOC_APP_NAME,
   buildCarriesDeveloperIdSigning,

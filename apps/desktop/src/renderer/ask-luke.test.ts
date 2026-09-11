@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { PRODUCT_ASK_OUTCOME } from "@sidecar/analytics";
 import { BRAIN_ASK_REFUSAL } from "@sidecar/brain/requests";
+import { test } from "vitest";
 import { composerAfterAsk } from "./ask-luke";
 import { ASK_UNSENT_REASON } from "./use-voice-view";
 

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   normalizeSession,
@@ -11,6 +10,7 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { test } from "vitest";
 import { observedSessions, type SessionView, workspaceTrayActions } from "./session-model";
 import { type SessionWriteHandlers, WorkspaceTrayActs } from "./session-row-view";
 

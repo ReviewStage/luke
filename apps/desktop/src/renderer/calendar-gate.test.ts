@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { test } from "vitest";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 
 function render(control: Partial<CalendarGateControl>, review?: ReactNode): string {

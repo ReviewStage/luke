@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { PRODUCT_EVENT } from "@sidecar/analytics";
 import { INTRODUCTION_SEED_BOUNDS, LIVE_SESSION_OUTCOME, SEED_ROLE } from "@sidecar/live";
 import type { IntroductionSessionSource, LiveSessionCreateInput } from "@sidecar/voice";
+import { test } from "vitest";
 import { IntroductionSession } from "./introduction-session";
 
 const SDP = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";

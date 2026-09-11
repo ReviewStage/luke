@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { WebContents } from "electron";
+import { test } from "vitest";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { appSettingsWire } from "../../testing/spoken-setting-bridge";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";

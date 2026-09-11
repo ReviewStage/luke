@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   HOSTED_AGENT_ID,
@@ -16,6 +15,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
+import { test } from "vitest";
 import {
   actsOnWorkspace,
   arrangeSessions,

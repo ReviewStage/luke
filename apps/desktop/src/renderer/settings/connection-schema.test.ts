@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
@@ -7,6 +6,7 @@ import {
 } from "@sidecar/session";
 import { settingsView } from "@sidecar/settings/testing";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
+import { test } from "vitest";
 import {
   connectionInput,
   connectionVisibility,

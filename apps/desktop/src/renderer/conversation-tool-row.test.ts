@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACTION_KIND, ACTION_OUTPUT_STATUS, type SessionActionKind } from "@sidecar/actions";
 import {
   isStoredToolPart,
@@ -8,6 +7,7 @@ import {
   type StoredToolPart,
   TOOL_PART_STATE,
 } from "@sidecar/session";
+import { test } from "vitest";
 import {
   TOOL_ROW_STATUS,
   type ToolRow,

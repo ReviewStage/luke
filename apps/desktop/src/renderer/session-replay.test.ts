@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import { test } from "vitest";
 import type { SessionReplayBootstrap } from "#shared/messages/session";
 import {
   POSTHOG_ASSETS_HOST,

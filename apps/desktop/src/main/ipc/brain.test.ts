@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
@@ -9,6 +8,7 @@ import type { BrainAskSubmission } from "@sidecar/brain/requests-wire";
 import { type GatewayOperator, REJECTED_SUBMISSION } from "@sidecar/host";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import type { WebContents } from "electron";
+import { test } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { brainActRows } from "./brain";

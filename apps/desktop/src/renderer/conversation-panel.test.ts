@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { test } from "vitest";
 import {
   CONVERSATION_ENTRY_SPEAKER,
   ConversationPanel,

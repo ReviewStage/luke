@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { maximumTypedAskLength } from "@sidecar/session";
 import type { WireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import { ONE_ACT_OF_EACH_KIND } from "../../testing/acts";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type ActKind, isActOutcome, parsedAct } from "./acts";
 

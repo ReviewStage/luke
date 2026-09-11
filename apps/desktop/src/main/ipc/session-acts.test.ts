@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { SessionRowActions } from "@sidecar/host";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { WebContents } from "electron";
+import { test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { ActRefused, type ActSender, createActRouter } from "../act-router";
 import { ROW_WRITE_REFUSAL, sessionActRows, WRITE_REFUSAL } from "./session-acts";

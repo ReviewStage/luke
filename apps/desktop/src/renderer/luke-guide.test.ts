@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -16,6 +15,7 @@ import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
+import { test } from "vitest";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { appSettingsWire, spokenSettingBridge } from "#testing/spoken-setting-bridge";

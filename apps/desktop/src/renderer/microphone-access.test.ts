@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@sidecar/live";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
+import { test } from "vitest";
 import {
   HOSTED_VOICE_UNAVAILABLE_NOTE,
   hostedVoiceUnavailableNote,

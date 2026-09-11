@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_TOOL_KIND,
@@ -12,6 +11,7 @@ import {
 import { CONVERSATION_EVENT_KIND, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { test } from "vitest";
 import { TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
 import {
   announcedWords,

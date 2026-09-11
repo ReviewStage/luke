@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   FACE_MOTION,
   FACE_MOTION_CYCLE_MS,
   FACE_MOTION_PARTS,
   type FaceMotion,
 } from "@sidecar/surface";
+import { test } from "vitest";
 import {
   asidePool,
   chooseAside,

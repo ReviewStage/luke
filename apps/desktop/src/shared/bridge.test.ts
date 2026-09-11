@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { ONE_ACT_OF_EACH_KIND } from "../testing/acts";
 import { BRIDGE, bridgeEntries, channels } from "./bridge";
 import { ACT_KIND, type ActKind } from "./messages/acts";
