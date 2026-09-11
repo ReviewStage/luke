@@ -1,2 +1,0 @@
-{"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Please fix the flaky check."}]}}
-{"type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "Parting words."}}

@@ -1,18 +1,9 @@
 /**
- * When the one-time spoken introduction runs, how far back a session it
- * detects may have moved, and how long its handoff waits. The decisions are
- * pure so they can be tested without Electron; the takeover is a fullscreen
- * mode of the panel, and the wiring that acts on these lives in the desktop's
- * window service.
+ * When the one-time spoken introduction runs and how long its handoff waits.
+ * The decisions are pure so they can be tested without Electron; the takeover
+ * is a fullscreen mode of the panel, and the wiring that acts on these lives
+ * in the desktop's window service.
  */
-
-/**
- * How recently a detected session must have moved to be worth introducing.
- * The roster keeps a waiting session forever — an unanswered question stays
- * news — but "these are your coding agents" said over a transcript from last
- * year introduces a graveyard; a week covers anyone's current work.
- */
-export const INTRODUCTION_PEEK_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * How long the handoff waits for the panel beneath the takeover to report

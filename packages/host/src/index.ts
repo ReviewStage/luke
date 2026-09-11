@@ -20,7 +20,6 @@ export type { MachinePresence } from "./device-presence.js";
 export type { HostSeams } from "./host-kernel.js";
 export {
   INTRODUCTION_HANDOFF_READY_MS,
-  INTRODUCTION_PEEK_FRESH_MS,
   shouldRunIntroduction,
 } from "./introduction-flow.js";
 export { jsonStateFile } from "./json-state-file.js";

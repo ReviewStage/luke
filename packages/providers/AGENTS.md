@@ -4,13 +4,14 @@
 only each provider's stable id, display name, order, and local/cloud location.
 The README platform table is generated from that identity catalog.
 
-The plugins this package ships are Claude Code (plus the Claude desktop
-app's session-application reader, which names the Code-tab chats that app
-holds and their `claude://` addresses), Codex (local only), Conductor
-(cloud), and OMP. The agents a Conductor workspace can run beyond those —
-Cursor, OpenCode, Copilot, Gemini CLI, Grok Build — are hosted-agent
-identities in `@sidecar/session` alone: a mark and a display name, with no
-files, hook, or credential behind them.
+The one plugin this package ships is Conductor, observed in the cloud through
+its documented API. The local providers the identity catalog still names —
+Claude Code, Codex, OMP — have no plugin here any more: Luke observes nothing
+on this Mac, and the service's roster carries cloud provider ids alone. The
+agents a Conductor workspace can run beyond those — Cursor, OpenCode, Copilot,
+Gemini CLI, Grok Build — are hosted-agent identities in `@sidecar/session`
+alone: a mark and a display name, with no files, hook, or credential behind
+them.
 
 A provider validates nothing about whether an action may run: `dispatchAction` and
 every provider write take an admitted request, which only `admit()` in
@@ -24,98 +25,48 @@ partial map of the actions and reads it actually implements. An absent handler i
 the unsupported answer, so a provider gains an action only by naming its key and
 taking on that action's constraint in root `CLAUDE.md` along with it. `dispatchAction`
 is the only code that reaches a handler, and it re-resolves every target from
-the plugin's own latest roster. Transcript reading belongs inside the plugin,
-through `jsonlTranscriptReader` for a provider whose records are JSONL.
+the plugin's own latest roster.
 
-Which plugins stand is a `Layer`. `providersLayer` in
-`@sidecar/providers/effect` merges one layer per registration, each built from
-the registration object `registrations.ts` declares for it, and the
-`Providers` service is the registry read out of that merge. A registration
-claims the id its plugin publishes while its own layer builds, so two
-registrations naming one id fail the build with
-`DuplicateProviderRegistration` rather than one silently replacing the other
-at a lookup nobody watches. `registrations.ts` exports `providerDeclarations`,
-the plain array every registration is declared into; P7-05 deleted
-`providerRegistrations`, the strangler shim that once built the layers itself
-and read a record back out of them, once the observation composer — its one
-caller — held the kernel as a tag and could build `providersLayer` inside its
-own effect instead.
+Nothing in this package is composed into the desktop. The web functions
+compile the Conductor adapter out of it by relative path (`server/hosted/`),
+build one plugin per pass with the caller's own decrypted key, and read the
+roster and the transcripts through it; `repository-checks.sh` refuses an
+import of `@sidecar/providers` anywhere under `packages/host/src` and
+`apps/desktop/src`, so no path from a turn, a row, or a window can reach a
+provider without the service's admission in between.
 
 There are no base classes: a plugin is a value, and the shared mechanics are
-functions with one home each: `observationPass` for a file-backed pass,
-`cloudPass` for a key-observed one, `hostClaims` for a workspace manager's
-claims, and `AdapterFailure` with `clearsObservedState` for whether a failed
-read clears what was observed.
+functions with one home each: `cloudPass` for a key-observed pass, and
+`AdapterFailure` with `clearsObservedState` for whether a failed read clears
+what was observed.
 
-Three of those mechanics reach outside the process, and each reaches it
-through Effect's own. A cloud provider's requests are `HttpClient` requests
-under the fiber's own deadline, and the 429 cadence is a `Schedule`:
-`rateLimitSchedule` in `cloud-wire.ts` steps on the `RateLimitedRead` a
-retried read fails with, takes each delay from `rateLimitDelayMs` — the same
-doubling, the same honoured `Retry-After`, the same single-wait maximum and
-one pass-wide ceiling — spends the pass's budget as it decides, and stops
-where that decision gives the request up, which is what leaves the read's own
-rate-limited failure standing. The hook spool is a `Stream` over
-`FileSystem.watch`, grouped into the window a batch is read in and re-armed
-by `Stream.retry` on a spaced schedule, so a spool directory hook
-installation has not created yet and a watcher that fails later are the same
-answer, tried again later. The window stays `groupedWithin`'s beat rather
-than the anchored one the hand-rolled debounce opened at its first id, and
-the difference is settled rather than inherited: two hooks two milliseconds
-apart do straddle a boundary and arrive as two batches, and neither batch
-costs a reader anything to undo. Two sessions straddling are one wake each
-either way, since a wake is minted per event and never per batch; one session
-straddling is read from the same spool file twice, so both batches carry that
-file's own event and its `mtime` — the one mark the brain's inbox folds into
-one entry. What the beat costs is the redundant read and never a second
-entry, so no anchored pull loop stands here. A read that throws costs its own
-entry and neither the batch nor the stream, because the spool only sharpens
-the timing of state the adapters read on their own pass anyway. A provider's
-own SQLite file is opened read-only inside a `Scope` that closes it, and
-never through the store's opener in `@sidecar/brain`, which sets pragmas and
-may `VACUUM` — writes a provider's file must never take.
+A cloud provider's requests are `HttpClient` requests under the fiber's own
+deadline, and the 429 cadence is a `Schedule`: `rateLimitSchedule` in
+`cloud-wire.ts` steps on the `RateLimitedRead` a retried read fails with, takes
+each delay from `rateLimitDelayMs` — the same doubling, the same honoured
+`Retry-After`, the same single-wait maximum and one pass-wide ceiling — spends
+the pass's budget as it decides, and stops where that decision gives the
+request up, which is what leaves the read's own rate-limited failure standing.
 
-`cloudPass` needs no promise face of its own any more: its reads, its one
-write, and its credential-bound read are effects, and Conductor — the one
-adapter that rides it — reaches every one of them through `runAdapterRead`
-below, the same door every other adapter answers its plugin from.
-`openReadOnlyDatabase` in `local-sqlite.ts` is gone outright: every local
-SQLite read in this package — Codex's state reader today — asks inside a
-`Scope` through `scopedReadOnlyDatabase` instead, closing the handle itself
-rather than answering one the caller closes in a `finally`.
-The spool has no promise face and, in this build, no consumer either:
-`observationSpoolEvents` is the whole of it. The hook wiring that would have
-run it is gone — the local loop registers no hook and watches no spool now
-that the rows draw the stored roster snapshot — so the window and the dropped
-read above are settled on the stream's own terms, and a build that wakes on
-hook events again provides `FileSystem` where it runs the stream and needs
-nothing else of it.
+`cloudPass` needs no promise face of its own: its reads, its one write, and
+its credential-bound read are effects, and Conductor — the one adapter that
+rides it — reaches every one of them through `runAdapterRead` in
+`shared/promise-face.ts`, the one `@deprecated` place those effects are run,
+because `SessionProviderPlugin` is still promises. P7-05 composed the host's
+own observation concern as an effect, but that composer never called a
+plugin's `observe()` or a transcript read directly — its roster comes from
+the hosted service's own snapshot, and it builds no plugin at all — so this
+face's deletion still waits on a caller inside this package holding a fiber
+of its own instead of it. Every one of those reads is still a read: the
+adapter opens its own credential-bound endpoint for reading alone, and the
+contract suite pins that no observation pass issues a request that can change
+provider state.
 
-Every adapter is already there. What Claude Code, Codex, and OMP read is an
-`Effect`: the observation pass discovers, parses and assembles as effects
-over a parse cache held in a `Ref`; the JSONL transcript reader's two reads
-and the path cache behind the incremental one are effects; and Codex's
-state database is asked inside a `Scope` that closes the handle, through
-`scopedReadOnlyDatabase`, with a question that answers nothing for a schema
-this build does not know and dies for anything else. Conductor's cloud pass
-is the same shape one level up: its `observe`, its actions' one write, and
-its conversation reads' one credential-bound read are each effects now that
-`cloudPass` itself is. What each plugin publishes is unchanged, because
-`SessionProviderPlugin` is still promises: `runAdapterRead` in
-`shared/promise-face.ts` is the one `@deprecated` place those effects are
-run — `ObservationPass#runPromise`, `promiseTranscriptReads`, Codex's own
-`observe`, Conductor's `observe`, its actions' write, and its conversation
-reads. P7-05 composed the host's own observation concern as an effect, but
-that composer never called a plugin's `observe()` or a transcript read
-directly — its roster comes from the hosted service's own snapshot, and it
-builds no plugin at all — so this face's deletion still waits on a caller
-inside this package holding a fiber of its own instead of it. Every one of
-those reads is still a read: an adapter opens the provider's files or its
-own credential-bound endpoint for reading alone, and a value test over a
-manifest of each on-disk home — its files, sizes, dates and hashes — pins
-that a pass and both transcript reads leave the home exactly as they found
-it, the provider's own hook configuration file included where one exists,
-since the registration that merges into that one is not the plugin.
+Every rendering of a transcript speaks one line vocabulary — `Developer:` for
+the person, the agent's own name for its replies, `→` for a tool call, `←` for
+its answer, `Error:` for a failure the provider recorded — and
+`shared/jsonl-transcript.ts` holds every rendering to the same bounds however
+the records differ, cutting a rendering from the front and saying so.
 
 Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over
@@ -130,8 +81,8 @@ which `repository-checks.sh` enforces and Biome is kept away from;
 
 Capabilities stay with their owning package in explicit, exhaustive maps:
 credentials in `@sidecar/credentials`, analytics connections in
-`@sidecar/analytics` and the desktop bridge, hooks and plugin registration in
-this package, fixture coverage in `@sidecar/session/fixtures` and the recorded
+`@sidecar/analytics` and the desktop bridge, plugin declaration in this
+package, fixture coverage in `@sidecar/session/fixtures` and the recorded
 provider fixtures beside `@sidecar/session`, and workspace presentation in
 the surface that offers it.
 Provider marks and CSS are presentation owned by their surfaces, not identity.

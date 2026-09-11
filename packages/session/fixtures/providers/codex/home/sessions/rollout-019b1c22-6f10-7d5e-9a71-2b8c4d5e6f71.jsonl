@@ -1,3 +1,0 @@
-{"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Rewrite the notch panel."}]}}
-{"type": "response_item", "payload": {"type": "function_call", "name": "exec_command", "arguments": "{\"cmd\": \"pnpm test\"}"}}
-{"type": "event_msg", "payload": {"type": "task_started"}}

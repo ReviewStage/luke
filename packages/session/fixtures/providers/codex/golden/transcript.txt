@@ -1,2 +1,0 @@
-Developer: Rewrite the notch panel.
-→ exec_command: pnpm test
