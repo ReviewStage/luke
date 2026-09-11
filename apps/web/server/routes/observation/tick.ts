@@ -2,6 +2,7 @@ import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { CLOUD_AGENT_PROVIDER_ID } from "../../core.js";
 import { getDatabase } from "../../db/index.js";
 import { devices, observationPass, providerKey } from "../../db/schema.js";
+import { CATALOG_TOOL_SET } from "../../hosted/brain-tool-set.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../../hosted/encryption.js";
 import { observeAndSnapshot } from "../../hosted/observation-pass.js";
 import {
@@ -9,10 +10,17 @@ import {
   OBSERVATION_ENVIRONMENT,
   type ObservationTickOptions,
 } from "../../hosted/observation-tick.js";
-import { hostedStore } from "../../hosted/store/index.js";
+import {
+  hostedStore,
+  type SpeechSweepOutcome,
+  storeWriter,
+  sweepSpeech,
+} from "../../hosted/store/index.js";
 import type { Route } from "../../route.js";
 
 const CLOUD_PROVIDER_IDS = Object.values(CLOUD_AGENT_PROVIDER_ID);
+
+const NOTHING_SWEPT: SpeechSweepOutcome = { held: 0, released: 0, expired: 0, turns: 0 };
 
 /**
  * The scheduled observation's one entry, called by Vercel's cron on the
@@ -55,6 +63,11 @@ const route: Route = {
         await store?.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter });
       },
       purgeCleared: async (now) => (store ? store.retention.purgeCleared(new Date(now)) : 0),
+      sweepSpeech: async (now) => {
+        if (!store) return NOTHING_SWEPT;
+        const writer = await storeWriter({ db: database, tools: CATALOG_TOOL_SET });
+        return sweepSpeech({ db: database, writer }, { now });
+      },
       observe: async (userId) => {
         if (!store || !encryptionSecret) return { complete: false, changed: false };
         const rows = await database

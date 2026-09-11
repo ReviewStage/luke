@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import type { SpeechSweepOutcome } from "./store/speech.js";
 
 /**
  * The scheduled observation: once a minute, for every account seen within
@@ -76,6 +77,15 @@ export interface ObservationTickOptions {
    * and reads nothing of any account.
    */
   purgeCleared: (now: number) => Promise<number>;
+  /**
+   * The pass over every briefing still on offer, of any account: held while
+   * a device of its account reports quiet ahead, released unspoken with a
+   * turn queued for the brain to decide again once the quiet lifts, and
+   * expired unspoken past its own instant. It rides on the tick for the same
+   * reason the purge does, and like the purge it observes nothing: it reads
+   * the offers' events and the devices' quiet instants, never a word.
+   */
+  sweepSpeech: (now: number) => Promise<SpeechSweepOutcome>;
   /** One read-only pass over the account's cloud providers, written down as the pass module does. */
   observe: (userId: string) => Promise<AccountPassOutcome>;
   now?: () => number;
@@ -96,6 +106,8 @@ interface ObservationTickAnswer {
   exhausted: boolean;
   /** Cleared conversations the tick purged past their retention window. */
   purged: number;
+  /** What the sweep over the briefings on offer did. */
+  speech: SpeechSweepOutcome;
 }
 
 const FAILED_PASS: AccountPassOutcome = { complete: false, changed: false };
@@ -146,6 +158,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
 
   await options.forgetIneligible(seenAfter);
   const purged = await options.purgeCleared(startedAt);
+  const speech = await options.sweepSpeech(startedAt);
   const accounts = await options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
 
   const answer: ObservationTickAnswer = {
@@ -155,6 +168,7 @@ export async function handleObservationTick(options: ObservationTickOptions): Pr
     changed: 0,
     exhausted: false,
     purged,
+    speech,
   };
   for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
     if (now() - startedAt + passDeadlineMs > budgetMs) {

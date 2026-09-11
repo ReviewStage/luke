@@ -11,10 +11,12 @@ import {
   OBSERVATION_TICK_PATH,
   type ObservationTickOptions,
 } from "../server/hosted/observation-tick";
+import type { SpeechSweepOutcome } from "../server/hosted/store";
 
 const CRON_SECRET = "cron-secret-1";
 const ENCRYPTION_SECRET = "a".repeat(64);
 const TICK_TIME = Date.parse("2026-08-12T02:45:00.000Z");
+const SWEPT: SpeechSweepOutcome = { held: 1, released: 0, expired: 3, turns: 0 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Request {
@@ -28,6 +30,7 @@ function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Re
 interface Recorded {
   forgot: number[];
   purged: number[];
+  swept: number[];
   listed: Array<{ limit: number; seenAfter: number }>;
   observed: string[];
 }
@@ -40,7 +43,7 @@ function tickOptions(
     changed: false,
   }),
 ) {
-  const recorded: Recorded = { forgot: [], purged: [], listed: [], observed: [] };
+  const recorded: Recorded = { forgot: [], purged: [], swept: [], listed: [], observed: [] };
   const options: ObservationTickOptions = {
     request: tickRequest(),
     cronSecret: CRON_SECRET,
@@ -55,6 +58,10 @@ function tickOptions(
     purgeCleared: async (now) => {
       recorded.purged.push(now);
       return 2;
+    },
+    sweepSpeech: async (now) => {
+      recorded.swept.push(now);
+      return SWEPT;
     },
     observe: async (userId) => {
       recorded.observed.push(userId);
@@ -118,10 +125,12 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     changed: 1,
     exhausted: false,
     purged: 2,
+    speech: SWEPT,
   });
   const seenAfter = TICK_TIME - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
   assert.deepEqual(recorded.forgot, [seenAfter]);
   assert.deepEqual(recorded.purged, [TICK_TIME]);
+  assert.deepEqual(recorded.swept, [TICK_TIME]);
   assert.deepEqual(recorded.listed, [{ limit: OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter }]);
   assert.deepEqual(recorded.observed, ["user-a", "user-b", "user-c"]);
 });
@@ -141,6 +150,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     changed: 0,
     exhausted: false,
     purged: 2,
+    speech: SWEPT,
   });
 });
 
@@ -181,6 +191,7 @@ test("a pass that outruns its deadline is counted failed and the tick moves on",
     changed: 1,
     exhausted: false,
     purged: 2,
+    speech: SWEPT,
   });
 });
 

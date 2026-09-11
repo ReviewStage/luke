@@ -1,18 +1,22 @@
-import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, notExists, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
   isSpeechEventKind,
+  SPEECH_EXPIRY_REASON,
   SPEECH_HELD_EVENT_PAYLOAD,
   SPEECH_OFFERED_EVENT_PAYLOAD,
   type SpeechEventKind,
+  type SpeechExpiredEventPayload,
   type SpeechHeldEventPayload,
   type SpeechOfferedEventPayload,
   type SpeechSpokenEventPayload,
+  TURN_ORIGIN,
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
+import { devices } from "../../db/devices-schema.js";
 import { conversations, events, messages } from "../../db/storage-schema.js";
 import type { HostedStoreDatabase } from "./database.js";
 import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
@@ -37,8 +41,9 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * not spoken stale: it ends unspoken with the release as its reason, and one
  * `hold_release` turn is queued on its conversation so the brain decides
  * again against the roster as it then is. The hold, the release, and the
- * expiry are the scheduled sweep's writes, which runs on the observation
- * tick and lands beside this module; nothing here writes any of the three.
+ * expiry are the scheduled sweep's writes, below, which runs on the
+ * observation tick; no transition a device or the service asks for writes
+ * any of the three.
  *
  * Every transition is one event through the store writer, numbered by the
  * conversation's own event sequence and appended under the conversation's
@@ -70,7 +75,7 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * an announce call; the claim and the spoken report are the live session
  * service's, the one speech sink, calling in process once it runs here (no
  * HTTP route claims, and none should); a push reads the standing to decide
- * and marks the offer pushed.
+ * and marks the offer pushed; and the sweep runs on the observation tick.
  */
 
 export const SPEECH_OFFER = {
@@ -79,7 +84,7 @@ export const SPEECH_OFFER = {
 } as const;
 
 const OPEN_OFFERS = {
-  /** The most open offers one read answers, oldest first. */
+  /** The most open offers one read answers, oldest first; the sweep's bound too, so the rest wait for the next minute. */
   MAX: 500,
 } as const;
 
@@ -479,6 +484,10 @@ export function markSpeechPushed(
 export interface OpenSpeechOffersQuery {
   /** One account's offers; every account's where absent. */
   readonly userId?: string | undefined;
+  /** Only these accounts' offers; every account's where absent. */
+  readonly userIds?: readonly string[] | undefined;
+  /** Accounts whose offers are left out: the sweep's read of the accounts with no quiet standing. */
+  readonly notUserIds?: readonly string[] | undefined;
   readonly limit?: number | undefined;
 }
 
@@ -507,6 +516,10 @@ export async function openSpeechOffers(
       and(
         eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_OFFERED),
         query.userId !== undefined ? eq(events.userId, query.userId) : undefined,
+        query.userIds !== undefined ? inArray(events.userId, [...query.userIds]) : undefined,
+        query.notUserIds !== undefined && query.notUserIds.length > 0
+          ? notInArray(events.userId, [...query.notUserIds])
+          : undefined,
         notExists(
           db
             .select({ id: settled.id })
@@ -529,4 +542,132 @@ export async function openSpeechOffers(
     const standing = speechStandingOf(speech.get(row.messageId) ?? []);
     return standing === undefined ? [] : [{ ...row, ...standing }];
   });
+}
+
+/** What one sweep did, as counts. */
+export interface SpeechSweepOutcome {
+  /** Offers marked held because a device of the account reports quiet still ahead. */
+  readonly held: number;
+  /** Held offers whose quiet lifted, ended unspoken for the brain to decide again. */
+  readonly released: number;
+  /** Offers past their expiry, ended unspoken. */
+  readonly expired: number;
+  /** Turns queued for the brain to re-decide, one per conversation a release touched. */
+  readonly turns: number;
+}
+
+/** The sweep's store: the writer's events path and, for a release, its turn queue. */
+export interface SpeechSweepStore {
+  readonly db: HostedStoreDatabase;
+  readonly writer: Pick<StoreWriter, "recordEvent" | "enqueueTurn">;
+}
+
+export interface SpeechSweepOptions {
+  readonly now: number;
+  /** The most offers each of the sweep's reads takes: one read per account with quiet standing, one over every other account. */
+  readonly limit?: number | undefined;
+  /**
+   * The accounts swept; every account where absent, which is the tick's
+   * call. A caller over a database other accounts are writing at the same
+   * time — a test file beside others on one Postgres — names its own.
+   */
+  readonly userIds?: readonly string[] | undefined;
+}
+
+/** The latest quiet instant still ahead among each account's devices; an account with none reports no hold. */
+async function quietByAccount(
+  db: HostedStoreDatabase,
+  now: number,
+  userIds: readonly string[] | undefined,
+): Promise<ReadonlyMap<string, number>> {
+  const rows = await db
+    .select({ userId: devices.userId, quietUntil: sql<Date>`max(${devices.quietUntil})` })
+    .from(devices)
+    .where(
+      and(
+        gt(devices.quietUntil, new Date(now)),
+        userIds !== undefined ? inArray(devices.userId, [...userIds]) : undefined,
+      ),
+    )
+    .groupBy(devices.userId);
+  return new Map(rows.map((row) => [row.userId, new Date(row.quietUntil).getTime()]));
+}
+
+/** One of the sweep's writes on an open offer, refused under the lock if the offer ended meanwhile; answers whether it landed. */
+async function sweepWrite(
+  store: SpeechSweepStore,
+  offer: SpeechOffer,
+  kind: typeof CONVERSATION_EVENT_KIND.SPEECH_HELD | typeof CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
+  payload: SpeechHeldEventPayload | SpeechExpiredEventPayload,
+): Promise<boolean> {
+  const written = await store.writer.recordEvent(
+    { userId: offer.userId, conversationId: offer.conversationId },
+    { messageId: offer.messageId, kind, payload: unparsedWire(payload), unless: SETTLED_KINDS },
+  );
+  return written.ok;
+}
+
+/**
+ * The scheduled pass over every open offer: held while a quiet instant of
+ * its account stands ahead, re-held when that instant moved later, released
+ * unspoken when the quiet has lifted — with one `hold_release` turn queued
+ * on its conversation — and expired unspoken when its own instant has passed
+ * with no hold over it. A held offer is never pushed or expired here, and
+ * nothing here reads a briefing's words or decides whether one is worth
+ * saying: that is the turn's, against the roster as it then is. The turn is
+ * a queued `turns` row; what runs queued rows is the opener's, not the
+ * sweep's.
+ *
+ * The read is split by account so a standing hold cannot starve the bound:
+ * an offer held for an hour-long meeting stays open, and oldest, for sixty
+ * ticks, and one bounded read over every account would fill with it. Each
+ * account with quiet standing is read under its own bound and only held;
+ * one read over every other account, held offers of quiet accounts left
+ * out, releases and expires.
+ */
+export async function sweepSpeech(
+  store: SpeechSweepStore,
+  options: SpeechSweepOptions,
+): Promise<SpeechSweepOutcome> {
+  const { now, limit, userIds } = options;
+  const quiet = await quietByAccount(store.db, now, userIds);
+  const outcome = { held: 0, released: 0, expired: 0, turns: 0 };
+  for (const [userId, quietUntil] of quiet) {
+    for (const offer of await openSpeechOffers(store.db, { userId, limit })) {
+      if (offer.state === SPEECH_STATE.HELD && (offer.quietUntil ?? 0) >= quietUntil) continue;
+      if (await sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_HELD, { quietUntil })) {
+        outcome.held += 1;
+      }
+    }
+  }
+  const released = new Set<string>();
+  const unheld = await openSpeechOffers(store.db, {
+    userIds,
+    notUserIds: [...quiet.keys()],
+    limit,
+  });
+  for (const offer of unheld) {
+    if (offer.state === SPEECH_STATE.HELD) {
+      const ended = await sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
+        reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED,
+      });
+      if (!ended) continue;
+      outcome.released += 1;
+      if (released.has(offer.conversationId)) continue;
+      released.add(offer.conversationId);
+      const queued = await store.writer.enqueueTurn(
+        { userId: offer.userId, conversationId: offer.conversationId },
+        { origin: TURN_ORIGIN.HOLD_RELEASE },
+      );
+      if (queued.ok) outcome.turns += 1;
+      continue;
+    }
+    if (offer.expiresAt <= now) {
+      const ended = await sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
+        reason: SPEECH_EXPIRY_REASON.DUE,
+      });
+      if (ended) outcome.expired += 1;
+    }
+  }
+  return outcome;
 }
