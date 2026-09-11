@@ -264,6 +264,15 @@ bounded, forking the close as a daemon and reporting what did not close in
 time rather than waiting on it. `hostLayerFromSeams(options)` beside
 it is `hostKernelLayerFromSeams` one level up. P8-01 takes `hostLayer` on the
 desktop's own runtime, and P12-05 deletes the adaptor with `createHostKernel`.
+`settingsOverridesFromEnvironment` in
+`packages/host/src/effect/settings-overrides.ts` is that same shim at the
+settings store's own door and is on no allowlist, because it runs no effect:
+every override is a `Config` read of the variable's own name, and what each
+read value means is one function both the effect over the `Environment` seam
+and this record face answer through, so the composer and the store's tests
+that still hand in the one `HostSeams` environment cannot resolve an override
+differently from a composition that reads the provider. P12-05 deletes it with
+`createHostKernel`.
 
 `shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
 allowlist: the coordinator's fixed quit order — admissions closed, the

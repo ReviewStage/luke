@@ -8,7 +8,6 @@ import {
   type CredentialProvider,
   type CredentialProviderId,
   type LinearGrant,
-  linearSignInConfig,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import {
@@ -43,14 +42,15 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
+import { Redacted } from "effect";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
+import type { SettingsEnvironmentOverrides } from "./effect/settings-overrides.js";
 
 export type { StoredAccount } from "@sidecar/credentials";
 
 import type { CalendarAccountCredential } from "@sidecar/calendar";
-import { googleCalendarSignInConfig } from "@sidecar/calendar";
 import type { StoredAccount } from "@sidecar/credentials";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
@@ -66,7 +66,7 @@ import {
   type StoredAppSettings,
   sameSettingEntry,
 } from "@sidecar/settings";
-import { environmentLiveVoice, resolveVoiceCapability } from "@sidecar/voice";
+import { resolveVoiceCapability } from "@sidecar/voice";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
@@ -110,7 +110,12 @@ export interface SecretCipher {
 export interface SettingsStoreOptions {
   directory: () => string;
   cipher: SecretCipher;
-  environment?: NodeJS.ProcessEnv;
+  /**
+   * What the launch environment overrides, already read: the store reads no
+   * environment of its own, so nothing it answers depends on a variable this
+   * composition was not handed through the `Environment` seam.
+   */
+  overrides: SettingsEnvironmentOverrides;
   /**
    * Whether this run will use the credentials it resolves. A fixture or evidence
    * run will not, and the panel has to mark what would actually happen rather
@@ -371,17 +376,6 @@ export function apiKeyRejection(apiKey: string, format?: CredentialFormat): stri
   return undefined;
 }
 
-function environmentApiKey(
-  provider: CredentialProvider,
-  environment: NodeJS.ProcessEnv,
-): string | undefined {
-  for (const variable of provider.environmentVariables) {
-    const value = environment[variable]?.trim();
-    if (value && !apiKeyRejection(value, provider.keyFormat)) return value;
-  }
-  return undefined;
-}
-
 function storedApiKeys(record: WireRecord, providers: readonly CredentialProvider[]) {
   const apiKeys: Record<string, string> = {};
   const persisted = record[SETTINGS_FIELD.API_KEYS];
@@ -550,7 +544,7 @@ function parsePersistedSettings(
 export class SettingsStore {
   readonly #directory: () => string;
   readonly #cipher: SecretCipher;
-  readonly #environment: NodeJS.ProcessEnv;
+  readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
@@ -700,7 +694,7 @@ export class SettingsStore {
   constructor(options: SettingsStoreOptions) {
     this.#directory = options.directory;
     this.#cipher = options.cipher;
-    this.#environment = options.environment ?? process.env;
+    this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
   }
 
@@ -717,7 +711,7 @@ export class SettingsStore {
         ...storedSettingsFromPersisted(persisted),
         // Resolved the way the session source resolves it, so the panel marks
         // what would actually be heard while the persisted file remains optional.
-        voice: persisted.voice ?? environmentLiveVoice(this.#environment) ?? LIVE_DEFAULTS.VOICE,
+        voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
         voiceSource: voiceCapability.source,
         formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       },
@@ -741,12 +735,12 @@ export class SettingsStore {
         // registered OAuth client resolved, and this run would use what it
         // grants. Without one the integration is not drawn at all.
         calendarSignInAvailable:
-          this.#credentialsUsable && googleCalendarSignInConfig(this.#environment) !== undefined,
+          this.#credentialsUsable && this.#overrides.googleCalendarSignIn !== undefined,
         // The same question for Linear, answered the same way: without a
         // registered OAuth client there is no consent page to open, so the row
         // is not drawn rather than drawn refusing.
         linearSignInAvailable:
-          this.#credentialsUsable && linearSignInConfig(this.#environment) !== undefined,
+          this.#credentialsUsable && this.#overrides.linearSignIn !== undefined,
         // Whether this build can offer the Apple Calendar connection: a Mac to
         // read, and a run that would use what macOS grants. No client gates it
         // the way the sign-ins are gated — the grant lives with the system.
@@ -1379,11 +1373,11 @@ export class SettingsStore {
       return resolved;
     }
     const stored = await this.#storedApiKey(provider);
-    const fromEnvironment = stored ? undefined : environmentApiKey(provider, this.#environment);
+    const fromEnvironment = stored ? undefined : this.#overrides.apiKeys.get(provider.id);
     const resolved: ResolvedApiKey = stored
       ? { apiKey: stored, source: CREDENTIAL_SOURCE.ENCRYPTED_FILE }
       : fromEnvironment
-        ? { apiKey: fromEnvironment, source: CREDENTIAL_SOURCE.ENVIRONMENT }
+        ? { apiKey: Redacted.value(fromEnvironment), source: CREDENTIAL_SOURCE.ENVIRONMENT }
         : { source: CREDENTIAL_SOURCE.NONE };
     this.#resolved.set(provider.id, resolved);
     return resolved;

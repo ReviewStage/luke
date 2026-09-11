@@ -39,7 +39,8 @@ export interface LinearSignInConfig {
   clientId: string;
 }
 
-const SIGN_IN_ENVIRONMENT = {
+/** The variable a development run points the sign-in at another registration with. */
+export const LINEAR_SIGN_IN_ENVIRONMENT = {
   CLIENT_ID: "LINEAR_OAUTH_CLIENT_ID",
 } as const;
 
@@ -61,7 +62,7 @@ export function linearSignInConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): LinearSignInConfig | undefined {
   const clientId =
-    environment[SIGN_IN_ENVIRONMENT.CLIENT_ID]?.trim() || REGISTERED_LINEAR_CLIENT_ID;
+    environment[LINEAR_SIGN_IN_ENVIRONMENT.CLIENT_ID]?.trim() || REGISTERED_LINEAR_CLIENT_ID;
   if (!clientId) return undefined;
   return { clientId };
 }
