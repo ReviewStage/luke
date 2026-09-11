@@ -17,6 +17,7 @@ test("both voice functions carry the 800 second maximum duration", () => {
 });
 
 test("every path given a duration is a route with an entrypoint, and vercel.json names it", () => {
+  // SAFETY: vercel.json is this app's own deployment manifest, read for its functions block alone.
   const vercel = JSON.parse(
     readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
   ) as { functions: Record<string, { maxDuration: number }> };
