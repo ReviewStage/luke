@@ -64,7 +64,12 @@ export function resolveHostedUserId(request: Request): Promise<string | undefine
   });
 }
 
-const seams = {
+/**
+ * The same seams, exported for a route built as an `HttpApi` group instead of
+ * through `hostedVaultRoute` below: the group reads them directly rather than
+ * rebuilding the queries they close over.
+ */
+export const hostedVaultSeams = {
   resolveUserId: resolveHostedUserId,
   encryptionSecret: process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET],
   readKey: async (userId: string, providerId: string) => {
@@ -109,5 +114,5 @@ const seams = {
  * endpoint is; everything above it is the same for all of them.
  */
 export function hostedVaultRoute(handler: (route: HostedVaultRoute) => Promise<Response>): Route {
-  return { fetch: (request) => handler({ ...seams, request }) };
+  return { fetch: (request) => handler({ ...hostedVaultSeams, request }) };
 }

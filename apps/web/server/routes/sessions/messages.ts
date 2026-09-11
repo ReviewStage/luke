@@ -1,8 +1,5 @@
-import { executeConversationRead } from "../../hosted/action-execute.js";
-import { handleConversationRead } from "../../hosted/conversation-read.js";
-import { hostedVaultRoute } from "../../hosted/vault-route.js";
+import { observationApp } from "../../observation-app.js";
+import { routeFromHttpApp } from "../../route-effect.js";
 
 /** Reads one observed session's conversation for the caller who opened its screen. */
-export default hostedVaultRoute((route) =>
-  handleConversationRead({ ...route, execute: executeConversationRead }),
-);
+export default routeFromHttpApp(observationApp());

@@ -1,5 +1,5 @@
-import { handleObserve } from "../hosted/observe.js";
-import { hostedVaultRoute } from "../hosted/vault-route.js";
+import { observationApp } from "../observation-app.js";
+import { routeFromHttpApp } from "../route-effect.js";
 
 /** Observes the signed-in user's cloud sessions on demand. */
-export default hostedVaultRoute(handleObserve);
+export default routeFromHttpApp(observationApp());

@@ -150,9 +150,10 @@ half is a small `SqlClient` over `@electric-sql/pglite`, because no
 a function default-exports. It reads the runtime through `runWeb` and then
 holds the handler for the instance's life, so it is a caller of the edge rather
 than a second one, and a warm invocation reaches the services the cold one
-built. The brain group's four routes and `server/routes/auth/[...all].ts` are
-the routes converted this way; every other route still default-exports the
-promise-shaped handler beside it.
+built. The brain group's four routes, `server/routes/auth/[...all].ts`, the
+six routes behind the actions group, and the five routes behind the
+observation group below are converted this way; every other route still
+default-exports the promise-shaped handler beside it.
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -198,6 +199,32 @@ roster read, and dispatch, so the group carries the request across the
 Auth's, and the hosted vocabulary's own `not-found` answers any path outside
 the six. `fixtures/actions-route/` records one accepted and one rejected
 answer, and `tests/actions-app.test.ts` holds the group to them.
+
+## The observation group
+
+`server/observation-app.ts` is the observation route group: five Vercel
+functions on five paths — `server/routes/sessions/messages.ts`,
+`server/routes/projects.ts`, `server/routes/events.ts`,
+`server/routes/observe.ts`, and `server/routes/observation/tick.ts` — each
+mounting the same `observationApp()`, which is organization rather than
+dispatch, since `vercel.json` already sends each function only the requests
+for its own path. Every path is declared with `HttpRouter.all` rather than a
+method-specific builder, because each handler still enforces its own method
+and answers its own 405 exactly as it did before conversion; only a path none
+of the five declares reaches the group's own `HttpRouter.empty` and the hosted
+vocabulary's `not-found`. Each handler's own logic is carried unchanged —
+`server/hosted/conversation-read.ts`, `server/hosted/projects.ts`,
+`server/hosted/events.ts`, `server/hosted/observe.ts`, and
+`server/hosted/observation-tick.ts` — behind a passthrough shaped like the
+auth group's: the `HttpServerRequest` becomes the `Request` the handler always
+took, and its `Response` is carried back with `HttpServerResponse.raw`.
+`server/hosted/vault-route.ts` exports its seams as `hostedVaultSeams` beside
+`hostedVaultRoute`, so the three routes behind it (sessions/messages,
+projects, observe) read the same resolved bearer and the same provider-key
+queries without a second copy of them. `fixtures/observation-route/` records
+one answer per route, a wrong method on a declared path, and a path outside
+the group, and `tests/observation-app.test.ts` answers each twice — through
+the group and by calling the handler directly — and compares the two.
 
 ## Signing in on a Preview deployment
 
