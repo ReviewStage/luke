@@ -27,7 +27,7 @@ const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 const OTHER_DEVICE_ID = "7d2f3f25-ab1c-4d3e-9f4a-1b2c3d4e5f61";
 
 const store: RatingStore = {
-  db: database.db,
+  run: database.run,
   writer: await storeWriter({ run: database.run, tools: {}, now: () => NOW }),
 };
 

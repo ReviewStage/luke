@@ -234,7 +234,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         readWorkspaceDefaults(seams.db(), userId),
         seams.store().facts.list(userId),
         readRecentMessages(
-          seams.db(),
+          seams.run,
           admitted.target,
           CATALOG_TOOL_SET,
           BRAIN_HOST.RECENT_MESSAGES,
@@ -252,7 +252,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     async seed(admitted) {
       const recent = await readRecentMessages(
-        seams.db(),
+        seams.run,
         admitted.target,
         CATALOG_TOOL_SET,
         BRAIN_HOST.SEED_MESSAGES,
