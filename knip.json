@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreDependencies": ["oxlint", "husky", "lint-staged", "@effect/vitest"],
+  "ignoreDependencies": ["oxlint", "husky", "lint-staged"],
   "ignoreBinaries": [
     "iconutil",
     "ditto",
