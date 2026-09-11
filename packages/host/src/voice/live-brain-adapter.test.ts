@@ -9,14 +9,14 @@ import {
   type BrainSubmission,
 } from "@sidecar/brain/requests";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import { Emitter } from "@sidecar/wire";
-import { test } from "vitest";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrainRunEvent,
-} from "./live-brain.js";
+} from "@sidecar/voice/live-session";
+import { Emitter } from "@sidecar/wire";
+import { test } from "vitest";
 import { brainAgentLiveBrain, type LiveBrainAgent } from "./live-brain-adapter.js";
 
 /** The stamp every run event carries beside its own fields, as the agent's teller adds it: the conversation, the turn, its place in it. */

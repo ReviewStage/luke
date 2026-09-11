@@ -24,6 +24,7 @@ import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationLoop } from "@sidecar/runtime";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
+import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString, lateRef } from "@sidecar/wire";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
@@ -34,7 +35,6 @@ import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import type { Composer, ComposerContext } from "./composer.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateFile } from "./onboarding-state.js";
-import type { BeatKind } from "./voice/proactive-queue.js";
 import { reporterOf } from "./wire-helpers.js";
 
 /** A diary changes at the pace of hands too; five minutes is current. */

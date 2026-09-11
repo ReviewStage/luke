@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./live-session": "./src/live-session/index.js",
     "./orchestrator": "./src/orchestrator/index.js",
     "./testing": "./src/testing.js"
   },

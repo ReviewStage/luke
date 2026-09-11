@@ -202,7 +202,13 @@ vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
 `@sidecar/providers/superset/sign-in-stage`, `@sidecar/runtime/vocabulary`,
 `@sidecar/brain/store`, `@sidecar/brain/store-worker`), or
 the renderer bundle fails to resolve `node:http` behind a string constant it
-wanted to draw.
+wanted to draw. `@sidecar/voice/live-session` is the same door for behavior
+rather than vocabulary: the live session service and its parts are
+transport-neutral, composed by whoever holds a session's sideband — the
+desktop's host today, the hosted voice service's web function next — so they
+stand behind an entry of their own, and the package names no socket library
+anywhere: its sources open connections through the injected `openSocket`
+seam, and each composition binds `ws` on its own side.
 
 `@sidecar/wire/effect` is the same door for the Effect bridges that stand
 beside the hand-rolled base while both are still in use — the `Scope`,

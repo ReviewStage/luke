@@ -23,7 +23,7 @@ import { type AccountToken, hostedVoiceServiceOrigin } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { lateRef } from "@sidecar/wire";
 import type { Composer, ComposerContext } from "./composer.js";
-import { openSocketOverWs } from "./voice/live-sideband.js";
+import { openSocketOverWs } from "./voice/socket-over-ws.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";

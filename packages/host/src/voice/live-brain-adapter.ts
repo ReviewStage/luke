@@ -13,7 +13,7 @@ import {
   type LiveBrain,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
-} from "./live-brain.js";
+} from "@sidecar/voice/live-session";
 
 /** What the adapter says when no brain stands to take the ask at all. */
 const NO_BRAIN_REFUSAL = BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT];

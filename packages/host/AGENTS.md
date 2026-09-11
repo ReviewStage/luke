@@ -78,29 +78,34 @@ connection would.
 
 ## The live session reaches the brain through one door
 
-`voice/live-session-service.ts` owns the one GPT Live session: seeding it
-from the record and the roster, the delegation adapter, the transcript
-ledger's settled utterances, idle, and the graceful close, over two units of
-its own — `voice/append-channel.ts`, one session's sends in order, each
-awaiting its acknowledgment or the error naming it and settled spoken by the
-output transcript, and `voice/proactive-queue.ts`, the briefings and beats
-waiting for a session under the announcement hold. It reaches Luke's judgment
-only through `LiveBrain` (`voice/live-brain.ts`): a transport-neutral
-contract of ids and plain data — submit a spoken ask under the service's own
-submission id, hear the run seams by name, read the redacted roster view — and
-nothing in the service imports `@sidecar/brain`. Today's one implementation adapts main's
-in-process `BrainAgent` in `voice/live-brain-adapter.ts`; a hosted brain
-reached over HTTP is another implementation of the same contract, and the
-service moves with it. The run event kinds are read by name and never assumed
-exhaustive: a brain that fires kinds this build does not know leaves the
-adapter and every test standing. The record is behind its own door too,
-`LiveRecord` (`voice/live-record.ts`), with a developer utterance and a Luke
-utterance as two distinct writes — one table takes both today, and a later
-record keeps the brain's reply and Luke's spoken words apart — and the
-desktop's Conversation writer is its only implementation. The trusted
-sideband's socket seam is implemented over `ws` in `voice/live-sideband.ts`,
-so `@sidecar/voice` stays free of it, beside the graceful close the
-conversations guide prescribes. The live service is the one sink for
+The one GPT Live session is owned by `@sidecar/voice`'s `LiveSessionService`
+(`packages/voice/src/live-session/`), behind that package's `./live-session`
+door: seeding the session from the record and the roster, the delegation
+adapter, the transcript ledger's settled utterances, idle, and the graceful
+close, over two units of its own — `append-channel.ts`, one session's sends in
+order, each awaiting its acknowledgment or the error naming it and settled
+spoken by the output transcript, and `proactive-queue.ts`, the briefings and
+beats waiting for a session under the announcement hold. The machinery is
+transport-neutral and lives in a package so that a second composition, the
+hosted voice service's, can hold a sideband beside this host's, which
+composes it over main's agent and the desktop's Conversation writer. It
+reaches Luke's judgment only through `LiveBrain`: a
+transport-neutral contract of ids and plain data — submit a spoken ask under
+the service's own submission id, hear the run seams by name, read the
+redacted roster view — and nothing in the service imports `@sidecar/brain`.
+This host's implementation adapts main's in-process `BrainAgent` in
+`voice/live-brain-adapter.ts`; the hosted brain is another implementation of
+the same contract, and the service moves with it. The run event kinds are
+read by name and never assumed exhaustive: a brain that fires kinds this
+build does not know leaves the adapter and every test standing. The record is
+behind its own door too, `LiveRecord`, with a developer utterance and a Luke
+utterance as two distinct writes — one table takes both here, and the hosted
+record keeps the brain's reply and Luke's spoken words apart — and this
+host's implementation is the desktop's Conversation writer in
+`voice/conversation-live-record.ts`. The trusted sideband's socket seam is
+implemented over `ws` in `voice/socket-over-ws.ts`, so `@sidecar/voice`
+stays free of it and the live-session door can be bundled into a web
+function. The live service is the one sink for
 everything Luke says unprompted: `compose-live.ts` takes every briefing from
 the brain, every run's streamed reply to speak, and the two onboarding
 beats. A briefing or reply with no session standing makes the service say it
