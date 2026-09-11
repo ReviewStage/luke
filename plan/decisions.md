@@ -1258,3 +1258,33 @@ The shape, which is better than the one I asked for: `LiveSessionService` is **g
 and the desktop's composition is untouched — a small change rather than a rewrite of a live path.
 **Recorded as a commitment: its absence from part b is a regression, not an omission**, and D3's
 #1055 now says "closed by construction in C8 part b".
+
+
+## 2026-09-11 — Twice in two hours: a bounded read across accounts starves (orchestrator, from C5b and D3)
+
+**One bug class, two independent instances, two different passes over the same table, both found by
+review rather than by writing.**
+
+- **C5b's sweep** read open speech offers across **every** account and excluded quiet ones *after*.
+  One account in a long meeting filled the 500-row bound with held offers, so **every other
+  account's briefings were never considered at all.** Bugbot found it.
+- **D3's push pass**, an hour later, had the identical bug for the identical reason. Its own
+  thermo-nuclear review found it.
+
+**Both fixes took the same form: exclude at the read, not after it** — `notInArray` in the sweep,
+`notUserIds` in the push pass — with the bound **per account** rather than global, and the proving
+test being **two accounts under `limit: 1`**. A test with one account cannot see this, which is why
+neither instance was caught while writing.
+
+**Warned C3 directly rather than only adding it to the addendum**, because its opener drains queued
+`turns` rows across accounts under a bound and is therefore the third instance unless designed out:
+one account queueing twenty turns — a burst of roster diffs, a retry loop, a busy developer — takes
+the whole pass. Its exclusion axis is fairness rather than quietness (one turn per conversation or
+per account before a second from any), and if it concludes its pass cannot starve by construction it
+says so with the reason.
+
+**And a distinction from the same review, worth keeping:** a `FAILED` or `REFUSED` send ends the
+pass (a transport problem is not each recipient's problem), while **`TOKEN_GONE` is that one
+device's own answer and the pass continues**, the next tick delivering the spared offer exactly
+once. Marking-and-failing the remainder would have written a lie into the record about offers
+nothing ever tried.
