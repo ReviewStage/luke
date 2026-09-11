@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { eq } from "drizzle-orm";
+import { Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -11,7 +11,6 @@ import {
   ACTION_TOOL,
   BRAIN_TURN_TRIGGER,
 } from "../server/core";
-import { CONVERSATION_KIND, conversations, turns } from "../server/db/storage-schema";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_HEADER,
@@ -33,6 +32,12 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  insertConversation,
+  readConversationById,
+  readTurnsByConversation,
+  setConversationDeletedAt,
+} from "./support/store-rows";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and
@@ -129,21 +134,18 @@ function ownSeat(userId: string, conversationId: string): SessionAuth {
 }
 
 async function ownedConversation(userId: string): Promise<ConversationTarget> {
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId });
+  return { userId, conversationId };
 }
 
+const RuntimeSessionRowSchema = Schema.Struct({
+  runtime_session_id: Schema.NullOr(Schema.String),
+});
+
 async function recordedSession(conversationId: string): Promise<string | null> {
-  const [row] = await database.db
-    .select({ runtimeSessionId: conversations.runtimeSessionId })
-    .from(conversations)
-    .where(eq(conversations.id, conversationId));
+  const [row] = await readConversationById(database.run, conversationId);
   assert.ok(row);
-  return row.runtimeSessionId;
+  return Schema.decodeUnknownSync(RuntimeSessionRowSchema)(row).runtime_session_id;
 }
 
 /** A session's start as the store hook runs it: admitted while claiming, then the claim; answers whether the record is now this session's. */
@@ -268,10 +270,7 @@ test("the session that lost the race relays nothing: one turn stands on the conv
 
   assert.deepEqual(olderCarried, [false, false, false, false, false, false]);
   assert.deepEqual(newerCarried, [true, true, true, true, true, true]);
-  const turnRows = await database.db
-    .select({ id: turns.id })
-    .from(turns)
-    .where(eq(turns.conversationId, target.conversationId));
+  const turnRows = await readTurnsByConversation(database.run, target.conversationId);
   assert.deepEqual(
     turnRows.map((row) => row.id),
     [hostTurnId(SESSION.NEWER, "turn_0")],
@@ -409,10 +408,7 @@ test("a conversation cleared while its session runs admits nobody at the door an
   assert.equal(await start(host, seat, SESSION.OLDER), true);
   const auth = channelAuth([userA]);
 
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: new Date(NOW) })
-    .where(eq(conversations.id, target.conversationId));
+  await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
 
   assert.deepEqual(
     await auth(request(`/eve/v1/session/${SESSION.OLDER}/stream`, userA)),
@@ -479,10 +475,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
     reason: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
 
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: new Date(NOW) })
-    .where(eq(conversations.id, target.conversationId));
+  await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
   assert.deepEqual(await call(SESSION.NEWER, seat), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: BRAIN_HOST_REFUSAL.NO_CONVERSATION,

@@ -424,14 +424,15 @@ route caller — a distinct change from removing Drizzle.
 `HostedStoreTestDatabase.db` in `apps/web/tests/support/hosted-store-database.ts`
 is on the allowlist for the same reason `HostedStoreRun` is, one layer up: the
 harness's PGlite is migrated through `runWebMigrations` rather than Drizzle's
-own migrator as of P10-14c, but the test files P10-14c and P10-14c2 have not
-yet moved onto the `sql` client beside it still read the same connection
-through a Drizzle handle, so the harness stands both up rather than choosing
-between them. The last remaining-drizzle slice removes the field, the handle,
-and the harness's `drizzle-orm` imports once every test file reaches `sql`
-directly; P10-14c2's own inventory (`tests/support/store-rows.ts`) found the
-original P10-14a count of files still short by three, so that slice is not
-yet numbered here.
+own migrator as of P10-14c, but the test files P10-14c, P10-14c2, and P10-14c3
+have not yet moved onto the `sql` client beside it still read the same
+connection through a Drizzle handle, so the harness stands both up rather
+than choosing between them. The last remaining-drizzle slice removes the
+field, the handle, and the harness's `drizzle-orm` imports once every test
+file reaches `sql` directly; P10-14c2's own inventory
+(`tests/support/store-rows.ts`) found the original P10-14a count of files
+still short by three, and eight of the roughly two dozen files still stand
+after P10-14c3, so that slice is not yet numbered here.
 
 `createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
 for the same reason `HostedStoreRun` is: `RateBrake.check` is an

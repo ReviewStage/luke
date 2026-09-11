@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { Schema } from "effect";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -12,12 +12,12 @@ import {
   MESSAGE_ROLE,
   PUSH_ENVIRONMENT,
   SPEECH_EXPIRY_REASON,
+  type StoredUIMessage,
   TURN_ORIGIN,
   TURN_STATUS,
   type WireRecord,
 } from "../server/core";
-import { devices } from "../server/db/devices-schema";
-import { CONVERSATION_KIND, conversations, events, messages, turns } from "../server/db/schema";
+import { CONVERSATION_KIND } from "../server/db/schema";
 import {
   APNS_DELIVERY,
   APNS_INTERRUPTION_LEVEL,
@@ -51,6 +51,17 @@ import {
   sweepSpeech,
 } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  DeviceRowSchema,
+  insertConversation,
+  insertDevice,
+  insertMessage,
+  insertTurn,
+  readDevicesByUser,
+  readEventsByMessage,
+  setDeviceActiveUntil,
+  setDeviceQuietUntil,
+} from "./support/store-rows";
 
 /**
  * The push over the briefings on offer, against the real migrations. The
@@ -94,7 +105,7 @@ interface Announced {
   readonly messageId: string;
 }
 
-type MessageParts = (typeof messages.$inferInsert)["parts"];
+type MessageParts = StoredUIMessage["parts"];
 
 function announcePart(input: WireRecord): MessageParts[number] {
   // SAFETY: a stored tool part in the SDK's own shape; the read under the catalog registry is the validation.
@@ -109,45 +120,33 @@ function announcePart(input: WireRecord): MessageParts[number] {
 
 /** An observed conversation with one settled turn whose assistant row carries the parts given, as the relay leaves them. */
 async function announced(userId: string, parts: MessageParts): Promise<Announced> {
-  const [conversation] = await database.db
-    .insert(conversations)
-    .values({
-      userId,
-      kind: CONVERSATION_KIND.OBSERVED,
-      providerId: SESSION.providerId,
-      providerSessionId: `${SESSION.providerSessionId}-${randomUUID()}`,
-    })
-    .returning({ id: conversations.id });
-  assert.ok(conversation);
-  const [turn] = await database.db
-    .insert(turns)
-    .values({
-      userId,
-      conversationId: conversation.id,
-      origin: TURN_ORIGIN.ROSTER_DIFF,
-      status: TURN_STATUS.SETTLED,
-      queuedAt: new Date(clock),
-      settledAt: new Date(clock),
-    })
-    .returning({ id: turns.id });
-  assert.ok(turn);
-  const [message] = await database.db
-    .insert(messages)
-    .values({
-      userId,
-      conversationId: conversation.id,
-      seq: 1,
-      turnId: turn.id,
-      clientId: turn.id,
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts,
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
-      createdAt: new Date(clock),
-      finishedAt: new Date(clock),
-    })
-    .returning({ id: messages.id });
-  assert.ok(message);
-  return { userId, conversationId: conversation.id, messageId: message.id };
+  const conversationId = await insertConversation(database.run, {
+    userId,
+    kind: CONVERSATION_KIND.OBSERVED,
+    providerId: SESSION.providerId,
+    providerSessionId: `${SESSION.providerSessionId}-${randomUUID()}`,
+  });
+  const turnId = await insertTurn(database.run, {
+    userId,
+    conversationId,
+    origin: TURN_ORIGIN.ROSTER_DIFF,
+    status: TURN_STATUS.SETTLED,
+    queuedAt: new Date(clock),
+    settledAt: new Date(clock),
+  });
+  const messageId = await insertMessage(database.run, {
+    userId,
+    conversationId,
+    seq: 1,
+    turnId,
+    clientId: turnId,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts,
+    metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    createdAt: new Date(clock),
+    finishedAt: new Date(clock),
+  });
+  return { userId, conversationId, messageId };
 }
 
 async function offered(userId: string, briefing = BRIEFING): Promise<Announced> {
@@ -168,7 +167,7 @@ interface DeviceReport {
 /** One device row of the account as it last reported itself; answers the row's id. */
 async function device(userId: string, report: DeviceReport = {}): Promise<string> {
   const id = randomUUID();
-  await database.db.insert(devices).values({
+  await insertDevice(database.run, {
     id,
     userId,
     installationId: `install-${id}`,
@@ -183,17 +182,20 @@ async function device(userId: string, report: DeviceReport = {}): Promise<string
 }
 
 async function report(deviceId: string, change: Pick<DeviceReport, "activeUntil" | "quietUntil">) {
-  await database.db
-    .update(devices)
-    .set({
-      ...(change.activeUntil !== undefined
-        ? { activeUntil: change.activeUntil === null ? null : new Date(change.activeUntil) }
-        : undefined),
-      ...(change.quietUntil !== undefined
-        ? { quietUntil: change.quietUntil === null ? null : new Date(change.quietUntil) }
-        : undefined),
-    })
-    .where(eq(devices.id, deviceId));
+  if (change.activeUntil !== undefined) {
+    await setDeviceActiveUntil(
+      database.run,
+      deviceId,
+      change.activeUntil === null ? null : new Date(change.activeUntil),
+    );
+  }
+  if (change.quietUntil !== undefined) {
+    await setDeviceQuietUntil(
+      database.run,
+      deviceId,
+      change.quietUntil === null ? null : new Date(change.quietUntil),
+    );
+  }
 }
 
 function token(): string {
@@ -220,19 +222,13 @@ function fakeSender(answer: ApnsDelivery = APNS_DELIVERY.DELIVERED) {
 }
 
 async function speechEvents(messageId: string) {
-  return database.db
-    .select({ kind: events.kind, deviceId: events.deviceId })
-    .from(events)
-    .where(eq(events.messageId, messageId))
-    .orderBy(asc(events.seq));
+  const rows = await readEventsByMessage(database.run, messageId);
+  return rows.map((row) => ({ kind: row.kind, deviceId: row.device_id }));
 }
 
 async function deviceIds(userId: string): Promise<string[]> {
-  const rows = await database.db
-    .select({ id: devices.id })
-    .from(devices)
-    .where(eq(devices.userId, userId));
-  return rows.map((row) => row.id);
+  const rows = await readDevicesByUser(database.run, userId);
+  return rows.map((row) => Schema.decodeUnknownSync(DeviceRowSchema)(row).id);
 }
 
 function offer(overrides: Partial<SpeechOffer> = {}): SpeechOffer {
@@ -486,11 +482,10 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
   });
   assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
   assert.deepEqual(sent, []);
-  const [, , ended] = await database.db
-    .select({ kind: events.kind, payload: events.payload })
-    .from(events)
-    .where(eq(events.messageId, row.messageId))
-    .orderBy(asc(events.seq));
+  const [, , ended] = (await readEventsByMessage(database.run, row.messageId)).map((event) => ({
+    kind: event.kind,
+    payload: event.payload,
+  }));
   assert.deepEqual(ended, {
     kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
     payload: { reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED },
