@@ -27,7 +27,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  * it. Nothing else registers IPC.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
-  const { config, state, telemetry, native, updates, operator, windows } = services;
+  const { config, state, telemetry, native, updates, operator, windows, run } = services;
   const { runMode, launch } = config;
   const { panels, voiceWindow, hotkeys, dock, introductionSession } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
@@ -208,6 +208,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       introduction: windows.introductionPlaying() && panels.owns(sender),
     }),
     router: createActRouter(rows),
+    run,
     reports,
     /**
      * The document as one window stands, answered before anything is drawn

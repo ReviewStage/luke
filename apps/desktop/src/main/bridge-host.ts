@@ -1,4 +1,5 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
+import type { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import {
   BRIDGE,
@@ -42,6 +43,8 @@ export interface BridgeHostDependencies {
   /** Which of the three surfaces asked, decided by the windows this process opened. */
   senderOf: (sender: WebContents) => ActSender;
   router: ActRouter;
+  /** Every act's Effect, run on the desktop's own runtime rather than a second one. */
+  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   reports: ReportHandlers;
   /** The document as one window stands, which is the answer to its own bootstrap read. */
   snapshotFor: (sender: WebContents) => Promise<AppStateSnapshot>;
@@ -59,7 +62,7 @@ type ErasedHandler = (context: BridgeContext, ...args: never[]) => unknown;
  * composition and its start.
  */
 export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
-  const { ipcMain, trustedSender, senderOf, router, reports, snapshotFor } = dependencies;
+  const { ipcMain, trustedSender, senderOf, router, run, reports, snapshotFor } = dependencies;
 
   ipcMain.handle(BRIDGE.act.channel, async (event, ...rawArgs) => {
     // `parsedAct` is this entry's own argument guard, so it is read here for
@@ -68,7 +71,7 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
     const act: Act | undefined =
       rawArgs.length === 1 ? parsedAct(rawArgs[0] as UnparsedWireValue) : undefined;
     if (!trustedSender(event) || !act) throw new Error("Invalid bridge request");
-    return router.performAct(act, senderOf(event.sender));
+    return run(router.performAct(act, senderOf(event.sender)));
   });
 
   ipcMain.handle(BRIDGE.requestAppState.channel, async (event) => {

@@ -1,4 +1,5 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { WebContents } from "electron";
 import {
   ACT,
@@ -55,7 +56,7 @@ export interface ActRouter {
   performAct<Kind extends ActKind>(
     act: Extract<Act, { kind: Kind }>,
     sender: ActSender,
-  ): Promise<ActOutcome<Kind>>;
+  ): Effect.Effect<ActOutcome<Kind>>;
 }
 
 /** Any one kind's payload, which is what the union index below hands a row. */
@@ -80,32 +81,37 @@ function refused(reason: string): ActOutcome {
  * its own, and nothing dispatches on anything but the kind.
  */
 export function createActRouter(rows: ActRows): ActRouter {
-  async function perform(act: Act, sender: ActSender): Promise<ActOutcome> {
+  function perform(act: Act, sender: ActSender): Effect.Effect<ActOutcome> {
     if (!Object.hasOwn(ACT, act.kind)) {
-      return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
+      return Effect.succeed({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     }
     const declared = ACT[act.kind];
     // SAFETY: an act's payload is the structured-clone value its own schema
     // admitted, which is what reading it again takes.
     const sent = ("payload" in act ? act.payload : undefined) as UnparsedWireValue;
     const read = declared.payload.read(sent);
-    if (!read.ok) return refused(declared.refusal);
-    try {
+    if (!read.ok) return Effect.succeed(refused(declared.refusal));
+    return Effect.gen(function* () {
       // SAFETY: ActRows types every row by its own kind; the erasure is the
       // union index this dispatch is, and the answer is guarded below.
-      const value = await (rows[act.kind] as ErasedRow)(read.value, sender);
+      const value = yield* Effect.tryPromise({
+        try: async () => (rows[act.kind] as ErasedRow)(read.value, sender),
+        catch: (error) => error,
+      });
       if (declared.result(value) === false) return refused(declared.refusal);
       // SAFETY: the kind's own result guard admitted this value.
       return { status: ACT_OUTCOME_STATUS.DONE, value: value as ActResultFor<ActKind> };
-    } catch (error) {
-      return refused(error instanceof ActRefused ? error.message : declared.refusal);
-    }
+    }).pipe(
+      Effect.catchAll((error) =>
+        Effect.succeed(refused(error instanceof ActRefused ? error.message : declared.refusal)),
+      ),
+    );
   }
 
   return {
     performAct: <Kind extends ActKind>(act: Extract<Act, { kind: Kind }>, sender: ActSender) =>
       // SAFETY: `perform` answers the outcome of the kind it was handed, which
       // is the kind this call named; the dispatch above erases the union.
-      perform(act, sender) as Promise<ActOutcome<Kind>>,
+      perform(act, sender) as Effect.Effect<ActOutcome<Kind>>,
   };
 }

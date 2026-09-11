@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { SessionRowActions } from "@sidecar/host";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
@@ -115,14 +116,18 @@ test("through the router, a refused sender reads as the row's own refusal and an
   const f = fixture(async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }));
   // SAFETY: the router dispatches on the kind alone; the other kinds are never reached here.
   const router = createActRouter(f.rows as Parameters<typeof createActRouter>[0]);
-  const refused = await router.performAct(
-    { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
-    VOICE,
+  const refused = await Effect.runPromise(
+    router.performAct(
+      { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
+      VOICE,
+    ),
   );
   assert.deepEqual(refused, { status: ACT_OUTCOME_STATUS.REFUSED, reason: ROW_WRITE_REFUSAL });
-  const done = await router.performAct(
-    { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
-    PANEL,
+  const done = await Effect.runPromise(
+    router.performAct(
+      { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
+      PANEL,
+    ),
   );
   assert.deepEqual(done, {
     status: ACT_OUTCOME_STATUS.DONE,
