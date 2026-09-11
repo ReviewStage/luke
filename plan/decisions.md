@@ -1156,3 +1156,41 @@ in the schema comment, cross-account tests flipped to per-user, `prompts.read` p
 re-hashes to the turn's hash). **Under C′ it is the same migration with the column dropped rather
 than sealed** — the switch is cheap either way, and `prompts.read`'s test disappears, which is worth
 noting because it is the test that proves the seal is reversible by the service and by nobody else.
+
+
+## 2026-09-11 — Expire may follow a claim; push may not (orchestrator, from D3)
+
+D3 found that C5a's store did not enforce the rule D3's own brief gave it — *"a claimed briefing is
+never pushed"* — because of a **read→mark window**: the push pass read "unclaimed", a claim landed,
+and the push mark still applied. Both a claim and a push would then stand on one offer, and **the
+developer hears the same briefing twice.**
+
+**Authorized and recorded: `markSpeechPushed` refuses a `CLAIMED` offer** (`refusals`
+`CLAIMED → already_claimed`, and `unless` gains `speech.claimed`). The guarantee moves **into the
+transition** rather than living in the caller — the same move C5a made putting `unless` inside the
+speech module, and for the same reason: **the door enforces, the caller cannot forget.** D3's push
+pass is not the last caller this will ever have.
+
+**The asymmetry this creates is deliberate and must be stated in the module, because it reads as an
+inconsistency:**
+
+- **The sweep MAY expire a claimed offer.** A device that claimed and then vanished must not hold a
+  briefing forever; expiry is cleanup, and it is why C5a's `unless` deliberately omits `claimed`.
+- **Nothing may push over a claim.** A push is a **second delivery**, and the harm is not a stale
+  record but the developer hearing the same words twice.
+
+So: *expire may follow a claim; push may not.* Beside the two races in the same comment.
+
+**Consequence for the record: two of C5a's merged assertions change**, and D3 says so in its body
+rather than leaving a reviewer to find another PR's tests edited — "a claim racing a push: the push
+lands either way" becomes "exactly one lands, whichever reached the lock first", and "push closes a
+claim that never became speech" now expects `already_claimed`. **Neither is a weakening**; the first
+was asserting the window.
+
+**Split ruling, the third on this basis today** (after C8's a1/a2 and C8's delegated-write fix): a
+trust-rule tightening to already-merged code, including edits to another PR's tests, gets its own
+PR and its own revert handle rather than being reviewed inside a thousand lines of new push
+machinery. **(a)** `fix(LUKE-134): a push never lands over a claim`, ~150 lines, merges first, may
+enqueue on Vercel-pending. **(b)** the push pass, tick, route, PRIVACY.md and eight tests, ~1,000
+accepted with the production/test split stated — ~480 source against ~560 tests and ~90 of prose is
+inside what the bound measures, and **tests are not cut to reach a number.**
