@@ -2,6 +2,7 @@ import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import { ASK_ORIGIN, type AskOrigin } from "../../core.js";
+import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
 import type { HostedStoreRun } from "./database.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -57,8 +58,16 @@ export interface AskRecord {
   named(userId: string, id: string): Promise<AskRow | undefined>;
   /** The newest eve session any of the conversation's asks was handed to, by eve's own sortable ids, ahead of the conversation row recording it. */
   latestSession(userId: string, conversationId: string): Promise<string | undefined>;
-  /** Runs the dispatch under the ask row's lock unless a session is already written, and writes what eve answered; answers the row after. */
-  dispatchOnce(id: string, dispatch: () => Promise<AskDispatch | undefined>): Promise<AskRow>;
+  /**
+   * Runs the dispatch under the conversation's lock unless a session is already written, handing it
+   * the conversation's newest session as read under that lock, and writes what eve answered; answers
+   * the row after.
+   */
+  dispatchOnce(
+    target: ConversationTarget,
+    id: string,
+    dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
+  ): Promise<AskRow>;
   /** Stamps a Stop on an ask whose turn has not started, for the start to honour. */
   cancelRequested(id: string, at: Date): Promise<void>;
 }
@@ -193,6 +202,33 @@ const findLatestSession = SqlSchema.findOne({
     ),
 });
 
+/** The newest session any of the conversation's asks was handed to, by eve's sortable ids. */
+function latestSessionOf(
+  target: ConversationTarget,
+): Effect.Effect<string | undefined, AskFailure, SqlClient.SqlClient> {
+  return Effect.map(findLatestSession(target), (found) =>
+    Option.getOrUndefined(Option.map(found, (row) => row.sessionId)),
+  );
+}
+
+/**
+ * The session a follow-up goes to: the newest the account's record knows of,
+ * whether the conversation row has recorded it yet or only the ask that
+ * opened it has. eve's session ids sort by the instant they were minted,
+ * the same ordering the row's forward-only claim relies on, so the greater
+ * id is the newer session; a row still recording a session the last ask
+ * moved on from would otherwise be sent to, retried against, and reopened
+ * beside.
+ */
+export function newestSession(
+  recorded: string | undefined,
+  latestDispatched: string | undefined,
+): string | undefined {
+  if (recorded === undefined) return latestDispatched;
+  if (latestDispatched === undefined) return recorded;
+  return latestDispatched > recorded ? latestDispatched : recorded;
+}
+
 const DispatchSchema = Schema.Struct({
   id: Schema.String,
   sessionId: Schema.String,
@@ -254,11 +290,28 @@ const bindDeliveredAsks = SqlSchema.findAll({
     ),
 });
 
-const LockAskSchema = Schema.String;
+const ConversationLockSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+});
 
-/** The ask's row under its own lock, so one dispatch at a time reads it and writes what eve answered. */
-const lockAsk = SqlSchema.findOne({
-  Request: LockAskSchema,
+/** The conversation row under its own lock, the lock the writer and Clear take, so one dispatch at a time runs in a conversation. */
+const lockConversation = SqlSchema.findOne({
+  Request: ConversationLockSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (target) =>
+    statement(
+      (sql) => sql`
+        select id from conversations
+        where id = ${target.conversationId} and user_id = ${target.userId} and deleted_at is null
+        for update
+      `,
+    ),
+});
+
+/** The ask's row, read inside the conversation's lock. */
+const readAsk = SqlSchema.findOne({
+  Request: Schema.String,
   Result: AskRowSchema,
   execute: (id) =>
     statement(
@@ -267,29 +320,43 @@ const lockAsk = SqlSchema.findOne({
                session_id, delivery_id, turn_id, cancel_requested_at
         from asks
         where id = ${id}
-        for update
       `,
     ),
 });
 
 /**
- * One dispatch per ask: the row is locked, a session already written ends
- * the call with nothing dispatched, and otherwise the caller's dispatch runs
- * under the lock and what eve answered is written before it is released. A
- * dispatch that answers nothing leaves the row as it was, for a retry.
+ * One dispatch at a time per conversation: the conversation row is locked,
+ * the ask row is read under it, a session already written ends the call
+ * with nothing dispatched, and otherwise the caller's dispatch runs under
+ * the lock and what eve answered is written before it is released. The lock
+ * is the conversation's rather than the ask's on purpose: two first asks of
+ * different client ids on a conversation with no session would each open
+ * one, and the ask bound to the session the forward-only claim loses would
+ * never read a turn; under the conversation's lock the second waits, reads
+ * the session the first opened, and sends into it. A dispatch that answers
+ * nothing leaves the row as it was, for a retry. The order is the one every
+ * lock here keeps: the user's row, then the conversation's, and never an
+ * ask's row held while a conversation's is wanted.
  */
 function dispatchAskOnce(
+  target: ConversationTarget,
   id: string,
-  dispatch: () => Promise<AskDispatch | undefined>,
+  dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
 ): Effect.Effect<AskRow, AskFailure, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
       Effect.gen(function* () {
-        const locked = yield* lockAsk(id);
-        if (Option.isNone(locked)) throw new Error("the ask to dispatch is not standing");
-        const standing = askRow(locked.value);
+        const locked = yield* lockConversation(target);
+        if (Option.isNone(locked)) throw new Error("the ask's conversation is not standing");
+        const read = yield* readAsk(id);
+        if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
+        const standing = askRow(read.value);
         if (standing.sessionId !== undefined) return standing;
-        const answered = yield* Effect.promise(dispatch);
+        const session = newestSession(
+          yield* recordedRuntimeSession(target),
+          yield* latestSessionOf(target),
+        );
+        const answered = yield* Effect.promise(() => dispatch(session));
         if (answered === undefined) return standing;
         yield* markDispatched({
           id,
@@ -326,13 +393,8 @@ export function askRecord(run: HostedStoreRun): AskRecord & AskDeliveryBinding {
           Option.getOrUndefined(Option.map(found, askRow)),
         ),
       ),
-    latestSession: (userId, conversationId) =>
-      run(
-        Effect.map(findLatestSession({ userId, conversationId }), (found) =>
-          Option.getOrUndefined(Option.map(found, (row) => row.sessionId)),
-        ),
-      ),
-    dispatchOnce: (id, dispatch) => run(dispatchAskOnce(id, dispatch)),
+    latestSession: (userId, conversationId) => run(latestSessionOf({ userId, conversationId })),
+    dispatchOnce: (target, id, dispatch) => run(dispatchAskOnce(target, id, dispatch)),
     cancelRequested: (id, at) => run(markCancelRequested({ id, at })),
     bindDeliveries: (target, deliveryIds, turnId) =>
       deliveryIds.length === 0

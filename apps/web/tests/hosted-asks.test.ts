@@ -89,8 +89,10 @@ test("a read is the account's own: an ask is named for its account and for nobod
   assert.equal(await asks.named(other, earlier.id), undefined);
   assert.equal(await asks.latestSession(owner, conversationId), undefined);
 
-  await asks.dispatchOnce(earlier.id, async () => ({ sessionId: "wrun_02_newer" }));
-  await asks.dispatchOnce(later.id, async () => ({
+  await asks.dispatchOnce({ userId: owner, conversationId }, earlier.id, async () => ({
+    sessionId: "wrun_02_newer",
+  }));
+  await asks.dispatchOnce({ userId: owner, conversationId }, later.id, async () => ({
     sessionId: "wrun_01_older",
     deliveryId: "delivery-2",
   }));
@@ -103,9 +105,12 @@ test("a second dispatch on an ask already handed to eve runs nothing and changes
   const conversationId = await conversation(userId);
   const ask = await asks.record(write(userId, conversationId));
   const turnId = randomUUID();
-  await asks.dispatchOnce(ask.id, async () => ({ sessionId: "wrun_1", turnId }));
+  await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => ({
+    sessionId: "wrun_1",
+    turnId,
+  }));
   let ran = 0;
-  const after = await asks.dispatchOnce(ask.id, async () => {
+  const after = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
     ran += 1;
     return { sessionId: "wrun_2", deliveryId: "delivery-1" };
   });
@@ -115,7 +120,8 @@ test("a second dispatch on an ask already handed to eve runs nothing and changes
   assert.equal(after.deliveryId, undefined);
   const undispatched = await asks.record(write(userId, conversationId));
   assert.equal(
-    (await asks.dispatchOnce(undispatched.id, async () => undefined)).sessionId,
+    (await asks.dispatchOnce({ userId, conversationId }, undispatched.id, async () => undefined))
+      .sessionId,
     undefined,
   );
 
@@ -131,15 +137,15 @@ test("binding a turn's deliveries names the turn on each delivered ask not yet b
   const waiting = await asks.record(write(userId, conversationId));
   const alsoWaiting = await asks.record(write(userId, conversationId));
   const unrelated = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(waiting.id, async () => ({
+  await asks.dispatchOnce(target, waiting.id, async () => ({
     sessionId: "wrun_1",
     deliveryId: "delivery-a",
   }));
-  await asks.dispatchOnce(alsoWaiting.id, async () => ({
+  await asks.dispatchOnce(target, alsoWaiting.id, async () => ({
     sessionId: "wrun_1",
     deliveryId: "delivery-b",
   }));
-  await asks.dispatchOnce(unrelated.id, async () => ({
+  await asks.dispatchOnce(target, unrelated.id, async () => ({
     sessionId: "wrun_1",
     deliveryId: "delivery-c",
   }));
@@ -279,4 +285,30 @@ test("over the real record, a follow-up ask stands queued under its own id until
     }),
     { ok: false, refusal: ASK_REFUSAL.NOT_FOUND },
   );
+});
+
+test("two first asks of different client ids on a conversation with no session open one session between them: the second waits on the conversation's lock, reads the session the first opened, and sends into it", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const eve = eveAccepting(`wrun_${randomUUID()}`);
+  const seams = { run: database.run, asks, eve, now: () => NOW };
+  const ask = (clientId: string) =>
+    acceptAsk(seams, {
+      userId,
+      conversationId,
+      clientId,
+      question: "what changed?",
+      origin: ASK_ORIGIN.TYPED,
+    });
+  const [first, second] = await Promise.all([ask(randomUUID()), ask(randomUUID())]);
+  assert.ok(first.ok && second.ok);
+  assert.notEqual(first.answer.id, second.answer.id);
+  assert.equal(eve.opens, 1);
+  assert.deepEqual(eve.deliveries, ["delivery-1"]);
+  const rows = await Promise.all([
+    asks.named(userId, first.answer.id),
+    asks.named(userId, second.answer.id),
+  ]);
+  assert.equal(rows[0]?.sessionId, rows[1]?.sessionId);
+  assert.equal([rows[0]?.deliveryId, rows[1]?.deliveryId].filter((d) => d !== undefined).length, 1);
 });
