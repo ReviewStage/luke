@@ -15,6 +15,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/platform": "catalog:",
     "@sidecar/actions": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/brain": "workspace:*",
@@ -37,6 +38,7 @@
     "ws": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "8.18.1",
