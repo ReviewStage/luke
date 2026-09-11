@@ -115,13 +115,14 @@ test("a second dispatch on an ask already handed to eve runs nothing and changes
     return { sessionId: "wrun_2", deliveryId: "delivery-1" };
   });
   assert.equal(ran, 0);
+  assert.ok(after);
   assert.equal(after.sessionId, "wrun_1");
   assert.equal(after.turnId, turnId);
   assert.equal(after.deliveryId, undefined);
   const undispatched = await asks.record(write(userId, conversationId));
   assert.equal(
     (await asks.dispatchOnce({ userId, conversationId }, undispatched.id, async () => undefined))
-      .sessionId,
+      ?.sessionId,
     undefined,
   );
 
@@ -311,4 +312,51 @@ test("two first asks of different client ids on a conversation with no session o
   ]);
   assert.equal(rows[0]?.sessionId, rows[1]?.sessionId);
   assert.equal([rows[0]?.deliveryId, rows[1]?.deliveryId].filter((d) => d !== undefined).length, 1);
+});
+
+test("a dispatch on a conversation cleared since the ask was admitted runs nothing and answers no row, so the Clear is the caller's refusal and not a failure", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const ask = await asks.record(write(userId, conversationId));
+  await database.db
+    .update(conversations)
+    .set({ deletedAt: new Date(NOW) })
+    .where(eq(conversations.id, conversationId));
+  let dispatched = 0;
+  const outcome = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
+    dispatched += 1;
+    return { sessionId: "wrun_never" };
+  });
+  assert.equal(outcome, undefined);
+  assert.equal(dispatched, 0);
+  assert.equal((await asks.named(userId, ask.id))?.sessionId, undefined);
+});
+
+test("an ask whose conversation is cleared between its admission and its dispatch is refused as not found, and eve is not reached", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const eve = eveAccepting(`wrun_${randomUUID()}`);
+  const clearingBeforeDispatch = {
+    ...asks,
+    dispatchOnce: async (...args: Parameters<typeof asks.dispatchOnce>) => {
+      await database.db
+        .update(conversations)
+        .set({ deletedAt: new Date(NOW) })
+        .where(eq(conversations.id, conversationId));
+      return asks.dispatchOnce(...args);
+    },
+  };
+  const outcome = await acceptAsk(
+    { run: database.run, asks: clearingBeforeDispatch, eve, now: () => NOW },
+    {
+      userId,
+      conversationId,
+      clientId: randomUUID(),
+      question: "still there?",
+      origin: ASK_ORIGIN.TYPED,
+    },
+  );
+  assert.deepEqual(outcome, { ok: false, refusal: ASK_REFUSAL.NOT_FOUND });
+  assert.equal(eve.opens, 0);
+  assert.deepEqual(eve.deliveries, []);
 });

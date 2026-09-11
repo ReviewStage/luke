@@ -61,13 +61,14 @@ export interface AskRecord {
   /**
    * Runs the dispatch under the conversation's lock unless a session is already written, handing it
    * the conversation's newest session as read under that lock, and writes what eve answered; answers
-   * the row after.
+   * the row after, or nothing when the conversation no longer stands, so a Clear landing between the
+   * ask's admission and its dispatch is the caller's refusal and not a failure.
    */
   dispatchOnce(
     target: ConversationTarget,
     id: string,
     dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
-  ): Promise<AskRow>;
+  ): Promise<AskRow | undefined>;
   /** Stamps a Stop on an ask whose turn has not started, for the start to honour. */
   cancelRequested(id: string, at: Date): Promise<void>;
 }
@@ -342,12 +343,12 @@ function dispatchAskOnce(
   target: ConversationTarget,
   id: string,
   dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
-): Effect.Effect<AskRow, AskFailure, SqlClient.SqlClient> {
+): Effect.Effect<AskRow | undefined, AskFailure, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockConversation(target);
-        if (Option.isNone(locked)) throw new Error("the ask's conversation is not standing");
+        if (Option.isNone(locked)) return undefined;
         const read = yield* readAsk(id);
         if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
         const standing = askRow(read.value);

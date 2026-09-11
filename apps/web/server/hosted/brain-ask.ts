@@ -300,26 +300,36 @@ export async function acceptAsk(seams: AskSeams, input: AskInput): Promise<AskOu
   // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
   // conversation: of two retries for one client id the second finds the session written and
   // hands eve nothing, and of two first asks the second reads the session the first opened and
-  // sends into it rather than opening a second the forward-only claim would lose.
+  // sends into it rather than opening a second the forward-only claim would lose. A Clear that
+  // lands between the admission above and this lock finds no conversation to dispatch in, and the
+  // ask is refused as not found rather than dispatched into a conversation the account has cleared.
   let failed: AskOutcome | undefined;
-  await seams.asks.dispatchOnce({ userId, conversationId }, ask.id, async (sessionId) => {
-    if (sessionId !== undefined) {
-      const sent = await seams.eve.send(sessionId, message);
-      if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
-        return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
+  const dispatched = await seams.asks.dispatchOnce(
+    { userId, conversationId },
+    ask.id,
+    async (sessionId) => {
+      if (sessionId !== undefined) {
+        const sent = await seams.eve.send(sessionId, message);
+        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
+          return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
+        }
+        if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
+          failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: sent.status };
+          return undefined;
+        }
       }
-      if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
-        failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: sent.status };
+      const opened = await seams.eve.open(message);
+      if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
+        failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
         return undefined;
       }
-    }
-    const opened = await seams.eve.open(message);
-    if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
-      failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
-      return undefined;
-    }
-    return { sessionId: opened.sessionId, turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID) };
-  });
+      return {
+        sessionId: opened.sessionId,
+        turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID),
+      };
+    },
+  );
+  if (dispatched === undefined) return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
   return failed ?? accepted;
 }
 

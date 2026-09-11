@@ -35,7 +35,10 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
-import { recordedRuntimeSession } from "../server/hosted/brain-host/recorded-session";
+import {
+  conversationOwnedBy,
+  recordedRuntimeSession,
+} from "../server/hosted/brain-host/recorded-session";
 import { newestSession } from "../server/hosted/store/asks";
 import type { HostedStoreRun } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -102,6 +105,8 @@ function memoryAsks(run: HostedStoreRun): AskRecord & { rows: Map<string, AskRow
     async dispatchOnce(target, id, dispatch) {
       // One dispatch at a time per conversation, as the conversation lock serialises them on the real record.
       const turn = (inFlight.get(target.conversationId) ?? Promise.resolve()).then(async () => {
+        if (!(await run(conversationOwnedBy(target.userId, target.conversationId))))
+          return undefined;
         const row = rows.get(id);
         assert.ok(row);
         if (row.sessionId !== undefined) return row;
