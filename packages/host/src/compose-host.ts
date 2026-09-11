@@ -49,7 +49,7 @@ import {
   hostStandingLayer,
 } from "./effect/host.js";
 import { HostKernelTag, HostService, hostKernelLayerFromSeams } from "./effect/kernel.js";
-import { HostSeamsObject, Reporter, RunMode } from "./effect/seams.js";
+import { type Environment, HostSeamsObject, Reporter, RunMode } from "./effect/seams.js";
 import type { HostSeams } from "./host-kernel.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
@@ -121,7 +121,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
 export const hostAssemblyLayer: Layer.Layer<
   HostAssemblyTag,
   DuplicateGatewayMethod,
-  HostKernelTag | HostService | HostSeamsObject | RunMode | Reporter
+  HostKernelTag | HostService | HostSeamsObject | RunMode | Reporter | Environment
 > = Layer.effect(
   HostAssemblyTag,
   Effect.gen(function* () {
@@ -133,7 +133,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const { now } = kernel;
 
     const settings = composeSettings({ kernel });
-    const account = composeAccount({ kernel, settings });
+    const account = yield* composeAccount({ settings });
     const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
     const issues = composeIssues({ kernel, settings, observationGate });
     const observation = composeObservation({ kernel, settings, account, issues, observationGate });
@@ -421,7 +421,7 @@ export const hostAssemblyLayer: Layer.Layer<
 export const hostLayer: Layer.Layer<
   HostTag,
   DuplicateGatewayMethod,
-  HostKernelTag | HostService | HostSeamsObject | RunMode | Reporter
+  HostKernelTag | HostService | HostSeamsObject | RunMode | Reporter | Environment
 > = Layer.provide(hostStandingLayer, hostAssemblyLayer);
 
 /**

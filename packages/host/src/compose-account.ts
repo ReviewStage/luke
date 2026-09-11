@@ -10,11 +10,7 @@ import {
   type AccountSnapshot,
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
-import {
-  AgentTraceWriter,
-  agentTraceDirectoryFromEnvironment,
-  tracedModelAdapter,
-} from "@sidecar/devtrace";
+import { AgentTraceWriter, agentTraceDirectory, tracedModelAdapter } from "@sidecar/devtrace";
 import {
   carried,
   GATEWAY_EVENT,
@@ -23,10 +19,17 @@ import {
   gatewayOk,
   invalid,
 } from "@sidecar/gateway";
-import { type AccountToken, hostedVoiceServiceOrigin } from "@sidecar/hosted";
+import {
+  type AccountToken,
+  hostedVoiceServiceOrigin,
+  VOICE_SERVICE_ORIGIN_VARIABLE,
+} from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { lateRef } from "@sidecar/wire";
-import type { Composer, ComposerContext } from "./composer.js";
+import { Config, Effect, Option } from "effect";
+import type { SettingsComposer } from "./compose-settings.js";
+import type { Composer } from "./composer.js";
+import { HostKernelTag, lateService } from "./effect/kernel.js";
+import { Environment } from "./effect/seams.js";
 import { openSocketOverWs } from "./voice/socket-over-ws.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
 
@@ -72,199 +75,227 @@ export interface AccountComposer extends Composer {
   link: (links: AccountLinks) => void;
 }
 
-export type AccountDependencies = ComposerContext;
+export interface AccountDependencies {
+  settings: SettingsComposer;
+}
 
-export function composeAccount(dependencies: AccountDependencies): AccountComposer {
-  const { kernel, settings } = dependencies;
-  const { runMode, report, options } = kernel;
-  const links = lateRef<AccountLinks>("the account composer's links");
-
-  const client = new AccountClient({
-    baseUrl: kernel.accountBaseUrl,
-    clientId: ACCOUNT_CLIENT_ID,
-  });
-  let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
-
-  const session = new AccountSessionManager({
-    client,
-    store: settings.store,
-    hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
-    requiresAccount: runMode.requiresAccount,
-    openExternal: (url) => kernel.openExternalThroughNode(url),
-    startCapabilities: () => links.get().startCapabilities(),
-    stopCapabilities: () => links.get().stopCapabilities(),
-    onSignOut: (stored) => links.get().releaseDevice(stored),
-    onChange: (next) => {
-      const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
-      const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-      const previousAccountKey =
-        account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
-      const nextAccountKey = signedIn ? next.email : undefined;
-      account = next;
-      if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
-      if (signedIn && !wasSignedIn) links.get().onFirstSignIn();
-      kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(account));
-      void settings.emitSettings();
-      void emitSessionReplay();
-      if (signedIn && !wasSignedIn) {
-        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-        links.get().onFirstSignInArrival();
+/**
+ * The account concern, over the kernel it takes as a tag rather than as a
+ * constructor argument. What the merge links late is a set-once `Deferred`
+ * (`lateService`) rather than a holder of its own, so the link a concern
+ * holds cannot depend on the order the merge folded it in; the sync read
+ * beside it is what the callbacks the session manager and the Gateway
+ * handlers answer still hold.
+ */
+export const composeAccount = (
+  dependencies: AccountDependencies,
+): Effect.Effect<AccountComposer, never, HostKernelTag | Environment> =>
+  Effect.gen(function* () {
+    const { settings } = dependencies;
+    const kernel = yield* HostKernelTag;
+    const environment = yield* Environment;
+    const { runMode, report, options } = kernel;
+    const late = yield* lateService<AccountLinks>();
+    const links = (): AccountLinks => {
+      const standing = late.unsafePeek();
+      if (Option.isNone(standing)) {
+        throw new Error("the account composer's links are read before link() has run");
       }
-    },
-  });
-
-  /**
-   * The development trace, gated so it cannot exist for a user: a packaged
-   * build never reads the variable, a fixture or evidence run has no traffic to
-   * tap and constructs no writer.
-   */
-  const agentTraceDirectory =
-    options.packaged || !runMode.sendsNetwork
-      ? undefined
-      : agentTraceDirectoryFromEnvironment(options.environment);
-  const agentTrace = agentTraceDirectory
-    ? new AgentTraceWriter({ directory: agentTraceDirectory })
-    : undefined;
-  if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
-
-  function capabilitiesActive(): boolean {
-    return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
-  }
-
-  // The holder is the account's own address, so a call's one retry after a
-  // 401 can tell a renewed token from a different person's: a sign-out and
-  // sign-in between the attempt and its retry reads as the caller's account
-  // gone, never as a fresh bearer to carry the old account's payload under.
-  const token: AccountToken = {
-    readAccessToken: async () =>
-      runMode.sendsNetwork ? (await settings.store.readAccount())?.accessToken : undefined,
-    refreshAccount: session.refreshOnce,
-    readAccountKey: async () => (await settings.store.readAccount())?.email,
-  };
-
-  const voiceCapabilities = new VoiceCapabilityAssembler({
-    settings: settings.store,
-    credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
-    fixtureRun: () => !runMode.sendsNetwork,
-    accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
-    hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
-    // The voice functions live on the account service's origin, so its
-    // development override reaches them too; a voice override of its own stands
-    // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
-    hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
-      packaged: options.packaged,
-      override: options.environment.LUKE_VOICE_SERVICE_ORIGIN ?? kernel.hostedServiceBaseUrl,
-    }),
-    openSocket: openSocketOverWs,
-    refreshAccount: session.refreshOnce,
-    deviceId: () => links.get().deviceId(),
-    ...(agentTrace
-      ? {
-          wrapBrainModel: (model) =>
-            tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record)),
-        }
-      : undefined),
-  });
-
-  /**
-   * Whether an account was deleted in this run, which stands recording down
-   * for the rest of it; the client relays the answer to its renderers.
-   */
-  let sessionReplayEndedByDeletion = false;
-
-  async function sessionReplayState(): Promise<{ permitted: boolean; accountId?: string }> {
-    const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-    const accountId = signedIn ? (await settings.store.readAccount())?.id : undefined;
-    return {
-      permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
-      ...(accountId ? { accountId } : undefined),
+      return standing.value;
     };
-  }
 
-  let sessionReplayGeneration = 0;
-  async function emitSessionReplay(): Promise<void> {
-    // The account is read asynchronously, and a sign-out reports the transition
-    // before it clears the stored account, so a late answer must not restart
-    // recording under the person who just left.
-    const generation = ++sessionReplayGeneration;
-    const replay = await sessionReplayState();
-    if (generation !== sessionReplayGeneration) return;
-    kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
-  }
+    const client = new AccountClient({
+      baseUrl: kernel.accountBaseUrl,
+      clientId: ACCOUNT_CLIENT_ID,
+    });
+    let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
-  async function applyVoiceCredential(): Promise<void> {
-    await transitionVoiceSource({
-      retire: () => links.get().retireBrain(),
-      apply: () => voiceCapabilities.apply(),
-      rebuild: async () => {
-        await links.get().rebuildBrain();
-        links.get().syncMemory();
+    const session = new AccountSessionManager({
+      client,
+      store: settings.store,
+      hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
+      requiresAccount: runMode.requiresAccount,
+      openExternal: (url) => kernel.openExternalThroughNode(url),
+      startCapabilities: () => links().startCapabilities(),
+      stopCapabilities: () => links().stopCapabilities(),
+      onSignOut: (stored) => links().releaseDevice(stored),
+      onChange: (next) => {
+        const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
+        const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+        const previousAccountKey =
+          account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+        const nextAccountKey = signedIn ? next.email : undefined;
+        account = next;
+        if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
+        if (signedIn && !wasSignedIn) links().onFirstSignIn();
+        kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(account));
+        void settings.emitSettings();
+        void emitSessionReplay();
+        if (signedIn && !wasSignedIn) {
+          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+          links().onFirstSignInArrival();
+        }
       },
     });
-  }
 
-  const methods: GatewayMethodTable = {
-    [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => gatewayOk({ account: carried(account) }),
-    [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: async (params) => {
-      if (!isAccountProvider(params.provider))
-        return invalid("provider is not one this build knows");
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-        account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
-      });
-      const snapshot = await session.beginSignIn(params.provider);
-      return gatewayOk({ account: carried(snapshot) });
-    },
-    [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () => {
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-        account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
-      });
-      session.cancelSignIn();
-      return gatewayOk({});
-    },
-    [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: async () => {
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-        account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
-      });
-      // The count of the action leaves before the action ends the account it is
-      // authenticated with; queued behind the sign-out it would wait for the
-      // next sign-in.
-      await settings.flushProductEvents();
-      const snapshot = await session.signOut({ revokeRemote: true });
-      return gatewayOk({ account: carried(snapshot) });
-    },
-    [GATEWAY_METHOD.ACCOUNT_DELETE]: async () => {
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-        account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
-      });
-      await settings.flushProductEvents();
-      const snapshot = await session.deleteEverywhere();
-      // Only a deletion that landed stands recording down for the run.
-      sessionReplayEndedByDeletion = true;
-      void emitSessionReplay();
-      return gatewayOk({ account: carried(snapshot) });
-    },
-  };
+    /**
+     * The development trace, gated so it cannot exist for a user: a packaged
+     * build never reads the variable, a fixture or evidence run has no traffic to
+     * tap and constructs no writer.
+     */
+    const traceDirectory =
+      options.packaged || !runMode.sendsNetwork
+        ? Option.none<string>()
+        : yield* Effect.orDie(environment.load(agentTraceDirectory));
+    const agentTrace = Option.isSome(traceDirectory)
+      ? new AgentTraceWriter({ directory: traceDirectory.value })
+      : undefined;
+    if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
 
-  return {
-    methods,
-    session,
-    voiceCapabilities,
-    agentTrace,
-    snapshot: () => account,
-    signedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
-    capabilitiesActive,
-    token,
-    applyVoiceCredential,
-    sessionReplayState,
-    link: (next) => links.set(next),
-    start: async () => {
-      account = runMode.requiresAccount
-        ? await settings.store.accountSnapshot()
-        : { status: ACCOUNT_STATUS.SIGNED_OUT };
-      session.initialize(account);
-    },
-    // The session manager holds no timer this host started: what a sign-in
-    // began is stopped by the capabilities it started, not here.
-    stop: async () => undefined,
-  };
-}
+    const voiceServiceOrigin = yield* Effect.orDie(
+      environment.load(Config.option(Config.string(VOICE_SERVICE_ORIGIN_VARIABLE))),
+    );
+
+    function capabilitiesActive(): boolean {
+      return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
+    }
+
+    // The holder is the account's own address, so a call's one retry after a
+    // 401 can tell a renewed token from a different person's: a sign-out and
+    // sign-in between the attempt and its retry reads as the caller's account
+    // gone, never as a fresh bearer to carry the old account's payload under.
+    const token: AccountToken = {
+      readAccessToken: async () =>
+        runMode.sendsNetwork ? (await settings.store.readAccount())?.accessToken : undefined,
+      refreshAccount: session.refreshOnce,
+      readAccountKey: async () => (await settings.store.readAccount())?.email,
+    };
+
+    const voiceCapabilities = new VoiceCapabilityAssembler({
+      settings: settings.store,
+      credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
+      fixtureRun: () => !runMode.sendsNetwork,
+      accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
+      hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
+      // The voice functions live on the account service's origin, so its
+      // development override reaches them too; a voice override of its own stands
+      // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
+      hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
+        packaged: options.packaged,
+        override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
+      }),
+      openSocket: openSocketOverWs,
+      refreshAccount: session.refreshOnce,
+      deviceId: () => links().deviceId(),
+      ...(agentTrace
+        ? {
+            wrapBrainModel: (model) =>
+              tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record)),
+          }
+        : undefined),
+    });
+
+    /**
+     * Whether an account was deleted in this run, which stands recording down
+     * for the rest of it; the client relays the answer to its renderers.
+     */
+    let sessionReplayEndedByDeletion = false;
+
+    async function sessionReplayState(): Promise<{ permitted: boolean; accountId?: string }> {
+      const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+      const accountId = signedIn ? (await settings.store.readAccount())?.id : undefined;
+      return {
+        permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
+        ...(accountId ? { accountId } : undefined),
+      };
+    }
+
+    let sessionReplayGeneration = 0;
+    async function emitSessionReplay(): Promise<void> {
+      // The account is read asynchronously, and a sign-out reports the transition
+      // before it clears the stored account, so a late answer must not restart
+      // recording under the person who just left.
+      const generation = ++sessionReplayGeneration;
+      const replay = await sessionReplayState();
+      if (generation !== sessionReplayGeneration) return;
+      kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
+    }
+
+    async function applyVoiceCredential(): Promise<void> {
+      await transitionVoiceSource({
+        retire: () => links().retireBrain(),
+        apply: () => voiceCapabilities.apply(),
+        rebuild: async () => {
+          await links().rebuildBrain();
+          links().syncMemory();
+        },
+      });
+    }
+
+    const methods: GatewayMethodTable = {
+      [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => gatewayOk({ account: carried(account) }),
+      [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: async (params) => {
+        if (!isAccountProvider(params.provider))
+          return invalid("provider is not one this build knows");
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
+        });
+        const snapshot = await session.beginSignIn(params.provider);
+        return gatewayOk({ account: carried(snapshot) });
+      },
+      [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () => {
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
+        });
+        session.cancelSignIn();
+        return gatewayOk({});
+      },
+      [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: async () => {
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
+        });
+        // The count of the action leaves before the action ends the account it is
+        // authenticated with; queued behind the sign-out it would wait for the
+        // next sign-in.
+        await settings.flushProductEvents();
+        const snapshot = await session.signOut({ revokeRemote: true });
+        return gatewayOk({ account: carried(snapshot) });
+      },
+      [GATEWAY_METHOD.ACCOUNT_DELETE]: async () => {
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
+        });
+        await settings.flushProductEvents();
+        const snapshot = await session.deleteEverywhere();
+        // Only a deletion that landed stands recording down for the run.
+        sessionReplayEndedByDeletion = true;
+        void emitSessionReplay();
+        return gatewayOk({ account: carried(snapshot) });
+      },
+    };
+
+    return {
+      methods,
+      session,
+      voiceCapabilities,
+      agentTrace,
+      snapshot: () => account,
+      signedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
+      capabilitiesActive,
+      token,
+      applyVoiceCredential,
+      sessionReplayState,
+      link: (next) => {
+        late.unsafeSet(next);
+      },
+      start: async () => {
+        account = runMode.requiresAccount
+          ? await settings.store.accountSnapshot()
+          : { status: ACCOUNT_STATUS.SIGNED_OUT };
+        session.initialize(account);
+      },
+      // The session manager holds no timer this host started: what a sign-in
+      // began is stopped by the capabilities it started, not here.
+      stop: async () => undefined,
+    };
+  });

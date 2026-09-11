@@ -18,9 +18,10 @@ import { Cause, Deferred, Effect, Exit, FiberId } from "effect";
  * @deprecated The returned closure's `Effect.runPromiseExit` is on the
  * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: this package's
  * two callers, `AccountSessionManager.refresh` and `LinearCredentials`'s own
- * renewal, still hold a Promise rather than a fiber. P7-04 and P7-06 move
- * each composer onto the host's own runtime, at which point its caller runs
- * this join as an Effect and this seam goes.
+ * renewal, still hold a Promise rather than a fiber. P7-06 moves the Linear
+ * caller onto the host's own runtime; the account's holds `refreshOnce`
+ * behind an `AccountToken` a hosted client is handed, so it runs this join as
+ * an Effect only once `AccountSessionManager.refresh` is one itself.
  */
 export function singleFlight(run: () => Promise<void>): () => Promise<void> {
   const gate = Effect.unsafeMakeSemaphore(1);

@@ -150,6 +150,7 @@ export {
   sessionOpeningFrameSchema,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
+  VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
 } from "./live-contract.js";
 export {
