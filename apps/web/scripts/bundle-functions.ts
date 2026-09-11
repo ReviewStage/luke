@@ -1,7 +1,16 @@
+import { rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { build } from "esbuild";
-import { functionBundlePlan, packageNameOf } from "../server/function-bundles.js";
-import { bundlePath, stubDrift } from "../server/function-stubs.js";
+import {
+  expectedExternals,
+  externalsByBundle,
+  externalsDrift,
+  FUNCTION_METAFILE,
+  functionBundlePlan,
+  importChain,
+  packageNameOf,
+} from "../server/function-bundles.js";
+import { bundlePath, FUNCTION_BUNDLE_DIRECTORY, stubDrift } from "../server/function-stubs.js";
 
 /**
  * Bundles the functions the routes under `server/routes/` are grouped into,
@@ -37,6 +46,8 @@ if (drift.length > 0) {
 }
 
 const plan = await functionBundlePlan(WEB);
+// Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.
+await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
 const result = await build({ ...plan.options, write: true });
 
 const undeclared = new Set<string>();
@@ -49,6 +60,28 @@ for (const input of Object.values(result.metafile.inputs)) {
 if (undeclared.size > 0) {
   throw new Error(
     `bundled routes reach dependencies apps/web does not declare: ${[...undeclared].sort().join(", ")}`,
+  );
+}
+
+await writeFile(join(WEB, FUNCTION_METAFILE), JSON.stringify(result.metafile));
+
+const externals = externalsDrift(
+  await expectedExternals(WEB),
+  externalsByBundle(result.metafile, WEB),
+);
+if (externals.length > 0) {
+  const lines = externals.map((entry) => {
+    const outputPath = Object.keys(result.metafile.outputs).find((path) =>
+      path.endsWith(entry.bundle),
+    );
+    const chains = entry.added.map(
+      (added) =>
+        `${added} via ${(outputPath === undefined ? [] : importChain(result.metafile, outputPath, added)).join(" -> ")}`,
+    );
+    return `${entry.bundle}: added ${JSON.stringify(entry.added)} removed ${JSON.stringify(entry.removed)}${chains.length > 0 ? ` (${chains.join("; ")})` : ""}`;
+  });
+  throw new Error(
+    `function bundles load externals the record does not expect (run \`pnpm --filter @luke/web functions:externals\` if intended):\n${lines.join("\n")}`,
   );
 }
 
