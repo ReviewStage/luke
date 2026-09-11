@@ -1836,3 +1836,45 @@ The wider point, since this is the second cross-workstream collision this mornin
 `vercel.json` route shape: **a lane that is "finished and waiting" is not static.** Its
 correctness is relative to a main that moves — sixty-plus commits today — and keeping prepared work
 true is orchestration rather than bookkeeping.
+
+
+## How to pick a mutation (C3, from LUKE-127's eleven)
+
+**A mutation is chosen from the guarantee, not from the code.** Before writing one, state the
+sentence the PR body promises — *"a refused send leaves the cursor and the diffs standing"*, *"the
+deployment may open only the turns its table admits"*, *"a release is never lost"* — and then ask
+**what the cheapest edit is that would make a working system break that sentence while every existing
+test still passes.** That edit is the mutation, and it is almost always one of four shapes:
+
+1. **Move a write across the boundary it is supposed to sit behind** — the cursor keep pulled out of
+   the transaction, the dequeue moved before eve accepts.
+2. **Delete a filter or a comparison** — the release reason dropped from the read, the turn kind
+   unchecked at the door, the carried filter removed.
+3. **Collapse two things the design keeps distinct into one** — the accessor answering `principalId`
+   for every principal type, *which is how a rule quietly becomes a field.*
+4. **Replace a bound with its absence or its old value** — the per-account limit gone, the read cut
+   back to eight.
+
+**If none of the four breaks the sentence, either the sentence is not a guarantee or the code does
+not yet hold it** — and both are worth knowing before the PR opens. Apply the mutation, run the
+suite, revert. **A mutation that passes is the finding**, and the response is a test that names the
+consequence, not a test that names the line.
+
+**The test a mutation fails should name what the developer would have suffered**, because that is
+what makes the failure legible and the count worth quoting. *"Carried filter dropped fails three
+tests"* beats one test asserting the filter exists, because the three are the three consequences — a
+release read back that a message already named, a re-decision sent for briefings already decided, a
+turn listing twelve when it should list twelve minus one — and **each would still fail if the filter
+were rewritten some other wrong way, where a test of the mechanism would pass.**
+
+**Two corollaries.**
+
+- **A fixture that happens to satisfy the mutated code is the commonest way a mutation passes for
+  the wrong reason.** The fake database whose transaction failed but had no insert to expose the
+  moved write, and the writer clocked to real time while the fixture's events sat at the fixture
+  instant, **both hid a real defect until the fixture was made to carry the state the mutation would
+  corrupt.**
+- **When a change moves a boundary, look for existing tests that used the old boundary as a
+  convenient fixture** — the two cursor tests that used a queued row — **and move them onto the new
+  one with their assertions unchanged**, so they keep testing what they tested rather than passing
+  on a row the code now skips.
