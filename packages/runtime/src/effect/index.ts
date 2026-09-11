@@ -1,4 +1,22 @@
 export {
+  CHILD_COMPLETION_REFUSAL,
+  CHILD_SPAWN_REFUSAL,
+  ChildCancellationIncomplete,
+  type ChildCompletionRefusal,
+  ChildCompletionRefused,
+  ChildSpawnRefused,
+  cancelChild,
+  cancelDescendantsOf,
+  childDeliveryBackoffSchedule,
+  childLines,
+  dismissChildCompletion,
+  type EffectChildRunServiceOptions,
+  makeChildRunService,
+  retryChildDelivery,
+  spawnChild,
+} from "../children.effect.js";
+export { acquireLane, laneSnapshot, withLane } from "../lanes.effect.js";
+export {
   gatherPromptFactsEffect,
   PromptFactsIOError,
 } from "../prompt.effect.js";
