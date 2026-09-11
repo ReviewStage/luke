@@ -702,7 +702,7 @@ export class TurnRunner {
     const reopened = await claimOpenedContext(
       this.#options.runtime.openContext(
         { format: context.checkpointFormat, items: mark.items },
-        JSON.stringify(UNKNOWN_ACTION_RESULT),
+        UNKNOWN_ACTION_RESULT,
         { signal: generation.abort.signal },
       ),
       generation.abort.signal,

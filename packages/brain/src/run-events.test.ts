@@ -17,6 +17,7 @@ import {
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
   type UnparsedWireValue,
+  valueFromJsonText,
 } from "@sidecar/wire";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { z } from "zod";
@@ -50,7 +51,6 @@ import {
   SLOW_STEP_KIND,
   slowStepOf,
   TOOL_CALL_SETTLEMENT,
-  toolCallInput,
   toolCallSettlementOf,
   turnOriginOf,
 } from "./run-events.js";
@@ -870,8 +870,8 @@ test("a tool's result settles as an answer unless its status is a refusal, an un
     errorText: "not json",
     status: ACTION_RESULT_STATUS.UNSUPPORTED,
   });
-  assert.deepEqual(toolCallInput('{"text":"hi"}'), { text: "hi" });
-  assert.equal(toolCallInput("{broken"), "{broken");
+  assert.deepEqual(valueFromJsonText('{"text":"hi"}'), { text: "hi" });
+  assert.equal(valueFromJsonText("{broken"), "{broken");
 });
 
 test("a turn's teller numbers its events from one, knows once its start was told, and registers the runs it adopts", () => {

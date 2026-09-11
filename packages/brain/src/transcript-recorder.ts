@@ -14,7 +14,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
-import type { WireRecord } from "@sidecar/wire";
+import type { UnknownActionResult, WireRecord } from "@sidecar/wire";
 
 /**
  * The context engine with the transcript written beside it. Every input the
@@ -45,10 +45,10 @@ export class RecordingContextEngine implements ContextEngine {
 
   bootstrap(
     checkpoint: RuntimeCheckpoint | undefined,
-    lostResultJson: string,
+    lostResult: UnknownActionResult,
     lifecycle?: ContextLifecycle,
   ): MaybePromise<ContextBootstrap> {
-    return this.#engine.bootstrap(checkpoint, lostResultJson, lifecycle);
+    return this.#engine.bootstrap(checkpoint, lostResult, lifecycle);
   }
 
   ingest(input: ContextInput, lifecycle?: ContextLifecycle): MaybePromise<void> {

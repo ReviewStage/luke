@@ -26,6 +26,7 @@ import {
 } from "./compaction.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import type { BrainPersistedState } from "./envelope.js";
+import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -127,7 +128,7 @@ test("the fold keeps at most the reserve's worth of tail, and the assessment nam
 
 test("the fold cuts at a user message, so every exchange is kept whole or folded whole, and the summary stands first as an assistant message", async () => {
   const engine = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
-  engine.bootstrap(undefined, "{}");
+  engine.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
   const items: WireRecord[] = [
     userMessageItem("first ask"),
     reasoning("rs1"),
@@ -191,7 +192,7 @@ test("the fold cuts at a user message, so every exchange is kept whole or folded
   assert.deepEqual(engine.checkpoint().items.slice(1), groups[2]);
   // Nothing to fold — one exchange — folds nothing and asks no summary.
   const small = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
-  small.bootstrap(undefined, "{}");
+  small.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
   small.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "only" });
   assert.equal(
     await small.foldBehindSummary(async () => {
@@ -232,7 +233,7 @@ function adapter(overrides: Partial<ModelAdapter> = {}): ModelAdapter {
 
 test("the summary is asked of the model with no tools over the older items alone, and a summary that fails or comes back empty changes nothing", async () => {
   const engine = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
-  engine.bootstrap(undefined, "{}");
+  engine.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
   const recorder = new RecordingContextEngine(engine, () => NOW);
   // The last exchange alone fills the recent-tail budget, so the two before it fold.
   for (const text of ["a", "b", "c".repeat(100_000)]) {
@@ -288,7 +289,7 @@ test("the summary is asked of the model with no tools over the older items alone
   assert.deepEqual(refused, { compacted: false, reason: "upstream: not asked" });
   assert.deepEqual(recorder.checkpoint().items, standing);
   const bare = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
-  bare.bootstrap(undefined, "{}");
+  bare.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
   assert.deepEqual(
     await compactContext(bare, model, { ...request, capabilities: known.capabilities }),
     { compacted: false, reason: "nothing to compact" },
@@ -297,7 +298,7 @@ test("the summary is asked of the model with no tools over the older items alone
 
 test("the recorder keeps every ingested input and fold as transcript events, rolled back with the mark and drained as checkpoints land", async () => {
   const engine = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
-  engine.bootstrap(undefined, "{}");
+  engine.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
   const recorder = new RecordingContextEngine(engine, () => NOW);
   await recorder.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "ask" });
   const mark = recorder.mark();

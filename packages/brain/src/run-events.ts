@@ -6,6 +6,7 @@ import {
   isRecord,
   isWireString,
   type UnparsedWireValue,
+  valueFromJsonText,
   type WireRecord,
 } from "@sidecar/wire";
 import type { UIMessage } from "ai";
@@ -262,27 +263,12 @@ export function turnCompactionOf(
   };
 }
 
-/** JSON the runtime serialized, read back as data; text that is not JSON is kept as the text it is. */
-function parsedJson(json: string): UnparsedWireValue {
-  try {
-    // SAFETY: JSON.parse answers a wire value; the callers keep it as data and read nothing off it but a reason.
-    return JSON.parse(json) as UnparsedWireValue;
-  } catch {
-    return json;
-  }
-}
-
-/** A call's arguments as the tool part keeps them: parsed when they parse, the raw text otherwise. */
-export function toolCallInput(argumentsJson: string): UnparsedWireValue {
-  return parsedJson(argumentsJson);
-}
-
 /** How a tool's result reads as a tool part's settlement: an answer, or a refusal carrying the output's own reason. */
 export function toolCallSettlementOf(
   outputJson: string,
   status: string | undefined,
 ): ToolCallSettlement {
-  const output = parsedJson(outputJson);
+  const output = valueFromJsonText(outputJson);
   if (status === undefined || !isToolRefusalStatus(status)) {
     return {
       state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,

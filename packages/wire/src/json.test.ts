@@ -12,6 +12,7 @@ import {
   resolveOptions,
   text,
   type UnparsedWireValue,
+  valueFromJsonText,
 } from "./json.js";
 
 test("positiveInteger keeps the default for missing, infinite, or non-positive values", () => {
@@ -81,4 +82,15 @@ test("isUnitLevel refuses anything outside the 0-to-1 scale", () => {
   assert.equal(isUnitLevel("1"), false);
   assert.equal(isUnitLevel(undefined), false);
   assert.equal(isUnitLevel(boxed(0.5)), false);
+});
+
+test("valueFromJsonText reads JSON as the data it carries and keeps other text as text", () => {
+  assert.deepEqual(valueFromJsonText('{"status":"unknown","reason":"lost"}'), {
+    status: "unknown",
+    reason: "lost",
+  });
+  assert.deepEqual(valueFromJsonText("[1,2]"), [1, 2]);
+  assert.equal(valueFromJsonText("3"), 3);
+  assert.equal(valueFromJsonText("{broken"), "{broken");
+  assert.equal(valueFromJsonText(""), "");
 });

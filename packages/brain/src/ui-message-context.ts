@@ -19,11 +19,11 @@ import {
 import { readStoredUIMessages, type StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   isWireString,
-  recordFromJsonLine,
   SCHEMA_REFUSAL,
   type SchemaPath,
   type SchemaRead,
   type SchemaRefusal,
+  type UnknownActionResult,
   type UnparsedWireValue,
   type WireRecord,
   wireRecord,
@@ -87,8 +87,8 @@ export interface ModelInputOptions {
   /** The registered tools, by the name a part spells; the SDK renders each result under its tool's declaration. */
   readonly tools: ToolSet;
   readonly replay: ReplayTarget;
-  /** What a call the record left unanswered is answered with. */
-  readonly lostResultJson: string;
+  /** What a call the record left unanswered is answered with: the envelope saying its effect is unknown. */
+  readonly lostResult: UnknownActionResult;
 }
 
 function compactionOf(row: ContextRow): CompactionMetadata | undefined {
@@ -198,7 +198,7 @@ function preparedToolPart(
     return {
       ...call,
       state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-      output: recordFromJsonLine(options.lostResultJson) ?? options.lostResultJson,
+      output: options.lostResult,
     };
   }
   const result =
@@ -349,7 +349,7 @@ export class UIMessageContextEngine implements ContextEngine {
   readonly checkpointFormat: CheckpointFormat;
   readonly #options: UIMessageContextEngineOptions;
   #rows: readonly ContextRow[] = [];
-  #lostResultJson: string | undefined;
+  #lostResult: UnknownActionResult | undefined;
   readonly #marks = new WeakMap<readonly WireRecord[], readonly ContextRow[]>();
 
   constructor(options: UIMessageContextEngineOptions) {
@@ -371,9 +371,9 @@ export class UIMessageContextEngine implements ContextEngine {
    */
   async bootstrap(
     checkpoint: RuntimeCheckpoint | undefined,
-    lostResultJson: string,
+    lostResult: UnknownActionResult,
   ): Promise<ContextBootstrap> {
-    this.#lostResultJson = lostResultJson;
+    this.#lostResult = lostResult;
     this.#rows = [];
     if (!checkpoint) return { loaded: true, repaired: 0 };
     if (!sameCheckpointFormat(checkpoint.format, this.checkpointFormat)) {
@@ -401,15 +401,15 @@ export class UIMessageContextEngine implements ContextEngine {
 
   /** The derived input, then the ephemeral text as user messages, so the derived prefix stays cacheable. */
   async assemble(assembly: ContextAssembly): Promise<readonly WireRecord[]> {
-    const lostResultJson = this.#lostResultJson;
+    const lostResult = this.#lostResult;
     // Rows arrive only at bootstrap, where the lost result does too; before it there is nothing to derive.
     const derived: readonly ModelMessage[] =
-      lostResultJson === undefined
+      lostResult === undefined
         ? []
         : await modelInputFrom(this.#rows, {
             tools: this.#options.tools,
             replay: this.#options.replay,
-            lostResultJson,
+            lostResult,
           });
     const ephemeral: readonly ModelMessage[] = assembly.ephemeral.map((content) => ({
       role: MESSAGE_ROLE.USER,

@@ -26,7 +26,7 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from "@sidecar/runtime/vocabulary";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type UnknownActionResult } from "@sidecar/wire";
 import { compactContext } from "./compaction.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
 import { settledUnlessAborted } from "./settled.js";
@@ -131,19 +131,19 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
 
   async openContext(
     checkpoint: RuntimeCheckpoint | undefined,
-    lostResultJson: string,
+    lostResult: UnknownActionResult,
     lifecycle?: ContextLifecycle,
   ): Promise<ContextOpening> {
     const context = this.#options.createContext(this.#checkpoint);
-    return { context, bootstrap: await context.bootstrap(checkpoint, lostResultJson, lifecycle) };
+    return { context, bootstrap: await context.bootstrap(checkpoint, lostResult, lifecycle) };
   }
 
   async resume(
     checkpoint: RuntimeCheckpoint,
     request: Omit<RuntimeRunRequest, "context">,
-    lostResultJson: string,
+    lostResult: UnknownActionResult,
   ): Promise<RuntimeRun | { readonly refused: string }> {
-    const { context, bootstrap } = await this.openContext(checkpoint, lostResultJson);
+    const { context, bootstrap } = await this.openContext(checkpoint, lostResult);
     if (!bootstrap.loaded) return { refused: bootstrap.reason ?? "checkpoint not loaded" };
     return this.start({ ...request, context });
   }

@@ -21,6 +21,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
+import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
@@ -109,7 +110,7 @@ function harness(tools?: Partial<ToolExecutor>): Harness {
   const events: RuntimeEvent[] = [];
   const executed: ToolInvocation[] = [];
   const context = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
-  context.bootstrap(undefined, '{"status":"unknown"}');
+  context.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
   const abort = new AbortController();
   const executor: ToolExecutor = {
     execute: async (invocation) => {
@@ -425,11 +426,15 @@ test("resume loads a compatible checkpoint and refuses a foreign one without tou
   const refused = await r.resume(
     { format: { ...r.descriptor.checkpoint, runtime: "other" }, items },
     h.request(),
-    "{}",
+    UNKNOWN_ACTION_RESULT,
   );
   assert.ok("refused" in refused);
   h.model.answers.push(answered({ text: "resumed" }));
-  const resumed = await r.resume({ format: r.descriptor.checkpoint, items }, h.request(), "{}");
+  const resumed = await r.resume(
+    { format: r.descriptor.checkpoint, items },
+    h.request(),
+    UNKNOWN_ACTION_RESULT,
+  );
   assert.ok(!("refused" in resumed));
   if (!("refused" in resumed)) {
     assert.deepEqual(await resumed.done, { reason: RUN_END_REASON.COMPLETED, text: "resumed" });
@@ -529,7 +534,7 @@ test("an engine whose lifecycle hooks are asynchronous is awaited at every step"
     answered({ text: "ok" }),
   );
   const r = runtime(h.model);
-  const opened = await r.openContext(undefined, "{}");
+  const opened = await r.openContext(undefined, UNKNOWN_ACTION_RESULT);
   assert.equal(opened.bootstrap.loaded, true);
   const end = await r.start(h.request({ context: asyncEngine })).done;
   assert.deepEqual(end, { reason: RUN_END_REASON.COMPLETED, text: "ok" });
