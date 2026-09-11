@@ -1577,3 +1577,51 @@ between part b being a line and being a signature change in someone else's file.
 options differ in what the record can honestly say.** Recommendation unchanged — one secret with
 honest naming, because a silently-missing secret is worse than a coarser record, and the coarser
 record is still true.
+
+
+## 2026-09-11 — C3's (c) shape, and the question its own principle raises about the turns read (orchestrator)
+
+**(a) #1069 carries the ruled shape, and in one place better than I asked: `principalType: service`.**
+I required "a distinct type, not a flag"; C3 put the distinction in the **principal type itself**
+rather than in an authenticator string, so a route expecting a user principal cannot be handed the
+deployment one at all. One authenticator name **`luke-deployment`**, the acted-for account as
+attribute **`luke:account`**, the turn kind as **`luke:turn`** recorded as the turn's origin, the
+table as **kind → admitted** (`observation` true today), and **`DeploymentActor { secret, admits }`**
+in `brainHostChannelInput` so part b adds a row rather than a parameter. CLEAN with a complete
+verdict set; rebasing stopped per the hold policy.
+
+**(c)'s shape, recorded — and it is NOT a wire change.** `TURN_ORIGIN.HOLD_RELEASE` already exists on
+the wire from A3b, so what is added is the **host's** turn-kind vocabulary:
+`BRAIN_HOST_TURN.HOLD_RELEASE`, its `BRAIN_HOST_TURN_KIND` entry
+(`origin: BRAIN_TURN_ORIGIN.HOLD_RELEASE`, `trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED`), the relay's
+`TURN_ORIGIN_OF_HOST_TURN` mapping, and `DEPLOYMENT_TURNS[hold_release]`. Stated in the body so a
+reader does not go looking in `@sidecar/wire` for a change that is not there.
+
+Store: **`writer.dequeueTurn`** (removes a queued row no message names; a started or named row is
+left as it stands), **`releasedBriefings`** over messages and events only — no turns join, so the
+store-writer boundary test is unchanged — and **`queuedTurns`**. The opener drains hold releases
+first, one eve message per conversation listing the briefings released since one offer lifetime
+before its oldest queued row, dequeued after eve accepts.
+
+**Both of my earlier questions answered:** D1's view draws no queued row, because it groups messages
+by turn and a queued row has none; and the causal record survives the dequeue as the relay's row
+under origin `hold_release` plus the `speech.expired(hold_released)` events.
+
+### The third question, which follows from C3's own principle
+
+C3 established the sentence this entry has quoted all morning — **"a queued `turns` row is the
+opener's inbox, never the run's record"** — and then reported honestly that *"the turns read lists it
+for the minute it stands."*
+
+**If a queued row is an inbox entry rather than a run, should `GET /api/brain/turns?after=` answer it
+at all?** That is a read of what ran. Answering an inbox entry there invites the client bug the view
+avoids: LukeKit's `ConversationTurnRows` reads turns directly, and a message-less turn could draw as
+an empty row for up to a minute, appearing then vanishing — the *looks-like-a-hang* family in
+reverse, and the third time this rework has met it.
+
+**Three ways, C3's call with the reason in the body:** filter queued rows from the turns read (most
+consistent with its own principle); confirm `ConversationTurnRows` draws nothing for a message-less
+turn and leave the route honest; or state the one-minute window as a known intermediate state — the
+weakest, because it is a state no client asked for. **Orchestrator leans the first:** a route that
+answers inbox entries from a record read contradicts the principle, and the contradiction stays
+invisible until a client draws one.
