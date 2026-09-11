@@ -48,19 +48,9 @@
         "src/entry-server.tsx",
         "server/db/migrate.ts",
         "scripts/*.ts",
-        "tests/**/*.test.ts",
-        "agent/**/*.ts",
-        "evals/**/*.ts"
+        "tests/**/*.test.ts"
       ],
-      "project": [
-        "api/**",
-        "src/**",
-        "server/**",
-        "scripts/**",
-        "tests/**",
-        "agent/**",
-        "evals/**"
-      ],
+      "project": ["api/**", "src/**", "server/**", "scripts/**", "tests/**"],
       "ignoreDependencies": ["@sidecar/providers"]
     },
     "packages/*": {
@@ -90,6 +80,10 @@
     "tools/*": {
       "entry": ["src/*.ts", "*.ts", "*.mjs", "**/*.test.*"],
       "project": ["**/*.ts", "**/*.mjs"]
+    },
+    "apps/web/eve": {
+      "entry": ["**/*.ts"],
+      "project": ["**/*.ts"]
     }
   },
   "rules": {

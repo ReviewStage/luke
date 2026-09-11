@@ -175,12 +175,12 @@ test("every function bundle loads exactly the externals the record expects", {
 
 /**
  * The guard falsified on purpose: a route bundled with one value import into
- * `agent/`, whose hooks value-import `defineState` from `eve/context` and are
+ * `eve/`, whose hooks value-import `defineState` from `eve/context` and are
  * safe today only because no function bundle reaches them. Both checks must
  * fail on that bundle, and the drift must carry the import chain to the
  * module that brought eve in, or the guard is a belief rather than a check.
  */
-test("a route that reaches agent/ fails both guards, naming the bundle and the import chain", {
+test("a route that reaches eve/ fails both guards, naming the bundle and the import chain", {
   timeout: 60_000,
 }, async () => {
   const plan = await functionBundlePlan(WEB);
@@ -191,7 +191,7 @@ test("a route that reaches agent/ fails both guards, naming the bundle and the i
     write: false,
     outfile: join(WEB, FUNCTION_BUNDLE_DIRECTORY, `${probe}.js`),
     stdin: {
-      contents: 'import "./devices.ts";\nimport "../../agent/hooks/store.ts";\n',
+      contents: 'import "./devices.ts";\nimport "../../eve/hooks/store.ts";\n',
       resolveDir: join(WEB, "server", "routes"),
       sourcefile: `${probe}.ts`,
       loader: "ts",
@@ -216,6 +216,6 @@ test("a route that reaches agent/ fails both guards, naming the bundle and the i
   ]);
 
   const chain = importChain(result.metafile, outputPath, "eve/context");
-  assert.equal(chain.at(-1), posix.join("agent", "hooks", "store.ts"));
+  assert.equal(chain.at(-1), posix.join("eve", "hooks", "store.ts"));
   assert.equal(chain.length >= 2, true);
 });

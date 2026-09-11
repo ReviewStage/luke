@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import agent from "../agent/agent";
+import agent from "../eve/agent";
 import { ACTION_TOOL, BRAIN_TOOL, BRAIN_TURN_TRIGGER, brainToolCatalog } from "../server/core";
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import { hostedTurnPolicy } from "../server/hosted/brain-host/tools";

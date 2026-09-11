@@ -39,6 +39,7 @@ artifacts/
 # Local build and agent state, never inputs
 .vercel/
 .eve/
+.output/
 
 # An agent tool's shared configuration is a repository input and its per-machine
 # state is not, so these directories are ignored by file rather than whole. The
