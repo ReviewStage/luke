@@ -1080,3 +1080,41 @@ that fast, the preset did not take.
 
 This is the one place in the rework where **the order of a settings change and a merge decides
 whether production keeps migrating its database.**
+
+
+## 2026-09-11 — A delegation arriving late left the developer's words unwritten while Luke spoke (orchestrator, from C8's a2 / Bugbot)
+
+**The most serious finding of the rework so far, and it is a broken trust rule rather than a missing
+row.**
+
+`LiveSessionService` skipped the delegated write when the utterance had already settled and been
+written **undelegated** by the settle timer. On the desktop both writes were the same ask line, so
+nothing showed. **Over the hosted record an undelegated write is segments alone** — so a delegation
+arriving more than `gap + margin` (2 s) after the developer stopped speaking left **the developer's
+own words never written while Luke's reply was still spoken.** The record would hold a reply with no
+ask: not a lost row, **a conversation that misrepresents who said what.**
+
+CLAUDE.md's shape everywhere is that the record precedes the effect — the Conversation write
+precedes any offer, an action is journaled before its effect. This broke it in the one place the
+hosted split creates.
+
+**The fix is in the service, not the record.** The delegated write runs for **every** delegated ask
+and is **awaited ahead of the reply**; `DeveloperUtteranceRecord` carries the ledger's `rowId`; the
+desktop's `conversationLiveRecord` dedupes by it so its lines are unchanged.
+
+**The rejected fix is the instructive half.** Consuming at arrival fixed the record and left the
+service asking nothing of it, so a fast reply could still land before the message row — **and it
+failed under the parallel Postgres suite**, which is gate finding 9 earning its keep inside the
+hour: a race PGlite's per-file isolation hides and a single-threaded run calls green. **The
+guarantee belongs where the ordering is decided**, which is the service.
+
+**Ruling: split, and the service fix goes first as its own PR** — `fix(LUKE-132): the delegated
+write runs for every delegated ask and precedes the reply`, over `packages/voice` and
+`packages/host` with the desktop dedupe and its tests. It touches no `apps/web` route, dependency or
+migration, so it may enqueue with Vercel pending. **a2 then rebases onto it**, returns under the
+~800 bound, and still owes the barrel fix. LUKE-132 is Done when all three are in.
+
+Same reasoning as the a1/a2 split one layer down: **a trust-ordering fix to a live path must not be
+reviewed inside eight hundred lines of new web source.** Its body names the motivation honestly —
+benign on the desktop today, wrong the moment the record splits — so a reviewer does not spend the
+review wondering why a no-op changed.
