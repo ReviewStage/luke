@@ -1,15 +1,32 @@
+# macOS
 .DS_Store
-.build/
-artifacts/
-coverage/
+
+# Node, in the canonical template's own forms: unanchored, so a package that
+# gains an output directory is covered the day it does rather than the day
+# someone remembers this file.
+logs
+*.log
+coverage
+*.lcov
+.nyc_output
 node_modules/
-apps/*/out/
-apps/*/dist/
-apps/*/dist-server/
-apps/web/dist-functions/
-apps/*/.vite/
+.pnpm-store
 *.tsbuildinfo
-pnpm-debug.log*
+dist
+out
+.vite/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# The build outputs this repository names for itself, beside the template's
+# dist and out. .build/ is both the repository's own scratch — run.sh writes
+# traces there, evidence.sh reads the icon — and Swift Package Manager's.
+.build/
+dist-server/
+dist-functions/
+
+# Generated evidence is never committed; a pull request links it from CI.
+artifacts/
 
 # Local secrets. Commit an explicit example file when configuration needs one.
 .env
@@ -22,9 +39,31 @@ pnpm-debug.log*
 # Local build and agent state, never inputs
 .vercel/
 .eve/
-.claude/
-error.log
 
-# Xcode resolves the iOS app's packages into the workspace beside the project.
-apps/ios/Luke.xcodeproj/project.xcworkspace/
-apps/ios/Luke.xcodeproj/xcuserdata/
+# An agent tool's shared configuration is a repository input and its per-machine
+# state is not, so these directories are ignored by file rather than whole. The
+# Claude pattern matches .claude/* rather than the directory itself, because Git
+# does not descend into an excluded directory to re-include a file inside it.
+.claude/*
+!.claude/agents/
+!.claude/commands/
+!.claude/hooks/
+!.claude/rules/
+!.claude/settings.json
+!.claude/skills/
+.conductor/settings.local.json
+.conductor/settings.local.toml
+
+# Xcode. The shared schemes under xcshareddata/ are inputs and stay tracked.
+# .swiftpm/ is the Swift template's conditional entry, and the condition holds:
+# apps/ios/LukeKit carries a Package.swift. Ignoring the generated workspace is
+# that template's own *.xcworkspace option, narrowed to the one Xcode derives
+# beside the project when it resolves the app's packages.
+xcuserdata/
+DerivedData/
+.swiftpm/
+*.dSYM
+*.dSYM.zip
+*.ipa
+*.hmap
+**/*.xcodeproj/project.xcworkspace/
