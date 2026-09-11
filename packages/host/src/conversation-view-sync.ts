@@ -42,9 +42,9 @@ export const CONVERSATION_VIEW_BOUNDS = {
 
 /** Where this device's read of each resource stands; absent before the first page of that resource. */
 export interface ConversationReadCursors {
-  readonly messages?: string;
-  readonly events?: string;
-  readonly turns?: string;
+  readonly messages?: string | undefined;
+  readonly events?: string | undefined;
+  readonly turns?: string | undefined;
 }
 
 /** A messages page with its rows already held to the vocabulary, so nothing here reads inside a message. */
@@ -182,7 +182,7 @@ export class ConversationViewSync {
     if (moved) this.#revision += 1;
   }
 
-  /** Folds one turns page in: a turn answered again replaces the one held, and the group it wrote reads the new row. */
+  /** Folds one turns page in: a turn answered again replaces the one held, the group it wrote reads the new row, and the cursor follows the answer's, absent included. */
   applyTurns(turns: readonly BrainTurnRecord[], next: string | undefined): void {
     let moved = false;
     for (const record of turns) {
@@ -194,7 +194,11 @@ export class ConversationViewSync {
       if (group !== undefined) group.turn = turn;
       moved = true;
     }
-    if (next !== undefined) this.#cursors = { ...this.#cursors, turns: next };
+    // An answer with no cursor says the account has no turn at all — nothing
+    // taken and nothing to take, as after a Clear that emptied them — and the
+    // change signal's head is absent then too; the cursor held is let go so
+    // the two read equal and the next poll does not read turns again.
+    this.#cursors = { ...this.#cursors, turns: next };
     if (moved) this.#revision += 1;
   }
 

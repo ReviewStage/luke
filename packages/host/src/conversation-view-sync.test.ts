@@ -272,10 +272,14 @@ test("a turn answered again replaces the one held, and a group with no turn row 
   sync.applyTurns([turnRecord(turnId(1), TURN_STATUS.RUNNING, NOW)], "t2");
   assert.equal(sync.revision, running);
   assert.equal(sync.cursors().turns, "t2");
-  sync.applyTurns([turnRecord(turnId(1), TURN_STATUS.SETTLED, NOW)], undefined);
+  sync.applyTurns([turnRecord(turnId(1), TURN_STATUS.SETTLED, NOW)], "t3");
   assert.equal(sync.snapshot().groups[0]?.turn?.status, TURN_STATUS.SETTLED);
-  // An absent next leaves the turns cursor where it stood.
-  assert.equal(sync.cursors().turns, "t2");
+  assert.equal(sync.cursors().turns, "t3");
+  // An answer with no cursor is an account with no turn, as after a Clear that
+  // emptied them: the cursor held goes with it, so it reads equal to the
+  // change signal's absent head rather than re-reading turns every poll.
+  sync.applyTurns([], undefined);
+  assert.equal(sync.cursors().turns, undefined);
 });
 
 test("the latest speech event on a message decides whether its announcement was heard", () => {

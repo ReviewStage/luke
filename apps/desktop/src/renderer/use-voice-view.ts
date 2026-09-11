@@ -60,8 +60,9 @@ export async function submitTypedAsk(input: {
 }
 
 /** What the strip says when the stored thread could not be deleted. */
+/** What the strip says of a Clear the service did not take: the thread stands exactly as it was. */
 export const CLEAR_FAILED_REASON =
-  "Conversation was cleared from view, but its file could not be fully erased. Try again.";
+  "Luke's service could not clear the conversation, so it still stands. Try again in a moment.";
 
 /**
  * The two lines the panel puts on the strip itself: a fault and a notice the
