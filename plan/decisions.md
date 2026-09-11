@@ -2088,3 +2088,38 @@ migration. **The trust fix is the part that has to be reviewable.**
 **The general form, for the G lane and anything else that lands mid-migration: adopt the new idiom
 where you are writing new code against new tables; leave it where you are changing what existing
 rows mean.** An idiom migration and a semantic change in one diff are two reviews wearing one hat.
+
+
+## 2026-09-11 — Which guarantees survive a rewrite by strangers, and which need their author (orchestrator, from C3's second rehearsal)
+
+**A correction to the conclusion I drew this afternoon.** When #1104 rewrote the hosted store's
+writers and speech, I verified that C5a's one-door type, the required `unless`, D3a's push refusal
+and `NOT_CLAIMANT` all survived, and said they survived **because they were types and required
+parameters rather than comments.** True — and the general conclusion I implied was wrong.
+
+**C3's forward-only cursor keep survived only because C3 was the one rewriting it.**
+`consumeRosterDiff` became an Effect over `SqlClient`, the Drizzle transaction that paired it with
+the cursor write went away, and the property had to be **rebuilt as a SQL predicate**: one
+insert … on conflict do update **`where provider_cursors.cursor = from`**, with a null `from`
+comparing to nothing. **Nothing in the type system was holding it.** Had the Effect lane rewritten
+`provider_cursors` instead of the module beside it, there is no reason to think the compare-and-set
+would have come through — **they had no way to know it was load-bearing.**
+
+**So: a guarantee encoded in a TYPE survives a rewrite by strangers. A guarantee encoded in a SQL
+PREDICATE survives only if its author is the one rewriting it.** That is an argument for the G lane
+and for anything that outlives this rework: the forward-only cursor, the standing-main partial
+unique index, the claim's uniqueness, the `unless` exclusions — **some are structures and some are
+predicates, and the predicates need naming somewhere a rewriter will look**, not only in the PR body
+of whoever wrote them.
+
+**And the test that proves a boundary rather than a call.** C3's one-transaction test drives the real
+client through **a proxy whose `withTransaction` fails after its body has run** — so it proves the
+transaction actually wraps the writes rather than that the code calls `withTransaction`. That is the
+"move a write across the boundary it is supposed to sit behind" mutation from C3's own write-up
+turned into a fixture, and a test asserting the call would have passed the mutation.
+
+**Accounting correction owed to Dean:** C3's post-ruling cycle has been reported as "minutes". True
+of the first rehearsal, no longer the whole truth. #1104 required **real rewrites** — (b)'s
+transaction and cursor keep, (c)'s `dequeueTurn` as a `Write<>` over `SqlSchema`, the released and
+carried reads as `findAll` pages, the tick's composition moving into `observationTickHandler`. **The
+replay is minutes; the work was hours, and the delay caused it.**
