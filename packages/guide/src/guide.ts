@@ -17,6 +17,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Schema } from "effect";
 
 /** How a setting takes a value: a switch, or one choice from a fixed set. */
 export const APP_SETTING_KIND = {
@@ -25,6 +26,10 @@ export const APP_SETTING_KIND = {
 } as const;
 
 type AppSettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
+
+export const AppSettingKindSchema = Schema.Literal(...Object.values(APP_SETTING_KIND));
+
+const readsAppSettingKind = Schema.is(AppSettingKindSchema);
 
 /** The two words a toggle's state is said in, on screen and out loud. */
 export const APP_TOGGLE_VALUE = {
@@ -100,11 +105,13 @@ export const APP_UPDATE_ACTION = {
 
 export type AppUpdateAction = (typeof APP_UPDATE_ACTION)[keyof typeof APP_UPDATE_ACTION];
 
-const APP_UPDATE_ACTION_LIST: readonly AppUpdateAction[] = Object.values(APP_UPDATE_ACTION);
+export const AppUpdateActionSchema = Schema.Literal(...Object.values(APP_UPDATE_ACTION));
+
+const readsAppUpdateAction = Schema.is(AppUpdateActionSchema);
 
 /** Guards an action arriving from a tool call's untrusted arguments. */
 export function isAppUpdateAction(value: UnparsedWireValue): value is AppUpdateAction {
-  return isListedGuideValue(value, APP_UPDATE_ACTION_LIST);
+  return readsAppUpdateAction(value);
 }
 
 /** The two waits during which the Updates row's button offers nothing. */
@@ -117,8 +124,14 @@ export const APP_UPDATE_WAIT = {
 
 export type AppUpdateWait = (typeof APP_UPDATE_WAIT)[keyof typeof APP_UPDATE_WAIT];
 
+export const AppUpdateWaitSchema = Schema.Literal(...Object.values(APP_UPDATE_WAIT));
+
 /** What the Updates row's button is right now: one action, or one wait. */
 export type AppUpdateButton = AppUpdateAction | AppUpdateWait;
+
+export const AppUpdateButtonSchema = Schema.Union(AppUpdateActionSchema, AppUpdateWaitSchema);
+
+const readsAppUpdateButton = Schema.is(AppUpdateButtonSchema);
 
 /**
  * The Updates row, as the guide describes it: the running version, where the
@@ -167,7 +180,7 @@ function isAppGuideSetting(value: UnparsedWireValue): value is AppGuideSetting &
     isWireString(value.id) &&
     isWireString(value.label) &&
     isWireString(value.description) &&
-    (value.kind === APP_SETTING_KIND.TOGGLE || value.kind === APP_SETTING_KIND.CHOICE) &&
+    readsAppSettingKind(value.kind) &&
     isWireString(value.value) &&
     (value.defaultValue === undefined || isWireString(value.defaultValue)) &&
     (value.choices === undefined || isStringList(value.choices)) &&
@@ -181,9 +194,7 @@ function isAppGuideUpdate(value: UnparsedWireValue): value is AppGuideUpdate & W
     isRecord(value) &&
     isWireString(value.version) &&
     isWireString(value.detail) &&
-    (isAppUpdateAction(value.button) ||
-      value.button === APP_UPDATE_WAIT.CHECKING ||
-      value.button === APP_UPDATE_WAIT.DOWNLOADING)
+    readsAppUpdateButton(value.button)
   );
 }
 
@@ -213,20 +224,13 @@ export const APP_PANEL_TAB = {
 
 export type AppPanelTab = (typeof APP_PANEL_TAB)[keyof typeof APP_PANEL_TAB];
 
-const APP_PANEL_TAB_LIST: readonly AppPanelTab[] = Object.values(APP_PANEL_TAB);
+export const AppPanelTabSchema = Schema.Literal(...Object.values(APP_PANEL_TAB));
 
-function isListedGuideValue<T extends string>(
-  value: UnparsedWireValue,
-  list: readonly T[],
-): value is T {
-  if (!isWireString(value)) return false;
-  // SAFETY: value is a string; list membership is the guide vocabulary contract check.
-  return list.includes(value as T);
-}
+const readsAppPanelTab = Schema.is(AppPanelTabSchema);
 
 /** Guards a tab arriving from a tool call's untrusted arguments. */
 export function isAppPanelTab(value: UnparsedWireValue): value is AppPanelTab {
-  return isListedGuideValue(value, APP_PANEL_TAB_LIST);
+  return readsAppPanelTab(value);
 }
 
 /**
@@ -245,12 +249,13 @@ export const FEEDBACK_COMPOSER_KIND = {
 export type FeedbackComposerKind =
   (typeof FEEDBACK_COMPOSER_KIND)[keyof typeof FEEDBACK_COMPOSER_KIND];
 
-const FEEDBACK_COMPOSER_KIND_LIST: readonly FeedbackComposerKind[] =
-  Object.values(FEEDBACK_COMPOSER_KIND);
+export const FeedbackComposerKindSchema = Schema.Literal(...Object.values(FEEDBACK_COMPOSER_KIND));
+
+const readsFeedbackComposerKind = Schema.is(FeedbackComposerKindSchema);
 
 /** Guards a kind arriving from a tool call's untrusted arguments. */
 export function isFeedbackComposerKind(value: UnparsedWireValue): value is FeedbackComposerKind {
-  return isListedGuideValue(value, FEEDBACK_COMPOSER_KIND_LIST);
+  return readsFeedbackComposerKind(value);
 }
 
 /**
@@ -266,11 +271,13 @@ export const SESSION_LIST_SORT = {
 
 export type SessionListSort = (typeof SESSION_LIST_SORT)[keyof typeof SESSION_LIST_SORT];
 
-const SESSION_LIST_SORT_LIST: readonly SessionListSort[] = Object.values(SESSION_LIST_SORT);
+export const SessionListSortSchema = Schema.Literal(...Object.values(SESSION_LIST_SORT));
+
+const readsSessionListSort = Schema.is(SessionListSortSchema);
 
 /** Guards a sort arriving from a tool call's untrusted arguments. */
 export function isSessionListSort(value: UnparsedWireValue): value is SessionListSort {
-  return isListedGuideValue(value, SESSION_LIST_SORT_LIST);
+  return readsSessionListSort(value);
 }
 
 /**
