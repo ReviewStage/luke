@@ -2038,3 +2038,22 @@ exactly the objection I raised.
 **Third time today a worker has answered a question from main rather than from a summary of main,
 and the third time the answer was better than the summary.** The standing instruction to verify
 rather than take is what keeps a wrong requirement of mine from becoming a wrong line of code.
+
+
+## 2026-09-11 — Relay a peer's requirement as a question unless I have verified the reasoning (orchestrator)
+
+**The withdrawal above cost C2b-2b an implementation.** I relayed C8's "take one
+`HostedStoreContext`" **as a requirement**, with a justification of my own I had not verified;
+C2b re-shaped `acceptAsk` to match; then I withdrew it on the strength of C2b's reading of main. It
+restored the narrower shape from the previous commit rather than re-deriving, so nothing was lost
+but the round trip — and the round trip was mine.
+
+**The rule: when a requirement about one worker's module comes from another worker, relay it as a
+QUESTION unless I have checked the reasoning myself.** The worker holding the code can answer in
+minutes; a requirement makes them implement first and answer afterwards. C8's five points about
+`acceptAsk`'s shape were right and worth relaying as requirements because they were about **part b's
+needs**, which only C8 could state. The `db`-versus-`run` question was about **C2b's module**, which
+only C2b could answer — and that is the line I crossed.
+
+Recorded beside the broadcast lesson, because both are the same failure in different clothes:
+**a message of mine carrying more authority than its evidence.**
