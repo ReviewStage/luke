@@ -1,0 +1,27 @@
+{
+  "type": "function",
+  "name": "open_session",
+  "description": "Open one observed session's own screen in this app, leaving this conversation — only when the developer asks to open, go to, or jump into that specific session. An ask to show, see, or list sessions or agents — \"show me the waiting sessions\" — narrows the list through show_panel instead, never this. The phone shows one screen, so open one session per response; asked for several, ask which.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session provider ID."
+      },
+      "provider_session_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session ID."
+      }
+    },
+    "required": [
+      "provider_id",
+      "provider_session_id"
+    ],
+    "additionalProperties": false
+  }
+}

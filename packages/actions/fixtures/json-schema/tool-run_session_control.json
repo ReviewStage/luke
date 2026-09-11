@@ -1,0 +1,33 @@
+{
+  "type": "function",
+  "name": "run_session_control",
+  "description": "Run a control advertised by an observed session.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session provider ID."
+      },
+      "provider_session_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session ID."
+      },
+      "control_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The control ID."
+      }
+    },
+    "required": [
+      "provider_id",
+      "provider_session_id",
+      "control_id"
+    ],
+    "additionalProperties": false
+  }
+}

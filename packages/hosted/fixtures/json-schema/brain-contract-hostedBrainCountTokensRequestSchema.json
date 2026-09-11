@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "prompt": {
+      "type": "string",
+      "maxLength": 200000
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "maxItems": 64
+    },
+    "input": {
+      "type": "array",
+      "description": "Responses input items, admitted by this build's own allowlist rather than by this declaration.",
+      "items": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "contract",
+    "prompt",
+    "tools",
+    "input"
+  ],
+  "additionalProperties": false
+}

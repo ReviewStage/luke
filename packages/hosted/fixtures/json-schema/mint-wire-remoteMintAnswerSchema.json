@@ -1,0 +1,94 @@
+{
+  "type": "object",
+  "properties": {
+    "connection": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expiresAt": {
+          "type": "number"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callsUrl": {
+          "type": "string",
+          "enum": [
+            "https://api.openai.com/v1/realtime/calls"
+          ]
+        },
+        "wsUrl": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "value",
+        "expiresAt",
+        "model",
+        "callsUrl",
+        "wsUrl"
+      ],
+      "additionalProperties": false
+    },
+    "quota": {
+      "type": "object",
+      "properties": {
+        "used": {
+          "type": "number",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 0
+        },
+        "resetsAt": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "used",
+        "limit",
+        "resetsAt"
+      ],
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "itemId",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "sessions"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "connection",
+    "context"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "connecting",
+        "connected",
+        "disconnected",
+        "failed",
+        "closed"
+      ]
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "additionalProperties": false
+}

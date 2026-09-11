@@ -1,0 +1,33 @@
+{
+  "type": "function",
+  "name": "update_issue_state",
+  "description": "Update a tracked issue's state.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "tracker_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The tracker ID."
+      },
+      "issue_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The issue ID."
+      },
+      "state": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The target state."
+      }
+    },
+    "required": [
+      "tracker_id",
+      "issue_id",
+      "state"
+    ],
+    "additionalProperties": false
+  }
+}

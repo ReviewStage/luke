@@ -1,0 +1,23 @@
+{
+  "type": "function",
+  "name": "run_update_action",
+  "description": "Press the Updates row's button for the developer: check for updates, open the latest release's page in the browser to download by hand, or restart into an update already downloaded. Only the action the button currently offers runs — the app guide's Updates line names it.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "check",
+          "download",
+          "restart"
+        ],
+        "description": "The action to run, as the guide's Updates line offers it."
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "additionalProperties": false
+  }
+}

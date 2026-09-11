@@ -1,0 +1,44 @@
+{
+  "type": "function",
+  "name": "show_panel",
+  "description": "Show the session list — and narrow, search, or reorder it. An ask to show, see, or list sessions of some kind — \"show me the waiting sessions\", \"show me the Conductor agents\" — is this tool with a filter, not open_session.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "filters": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "all",
+            "claude-code",
+            "codex",
+            "conductor",
+            "omp",
+            "working",
+            "waiting",
+            "error",
+            "complete",
+            "unknown"
+          ]
+        },
+        "description": "The values to narrow the session list to: all for every session, a provider_id for one provider's sessions, or a status (working, waiting, error, complete, unknown). Values combine — a provider with a status keeps that provider's sessions in that status — and all stands alone."
+      },
+      "sort": {
+        "type": "string",
+        "enum": [
+          "urgency",
+          "recency"
+        ],
+        "description": "Reorders the session list: urgency puts what needs the developer first, recency puts what moved last first."
+      },
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Optional words to search the session list for; only rows saying every word stay."
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}

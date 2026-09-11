@@ -1,0 +1,383 @@
+{
+  "type": "object",
+  "properties": {
+    "conversations": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "main"
+                ]
+              },
+              "openedAt": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "openedAt"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "observed"
+                ]
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "providerId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "providerSessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "providerId",
+                  "providerSessionId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "session"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "maxItems": 256
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "conversationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "main"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "observed"
+                    ]
+                  },
+                  "session": {
+                    "type": "object",
+                    "properties": {
+                      "providerId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "providerSessionId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "providerId",
+                      "providerSessionId"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "session"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "turn": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "origin": {
+                "type": "string",
+                "enum": [
+                  "typed",
+                  "spoken",
+                  "roster_diff",
+                  "hold_release",
+                  "child"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "settled",
+                  "cancelled",
+                  "failed"
+                ]
+              },
+              "queuedAt": {
+                "type": "number",
+                "minimum": 0
+              },
+              "startedAt": {
+                "type": "number",
+                "minimum": 0
+              },
+              "settledAt": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "origin",
+              "status",
+              "queuedAt"
+            ],
+            "additionalProperties": false
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "createdAt": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "toolCallId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "toolName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "input-streaming",
+                              "input-available",
+                              "output-available",
+                              "output-error"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "announce"
+                            ]
+                          },
+                          "unspoken": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "toolCallId",
+                          "toolName",
+                          "state",
+                          "kind",
+                          "unspoken"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "toolCallId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "toolName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "input-streaming",
+                              "input-available",
+                              "output-available",
+                              "output-error"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "action"
+                            ]
+                          },
+                          "outcome": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "accepted",
+                              "unknown",
+                              "refused"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "toolCallId",
+                          "toolName",
+                          "state",
+                          "kind",
+                          "outcome"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "toolCallId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "toolName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "input-streaming",
+                              "input-available",
+                              "output-available",
+                              "output-error"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "detail"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "toolCallId",
+                          "toolName",
+                          "state",
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "message",
+                "seq",
+                "createdAt",
+                "tools"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "turnId",
+          "conversationId",
+          "source",
+          "messages"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 712
+    },
+    "next": {
+      "type": "string",
+      "maxLength": 32768
+    },
+    "hasMore": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "conversations",
+    "groups",
+    "next",
+    "hasMore"
+  ],
+  "additionalProperties": false
+}

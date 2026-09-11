@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "idle": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "idle"
+  ],
+  "additionalProperties": false
+}

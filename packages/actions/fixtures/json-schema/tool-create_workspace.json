@@ -1,0 +1,54 @@
+{
+  "type": "function",
+  "name": "create_workspace",
+  "description": "Create a workspace for a new agent.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The provider ID; omit it to create in the default provider."
+      },
+      "project_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The project ID; omit it to create in that provider's default project."
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The target ID of the host, exactly as the projects list gives it, and only for a project whose line carries a target_id; a project listed without one takes none."
+      },
+      "agent": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The agent kind."
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "description": "The workspace's name: the developer's own when they chose one, otherwise a short, specific name composed from what the workspace is for, in a few words with no punctuation. Always supply one, except in a project listed as naming its own workspaces, which takes none."
+      },
+      "task": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000,
+        "description": "An optional opening task."
+      },
+      "model": {
+        "type": "string",
+        "minLength": 1,
+        "description": "An optional model."
+      },
+      "effort": {
+        "type": "string",
+        "minLength": 1,
+        "description": "An optional effort level."
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}

@@ -20,4 +20,14 @@ export {
   type JsonValue,
   type ParsedJsonObject,
 } from "./json.js";
+export {
+  type JsonSchemaExportName,
+  type JsonSchemaGolden,
+  type JsonSchemaGoldenTool,
+  type JsonSchemaSource,
+  jsonSchemaGoldenRoot,
+  type RecordedJsonSchemas,
+  settleJsonSchemaGolden,
+  settleJsonSchemaGoldenSet,
+} from "./json-schema-golden.js";
 export { temporaryDirectory } from "./temporary-directory.js";

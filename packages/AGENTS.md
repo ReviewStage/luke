@@ -29,6 +29,20 @@ which both parses the untrusted value and emits the JSON Schema a model is
 shown for it. A hand-written parser beside a hand-written schema is two
 statements of the same rule that can drift.
 
+What a schema emits is recorded rather than described. Every tool definition
+the action catalog produces, every schema the hosted wire and the live
+vocabulary declare, and the protocol's own declared shapes are held as byte
+goldens under each package's `fixtures/json-schema/`, written and compared by
+`@sidecar/wire/testing`'s `settleJsonSchemaGolden` and re-recorded only under
+`LUKE_UPDATE_FIXTURES=1`. The bytes are the point: a model provider keys its
+prompt cache on the text of a request, so a reordered key, a widened bound, or
+a reworded description costs every standing conversation its prefix, and
+nothing sorts the keys because their order is part of what is being held
+still. A module's recorded set is typed against the module itself, so a schema
+added beside one already recorded does not compile until it is recorded too,
+and Biome is kept off those fixture trees because its JSON formatting would
+rewrite the recorded bytes.
+
 Anything that carries identity — a `Context.Tag`, a schema brand — has exactly
 one copy across the whole install, which the `pnpm-workspace.yaml` catalog
 guarantees by pinning every package to the same resolved version of the

@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "properties": {
+    "platform": {
+      "type": "string",
+      "enum": [
+        "macos",
+        "ios",
+        "watchos"
+      ]
+    },
+    "installationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "pushToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "pushEnvironment": {
+      "type": "string",
+      "enum": [
+        "sandbox",
+        "production"
+      ]
+    }
+  },
+  "required": [
+    "platform",
+    "installationId"
+  ],
+  "additionalProperties": false
+}

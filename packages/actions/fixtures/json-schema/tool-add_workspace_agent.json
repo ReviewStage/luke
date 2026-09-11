@@ -1,0 +1,55 @@
+{
+  "type": "function",
+  "name": "add_workspace_agent",
+  "description": "Add an agent to an observed workspace.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session provider ID."
+      },
+      "provider_session_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session ID."
+      },
+      "agent": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The agent kind."
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "description": "An optional agent name."
+      },
+      "task": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000,
+        "description": "An optional opening task."
+      },
+      "model": {
+        "type": "string",
+        "minLength": 1,
+        "description": "An optional model."
+      },
+      "effort": {
+        "type": "string",
+        "minLength": 1,
+        "description": "An optional effort level."
+      }
+    },
+    "required": [
+      "provider_id",
+      "provider_session_id",
+      "agent"
+    ],
+    "additionalProperties": false
+  }
+}

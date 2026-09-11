@@ -107,7 +107,7 @@ export function hostedBrainBounds(): HostedBrainBounds {
   };
 }
 
-const hostedBrainCapabilitiesSchema: Schema<HostedBrainCapabilities> = s.record(
+export const hostedBrainCapabilitiesSchema: Schema<HostedBrainCapabilities> = s.record(
   {
     contract: s.literal(HOSTED_BRAIN_CONTRACT_VERSION),
     model: s.text({ ends: TEXT_ENDS.KEEP }),
@@ -302,7 +302,7 @@ const textsSchema = s.array(
  * request naming a tool the other side does not know is refused before it
  * costs anything. The same declaration runs on both ends.
  */
-function hostedBrainRespondRequestSchema(
+export function hostedBrainRespondRequestSchema(
   catalog: ReadonlySet<string>,
 ): Schema<HostedBrainRespondRequest> {
   return s.record({
@@ -314,7 +314,7 @@ function hostedBrainRespondRequestSchema(
   });
 }
 
-function hostedBrainCountTokensRequestSchema(
+export function hostedBrainCountTokensRequestSchema(
   catalog: ReadonlySet<string>,
 ): Schema<HostedBrainCountTokensRequest> {
   return s.record({
@@ -325,7 +325,7 @@ function hostedBrainCountTokensRequestSchema(
   });
 }
 
-const hostedBrainEmbedRequestSchema: Schema<HostedBrainEmbedRequest> = s.record({
+export const hostedBrainEmbedRequestSchema: Schema<HostedBrainEmbedRequest> = s.record({
   contract: contractSchema,
   texts: textsSchema,
 });
@@ -351,7 +351,7 @@ export function hostedBrainEmbedRequestFromWire(
 }
 
 /** The vectors are one width, and the width is the one the answer names. */
-const hostedBrainEmbedAnswerSchema: Schema<HostedBrainEmbedAnswer> = s.refine(
+export const hostedBrainEmbedAnswerSchema: Schema<HostedBrainEmbedAnswer> = s.refine(
   s.record(
     {
       model: s.text({ ends: TEXT_ENDS.KEEP }),
@@ -373,7 +373,7 @@ export interface HostedBrainCountTokensAnswer {
   inputTokens: number;
 }
 
-const hostedBrainCountTokensAnswerSchema: Schema<HostedBrainCountTokensAnswer> = s.record(
+export const hostedBrainCountTokensAnswerSchema: Schema<HostedBrainCountTokensAnswer> = s.record(
   { inputTokens: s.wholeNumber({ minimum: 0 }) },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
 );

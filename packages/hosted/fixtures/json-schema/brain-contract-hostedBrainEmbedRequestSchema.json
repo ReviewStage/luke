@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "texts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8000
+      },
+      "minItems": 1,
+      "maxItems": 64
+    }
+  },
+  "required": [
+    "contract",
+    "texts"
+  ],
+  "additionalProperties": false
+}

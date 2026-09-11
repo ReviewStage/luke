@@ -1,0 +1,226 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "session.create"
+          ]
+        },
+        "sdp": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "voice": {
+          "type": "string",
+          "enum": [
+            "alloy",
+            "ash",
+            "ballad",
+            "beacon",
+            "bossa",
+            "cedar",
+            "cinder",
+            "coral",
+            "delta",
+            "echo",
+            "gleam",
+            "marin",
+            "meridian",
+            "quartz",
+            "ripple",
+            "sage",
+            "shimmer",
+            "stone",
+            "tempo",
+            "verse",
+            "vesper",
+            "willow"
+          ]
+        },
+        "input": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "message"
+                    ]
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "developer"
+                    ]
+                  },
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "input_text"
+                          ]
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 32768
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  }
+                },
+                "required": [
+                  "type",
+                  "role",
+                  "content"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "message"
+                    ]
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "user"
+                    ]
+                  },
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "input_text"
+                          ]
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 32768
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  }
+                },
+                "required": [
+                  "type",
+                  "role",
+                  "content"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "message"
+                    ]
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "assistant"
+                    ]
+                  },
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "output_text"
+                          ]
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 32768
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "text"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  }
+                },
+                "required": [
+                  "type",
+                  "role",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "type",
+        "sdp",
+        "voice",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "session.attach"
+          ]
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "type",
+        "sessionId"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

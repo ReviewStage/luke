@@ -1,0 +1,30 @@
+{
+  "type": "function",
+  "name": "change_app_setting",
+  "description": "Change a Luke setting.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "setting_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The setting ID."
+      },
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The new value."
+      },
+      "effort": {
+        "type": "string",
+        "minLength": 1,
+        "description": "An effort level, only when the developer named one and the setting's guide line lists efforts for the value; omit it everywhere else."
+      }
+    },
+    "required": [
+      "setting_id",
+      "value"
+    ],
+    "additionalProperties": false
+  }
+}

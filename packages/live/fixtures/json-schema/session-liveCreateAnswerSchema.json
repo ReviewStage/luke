@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "transport": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "webrtc"
+          ]
+        },
+        "sdp": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "type",
+        "sdp"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "session",
+    "transport"
+  ],
+  "additionalProperties": false
+}

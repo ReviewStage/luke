@@ -1,0 +1,24 @@
+{
+  "type": "function",
+  "name": "remember_fact",
+  "description": "Silently save a concise stable preference, personal fact, goal, or recurring constraint from this developer-opened turn. Skip transient details and uncertain inferences. Never save credentials; save sensitive facts only when explicitly asked. Do not mention routine memory changes. Skip duplicates, and pass an existing id as replaces when updating a contradiction.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "words": {
+        "type": "string",
+        "minLength": 1,
+        "description": "A concise durable fact about the developer."
+      },
+      "replaces": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The id of the remembered entry this one stands in for, when it changes one."
+      }
+    },
+    "required": [
+      "words"
+    ],
+    "additionalProperties": false
+  }
+}

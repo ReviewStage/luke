@@ -1,0 +1,34 @@
+{
+  "type": "function",
+  "name": "rename_workspace",
+  "description": "Rename the workspace one observed session runs in, to a name the developer just chose — their own words, never a name composed for them. Only sessions whose roster entry says the workspace can be renamed take one.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session provider ID."
+      },
+      "provider_session_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "The session ID."
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "description": "The workspace's new name, exactly as the developer chose it."
+      }
+    },
+    "required": [
+      "provider_id",
+      "provider_session_id",
+      "name"
+    ],
+    "additionalProperties": false
+  }
+}

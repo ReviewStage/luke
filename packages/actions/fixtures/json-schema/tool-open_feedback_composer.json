@@ -1,0 +1,27 @@
+{
+  "type": "function",
+  "name": "open_feedback_composer",
+  "description": "Open the feedback composer.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "type": "string",
+        "enum": [
+          "feedback",
+          "prompt"
+        ],
+        "description": "The feedback type."
+      },
+      "draft": {
+        "type": "string",
+        "minLength": 1,
+        "description": "An optional draft."
+      }
+    },
+    "required": [
+      "kind"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    }
+  },
+  "required": [
+    "deviceId"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,84 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "type": "integer",
+      "enum": [
+        2
+      ]
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "respond",
+          "count-tokens",
+          "embed"
+        ]
+      },
+      "maxItems": 3
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxItems": 64
+    },
+    "bounds": {
+      "type": "object",
+      "properties": {
+        "promptChars": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "inputItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "requestBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximumOutputTokens": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "promptChars",
+        "inputItems",
+        "requestBytes",
+        "maximumOutputTokens"
+      ],
+      "additionalProperties": false
+    },
+    "reasoningEfforts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "maxItems": 3
+    }
+  },
+  "required": [
+    "contract",
+    "model",
+    "operations",
+    "tools",
+    "bounds",
+    "reasoningEfforts"
+  ],
+  "additionalProperties": false
+}
