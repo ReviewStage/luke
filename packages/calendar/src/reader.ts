@@ -193,6 +193,13 @@ export class GoogleCalendarReader {
     this.#now = options.now ?? Date.now;
   }
 
+  /**
+   * @deprecated On the `Effect.runPromise` allowlist in
+   * `docs/adr/0001-effect.md`: every caller of this reader still holds a
+   * promise, not a fiber, so the request effect is run to one here rather
+   * than on a runtime this class owns. P7-06 moves the calendars composer
+   * onto the host's own runtime, at which point this method goes with it.
+   */
   #run<Answer>(
     effect: Effect.Effect<Answer, GoogleCalendarRequestError, HttpClient.HttpClient>,
   ): Promise<Answer> {

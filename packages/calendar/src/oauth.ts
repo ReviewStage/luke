@@ -228,6 +228,14 @@ function exchangeEffect(
  * Trades the code for a grant at Google's token endpoint. Google's desktop
  * client type expects the secret it documents as non-confidential, which is
  * why a run holding no secret is offered no sign-in at all.
+ *
+ * @deprecated On the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md`: every caller of the sign-in still holds a
+ * promise, not a fiber — `googleCalendarSignIn`'s `exchange` and
+ * `packages/host/src/compose-calendars.ts` both call this synchronously — so
+ * the exchange effect is run to one here rather than on a runtime this
+ * function owns. P7-06 moves the calendars composer onto the host's own
+ * runtime, at which point this run goes with it.
  */
 export function exchangeGoogleCode(
   config: GoogleCalendarSignInConfig,
