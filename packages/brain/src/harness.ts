@@ -707,29 +707,3 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
     cancel: h.clock.cancel,
   });
 }
-
-/**
- * A conversation held busy by an observation turn: a hold's release, which
- * opens a turn over no inbox entry, so nothing is left owed when the turn is
- * cut short. An observation turn takes no steered words, so asks made while
- * it stands wait in the queue for a turn of their own; releasing ends the
- * turn, which drains what waited into one turn. `inner.inputs[0]` is the
- * observation turn; the drained turn is the one after it.
- */
-export async function reviewing(...replies: readonly BrainClientAnswer[]) {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  inner.answers.push(answered([message("nothing spoken")]), ...replies);
-  h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
-  await settle();
-  return {
-    h,
-    inner,
-    async release(): Promise<void> {
-      gated.open();
-      await settle();
-      while (h.agent.busy()) await settle();
-    },
-  };
-}

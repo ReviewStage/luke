@@ -3,8 +3,11 @@
  * instead of a hand-advanced `FakeClock`, so a test written with
  * `@effect/vitest`'s `it.effect` drives the agent's timers with the
  * `TestClock` the way every other Effect test in this package already does.
- * `../harness.ts` keeps standing for the tests P5-17 has not yet moved onto
- * this one.
+ * Every test in this package that drives time or the seam is on this harness
+ * now; `../harness.ts`'s own `harness()` and `FakeClock` still stand only as
+ * the object this one builds on top of and overrides the clock seam of, and
+ * `agentOn`/`heldOpenRuntime` stay there for the one test that builds a
+ * second `BrainAgent` or runtime by hand without needing either to advance.
  *
  * `timersFromRuntime` reads and schedules against whichever runtime it is
  * handed, so capturing the currently running fiber's own runtime — the one
@@ -12,16 +15,33 @@
  * `TestClock.setTime` reach the timers this harness's `BrainAgent` schedules,
  * with no clock of the harness's own to keep in step.
  */
-import { timersFromRuntime } from "@sidecar/runtime/effect";
+import { type TimerSeam, timersFromRuntime } from "@sidecar/runtime/effect";
 import { Chunk, Effect, TestClock } from "effect";
 import {
+  answered,
+  type BrainClientAnswer,
+  FakeClient,
+  gatedClient,
   type Harness,
   type HarnessOverrides,
+  message,
   NOW,
   harness as plainHarness,
   settle,
 } from "../harness.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "../testing.js";
+
+/**
+ * The `now`/`schedule`/`cancel` seam of the current fiber's own runtime, for
+ * a caller building a second clock-driven collaborator (another `BrainAgent`,
+ * a `BrainGenerationClock`) that must read the same ambient `TestClock` an
+ * `effectHarness`'s own agent does, rather than a clock of its own that never
+ * advances alongside it.
+ */
+export const ambientTimers: Effect.Effect<TimerSeam> = Effect.gen(function* () {
+  const runtime = yield* Effect.runtime<never>();
+  return timersFromRuntime(runtime);
+});
 
 /**
  * Builds the harness over the current fiber's own runtime, so its `BrainAgent`
@@ -36,8 +56,7 @@ export const effectHarness = (
 ): Effect.Effect<Harness> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    const runtime = yield* Effect.runtime<never>();
-    const { now, schedule, cancel } = timersFromRuntime(runtime);
+    const { now, schedule, cancel } = yield* ambientTimers;
     return plainHarness({ now, schedule, cancel, ...overrides }, repository);
   });
 
@@ -64,4 +83,34 @@ export const advanceHarness = (untilMs: number): Effect.Effect<void> =>
       yield* Effect.promise(() => settle());
     }
     yield* TestClock.setTime(untilMs);
+  });
+
+/**
+ * `../harness.ts`'s `reviewing` over `effectHarness` instead of `harness`: a
+ * conversation held busy by an observation turn, over the ambient `TestClock`.
+ */
+export const effectReviewing = (
+  ...replies: readonly BrainClientAnswer[]
+): Effect.Effect<{
+  h: Harness;
+  inner: FakeClient;
+  release: () => Effect.Effect<void>;
+}> =>
+  Effect.gen(function* () {
+    const inner = new FakeClient();
+    const gated = gatedClient(inner);
+    const h = yield* effectHarness({ client: gated.client });
+    inner.answers.push(answered([message("nothing spoken")]), ...replies);
+    h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+    yield* Effect.promise(() => settle());
+    return {
+      h,
+      inner,
+      release: () =>
+        Effect.gen(function* () {
+          gated.open();
+          yield* Effect.promise(() => settle());
+          while (h.agent.busy()) yield* Effect.promise(() => settle());
+        }),
+    };
   });
