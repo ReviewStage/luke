@@ -17,6 +17,7 @@ import {
 } from "../core.js";
 import {
   ASK_REFUSAL,
+  type AskInput,
   type AskSeams,
   type AskStandingReads,
   acceptAsk,
@@ -102,6 +103,13 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
 export interface HostedLiveBrainOptions {
   /** The account the voice session was opened for, resolved at the handshake and written to `voice_sessions`. */
   readonly userId: string;
+  /**
+   * The conversation every ask lands in, where the composition pins one: the
+   * same one its record writes, so an ask and the lines it leaves cannot name
+   * two conversations once a Clear has moved the standing main. Unpinned, each
+   * ask resolves the standing main at its own instant.
+   */
+  readonly conversationId?: string;
   /** The ask door's seams: the runner, the ask record, eve under the deployment principal for this account, and the clock. */
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, over the same runner. */
@@ -207,12 +215,17 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
 
   return {
     async submitAsk(ask) {
-      const outcome = await acceptAsk(options.asks, {
+      const input: AskInput = {
         userId: options.userId,
         question: ask.question,
         origin: ASK_ORIGIN.SPOKEN,
         clientId: ask.submissionId,
-      });
+      };
+      const pinned = options.conversationId;
+      const outcome = await acceptAsk(
+        options.asks,
+        pinned === undefined ? input : { ...input, conversationId: pinned },
+      );
       if (!outcome.ok) {
         return {
           outcome: LIVE_BRAIN_SUBMISSION.REFUSED,

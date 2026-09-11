@@ -585,6 +585,19 @@ handed to the service as decided at its claim, since the record's expiry is
 what says how long an offer stands and the service's staleness rule measures
 only the wait from that decision to the speech.
 
+`server/voice/live-exchange.ts` composes the whole for one account's one
+live session — the brain answered in process, the record over the voice
+writer with the sideband observed once ahead of the service, and the
+briefings above — over one store context, with the eve client handed in as
+the caller composed it. The brain's asks are pinned to the conversation the
+record writes, so an ask and the lines it leaves cannot name two
+conversations once a Clear has moved the standing main: after a Clear the
+ask is refused at the door and eve is not reached, rather than eve taking a
+turn the record cannot write. The service's `onBriefingAppend` seam tells the voice
+writer which message a briefing's last append carries, so the session's own
+voice past the append marks the briefing spoken. Nothing attaches this to the
+sessions route; that is the desktop cutover's, by build.
+
 ### One connection is one invocation
 
 A WebSocket connection to a Vercel Function closes when the function reaches
