@@ -39,10 +39,10 @@ interface NotchWingsProps {
    * session of its own, hands one in; the panel has no stream and is handed
    * the level and the voice's edges below instead.
    */
-  analyser?: AnalyserNode;
+  analyser?: AnalyserNode | undefined;
   /** How loud whoever is talking is, in the unit interval, as last relayed. */
   level?: number;
-  voice?: WaveformVoice;
+  voice?: WaveformVoice | undefined;
   /**
    * Whether whoever holds the turn is audibly speaking right now, on the
    * debounced edge the voice window measures beside the stream. The face and

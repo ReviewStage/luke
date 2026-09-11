@@ -138,7 +138,7 @@ export interface UpdateServiceOptions {
   currentVersion: string;
   /** Every state the service moves through, for the broadcast to carry. */
   onChange: (update: UpdateSnapshot) => void;
-  engine?: UpdaterEngine;
+  engine?: UpdaterEngine | undefined;
   lastRunVersion?: LastRunVersionStore;
   intervalMs?: number;
   justUpdatedFirstCheckDelayMs?: number;
@@ -231,7 +231,7 @@ export class UpdateService {
         this.#publishingWait = undefined;
         this.#report(`Update failed: ${message}`);
         void this.#engine?.clearCachedUpdate().catch(() => undefined);
-        this.#move({ ...this.#base(UPDATE_STATUS.ERROR), latestVersion: this.#latestVersion });
+        this.#move(this.#errorSnapshot());
       },
     });
   }
@@ -280,7 +280,7 @@ export class UpdateService {
       } else {
         this.#publishingWait = undefined;
         this.#report(`Update check failed: ${message}`);
-        this.#move({ ...this.#base(UPDATE_STATUS.ERROR), latestVersion: this.#latestVersion });
+        this.#move(this.#errorSnapshot());
       }
     }
     return this.#snapshot;
@@ -407,6 +407,13 @@ export class UpdateService {
       currentVersion: this.#currentVersion,
       installSupported: this.#engine !== undefined,
     };
+  }
+
+  #errorSnapshot(): UpdateSnapshot {
+    const base = { ...this.#base(UPDATE_STATUS.ERROR) };
+    return this.#latestVersion === undefined
+      ? base
+      : { ...base, latestVersion: this.#latestVersion };
   }
 
   #idle(upToDate: boolean): UpdateSnapshot {

@@ -10,7 +10,7 @@ import { useStateWithRef } from "./use-state-with-ref";
  */
 export interface PanelEntryBase {
   busy: boolean;
-  rejection?: string;
+  rejection?: string | undefined;
 }
 
 /**

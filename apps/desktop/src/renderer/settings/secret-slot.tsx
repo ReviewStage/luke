@@ -11,7 +11,7 @@ export interface SecretEntry {
   /** True while the secret is being sent. */
   busy: boolean;
   /** Why the last attempt was refused, if it was. */
-  rejection?: string;
+  rejection?: string | undefined;
 }
 
 /**

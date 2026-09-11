@@ -39,7 +39,7 @@ export interface CredentialEntry {
    */
   away: boolean;
   /** Why the last attempt was refused, if it was. */
-  rejection?: string;
+  rejection?: string | undefined;
 }
 
 /**
@@ -48,7 +48,7 @@ export interface CredentialEntry {
  * was half-typed.
  */
 export interface CredentialEntryControl {
-  entry?: CredentialEntry;
+  entry?: CredentialEntry | undefined;
   /** Opens a field for a provider, replacing whatever was being entered. */
   begin(providerId: CredentialProviderId): void;
   /**

@@ -7,6 +7,7 @@ import { channels } from "#shared/bridge";
 import type { AppAudioSlice } from "#shared/messages/app-state";
 import {
   MICROPHONE_STATUS,
+  type MicrophoneRoute,
   type MicrophoneStatus,
   type OutputAudioState,
 } from "#shared/messages/audio";
@@ -100,8 +101,21 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
   let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
 
   /** One write of what this machine's own devices answer, into the one document. */
-  function writeAudio(patch: Partial<AppAudioSlice>): void {
-    state.update({ audio: { ...state.snapshot().audio, ...patch } });
+  function writeAudio(patch: {
+    microphoneStatus?: MicrophoneStatus;
+    microphoneRoute?: MicrophoneRoute | undefined;
+    outputAudio?: OutputAudioState | undefined;
+  }): void {
+    const current = state.snapshot().audio;
+    const microphoneRoute =
+      "microphoneRoute" in patch ? patch.microphoneRoute : current.microphoneRoute;
+    const outputAudio = "outputAudio" in patch ? patch.outputAudio : current.outputAudio;
+    const audio: AppAudioSlice = {
+      microphoneStatus: patch.microphoneStatus ?? current.microphoneStatus,
+    };
+    if (microphoneRoute !== undefined) audio.microphoneRoute = microphoneRoute;
+    if (outputAudio !== undefined) audio.outputAudio = outputAudio;
+    state.update({ audio });
   }
 
   function readMicrophoneStatus(): MicrophoneStatus {

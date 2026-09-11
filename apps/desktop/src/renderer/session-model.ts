@@ -238,10 +238,10 @@ export interface SessionView {
    * row draws a branch under its own glyph and a repository plain, and only the
    * fields can say which kind of identifier this is.
    */
-  repository?: string;
-  branch?: string;
+  repository?: string | undefined;
+  branch?: string | undefined;
   /** Read on the provider mark's hover, never spent on a line of the row. */
-  model?: string;
+  model?: string | undefined;
   /**
    * The size of the session's change, already worded for the row — the counts
    * are the provider's, the words are the surface's. Beside the checkout on

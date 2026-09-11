@@ -320,8 +320,11 @@ const UPDATE_BUTTON_FOR_ROW_ACTION = {
  * not news.
  */
 function updateGuideEntry(update: UpdateSnapshot): AppGuideUpdate {
-  const steady =
-    update.status === UPDATE_STATUS.DOWNLOADING ? { ...update, progress: undefined } : update;
+  let steady: UpdateSnapshot = update;
+  if (update.status === UPDATE_STATUS.DOWNLOADING) {
+    const { progress: _progress, ...rest } = update;
+    steady = rest;
+  }
   const row = updateRow(steady);
   return {
     version: update.currentVersion,

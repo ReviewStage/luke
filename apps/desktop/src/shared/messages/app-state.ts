@@ -57,7 +57,7 @@ export interface AppAudioSlice {
   outputAudio?: OutputAudioState;
 }
 
-interface AppHotkeysSlice {
+export interface AppHotkeysSlice {
   /**
    * The accelerator each key was registered as, absent where the system
    * refused one — a chord nothing can trigger must not be drawn as though it

@@ -23,7 +23,7 @@ import {
   type WebContents,
 } from "electron";
 import { channels } from "#shared/bridge";
-import type { AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
+import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AppStateStore } from "../app-state";
 import { DockPresence } from "../window/dock-presence";
@@ -323,16 +323,17 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         panels.setMode(displayId, mode, requestFocus);
       },
       hotkeyChanged: (rank) => {
-        state.update({
-          hotkeys: {
-            ...state.snapshot().hotkeys,
-            ...(rank === HOTKEY_RANK.TALK
-              ? { talk: hotkeys.talk, talkHeld: hotkeys.held }
-              : rank === HOTKEY_RANK.ASK
-                ? { ask: hotkeys.ask }
-                : { stop: hotkeys.stop }),
-          },
-        });
+        const current = state.snapshot().hotkeys;
+        const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;
+        const ask = rank === HOTKEY_RANK.ASK ? hotkeys.ask : current.ask;
+        const stop = rank === HOTKEY_RANK.STOP ? hotkeys.stop : current.stop;
+        const nextHotkeys: AppHotkeysSlice = {
+          talkHeld: rank === HOTKEY_RANK.TALK ? hotkeys.held : current.talkHeld,
+        };
+        if (talk !== undefined) nextHotkeys.talk = talk;
+        if (ask !== undefined) nextHotkeys.ask = ask;
+        if (stop !== undefined) nextHotkeys.stop = stop;
+        state.update({ hotkeys: nextHotkeys });
       },
     },
   });

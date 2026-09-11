@@ -92,7 +92,7 @@ export interface SessionReplayBootstrap {
    * while this is absent is anonymous, joined to the person if a sign-in
    * lands during it and to nobody if none ever does.
    */
-  accountId?: string;
+  accountId?: string | undefined;
 }
 
 /** The complete session state one observation revision publishes to a desktop surface. */

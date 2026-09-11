@@ -87,7 +87,7 @@ export function FeedbackSlot({
   /** Reports the composer's height, so the surface can end where it does. */
   measure: (element: HTMLElement | null) => void;
   /** The landing being played after a delivered send, replacing the fields. */
-  confirming?: { confirmation: FeedbackConfirmation; play: number };
+  confirming?: { confirmation: FeedbackConfirmation; play: number } | undefined;
   /** Reduced motion: the landing shows its words with the face at rest. */
   still: boolean;
 }): React.JSX.Element | null {
