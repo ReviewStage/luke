@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { eq } from "drizzle-orm";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
@@ -16,7 +15,7 @@ import {
   sessionKey,
   type WireRecord,
 } from "../server/core";
-import { CONVERSATION_KIND, conversations, events } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import {
   type HostedActionCarrier,
@@ -34,6 +33,7 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import type { ObservedRoster } from "../server/hosted/observed-roster";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertConversation, readEventsByConversation } from "./support/store-rows";
 
 /**
  * The brain's tools as eve runs them, over fakes for everything the host
@@ -274,12 +274,11 @@ test("a call whose turn is over is refused before anything runs", async () => {
 
 test("a briefing is offered as an event on the turn's own journal row, and refused where no journal stands", async () => {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.OBSERVED })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  const target: ConversationTarget = { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, {
+    userId,
+    kind: CONVERSATION_KIND.OBSERVED,
+  });
+  const target: ConversationTarget = { userId, conversationId };
   const writer = await storeWriter({
     run: database.run,
     tools: CATALOG_TOOL_SET,
@@ -292,7 +291,7 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
     false,
   );
 
-  const stamp = { conversationId: sessionKey(row.id), turnId };
+  const stamp = { conversationId: sessionKey(conversationId), turnId };
   await writer.consume(target, {
     ...stamp,
     sequence: 1,
@@ -313,10 +312,7 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
     await offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
     true,
   );
-  const recorded = await database.db
-    .select({ kind: events.kind })
-    .from(events)
-    .where(eq(events.conversationId, row.id));
+  const recorded = await readEventsByConversation(database.run, conversationId);
   assert.deepEqual(
     recorded.map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],

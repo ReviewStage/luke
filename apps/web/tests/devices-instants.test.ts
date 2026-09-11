@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import * as SqlClient from "@effect/sql/SqlClient";
 import { PGlite } from "@electric-sql/pglite";
-import { gt, gte, sql } from "drizzle-orm";
+import { Effect, Schema } from "effect";
 import { test } from "vitest";
 import { z } from "zod";
-import { devices } from "../server/db/devices-schema";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertDevice, readDevicesByUser } from "./support/store-rows";
 
 /**
  * The `devices` instants this rework writes (`last_seen_at`, `active_until`,
@@ -137,9 +138,21 @@ test("the migration keeps every recorded instant, whatever zone the migrating se
   await client.close();
 });
 
+const DeviceInstantsRowSchema = Schema.Struct({
+  id: Schema.String,
+  last_seen_at: Schema.DateFromSelf,
+  active_until: Schema.NullOr(Schema.DateFromSelf),
+  quiet_until: Schema.NullOr(Schema.DateFromSelf),
+});
+
 test("a device's instants round-trip through the schema as points on the timeline, and a hold or an eligibility is compared against now by the instant under any session zone", async () => {
   const database = await openHostedStoreTestDatabase();
-  await database.db.execute(sql.raw(`set time zone '${SESSION_ZONE}'`));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql.unsafe(`set time zone '${SESSION_ZONE}'`);
+    }),
+  );
   const userId = await database.createUser();
   const holdingId = `device-${randomUUID()}`;
   const releasedId = `device-${randomUUID()}`;
@@ -147,44 +160,34 @@ test("a device's instants round-trip through the schema as points on the timelin
   const now = new Date("2026-03-01T12:00:00.000Z");
   const holding = new Date(now.getTime() + 30 * 60_000);
   const released = new Date(now.getTime() - 30 * 60_000);
-  await database.db.insert(devices).values([
-    {
-      id: holdingId,
-      userId,
-      installationId: `install-${holdingId}`,
-      platform: "macos",
-      lastSeenAt: now,
-      activeUntil: holding,
-      quietUntil: holding,
-    },
-    {
-      id: releasedId,
-      userId,
-      installationId: `install-${releasedId}`,
-      platform: "macos",
-      lastSeenAt: released,
-      activeUntil: null,
-      quietUntil: released,
-    },
-  ]);
+  await insertDevice(database.run, {
+    id: holdingId,
+    userId,
+    installationId: `install-${holdingId}`,
+    platform: "macos",
+    lastSeenAt: now,
+    activeUntil: holding,
+    quietUntil: holding,
+  });
+  await insertDevice(database.run, {
+    id: releasedId,
+    userId,
+    installationId: `install-${releasedId}`,
+    platform: "macos",
+    lastSeenAt: released,
+    activeUntil: null,
+    quietUntil: released,
+  });
 
-  const mine = sql`${devices.userId} = ${userId}`;
-  const rows = await database.db
-    .select({
-      id: devices.id,
-      lastSeenAt: devices.lastSeenAt,
-      activeUntil: devices.activeUntil,
-      quietUntil: devices.quietUntil,
-    })
-    .from(devices)
-    .where(mine)
-    .orderBy(devices.lastSeenAt);
+  const rows = (await readDevicesByUser(database.run, userId)).map((row) =>
+    Schema.decodeUnknownSync(DeviceInstantsRowSchema)(row),
+  );
   assert.deepEqual(
     rows.map((row) => [
       row.id,
-      row.lastSeenAt.getTime(),
-      row.activeUntil?.getTime() ?? null,
-      row.quietUntil?.getTime() ?? null,
+      row.last_seen_at.getTime(),
+      row.active_until?.getTime() ?? null,
+      row.quiet_until?.getTime() ?? null,
     ]),
     [
       [releasedId, released.getTime(), null, released.getTime()],
@@ -192,18 +195,22 @@ test("a device's instants round-trip through the schema as points on the timelin
     ],
   );
 
-  const stillHolding = await database.db
-    .select({ id: devices.id })
-    .from(devices)
-    .where(sql`${mine} and ${gt(devices.quietUntil, now)}`);
+  const stillHolding = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select id from devices where user_id = ${userId} and quiet_until > ${now}`;
+    }),
+  );
   assert.deepEqual(
     stillHolding.map((row) => row.id),
     [holdingId],
   );
-  const eligible = await database.db
-    .select({ id: devices.id })
-    .from(devices)
-    .where(sql`${mine} and ${gte(devices.lastSeenAt, now)}`);
+  const eligible = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select id from devices where user_id = ${userId} and last_seen_at >= ${now}`;
+    }),
+  );
   assert.deepEqual(
     eligible.map((row) => row.id),
     [holdingId],

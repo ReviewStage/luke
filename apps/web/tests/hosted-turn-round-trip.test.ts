@@ -27,9 +27,9 @@ import {
   unknownActionOutput,
   type WireRecord,
 } from "../server/core";
-import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertConversation } from "./support/store-rows";
 
 /**
  * One multi-step turn across the whole path the plan draws: the brain's turn
@@ -198,12 +198,8 @@ class Journey {
 
 async function conversation(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId });
+  return { userId, conversationId };
 }
 
 /** One model message's content as the ids and kinds a step is made of. */
