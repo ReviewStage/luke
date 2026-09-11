@@ -243,6 +243,15 @@ stand behind an entry of their own, and the package names no socket library
 anywhere: its sources open connections through the injected `openSocket`
 seam, and each composition binds `ws` on its own side.
 
+`@sidecar/voice/effect` is the same package's door for the Effect tags
+beside those plain seams: `LiveBrainTag`, `LiveRecordTag`,
+`LiveSessionSourceTag`, `IntroductionSessionSourceTag`, and
+`LiveVoiceBridgeTag`, each with a `Layer.succeed` adaptor over the plain
+object a caller still holds. Every adaptor is a strangler shim standing
+until the class it feeds — `LiveSessionService` or `LiveVoiceOrchestrator` —
+reads the tag itself rather than taking the value as a constructor argument,
+and `docs/adr/0001-effect.md` names which caller and which PR for each.
+
 `@sidecar/wire/effect` is the same door for the Effect bridges that stand
 beside the hand-rolled base while both are still in use — the `Scope`,
 `Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
