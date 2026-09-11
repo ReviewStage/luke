@@ -20,6 +20,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import type { UserMessageMetadata, WireRecord } from "@sidecar/wire";
+import { Either } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { CONTEXT_OPENING, claimOpenedContext, retireContext } from "./generation.js";
 import {
@@ -30,6 +31,7 @@ import {
   subagentTaskInputText,
 } from "./input-items.js";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
+import type { CompactionRefused } from "./maintenance.js";
 import { inboxEvents } from "./observation-inbox.js";
 import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 import {
@@ -151,7 +153,7 @@ export interface TurnRunnerOptions {
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
     prompt: string,
     countedTokens?: number,
-  ) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  ) => Promise<Either.Either<void, CompactionRefused>>;
   /** Queues the optional compaction a settled turn leaves behind. */
   scheduleMaintenance: (turnContext: TurnContext, countedTokens: number | undefined) => void;
   /** The ask ledger's seams: what a waiting ask may do, and who hears a record change. */
@@ -555,15 +557,15 @@ export class TurnRunner {
         });
         policy = this.#resolvePolicy(preparation, plan.trigger);
         const prepared = this.#revoked(turnContext)
-          ? { ok: true as const }
+          ? Either.right(undefined)
           : await this.#options.compactIfNeeded(turnContext, preparation.prompt);
         if (this.#revoked(turnContext)) {
           failure = revocation();
-        } else if (!prepared.ok) {
+        } else if (Either.isLeft(prepared)) {
           // The request would not fit and the context could not be folded:
           // the run fails recoverably, and what stands is exactly what stood.
           run.compactionFailed = true;
-          gathering.error = `compaction required: ${prepared.reason}`;
+          gathering.error = `compaction required: ${prepared.left.reason}`;
           failure = { outcome: TURN_OUTCOME.FAILED };
         } else {
           // The admission's compaction, if any, is the new rollback point: a

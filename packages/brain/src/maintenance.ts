@@ -11,7 +11,7 @@ import {
   type MemoryDefinition,
   reserveTokens,
 } from "@sidecar/runtime/vocabulary";
-import { Data, Effect } from "effect";
+import { Data, Effect, Either } from "effect";
 import { assessCompaction, COMPACTION_NEED, type CompactionAssessment } from "./compaction.js";
 import { CONTEXT_OPENING } from "./generation.js";
 import { turnCompactionOf } from "./run-events.js";
@@ -43,6 +43,16 @@ export interface BrainFlushMarkerStore {
 export class FlushMarkerWriteFailed extends Data.TaggedError("FlushMarkerWriteFailed")<{
   readonly reason: string;
   readonly revoked: boolean;
+}> {}
+
+/** A failed read of the flush marker from its store. */
+class FlushMarkerReadFailed extends Data.TaggedError("FlushMarkerReadFailed")<{
+  readonly reason: string;
+}> {}
+
+/** The context could not be folded to fit the next request. */
+export class CompactionRefused extends Data.TaggedError("CompactionRefused")<{
+  readonly reason: string;
 }> {}
 
 /**
@@ -152,8 +162,8 @@ export class Maintenance {
         prepared.prompt,
         countedTokens,
       );
-      if (!compacted.ok)
-        this.#seam.report(`Brain compaction did not complete: ${compacted.reason}`);
+      if (Either.isLeft(compacted))
+        this.#seam.report(`Brain compaction did not complete: ${compacted.left.reason}`);
     } finally {
       this.#options.holdTurnInFlight(false);
     }
@@ -172,10 +182,10 @@ export class Maintenance {
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
     prompt: string,
     countedTokens?: number,
-  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  ): Promise<Either.Either<void, CompactionRefused>> {
     const { context, signal } = turnContext;
     const capabilities = await this.#options.runtime.capabilities();
-    if (this.#revoked(turnContext)) return { ok: true };
+    if (this.#revoked(turnContext)) return Either.right(undefined);
     const assessment = assessCompaction(
       context.checkpoint().items,
       prompt,
@@ -186,20 +196,22 @@ export class Maintenance {
     // usually runs on a context not yet over the reserve; at admission it
     // runs right before the compaction the request needs.
     await this.#flushBeforeCompaction(turnContext, assessment);
-    if (this.#revoked(turnContext)) return { ok: true };
-    if (assessment.need === COMPACTION_NEED.NONE) return { ok: true };
+    if (this.#revoked(turnContext)) return Either.right(undefined);
+    if (assessment.need === COMPACTION_NEED.NONE) return Either.right(undefined);
     const outcome = await this.#options.runtime.compact(context, { prompt, signal });
-    if (this.#revoked(turnContext)) return { ok: true };
-    if (!outcome.compacted) return { ok: false, reason: outcome.reason };
+    if (this.#revoked(turnContext)) return Either.right(undefined);
+    if (!outcome.compacted) return Either.left(new CompactionRefused({ reason: outcome.reason }));
     turnContext.generation.compactionCount += 1;
     if (!(await this.#seam.ledger.checkpoint(turnContext))) {
-      return { ok: false, reason: "the compacted context could not be checkpointed" };
+      return Either.left(
+        new CompactionRefused({ reason: "the compacted context could not be checkpointed" }),
+      );
     }
     // The fold is told once it is on record, and to the turn whose sequence it
     // belongs in: the turn about to run, or the settled turn that queued this
     // maintenance, whose events it follows.
     turnContext.events.compacted(turnCompactionOf(outcome));
-    return { ok: true };
+    return Either.right(undefined);
   }
 
   /**
@@ -259,9 +271,9 @@ export class Maintenance {
     }
     const marked = await this.#writeFlushMarker(turnContext, cycle);
     if (marked.aborted || this.#revoked(turnContext)) return;
-    if (!marked.value.ok) {
+    if (Either.isLeft(marked.value)) {
       this.#seam.report(
-        `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.reason}); the cycle stays unflushed and runs again at the next assessment`,
+        `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.left.reason}); the cycle stays unflushed and runs again at the next assessment`,
       );
       return;
     }
@@ -295,19 +307,19 @@ export class Maintenance {
     }
     const read = await settledUnlessAborted(
       store.read(generation.id).then(
-        (lastCompactionCount) => ({ ok: true as const, lastCompactionCount }),
-        (error: Error) => ({ ok: false as const, reason: error.message }),
+        (lastCompactionCount) => Either.right({ lastCompactionCount }),
+        (error: Error) => Either.left(new FlushMarkerReadFailed({ reason: error.message })),
       ),
       signal,
     );
     if (read.aborted || this.#revoked(turnContext)) return false;
-    if (!read.value.ok) {
+    if (Either.isLeft(read.value)) {
       this.#seam.report(
-        `Memory flush marker could not be read (${read.value.reason}); the flush waits for the next assessment`,
+        `Memory flush marker could not be read (${read.value.left.reason}); the flush waits for the next assessment`,
       );
       return false;
     }
-    generation.flush = { read: true, lastCompactionCount: read.value.lastCompactionCount };
+    generation.flush = { read: true, lastCompactionCount: read.value.right.lastCompactionCount };
     return true;
   }
 
@@ -322,9 +334,9 @@ export class Maintenance {
   async #writeFlushMarker(
     turnContext: Pick<TurnContext, "generation" | "signal">,
     cycle: number,
-  ): Promise<Settled<{ ok: true } | { ok: false; reason: string }>> {
+  ): Promise<Settled<Either.Either<void, FlushMarkerWriteFailed>>> {
     const store = this.#options.flushMarker;
-    if (!store) return { aborted: false, value: { ok: true } };
+    if (!store) return { aborted: false, value: Either.right(undefined) };
     const { generation, signal } = turnContext;
     /**
      * @deprecated Runs `writeFlushMarkerEffect` to the `Promise` this method's
@@ -332,16 +344,11 @@ export class Maintenance {
      * the host's own `Layer` and this write reaches a runtime edge of its
      * own rather than being run here.
      */
-    const attempts = (): Promise<{ ok: true } | { ok: false; reason: string }> =>
-      Effect.runPromise(
-        writeFlushMarkerEffect(store, generation.id, cycle, signal).pipe(
-          Effect.as({ ok: true as const }),
-          Effect.catchAll((error) => Effect.succeed({ ok: false as const, reason: error.reason })),
-        ),
-      );
+    const attempts = (): Promise<Either.Either<void, FlushMarkerWriteFailed>> =>
+      Effect.runPromise(Effect.either(writeFlushMarkerEffect(store, generation.id, cycle, signal)));
     const outcome = attempts();
     const settled = await claimedUnlessAborted(outcome, signal, (late) => {
-      if (late.ok) generation.flush.lastCompactionCount = cycle;
+      if (Either.isRight(late)) generation.flush.lastCompactionCount = cycle;
     });
     if (settled.aborted) {
       generation.flush.settling = outcome.then(() => undefined);
