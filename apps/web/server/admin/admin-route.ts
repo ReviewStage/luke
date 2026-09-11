@@ -1,6 +1,5 @@
 import type { AdminSeams } from "../admin-app.js";
 import { auth } from "../auth.js";
-import { getDatabase } from "../db/index.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../hosted/posthog.js";
 import { runWeb } from "../runtime.js";
@@ -80,18 +79,18 @@ export function hostedAdminSeams(): AdminSeams {
       ),
     readUsers: async (now, scope, viewerId, windowDays, search) =>
       buildAdminUserList(
-        await readAdminUsersSource(getDatabase(), { now, scope, search, viewerId, windowDays }),
+        await runWeb(readAdminUsersSource({ now, scope, search, viewerId, windowDays })),
         now,
         windowDays,
         search,
       ),
     readUser: async (userId, now, windowDays) => {
-      const source = await readAdminUserSource(getDatabase(), { userId, now, windowDays });
+      const source = await runWeb(readAdminUserSource({ userId, now, windowDays }));
       return source && buildAdminUserDetail(source, now, windowDays);
     },
     readDay: async (day, now, scope) =>
-      buildAdminDayDetail(await readAdminDaySource(getDatabase(), { day, scope }), now, day),
+      buildAdminDayDetail(await runWeb(readAdminDaySource({ day, scope })), now, day),
     writeFavorite: (adminId, userId, favorite) =>
-      writeAdminFavorite(getDatabase(), { adminId, userId, favorite }),
+      runWeb(writeAdminFavorite({ adminId, userId, favorite })),
   };
 }
