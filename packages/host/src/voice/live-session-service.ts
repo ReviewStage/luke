@@ -93,6 +93,10 @@ const SLOW_STEP_GENERAL_NOTE = "Luke is still working on it; this takes a moment
 
 const TYPED_ASK_MIRROR_NOTE = "The developer typed this ask into Luke's composer:";
 
+/** Said once, under the delegation, when the developer's ask could not be put on record: an ask off the record is answered nowhere. */
+export const ASK_UNRECORDED_NOTE =
+  "I couldn't write that ask down, so I'm not going to answer it here.";
+
 /**
  * What the stop key says to the model. Muting the microphone never stops the
  * output, as the live guide notes, so a microphone muted while Luke is
@@ -189,6 +193,12 @@ interface StandingSession {
 interface Exchange {
   readonly runIds: Set<string>;
   delegationIds: string[];
+  /** Asks of this exchange whose record write is still out; while any is, run events are deferred rather than spoken. */
+  pendingRecords: number;
+  /** Run events held while a record write is out, replayed in order once it lands. */
+  deferred: LiveBrainRunEvent[];
+  /** The delegation whose ask the record refused, if any: once every write is in, the exchange is dropped and told so once. */
+  unrecorded: string | undefined;
   /** The session the delegations belong to; a closed session's ids die with it and later sentences go session-wide. */
   sessionId: string | undefined;
   settled: boolean;
@@ -217,6 +227,9 @@ function newExchange(
   return {
     runIds: new Set([runId]),
     delegationIds,
+    pendingRecords: 0,
+    deferred: [],
+    unrecorded: undefined,
     sessionId,
     settled: false,
     buffered: [],
@@ -640,7 +653,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     }
   }
 
-  async #write(write: UtteranceWrite): Promise<void> {
+  async #write(write: UtteranceWrite): Promise<boolean> {
     const { session, utterance } = write;
     const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#options.now();
     const written =
@@ -664,6 +677,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
             recordedAt,
           });
     if (!written) this.#options.report("A live utterance could not be written to the record");
+    return written;
   }
 
   /**
@@ -707,40 +721,84 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       submissionId: this.#options.createId(),
       question,
     });
-    const runId =
-      submission.outcome === LIVE_BRAIN_SUBMISSION.ACCEPTED ? submission.runId : undefined;
-    if (!session.writtenRows.has(ask.rowId)) {
-      session.writtenRows.add(ask.rowId);
-      await this.#write({
-        session,
-        utterance: ask,
-        delegationId,
-        askContext: { sinceMs, untilMs: offsetMs },
-        ...(runId !== undefined ? { runId } : undefined),
-      });
-    }
     if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+      if (!session.writtenRows.has(ask.rowId)) {
+        session.writtenRows.add(ask.rowId);
+        await this.#write({
+          session,
+          utterance: ask,
+          delegationId,
+          askContext: { sinceMs, untilMs: offsetMs },
+        });
+      }
       this.#speakInto(session, delegationId, submission.refusal);
       return;
     }
+    // The exchange stands before the ask's record write is awaited, so a run
+    // that ends at once or speaks its first sentence during the write is
+    // deferred into it rather than dropped; the record still precedes the
+    // speech, because nothing deferred is spoken until the write lands.
+    const exchange = this.#registerExchange(session, submission.runId, delegationId);
+    if (session.writtenRows.has(ask.rowId)) return;
+    session.writtenRows.add(ask.rowId);
+    exchange.pendingRecords += 1;
+    const recorded = await this.#write({
+      session,
+      utterance: ask,
+      delegationId,
+      askContext: { sinceMs, untilMs: offsetMs },
+      runId: submission.runId,
+    });
+    exchange.pendingRecords -= 1;
+    if (!recorded) exchange.unrecorded ??= delegationId;
+    // A sibling ask steered into this exchange may still have its own write
+    // out; the exchange is settled once, when the last of them is in.
+    if (exchange.pendingRecords > 0) return;
+    if (exchange.unrecorded !== undefined) {
+      const refusedDelegation = exchange.unrecorded;
+      this.#dropExchange(exchange);
+      this.#speakInto(session, refusedDelegation, ASK_UNRECORDED_NOTE);
+      return;
+    }
+    for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
+  }
+
+  /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */
+  #registerExchange(session: StandingSession, runId: string, delegationId: string): Exchange {
     const open = [...this.#exchanges.values()].find(
       (exchange) => exchange.sessionId === session.sessionId && exchange.end === undefined,
     );
     if (open) {
       open.delegationIds.push(delegationId);
-      open.runIds.add(submission.runId);
-      this.#exchanges.set(submission.runId, open);
-      return;
+      open.runIds.add(runId);
+      this.#exchanges.set(runId, open);
+      return open;
     }
-    this.#exchanges.set(
-      submission.runId,
-      newExchange(submission.runId, [delegationId], session.sessionId),
-    );
+    const exchange = newExchange(runId, [delegationId], session.sessionId);
+    this.#exchanges.set(runId, exchange);
+    return exchange;
+  }
+
+  /** An exchange whose ask never reached the record answers nothing: its runs are forgotten and what they said is dropped. */
+  #dropExchange(exchange: Exchange): void {
+    if (exchange.finalize !== undefined) this.#options.cancel(exchange.finalize);
+    exchange.finalize = undefined;
+    exchange.deferred = [];
+    exchange.buffered = [];
+    exchange.late = [];
+    this.#lateExchanges.delete(exchange);
+    for (const [runId, held] of [...this.#exchanges]) {
+      if (held === exchange) this.#exchanges.delete(runId);
+    }
   }
 
   #onRunEvent(event: LiveBrainRunEvent): void {
     const exchange = this.#exchanges.get(event.runId);
     if (!exchange) return;
+    if (exchange.pendingRecords > 0) {
+      exchange.deferred.push(event);
+      return;
+    }
     switch (event.kind) {
       case LIVE_BRAIN_RUN_EVENT.SLOW_STEP: {
         if (exchange.slowStepTold) return;

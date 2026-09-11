@@ -41,6 +41,7 @@ import {
 } from "./live-brain.js";
 import type { DeveloperUtteranceRecord, LiveRecord, LukeUtteranceRecord } from "./live-record.js";
 import {
+  ASK_UNRECORDED_NOTE,
   LiveSessionService,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
@@ -192,10 +193,31 @@ class FakeBrain implements LiveBrain {
 class FakeRecord implements LiveRecord {
   readonly developer: DeveloperUtteranceRecord[] = [];
   readonly luke: LukeUtteranceRecord[] = [];
+  /** While set, developer writes wait here for the test to answer them. */
+  #held: ((written: boolean) => void)[] | undefined;
+
+  /** The next developer writes are held until `release` answers them. */
+  hold(): void {
+    this.#held = [];
+  }
+
+  /** Answers the oldest held developer write; a write answered true is on the record. */
+  release(written: boolean): void {
+    const held = this.#held?.shift();
+    assert.ok(held, "a developer write is held");
+    held(written);
+  }
 
   async writeDeveloperUtterance(record: DeveloperUtteranceRecord): Promise<boolean> {
-    this.developer.push(record);
-    return true;
+    if (this.#held === undefined) {
+      this.developer.push(record);
+      return true;
+    }
+    const written = await new Promise<boolean>((resolve) => {
+      this.#held?.push(resolve);
+    });
+    if (written) this.developer.push(record);
+    return written;
   }
 
   async writeLukeUtterance(record: LukeUtteranceRecord): Promise<boolean> {
@@ -1054,4 +1076,132 @@ test("an append pending when the session dies is dropped with it and never re-se
   });
   await f.clock.advance(f.clock.now + 1000);
   assert.equal(appends(second, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+});
+
+test("run events landing while the ask's record write is out are deferred, then spoken in order once the record holds the ask", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.record.hold();
+  sideband.input("Ship it.", 0, 800);
+  sideband.delegation("item_1", 900);
+  await drainMicrotasks();
+  assert.equal(f.brain.asks.length, 1);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Shipped." });
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Green." });
+  await drainMicrotasks();
+  assert.equal(f.record.developer.length, 0);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  f.record.release(true);
+  await drainMicrotasks();
+  assert.equal(f.record.developer.length, 1);
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.deepEqual(
+    commentary.map((event) => ("content" in event ? event.content : undefined)),
+    ["Shipped."],
+  );
+  assert.equal(
+    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
+    "item_1",
+  );
+  sideband.acknowledge(0, 1000, 1100);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
+});
+
+test("a run that ends during the ask's record write is finalized once the write lands, its end spoken as the standing note", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.record.hold();
+  sideband.input("Do the thing.", 0, 800);
+  sideband.delegation("item_1", 900);
+  await drainMicrotasks();
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+    runId: "run-1",
+    end: LIVE_BRAIN_RUN_END.FAILED,
+  });
+  await f.clock.advance(f.clock.now + 1000);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  f.record.release(true);
+  await drainMicrotasks();
+  await f.clock.advance(f.clock.now + 1000);
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(commentary.length, 1);
+  assert.equal(
+    commentary[0] && "content" in commentary[0] && commentary[0].content,
+    RUN_END_NOTE[LIVE_BRAIN_RUN_END.FAILED],
+  );
+});
+
+test("an ask whose record write fails is answered with the unrecorded note once, and its run's later events reach nothing", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.record.hold();
+  sideband.input("Send it.", 0, 800);
+  sideband.delegation("item_1", 900);
+  await drainMicrotasks();
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Sent." });
+  f.record.release(false);
+  await drainMicrotasks();
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(commentary.length, 1);
+  assert.equal(
+    commentary[0] && "content" in commentary[0] && commentary[0].content,
+    ASK_UNRECORDED_NOTE,
+  );
+  assert.equal(
+    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
+    "item_1",
+  );
+  sideband.acknowledge(0, 1000, 1100);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Late." });
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+    runId: "run-1",
+    end: LIVE_BRAIN_RUN_END.FAILED,
+  });
+  await f.clock.advance(f.clock.now + 1000);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+  assert.equal(f.record.developer.length, 0);
+});
+
+test("a steered ask whose sibling's record write fails is settled once every write is in: one unrecorded note, nothing spoken", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.record.hold();
+  sideband.input("What failed?", 0, 800);
+  sideband.delegation("item_1", 900);
+  await drainMicrotasks();
+  sideband.input("In the API repo.", 5000, 5800);
+  sideband.delegation("item_2", 5900);
+  await drainMicrotasks();
+  assert.equal(f.brain.asks.length, 2);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+    runId: "run-2",
+    sentence: "Two tests.",
+  });
+  f.record.release(false);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  f.record.release(true);
+  await drainMicrotasks();
+  const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(commentary.length, 1);
+  assert.equal(
+    commentary[0] && "content" in commentary[0] && commentary[0].content,
+    ASK_UNRECORDED_NOTE,
+  );
+  assert.equal(
+    commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
+    "item_1",
+  );
+  sideband.acknowledge(0, 6000, 6100);
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-2", sentence: "Late." });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+  assert.equal(f.record.developer.length, 1);
 });
