@@ -131,7 +131,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Eleven strangler shims are on that allowlist for as long as they live.
+Fourteen strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -216,6 +216,23 @@ the `ModelAdapter` interface's promise, so the `Effect.withSpan` wrapping the
 wrapped adapter's call is run to that promise here. It goes together with
 `BrainTransport#send`'s `runCall` in P5-14.
 
+`timedRequest` in `packages/credentials/src/account/client.ts` and
+`LinearIssueTracker#post` in `packages/credentials/src/linear/tracker.ts` are
+the twelfth and thirteenth: both build a request over the ambient `HttpClient`
+from a `CloudFetch`-shaped `fetch` option, exactly as `createAccountCall`
+does, and both still answer their callers — `AccountClient`,
+`deleteHostedAccount`, and `LinearIssueTracker`'s `observe`/`execute` — a
+Promise rather than a fiber, so each runs its request to a promise in place.
+Both go with `CloudFetch` and `layerFromCloudFetch` in P12-04.
+
+`singleFlight`'s returned closure in `packages/credentials/src/single-flight.ts`
+is the fourteenth, and the only one not shaped by `CloudFetch`: its two
+callers, `AccountSessionManager.refresh` and `LinearCredentials`'s own
+renewal, hold a Promise from a package this migration has not yet reached, so
+the join over the internal `Semaphore` and `Deferred` is run to a promise for
+them. P7-04 and P7-06 move each composer onto the host's own runtime; once
+both callers run on Effect themselves, this seam goes with them.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -241,6 +258,9 @@ design decision stated as such:
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P5-14 |
+| `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
+| `LinearIssueTracker#post` | P4-03 | P12-04 |
+| `singleFlight`'s Promise-returning closure | P4-03 | P7-04, P7-06 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |

@@ -193,6 +193,33 @@ test("userinfo keeps a picture only from the hosts the renderer's policy pins", 
   }
 });
 
+test("a request that outlives its deadline ends as a timeout, never a hang", async () => {
+  const client = new AccountClient({
+    baseUrl: "https://tryluke.dev/api/auth",
+    clientId: "luke-desktop",
+    timeoutMs: 1,
+    fetch: () => new Promise<Response>(() => undefined),
+  });
+
+  const error = await client.refresh("stale").catch((cause: unknown) => cause);
+  assert.ok(error instanceof Error);
+  assert.equal(error.name, "TimeoutError");
+});
+
+test("a transport that cannot carry the request is an error, never a hang", async () => {
+  const client = new AccountClient({
+    baseUrl: "https://tryluke.dev/api/auth",
+    clientId: "luke-desktop",
+    fetch: () => {
+      throw new TypeError("fetch failed");
+    },
+  });
+
+  const error = await client.refresh("stale").catch((cause: unknown) => cause);
+  assert.ok(error instanceof Error);
+  assert.equal(error instanceof AccountClientError, false);
+});
+
 test("OAuth errors preserve their status and machine-readable code", async () => {
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",

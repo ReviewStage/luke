@@ -1,3 +1,6 @@
+import * as HttpBody from "@effect/platform/HttpBody";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   isRecord,
@@ -6,6 +9,8 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { layerFromCloudFetch, webResponseFromClientResponse } from "@sidecar/wire/effect";
+import { Cause, Duration, Effect, Exit, type Layer } from "effect";
 import type { AccountProvider } from "./snapshot.js";
 
 export interface AccountTokens {
@@ -105,16 +110,51 @@ function tokensFrom(body: WireRecord): AccountTokens {
   return { accessToken: body.access_token, refreshToken: body.refresh_token };
 }
 
+const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
+
+/**
+ * One request over the ambient `HttpClient`, under its own deadline. A
+ * client that could not carry it, or a body that outlived the deadline, ends
+ * the request as the failure `Cause.squash` unwraps back to the caller — the
+ * platform's own transport error for the first, a timeout named the way
+ * `AbortSignal.timeout` always named it for the second — so every caller here
+ * keeps reading a thrown error exactly as it always did.
+ *
+ * @deprecated This is the CloudFetch-shaped seam on the `Effect.runPromise`
+ * allowlist in `docs/adr/0001-effect.md`: `AccountClient` and
+ * `deleteHostedAccount` still answer a Promise over a `CloudFetch`-shaped
+ * `fetch` option, so the request built over the ambient `HttpClient` is run
+ * to a promise here rather than left to a caller's own fiber. Deleted with
+ * `CloudFetch` and `layerFromCloudFetch` in P12-04.
+ */
+function timedRequest(
+  client: Layer.Layer<HttpClient.HttpClient>,
+  request: HttpClientRequest.HttpClientRequest,
+  timeoutMs: number,
+): Promise<Response> {
+  const answer = HttpClient.execute(request).pipe(
+    Effect.flatMap(webResponseFromClientResponse),
+    Effect.timeoutFail({
+      duration: Duration.millis(timeoutMs),
+      onTimeout: () => new DOMException("The request timed out", "TimeoutError"),
+    }),
+  );
+  return Effect.runPromiseExit(Effect.provide(answer, client)).then((exit) => {
+    if (Exit.isSuccess(exit)) return exit.value;
+    throw Cause.squash(exit.cause);
+  });
+}
+
 export class AccountClient {
   readonly #baseUrl: string;
   readonly #clientId: string;
-  readonly #fetch: FetchLike;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #timeoutMs: number;
 
   constructor(options: AccountClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, "");
     this.#clientId = options.clientId;
-    this.#fetch = options.fetch ?? fetch;
+    this.#client = layerFromCloudFetch(options.fetch ?? fetch);
     this.#timeoutMs = options.timeoutMs ?? 15_000;
   }
 
@@ -161,24 +201,31 @@ export class AccountClient {
 
   /** Revokes the long-lived credential; local sign-out never depends on this succeeding. */
   async revoke(refreshToken: string): Promise<void> {
-    const response = await this.#fetch(`${this.#baseUrl}/oauth2/revoke`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: this.#clientId,
-        token: refreshToken,
-        token_type_hint: "refresh_token",
+    const response = await timedRequest(
+      this.#client,
+      HttpClientRequest.post(`${this.#baseUrl}/oauth2/revoke`, {
+        body: HttpBody.raw(
+          new URLSearchParams({
+            client_id: this.#clientId,
+            token: refreshToken,
+            token_type_hint: "refresh_token",
+          }).toString(),
+          { contentType: FORM_CONTENT_TYPE },
+        ),
       }),
-      signal: AbortSignal.timeout(this.#timeoutMs),
-    });
+      this.#timeoutMs,
+    );
     if (!response.ok) await responseRecord(response);
   }
 
   async userInfo(accessToken: string, provider: AccountProvider): Promise<AccountIdentity> {
-    const response = await this.#fetch(`${this.#baseUrl}/oauth2/userinfo`, {
-      headers: { authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(this.#timeoutMs),
-    });
+    const response = await timedRequest(
+      this.#client,
+      HttpClientRequest.get(`${this.#baseUrl}/oauth2/userinfo`, {
+        headers: { authorization: `Bearer ${accessToken}` },
+      }),
+      this.#timeoutMs,
+    );
     const body = await responseRecord(response);
     if (!isWireString(body.email)) {
       throw new AccountClientError("Account service returned an invalid identity");
@@ -194,12 +241,15 @@ export class AccountClient {
   }
 
   async #token(fields: Record<string, string>): Promise<WireRecord> {
-    const response = await this.#fetch(`${this.#baseUrl}/oauth2/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(fields),
-      signal: AbortSignal.timeout(this.#timeoutMs),
-    });
+    const response = await timedRequest(
+      this.#client,
+      HttpClientRequest.post(`${this.#baseUrl}/oauth2/token`, {
+        body: HttpBody.raw(new URLSearchParams(fields).toString(), {
+          contentType: FORM_CONTENT_TYPE,
+        }),
+      }),
+      this.#timeoutMs,
+    );
     return responseRecord(response);
   }
 }
@@ -260,14 +310,13 @@ export interface AccountDeletionOptions {
  * token (refresh and retry) from a service that actually said no.
  */
 export async function deleteHostedAccount(options: AccountDeletionOptions): Promise<void> {
-  const fetchLike = options.fetch ?? fetch;
-  const response = await fetchLike(
-    `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
-    {
-      method: "POST",
-      headers: { authorization: `Bearer ${options.accessToken}` },
-      signal: AbortSignal.timeout(options.timeoutMs ?? DELETE_TIMEOUT_MS),
-    },
+  const response = await timedRequest(
+    layerFromCloudFetch(options.fetch ?? fetch),
+    HttpClientRequest.post(
+      `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
+      { headers: { authorization: `Bearer ${options.accessToken}` } },
+    ),
+    options.timeoutMs ?? DELETE_TIMEOUT_MS,
   );
   if (!response.ok) {
     throw new AccountClientError(`Account service returned ${response.status}`, {
