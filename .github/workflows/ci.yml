@@ -47,14 +47,16 @@ jobs:
   # The store tests run on PGlite inside the test shards above; this job is
   # the one place the generated migrations and the same tests meet a real
   # Postgres, so a statement PGlite accepts and Postgres refuses is caught
-  # before a deployment's `db:migrate` finds it.
+  # before a deployment's `db:migrate` finds it. The image is the major
+  # production runs (Neon, 18.x), which is also the major PGlite embeds; a
+  # test that fails here fails about the database the service actually runs.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: luke
           POSTGRES_PASSWORD: luke
