@@ -12,6 +12,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { temporaryDirectory } from "@sidecar/wire/testing";
+import { Runtime } from "effect";
 import { test } from "vitest";
 import { wireStore } from "./store-wiring.js";
 
@@ -33,6 +34,7 @@ function wiring(root: string) {
   const wired = wireStore({
     persistent: true,
     transport: inProcessStoreTransport(),
+    execution: Runtime.defaultRuntime,
     agentRoot: () => root,
     workspaceDirectory: () => path.join(root, "workspace"),
     ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true }),

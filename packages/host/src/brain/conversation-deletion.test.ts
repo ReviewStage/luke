@@ -34,6 +34,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
+import { Runtime } from "effect";
 import { type TestContext, test } from "vitest";
 import { ConversationThread } from "../conversation-thread.js";
 import { operatorOverBrain } from "../testing/index.js";
@@ -104,7 +105,7 @@ function repository(client: StoreClient) {
 
 async function composed(t: TestContext) {
   const root = await temporaryDirectory(t, "luke-clear-");
-  const client = storeClient(inProcessStoreTransport());
+  const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
   let clock = NOW;
   let ids = 0;
   let generations = 0;

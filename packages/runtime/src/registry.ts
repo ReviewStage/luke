@@ -342,22 +342,6 @@ export function resolveConfigurationEither(
 }
 
 /**
- * The outcome shape `resolveConfiguration` answered before the door turned
- * into an `Either`, kept as an adaptor over `resolveConfigurationEither` for
- * `ConfigurationStore` and any caller still holding it.
- *
- * @deprecated Read `resolveConfigurationEither` instead; P7-08's host
- * composer is what deletes this adaptor once it consumes the `Either` door
- * directly.
- */
-export function resolveConfiguration(names: AgentConfiguration): ConfigurationOutcome {
-  return Either.match(resolveConfigurationEither(names), {
-    onLeft: (refusal) => ({ outcome: CONFIGURATION_OUTCOME.REFUSED, refusal: refusal.code }),
-    onRight: (configuration) => ({ outcome: CONFIGURATION_OUTCOME.RESOLVED, configuration }),
-  });
-}
-
-/**
  * One agent's standing configuration. `publish` resolves and, only when the
  * whole configuration resolves, replaces the snapshot in one assignment; a
  * refused publish leaves the standing snapshot exactly as it was. Two agents

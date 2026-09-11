@@ -1,6 +1,7 @@
 import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
 import {
   type AgentRuntime,
+  type ExecutionRuntime,
   type ModelAdapter,
   promiseAgentRuntime,
 } from "@sidecar/runtime/vocabulary";
@@ -17,8 +18,16 @@ import { ToolLoopAgentRuntime } from "./runtime.js";
  * derivation over stored UIMessages, is constructed behind
  * `@sidecar/brain/ui-message-context` rather than here, because it reaches
  * the AI SDK at run time and the barrel must not.
+ *
+ * The execution is the runtime every run of this loop is a fiber on. A host
+ * that composes one hands its own, so a turn's fiber and the host that
+ * cancels it stand on one runtime; a caller that hands none runs on Effect's
+ * default, which is what a test building a loop by hand wants.
  */
-export function toolLoopRuntimeOver(model: ModelAdapter): AgentRuntime {
+export function toolLoopRuntimeOver(
+  model: ModelAdapter,
+  execution?: ExecutionRuntime,
+): AgentRuntime {
   return promiseAgentRuntime(
     new ToolLoopAgentRuntime({
       model,
@@ -26,5 +35,6 @@ export function toolLoopRuntimeOver(model: ModelAdapter): AgentRuntime {
       createContext: (format) =>
         new ResponsesContextEngine({ id: format.runtime, version: format.runtimeVersion }),
     }),
+    execution ? { execution } : {},
   );
 }

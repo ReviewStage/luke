@@ -340,7 +340,7 @@ export class Maintenance {
     const { generation, signal } = turnContext;
     /**
      * @deprecated Runs `writeFlushMarkerEffect` to the `Promise` this method's
-     * own callers still hold; deleted in P7-08 once the brain composes onto
+     * own callers still hold; deleted in P7-08b once the brain composes onto
      * the host's own `Layer` and this write reaches a runtime edge of its
      * own rather than being run here.
      */

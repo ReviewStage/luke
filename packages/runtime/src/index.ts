@@ -100,7 +100,6 @@ export {
   notebookMemoryProviderFor,
   RESPONSES_ITEM_FORMAT,
   type ResolvedConfiguration,
-  resolveConfiguration,
   resolveConfigurationEither,
   type SkillDescriptor,
   TOOL_EFFECT,

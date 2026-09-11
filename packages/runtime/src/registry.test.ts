@@ -17,7 +17,6 @@ import {
   MEMORY_CAPABILITY,
   notebookMemoryProviderFor,
   RESPONSES_ITEM_FORMAT,
-  resolveConfiguration,
   resolveConfigurationEither,
   TOOL_EFFECT,
   TOOL_EXECUTION,
@@ -74,10 +73,7 @@ test("both context engines stand in the table, each under its own item format, a
   );
   assert.notDeepEqual(RESPONSES_ITEM_FORMAT, UI_MESSAGE_ITEM_FORMAT);
   for (const contextEngineId of Object.values(BUILTIN_CONTEXT_ENGINE)) {
-    assert.equal(
-      resolveConfiguration(configuration({ contextEngineId })).outcome,
-      CONFIGURATION_OUTCOME.RESOLVED,
-    );
+    assert.ok(Either.isRight(resolveConfigurationEither(configuration({ contextEngineId }))));
   }
 });
 
@@ -86,25 +82,29 @@ function refusalOf(outcome: ConfigurationOutcome) {
   return outcome.outcome === CONFIGURATION_OUTCOME.REFUSED ? outcome.refusal : undefined;
 }
 
+/** The refusal a resolution answered, or nothing when it resolved. */
+function refusalCodeOf(resolution: ReturnType<typeof resolveConfigurationEither>) {
+  return Either.isLeft(resolution) ? resolution.left.code : undefined;
+}
+
 test("resolution checks every name and answers a frozen configuration", () => {
-  const resolved = resolveConfiguration(configuration());
-  assert.equal(resolved.outcome, CONFIGURATION_OUTCOME.RESOLVED);
-  assert.ok(resolved.outcome === CONFIGURATION_OUTCOME.RESOLVED);
-  assert.ok(Object.isFrozen(resolved.configuration));
-  assert.ok(Object.isFrozen(resolved.configuration.toolPolicy));
+  const resolved = resolveConfigurationEither(configuration());
+  assert.ok(Either.isRight(resolved));
+  assert.ok(Object.isFrozen(resolved.right));
+  assert.ok(Object.isFrozen(resolved.right.toolPolicy));
 
   assert.equal(
-    refusalOf(
-      resolveConfiguration(configuration({ modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED })),
+    refusalCodeOf(
+      resolveConfigurationEither(configuration({ modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED })),
     ),
     CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH,
   );
   assert.equal(
-    refusalOf(resolveConfiguration(configuration({ maximumOutputTokens: 0 }))),
+    refusalCodeOf(resolveConfigurationEither(configuration({ maximumOutputTokens: 0 }))),
     CONFIGURATION_REFUSAL.INVALID_OUTPUT_TOKENS,
   );
   assert.equal(
-    refusalOf(resolveConfiguration(configuration({ workspaceDirectory: "  " }))),
+    refusalCodeOf(resolveConfigurationEither(configuration({ workspaceDirectory: "  " }))),
     CONFIGURATION_REFUSAL.EMPTY_WORKSPACE,
   );
 });
@@ -115,7 +115,10 @@ test("a name no built-in holds is refused, and the standing snapshot is unchange
   // Only a name that arrived over the wire can be one the table does not
   // hold; every name a build spells is checked by the derived id unions.
   const wireShaped = { ...configuration(), contextEngineId: "someone-elses-engine" };
-  assert.equal(refusalOf(resolveConfiguration(wireShaped)), CONFIGURATION_REFUSAL.UNKNOWN_ID);
+  assert.equal(
+    refusalCodeOf(resolveConfigurationEither(wireShaped)),
+    CONFIGURATION_REFUSAL.UNKNOWN_ID,
+  );
   assert.equal(refusalOf(store.publish(wireShaped)), CONFIGURATION_REFUSAL.UNKNOWN_ID);
   assert.strictEqual(store.snapshot(), first);
   assert.equal(
@@ -153,12 +156,13 @@ test("a store publishes atomically: a refused publish leaves the snapshot standi
   assert.deepEqual(Object.keys(second.configuration.credential), ["kind"]);
 });
 
-test("resolveConfigurationEither answers the same values as the outcome adaptor", () => {
-  const outcome = resolveConfiguration(configuration());
+test("the store's own publish and the Either door answer the same values", () => {
+  const store = new ConfigurationStore(configuration());
+  const published = store.publish(configuration());
   const either = resolveConfigurationEither(configuration());
-  assert.ok(outcome.outcome === CONFIGURATION_OUTCOME.RESOLVED);
+  assert.ok(published.outcome === CONFIGURATION_OUTCOME.RESOLVED);
   assert.ok(Either.isRight(either));
-  assert.deepEqual(either.right, outcome.configuration);
+  assert.deepEqual(either.right, published.configuration);
 
   const refused = resolveConfigurationEither(
     configuration({ modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED }),

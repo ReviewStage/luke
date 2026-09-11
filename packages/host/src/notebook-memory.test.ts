@@ -18,6 +18,7 @@ import {
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
+import { Runtime } from "effect";
 import { type TestContext, test } from "vitest";
 import { composeNotebookMemory, type NotebookMemoryDependencies } from "./notebook-memory.js";
 
@@ -34,7 +35,7 @@ async function agentRoot(t: TestContext) {
 }
 
 function client() {
-  const store = storeClient(inProcessStoreTransport());
+  const store = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
   return { store, close: () => store.close() };
 }
 

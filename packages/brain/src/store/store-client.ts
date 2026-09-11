@@ -5,8 +5,20 @@ import { type Rpc, RpcClient } from "@effect/rpc";
 import type { RpcClientError } from "@effect/rpc/RpcClientError";
 import type { NotebookMemoryStore } from "@sidecar/memory";
 import type { ChildStore } from "@sidecar/runtime";
-import type { SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
-import { Cause, Data, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
+import type { ExecutionRuntime, SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
+import {
+  Cause,
+  Data,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  ManagedRuntime,
+  Option,
+  Runtime,
+  Scope,
+} from "effect";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "../envelope.js";
 import { EnvelopeTracker } from "./envelope.js";
 import type { StoreSchemaRefused } from "./migration.js";
@@ -162,26 +174,37 @@ export const workerStoreTransport = (spawn: () => WorkerThreads.Worker): StoreTr
 });
 
 /**
- * Settles an effect as the promise its caller still holds, rejecting with the
- * failure itself rather than a wrapper of it, so a caller reads the same
- * `message` the store wrote.
- *
- * @deprecated A strangler shim on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`: the host's store wiring holds promises until
- * P7-08 composes the brain's layers and takes the Rpc client itself.
+ * Settles an effect as the promise its caller still holds, on the runtime it
+ * was handed rather than one built here, rejecting with the failure itself
+ * rather than a wrapper of it, so a caller reads the same `message` the store
+ * wrote.
  */
-const settled = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
-  Effect.runPromiseExit(effect).then((exit) =>
-    Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
-  );
+const settledOn = (
+  execution: ExecutionRuntime,
+): (<A, E>(effect: Effect.Effect<A, E>) => Promise<A>) => {
+  const exits =
+    ManagedRuntime.TypeId in execution
+      ? <A, E>(effect: Effect.Effect<A, E>) => execution.runPromiseExit(effect)
+      : Runtime.runPromiseExit(execution);
+  return (effect) =>
+    exits(effect).then((exit) =>
+      Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
+    );
+};
 
 /**
- * The Promise face over a transport.
+ * The Promise face over a transport, every ask of it run on the execution the
+ * caller composed: the host's own runtime in the app, so the store's asks are
+ * fibers of the one runtime the host holds rather than of a second one built
+ * where the work lives.
  *
- * @deprecated The face itself is the shim `settled` names; the interface it
- * answers is what the host keeps until P7-08.
+ * @deprecated A strangler shim on the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md`: `StoreClient` answers the promises
+ * `BrainStateRepository`, `NotebookMemoryStore`, and `ChildStore` declare, so
+ * the face lives as long as those three interfaces do.
  */
-export function storeClient(transport: StoreTransport): StoreClient {
+export function storeClient(transport: StoreTransport, execution: ExecutionRuntime): StoreClient {
+  const settled = settledOn(execution);
   const sends = Effect.unsafeMakeSemaphore(1);
   interface Standing extends StoreConnection {
     readonly scope: Scope.CloseableScope;

@@ -64,6 +64,7 @@ import {
   CONVERSATION_KIND,
   childIdOf,
   conversationKindOf,
+  type ExecutionRuntime,
   isReasoningEffort,
   MAIN_SESSION_KEY,
   MEMORY_CAPTURE_PHASE,
@@ -92,6 +93,8 @@ import {
 } from "./wiring-children.js";
 
 export interface BrainWiringDependencies extends ChildWiringDependencies {
+  /** The runtime every run of a conversation's tool loop is a fiber of: the host's own. */
+  execution: ExecutionRuntime;
   /** A conversation's envelope, read and written only through the store built here; a temporary thread's lives in memory alone. */
   repositoryFor: (sessionKey: SessionKey) => BrainStateRepository;
   /** Lists an observed session's conversation in the store, creating its row when none stands; absent, the row is not kept. */
@@ -554,7 +557,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       children: children.accessFor(sessionKey),
       ...(memory ? { memory } : undefined),
       ...(flushMarker ? { flushMarker } : undefined),
-      runtime: toolLoopRuntimeOver(model),
+      runtime: toolLoopRuntimeOver(model, dependencies.execution),
       actions,
       roster: dependencies.roster,
       standingContext: () => dependencies.standingContext(sessionKey),
@@ -942,7 +945,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     createRuntime: () => {
       const model = liveModel();
       if (!model) return undefined;
-      return toolLoopRuntimeOver(model);
+      return toolLoopRuntimeOver(model, dependencies.execution);
     },
   };
 }
