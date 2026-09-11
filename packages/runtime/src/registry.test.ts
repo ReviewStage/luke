@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Either } from "effect";
 import { test } from "vitest";
 import { agentId } from "./identifiers.js";
 import {
@@ -17,6 +18,7 @@ import {
   notebookMemoryProviderFor,
   RESPONSES_ITEM_FORMAT,
   resolveConfiguration,
+  resolveConfigurationEither,
   TOOL_LOOP_RUNTIME,
   UI_MESSAGE_ITEM_FORMAT,
 } from "./registry.js";
@@ -146,6 +148,30 @@ test("a store publishes atomically: a refused publish leaves the snapshot standi
   assert.deepEqual(first.configuration.toolPolicy, {});
   // The credential travels as a reference alone: no secret has a field to live in.
   assert.deepEqual(Object.keys(second.configuration.credential), ["kind"]);
+});
+
+test("resolveConfigurationEither answers the same values as the outcome adaptor", () => {
+  const outcome = resolveConfiguration(configuration());
+  const either = resolveConfigurationEither(configuration());
+  assert.ok(outcome.outcome === CONFIGURATION_OUTCOME.RESOLVED);
+  assert.ok(Either.isRight(either));
+  assert.deepEqual(either.right, outcome.configuration);
+
+  const refused = resolveConfigurationEither(
+    configuration({ modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED }),
+  );
+  assert.ok(Either.isLeft(refused));
+  assert.equal(refused.left._tag, "ConfigurationRefused");
+  assert.equal(refused.left.code, CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH);
+});
+
+test("a duplicate id in a built-in table is a type error, never a run-time refusal", () => {
+  const shapedLikeBuiltins = {
+    [BUILTIN_MODEL_ADAPTER.OPENAI]: { credentialKind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY },
+    // @ts-expect-error two model adapters cannot share an id: the object literal itself refuses it.
+    [BUILTIN_MODEL_ADAPTER.OPENAI]: { credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
+  };
+  assert.deepEqual(Object.keys(shapedLikeBuiltins), [BUILTIN_MODEL_ADAPTER.OPENAI]);
 });
 
 test("two agents are two isolated stores", () => {
