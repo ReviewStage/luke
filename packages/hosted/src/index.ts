@@ -25,6 +25,18 @@ export {
   hostedActionWorkspaceAnswerSchema,
 } from "./action-wire.js";
 export {
+  ASK_BOUNDS,
+  ASK_ORIGIN,
+  type AskOrigin,
+  type HostedBrainAskAnswer,
+  type HostedBrainAskRequest,
+  type HostedBrainTurnAnswer,
+  hostedBrainAskAnswerSchema,
+  hostedBrainAskRequestSchema,
+  hostedBrainTurnAnswerSchema,
+  TURN_WAIT_QUERY,
+} from "./ask-wire.js";
+export {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_EMBED_BOUNDS,
   HOSTED_BRAIN_OPERATION,
@@ -220,7 +232,9 @@ export {
   snapshotRoster,
 } from "./roster-client.js";
 export {
+  brainTurnCancelPath,
   brainTurnEventsPath,
+  brainTurnPath,
   conversationMessageRatingPath,
   HOSTED_SERVICE_PATH,
   VOICE_SERVICE_PATH,

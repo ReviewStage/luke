@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "typed",
+        "spoken"
+      ]
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "conversationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    }
+  },
+  "required": [
+    "question",
+    "origin",
+    "clientId"
+  ],
+  "additionalProperties": false
+}

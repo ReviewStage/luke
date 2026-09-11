@@ -64,6 +64,8 @@ export const HOSTED_API_ERROR = {
   NOT_FOUND: "not-found",
   /** The message stands and is the caller's, but it is not one of Luke's, and only Luke's words take a rating. */
   NOT_RATEABLE: "not-rateable",
+  /** The turn the path names has no session running it, so there is nothing to stop; its record stands as it was. */
+  NOT_RUNNING: "not-running",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

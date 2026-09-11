@@ -103,6 +103,8 @@ public enum HostedAPIError: String, Sendable {
     case notFound = "not-found"
     /// The message is the caller's but not one of Luke's, and only Luke's words take a rating.
     case notRateable = "not-rateable"
+    /// The turn the path names has no session running it, so there is nothing to stop; its record stands as it was.
+    case notRunning = "not-running"
 }
 
 public enum VaultClientError: Error, Equatable {
