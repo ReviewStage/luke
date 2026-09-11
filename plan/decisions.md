@@ -2205,3 +2205,38 @@ it from here.
 **And C4's acceptance rewrite supersedes the ticket's:** *"two turns under the same prompt carry one
 `prompt_hash`; a changed workspace file yields a new one on the next session's first turn"* — the
 same property, asserted on the rows that hold it, with the session-scope correction folded in.
+
+
+## 2026-09-11 ~15:10Z — Dean approves the `asks` table (orchestrator)
+
+**Ruled: the table exists.** The four refinements that accompanied the escalation carry with the
+approval:
+
+1. **`hostTurnId(sessionId, eveTurnId)` remains the only turn-id scheme.** The earliest ask's id does
+   **not** become the turn id; `GET /api/brain/turns/{id}` accepts either an ask id or a turn id and
+   resolves an ask through `asks.turn_id`, uniformly. One scheme, one resolution path.
+2. **A queued ask's Stop is honoured rather than refused** — `cancel_requested_at` on the ask, and the
+   relay posting eve's scoped cancel the moment `turn.started` names that delivery. **Behaviour lands
+   in C2b-3; the column is designed in now** so 3 is a behaviour change and not a migration.
+   `NOT_RUNNING` keeps its own case: a Stop on a conversation recording no session at all.
+3. **The account's first main is opened by compare-and-set** under the standing-main partial unique
+   index — already built and race-tested against Clear.
+4. **Named `asks`**, with the body noting that **CLAUDE.md calls the local one "the requests"**, so G5
+   reconciles one concept under two names.
+
+**And the correction to how this was framed, recorded because it changes the argument rather than
+the outcome: the table is needed whether or not asks fold.** The turn id does not exist until
+`turn.started`, so the route cannot answer with one and a caller needs something keyed by its own
+client id to poll. **Folding adds a second reason; lateness alone already forces the record.** On
+folding itself: there is no crisp industry convention — OpenAI's Assistants model refuses a second
+message during an active run, while **OpenClaw, which this repo ports from, folds and answers both**,
+and CLAUDE.md already documents that as Luke's own local behaviour ("the run reads it at its next
+model boundary … and answers both"; an ask past the queue's depth "is folded into a summary line the
+next turn opens with"). **eve's folding matches the desktop's documented behaviour.**
+
+**Migration numbers, assigned to prevent the collision the rule exists for:** C4 holds **`0022`**
+(`DROP TABLE prompts`), C2b-2b takes **`0023`** — and is told to re-read main and every open PR at
+the moment it writes it rather than trusting the assignment, because that rule caught the
+orchestrator once today already.
+
+**What unblocks behind it:** C2b-2b → C2b-3 → **C8 part b → LUKE-132 done → E5 → G1, G2, G3, G5.**
