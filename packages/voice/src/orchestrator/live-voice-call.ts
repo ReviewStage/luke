@@ -26,8 +26,6 @@ export interface LiveVoiceCall {
   readonly sessionId: string | undefined;
   /** Whether a session stands or is coming up, so a second press unmutes rather than opening again. */
   readonly standing: boolean;
-  /** Whether the developer's microphone is being heard. */
-  readonly listening: boolean;
   /**
    * Builds the peer, hands the offer to the host, and waits for the session
    * to start; a press's microphone track rides the offer disabled, and any
@@ -49,9 +47,27 @@ export interface LiveVoiceCall {
   close(): Effect.Effect<void>;
 }
 
+/**
+ * Who the session is carrying at this instant. GPT Live is full duplex, so
+ * both stand together while the developer talks over Luke's answer, which is
+ * exactly what one status cannot say: it names the louder claim and drops the
+ * other.
+ */
+export interface LiveVoiceSpeakers {
+  /** Whether the developer's microphone is being heard. */
+  listening: boolean;
+  /** Whether Luke is audible on the remote track. */
+  lukeSpeaking: boolean;
+}
+
 /** What the call tells the policy as it moves, so the view can be reported. */
 export interface LiveVoiceCallEvents {
-  onStatus(status: LiveStatus): void;
+  /**
+   * The status and both speakers together, since a speaker can move without
+   * the status moving: the microphone opening under Luke's own sentence
+   * leaves the session speaking and starts the developer's meter.
+   */
+  onStatus(status: LiveStatus, speakers: LiveVoiceSpeakers): void;
   /**
    * The caption rows as the transcript ledger groups them, both speakers,
    * each row stable once opened and growing in place: Luke's rows while he

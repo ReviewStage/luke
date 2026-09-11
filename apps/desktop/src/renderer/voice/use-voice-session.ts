@@ -8,10 +8,15 @@ import {
   type LiveVoiceSurroundings,
 } from "@sidecar/voice/orchestrator";
 import { Duration, Effect, FiberId, Runtime, Schedule } from "effect";
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { VOICE_COMMAND, voiceExchangeKind } from "#shared/messages/voice-view";
+import {
+  SILENT_VOICE_LEVELS,
+  VOICE_COMMAND,
+  type VoiceLevels,
+  voiceExchangeKind,
+} from "#shared/messages/voice-view";
 import { useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererRuntimeNow } from "../renderer-runtime";
@@ -117,6 +122,16 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   });
   const orchestrator = orchestratorRef.current;
   const audioContext = useRef<AudioContext | undefined>(undefined);
+  /**
+   * The pair the panels draw from, each meter amending its own half: a meter
+   * hears one stream, and the report carries both so a panel never draws one
+   * speaker's loudness under the other's name.
+   */
+  const levels = useRef<VoiceLevels>(SILENT_VOICE_LEVELS);
+  const relayLevel = useCallback((moved: Partial<VoiceLevels>) => {
+    levels.current = { ...levels.current, ...moved };
+    window.sidecar.reportVoiceLevel(levels.current);
+  }, []);
 
   /**
    * Everything this window reads rather than owns — whether a voice stands,
@@ -139,34 +154,44 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // Two meters over one context: Luke's track decides the speaking status,
   // since the guide forbids reading it off transcript events, and the
   // microphone's track decides idle, since the guide forbids reading silence
-  // off a missing one. The loudness the panels draw is whoever is talking.
+  // off a missing one. Each reports its own loudness whatever the other is
+  // doing, because the session is full duplex and the panel decides which of
+  // the two it draws.
   useEffect(() => {
     if (!remote) return;
     const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
     audioContext.current = context;
-    return startVoiceLevelMeter({
+    const relay = (luke: number) => relayLevel({ luke });
+    const stop = startVoiceLevelMeter({
       stream: remote,
       audioContext: context,
       onActivity: (active) => callRef.current?.reportRemoteAudioLevel(active),
-      onLevel: (level) => {
-        if (!callRef.current?.listening) window.sidecar.reportVoiceLevel(level);
-      },
+      onLevel: relay,
     });
-  }, [remote]);
+    // A stream that went away carries no loudness, and the last reading it
+    // left would otherwise stand under the other speaker's meter.
+    return () => {
+      stop();
+      relay(0);
+    };
+  }, [remote, relayLevel]);
 
   useEffect(() => {
     if (!local) return;
     const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
     audioContext.current = context;
-    return startVoiceLevelMeter({
+    const relay = (developer: number) => relayLevel({ developer });
+    const stop = startVoiceLevelMeter({
       stream: local,
       audioContext: context,
       onActivity: (active) => callRef.current?.reportMicrophoneActivity(active),
-      onLevel: (level) => {
-        if (callRef.current?.listening) window.sidecar.reportVoiceLevel(level);
-      },
+      onLevel: relay,
     });
-  }, [local]);
+    return () => {
+      stop();
+      relay(0);
+    };
+  }, [local, relayLevel]);
 
   useEffect(() => {
     const element = remoteAudio.current;

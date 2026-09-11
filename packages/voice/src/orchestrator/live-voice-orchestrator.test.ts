@@ -10,6 +10,7 @@ import type {
   LiveVoiceCall,
   LiveVoiceCallEvents,
   LiveVoiceCallOpening,
+  LiveVoiceSpeakers,
 } from "./live-voice-call.js";
 import {
   type LiveVoiceExchangeOpening,
@@ -50,10 +51,6 @@ class FakeCall implements LiveVoiceCall {
     );
   }
 
-  get listening(): boolean {
-    return this.status === LIVE_STATUS.LISTENING;
-  }
-
   open(opening: LiveVoiceCallOpening): Effect.Effect<boolean> {
     this.opens += 1;
     this.openings.push(opening);
@@ -92,9 +89,18 @@ class FakeCall implements LiveVoiceCall {
     return Effect.void;
   }
 
+  /** A status and the speakers it implies, which is every edge but a full-duplex one. */
   settle(status: LiveStatus): void {
+    this.report(status, {
+      listening: status === LIVE_STATUS.LISTENING,
+      lukeSpeaking: status === LIVE_STATUS.SPEAKING,
+    });
+  }
+
+  /** Both speakers at once, which no status can carry: the microphone is open under Luke's own answer. */
+  report(status: LiveStatus, speakers: LiveVoiceSpeakers): void {
     this.status = status;
-    this.events.onStatus(status);
+    this.events.onStatus(status, speakers);
   }
 }
 
@@ -370,8 +376,7 @@ test("a session lost after the key was let go of does not listen again on the ne
   await f.orchestrator.endTalk();
   assert.equal(first.mutes, 1);
   // Lost before the mute's status landed: the last status the call reported was listening.
-  first.status = LIVE_STATUS.LISTENING;
-  first.events.onStatus(LIVE_STATUS.LISTENING);
+  first.settle(LIVE_STATUS.LISTENING);
   const lost = sessionIdOf(first);
   first.settle(LIVE_STATUS.IDLE);
   f.orchestrator.obeySessionChange({
@@ -603,4 +608,58 @@ test("a session pausing between Luke's sentences is one exchange, counted once",
   call.settle(LIVE_STATUS.SPEAKING);
   await drainMicrotasks();
   assert.deepEqual(f.openings.filter(Boolean), [{ microphoneCall: false }]);
+});
+
+test("both speakers stand together in the view, and a speaker moving under a still status is reported", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  call.started();
+  await pressed;
+  await drainMicrotasks();
+  const listening = f.views.at(-1);
+  assert.equal(listening?.listening, true);
+  assert.equal(listening?.lukeSpeaking, false);
+  // Luke answering over the open microphone: the status names him, and the
+  // developer is still being heard.
+  call.report(LIVE_STATUS.SPEAKING, { listening: true, lukeSpeaking: true });
+  await drainMicrotasks();
+  const both = f.views.at(-1);
+  assert.equal(both?.voiceStatus, LIVE_STATUS.SPEAKING);
+  assert.equal(both?.listening, true);
+  assert.equal(both?.lukeSpeaking, true);
+  const reports = f.views.length;
+  // The key coming up under the same answer moves no status, and is still a view.
+  call.report(LIVE_STATUS.SPEAKING, { listening: false, lukeSpeaking: true });
+  await drainMicrotasks();
+  assert.equal(f.views.length, reports + 1);
+  assert.equal(f.views.at(-1)?.listening, false);
+  assert.equal(f.views.at(-1)?.lukeSpeaking, true);
+});
+
+test("a session lost while both speakers stood listens again on the next", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const first = f.latest();
+  assert.ok(first);
+  first.started();
+  await pressed;
+  first.report(LIVE_STATUS.SPEAKING, { listening: true, lukeSpeaking: true });
+  const lost = sessionIdOf(first);
+  first.settle(LIVE_STATUS.IDLE);
+  f.orchestrator.obeySessionChange({
+    phase: LIVE_SESSION_PHASE.CLOSED,
+    sessionId: lost,
+    reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+  });
+  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  const second = f.latest();
+  assert.ok(second);
+  assert.notEqual(second, first);
+  second.started();
+  await drainMicrotasks();
+  assert.equal(second.unmutes, 1);
+  // Nobody is heard on a call that is gone, whatever it was carrying when it went.
+  assert.equal(f.views.at(-1)?.lukeSpeaking, false);
 });

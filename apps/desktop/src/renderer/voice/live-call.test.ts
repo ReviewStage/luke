@@ -9,7 +9,7 @@ import {
   LIVE_STATUS,
   type LiveStatus,
 } from "@sidecar/live";
-import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
+import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestrator";
 import type { WireRecord } from "@sidecar/wire";
 import {
   Deferred,
@@ -203,6 +203,7 @@ function build(
   let devicesOpened = 0;
   let holdMicrophone: (() => void) | undefined;
   const statuses: LiveStatus[] = [];
+  const speakers: LiveVoiceSpeakers[] = [];
   const captions: (readonly LiveCaptionRow[])[] = [];
   const errors: (string | undefined)[] = [];
   const offers: string[] = [];
@@ -214,7 +215,10 @@ function build(
   const wire: string[] = [];
   const call = new LiveCall({
     events: {
-      onStatus: (status) => statuses.push(status),
+      onStatus: (status, heard) => {
+        statuses.push(status);
+        speakers.push(heard);
+      },
       onCaptions: (rows) => captions.push(rows),
       onError: (message) => errors.push(message),
     },
@@ -292,6 +296,7 @@ function build(
     },
     call,
     statuses,
+    speakers,
     captions,
     errors,
     offers,
@@ -1177,5 +1182,44 @@ it.effect(
       );
       // Once it has settled, an ask reads the call's own standing.
       assert.equal(yield* f.call.open({ byPress: true }), true);
+    }),
+);
+
+it.effect(
+  "both speakers are reported beside the status, and a speaker moving under a still status is a report of its own",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const opening = yield* Effect.fork(f.call.open({ byPress: true }));
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
+      assert.deepEqual(f.speakers.at(-1), { listening: false, lukeSpeaking: false });
+      const unmuting = yield* Effect.fork(f.call.unmute());
+      yield* settle;
+      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+      yield* Fiber.join(unmuting);
+      assert.deepEqual(f.speakers.at(-1), { listening: true, lukeSpeaking: false });
+      // Luke answering over the open microphone: the status names him, the
+      // developer is still heard, and the panel is told both.
+      f.call.reportRemoteAudioLevel(true);
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
+      assert.deepEqual(f.speakers.at(-1), { listening: true, lukeSpeaking: true });
+      // The key coming up under the same answer leaves the status where it is.
+      const reports = f.statuses.length;
+      const muting = yield* Effect.fork(f.call.mute());
+      yield* settle;
+      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+      yield* Fiber.join(muting);
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
+      assert.equal(f.statuses.length, reports + 1);
+      assert.deepEqual(f.speakers.at(-1), { listening: false, lukeSpeaking: true });
+      // Luke going quiet is his own edge, held through the hangover.
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(SPEAKING_HANGOVER_MS);
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
+      assert.deepEqual(f.speakers.at(-1), { listening: false, lukeSpeaking: false });
     }),
 );

@@ -5,6 +5,7 @@ import { test } from "vitest";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
   CLEAR_FAILED_REASON,
+  drawnLevel,
   panelVoiceView,
   voiceActiveFor,
   voiceErrorToShow,
@@ -14,23 +15,24 @@ import {
 import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE } from "./waveform";
 
-test("the meter follows whoever is actually talking", () => {
-  assert.equal(waveformVoice(LIVE_STATUS.SPEAKING), WAVEFORM_VOICE.LUKE);
-  assert.equal(waveformVoice(LIVE_STATUS.LISTENING), WAVEFORM_VOICE.DEVELOPER);
-  for (const status of [
-    LIVE_STATUS.IDLE,
-    LIVE_STATUS.CONNECTING,
-    LIVE_STATUS.MUTED,
-    LIVE_STATUS.CLOSING,
-    LIVE_STATUS.FAILED,
-    LIVE_STATUS.UNAVAILABLE,
-  ] as const) {
-    assert.equal(waveformVoice(status), undefined);
-  }
+test("the one meter follows whoever is actually talking, and Luke wins the place from both", () => {
+  assert.equal(waveformVoice({ listening: false, lukeSpeaking: true }), WAVEFORM_VOICE.LUKE);
+  assert.equal(waveformVoice({ listening: true, lukeSpeaking: false }), WAVEFORM_VOICE.DEVELOPER);
+  assert.equal(waveformVoice({ listening: true, lukeSpeaking: true }), WAVEFORM_VOICE.LUKE);
+  assert.equal(waveformVoice({ listening: false, lukeSpeaking: false }), undefined);
 });
 
-test("a panel that has heard nothing draws an idle voice", () => {
+test("the level drawn is the drawn voice's own reading", () => {
+  const levels = { developer: 0.4, luke: 0.9 };
+  assert.equal(drawnLevel(WAVEFORM_VOICE.LUKE, levels), levels.luke);
+  assert.equal(drawnLevel(WAVEFORM_VOICE.DEVELOPER, levels), levels.developer);
+  assert.equal(drawnLevel(undefined, levels), 0);
+});
+
+test("a panel that has heard nothing draws an idle voice with neither speaker", () => {
   assert.equal(IDLE_VOICE_VIEW.voiceStatus, LIVE_STATUS.IDLE);
+  assert.equal(IDLE_VOICE_VIEW.listening, false);
+  assert.equal(IDLE_VOICE_VIEW.lukeSpeaking, false);
   assert.equal(IDLE_VOICE_VIEW.talkOpening, false);
   assert.equal(IDLE_VOICE_VIEW.lukeCaptions, undefined);
   assert.deepEqual(IDLE_VOICE_VIEW.liveConversationEntries, []);

@@ -13,20 +13,16 @@ import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@si
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import { liveExchangeActive } from "@sidecar/live";
 import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
-import {
-  isRecord,
-  isUnitLevel,
-  isWireBoolean,
-  isWireString,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
+import { isRecord, isWireBoolean, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
 import { isSessionIdentity } from "./messages/session";
 import {
   isVoiceCommand,
+  isVoiceLevels,
   isVoiceView,
   type VoiceCommand,
+  type VoiceLevels,
   type VoiceView,
 } from "./messages/voice-view";
 import { isWireValue, wireResult as result, type WireGuard } from "./messages/wire-guard";
@@ -149,14 +145,15 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * How loud whoever is talking is right now, in the unit interval, reported
-   * by the voice window at a bounded rate only while a turn is listening or
-   * responding. It rides its own channel so the snapshot stays edge-driven.
+   * How loud each speaker is right now, in the unit interval, reported by the
+   * voice window at a bounded rate while a session stands. Both readings ride
+   * one report because either may be talking under the other, and they ride
+   * their own channel so the snapshot stays edge-driven.
    */
   reportVoiceLevel: entry({
     kind: "send",
     channel: "app:report-voice-level",
-    args: args<[number]>((v) => v.length === 1 && isUnitLevel(v[0])),
+    args: args<[VoiceLevels]>((v) => v.length === 1 && isVoiceLevels(v[0])),
   }),
   /**
    * Whether a panel is recording a new shortcut, during which the talk key it
@@ -276,15 +273,15 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * How loud whoever is talking is, relayed to every panel as the stream it
-   * is: twenty readings a second, each expiring in fifty milliseconds, so it
-   * is an event rather than a slice of the document a panel bootstraps from.
+   * How loud both speakers are, relayed to every panel as the stream it is:
+   * twenty readings a second, each expiring in fifty milliseconds, so it is
+   * an event rather than a slice of the document a panel bootstraps from.
    */
   onVoiceLevelChanged: entry({
     kind: "subscribe",
     channel: "app:voice-level-changed",
     args: noArgs,
-    result: result<number>(isUnitLevel),
+    result: result<VoiceLevels>(isVoiceLevels),
   }),
   /**
    * A panel's validated command, forwarded by the main process to the voice
