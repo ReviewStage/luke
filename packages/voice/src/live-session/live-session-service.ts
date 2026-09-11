@@ -169,6 +169,7 @@ interface StandingSession {
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
   retained: RetainedDelegation[];
+  /** Utterance rows the settle timer has nothing more to write: written undelegated already, or handed to a delegated write, which a record tells from the undelegated one by the row. */
   readonly writtenRows: Set<number>;
   /** When each utterance's first fragment arrived, on this host's clock: the instant its line is recorded at, so a Clear's cutoff refuses what was begun before it. */
   readonly rowBeganAt: Map<number, number>;
@@ -634,6 +635,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const written =
       utterance.speaker === TRANSCRIPT_SPEAKER.USER
         ? await this.#options.record.writeDeveloperUtterance({
+            rowId: utterance.rowId,
             text: utterance.text,
             voiceSessionId: session.sessionId,
             delegationId: write.delegationId,
@@ -696,16 +698,19 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       submissionId: this.#options.createId(),
       question,
     });
+    // The delegated write runs whether or not the settle timer wrote the
+    // utterance undelegated already: an ask is on record only under its
+    // delegation, and a record that took the utterance before tells the two
+    // writes apart by the row. The settle timer, for its part, writes the row
+    // no more.
+    session.writtenRows.add(ask.rowId);
     if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
-      if (!session.writtenRows.has(ask.rowId)) {
-        session.writtenRows.add(ask.rowId);
-        await this.#write({
-          session,
-          utterance: ask,
-          delegationId,
-          askContext: { sinceMs, untilMs: offsetMs },
-        });
-      }
+      await this.#write({
+        session,
+        utterance: ask,
+        delegationId,
+        askContext: { sinceMs, untilMs: offsetMs },
+      });
       this.#speakInto(session, delegationId, submission.refusal);
       return;
     }
@@ -714,8 +719,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // deferred into it rather than dropped; the record still precedes the
     // speech, because nothing deferred is spoken until the write lands.
     const exchange = this.#registerExchange(session, submission.runId, delegationId);
-    if (session.writtenRows.has(ask.rowId)) return;
-    session.writtenRows.add(ask.rowId);
     exchange.pendingRecords += 1;
     const recorded = await this.#write({
       session,
