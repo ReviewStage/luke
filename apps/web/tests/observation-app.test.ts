@@ -124,6 +124,7 @@ const EXCHANGES: readonly Exchange[] = [
           waiting: 0,
         }),
         observe: async () => ({ complete: false, changed: false }),
+        openTurns: async () => ({ observation: 0, failed: 0 }),
       });
     },
   },

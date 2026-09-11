@@ -11,6 +11,7 @@ import {
   user,
   workspaceFile,
 } from "../server/db/schema";
+import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { MAXIMUM_PENDING_ROSTER_DIFFS } from "../server/hosted/store";
 import { userSeal } from "../server/hosted/store/database";
@@ -307,4 +308,36 @@ test("a sealed row under one user does not open as another, and opens whole unde
 
   await assert.rejects(readRosterSnapshot(database.db, userSeal(keys, other), userId));
   assert.deepEqual(await readRosterSnapshot(database.db, userSeal(keys, userId), userId), snapshot);
+});
+
+test("an observed conversation is opened on its session's first diff and stands for every later one, one per session per account", async () => {
+  const userId = await database.createUser();
+  const other = await database.createUser();
+  const session = { providerId: "conductor", providerSessionId: "s-observed-1" };
+  const opened = await database.store.directory.observed(userId, session, NOW);
+  assert.ok(opened);
+  assert.equal(await database.store.directory.observed(userId, session, NOW + 1), opened);
+  const another = await database.store.directory.observed(
+    userId,
+    { ...session, providerSessionId: "s-observed-2" },
+    NOW,
+  );
+  assert.ok(another);
+  assert.notEqual(another, opened);
+  const elsewhere = await database.store.directory.observed(other, session, NOW);
+  assert.ok(elsewhere);
+  assert.notEqual(elsewhere, opened);
+  const standing = await database.store.directory.standing(userId);
+  assert.deepEqual(
+    standing
+      .filter((conversation) => conversation.kind === CONVERSATION_KIND.OBSERVED)
+      .map((conversation) => conversation.id)
+      .sort(),
+    [opened, another].sort(),
+  );
+  const [row] = await database.db
+    .select({ kind: conversations.kind, providerSessionId: conversations.providerSessionId })
+    .from(conversations)
+    .where(eq(conversations.id, opened));
+  assert.deepEqual(row, { kind: CONVERSATION_KIND.OBSERVED, providerSessionId: "s-observed-1" });
 });
