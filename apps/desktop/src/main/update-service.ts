@@ -1,3 +1,15 @@
+import { scheduleOnce } from "@sidecar/runtime/effect";
+import {
+  Duration,
+  Effect,
+  Exit,
+  type Fiber,
+  FiberId,
+  Runtime,
+  Schedule,
+  ScheduleDecision,
+  Scope,
+} from "effect";
 import {
   UPDATE_STATUS,
   type UpdateProgress,
@@ -82,7 +94,26 @@ function isPublishingWindowErrorMessage(message: string): boolean {
  * Exhausted, the failure is the error row it always was: a corrupt release
  * must not hide behind endless retries.
  */
-const PUBLISHING_RETRY_DELAYS_MS = [2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000] as const;
+const PUBLISHING_RETRY_DELAYS_MS: readonly [number, ...number[]] = [
+  2 * 60 * 1000,
+  5 * 60 * 1000,
+  15 * 60 * 1000,
+];
+
+/**
+ * The delay sequence as a `Schedule`, so the budget a version spends is data
+ * a schedule steps through rather than an index counted by hand. Stepped
+ * directly through `Schedule#step` rather than through a `ScheduleDriver`:
+ * the driver's own `next` sleeps out the delay it returns, where this needs
+ * the delay back to arm a cancellable fiber of its own — one a fresh check
+ * can collapse mid-wait.
+ */
+function publishingRetrySchedule(
+  delaysMs: readonly [number, ...number[]],
+): Schedule.Schedule<Duration.Duration> {
+  const [first, ...rest] = delaysMs;
+  return Schedule.fromDelays(Duration.millis(first), ...rest.map(Duration.millis));
+}
 
 /** The updater lifecycle, as electron-updater announces it. */
 export interface UpdaterEngineEvents {
@@ -142,7 +173,9 @@ export interface UpdateServiceOptions {
   lastRunVersion?: LastRunVersionStore;
   intervalMs?: number;
   justUpdatedFirstCheckDelayMs?: number;
-  publishingRetryDelaysMs?: readonly number[];
+  publishingRetryDelaysMs?: readonly [number, ...number[]];
+  /** The runtime the service's own scope and schedules are run on, for a test's own. */
+  runtime?: Runtime.Runtime<never>;
   report?: (line: string) => void;
 }
 
@@ -167,17 +200,24 @@ export class UpdateService {
   readonly #lastRunVersion: LastRunVersionStore | undefined;
   readonly #intervalMs: number;
   readonly #justUpdatedFirstCheckDelayMs: number;
-  readonly #publishingRetryDelaysMs: readonly number[];
+  readonly #publishingRetrySchedule: Schedule.Schedule<Duration.Duration>;
   readonly #report: (line: string) => void;
+  readonly #runtime: Runtime.Runtime<never>;
+  /**
+   * Owns every fiber the service forks — the timed check, the first check,
+   * and a publishing retry — so `stop()` is this one scope closing rather
+   * than a handle collected and cleared per timer.
+   */
+  readonly #scope: Scope.CloseableScope;
   #snapshot: UpdateSnapshot;
   #latestVersion: string | undefined;
   #installing = false;
   #started = false;
-  #timer: NodeJS.Timeout | undefined;
-  #firstCheck: NodeJS.Timeout | undefined;
-  #publishingRetry: NodeJS.Timeout | undefined;
+  #stopped = false;
+  #publishingRetry: Fiber.RuntimeFiber<void> | undefined;
   #publishingVersion: string | undefined;
-  #publishingRetriesUsed = 0;
+  /** `#publishingRetrySchedule`'s own state, carried step to step for `#publishingVersion`. */
+  #publishingScheduleState: unknown;
   /**
    * The version a live publishing wait is about, or undefined outside one.
    * Distinct from `#publishingVersion`, which keys the spent budget and must
@@ -191,11 +231,15 @@ export class UpdateService {
     this.#onChange = options.onChange;
     this.#engine = options.engine;
     this.#lastRunVersion = options.lastRunVersion;
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
+    this.#scope = Runtime.runSync(this.#runtime)(Scope.make());
     this.#intervalMs = options.intervalMs ?? UPDATE_CHECK_DEFAULTS.INTERVAL_MS;
     this.#justUpdatedFirstCheckDelayMs =
       options.justUpdatedFirstCheckDelayMs ??
       UPDATE_CHECK_DEFAULTS.JUST_UPDATED_FIRST_CHECK_DELAY_MS;
-    this.#publishingRetryDelaysMs = options.publishingRetryDelaysMs ?? PUBLISHING_RETRY_DELAYS_MS;
+    this.#publishingRetrySchedule = publishingRetrySchedule(
+      options.publishingRetryDelaysMs ?? PUBLISHING_RETRY_DELAYS_MS,
+    );
     this.#report = options.report ?? reportToStderr;
     this.#snapshot = this.#idle(false);
     this.#engine?.wire({
@@ -264,7 +308,7 @@ export class UpdateService {
     // press or timed tick mid-wait collapses the pending timer rather than
     // stacking a second check behind it.
     if (this.#publishingRetry) {
-      clearTimeout(this.#publishingRetry);
+      this.#publishingRetry.unsafeInterruptAsFork(FiberId.none);
       this.#publishingRetry = undefined;
     }
     this.#move({ ...this.#base(UPDATE_STATUS.CHECKING) });
@@ -302,7 +346,8 @@ export class UpdateService {
   /**
    * Starts the timed check. The first check runs at once — except on the
    * first launch after an install, where it waits long enough for the
-   * `updated` confirmation to be seen before `checking` overwrites it.
+   * `updated` confirmation to be seen before `checking` overwrites it. Both
+   * are fibers forked into the service's own scope, which `stop()` closes.
    */
   start(): void {
     if (this.#started || !this.#engine) return;
@@ -314,42 +359,63 @@ export class UpdateService {
       this.#report(`Updated: ${previous} -> ${this.#currentVersion}`);
       this.#move({ ...this.#base(UPDATE_STATUS.UPDATED), previousVersion: previous });
     }
-    this.#timer = setInterval(() => void this.check(), this.#intervalMs);
-    this.#timer.unref();
-    this.#firstCheck = setTimeout(
-      () => void this.check(),
-      justUpdated ? this.#justUpdatedFirstCheckDelayMs : 0,
+    const runSync = Runtime.runSync(this.#runtime);
+    const work = Effect.sync(() => void this.check());
+    // The interval never fires at the fork itself: the whole repeat is
+    // pushed back by one interval, so the cadence lands at `intervalMs`,
+    // `2 * intervalMs`, ... exactly as the timer it replaces did, leaving the
+    // very first check to the one below.
+    runSync(
+      Effect.provideService(
+        Effect.forkScoped(
+          Effect.delay(
+            Effect.repeat(work, Schedule.spaced(Duration.millis(this.#intervalMs))),
+            Duration.millis(this.#intervalMs),
+          ),
+        ),
+        Scope.Scope,
+        this.#scope,
+      ),
     );
-    this.#firstCheck.unref();
+    runSync(
+      Effect.provideService(
+        scheduleOnce(justUpdated ? this.#justUpdatedFirstCheckDelayMs : 0, work),
+        Scope.Scope,
+        this.#scope,
+      ),
+    );
   }
 
   stop(): void {
-    if (this.#timer) clearInterval(this.#timer);
-    if (this.#firstCheck) clearTimeout(this.#firstCheck);
-    if (this.#publishingRetry) clearTimeout(this.#publishingRetry);
-    this.#timer = undefined;
-    this.#firstCheck = undefined;
+    if (this.#stopped) return;
+    this.#stopped = true;
     this.#publishingRetry = undefined;
+    Runtime.runFork(this.#runtime)(Scope.close(this.#scope, Exit.void));
   }
 
   /**
-   * Spends the next slot of the version's retry budget and arms the timer.
-   * The budget is keyed to the version so a later release starts fresh, and
-   * it survives the wait itself: an exhausted version stays exhausted, so a
-   * later check that finds it still failing lands on the error row rather
-   * than a fresh schedule.
+   * Spends the next slot of the version's retry schedule and arms a
+   * cancellable fiber for it. The schedule is keyed to the version so a
+   * later release starts fresh, and it survives the wait itself: an
+   * exhausted version's state stays exhausted, so a later check that finds
+   * it still failing lands on the error row rather than a fresh schedule.
    */
   #armPublishingRetry(version: string): boolean {
     if (version !== this.#publishingVersion) {
       this.#publishingVersion = version;
-      this.#publishingRetriesUsed = 0;
+      this.#publishingScheduleState = this.#publishingRetrySchedule.initial;
     }
-    const delayMs = this.#publishingRetryDelaysMs[this.#publishingRetriesUsed];
-    if (delayMs === undefined) return false;
-    this.#publishingRetriesUsed += 1;
-    if (this.#publishingRetry) clearTimeout(this.#publishingRetry);
-    this.#publishingRetry = setTimeout(() => void this.check(), delayMs);
-    this.#publishingRetry.unref();
+    const runSync = Runtime.runSync(this.#runtime);
+    const [state, delay, decision] = runSync(
+      this.#publishingRetrySchedule.step(Date.now(), undefined, this.#publishingScheduleState),
+    );
+    if (ScheduleDecision.isDone(decision)) return false;
+    this.#publishingScheduleState = state;
+    if (this.#publishingRetry) this.#publishingRetry.unsafeInterruptAsFork(FiberId.none);
+    const work = Effect.sync(() => void this.check());
+    this.#publishingRetry = runSync(
+      Effect.provideService(scheduleOnce(Duration.toMillis(delay), work), Scope.Scope, this.#scope),
+    );
     return true;
   }
 
