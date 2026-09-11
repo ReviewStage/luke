@@ -31,17 +31,24 @@ test("the four live session methods are in the vocabulary, and every one of them
   assert.equal(isGatewayEventKind(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED), true);
 });
 
-test("the realtime vocabulary the live methods will replace still stands beside them", () => {
+test("the retired Realtime vocabulary is no longer in the contract", () => {
   for (const method of [
-    GATEWAY_METHOD.VOICE_MINT_REALTIME_CREDENTIAL,
-    GATEWAY_METHOD.SPEECH_SETTLE,
-    GATEWAY_METHOD.RECEIVER_REPORT,
-    GATEWAY_METHOD.DELIVERY_CLAIM,
+    "voice.mintRealtimeCredential",
+    "speech.settle",
+    "receiver.report",
+    "delivery.claim",
+    "delivery.acknowledge",
   ]) {
-    assert.equal(isGatewayMethod(method), true);
+    assert.equal(isGatewayMethod(method), false);
   }
-  assert.equal(isGatewayEventKind(GATEWAY_EVENT.SPEECH_OFFERED), true);
-  assert.equal(isGatewayEventKind(GATEWAY_EVENT.SPEECH_WITHDRAWN), true);
+  for (const event of [
+    "speech.offered",
+    "speech.withdrawn",
+    "delivery.offered",
+    "deliveries.withdrawn",
+  ]) {
+    assert.equal(isGatewayEventKind(event), false);
+  }
 });
 
 test("a create request carries the offer and nothing else", () => {

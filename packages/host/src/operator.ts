@@ -1,18 +1,15 @@
-import { brainRequestRecordFromWire, isBrainRequestOrigin } from "@sidecar/brain/requests";
+import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
 import {
   type BrainAskSubmission,
   type BrainAskSubmissionResult,
   type BrainAskWait,
-  type BrainReplyClaimResult,
-  type BrainReplyOffer,
   type BrainRequestSnapshot,
   isBrainAskSubmissionResult,
-  isBrainReplyOffer,
 } from "@sidecar/brain/requests-wire";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
-import { isRecord, isWireBoolean, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
+import { isRecord, isWireBoolean, isWireString, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import { REJECTED_SUBMISSION } from "./brain/publication.js";
 
@@ -29,17 +26,12 @@ export interface GatewayOperator {
     submission: BrainAskSubmission,
     sessionKey?: SessionKey,
   ) => Promise<BrainAskSubmissionResult>;
-  /** Waits on one run; `speakerEpoch` is the receiver epoch the asking call holds, given only by the voice window. */
-  wait: (runId: string, speakerEpoch: number | undefined) => Promise<BrainAskWait>;
+  wait: (runId: string) => Promise<BrainAskWait>;
   cancel: (runId: string) => Promise<BrainRequestSnapshot | undefined>;
   runs: () => Promise<readonly BrainRequestSnapshot[]>;
-  claim: (runId: string, deliveryId: string, epoch: number) => Promise<BrainReplyClaimResult>;
-  acknowledge: (runId: string, deliveryId: string, epoch: number) => Promise<boolean>;
   /** Delete conversation on a conversation: answers whether the erasure completed or was interrupted, false only when refused. */
   deleteConversation: (sessionKey?: SessionKey) => Promise<boolean>;
   onRunsChanged: (listener: (runs: readonly BrainRequestSnapshot[]) => void) => () => void;
-  onDeliveryOffered: (listener: (offer: BrainReplyOffer) => void) => () => void;
-  onDeliveriesWithdrawn: (listener: (epoch: number) => void) => () => void;
   onConversationChanged: (listener: (change: GatewayConversationChange) => void) => () => void;
   /** The underlying client, for the calls the typed surface above does not name. */
   readonly client: GatewayClient;
@@ -62,15 +54,6 @@ function submissionResultFromWire(result: GatewayCallResult): BrainAskSubmission
   return result.ok && isBrainAskSubmissionResult(result.result)
     ? result.result
     : REJECTED_SUBMISSION;
-}
-
-function claimFromWire(result: GatewayCallResult): BrainReplyClaimResult {
-  if (!result.ok || !isRecord(result.result) || result.result.granted !== true) {
-    return { granted: false };
-  }
-  const { words, origin } = result.result;
-  if (!isWireString(words) || !isBrainRequestOrigin(origin)) return { granted: false };
-  return { granted: true, words, origin };
 }
 
 /** The operator is one typed surface over a client a caller shares with its host operator; the client is made once. */
@@ -98,11 +81,8 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
           { idempotencyKey: submission.submissionId },
         ),
       ),
-    wait: async (runId, speakerEpoch) => {
-      const result = await client.call(GATEWAY_METHOD.RUN_WAIT, {
-        runId,
-        ...(speakerEpoch !== undefined ? { speakerEpoch } : undefined),
-      });
+    wait: async (runId) => {
+      const result = await client.call(GATEWAY_METHOD.RUN_WAIT, { runId });
       if (!result.ok || !isRecord(result.result)) return { record: undefined, speak: false };
       const record = brainRequestRecordFromWire(result.result.record);
       return { record, speak: record !== undefined && result.result.speak === true };
@@ -116,16 +96,6 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
       const result = await client.call(GATEWAY_METHOD.RUN_LIST);
       return result.ok ? runsFromWire(result.result) : [];
     },
-    claim: async (runId, deliveryId, epoch) =>
-      claimFromWire(await client.call(GATEWAY_METHOD.DELIVERY_CLAIM, { runId, deliveryId, epoch })),
-    acknowledge: async (runId, deliveryId, epoch) => {
-      const result = await client.call(GATEWAY_METHOD.DELIVERY_ACKNOWLEDGE, {
-        runId,
-        deliveryId,
-        epoch,
-      });
-      return result.ok && isRecord(result.result) && result.result.acknowledged === true;
-    },
     deleteConversation: async (sessionKey = MAIN_SESSION_KEY) => {
       const result = await client.call(GATEWAY_METHOD.CONVERSATION_DELETE, { sessionKey });
       if (!result.ok || !isRecord(result.result)) return false;
@@ -136,18 +106,6 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
     },
     onRunsChanged: (listener) =>
       on(GATEWAY_EVENT.RUNS_CHANGED, (payload) => runsFromWire(payload), listener),
-    onDeliveryOffered: (listener) =>
-      on(
-        GATEWAY_EVENT.DELIVERY_OFFERED,
-        (payload) => (isBrainReplyOffer(payload) ? payload : undefined),
-        listener,
-      ),
-    onDeliveriesWithdrawn: (listener) =>
-      on(
-        GATEWAY_EVENT.DELIVERIES_WITHDRAWN,
-        (payload) => (isRecord(payload) && isWireNumber(payload.epoch) ? payload.epoch : undefined),
-        listener,
-      ),
     onConversationChanged: (listener) =>
       on(
         GATEWAY_EVENT.CONVERSATION_CHANGED,

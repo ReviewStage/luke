@@ -116,7 +116,7 @@ export function composeLive(dependencies: LiveDependencies): LiveComposer {
       : undefined),
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-        credential_source: VOICE_SOURCE_COUNTED_AS[account.voiceCapabilities.voiceSource],
+        session_source: VOICE_SOURCE_COUNTED_AS[account.voiceCapabilities.voiceSource],
       });
     },
     onProactiveSpoken: (kind) => {

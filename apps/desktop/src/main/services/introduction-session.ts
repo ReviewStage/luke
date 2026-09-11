@@ -1,6 +1,6 @@
 import {
-  PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_EVENT,
+  PRODUCT_VOICE_SESSION_SOURCE,
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway";
@@ -47,7 +47,7 @@ export class IntroductionSession {
     if (!opened) return undefined;
     this.#standing = opened;
     this.#dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-      credential_source: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
+      session_source: PRODUCT_VOICE_SESSION_SOURCE.INTRODUCTION,
     });
     return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
   }

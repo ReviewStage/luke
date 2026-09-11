@@ -10,7 +10,14 @@
  * trace may record is a product decision, not an implementation detail.
  */
 
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@sidecar/live";
+import {
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 
 /**
  * Which kind of record one line of the trace carries. It is vocabulary rather
@@ -33,7 +40,7 @@ export type TraceDirection = (typeof TRACE_DIRECTION)[keyof typeof TRACE_DIRECTI
 
 const TRACE_DIRECTIONS: readonly string[] = Object.values(TRACE_DIRECTION);
 
-/** One realtime event as the tap saw it cross the data channel. */
+/** One live event as the tap saw it cross the data channel. */
 export interface AgentWireTrace {
   readonly direction: TraceDirection;
   readonly event: WireRecord;
@@ -47,24 +54,60 @@ export function isAgentWireTrace(value: UnparsedWireValue): value is AgentWireTr
   return isRecord(value) && isTraceDirection(value.direction) && isRecord(value.event);
 }
 
-/** The Realtime client event a tapped trace still carries the phone's press audio in. */
-const REALTIME_AUDIO_APPEND_EVENT = "input_audio_buffer.append";
+/**
+ * The live events a trace reads back into a conversation. The exporter names
+ * them from here rather than from the live package directly so the trace's
+ * vocabulary is one list: the two captions, the three appends a trusted side
+ * sends, the delegation that opens a backend turn, the usage snapshot, and
+ * the two lifecycle events.
+ */
+export const TRACE_LIVE_EVENT = {
+  SESSION_STARTED: LIVE_SERVER_EVENT.SESSION_STARTED,
+  SESSION_CLOSED: LIVE_SERVER_EVENT.SESSION_CLOSED,
+  INPUT_TRANSCRIPT_DELTA: LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA,
+  OUTPUT_TRANSCRIPT_DELTA: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+  DELEGATION_CREATED: LIVE_SERVER_EVENT.DELEGATION_CREATED,
+  USAGE_UPDATED: LIVE_SERVER_EVENT.USAGE_UPDATED,
+  INSTRUCTIONS_APPEND: LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
+  THINKING_APPEND: LIVE_CLIENT_EVENT.THINKING_APPEND,
+  COMMENTARY_APPEND: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+} as const;
+
+export type TraceLiveEvent = (typeof TRACE_LIVE_EVENT)[keyof typeof TRACE_LIVE_EVENT];
 
 /**
- * Strips the one payload a trace must not carry whole: the developer's own
- * voice. An audio append is base64 microphone samples — megabytes an hour of
- * something no one reads in a trace viewer — so it is replaced by its size
- * before it ever crosses to the writer. Every other event travels as it went
- * over the wire, because the words and documents are exactly what a trace
- * exists to show.
+ * The two reflected-audio events, and the field each carries its base64
+ * samples in. Neither reaches the renderer's channel, but a sideband trace
+ * would see both, and the writer strips them by the same rule.
+ */
+const REFLECTED_AUDIO_FIELD = {
+  [LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND]: "audio",
+  [LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA]: "delta",
+} as const;
+
+function reflectedAudioField(type: WireValue | undefined): string | undefined {
+  return isWireString(type) && Object.hasOwn(REFLECTED_AUDIO_FIELD, type)
+    ? REFLECTED_AUDIO_FIELD[type as keyof typeof REFLECTED_AUDIO_FIELD]
+    : undefined;
+}
+
+/**
+ * Strips the one payload a trace must not carry whole: audio. A reflected
+ * audio event is base64 samples of the developer's voice or Luke's — megabytes
+ * an hour of something no one reads in a trace viewer — so it is replaced by
+ * its size before it ever crosses to the writer. Every other event travels as
+ * it went over the wire, because the words and documents are exactly what a
+ * trace exists to show.
  */
 export function sanitizedTraceEvent(event: WireRecord): WireRecord {
-  if (event.type !== REALTIME_AUDIO_APPEND_EVENT) return event;
-  const audio = event.audio;
+  const type = event.type;
+  const field = reflectedAudioField(type);
+  if (type === undefined || field === undefined) return event;
+  const audio = event[field];
   if (!isWireString(audio)) return event;
   const padding = audio.endsWith("==") ? 2 : audio.endsWith("=") ? 1 : 0;
   return {
-    type: event.type,
+    type,
     audioBytes: Math.floor((audio.length * 3) / 4) - padding,
   };
 }

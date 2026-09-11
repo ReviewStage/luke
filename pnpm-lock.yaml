@@ -457,6 +457,9 @@ importers:
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../brain
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -932,6 +935,9 @@ importers:
       '@sidecar/devtrace':
         specifier: workspace:*
         version: link:../../packages/devtrace
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../../packages/live
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../../packages/wire
