@@ -17,7 +17,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
-import { asc, eq } from "drizzle-orm";
+import { Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -27,12 +27,7 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import { CONVERSATION_KIND, conversations, messages } from "../server/db/storage-schema";
-import {
-  VOICE_SEGMENT_ROLE,
-  voiceSessions,
-  voiceTranscriptSegments,
-} from "../server/db/voice-schema";
+import { VOICE_SEGMENT_ROLE } from "../server/db/voice-schema";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
@@ -54,6 +49,12 @@ import { observedSideband } from "../server/voice/live-sideband";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
+import {
+  insertConversation,
+  readMessagesByConversation,
+  readVoiceSessionByLiveSessionId,
+  readVoiceTranscriptSegmentsBySession,
+} from "./support/store-rows";
 
 /**
  * The live session service over the hosted record, on the real migrations in
@@ -91,14 +92,10 @@ const writer = voiceWriter({ run: database.run, store });
  */
 async function target(registered = true): Promise<VoiceTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
+  const conversationId = await insertConversation(database.run, { userId });
   const liveSessionId = `sess_${randomUUID()}`;
   if (registered) await sessionRecord.register({ userId, sessionId: liveSessionId });
-  return { userId, liveSessionId, conversation: { userId, conversationId: row.id } };
+  return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
 
 class FakeBrain implements LiveBrain {
@@ -205,41 +202,52 @@ async function until(predicate: () => boolean, what: string): Promise<void> {
   assert.fail(`timed out waiting for ${what}`);
 }
 
+const VoiceSessionIdRowSchema = Schema.Struct({ id: Schema.String });
+
+const SegmentRowSchema = Schema.Struct({
+  seq: Schema.Number,
+  role: Schema.String,
+  text: Schema.String,
+  start_ms: Schema.Number,
+  end_ms: Schema.Number,
+});
+
+const MessageRowSchema = Schema.Struct({
+  client_id: Schema.String,
+  role: Schema.String,
+  parts: Schema.Unknown,
+  metadata: Schema.Unknown,
+});
+
 async function sessionRowId(liveSessionId: string): Promise<string> {
-  const [row] = await database.db
-    .select({ id: voiceSessions.id })
-    .from(voiceSessions)
-    .where(eq(voiceSessions.liveSessionId, liveSessionId));
+  const [row] = await readVoiceSessionByLiveSessionId(database.run, liveSessionId);
   assert.ok(row);
-  return row.id;
+  return Schema.decodeUnknownSync(VoiceSessionIdRowSchema)(row).id;
 }
 
 async function segments(liveSessionId: string) {
-  const rows = await database.db
-    .select({
-      seq: voiceTranscriptSegments.seq,
-      role: voiceTranscriptSegments.role,
-      text: voiceTranscriptSegments.text,
-      startMs: voiceTranscriptSegments.startMs,
-      endMs: voiceTranscriptSegments.endMs,
-    })
-    .from(voiceTranscriptSegments)
-    .where(eq(voiceTranscriptSegments.voiceSessionId, await sessionRowId(liveSessionId)))
-    .orderBy(asc(voiceTranscriptSegments.seq));
-  return rows.map((row) => [row.seq, row.role, row.text, row.startMs, row.endMs]);
+  const rows = await readVoiceTranscriptSegmentsBySession(
+    database.run,
+    await sessionRowId(liveSessionId),
+  );
+  return rows
+    .map((row) => Schema.decodeUnknownSync(SegmentRowSchema)(row))
+    .map((row) => [row.seq, row.role, row.text, row.start_ms, row.end_ms]);
 }
 
-async function messageRows(conversation: ConversationTarget) {
-  return database.db
-    .select({
-      clientId: messages.clientId,
-      role: messages.role,
-      parts: messages.parts,
-      metadata: messages.metadata,
-    })
-    .from(messages)
-    .where(eq(messages.conversationId, conversation.conversationId))
-    .orderBy(asc(messages.seq));
+async function messageRows(
+  conversation: ConversationTarget,
+): Promise<{ clientId: string; role: string; parts: unknown; metadata: unknown }[]> {
+  const rows = await readMessagesByConversation(database.run, conversation.conversationId);
+  return rows.map((row) => {
+    const decoded = Schema.decodeUnknownSync(MessageRowSchema)(row);
+    return {
+      clientId: decoded.client_id,
+      role: decoded.role,
+      parts: decoded.parts,
+      metadata: decoded.metadata,
+    };
+  });
 }
 
 const IGNORED = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED } as const;

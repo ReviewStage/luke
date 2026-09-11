@@ -1,27 +1,21 @@
 import assert from "node:assert/strict";
-import { and, eq, isNull } from "drizzle-orm";
+import { Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { standingMain } from "../server/hosted/brain-host/main";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { readStandingConversations, setConversationDeletedAt } from "./support/store-rows";
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = new Date(1_800_000_000_000);
 
+const IdRowSchema = Schema.Struct({ id: Schema.String });
+
 async function standingMains(userId: string): Promise<string[]> {
-  const rows = await database.db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.userId, userId),
-        eq(conversations.kind, CONVERSATION_KIND.MAIN),
-        isNull(conversations.deletedAt),
-      ),
-    );
-  return rows.map((row) => row.id);
+  const rows = await readStandingConversations(database.run, userId, CONVERSATION_KIND.MAIN);
+  return rows.map((row) => Schema.decodeUnknownSync(IdRowSchema)(row).id);
 }
 
 test("the first ask opens the account's main once, however many open it together, and every later ask finds that one", async () => {
@@ -52,10 +46,7 @@ test("a first ask and a Clear racing on an account with no main both land, and o
 test("a cleared main is not the standing one: the next ask opens another beside the stamped row", async () => {
   const userId = await database.createUser();
   const first = await database.run(standingMain(userId, NOW));
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: NOW })
-    .where(eq(conversations.id, first));
+  await setConversationDeletedAt(database.run, first, NOW);
   const next = await database.run(standingMain(userId, NOW));
   assert.notEqual(next, first);
   assert.deepEqual(await standingMains(userId), [next]);

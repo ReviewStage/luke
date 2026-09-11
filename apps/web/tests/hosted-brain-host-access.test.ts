@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import {
   actedForAccount,
   conversationIdOf,
@@ -36,6 +36,7 @@ import {
   sessionIdOf,
 } from "../server/hosted/brain-host/door";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertConversation } from "./support/store-rows";
 
 /**
  * The host's own check of who a session is for: the conversation a request
@@ -61,12 +62,7 @@ function principal(
 }
 
 async function ownedConversation(userId: string): Promise<string> {
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return row.id;
+  return insertConversation(database.run, { userId });
 }
 
 test("the request's conversation and turn kind become attributes only when well formed", () => {
@@ -157,21 +153,18 @@ test("account B is refused on account A's session, whichever seat it takes", asy
 
 test("a cleared conversation admits nobody, its owner included, and no session claims its record", async () => {
   const userA = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId: userA, kind: CONVERSATION_KIND.MAIN, deletedAt: new Date() })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  const a = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: row.id });
+  const conversationId = await insertConversation(database.run, {
+    userId: userA,
+    deletedAt: new Date(),
+  });
+  const a = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId });
   assert.deepEqual(await database.run(admitConversation({ current: a, initiator: a }, CLAIMING)), {
     ok: false,
     refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
   });
   const session = "wrun_01M0000000000000000000000C";
   assert.equal(
-    await database.run(
-      claimRuntimeSession({ userId: userA, conversationId: row.id }, session, new Date()),
-    ),
+    await database.run(claimRuntimeSession({ userId: userA, conversationId }, session, new Date())),
     false,
   );
   assert.equal(await database.run(runtimeSessionOwner(session)), undefined);

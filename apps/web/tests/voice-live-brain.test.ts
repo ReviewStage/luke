@@ -8,11 +8,9 @@ import {
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
-import { eq } from "drizzle-orm";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
-import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
 import { ASK_REFUSAL } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -37,6 +35,7 @@ import {
 } from "../server/voice/live-brain";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { deleteConversation, insertConversation } from "./support/store-rows";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -112,12 +111,8 @@ function fakeEve(): FakeEve {
 /** A fresh account with its standing main, the conversation a spoken ask lands in. */
 async function account(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId });
+  return { userId, conversationId };
 }
 
 interface Stand {
@@ -309,7 +304,7 @@ test("an ask the record no longer holds ends as failed rather than being followe
   const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
   if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-  await database.db.delete(conversations).where(eq(conversations.id, target.conversationId));
+  await deleteConversation(database.run, target.conversationId);
   await until(() => f.events.length === 1, "the lost ask's end");
   assert.deepEqual(f.events, [
     { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },

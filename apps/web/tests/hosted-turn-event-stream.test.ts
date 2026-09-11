@@ -27,7 +27,6 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "../server/core";
-import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
 import { DISPATCH_QUERY } from "../server/function-dispatch";
 import {
   FUNCTION_GROUP,
@@ -56,6 +55,7 @@ import {
 } from "../server/hosted/turn-event-stream";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertConversation } from "./support/store-rows";
 
 /**
  * The turn event stream over the real migrations on PGlite, with the turn
@@ -90,12 +90,8 @@ const QUICK = { POLL_MS: 5, HEARTBEAT_MS: 20, ATTACHMENT_MS: 150 } as const;
 
 async function conversation(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId });
+  return { userId, conversationId };
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>

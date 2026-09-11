@@ -11,12 +11,11 @@ import {
   MESSAGE_ROLE,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-import { eq } from "drizzle-orm";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND, conversations, messages } from "../server/db/schema";
 import { handleConversationClear } from "../server/hosted/conversation-clear";
 import { handleConversationMessages } from "../server/hosted/resource-reads";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { insertConversation, insertMessage, readConversationById } from "./support/store-rows";
 
 /**
  * Clear over the real store: the route stamps the standing main and answers
@@ -49,14 +48,10 @@ async function body(response: Response): Promise<UnparsedWireValue> {
 }
 
 async function populate(userId: string): Promise<string> {
-  const [main] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN, nextMessageSeq: 2 })
-    .returning({ id: conversations.id });
-  assert.ok(main);
-  await database.db.insert(messages).values({
+  const conversationId = await insertConversation(database.run, { userId, nextMessageSeq: 2 });
+  await insertMessage(database.run, {
     userId,
-    conversationId: main.id,
+    conversationId,
     seq: 1,
     clientId: "client-1",
     role: MESSAGE_ROLE.USER,
@@ -65,7 +60,7 @@ async function populate(userId: string): Promise<string> {
     createdAt: new Date(NOW),
     finishedAt: new Date(NOW),
   });
-  return main.id;
+  return conversationId;
 }
 
 test("Clear stamps the standing main, answers the one it opened, and the next messages read lists only that one", async () => {
@@ -90,11 +85,8 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   assert.notEqual(answer.opened, main);
   assert.equal(answer.openedAt, NOW);
 
-  const [stamped] = await database.db
-    .select({ deletedAt: conversations.deletedAt })
-    .from(conversations)
-    .where(eq(conversations.id, main));
-  assert.deepEqual(stamped?.deletedAt, new Date(NOW));
+  const [stamped] = await readConversationById(database.run, main);
+  assert.deepEqual(stamped?.deleted_at, new Date(NOW));
 
   const after = conversationMessagesAnswerSchema.parse(
     await body(await handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET")))),
