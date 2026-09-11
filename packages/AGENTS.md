@@ -211,8 +211,12 @@ vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
 `@sidecar/providers/superset/sign-in-stage`, `@sidecar/runtime/vocabulary`,
 `@sidecar/brain/store`, `@sidecar/brain/store-worker`), or
 the renderer bundle fails to resolve `node:http` behind a string constant it
-wanted to draw. `@sidecar/voice/live-session` is the same door for behavior
-rather than vocabulary: the live session service and its parts are
+wanted to draw. What that door holds back has since grown: the loopback
+consent trip behind `@sidecar/credentials`'s barrel serves its landing page on
+`@effect/platform-node`'s own HTTP server, so the vocabulary subpath is what
+keeps that layer out of a bundle as much as `node:http` itself.
+`@sidecar/voice/live-session` is the same door for behavior rather than
+vocabulary: the live session service and its parts are
 transport-neutral, composed by whoever holds a session's sideband — the
 desktop's host today, the hosted voice service's web function next — so they
 stand behind an entry of their own, and the package names no socket library
