@@ -3163,3 +3163,63 @@ is (b), the remediation is a concurrency question and not a bug.
 
 Merges are unaffected and continue. #1199 is queued at position 2; **the merge does not depend on
 deploys**, only the post-merge probe does.
+
+
+## 2026-09-12 ~00:00Z — HELD: narrowing the hosted registered tool names breaks installed desktops
+
+**G3-4 (deleting the Linear integration) reported two consequences as "ruled on": the hosted tool
+set's registered names narrow by two, and the prompt-cache key's bytes change once. Neither is in
+this file.** So either I ruled and failed to record it — my own standing rule broken — or it was
+never ruled. Recording the ruling now, and it is not the one the worker expected.
+
+**The two names are `issue-state` and `issue-comment`** (`packages/actions/src/action-kinds.ts:61`),
+the tracker's only two actions.
+
+### What the contract actually does, read in the tree rather than assumed
+
+- `packages/hosted/src/brain-contract.ts:308` — the respond request schema is built from a catalog
+  that is *"the service's registered names, **or the capabilities a desktop fetched**"*, and **the
+  same declaration runs on both ends**.
+- `brain-contract.ts:222` — an unregistered name becomes
+  `HOSTED_BRAIN_REQUEST_REFUSAL.UNKNOWN_TOOL`, a refusal of **the request**, not a dropped tool.
+- `packages/brain/src/hosted-model-adapter.test.ts:174-186` — **already a test**: capabilities
+  listing a narrower set than the request names produce `MODEL_RESPONSE_OUTCOME.FAILED` with
+  `MODEL_FAILURE.COMPATIBILITY`. The adapter does not drop the unknown name and continue.
+
+**So an already-installed desktop that offers those two names fetches the narrowed capabilities and
+every brain turn fails.** Not the tracker degraded — **the brain stops.**
+
+### The rule this inverts
+
+`CLAUDE.md`: *"The service therefore deploys before such a desktop ships, and widening the contract
+is a product decision."* That protects **widening** — a new desktop meeting an old service.
+**Narrowing runs the other way**: an old desktop meeting a new service, and nothing in the tree
+protects that direction. The registered set is effectively append-only for as long as any desktop in
+the field offers a name.
+
+### Ruling
+
+**HELD.** G3-4 continues on everything that does not touch the hosted catalog — the local deletions,
+the gateway, the panel, the desktop rows, the settings machinery — and **does not land the
+narrowing** pending two facts it is establishing:
+
+1. **Does a desktop offer the two names unconditionally, or only when a tracker is connected?** That
+   is the blast radius, and I will not guess it.
+2. **Does the service's registered catalog have to lose the names at all, or only the desktop's
+   offer?** **If the service can keep them registered, there is no break and the question dissolves**
+   — a registered name with no caller costs nothing, and deleting it buys nothing. That is the
+   cheapest fix if it is available, and it is the one to prefer.
+
+**Escalated to Dean**, because this changes a contract and that is the standing line for escalation
+rather than a judgment call.
+
+**The prompt-cache key's bytes changing once is benign and is ruled so:** a cache key is a routing
+hint that identifies nothing, and a changed key costs one uncached turn. It belongs in the PR body
+as a cost, not a risk.
+
+### The general shape, which is the reusable part
+
+**A consequence reported as "you ruled on this" is not a ruling.** Both of tonight's came back to me
+as settled and neither was recorded; one of them turned out to be a breaking change. **A ruling that
+is not in this file did not happen**, and the cost of the convention is exactly this: it catches the
+case where an agreement was assumed rather than made.
