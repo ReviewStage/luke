@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
 import {
   conversationClearAnswerSchema,
   conversationMessagesAnswerSchema,
@@ -13,6 +12,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
+import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND, conversations, messages } from "../server/db/schema";
 import { handleConversationClear } from "../server/hosted/conversation-clear";
 import { handleConversationMessages } from "../server/hosted/resource-reads";
@@ -25,7 +25,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  */
 
 const database = await openHostedStoreTestDatabase();
-after(() => database.close());
+afterAll(() => database.close());
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const CLEAR_PATH = "https://luke.test/api/conversation/clear";
