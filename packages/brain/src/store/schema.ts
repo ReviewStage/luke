@@ -115,7 +115,7 @@ export const STORE_SCHEMA_FLOOR = 1;
  * name altered no table that already stood — it only added ones the current
  * statements create where none is — so it migrates by having nothing to do;
  * a database at a version this build does not know at all is refused rather
- * than migrated by guess, which `StoreDatabase.open` raises before any step.
+ * than migrated by guess, which `migration.ts` raises before any step.
  */
 export interface SchemaMigrationStep {
   sql: string;

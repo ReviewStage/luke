@@ -208,6 +208,15 @@ it are still promises reading a record, so the layers are built and the
 is a `runSync` over a scope that closes at once, holding nothing; P7-01 and
 P7-02 hand the layer to the host itself and delete the door.
 
+`migrateStoreSchemaSync` in `packages/brain/src/store/migration.ts` is on the
+allowlist for the shape of its caller rather than its own: `StoreDatabase.open`
+is a synchronous constructor that hands back a handle, so the migration effect
+is run there with `runSyncExit` over a layer built around that one call and
+closed with it. Every statement the migration issues is a synchronous call into
+`node:sqlite`, so the run waits on nothing and holds nothing; P5-11 makes the
+store worker an Rpc server that opens the database on its own runtime edge and
+runs `migrateStoreSchema` there, and this door goes with it.
+
 `AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is on the same
 terms: its callers are the host's composers, which still hold a plain object
 with `record*` methods rather than a fiber, so each tapped line — the entry an
@@ -311,6 +320,7 @@ design decision stated as such:
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
+| `migrateStoreSchemaSync` door over `migrateStoreSchema` | P5-09 | P5-11 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

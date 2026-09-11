@@ -2,12 +2,7 @@ import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
 import type { SqlClient } from "@effect/sql/SqlClient";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { Layer } from "effect";
-import {
-  STORE_SCHEMA_FLOOR,
-  STORE_SCHEMA_MIGRATIONS,
-  STORE_SCHEMA_STATEMENTS,
-  STORE_SCHEMA_VERSION,
-} from "./schema.js";
+import { migrateStoreSchemaSync } from "./migration.js";
 import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
 
 /**
@@ -28,7 +23,10 @@ import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
  * The handle is opened by `sql-node-sqlite.ts`, and the same handle stands
  * behind `sql`, the `@effect/sql` client the table modules move onto in
  * P5-10a..d; the synchronous `prepare`, `exec`, and `transaction` below are
- * the surface they move off, kept until the last of them has.
+ * the surface they move off, kept until the last of them has. Bringing the
+ * schema to this build's version is already that client's work, in
+ * `migration.ts`, which `open` runs over the layer below before handing the
+ * database back.
  */
 
 export const AGENT_DATABASE_FILE = "agent.sqlite";
@@ -52,7 +50,7 @@ export class StoreDatabase {
   /** Opens or creates the database at `location` and brings its schema to this build's version. */
   static open(location: string): StoreDatabase {
     const database = new StoreDatabase(openDatabaseHandle(location));
-    database.#migrateSchema();
+    migrateStoreSchemaSync(database.sql);
     return database;
   }
 
@@ -60,74 +58,6 @@ export class StoreDatabase {
   reclaimFreedPages(): void {
     this.#db.exec("PRAGMA incremental_vacuum");
     this.#db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  }
-
-  /**
-   * Brings the schema to this build's version. A database at an earlier
-   * version is walked forward one step at a time after the current statements
-   * have created what is missing, so a column the statements now declare is
-   * added to the table that already stands rather than assumed; a database at a later
-   * version, or at one with no step to reach this one, is refused.
-   */
-  #migrateSchema(): void {
-    this.transaction(() => {
-      // SAFETY: sqlite_master's name column is text; a row is that column or nothing.
-      const versioned = this.#db
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'")
-        .get() as { name: string } | undefined;
-      // SAFETY: the schema_version table has one integer column; a row is that column or nothing.
-      const row = versioned
-        ? (this.#db.prepare("SELECT version FROM schema_version").get() as
-            | { version: number }
-            | undefined)
-        : undefined;
-      // A version this build cannot reach from — past its own, or before the
-      // floor it carries forward from — is refused rather than migrated by guess.
-      if (row && (row.version > STORE_SCHEMA_VERSION || row.version < STORE_SCHEMA_FLOOR)) {
-        throw new Error(
-          `the brain's store is at schema version ${row.version}, not ${STORE_SCHEMA_VERSION}`,
-        );
-      }
-      // The current statements run first: each creates a table only where
-      // none stands, so a table a later version added exists before a step
-      // that fills it from the older ones, and a table that already stands is
-      // left for its step to alter.
-      for (const statement of STORE_SCHEMA_STATEMENTS) this.#db.exec(statement);
-      if (row) {
-        // A version the table names no steps for changed only what the
-        // current statements above already create, so it migrates by having
-        // nothing to do; the refusal that matters is a version this build
-        // does not know at all, raised above.
-        for (let version = row.version + 1; version <= STORE_SCHEMA_VERSION; version += 1) {
-          const steps = STORE_SCHEMA_MIGRATIONS.get(version) ?? [];
-          for (const step of steps) {
-            if (step.onlyIf && !this.#stands(step.onlyIf)) continue;
-            if (step.unless && this.#stands(step.unless)) continue;
-            this.#db.prepare(step.sql).run(...step.params);
-          }
-        }
-      }
-      if (!row) {
-        this.#db
-          .prepare("INSERT INTO schema_version (version) VALUES (?)")
-          .run(STORE_SCHEMA_VERSION);
-      } else if (row.version !== STORE_SCHEMA_VERSION) {
-        this.#db.prepare("UPDATE schema_version SET version = ?").run(STORE_SCHEMA_VERSION);
-      }
-    });
-  }
-
-  #stands(target: { table: string; column?: string }): boolean {
-    const table = this.#db
-      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
-      .get(target.table);
-    if (!table) return false;
-    if (target.column === undefined) return true;
-    return (
-      this.#db
-        .prepare("SELECT 1 FROM pragma_table_info(?) WHERE name = ?")
-        .get(target.table, target.column) !== undefined
-    );
   }
 
   /** @deprecated A table module moves onto `sql` in P5-10a..d, and this goes with the last one. */
