@@ -43,11 +43,12 @@ The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
 `GITHUB_CLIENT_SECRET`.
 
-`vercel.json` uses a legacy `routes` entry for `/api/auth/(.*)` because Vercel's
-zero-config `api/` detection treats `[...all].js` as a single dynamic segment and
-adds a hard 404 for deeper API paths. A `rewrites` entry runs after that detected
-filesystem routing phase, so it cannot reach the Better Auth handler; keep this
-rule in `routes`, ahead of the detected routes.
+The web service's `routes` in `vercel.json` carry a legacy entry for
+`/api/auth/(.*)` because Vercel's zero-config `api/` detection treats
+`[...all].js` as a single dynamic segment and adds a hard 404 for deeper API
+paths. A `rewrites` entry runs after that detected filesystem routing phase, so
+it cannot reach the Better Auth handler; keep this rule in `routes`, ahead of
+the detected routes.
 
 Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
 so every database the application reaches already carries the clients, including
@@ -174,6 +175,23 @@ at the `VOICE_SERVICE_PATH` paths and the desktop posts feedback to
 `/api/feedback`. Reverting the PR that introduced the tree is one
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
+
+The Vercel project is two services in one deployment, declared under `services`
+in `vercel.json`, which Vercel reads only while the project's Framework Preset
+is Services. `web` is this app at its root and carries the migrate-and-seed
+build, the install filter, the ignore rule, and the `routes` above unchanged.
+`eve` is the hosted brain: its root is `agent/`, the eve project, which has no
+manifest of its own and resolves `eve` from this app's dependencies, so its
+install is this app's install and its build is `eve build`. eve resolves its
+application root by walking up from the agent directory and writes its Build
+Output under that root, which here is the web service's; the two
+`EVE_INTERNAL_*` variables on the build command are the ones eve's own frontend
+integrations set to publish a service's output under the service root instead,
+authored here by hand because the authored services graph is authoritative and
+eve generates nothing beside it. Public routing is the top-level `rewrites`:
+`/eve/v1/*` enters the eve service and everything else the web service, and a
+service's own routes run only once a request has entered it. The project's
+environment variables reach both services alike.
 
 ## Where a function runs an Effect
 

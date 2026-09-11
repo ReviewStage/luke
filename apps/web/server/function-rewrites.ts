@@ -1,21 +1,22 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Schema } from "effect";
+import { isRecord, unparsedWire, type WireBoundaryInput } from "./core.js";
 import { DISPATCH_QUERY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";
 
 /**
- * The `/api/` entries of `vercel.json`'s `routes`, generated from the function
- * table so a client path lands on the function that groups its route. A route
- * with no rewrite would 404 on production while every check stayed green, so
- * the generation is committed and checked in two steps: the table itself,
- * `server/api-rewrites.json`, must be what the routes generate, and the
- * `/api/` entries of `vercel.json` must be the table, in its order. The table
- * is its own file so the configuration can one day be assembled by a
- * `vercel.ts` that imports it: Vercel bundles a config module's relative
- * imports and evaluates it in plain Node, which can take a JSON table and
- * cannot take this module's dependencies (LUKE-183).
+ * The `/api/` entries of the web service's `routes` in `vercel.json`,
+ * generated from the function table so a client path lands on the function
+ * that groups its route. A route with no rewrite would 404 on production
+ * while every check stayed green, so the generation is committed and checked
+ * in two steps: the table itself, `server/api-rewrites.json`, must be what
+ * the routes generate, and the web service's `/api/` entries must be the
+ * table, in its order. The table is its own file so the configuration can
+ * one day be assembled by a `vercel.ts` that imports it: Vercel bundles a
+ * config module's relative imports and evaluates it in plain Node, which can
+ * take a JSON table and cannot take this module's dependencies (LUKE-183).
  */
 export interface Rewrite {
   readonly src: string;
@@ -80,7 +81,7 @@ export function apiRewrites(definitions: readonly FunctionDefinition[]): readonl
 }
 
 export const VERCEL_CONFIG_FILE = "vercel.json";
-/** The committed generation of the `/api/` rewrites, which `vercel.json` is assembled from. */
+/** The committed generation of the `/api/` rewrites, which the web service's routes are assembled from. */
 export const API_REWRITES_FILE = join("server", "api-rewrites.json");
 
 const RewriteSchema = Schema.Struct({ src: Schema.String, dest: Schema.String });
@@ -99,22 +100,80 @@ export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
 
 /**
  * The whole of `vercel.json`, so a key this build does not know refuses the
- * generation rather than being carried or dropped unread.
+ * generation rather than being carried or dropped unread. The file is a
+ * services deployment: the web service owns the build, the install, the
+ * ignore rule, and the `routes` the `/api/` rewrites are generated into,
+ * because Vercel evaluates a service's routes only once a request has
+ * entered it and ignores a `routes` key left at the top level; the eve
+ * service owns its own build; and the top-level `rewrites` are the public
+ * routing that sends `/eve/v1/*` to eve and everything else to the web
+ * service.
  */
-const VercelConfig = Schema.Struct({
-  $schema: Schema.String,
+const WebService = Schema.Struct({
+  root: Schema.String,
+  framework: Schema.String,
   installCommand: Schema.String,
   buildCommand: Schema.String,
   ignoreCommand: Schema.String,
-  crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   routes: Schema.Array(RewriteSchema),
+});
+
+const EveService = Schema.Struct({
+  root: Schema.String,
+  framework: Schema.String,
+  installCommand: Schema.String,
+  buildCommand: Schema.String,
+  ignoreCommand: Schema.String,
+});
+
+const ServiceRewriteSchema = Schema.Struct({
+  source: Schema.String,
+  destination: Schema.Struct({ service: Schema.String }),
+});
+
+const VercelConfig = Schema.Struct({
+  $schema: Schema.String,
+  services: Schema.Struct({ web: WebService, eve: EveService }),
+  crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
+  rewrites: Schema.Array(ServiceRewriteSchema),
 });
 type VercelConfig = typeof VercelConfig.Type;
 
 const decodeVercelConfig = Schema.decodeUnknownSync(Schema.parseJson(VercelConfig));
 
+/** Whether the file carries both keys, by their presence: a `routes` key that is merely undefined-valued is still the wrong shape. */
+function hasTopLevelRoutesBesideServices(source: string): boolean {
+  let parsed: WireBoundaryInput;
+  try {
+    // SAFETY: the file is this app's own vercel.json; the strict decode that follows is what holds it to a shape.
+    parsed = JSON.parse(source) as WireBoundaryInput;
+  } catch {
+    return false;
+  }
+  const value = unparsedWire(parsed);
+  return isRecord(value) && "services" in value && "routes" in value;
+}
+
+/**
+ * Vercel ignores a `routes` key at the top level of a services deployment
+ * rather than refusing it, so a file generated into that location would pass
+ * every check and answer 404 on every `/api/` route in production. The
+ * generator refuses the shape by name, ahead of the schema, so the refusal
+ * says where the routes belong rather than which key was unknown.
+ */
+export class TopLevelRoutesBesideServicesError extends Error {
+  override readonly name = "TopLevelRoutesBesideServicesError";
+  constructor() {
+    super(
+      "vercel.json declares services, so its routes belong under services.web.routes; Vercel ignores a top-level routes key in services mode",
+    );
+  }
+}
+
 async function readVercelConfig(web: string): Promise<VercelConfig> {
-  return decodeVercelConfig(await readFile(join(web, VERCEL_CONFIG_FILE), "utf8"));
+  const source = await readFile(join(web, VERCEL_CONFIG_FILE), "utf8");
+  if (hasTopLevelRoutesBesideServices(source)) throw new TopLevelRoutesBesideServicesError();
+  return decodeVercelConfig(source);
 }
 
 const isApiRewrite = (rewrite: Rewrite) => rewrite.src.startsWith(API_ROUTE_PREFIX);
@@ -124,21 +183,22 @@ const sameRewrites = (a: readonly Rewrite[], b: readonly Rewrite[]) =>
 
 /**
  * Whether either committed half has drifted: the table from what the routes
- * generate, or `vercel.json`'s `/api/` entries from the table. Both are read,
- * so a table regenerated without the file assembled from it, or the reverse,
- * is drift and not a pass.
+ * generate, or the web service's `/api/` entries from the table. Both are
+ * read, so a table regenerated without the file assembled from it, or the
+ * reverse, is drift and not a pass.
  */
 export async function rewritesDrifted(web: string): Promise<boolean> {
   const table = await readApiRewritesTable(web);
   const generated = apiRewrites(await webFunctions(web));
-  const committed = (await readVercelConfig(web)).routes.filter(isApiRewrite);
+  const committed = (await readVercelConfig(web)).services.web.routes.filter(isApiRewrite);
   return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 
-/** `vercel.json` with its `/api/` rewrites replaced by the committed table, ahead of every other route. */
+/** `vercel.json` with the web service's `/api/` rewrites replaced by the committed table, ahead of every other route of that service. */
 export async function vercelConfigSource(web: string): Promise<string> {
   const config = await readVercelConfig(web);
-  const others = config.routes.filter((rewrite) => !isApiRewrite(rewrite));
+  const others = config.services.web.routes.filter((rewrite) => !isApiRewrite(rewrite));
   const routes = [...(await readApiRewritesTable(web)), ...others];
-  return `${JSON.stringify({ ...config, routes }, null, 2)}\n`;
+  const services = { ...config.services, web: { ...config.services.web, routes } };
+  return `${JSON.stringify({ ...config, services }, null, 2)}\n`;
 }
