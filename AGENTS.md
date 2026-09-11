@@ -1113,10 +1113,12 @@ Canonical commands:
   system's microphone indicator is lit exactly while the key is down. The
   two keys mean two different things and the host hears them as two: the
   talk key's release only closes the microphone, and Luke keeps answering
-  through it, while the stop key first asks the host, through
-  `voice.stopSpeaking`, to tell the model to stop speaking and wait, and
-  then closes the microphone the same way; no timing heuristic turns one
-  into the other. A
+  through it, while the stop key, pressed while Luke is speaking, first asks
+  the host, through `voice.stopSpeaking`, to tell the model to stop and then
+  wait, and closes the microphone the same way after; pressed while he is
+  silent it is the mute alone, since that instruction stands in the session
+  and would steer the answer he has not given yet; no timing heuristic turns
+  one key into the other. A
   session Luke opens for his own speech carries no capture device at all,
   only a sending line with no track that the next press fills. The one place a press stands in for a release is the Electron
   fallback, where the native talk-key helper could not start and the system
