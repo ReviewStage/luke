@@ -202,8 +202,18 @@ one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and repeated
 work into a `Scope`, which is what cancels it, and `timersFromRuntime` answers
 the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so a caller
 still injected with those closures reads the clock the rest of the process
-reads. Neither the barrel nor the vocabulary door names any of them, so the
-packages below the runtime resolve no `effect` either. A door is not what keeps
+reads, and `makePendingInputQueue` with `admitInput` and
+`queueDebounceSchedule` are the reply queue's Effect surface. Neither the
+barrel nor the vocabulary door names any of them, so the packages below the
+runtime resolve no `effect` either.
+
+A file ported from OpenClaw `b7528507` imports nothing from `effect`, so a
+later port of an upstream change stays a diff of that source; Effect reaches
+it through a sibling named for it (`queue.ts` and `queue.effect.ts`), which
+wraps the ported exports, states the port's refusals as tagged errors carrying
+the codes it already decides, and hands a caller any delay table the port
+states as a `Schedule`. `repository-checks.sh` names the ported files and
+refuses an `effect` import in any of them. A door is not what keeps
 `effect` out of a bundle generally, and `@sidecar/session` is where that stops
 being true: its fixed value sets are declared as `Schema.Literal` beside the
 `as const` object they derive from, and each `is*` guard over one is that
