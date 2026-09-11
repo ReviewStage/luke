@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
+import { Effect, type Stream, SubscriptionRef } from "effect";
 import type { AppState } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { HostBootstrap } from "./gateway/host-operator";
@@ -33,30 +34,40 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
  * slices, dropped where it says nothing new, and one notification per
  * applied patch. Nothing else may hold a copy of a slice — a reader takes a
  * snapshot, which is the document as it stands.
+ *
+ * The document itself is a `SubscriptionRef`, so its own `changes` Stream is
+ * the one subscription a production caller forks to reach the windows.
+ * `snapshot`, `update`, `touch`, and `subscribe` are the synchronous face the
+ * rest of main and this file's own tests still hold, each running its Ref
+ * operation through `Effect.runSync`, which never suspends here because
+ * nothing behind a `SubscriptionRef` write is asynchronous.
  */
 export class AppStateStore {
-  #state: AppState;
+  readonly #ref: SubscriptionRef.SubscriptionRef<AppState>;
   readonly #listeners = new Set<() => void>();
 
   constructor(initial: Omit<AppState, "version">) {
-    this.#state = { ...initial, version: 0 };
+    this.#ref = Effect.runSync(SubscriptionRef.make<AppState>({ ...initial, version: 0 }));
   }
 
+  /** @deprecated the synchronous read over the ref; P8-07 deletes it once every caller reads `changes` directly. */
   snapshot(): AppState {
-    return this.#state;
+    return Effect.runSync(SubscriptionRef.get(this.#ref));
   }
 
+  /** @deprecated the synchronous write over the ref; P8-07 deletes it once every caller reads `changes` directly. */
   update(patch: AppStatePatch): void {
-    const previous = this.#state;
+    const previous = this.snapshot();
     const moved = patchEntries(patch).filter(
       ([slice, value]) => !isDeepStrictEqual(previous[slice], value),
     );
     if (moved.length === 0) return;
-    this.#state = {
+    const next: AppState = {
       ...previous,
       ...Object.fromEntries(moved),
       version: previous.version + 1,
     };
+    Effect.runSync(SubscriptionRef.set(this.#ref, next));
     this.#announce();
   }
 
@@ -65,17 +76,29 @@ export class AppStateStore {
    * for the facts a window answers for and the document cannot — its mode and
    * the display it stands on — which move without any slice moving: the
    * snapshot a window is handed carries them, so a window whose own facts
-   * changed has to be handed one again.
+   * changed has to be handed one again. The ref is set to its own current
+   * value so `changes` re-announces it too, the same document under the same
+   * version.
+   *
+   * @deprecated the synchronous re-announce over the ref; P8-07 deletes it
+   * once every caller reads `changes` directly.
    */
   touch(): void {
+    Effect.runSync(SubscriptionRef.set(this.#ref, this.snapshot()));
     this.#announce();
   }
 
+  /** @deprecated the callback face over the ref's own subscribers; P8-07 deletes it, `changes` is the ref's own subscription. */
   subscribe(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
     };
+  }
+
+  /** The document's own change stream, direct from the ref, for the one production subscriber. */
+  get changes(): Stream.Stream<AppState> {
+    return this.#ref.changes;
   }
 
   #announce(): void {
