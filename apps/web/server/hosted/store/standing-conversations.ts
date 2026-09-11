@@ -10,12 +10,16 @@ import type { HostedStoreDatabase } from "./database.js";
  * how a cleared main leaves a device's cursor and its screen at once; a
  * child's and a thread's rows never cross into the view and are not listed.
  * Main comes first and the observed conversations follow in id order, so
- * every device pages the same conversations in the same order.
+ * every device pages the same conversations in the same order. The main
+ * carries the instant it was opened, which is where the view's window
+ * starts: a Clear opens a new main, and what an observed conversation wrote
+ * before that instant belongs to the thread the developer cleared.
  */
 export type StandingConversation =
   | {
       readonly id: string;
       readonly kind: typeof CONVERSATION_KIND.MAIN;
+      readonly openedAt: Date;
       readonly nextMessageSeq: number;
       readonly nextEventSeq: number;
     }
@@ -40,6 +44,7 @@ export async function standingConversations(
       kind: conversations.kind,
       providerId: conversations.providerId,
       providerSessionId: conversations.providerSessionId,
+      createdAt: conversations.createdAt,
       nextMessageSeq: conversations.nextMessageSeq,
       nextEventSeq: conversations.nextEventSeq,
     })
@@ -56,7 +61,7 @@ export async function standingConversations(
   for (const row of rows) {
     const counters = { nextMessageSeq: row.nextMessageSeq, nextEventSeq: row.nextEventSeq };
     if (row.kind === CONVERSATION_KIND.MAIN) {
-      standing.push({ id: row.id, kind: row.kind, ...counters });
+      standing.push({ id: row.id, kind: row.kind, openedAt: row.createdAt, ...counters });
       continue;
     }
     // An observed row without its session is a row no observation wrote, and it observes nothing the view could name.

@@ -230,13 +230,22 @@ const sessionIdentitySchema: Schema<SessionIdentity> = s.record(
 
 /**
  * One conversation the view is selected from, as the messages answer lists
- * them: the account's standing main, or an observed session's conversation
- * with the session it observes. A device drops the rows of a conversation an
- * answer no longer lists, which is how a Clear reaches a screen that already
- * drew the cleared rows.
+ * them: the account's standing main, with the instant it was opened, or an
+ * observed session's conversation with the session it observes. A device
+ * drops the rows of a conversation an answer no longer lists, which is how a
+ * Clear reaches a screen that already drew the cleared rows; and when the
+ * main's id changes it drops the observed rows written before the new main's
+ * `openedAt`, because the view's window starts there — an observed
+ * conversation is never cleared, so the service reads its rows from that
+ * instant on and a device that already holds earlier ones lets them go.
  */
 export type ConversationReadConversation =
-  | { readonly id: string; readonly kind: typeof CONVERSATION_VIEW_SOURCE.MAIN }
+  | {
+      readonly id: string;
+      readonly kind: typeof CONVERSATION_VIEW_SOURCE.MAIN;
+      /** Epoch milliseconds the standing main was opened at; the view's window starts here. */
+      readonly openedAt: number;
+    }
   | {
       readonly id: string;
       readonly kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED;
@@ -245,7 +254,11 @@ export type ConversationReadConversation =
 
 const conversationReadConversationSchema: Schema<ConversationReadConversation> = s.union([
   s.record(
-    { id: wireUuidSchema, kind: s.literal(CONVERSATION_VIEW_SOURCE.MAIN) },
+    {
+      id: wireUuidSchema,
+      kind: s.literal(CONVERSATION_VIEW_SOURCE.MAIN),
+      openedAt: countedNumber,
+    },
     { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
   ),
   s.record(

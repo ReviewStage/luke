@@ -43,6 +43,7 @@ import {
   listEvents,
   listMessages,
   listTurns,
+  type MessageCursor,
   type MessageListRead,
   type SequenceCursor,
   type StoredEventRecord,
@@ -124,12 +125,12 @@ export interface HostedStore {
    * stamped, so a cleared main is gone from the call after it.
    */
   messages: {
-    /** Messages after `after` in sequence order, read back under the registry; a page with an unreadable row is refused whole. */
+    /** Messages after `after` (and at or after `since`, where a window is given) in sequence order, read back under the registry; a page with an unreadable row is refused whole. */
     list(
       userId: string,
       conversationId: string,
       tools: ToolSet,
-      cursor?: SequenceCursor,
+      cursor?: MessageCursor,
     ): Promise<MessageListRead>;
   };
   events: {

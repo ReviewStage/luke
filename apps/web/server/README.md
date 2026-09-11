@@ -503,7 +503,12 @@ can take the turn a cursor named, and never forward past a turn unread. Every de
 same order, which the unique `(conversation_id, seq)` pairs make true rather
 than hoped for; a Clear leaves the next read, the cursor, and the answer's
 list of standing conversations at once, and a device drops what the list no
-longer names. The change signal answers each resource's head as the cursor a
+longer names. The observed conversations a Clear never stamps — they are the
+brain's own per-session context — are read from the instant the standing
+main was opened, which the main's entry carries as `openedAt`: their rows
+from before it never travel, their rows after it do, and the conversations
+themselves stand untouched. The window is a cut on what a read returns, never
+a rule of the view's selection. The change signal answers each resource's head as the cursor a
 caught-up device would hold — from the conversation rows' counters and one
 ordered look at the turns, never the rows themselves — beside the roster
 snapshot's instant, and the same call is the device's heartbeat: its row

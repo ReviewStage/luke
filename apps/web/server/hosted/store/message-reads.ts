@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   CONVERSATION_EVENT_KIND,
@@ -42,6 +42,17 @@ export interface SequenceCursor {
   /** Rows after this sequence; absent or zero for the conversation's beginning. */
   readonly after?: number;
   readonly limit?: number;
+}
+
+/**
+ * A message read's cursor, with the window a read may cut it to: only rows
+ * written at or after `since`. A conversation numbers its rows as it writes
+ * them, so the rows past the window are a tail of the sequence and the
+ * cursor still lands on the last row taken; the rows before it are never
+ * read and never travel, while the conversation itself stands untouched.
+ */
+export interface MessageCursor extends SequenceCursor {
+  readonly since?: Date;
 }
 
 export interface StoredMessageRecord {
@@ -116,7 +127,7 @@ export async function listMessages(
   userId: string,
   conversationId: string,
   tools: ToolSet,
-  cursor: SequenceCursor = {},
+  cursor: MessageCursor = {},
 ): Promise<MessageListRead> {
   const selected = await db
     .select({
@@ -138,6 +149,7 @@ export async function listMessages(
         eq(messages.conversationId, conversationId),
         eq(messages.userId, userId),
         gt(messages.seq, cursor.after ?? 0),
+        cursor.since === undefined ? undefined : gte(messages.createdAt, cursor.since),
       ),
     )
     .orderBy(asc(messages.seq))

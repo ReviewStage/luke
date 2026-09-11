@@ -5,6 +5,7 @@ import {
   type ConversationEventsAnswer,
   type ConversationMessagesAnswer,
   type ConversationReadMessage,
+  changesAnswerSchema,
   conversationEventsAnswerSchema,
   conversationMessagesAnswerSchema,
   HOSTED_API_ERROR,
@@ -32,7 +33,16 @@ import {
 } from "@sidecar/wire";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND, conversations, events, messages, turns } from "../server/db/schema";
+import {
+  CONVERSATION_KIND,
+  conversations,
+  events,
+  messages,
+  providerCursors,
+  turns,
+} from "../server/db/schema";
+import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { handleChanges } from "../server/hosted/change-signal";
 import {
   handleBrainTurns,
   handleConversationEvents,
@@ -88,13 +98,19 @@ function toolPart(
   } as unknown as MessageParts[number];
 }
 
+/** A conversation opened an hour before the fixture's rows, as a main stands before anything is written under it. */
 async function insertConversation(
   userId: string,
   row: Partial<typeof conversations.$inferInsert> = {},
 ): Promise<string> {
   const [inserted] = await database.db
     .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN, ...row })
+    .values({
+      userId,
+      kind: CONVERSATION_KIND.MAIN,
+      createdAt: new Date(NOW - 3_600_000),
+      ...row,
+    })
     .returning({ id: conversations.id });
   assert.ok(inserted);
   return inserted.id;
@@ -623,6 +639,12 @@ test("a cleared main is absent from the next read: its groups leave the device, 
     answer.conversations.map((conversation) => conversation.id).sort(),
     [opened, observed].sort(),
   );
+  const mainEntry = answer.conversations.find((conversation) => conversation.id === opened);
+  assert.equal(
+    mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt,
+    NOW + 60_000,
+  );
+  // The device still holds the observed group it read before the Clear; the client's own rule drops rows older than the new main.
   assert.deepEqual([...device.groups.keys()], [ids.roster]);
   assert.deepEqual(
     sequenceReadCursorSchema
@@ -641,10 +663,107 @@ test("a cleared main is absent from the next read: its groups leave the device, 
 
   const fresh = new Device(userId, 200);
   await fresh.catchUp();
+  assert.deepEqual(fresh.ordered(), []);
   assert.deepEqual(
-    fresh.ordered().map(([turnId]) => turnId),
-    [ids.roster],
+    sequenceReadCursorSchema
+      .parse(fresh.cursor ?? "")
+      ?.positions.map((position) => [position.conversationId, position.seq])
+      .sort(),
+    [
+      [opened, 0],
+      [observed, 3],
+    ].sort(),
   );
+});
+
+test("a Clear empties the thread of observed rows from before the new main and keeps the ones after it, and the observed conversation itself stands untouched", async () => {
+  const userId = await database.createUser();
+  const { observed, turns: ids } = await populate(userId);
+  await database.db.insert(providerCursors).values({
+    userId,
+    providerId: SESSION.providerId,
+    providerSessionId: SESSION.providerSessionId,
+    cursor: "msg_0000000000000042",
+  });
+  const before = {
+    conversation: await database.db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, observed)),
+    messages: await database.db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, observed)),
+    cursors: await database.db
+      .select()
+      .from(providerCursors)
+      .where(eq(providerCursors.userId, userId)),
+  };
+  assert.equal(before.messages.length, 3);
+
+  const clearedAt = NOW + 60_000;
+  const { opened } = await database.store.main.clear(userId, new Date(clearedAt));
+  const laterTurn = await insertTurn(userId, observed, {
+    origin: TURN_ORIGIN.ROSTER_DIFF,
+    queuedAt: new Date(clearedAt + 10_000),
+  });
+  const laterAnnounce = await insertMessage(userId, observed, 4, {
+    turnId: laterTurn,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    createdAt: new Date(clearedAt + 12_000),
+    parts: [toolPart("announce", "call_9a0000000000000001", { briefing: "The session finished." })],
+  });
+
+  const fresh = new Device(userId, 200);
+  await fresh.catchUp();
+  assert.deepEqual(fresh.ordered(), [[laterTurn, laterAnnounce]]);
+  assert.equal(fresh.groups.has(ids.roster), false);
+  const mainEntry = (await fresh.poll()).conversations.find((c) => c.id === opened);
+  assert.equal(mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt, clearedAt);
+
+  const heads = await handleChanges({
+    request: new Request("https://luke.test/api/changes", {
+      method: "POST",
+      headers: { authorization: "Bearer token-1", "content-type": "application/json" },
+      body: JSON.stringify({ deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7" }),
+    }),
+    resolveUserId: async () => userId,
+    store: database.store,
+    touchDevice: async () => false,
+    now: () => NOW,
+  });
+  const head = changesAnswerSchema.parse(
+    // SAFETY: the response body is the route's own JSON; the schema read is the validation.
+    (await heads.json()) as UnparsedWireValue,
+  );
+  assert.equal(head?.messages, fresh.cursor);
+
+  const after = {
+    conversation: await database.db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, observed)),
+    messages: await database.db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, observed)),
+    cursors: await database.db
+      .select()
+      .from(providerCursors)
+      .where(eq(providerCursors.userId, userId)),
+  };
+  assert.equal(after.conversation[0]?.deletedAt, null);
+  assert.deepEqual(after.cursors, before.cursors);
+  assert.deepEqual(
+    after.messages.filter((row) => row.seq <= 3),
+    before.messages,
+  );
+  assert.equal(after.messages.length, 4);
+  assert.equal(after.conversation[0]?.nextMessageSeq, 5);
+  const whole = await database.store.messages.list(userId, observed, CATALOG_TOOL_SET);
+  assert.equal(whole.ok, true);
+  assert.deepEqual(whole.ok ? whole.value.map((record) => record.seq) : [], [1, 2, 3, 4]);
 });
 
 test("a row the catalog cannot read refuses the page whole, naming the row, whether the tool is unregistered or its input refused", async () => {
