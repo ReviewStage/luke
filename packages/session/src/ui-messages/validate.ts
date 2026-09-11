@@ -1,6 +1,7 @@
 import {
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
+  effectSchema,
   isRecord,
   isWireString,
   MESSAGE_ROLE,
@@ -14,6 +15,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
+import { readEither, SchemaRefusalError, toSchemaRead } from "@sidecar/wire/effect";
 import {
   safeValidateUIMessages,
   type ToolSet,
@@ -22,6 +24,7 @@ import {
   type UIMessagePart,
   type UITools,
 } from "ai";
+import { Either } from "effect";
 import { isStoredToolPart, toolPartName } from "./tool-parts.js";
 
 /**
@@ -32,7 +35,15 @@ import { isStoredToolPart, toolPartName } from "./tool-parts.js";
  * SDK's own statement of it, not a second one kept here. What this wrapper
  * adds is what the SDK leaves to its caller: the metadata schema for each
  * role, the refusal of a tool name the catalog did not register, and the
- * refusal of a tool state a stored row never carries.
+ * refusal of a tool state a stored row never carries. The SDK's own
+ * `metadataSchema` option reads one schema for every row regardless of its
+ * role, so it cannot stand in for a check that a user row and an assistant
+ * row answer to different shapes; the role dispatch below reads each row's
+ * metadata against the Effect schema the wire vocabulary's
+ * `USER_MESSAGE_METADATA_STANDARD_SCHEMA` and
+ * `ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA` twins are themselves built
+ * from, through `effectSchema` and `readEither`, so the same declaration
+ * backs both the SDK-facing Standard Schema and this reader.
  */
 export type StoredUIMessage =
   | StoredMessageOf<typeof MESSAGE_ROLE.USER, UserMessageMetadata>
@@ -61,8 +72,25 @@ type ValidationOptions = Parameters<typeof safeValidateUIMessages<ValidatedMessa
  */
 const DYNAMIC_TOOL_PART_TYPE = "dynamic-tool";
 
-function refuse(refusal: SchemaRefusal, path: SchemaPath): SchemaRead<never> {
-  return { ok: false, refusal, path };
+const readUserMetadata = readEither(effectSchema(USER_MESSAGE_METADATA));
+const readAssistantMetadata = readEither(effectSchema(ASSISTANT_MESSAGE_METADATA));
+
+function refuse(
+  refusal: SchemaRefusal,
+  path: SchemaPath,
+): Either.Either<never, SchemaRefusalError> {
+  return Either.left(new SchemaRefusalError({ refusal, path }));
+}
+
+/** A metadata-shaped refusal read at the row's `metadata` field, rather than at the metadata value's own root. */
+function underMetadata<A>(
+  read: Either.Either<A, SchemaRefusalError>,
+): Either.Either<A, SchemaRefusalError> {
+  return Either.mapLeft(
+    read,
+    (error) =>
+      new SchemaRefusalError({ refusal: error.refusal, path: ["metadata", ...error.path] }),
+  );
 }
 
 /** The first tool part, as the rows arrived, whose name the registry does not hold. */
@@ -98,25 +126,35 @@ function refusedPart(
 }
 
 /** A validated row typed by its role, its metadata read under that role's schema. */
-function readStoredMessage(message: ValidatedMessage): SchemaRead<StoredUIMessage> {
+function readStoredMessage(
+  message: ValidatedMessage,
+): Either.Either<StoredUIMessage, SchemaRefusalError> {
   const part = refusedPart(message.parts);
   if (part) return refuse(SCHEMA_REFUSAL.MALFORMED, part);
   const { id, parts } = message;
   const metadata = unparsedWire(message.metadata);
   switch (message.role) {
     case MESSAGE_ROLE.USER: {
-      const read = USER_MESSAGE_METADATA.read(metadata);
-      if (!read.ok) return refuse(read.refusal, ["metadata", ...read.path]);
-      return { ok: true, value: { id, role: message.role, parts, metadata: read.value } };
+      const role = message.role;
+      return Either.map(underMetadata(readUserMetadata(metadata)), (value) => ({
+        id,
+        role,
+        parts,
+        metadata: value,
+      }));
     }
     case MESSAGE_ROLE.ASSISTANT: {
-      const read = ASSISTANT_MESSAGE_METADATA.read(metadata);
-      if (!read.ok) return refuse(read.refusal, ["metadata", ...read.path]);
-      return { ok: true, value: { id, role: message.role, parts, metadata: read.value } };
+      const role = message.role;
+      return Either.map(underMetadata(readAssistantMetadata(metadata)), (value) => ({
+        id,
+        role,
+        parts,
+        metadata: value,
+      }));
     }
     case MESSAGE_ROLE.SYSTEM:
       if (metadata !== undefined) return refuse(SCHEMA_REFUSAL.MALFORMED, ["metadata"]);
-      return { ok: true, value: { id, role: message.role, parts } };
+      return Either.right({ id, role: message.role, parts });
   }
 }
 
@@ -124,18 +162,18 @@ function readStoredMessage(message: ValidatedMessage): SchemaRead<StoredUIMessag
  * Reads stored rows back under the vocabulary: the SDK's own structural
  * validation and the registered tools' schemas, then this build's metadata by
  * role and its tool-state set. The registry is the catalog's `tool()`
- * declarations keyed by the name a part spells. Nothing here throws at a
- * value; a refusal is the same word and path a wire schema answers with, so a
- * store can tell a malformed row from one naming a tool this build no longer
- * registers. A conversation with no rows yet reads as no messages: the SDK
- * refuses an empty array, and an empty conversation is not a malformed one.
+ * declarations keyed by the name a part spells. A refusal is the same word
+ * and path a wire schema answers with, so a store can tell a malformed row
+ * from one naming a tool this build no longer registers. A conversation with
+ * no rows yet reads as no messages: the SDK refuses an empty array, and an
+ * empty conversation is not a malformed one.
  */
-export async function readStoredUIMessages(
+export async function readStoredUIMessagesEither(
   messages: UnparsedWireValue,
   tools: ToolSet,
-): Promise<SchemaRead<StoredUIMessage[]>> {
+): Promise<Either.Either<StoredUIMessage[], SchemaRefusalError>> {
   if (!Array.isArray(messages)) return refuse(SCHEMA_REFUSAL.MALFORMED, []);
-  if (messages.length === 0) return { ok: true, value: [] };
+  if (messages.length === 0) return Either.right([]);
   const unregistered = unregisteredToolPart(messages, tools);
   if (unregistered) return refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregistered);
   const validated = await safeValidateUIMessages<ValidatedMessage>({
@@ -149,8 +187,23 @@ export async function readStoredUIMessages(
   const stored: StoredUIMessage[] = [];
   for (const [messageIndex, message] of validated.data.entries()) {
     const read = readStoredMessage(message);
-    if (!read.ok) return refuse(read.refusal, [messageIndex, ...read.path]);
-    stored.push(read.value);
+    if (Either.isLeft(read)) {
+      return Either.left(
+        new SchemaRefusalError({
+          refusal: read.left.refusal,
+          path: [messageIndex, ...read.left.path],
+        }),
+      );
+    }
+    stored.push(read.right);
   }
-  return { ok: true, value: stored };
+  return Either.right(stored);
+}
+
+/** The strangler-shim entry point every store caller still holds a `SchemaRead` for. */
+export async function readStoredUIMessages(
+  messages: UnparsedWireValue,
+  tools: ToolSet,
+): Promise<SchemaRead<StoredUIMessage[]>> {
+  return toSchemaRead(await readStoredUIMessagesEither(messages, tools));
 }
