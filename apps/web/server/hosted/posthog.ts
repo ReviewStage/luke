@@ -13,8 +13,16 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
+import type * as HttpClient from "@effect/platform/HttpClient";
 import { type CloudFetch, HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
-import { callAnswered, createAccountCall, NO_CREDENTIAL } from "../core.js";
+import { Effect } from "effect";
+import {
+  accountCall,
+  callAnswered,
+  createAccountCall,
+  fixedBearer,
+  NO_CREDENTIAL,
+} from "../core.js";
 
 export const POSTHOG_ENVIRONMENT = {
   PROJECT_API_KEY: "POSTHOG_PROJECT_API_KEY",
@@ -109,34 +117,56 @@ export async function postPosthogBatch(
   return callAnswered(answer) ? answer.response : undefined;
 }
 
-export interface PosthogForgetOptions extends PosthogUpstreamOptions {
+export interface PosthogForgetOptions {
+  host?: string;
+  timeoutMs?: number;
   personalApiKey: string;
   projectId: string;
+}
+
+/** Why an erasure did not go through: the upstream never answered, or answered with a status that names no key. */
+export class PosthogForgetError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "PosthogForgetError";
+  }
 }
 
 /**
  * Asks the processor to erase the person behind one distinct id, and the
  * events recorded against them. The documented bulk-delete endpoint takes the
  * distinct ids in its body and `delete_events` in its query, and queues the
- * event deletion rather than performing it — so a resolved promise means the
- * erasure was accepted, never that it has already happened.
+ * event deletion rather than performing it — so a settled effect means the
+ * erasure was accepted, never that it has already happened. The request runs
+ * over the ambient `HttpClient`.
  */
-export async function forgetPosthogPerson(
+export function forgetPosthogPersonEffect(
   distinctId: string,
   options: PosthogForgetOptions,
-): Promise<void> {
-  const send = options.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
-  const host = resolvePosthogApiHost(options.host);
-  const url = `${host}/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/?delete_events=true`;
-  const response = await send(url, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${options.personalApiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ distinct_ids: [distinctId] }),
-    signal: AbortSignal.timeout(options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS),
+): Effect.Effect<void, PosthogForgetError, HttpClient.HttpClient> {
+  const call = accountCall({
+    baseUrl: resolvePosthogApiHost(options.host),
+    credential: fixedBearer(options.personalApiKey),
+    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
   });
-  // The status alone diagnoses the refusal; the body could name the key.
-  if (!response.ok) throw new Error(`Analytics erasure refused with status ${response.status}`);
+  const path = `/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/?delete_events=true`;
+  return Effect.flatMap(
+    call.send({
+      method: HTTP_METHOD.POST,
+      path,
+      body: JSON.stringify({ distinct_ids: [distinctId] }),
+    }),
+    (answer) => {
+      if (!callAnswered(answer)) {
+        return Effect.fail(
+          new PosthogForgetError(`network fault: ${answer.errorName ?? "unknown"}`),
+        );
+      }
+      // The status alone diagnoses the refusal; the body could name the key.
+      if (!answer.response.ok) {
+        return Effect.fail(new PosthogForgetError(`refused with status ${answer.response.status}`));
+      }
+      return Effect.void;
+    },
+  );
 }

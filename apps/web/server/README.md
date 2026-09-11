@@ -259,8 +259,10 @@ the one place that hands the group a real user table and a real preferences
 store, so both `api/account/delete.ts` and `api/account/preferences.ts` build
 the same group from the same wiring; the analytics erasure key and project are
 read from `HostedEnvironment` instead, the way the brain group's own key and
-model override are, and only the deletion's own transport stays an injectable
-seam. `server/hosted/account-delete.ts` and `server/hosted/account-preferences.ts`
+model override are, and the erasure call itself runs over the ambient
+`HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
+carries one — a test provides its own fake `HttpClient` layer instead.
+`server/hosted/account-delete.ts` and `server/hosted/account-preferences.ts`
 keep the promise-shaped handlers they always answered with, now read only by
 their own tests and as the byte-identity oracle `tests/account-app.test.ts`
 checks the group against, with the environment handed in directly the way

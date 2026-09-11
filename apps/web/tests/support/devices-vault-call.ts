@@ -32,6 +32,10 @@ export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
         posthogProjectId: undefined,
         posthogApiHost: undefined,
         providerKeyEncryptionSecret: secret === undefined ? undefined : Redacted.make(secret),
+        posthogProjectApiKey: undefined,
+        posthogIngestHost: undefined,
+        cronSecret: undefined,
+        apnsCredentials: undefined,
       }),
     ),
   );

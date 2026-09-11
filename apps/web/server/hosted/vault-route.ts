@@ -1,3 +1,4 @@
+import { Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import { getDatabase } from "../db/index.js";
@@ -7,7 +8,8 @@ import { runWeb } from "../runtime.js";
 import type { UserInfoEndpoint } from "./bearer.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "./bearer.js";
 import { deviceSeams } from "./device-store.js";
-import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
+import { payloadKeyRing } from "./encryption.js";
+import { HostedEnvironment } from "./environment.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
 import {
   deleteVaultKey,
@@ -79,14 +81,24 @@ export function resolveHostedUserId(request: Request): Promise<string | undefine
   return hostedUserId(request, hostedVaultUserInfo);
 }
 
+/** The provider key vault's own secret, read once with the deployment's services rather than at each invocation. */
+export async function hostedEncryptionSecret(): Promise<string | undefined> {
+  const environment = await runWeb(HostedEnvironment);
+  return environment.providerKeyEncryptionSecret === undefined
+    ? undefined
+    : Redacted.value(environment.providerKeyEncryptionSecret);
+}
+
 /**
  * The same seams, exported for a route built as an `HttpApi` group instead of
  * through `hostedVaultRoute` below: the group reads them directly rather than
- * rebuilding the queries they close over.
+ * rebuilding the queries they close over. `encryptionSecret` is not among
+ * them: it is read fresh from `HostedEnvironment` per request, by
+ * {@link hostedVaultRoute} and by the promise-shaped handlers that still
+ * spread this object directly.
  */
 export const hostedVaultSeams = {
   resolveUserId: resolveHostedUserId,
-  encryptionSecret: process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET],
   readKey: (userId: string, providerId: string) => runWeb(readVaultKey(userId, providerId)),
   readVaultKeys: (userId: string) => runWeb(readStoredVaultKeys(userId)),
   listKeys: (userId: string) => runWeb(listVaultKeys(userId)),
@@ -94,14 +106,17 @@ export const hostedVaultSeams = {
     runWeb(storeVaultKey(userId, providerId, ciphertext)),
   deleteKey: (userId: string, providerId: string) => runWeb(deleteVaultKey(userId, providerId)),
   store: storeFor,
-} satisfies Omit<HostedVaultRoute, "request">;
+} satisfies Omit<HostedVaultRoute, "request" | "encryptionSecret">;
 
 /**
  * One hosted route over the deployment's seams. The handler is what the
  * endpoint is; everything above it is the same for all of them.
  */
 export function hostedVaultRoute(handler: (route: HostedVaultRoute) => Promise<Response>): Route {
-  return { fetch: (request) => handler({ ...hostedVaultSeams, request }) };
+  return {
+    fetch: async (request) =>
+      handler({ ...hostedVaultSeams, encryptionSecret: await hostedEncryptionSecret(), request }),
+  };
 }
 
 /** The devices-and-vault group's real seams: the same account store the `hostedVaultRoute` seams other, still-promise-shaped hosted routes read. */

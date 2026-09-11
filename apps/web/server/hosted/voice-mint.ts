@@ -1,5 +1,6 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { Effect } from "effect";
 import {
-  type CloudFetch,
   HOSTED_WS_BASE_URL,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
@@ -15,7 +16,7 @@ import {
   realtimeCredentialIsUsable,
   type UnparsedWireValue,
 } from "../core.js";
-import { HOSTED_OPENAI_DEFAULTS, type OpenAiPostBody, postOpenAi } from "./openai.js";
+import { HOSTED_OPENAI_DEFAULTS, type OpenAiPostBody, postOpenAiEffect } from "./openai.js";
 
 /**
  * Mints one ephemeral Realtime credential on Luke's own key for a signed-in
@@ -75,7 +76,6 @@ export interface RealtimeConnectionMintOptions {
   preferences: VoiceMintPreferences;
   /** Builds the session document this endpoint mints with. */
   clientSecretRequest: (options: RealtimeSessionOptions) => OpenAiPostBody;
-  fetch?: CloudFetch | undefined;
   now?: (() => number) | undefined;
   timeoutMs?: number | undefined;
 }
@@ -95,42 +95,44 @@ export type RealtimeConnectionMint =
  * hands back either a usable connection aimed at OpenAI's canonical calls
  * endpoint or the refusal the handler answers with.
  */
-export async function mintRealtimeConnection(
+export function mintRealtimeConnection(
   options: RealtimeConnectionMintOptions,
-): Promise<RealtimeConnectionMint> {
+): Effect.Effect<RealtimeConnectionMint, never, HttpClient.HttpClient> {
   const sessionOptions: RealtimeSessionOptions = {};
   if (options.model) sessionOptions.model = options.model;
   if (options.preferences.voice) sessionOptions.voice = options.preferences.voice;
   if (options.preferences.speed) sessionOptions.speed = options.preferences.speed;
 
-  const response = await postOpenAi(
-    REALTIME_CLIENT_SECRETS_PATH,
-    options.clientSecretRequest(sessionOptions),
-    { apiKey: options.apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
-  );
-  if (!response) return { failure: {} };
-  // Status alone diagnoses the upstream without carrying its body onward.
-  if (!response.ok) return { failure: { upstreamStatus: response.status } };
+  return Effect.gen(function* () {
+    const response = yield* postOpenAiEffect(
+      REALTIME_CLIENT_SECRETS_PATH,
+      options.clientSecretRequest(sessionOptions),
+      { apiKey: options.apiKey, timeoutMs: options.timeoutMs },
+    );
+    if (!response) return { failure: {} };
+    // Status alone diagnoses the upstream without carrying its body onward.
+    if (!response.ok) return { failure: { upstreamStatus: response.status } };
 
-  const payload: unknown = await response.json().catch(() => undefined);
-  // A payload that omits its model still labels the credential with the model
-  // it was actually minted for.
-  const credential =
-    payload === undefined
-      ? undefined
-      : realtimeCredentialFromResponse(
-          // SAFETY: response.json returns a runtime value; realtimeCredentialFromResponse validates the wire contract.
-          payload as UnparsedWireValue,
-          options.model ?? REALTIME_DEFAULTS.MODEL,
-        );
-  const now = options.now ?? Date.now;
-  if (!credential || !realtimeCredentialIsUsable(credential, now())) return { failure: {} };
+    const payload: unknown = yield* Effect.promise(() => response.json().catch(() => undefined));
+    // A payload that omits its model still labels the credential with the model
+    // it was actually minted for.
+    const credential =
+      payload === undefined
+        ? undefined
+        : realtimeCredentialFromResponse(
+            // SAFETY: response.json returns a runtime value; realtimeCredentialFromResponse validates the wire contract.
+            payload as UnparsedWireValue,
+            options.model ?? REALTIME_DEFAULTS.MODEL,
+          );
+    const now = options.now ?? Date.now;
+    if (!credential || !realtimeCredentialIsUsable(credential, now())) return { failure: {} };
 
-  return {
-    connection: {
-      ...credential,
-      callsUrl: `${HOSTED_OPENAI_DEFAULTS.BASE_URL}${REALTIME_CALLS_PATH}`,
-      wsUrl: `${HOSTED_WS_BASE_URL}?model=${credential.model}`,
-    },
-  };
+    return {
+      connection: {
+        ...credential,
+        callsUrl: `${HOSTED_OPENAI_DEFAULTS.BASE_URL}${REALTIME_CALLS_PATH}`,
+        wsUrl: `${HOSTED_WS_BASE_URL}?model=${credential.model}`,
+      },
+    };
+  });
 }

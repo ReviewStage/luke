@@ -1,10 +1,10 @@
 import { getDatabase } from "../db/index.js";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
-import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
+import { payloadKeyRing } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
-import { resolveHostedUserId } from "./vault-route.js";
+import { hostedEncryptionSecret, resolveHostedUserId } from "./vault-route.js";
 
 /**
  * A hosted route over the conversation store: the same bearer resolution
@@ -22,9 +22,9 @@ export interface HostedStoreRoute {
 
 let composed: HostedStore | undefined;
 
-function deploymentStore(): HostedStore | undefined {
+async function deploymentStore(): Promise<HostedStore | undefined> {
   if (composed) return composed;
-  const secret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET]?.trim();
+  const secret = await hostedEncryptionSecret();
   if (!secret) return undefined;
   composed = hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret), run: runWeb });
   return composed;
@@ -33,7 +33,7 @@ function deploymentStore(): HostedStore | undefined {
 export function hostedStoreRoute(handler: (route: HostedStoreRoute) => Promise<Response>): Route {
   return {
     fetch: async (request) => {
-      const store = deploymentStore();
+      const store = await deploymentStore();
       if (!store) {
         return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
       }

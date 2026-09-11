@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { it } from "@effect/vitest";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import {
-  forgetPosthogPerson,
+  forgetPosthogPersonEffect,
   POSTHOG_DEFAULTS,
   type PosthogForgetOptions,
-} from "../server/hosted/posthog";
+} from "../server/hosted/posthog.js";
 
 const PERSONAL_KEY = "phx_personal";
 const PROJECT_ID = "12345";
@@ -34,53 +36,64 @@ function options(overrides: Partial<PosthogForgetOptions> = {}): PosthogForgetOp
   return { personalApiKey: PERSONAL_KEY, projectId: PROJECT_ID, ...overrides };
 }
 
-test("erasure asks the documented bulk delete for the one person and their events", async () => {
-  const posthog = upstream();
-  await forgetPosthogPerson("user-1", options({ fetch: posthog.fetch }));
+it.effect("erasure asks the documented bulk delete for the one person and their events", () =>
+  Effect.gen(function* () {
+    const posthog = upstream();
+    yield* forgetPosthogPersonEffect("user-1", options()).pipe(
+      Effect.provide(layerFromCloudFetch(posthog.fetch)),
+    );
 
-  const { url, init } = onlySent(posthog.sent);
-  assert.equal(
-    url,
-    `${POSTHOG_DEFAULTS.API_HOST}/api/projects/${PROJECT_ID}/persons/bulk_delete/?delete_events=true`,
-  );
-  assert.equal(init.method, "POST");
-  const headers = new Headers(init.headers);
-  assert.equal(headers.get("authorization"), `Bearer ${PERSONAL_KEY}`);
-  assert.equal(headers.get("content-type"), "application/json");
-  assert.deepEqual(JSON.parse(String(init.body)), { distinct_ids: ["user-1"] });
-});
+    const { url, init } = onlySent(posthog.sent);
+    assert.equal(
+      url,
+      `${POSTHOG_DEFAULTS.API_HOST}/api/projects/${PROJECT_ID}/persons/bulk_delete/?delete_events=true`,
+    );
+    assert.equal(init.method, "POST");
+    const headers = new Headers(init.headers);
+    assert.equal(headers.get("authorization"), `Bearer ${PERSONAL_KEY}`);
+    assert.equal(headers.get("content-type"), "application/json");
+    assert.deepEqual(JSON.parse(String(init.body)), { distinct_ids: ["user-1"] });
+  }),
+);
 
-test("a configured private API host is used as given, without its trailing slash", async () => {
-  const posthog = upstream();
-  await forgetPosthogPerson(
-    "user-1",
-    options({ host: "https://eu.posthog.com/", fetch: posthog.fetch }),
-  );
+it.effect("a configured private API host is used as given, without its trailing slash", () =>
+  Effect.gen(function* () {
+    const posthog = upstream();
+    yield* forgetPosthogPersonEffect("user-1", options({ host: "https://eu.posthog.com/" })).pipe(
+      Effect.provide(layerFromCloudFetch(posthog.fetch)),
+    );
 
-  const { url } = onlySent(posthog.sent);
-  assert.equal(
-    url,
-    `https://eu.posthog.com/api/projects/${PROJECT_ID}/persons/bulk_delete/?delete_events=true`,
-  );
-});
+    const { url } = onlySent(posthog.sent);
+    assert.equal(
+      url,
+      `https://eu.posthog.com/api/projects/${PROJECT_ID}/persons/bulk_delete/?delete_events=true`,
+    );
+  }),
+);
 
-test("a refusal throws the status alone, never anything that could name the key", async () => {
-  const posthog = upstream(401);
-  await assert.rejects(forgetPosthogPerson("user-1", options({ fetch: posthog.fetch })), {
-    message: "Analytics erasure refused with status 401",
-  });
-});
+it.effect("a refusal fails with the status alone, never anything that could name the key", () =>
+  Effect.gen(function* () {
+    const posthog = upstream(401);
+    const error = yield* forgetPosthogPersonEffect("user-1", options()).pipe(
+      Effect.provide(layerFromCloudFetch(posthog.fetch)),
+      Effect.flip,
+    );
 
-test("a network fault reaches the caller, which owns deciding the delete proceeds", async () => {
-  await assert.rejects(
-    forgetPosthogPerson(
-      "user-1",
-      options({
-        fetch: async () => {
+    assert.match(error.message, /refused with status 401/);
+  }),
+);
+
+it.effect("a network fault reaches the caller, which owns deciding the delete proceeds", () =>
+  Effect.gen(function* () {
+    const error = yield* forgetPosthogPersonEffect("user-1", options()).pipe(
+      Effect.provide(
+        layerFromCloudFetch(async () => {
           throw new Error("processor unreachable");
-        },
-      }),
-    ),
-    /processor unreachable/,
-  );
-});
+        }),
+      ),
+      Effect.flip,
+    );
+
+    assert.match(error.message, /network fault/);
+  }),
+);
