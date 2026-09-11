@@ -391,3 +391,36 @@ test("a Clear that opened a new main takes the observed crossing rows from befor
   sync.applyMessages(page([], "c4", [NEW_MAIN, OBSERVED], clearedAt));
   assert.equal(sync.revision, settled);
 });
+
+test("a Clear the service confirmed empties the picture from the answer alone: main's groups go, and observed rows from before the new main opened go with them", () => {
+  const sync = new ConversationViewSync();
+  const observedGroup = (id: string, at: number): ReadTurnGroup => ({
+    turnId: id,
+    conversationId: OBSERVED,
+    source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
+    messages: [announcement(Number(id.slice(-2)), Number(id.slice(-2)), at, false)],
+  });
+  sync.applyMessages(
+    page(
+      [
+        mainGroup(turnId(1), [ask(1, 1, "before", NOW)]),
+        observedGroup(turnId(11), NOW + 500),
+        observedGroup(turnId(12), NOW + 20_000),
+      ],
+      "c1",
+      [MAIN, OBSERVED],
+    ),
+  );
+  const before = sync.revision;
+  sync.applyClear(NOW + 10_000);
+  assert.ok(sync.revision > before);
+  assert.deepEqual(
+    sync.snapshot().groups.map((group) => group.turnId),
+    [turnId(12)],
+  );
+  // The cursors stand until the read that follows moves them.
+  assert.equal(sync.cursors().messages, "c1");
+  const cleared = sync.revision;
+  sync.applyClear(NOW + 10_000);
+  assert.equal(sync.revision, cleared);
+});

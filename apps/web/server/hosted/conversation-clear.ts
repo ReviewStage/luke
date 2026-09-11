@@ -55,9 +55,11 @@ export async function handleConversationClear(
   if (clearRateLimited(userId, now())) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
-  const outcome = await store.main.clear(userId, new Date(now()));
+  const openedAt = now();
+  const outcome = await store.main.clear(userId, new Date(openedAt));
   const answer: ConversationClearAnswer = {
     opened: outcome.opened,
+    openedAt,
     cleared: outcome.cleared.length,
   };
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);

@@ -80,7 +80,7 @@ interface FakeClient extends ConversationReadsClient, ConversationHeadsClient {
   messagesAnswer: ConversationReadResult<ConversationMessagesAnswer>;
   /** A gate a messages read waits at before answering, so a test can hold a poll open. */
   messagesGate: Promise<void>;
-  clearAnswer: { opened: string; cleared: number } | undefined;
+  clearAnswer: { opened: string; openedAt: number; cleared: number } | undefined;
 }
 
 function fakeClient(): FakeClient {
@@ -89,7 +89,7 @@ function fakeClient(): FakeClient {
     changesAnswer: undefined,
     messagesAnswer: ok(messagesAnswer("hello")),
     messagesGate: Promise.resolve(),
-    clearAnswer: { opened: "3c000000-0000-4000-8000-000000000009", cleared: 1 },
+    clearAnswer: { opened: "3c000000-0000-4000-8000-000000000009", openedAt: NOW + 1, cleared: 1 },
     poll: async (request: ChangesRequest) => {
       client.calls.push(`changes:${request.deviceId}`);
       return client.changesAnswer;
@@ -280,6 +280,16 @@ test("a Clear answers only after a poll that began after it has published, even 
   release();
   await held;
   await clearing;
+});
+
+test("a Clear the service took empties the picture even when the read after it does not land", async () => {
+  const { composer, client, views } = harness();
+  await composer.loop.refresh();
+  assert.equal(views().at(-1)?.groups.length, 1);
+  client.messagesAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
+  assert.equal(await clear(composer), true);
+  assert.deepEqual(composer.snapshot().groups, []);
+  assert.deepEqual(views().at(-1)?.groups, []);
 });
 
 test("a run that sends nothing polls nothing and is settled from the start, and a closed gate refuses Clear", async () => {

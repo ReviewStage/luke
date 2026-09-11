@@ -215,6 +215,24 @@ export class ConversationViewSync {
     if (moved) this.#revision += 1;
   }
 
+  /**
+   * Takes a Clear the service confirmed to this picture from the answer
+   * alone: every group of the main — the one standing was the one stamped,
+   * whatever its id — and every observed group from before the new main
+   * opened, exactly what the next read would no longer list. The read still
+   * follows to move the cursors; the screen does not wait on it landing.
+   */
+  applyClear(openedAt: number): void {
+    let moved = false;
+    for (const [turnId, group] of this.#groups) {
+      if (group.source.kind !== CONVERSATION_VIEW_SOURCE.MAIN) continue;
+      this.#groups.delete(turnId);
+      moved = true;
+    }
+    if (this.#dropObservedBefore(openedAt)) moved = true;
+    if (moved) this.#revision += 1;
+  }
+
   /** The service named a row it could not read back; the thread stands as last read and says so. */
   markUnreadable(row: UnreadableRow): void {
     if (

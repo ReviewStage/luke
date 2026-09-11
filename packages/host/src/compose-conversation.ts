@@ -264,10 +264,14 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       if (!gate()) return gatewayOk({ cleared: false });
       const answer = await client.clear();
       if (answer === undefined) return gatewayOk({ cleared: false });
-      // The next read lists the main the Clear opened and not the one it
-      // stamped, and the picture drops what the list no longer names; a pass
-      // that began after the Clear landed is what empties this Mac's thread
-      // before the answer says it did.
+      // The service's own answer is what empties this Mac's thread: the
+      // picture drops the stamped main's groups and the observed rows from
+      // before the new main opened, and every client is told, before any read
+      // is waited on — a read that fails to land cannot leave the old thread
+      // standing behind an answer that said it was cleared. The pass that
+      // follows moves the cursors onto the new main.
+      sync.applyClear(answer.openedAt);
+      publish();
       await pollAfter();
       return gatewayOk({ cleared: true });
     },

@@ -88,6 +88,7 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   assert.ok(answer);
   assert.equal(answer.cleared, 1);
   assert.notEqual(answer.opened, main);
+  assert.equal(answer.openedAt, NOW);
 
   const [stamped] = await database.db
     .select({ deletedAt: conversations.deletedAt })

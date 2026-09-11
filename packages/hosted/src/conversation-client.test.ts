@@ -134,11 +134,15 @@ test("Clear posts nothing but the bearer, and reads the main it opened", async (
   const { client, seen } = harness((request) => {
     const url = new URL(request.url);
     if (url.pathname === HOSTED_SERVICE_PATH.CONVERSATION_CLEAR) {
-      return json(200, { opened: OPENED, cleared: 2 });
+      return json(200, { opened: OPENED, openedAt: 1_757_505_600_000, cleared: 2 });
     }
     return json(404, { error: HOSTED_API_ERROR.NOT_FOUND });
   });
-  assert.deepEqual(await client.clear(), { opened: OPENED, cleared: 2 });
+  assert.deepEqual(await client.clear(), {
+    opened: OPENED,
+    openedAt: 1_757_505_600_000,
+    cleared: 2,
+  });
   assert.deepEqual(
     seen.map((request) => [request.method, new URL(request.url).pathname, request.body]),
     [["POST", HOSTED_SERVICE_PATH.CONVERSATION_CLEAR, undefined]],
