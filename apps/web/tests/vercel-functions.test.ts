@@ -3,7 +3,9 @@ import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { build } from "esbuild";
 import { test } from "vitest";
+import { bundlesReaching, functionBundlePlan } from "../server/function-bundles";
 import {
   FUNCTION_MAX_DURATION_SECONDS,
   functionConfigSource,
@@ -72,4 +74,19 @@ test("a nested stub's specifier resolves to its bundle under dist-functions/", (
     posix.resolve("/", posix.dirname(stubPath(route)), specifier),
     `/${FUNCTION_BUNDLE_DIRECTORY}/brain/v2/respond.js`,
   );
+});
+
+/**
+ * The eve package runs in eve's own service; a function bundle that imports
+ * it loads the brain host's whole graph at invocation, and the one time a
+ * shared module gained a value import reaching it, every function on
+ * production failed at load while every check stayed green. The bundles are
+ * built here as the build script builds them, unwritten, and the set of them
+ * reaching eve is asserted to be exactly none.
+ */
+test("no function bundle imports the eve package", { timeout: 60_000 }, async () => {
+  const plan = await functionBundlePlan(WEB);
+  const result = await build({ ...plan.options, write: false });
+  assert.equal(Object.keys(result.metafile.outputs).length, plan.entryPoints.length);
+  assert.deepEqual(bundlesReaching(result.metafile, "eve"), []);
 });

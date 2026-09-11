@@ -2,7 +2,7 @@ import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from
 import { text } from "../core.js";
 import { APNS_ENVIRONMENT, type ApnsCredentials, apnsCredentialsFromEnvironment } from "./apns.js";
 import { VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
-import { OBSERVATION_ENVIRONMENT } from "./observation-tick.js";
+import { OBSERVATION_ENVIRONMENT } from "./observation-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "./openai.js";
 import { POSTHOG_ENVIRONMENT } from "./posthog.js";
 

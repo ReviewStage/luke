@@ -7,7 +7,7 @@ import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../encryption.js";
-import { OBSERVATION_ENVIRONMENT } from "../observation-tick.js";
+import { OBSERVATION_ENVIRONMENT } from "../observation-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../openai.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
 import type { HostedStoreDatabase, HostedStoreRun } from "../store/database.js";

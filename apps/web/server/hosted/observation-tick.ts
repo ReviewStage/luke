@@ -6,6 +6,7 @@ import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
 } from "./http.js";
+import { OBSERVATION_TICK } from "./observation-bounds.js";
 import type { SpeechPushOutcome } from "./speech-push.js";
 import type { SpeechSweepOutcome } from "./store/speech.js";
 
@@ -22,41 +23,6 @@ import type { SpeechSweepOutcome } from "./store/speech.js";
  * decided, pushed to a phone by the speech push pass when no device is
  * placed to say it.
  */
-
-/** Where Vercel's scheduler calls, fixed here so the cron entry can be checked against it. */
-export const OBSERVATION_TICK_PATH = "/api/observation/tick";
-
-export const OBSERVATION_ENVIRONMENT = {
-  /** Vercel sends this as the bearer on every scheduled call once it is set. */
-  CRON_SECRET: "CRON_SECRET",
-} as const;
-
-export const OBSERVATION_TICK = {
-  /**
-   * How long one tick may spend before leaving the rest for the next. A batch
-   * starts only while a whole pass deadline still fits inside it, so the tick
-   * settles under the function's own cap even when its last batch spends
-   * every second a pass may.
-   */
-  BUDGET_MS: 50_000,
-  /**
-   * The longest one account's pass may run before the tick counts it failed
-   * and moves on: the adapter's whole 429 budget and a request deadline
-   * besides. The pass itself is not interrupted — a roster it still reads
-   * whole is written down if the function lives to see it — but the tick no
-   * longer waits on it, and the attempt the pass recorded at its start is
-   * what keeps the account from heading the next tick's order.
-   */
-  PASS_DEADLINE_MS: 25_000,
-  /** The function duration the tick's bundle declares; the budget leaves headroom under it. */
-  MAX_DURATION_SECONDS: 60,
-  /** The most accounts one tick lists; the least recently attempted come first, so nobody starves. */
-  MAX_ACCOUNTS: 200,
-  /** Accounts observed at once; each is a fan of provider requests of its own. */
-  CONCURRENCY: 4,
-  /** How recently an account must have been seen to be observed on the schedule. */
-  ACCOUNT_SEEN_WITHIN_MS: 7 * 24 * 60 * 60 * 1000,
-} as const;
 
 interface ObservedAccount {
   userId: string;

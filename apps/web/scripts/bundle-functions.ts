@@ -1,9 +1,8 @@
-import { readdir, readFile } from "node:fs/promises";
-import { builtinModules } from "node:module";
 import { join, relative } from "node:path";
 import { build } from "esbuild";
+import { functionBundlePlan, packageNameOf } from "../server/function-bundles.js";
 import { FUNCTION_MAX_DURATION_SECONDS, functionPath } from "../server/function-durations.js";
-import { FUNCTION_BUNDLE_DIRECTORY, stubDrift } from "../server/function-stubs.js";
+import { stubDrift } from "../server/function-stubs.js";
 
 /**
  * Bundles every route under `server/routes/` into a plain ESM file under
@@ -29,22 +28,6 @@ import { FUNCTION_BUNDLE_DIRECTORY, stubDrift } from "../server/function-stubs.j
  */
 const WEB = join(import.meta.dirname, "..");
 const ROUTES = join(WEB, "server", "routes");
-const BUNDLES = join(WEB, FUNCTION_BUNDLE_DIRECTORY);
-
-const WORKSPACE_PROTOCOL = "workspace:";
-
-// SAFETY: the file is this app's own package.json, read for its dependencies map alone.
-const manifest = JSON.parse(await readFile(join(WEB, "package.json"), "utf8")) as {
-  dependencies: Record<string, string>;
-};
-const externalDependencies = Object.entries(manifest.dependencies)
-  .filter(([, range]) => !range.startsWith(WORKSPACE_PROTOCOL))
-  .map(([name]) => name);
-const external = new Set([
-  ...externalDependencies,
-  ...builtinModules,
-  ...builtinModules.map((name) => `node:${name}`),
-]);
 
 const drift = await stubDrift({ web: WEB });
 if (drift.length > 0) {
@@ -55,32 +38,14 @@ if (drift.length > 0) {
   );
 }
 
-const entryPoints = (await readdir(ROUTES, { recursive: true }))
-  .filter((path) => path.endsWith(".ts"))
-  .map((path) => join(ROUTES, path));
-
-const result = await build({
-  entryPoints,
-  outbase: ROUTES,
-  outdir: BUNDLES,
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  target: "node24",
-  sourcemap: false,
-  metafile: true,
-  logLevel: "warning",
-  external: [...externalDependencies, ...externalDependencies.map((name) => `${name}/*`)],
-});
+const plan = await functionBundlePlan(WEB);
+const result = await build({ ...plan.options, write: true });
 
 const undeclared = new Set<string>();
 for (const input of Object.values(result.metafile.inputs)) {
   for (const imported of input.imports) {
     if (!imported.external) continue;
-    const packageName = imported.path.startsWith("@")
-      ? imported.path.split("/").slice(0, 2).join("/")
-      : (imported.path.split("/")[0] ?? imported.path);
-    if (!external.has(packageName)) undeclared.add(imported.path);
+    if (!plan.externalPackages.has(packageNameOf(imported.path))) undeclared.add(imported.path);
   }
 }
 if (undeclared.size > 0) {
