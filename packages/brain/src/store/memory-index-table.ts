@@ -1,5 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import * as Client from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
+import * as SqlSchema from "@effect/sql/SqlSchema";
 import {
   bm25RankToScore,
   buildFtsQuery,
@@ -33,8 +36,10 @@ import {
 } from "@sidecar/memory";
 import { DAILY_NOTES_DIRECTORY, WORKSPACE_FILE } from "@sidecar/runtime";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Effect, Option, Schema } from "effect";
 import type { StoreDatabase } from "./database.js";
 import type { NotebookEntry } from "./notebook-table.js";
+import { columnsDecoded } from "./rows.js";
 
 /**
  * The disposable search index over the notebook's Markdown files, in the
@@ -45,7 +50,9 @@ import type { NotebookEntry } from "./notebook-table.js";
  * and the embedding cache in one transaction; a search runs the lexical
  * rank in SQLite and the cosine similarity here on the worker, never on the
  * main thread; and a rebuild drops every derived row so the next scan
- * indexes everything again from the files alone.
+ * indexes everything again from the files alone. The scan and the read stay
+ * the synchronous file-system calls they always were; only the rows beside
+ * them move onto the client here.
  */
 
 const MEMORY_ROOT_FILES: readonly string[] = NOTEBOOK_ROOT_FILES;
@@ -133,19 +140,89 @@ function scanMemoryFiles(root: string): readonly ScannedFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-function listIndexedSources(database: StoreDatabase): readonly IndexedSourceRecord[] {
-  // SAFETY: the columns selected are the ones the row type names.
-  const rows = database
-    .prepare("SELECT path, source, hash, mtime, size FROM memory_index_sources ORDER BY path")
-    .all() as { path: string; source: string; hash: string; mtime: number; size: number }[];
-  return rows.map((row) => ({
+const IndexedSourceRow = Schema.Struct({
+  path: Schema.String,
+  source: Schema.String,
+  hash: Schema.String,
+  mtime: Schema.Number,
+  size: Schema.Number,
+});
+
+const indexedSourceRows = SqlSchema.findAll({
+  Request: Schema.Void,
+  Result: IndexedSourceRow,
+  execute: () =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) => sql`SELECT path, source, hash, mtime, size FROM memory_index_sources ORDER BY path`,
+    ),
+});
+
+const listIndexedSourcesEffect: Effect.Effect<
+  readonly IndexedSourceRecord[],
+  SqlError,
+  Client.SqlClient
+> = Effect.map(columnsDecoded(indexedSourceRows()), (rows) =>
+  rows.map((row) => ({
     path: row.path,
     source: MEMORY_SOURCE.MEMORY,
     hash: row.hash,
     mtimeMs: row.mtime,
     size: row.size,
-  }));
-}
+  })),
+);
+
+const vectorCountRow = SqlSchema.findOne({
+  Request: Schema.Struct({ filePath: Schema.String, model: Schema.String }),
+  Result: Schema.Struct({ count: Schema.Number }),
+  execute: ({ filePath, model }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT COUNT(*) AS count FROM memory_index_chunks
+            WHERE path = ${filePath} AND trim(text) <> '' AND (embedding = '' OR model <> ${model})`,
+    ),
+});
+
+/** Whether any indexed chunk of the path has no vector under the model given. */
+const lacksVectorsEffect = (
+  filePath: string,
+  identity: EmbeddingModelIdentity,
+): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
+  Effect.map(columnsDecoded(vectorCountRow({ filePath, model: identity.model })), (row) =>
+    Option.match(row, { onNone: () => false, onSome: ({ count }) => count > 0 }),
+  );
+
+const cachedEmbeddingRow = SqlSchema.findOne({
+  Request: Schema.Struct({ provider: Schema.String, model: Schema.String, hash: Schema.String }),
+  Result: Schema.Struct({ embedding: Schema.String }),
+  execute: ({ provider, model, hash }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT embedding FROM memory_embedding_cache
+            WHERE provider = ${provider} AND model = ${model} AND hash = ${hash}`,
+    ),
+});
+
+const cachedEmbeddingsEffect = (
+  identity: EmbeddingModelIdentity,
+  hashes: readonly string[],
+): Effect.Effect<Map<string, readonly number[]>, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const found = new Map<string, readonly number[]>();
+    for (const hash of hashes) {
+      const row = yield* columnsDecoded(
+        cachedEmbeddingRow({ provider: identity.provider, model: identity.model, hash }),
+      );
+      const vector = Option.match(row, {
+        onNone: () => undefined,
+        onSome: ({ embedding }) => parseEmbedding(embedding),
+      });
+      if (vector) found.set(hash, vector);
+    }
+    return found;
+  });
 
 /**
  * Compares the files on disk with the index and plans the apply: files whose
@@ -156,154 +233,112 @@ function listIndexedSources(database: StoreDatabase): readonly IndexedSourceReco
  * handed in: the plan itself writes nothing, so the caller reconciles the
  * notebook first.
  */
-export function planMemorySync(
-  database: StoreDatabase,
+export const planMemorySyncEffect = (
   root: string,
   identity: EmbeddingModelIdentity | undefined,
   entries: readonly Pick<NotebookEntry, "id" | "words">[],
-): MemoryScanPlan {
-  const files = scanMemoryFiles(root);
-  const indexed = new Map(listIndexedSources(database).map((record) => [record.path, record]));
-  const changed: IndexedFileWrite[] = [];
-  let unchanged = 0;
-  for (const file of files) {
-    const known = indexed.get(file.path);
-    indexed.delete(file.path);
-    // An unchanged file is done only when every chunk of it already carries a
-    // vector under the identity asked for: a file indexed before a credential
-    // stood, or while the embedding provider was failing, is planned again so
-    // its vectors are backfilled without waiting for the developer to edit it.
-    if (
-      known &&
-      known.hash === file.hash &&
-      !(identity && lacksVectors(database, file.path, identity))
-    ) {
-      unchanged += 1;
-      continue;
+): Effect.Effect<MemoryScanPlan, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const files = scanMemoryFiles(root);
+    const indexed = new Map(
+      (yield* listIndexedSourcesEffect).map((record) => [record.path, record]),
+    );
+    const changed: IndexedFileWrite[] = [];
+    let unchanged = 0;
+    for (const file of files) {
+      const known = indexed.get(file.path);
+      indexed.delete(file.path);
+      // An unchanged file is done only when every chunk of it already carries a
+      // vector under the identity asked for: a file indexed before a credential
+      // stood, or while the embedding provider was failing, is planned again so
+      // its vectors are backfilled without waiting for the developer to edit it.
+      if (
+        known &&
+        known.hash === file.hash &&
+        !(identity && (yield* lacksVectorsEffect(file.path, identity)))
+      ) {
+        unchanged += 1;
+        continue;
+      }
+      const entryLines =
+        file.path === WORKSPACE_FILE.USER
+          ? new Map(
+              parseNotebook(file.content).entries.flatMap((parsed) => {
+                const entry = entries.find((candidate) => candidate.words === parsed.words);
+                return entry ? [[parsed.line, entry.id] as const] : [];
+              }),
+            )
+          : new Map<number, string>();
+      changed.push({
+        path: file.path,
+        source: MEMORY_SOURCE.MEMORY,
+        hash: file.hash,
+        mtimeMs: file.mtimeMs,
+        size: file.size,
+        origin: MEMORY_ORIGIN.AGENT,
+        chunks: chunkMarkdown(file.content).map((chunk) => {
+          const ids = [...entryLines.entries()]
+            .filter(([line]) => line >= chunk.startLine && line <= chunk.endLine)
+            .map(([, id]) => id);
+          return {
+            startLine: chunk.startLine,
+            endLine: chunk.endLine,
+            text: chunk.text,
+            hash: chunk.hash,
+            ...(ids.length > 0 ? { entryIds: ids } : undefined),
+          };
+        }),
+      });
     }
-    const entryLines =
-      file.path === WORKSPACE_FILE.USER
-        ? new Map(
-            parseNotebook(file.content).entries.flatMap((parsed) => {
-              const entry = entries.find((candidate) => candidate.words === parsed.words);
-              return entry ? [[parsed.line, entry.id] as const] : [];
-            }),
-          )
-        : new Map<number, string>();
-    changed.push({
-      path: file.path,
-      source: MEMORY_SOURCE.MEMORY,
-      hash: file.hash,
-      mtimeMs: file.mtimeMs,
-      size: file.size,
-      origin: MEMORY_ORIGIN.AGENT,
-      chunks: chunkMarkdown(file.content).map((chunk) => {
-        const ids = [...entryLines.entries()]
-          .filter(([line]) => line >= chunk.startLine && line <= chunk.endLine)
-          .map(([, id]) => id);
-        return {
-          startLine: chunk.startLine,
-          endLine: chunk.endLine,
-          text: chunk.text,
-          hash: chunk.hash,
-          ...(ids.length > 0 ? { entryIds: ids } : undefined),
-        };
-      }),
-    });
-  }
-  const hashes = new Set(changed.flatMap((file) => file.chunks.map((chunk) => chunk.hash)));
-  const cached = identity ? cachedEmbeddings(database, identity, [...hashes]) : new Map();
-  const missing = new Map<string, string>();
-  if (identity) {
-    for (const file of changed) {
-      for (const chunk of file.chunks) {
-        if (!cached.has(chunk.hash) && chunk.text.trim().length > 0) {
-          missing.set(chunk.hash, chunk.text);
+    const hashes = new Set(changed.flatMap((file) => file.chunks.map((chunk) => chunk.hash)));
+    const cached = identity ? yield* cachedEmbeddingsEffect(identity, [...hashes]) : new Map();
+    const missing = new Map<string, string>();
+    if (identity) {
+      for (const file of changed) {
+        for (const chunk of file.chunks) {
+          if (!cached.has(chunk.hash) && chunk.text.trim().length > 0) {
+            missing.set(chunk.hash, chunk.text);
+          }
         }
       }
     }
-  }
-  return {
-    changed,
-    removed: [...indexed.keys()],
-    missingEmbeddings: [...missing.entries()].map(([hash, text]) => ({ hash, text })),
-    unchanged,
-  };
-}
+    return {
+      changed,
+      removed: [...indexed.keys()],
+      missingEmbeddings: [...missing.entries()].map(([hash, text]) => ({ hash, text })),
+      unchanged,
+    };
+  });
 
-/** Whether any indexed chunk of the path has no vector under the model given. */
-function lacksVectors(
-  database: StoreDatabase,
-  filePath: string,
-  identity: EmbeddingModelIdentity,
-): boolean {
-  // SAFETY: COUNT(*) is one integer column named `count`.
-  const row = database
-    .prepare(
-      `SELECT COUNT(*) AS count FROM memory_index_chunks
-       WHERE path = ? AND trim(text) <> '' AND (embedding = '' OR model <> ?)`,
-    )
-    .get(filePath, identity.model) as { count: number };
-  return row.count > 0;
-}
-
-function cachedEmbeddings(
-  database: StoreDatabase,
-  identity: EmbeddingModelIdentity,
-  hashes: readonly string[],
-): Map<string, readonly number[]> {
-  const found = new Map<string, readonly number[]>();
-  const select = database.prepare(
-    "SELECT embedding FROM memory_embedding_cache WHERE provider = ? AND model = ? AND hash = ?",
-  );
-  for (const hash of hashes) {
-    // SAFETY: the one text column selected is the embedding's JSON.
-    const row = select.get(identity.provider, identity.model, hash) as
-      | { embedding: string }
-      | undefined;
-    const vector = row ? parseEmbedding(row.embedding) : undefined;
-    if (vector) found.set(hash, vector);
-  }
-  return found;
-}
-
-function putCachedEmbeddings(
-  database: StoreDatabase,
+const putCachedEmbeddingsEffect = (
   identity: EmbeddingModelIdentity,
   embeddings: readonly EmbeddingWrite[],
   now: number,
-): void {
-  const insert = database.prepare(
-    `INSERT INTO memory_embedding_cache (provider, model, hash, embedding, dims, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(provider, model, hash) DO UPDATE SET embedding = excluded.embedding,
-       dims = excluded.dims, updated_at = excluded.updated_at`,
-  );
-  for (const embedding of embeddings) {
-    insert.run(
-      identity.provider,
-      identity.model,
-      embedding.hash,
-      serializeEmbedding(embedding.vector),
-      embedding.vector.length,
-      now,
-    );
-  }
-  database
-    .prepare(
-      `DELETE FROM memory_embedding_cache WHERE rowid IN (
-         SELECT rowid FROM memory_embedding_cache ORDER BY updated_at DESC, rowid DESC
-         LIMIT -1 OFFSET ?
-       )`,
-    )
-    .run(MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES);
-}
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    for (const embedding of embeddings) {
+      yield* sql`INSERT INTO memory_embedding_cache (provider, model, hash, embedding, dims, updated_at)
+                 VALUES (${identity.provider}, ${identity.model}, ${embedding.hash},
+                         ${serializeEmbedding(embedding.vector)}, ${embedding.vector.length}, ${now})
+                 ON CONFLICT(provider, model, hash) DO UPDATE SET embedding = excluded.embedding,
+                   dims = excluded.dims, updated_at = excluded.updated_at`;
+    }
+    yield* sql`DELETE FROM memory_embedding_cache WHERE rowid IN (
+                 SELECT rowid FROM memory_embedding_cache ORDER BY updated_at DESC, rowid DESC
+                 LIMIT -1 OFFSET ${MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES}
+               )`;
+  });
 
-function removeIndexedPath(database: StoreDatabase, filePath: string): void {
-  database.prepare("DELETE FROM memory_index_chunks_fts WHERE path = ?").run(filePath);
-  database.prepare("DELETE FROM memory_index_chunks WHERE path = ?").run(filePath);
-  database.prepare("DELETE FROM memory_index_sources WHERE path = ?").run(filePath);
-}
+const removeIndexedPathEffect = (
+  filePath: string,
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    yield* sql`DELETE FROM memory_index_chunks_fts WHERE path = ${filePath}`;
+    yield* sql`DELETE FROM memory_index_chunks WHERE path = ${filePath}`;
+    yield* sql`DELETE FROM memory_index_sources WHERE path = ${filePath}`;
+  });
 
 /**
  * Writes a planned sync: each changed file's chunks replace what the index
@@ -311,83 +346,66 @@ function removeIndexedPath(database: StoreDatabase, filePath: string): void {
  * a chunk with no vector is stored for keyword search alone, and removed
  * paths lose their rows. One transaction, so a search never sees half a file.
  */
-export function applyMemorySync(
-  database: StoreDatabase,
+export const applyMemorySyncEffect = (
   plan: { changed: readonly IndexedFileWrite[]; removed: readonly string[] },
   embeddings: readonly EmbeddingWrite[],
   identity: EmbeddingModelIdentity | undefined,
   now: number,
-): MemoryApplyReport {
-  return database.transaction(() => {
-    if (identity && embeddings.length > 0) putCachedEmbeddings(database, identity, embeddings, now);
-    const vectors = new Map(embeddings.map((embedding) => [embedding.hash, embedding.vector]));
-    const hashes = plan.changed.flatMap((file) => file.chunks.map((chunk) => chunk.hash));
-    const cached = identity ? cachedEmbeddings(database, identity, hashes) : new Map();
-    const insertSource = database.prepare(
-      `INSERT INTO memory_index_sources (path, source, hash, mtime, size, origin, indexed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    );
-    const insertChunk = database.prepare(
-      `INSERT INTO memory_index_chunks
-         (id, path, source, start_line, end_line, hash, model, text, embedding, entry_ids, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    const insertFts = database.prepare(
-      "INSERT INTO memory_index_chunks_fts (text, id, path) VALUES (?, ?, ?)",
-    );
-    let indexedChunks = 0;
-    let embeddedChunks = 0;
-    for (const removed of plan.removed) removeIndexedPath(database, removed);
-    for (const file of plan.changed) {
-      removeIndexedPath(database, file.path);
-      insertSource.run(
-        file.path,
-        file.source,
-        file.hash,
-        file.mtimeMs,
-        file.size,
-        file.origin,
-        now,
-      );
-      for (const chunk of file.chunks) {
-        const vector = vectors.get(chunk.hash) ?? cached.get(chunk.hash);
-        const id = chunkId(file.path, chunk.startLine, chunk.endLine, chunk.hash);
-        insertChunk.run(
-          id,
-          file.path,
-          file.source,
-          chunk.startLine,
-          chunk.endLine,
-          chunk.hash,
-          vector && identity ? identity.model : "",
-          chunk.text,
-          vector ? serializeEmbedding(vector) : "",
-          chunk.entryIds ? JSON.stringify(chunk.entryIds) : null,
-          now,
-        );
-        insertFts.run(chunk.text, id, file.path);
-        indexedChunks += 1;
-        if (vector) embeddedChunks += 1;
-      }
-    }
-    return {
-      indexedFiles: plan.changed.length,
-      removedFiles: plan.removed.length,
-      indexedChunks,
-      embeddedChunks,
-    };
-  });
-}
+): Effect.Effect<MemoryApplyReport, SqlError, Client.SqlClient> =>
+  Effect.flatMap(Client.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        if (identity && embeddings.length > 0) {
+          yield* putCachedEmbeddingsEffect(identity, embeddings, now);
+        }
+        const vectors = new Map(embeddings.map((embedding) => [embedding.hash, embedding.vector]));
+        const hashes = plan.changed.flatMap((file) => file.chunks.map((chunk) => chunk.hash));
+        const cached = identity ? yield* cachedEmbeddingsEffect(identity, hashes) : new Map();
+        let indexedChunks = 0;
+        let embeddedChunks = 0;
+        for (const removed of plan.removed) yield* removeIndexedPathEffect(removed);
+        for (const file of plan.changed) {
+          yield* removeIndexedPathEffect(file.path);
+          yield* sql`INSERT INTO memory_index_sources (path, source, hash, mtime, size, origin, indexed_at)
+                     VALUES (${file.path}, ${file.source}, ${file.hash}, ${file.mtimeMs}, ${file.size},
+                             ${file.origin}, ${now})`;
+          for (const chunk of file.chunks) {
+            const vector = vectors.get(chunk.hash) ?? cached.get(chunk.hash);
+            const id = chunkId(file.path, chunk.startLine, chunk.endLine, chunk.hash);
+            yield* sql`INSERT INTO memory_index_chunks
+                         (id, path, source, start_line, end_line, hash, model, text, embedding, entry_ids, updated_at)
+                       VALUES (${id}, ${file.path}, ${file.source}, ${chunk.startLine}, ${chunk.endLine},
+                               ${chunk.hash}, ${vector && identity ? identity.model : ""}, ${chunk.text},
+                               ${vector ? serializeEmbedding(vector) : ""},
+                               ${chunk.entryIds ? JSON.stringify(chunk.entryIds) : null}, ${now})`;
+            yield* sql`INSERT INTO memory_index_chunks_fts (text, id, path)
+                       VALUES (${chunk.text}, ${id}, ${file.path})`;
+            indexedChunks += 1;
+            if (vector) embeddedChunks += 1;
+          }
+        }
+        return {
+          indexedFiles: plan.changed.length,
+          removedFiles: plan.removed.length,
+          indexedChunks,
+          embeddedChunks,
+        };
+      }),
+    ),
+  );
 
 /** Drops every derived row; the files stand, and the next sync indexes them all again. */
-export function rebuildMemoryIndex(database: StoreDatabase): boolean {
-  database.transaction(() => {
-    database.exec("DELETE FROM memory_index_chunks_fts");
-    database.exec("DELETE FROM memory_index_chunks");
-    database.exec("DELETE FROM memory_index_sources");
-  });
-  return true;
-}
+export const rebuildMemoryIndexEffect: Effect.Effect<boolean, SqlError, Client.SqlClient> =
+  Effect.flatMap(Client.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* sql`DELETE FROM memory_index_chunks_fts`;
+        yield* sql`DELETE FROM memory_index_chunks`;
+        yield* sql`DELETE FROM memory_index_sources`;
+        return true;
+      }),
+    ),
+  );
 
 export interface MemoryIndexStatus {
   readonly sources: number;
@@ -396,31 +414,74 @@ export interface MemoryIndexStatus {
   readonly cachedEmbeddings: number;
 }
 
-export function memoryIndexStatus(database: StoreDatabase): MemoryIndexStatus {
-  const count = (sql: string) =>
-    // SAFETY: COUNT(*) is one integer column named `count`.
-    (database.prepare(sql).get() as { count: number }).count;
-  return {
-    sources: count("SELECT COUNT(*) AS count FROM memory_index_sources"),
-    chunks: count("SELECT COUNT(*) AS count FROM memory_index_chunks"),
-    embeddedChunks: count(
-      "SELECT COUNT(*) AS count FROM memory_index_chunks WHERE embedding <> ''",
-    ),
-    cachedEmbeddings: count("SELECT COUNT(*) AS count FROM memory_embedding_cache"),
-  };
-}
+const CountRow = Schema.Struct({ count: Schema.Number });
 
-type ChunkRow = {
-  id: string;
-  path: string;
-  start_line: number;
-  end_line: number;
-  text: string;
-  embedding: string;
-  entry_ids: string | null;
-  updated_at: number;
-  origin: string;
-};
+const sourcesCountRow = SqlSchema.findOne({
+  Request: Schema.Void,
+  Result: CountRow,
+  execute: () =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) => sql`SELECT COUNT(*) AS count FROM memory_index_sources`,
+    ),
+});
+
+const chunksCountRow = SqlSchema.findOne({
+  Request: Schema.Void,
+  Result: CountRow,
+  execute: () =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) => sql`SELECT COUNT(*) AS count FROM memory_index_chunks`,
+    ),
+});
+
+const embeddedChunksCountRow = SqlSchema.findOne({
+  Request: Schema.Void,
+  Result: CountRow,
+  execute: () =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) => sql`SELECT COUNT(*) AS count FROM memory_index_chunks WHERE embedding <> ''`,
+    ),
+});
+
+const cachedEmbeddingsCountRow = SqlSchema.findOne({
+  Request: Schema.Void,
+  Result: CountRow,
+  execute: () =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) => sql`SELECT COUNT(*) AS count FROM memory_embedding_cache`,
+    ),
+});
+
+const countOf = (found: Option.Option<{ count: number }>): number =>
+  Option.match(found, { onNone: () => 0, onSome: ({ count }) => count });
+
+export const memoryIndexStatusEffect: Effect.Effect<MemoryIndexStatus, SqlError, Client.SqlClient> =
+  Effect.gen(function* () {
+    return {
+      sources: countOf(yield* columnsDecoded(sourcesCountRow())),
+      chunks: countOf(yield* columnsDecoded(chunksCountRow())),
+      embeddedChunks: countOf(yield* columnsDecoded(embeddedChunksCountRow())),
+      cachedEmbeddings: countOf(yield* columnsDecoded(cachedEmbeddingsCountRow())),
+    };
+  });
+
+const ChunkRow = Schema.Struct({
+  id: Schema.String,
+  path: Schema.String,
+  start_line: Schema.Number,
+  end_line: Schema.Number,
+  text: Schema.String,
+  embedding: Schema.String,
+  entry_ids: Schema.NullOr(Schema.String),
+  updated_at: Schema.Number,
+  origin: Schema.String,
+});
+
+type ChunkRow = Schema.Schema.Type<typeof ChunkRow>;
 
 function entryIdsOf(serialized: string | null): string[] | undefined {
   if (!serialized) return undefined;
@@ -444,94 +505,105 @@ function provenanceOf(row: ChunkRow): MemoryProvenance {
 const CHUNK_COLUMNS = `c.id, c.path, c.start_line, c.end_line, c.text, c.embedding, c.entry_ids, c.updated_at,
   COALESCE(s.origin, '') AS origin`;
 
-function keywordSearch(
-  database: StoreDatabase,
+const keywordChunkRows = SqlSchema.findAll({
+  Request: Schema.Struct({ fts: Schema.String, limit: Schema.Number }),
+  Result: Schema.extend(ChunkRow, Schema.Struct({ rank: Schema.Number })),
+  execute: ({ fts, limit }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT ${sql.literal(CHUNK_COLUMNS)}, bm25(memory_index_chunks_fts) AS rank
+            FROM memory_index_chunks_fts f
+            JOIN memory_index_chunks c ON c.id = f.id
+            LEFT JOIN memory_index_sources s ON s.path = c.path
+            WHERE memory_index_chunks_fts MATCH ${fts}
+            ORDER BY rank LIMIT ${limit}`,
+    ),
+});
+
+const keywordSearchEffect = (
   query: string,
   limit: number,
-): readonly KeywordHit[] {
-  const fts = buildFtsQuery(query);
-  if (!fts) return [];
-  // SAFETY: the columns selected are the chunk row's, plus bm25's rank.
-  const rows = database
-    .prepare(
-      `SELECT ${CHUNK_COLUMNS}, bm25(memory_index_chunks_fts) AS rank
-       FROM memory_index_chunks_fts f
-       JOIN memory_index_chunks c ON c.id = f.id
-       LEFT JOIN memory_index_sources s ON s.path = c.path
-       WHERE memory_index_chunks_fts MATCH ?
-       ORDER BY rank LIMIT ?`,
-    )
-    .all(fts, limit) as (ChunkRow & { rank: number })[];
-  return rows.map((row) => ({
-    id: row.id,
-    path: row.path,
-    startLine: row.start_line,
-    endLine: row.end_line,
-    snippet: row.text,
-    textScore: bm25RankToScore(row.rank),
-    provenance: provenanceOf(row),
-  }));
-}
-
-/** Cosine similarity over every stored vector of the model given, here on the worker. */
-function vectorSearch(
-  database: StoreDatabase,
-  queryVector: readonly number[],
-  identity: EmbeddingModelIdentity,
-  limit: number,
-): readonly VectorHit[] {
-  // SAFETY: the columns selected are the chunk row's.
-  const rows = database
-    .prepare(
-      `SELECT ${CHUNK_COLUMNS} FROM memory_index_chunks c
-       LEFT JOIN memory_index_sources s ON s.path = c.path
-       WHERE c.model = ? AND c.embedding <> ''`,
-    )
-    .all(identity.model) as ChunkRow[];
-  const scored: VectorHit[] = [];
-  for (const row of rows) {
-    const vector = parseEmbedding(row.embedding);
-    if (!vector) continue;
-    const score = cosineSimilarity(queryVector, vector);
-    if (score <= 0) continue;
-    scored.push({
+): Effect.Effect<readonly KeywordHit[], SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const fts = buildFtsQuery(query);
+    if (!fts) return [];
+    const rows = yield* columnsDecoded(keywordChunkRows({ fts, limit }));
+    return rows.map((row) => ({
       id: row.id,
       path: row.path,
       startLine: row.start_line,
       endLine: row.end_line,
       snippet: row.text,
-      vectorScore: score,
+      textScore: bm25RankToScore(row.rank),
       provenance: provenanceOf(row),
-    });
-  }
-  return scored.sort((a, b) => b.vectorScore - a.vectorScore).slice(0, limit);
-}
+    }));
+  });
+
+const vectorChunkRows = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: ChunkRow,
+  execute: (model) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT ${sql.literal(CHUNK_COLUMNS)} FROM memory_index_chunks c
+            LEFT JOIN memory_index_sources s ON s.path = c.path
+            WHERE c.model = ${model} AND c.embedding <> ''`,
+    ),
+});
+
+/** Cosine similarity over every stored vector of the model given, here on the worker. */
+const vectorSearchEffect = (
+  queryVector: readonly number[],
+  identity: EmbeddingModelIdentity,
+  limit: number,
+): Effect.Effect<readonly VectorHit[], SqlError, Client.SqlClient> =>
+  Effect.map(columnsDecoded(vectorChunkRows(identity.model)), (rows) => {
+    const scored: VectorHit[] = [];
+    for (const row of rows) {
+      const vector = parseEmbedding(row.embedding);
+      if (!vector) continue;
+      const score = cosineSimilarity(queryVector, vector);
+      if (score <= 0) continue;
+      scored.push({
+        id: row.id,
+        path: row.path,
+        startLine: row.start_line,
+        endLine: row.end_line,
+        snippet: row.text,
+        vectorScore: score,
+        provenance: provenanceOf(row),
+      });
+    }
+    return scored.sort((a, b) => b.vectorScore - a.vectorScore).slice(0, limit);
+  });
 
 /** One hybrid search: candidates from both rankings under the multiplier, merged, decayed, diversified, and windowed. */
-export function searchMemoryIndex(
-  database: StoreDatabase,
+export const searchMemoryIndexEffect = (
   query: MemorySearchQuery,
-): MemorySearchOutcome {
-  const maxResults = query.maxResults ?? MEMORY_SEARCH_DEFAULTS.MAXIMUM_RESULTS;
-  const minScore = query.minScore ?? MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE;
-  const candidates = Math.max(1, maxResults * MEMORY_SEARCH_DEFAULTS.CANDIDATE_MULTIPLIER);
-  const keyword = keywordSearch(database, query.query, candidates);
-  const vector =
-    query.queryVector && query.identity
-      ? vectorSearch(database, query.queryVector, query.identity, candidates)
-      : [];
-  const merged = mergeHybridResults(
-    vector,
-    keyword,
-    MEMORY_SOURCE.MEMORY,
-    defaultRankingOptions(query.now),
-  );
-  return {
-    results: selectHybridSearchResults({ merged, keyword, maxResults, minScore }),
-    keywordHits: keyword.length,
-    vectorHits: vector.length,
-  };
-}
+): Effect.Effect<MemorySearchOutcome, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const maxResults = query.maxResults ?? MEMORY_SEARCH_DEFAULTS.MAXIMUM_RESULTS;
+    const minScore = query.minScore ?? MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE;
+    const candidates = Math.max(1, maxResults * MEMORY_SEARCH_DEFAULTS.CANDIDATE_MULTIPLIER);
+    const keyword = yield* keywordSearchEffect(query.query, candidates);
+    const vector =
+      query.queryVector && query.identity
+        ? yield* vectorSearchEffect(query.queryVector, query.identity, candidates)
+        : [];
+    const merged = mergeHybridResults(
+      vector,
+      keyword,
+      MEMORY_SOURCE.MEMORY,
+      defaultRankingOptions(query.now),
+    );
+    return {
+      results: selectHybridSearchResults({ merged, keyword, maxResults, minScore }),
+      keywordHits: keyword.length,
+      vectorHits: vector.length,
+    };
+  });
 
 /** The most lines one read answers when none are asked for. */
 const MEMORY_READ_DEFAULT_LINES = 120;
@@ -565,4 +637,49 @@ export function readMemoryLines(
     totalLines: all.length,
     truncated: end < all.length,
   };
+}
+
+/**
+ * The synchronous doors onto the effects above, for the callers that still
+ * hold a handle rather than a client: the store's own tests today.
+ *
+ * @deprecated Each goes with the caller that holds it; P5-11 runs every
+ * remaining one on the worker's own runtime edge.
+ */
+export function planMemorySync(
+  database: StoreDatabase,
+  root: string,
+  identity: EmbeddingModelIdentity | undefined,
+  entries: readonly Pick<NotebookEntry, "id" | "words">[],
+): MemoryScanPlan {
+  return database.run(planMemorySyncEffect(root, identity, entries));
+}
+
+/** @deprecated The synchronous door onto {@link applyMemorySyncEffect}; see {@link planMemorySync}. */
+export function applyMemorySync(
+  database: StoreDatabase,
+  plan: { changed: readonly IndexedFileWrite[]; removed: readonly string[] },
+  embeddings: readonly EmbeddingWrite[],
+  identity: EmbeddingModelIdentity | undefined,
+  now: number,
+): MemoryApplyReport {
+  return database.run(applyMemorySyncEffect(plan, embeddings, identity, now));
+}
+
+/** @deprecated The synchronous door onto {@link rebuildMemoryIndexEffect}; see {@link planMemorySync}. */
+export function rebuildMemoryIndex(database: StoreDatabase): boolean {
+  return database.run(rebuildMemoryIndexEffect);
+}
+
+/** @deprecated The synchronous door onto {@link memoryIndexStatusEffect}; see {@link planMemorySync}. */
+export function memoryIndexStatus(database: StoreDatabase): MemoryIndexStatus {
+  return database.run(memoryIndexStatusEffect);
+}
+
+/** @deprecated The synchronous door onto {@link searchMemoryIndexEffect}; see {@link planMemorySync}. */
+export function searchMemoryIndex(
+  database: StoreDatabase,
+  query: MemorySearchQuery,
+): MemorySearchOutcome {
+  return database.run(searchMemoryIndexEffect(query));
 }
