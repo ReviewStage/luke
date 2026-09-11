@@ -33,8 +33,8 @@ import {
   FUNCTION_MAX_DURATION_SECONDS,
   routeKeyOf,
 } from "../server/function-durations";
+import { functionPublicPath, webFunctions } from "../server/function-layout";
 import { apiRewrites } from "../server/function-rewrites";
-import { stubPath, webFunctions } from "../server/function-stubs";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -539,6 +539,6 @@ test("the function's duration outlasts an attachment, the rewrite hands the path
   const destination = new URL(rewrite.dest.replace("$1", match[1] ?? ""), "http://localhost");
   const turnEvents = functions.find((definition) => definition.file === FUNCTION_GROUP.TURN_EVENTS);
   assert.ok(turnEvents);
-  assert.equal(destination.pathname, `/${stubPath(turnEvents)}`);
+  assert.equal(destination.pathname, `/${functionPublicPath(turnEvents)}`);
   assert.deepEqual(destination.searchParams.getAll("id"), [turnId]);
 });

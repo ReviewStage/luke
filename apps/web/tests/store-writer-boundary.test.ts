@@ -20,7 +20,8 @@ import { test } from "vitest";
  * same way.
  */
 
-const SERVER_ROOTS = ["server", "api"].map((root) =>
+/** Every server module lives under `server/`; the functions Vercel deploys are emitted from it and nothing is committed under `api/`. */
+const SERVER_ROOTS = ["server"].map((root) =>
   fileURLToPath(new URL(`../${root}/`, import.meta.url)),
 );
 

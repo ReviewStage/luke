@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Schema } from "effect";
 import { DISPATCH_QUERY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
-import { stubPath, webFunctions } from "./function-stubs.js";
+import { functionPublicPath, webFunctions } from "./function-layout.js";
 
 /**
  * The `/api/` entries of `vercel.json`'s `routes`, generated from the function
@@ -43,7 +43,7 @@ const API_ROUTE_PREFIX = "/api/";
 
 function dest(definition: FunctionDefinition, route: string, query?: string): string {
   const parameters = `${DISPATCH_QUERY.ROUTE}=${route}${query === undefined ? "" : `&${query}`}`;
-  return `/${stubPath(definition)}?${parameters}`;
+  return `/${functionPublicPath(definition)}?${parameters}`;
 }
 
 /** The `/api/` rewrites, in the order they must stand: segment rewrites first, then one exact rule per remaining dispatched route. */

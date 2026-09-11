@@ -145,8 +145,3 @@ function functionDurations(): ReadonlyMap<string, number> {
   }
   return durations;
 }
-
-/** The literal the Node builder's static config reader takes a function's duration from. */
-export function functionConfigSource(maxDurationSeconds: number): string {
-  return `export const config = { maxDuration: ${maxDurationSeconds} };\n`;
-}

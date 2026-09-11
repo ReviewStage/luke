@@ -3,7 +3,7 @@ import { builtinModules } from "node:module";
 import { join, posix, relative, sep } from "node:path";
 import type { BuildOptions, Metafile, Plugin } from "esbuild";
 import type { FunctionDefinition } from "./function-durations.js";
-import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-stubs.js";
+import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-layout.js";
 
 /**
  * How the functions become bundles, declared once so the build script and the
@@ -24,8 +24,31 @@ import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./func
  * test asserts over, before any deploy.
  */
 
-const WORKSPACE_PROTOCOL = "workspace:";
 const FUNCTION_BUNDLE_TARGET = "node24";
+
+/**
+ * The specifiers left outside every bundle. Each is a guarded optional
+ * `require` inside an inlined dependency: `pg` tries its native binding and
+ * falls back to JavaScript, `ws` tries its two native accelerators and falls
+ * back the same way. esbuild leaves an unresolvable require inside a try/catch
+ * external on its own; naming them is what lets the externals record say
+ * exactly these and refuse a fourth.
+ */
+/**
+ * Prepended to every bundle. esbuild turns a CommonJS `require` inside an
+ * inlined dependency into a shim that throws "Dynamic require … is not
+ * supported" in ES module output unless a `require` is in scope; `pg` asks
+ * for `events` that way and every function would fail at load. A real
+ * `require` built from the module's own URL is what the shim finds instead.
+ */
+const REQUIRE_BANNER =
+  'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);';
+
+export const INLINE_EXCEPTION = {
+  PG_NATIVE: "pg-native",
+  BUFFERUTIL: "bufferutil",
+  UTF8_VALIDATE: "utf-8-validate",
+} as const;
 
 /**
  * The declared dependencies no function bundle may load at all: each runs in
@@ -112,13 +135,6 @@ function dispatcherPlugin(web: string, functions: readonly FunctionDefinition[])
 }
 
 export async function functionBundlePlan(web: string): Promise<FunctionBundlePlan> {
-  // SAFETY: the file is this app's own package.json, read for its dependencies map alone.
-  const manifest = JSON.parse(await readFile(join(web, "package.json"), "utf8")) as {
-    dependencies: Record<string, string>;
-  };
-  const externalDependencies = Object.entries(manifest.dependencies)
-    .filter(([, range]) => !range.startsWith(WORKSPACE_PROTOCOL))
-    .map(([name]) => name);
   const functions = await webFunctions(web);
   const entryPoints = functions.map((definition) => ({
     in: definition.dispatches
@@ -126,10 +142,11 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       : join(web, routeSourcePath(definition.file)),
     out: definition.file,
   }));
+  const exceptions = Object.values(INLINE_EXCEPTION);
   return {
     functions,
     externalPackages: new Set([
-      ...externalDependencies,
+      ...exceptions,
       ...builtinModules,
       ...builtinModules.map((name) => `node:${name}`),
     ]),
@@ -146,18 +163,39 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
       metafile: true,
       logLevel: "warning",
       plugins: [dispatcherPlugin(web, functions)],
-      external: [...externalDependencies, ...externalDependencies.map((name) => `${name}/*`)],
+      external: exceptions,
+      banner: { js: REQUIRE_BANNER },
     },
   };
 }
 
-/** The output bundles whose graph imports the named package at runtime, as the metafile's output paths, sorted. */
+type MetafileImport = Metafile["inputs"][string]["imports"][number];
+
+/** The specifier a module wrote, whether esbuild inlined what it resolved to or left it external. */
+function importSpecifier(imported: MetafileImport): string {
+  return imported.original ?? imported.path;
+}
+
+/**
+ * The output bundles whose graph imports the named package, as the metafile's
+ * output paths, sorted. Read from the inputs' own import specifiers rather
+ * than from the bundle's externals, so an import that esbuild inlined counts
+ * exactly as one it left external: under inline-first bundling a reached
+ * package appears in a bundle's inputs and never in its externals, and a
+ * guard over externals alone would pass while the package rode along.
+ */
 export function bundlesReaching(metafile: Metafile, packageName: string): readonly string[] {
   return Object.entries(metafile.outputs)
-    .filter(([, output]) =>
-      output.imports.some(
-        (imported) => imported.external && packageNameOf(imported.path) === packageName,
-      ),
+    .filter(
+      ([, output]) =>
+        Object.keys(output.inputs).some((inputPath) =>
+          metafile.inputs[inputPath]?.imports.some(
+            (imported) => packageNameOf(importSpecifier(imported)) === packageName,
+          ),
+        ) ||
+        output.imports.some(
+          (imported) => imported.external && packageNameOf(imported.path) === packageName,
+        ),
     )
     .map(([path]) => path)
     .sort();
@@ -241,7 +279,7 @@ export function importChain(
     if (current === undefined) break;
     const input = metafile.inputs[current];
     if (input === undefined) continue;
-    if (input.imports.some((imported) => imported.external && imported.path === specifier)) {
+    if (input.imports.some((imported) => importSpecifier(imported) === specifier)) {
       const chain: string[] = [];
       for (let at: string | undefined = current; at !== undefined; at = parent.get(at)) {
         chain.unshift(at);
