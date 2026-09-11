@@ -2302,10 +2302,19 @@ sentence.
    in-flight lives.
 4. **My reopen broadcast was false for the one PR it would have broken worst.** Merging the services
    PR under Vite puts main in the third state — key present, preset off — where Vite detection ignores
-   the block and main deploys with **no top-level `buildCommand`**: no `db:migrate`, no `auth:seed`, no
-   function bundling, so **every `api/` stub re-exports a bundle that was never built.** Worse than
-   the five failures, because it *succeeds* and serves a site whose API routes point at nothing. C2a
-   caught it. **Third over-broad broadcast of the day, second after I wrote the rule against them.**
+   the block and main deploys with **no top-level `buildCommand`**. C2a caught it. **Third over-broad
+   broadcast of the day, second after I wrote the rule against them.**
+
+   **Amended the same hour, by C2a against its own report.** I first recorded this as "no function
+   bundling, so every `api/` stub re-exports a bundle that was never built." That is wrong. Vercel's
+   static build runs the package.json script (`vercel-build`, `now-build`, `build`, in that order)
+   when no `buildCommand` is configured, rather than a framework default, and `apps/web`'s `build`
+   script ends in `tsx scripts/bundle-functions.ts` — so **the functions would in fact be bundled and
+   the stubs would work.** What the fallback drops is exactly the prefix `vercel.json`'s
+   `buildCommand` adds: **`pnpm db:migrate && pnpm auth:seed`**. The real failure is **a successful
+   deploy onto an unmigrated, unseeded database**, which is still worse than a failed deploy because
+   it succeeds and serves — but it is not a site whose API points at nothing. The claim is corrected
+   rather than deleted, because what it got right is why the PR is still held.
 
 **Three self-corrections from C2a, each tightening a claim it had just made:** that "Skipped — Not
 affected" proved services mode (it is consistent with a dashboard Ignored Build Step, not proof); the
