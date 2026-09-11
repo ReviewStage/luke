@@ -25,10 +25,14 @@ export type HostedStoreDatabase = PgDatabase<PgQueryResultHKT, HostedSchema>;
  * exists because the `HostedStore` methods answer promises while the modules
  * beneath them are converted one at a time.
  *
+ * The writers and the speech module are handed the same runner directly
+ * rather than through a store context, because a route composes them apart
+ * from the store: the door is one shim either way.
+ *
  * @deprecated A strangler shim. P10-14 deletes it with the Drizzle half, once
  * every module here is an effect and the routes above take one.
  */
-type HostedStoreRun = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
+export type HostedStoreRun = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
 
 export interface HostedStoreContext {
   readonly db: HostedStoreDatabase;

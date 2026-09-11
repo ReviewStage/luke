@@ -25,6 +25,7 @@ import {
   claimSpeech,
   markSpeechPushed,
   markSpeechSpoken,
+  type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
   SPEECH_OFFER,
@@ -57,13 +58,15 @@ const SESSION = { providerId: "conductor", providerSessionId: "s-fixture-1" } as
 
 let clock = NOW;
 const store: SpeechSweepStore = {
-  db: database.db,
+  run: database.run,
   writer: await storeWriter({
-    db: database.db,
+    run: database.run,
     tools: CATALOG_TOOL_SET,
     now: () => new Date(clock),
   }),
 };
+
+const openOffers = (query: OpenSpeechOffersQuery) => database.run(openSpeechOffers(query));
 
 interface Announced {
   readonly userId: string;
@@ -278,7 +281,7 @@ test("at most one authorization to speak per briefing, never that it was heard: 
     refusal: SPEECH_REFUSAL.ALREADY_CLAIMED,
   });
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId: row.userId })).map((offer) => [
+    (await openOffers({ userId: row.userId })).map((offer) => [
       offer.state,
       offer.claimedByDeviceId,
     ]),
@@ -312,7 +315,7 @@ test("at most one authorization to speak per briefing, never that it was heard: 
       [CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, winner],
     ],
   );
-  assert.deepEqual(await openSpeechOffers(database.db, { userId: row.userId }), []);
+  assert.deepEqual(await openOffers({ userId: row.userId }), []);
   for (const late of [
     markSpeechSpoken(store, row.userId, row.messageId, winner),
     claimSpeech(store, row.userId, row.messageId, PHONE, clock),
@@ -345,7 +348,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
       CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
     ]);
     assert.deepEqual(
-      (await openSpeechOffers(database.db, { userId: raced.userId })).map((offer) => offer.state),
+      (await openOffers({ userId: raced.userId })).map((offer) => offer.state),
       [SPEECH_STATE.CLAIMED],
     );
   } else {
@@ -354,7 +357,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
       CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
       CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
     ]);
-    assert.deepEqual(await openSpeechOffers(database.db, { userId: raced.userId }), []);
+    assert.deepEqual(await openOffers({ userId: raced.userId }), []);
   }
 
   const twice = await offered(raced.userId);
@@ -375,7 +378,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
   // The interleaving the race above cannot be made to take: the offer settles
   // between the claim's read and its lock, and the claim is refused under it.
   const interposed: SpeechStore = {
-    db: database.db,
+    run: database.run,
     writer: {
       recordEvent: async (target, event) => {
         if (event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED) {
@@ -407,7 +410,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
   // The mirror interleaving: the claim lands between the push's read and its
   // lock, and the push is refused under it rather than told over the claim.
   const claimedUnderneath: SpeechStore = {
-    db: database.db,
+    run: database.run,
     writer: {
       recordEvent: async (target, event) => {
         if (event.kind === CONVERSATION_EVENT_KIND.SPEECH_PUSHED) {
@@ -443,7 +446,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
     { messageId: claimed.messageId, kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, unless: [] },
   );
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId: raced.userId }))
+    (await openOffers({ userId: raced.userId }))
       .filter((offer) => offer.messageId === claimed.messageId)
       .map((offer) => [offer.state, offer.expiresAt]),
     [[SPEECH_STATE.CLAIMED, NOW + SPEECH_OFFER.TTL_MS]],
@@ -481,7 +484,7 @@ test("a push closes an offer nobody claimed, records the device pushed to, never
     ok: false,
     refusal: SPEECH_REFUSAL.EXPIRED,
   });
-  assert.deepEqual(await openSpeechOffers(database.db, { userId: unclaimed.userId }), [
+  assert.deepEqual(await openOffers({ userId: unclaimed.userId }), [
     {
       userId: due.userId,
       conversationId: due.conversationId,
@@ -544,9 +547,7 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
     });
   }
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId: unclaimed.userId })).map(
-      (offer) => offer.messageId,
-    ),
+    (await openOffers({ userId: unclaimed.userId })).map((offer) => offer.messageId),
     [fresh.messageId],
   );
   assert.equal(await viewMarksUnspoken(fresh), false);
@@ -574,7 +575,7 @@ test("while a device reports quiet nothing is claimed, pushed, or expired; when 
   });
   assert.deepEqual(
     new Map(
-      (await openSpeechOffers(database.db, { userId })).map((offer) => [
+      (await openOffers({ userId })).map((offer) => [
         offer.messageId,
         [offer.state, offer.quietUntil, offer.claimedByDeviceId],
       ]),
@@ -586,7 +587,7 @@ test("while a device reports quiet nothing is claimed, pushed, or expired; when 
     ]),
   );
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId: elsewhere.userId })).map((offer) => offer.state),
+    (await openOffers({ userId: elsewhere.userId })).map((offer) => offer.state),
     [SPEECH_STATE.OFFERED],
   );
   for (const refused of [
@@ -643,7 +644,7 @@ test("while a device reports quiet nothing is claimed, pushed, or expired; when 
       { origin: TURN_ORIGIN.HOLD_RELEASE, status: TURN_STATUS.QUEUED },
     ]);
   }
-  assert.deepEqual(await openSpeechOffers(database.db, { userId }), []);
+  assert.deepEqual(await openOffers({ userId }), []);
   assert.deepEqual(await sweepSpeech(store, { now: clock, userIds: accounts }), {
     held: 0,
     released: 0,
@@ -714,7 +715,7 @@ test("two held offers on one conversation release with one turn between them, an
     CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
   );
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId })).map((offer) => offer.state),
+    (await openOffers({ userId })).map((offer) => offer.state),
     [SPEECH_STATE.HELD, SPEECH_STATE.HELD],
   );
   clock = NOW;
@@ -742,7 +743,7 @@ test("a sweep write racing a settled transition is refused under the lock: the o
   clock = NOW;
   const due = await offered();
   const settling: SpeechSweepStore = {
-    db: database.db,
+    run: database.run,
     writer: {
       enqueueTurn: (target, enqueue) => store.writer.enqueueTurn(target, enqueue),
       recordEvent: async (target, event) => {

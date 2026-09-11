@@ -191,15 +191,15 @@ async function observationTickHandler(request: Request): Promise<Response> {
     purgeCleared: async (now) => (store ? store.retention.purgeCleared(new Date(now)) : 0),
     sweepSpeech: async (now) => {
       if (!store) return NOTHING_SWEPT;
-      const writer = await storeWriter({ db: database, tools: CATALOG_TOOL_SET });
-      return sweepSpeech({ db: database, writer }, { now });
+      const writer = await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET });
+      return sweepSpeech({ run: runWeb, writer }, { now });
     },
     pushSpeech: async (now) => {
       if (!store || !sender) return NOTHING_PUSHED;
-      const writer = await storeWriter({ db: database, tools: CATALOG_TOOL_SET });
+      const writer = await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET });
       return pushSpeech(
         {
-          store: { db: database, writer },
+          store: { db: database, run: runWeb, writer },
           tools: CATALOG_TOOL_SET,
           send: (notification) => sender.send(notification),
           forgetDevice: deviceSeams(database).forgetDevice,

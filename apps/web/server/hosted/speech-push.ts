@@ -25,6 +25,7 @@ import {
   type ApnsNotification,
 } from "./apns.js";
 import {
+  type HostedStoreDatabase,
   markSpeechPushed,
   openSpeechOffers,
   quietUntilByAccount,
@@ -181,8 +182,17 @@ export interface SpeechPushOutcome {
   readonly waiting: number;
 }
 
+/**
+ * The push pass's store: the speech module's own runner and writer, and the
+ * Drizzle handle its own two reads — the account's devices and the
+ * announcement's row — are still on.
+ */
+interface SpeechPushStore extends SpeechStore {
+  readonly db: HostedStoreDatabase;
+}
+
 export interface SpeechPushSeams {
-  readonly store: SpeechStore;
+  readonly store: SpeechPushStore;
   /** The tool registry the announcement's row is read back under. */
   readonly tools: ToolSet;
   /** One notification to Apple, answered as the sender classifies the reply. */
@@ -221,7 +231,7 @@ interface AccountDevices {
 }
 
 async function devicesByAccount(
-  store: SpeechStore,
+  store: SpeechPushStore,
   userIds: readonly string[],
   now: number,
 ): Promise<Map<string, AccountDevices>> {
@@ -264,7 +274,7 @@ async function devicesByAccount(
  * settled announce call on it, has no words to push.
  */
 async function briefingWordsOf(
-  store: SpeechStore,
+  store: SpeechPushStore,
   tools: ToolSet,
   offer: SpeechOffer,
 ): Promise<string | undefined> {
@@ -304,12 +314,14 @@ export async function pushSpeech(
   const { now, limit, userIds, clock = Date.now } = options;
   const until = clock() + SPEECH_PUSH.BUDGET_MS;
   const outcome = { pushed: 0, undelivered: 0, unaddressed: 0, unreadable: 0, waiting: 0 };
-  const quiet = await quietUntilByAccount(seams.store.db, now, userIds);
-  const offers = await openSpeechOffers(seams.store.db, {
-    userIds,
-    notUserIds: [...quiet.keys()],
-    limit,
-  });
+  const quiet = await seams.store.run(quietUntilByAccount(now, userIds));
+  const offers = await seams.store.run(
+    openSpeechOffers({
+      userIds,
+      notUserIds: [...quiet.keys()],
+      limit,
+    }),
+  );
   const reported = await devicesByAccount(
     seams.store,
     [...new Set(offers.map((offer) => offer.userId))],

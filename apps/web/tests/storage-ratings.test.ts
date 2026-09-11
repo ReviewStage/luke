@@ -28,7 +28,7 @@ const OTHER_DEVICE_ID = "7d2f3f25-ab1c-4d3e-9f4a-1b2c3d4e5f61";
 
 const store: RatingStore = {
   db: database.db,
-  writer: await storeWriter({ db: database.db, tools: {}, now: () => NOW }),
+  writer: await storeWriter({ run: database.run, tools: {}, now: () => NOW }),
 };
 
 async function insertConversation(

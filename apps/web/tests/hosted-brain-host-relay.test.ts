@@ -59,7 +59,7 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const writer = await storeWriter({
-  db: database.db,
+  run: database.run,
   tools: CATALOG_TOOL_SET,
   now: () => new Date(NOW),
 });
@@ -67,7 +67,7 @@ const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,
   offer: (target, turnId) =>
-    offerBriefing({ db: database.db, writer, now: () => NOW }, target, turnId),
+    offerBriefing({ db: database.db, run: database.run, writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: (message) => refusals.push(message),
 });

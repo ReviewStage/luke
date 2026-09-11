@@ -123,7 +123,7 @@ const TYPED_ASK: UserMessageMetadata = {
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
-const writer = await storeWriter({ db: database.db, tools: TOOLS, now: () => new Date(NOW) });
+const writer = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
 
 /** Messages as they cross into the reader: their JSON shape, which is what a row holds. */
 function asWire(stored: readonly UIMessage[]): UnparsedWireValue {
@@ -352,14 +352,14 @@ test("a writer refuses to be composed over a catalog whose declared output schem
       outputSchema: z.object({ lines: z.array(z.string()) }),
     }),
   };
-  await assert.rejects(storeWriter({ db: database.db, tools: narrow }));
+  await assert.rejects(storeWriter({ run: database.run, tools: narrow }));
   const undeclared: ToolSet = {
     read_transcript: tool({
       description: "Reads the tail of an observed session's transcript.",
       inputSchema: z.object({ providerId: z.string(), providerSessionId: z.string() }),
     }),
   };
-  await storeWriter({ db: database.db, tools: undeclared });
+  await storeWriter({ run: database.run, tools: undeclared });
 });
 
 test("a developer turn leaves its ask, its journal closed as the answer told, and a settled turn", async () => {

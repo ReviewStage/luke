@@ -79,9 +79,9 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const store = await storeWriter({ db: database.db, tools: TOOLS, now: () => new Date(NOW) });
+const store = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
 const sessionRecord = voiceSessionRecord(database.db, () => NOW);
-const writer = voiceWriter({ db: database.db, store });
+const writer = voiceWriter({ run: database.run, store });
 
 /**
  * A user with a main conversation, and the live session's row unless the test

@@ -223,12 +223,12 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
       forgetIneligible: (eligibility) => run(forgetObservationIneligible(eligibility)),
     },
     speech: {
-      open: (userId, limit) => openSpeechOffers(db, { userId, limit }),
+      open: (userId, limit) => run(openSpeechOffers({ userId, limit })),
     },
   };
 }
 
-export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
+export type { HostedStoreContext, HostedStoreDatabase, HostedStoreRun } from "./database.js";
 export {
   findMessageByClientId,
   listRecentMessages,
@@ -255,6 +255,7 @@ export {
   claimSpeech,
   markSpeechPushed,
   markSpeechSpoken,
+  type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
   quietUntilByAccount,

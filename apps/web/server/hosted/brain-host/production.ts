@@ -9,7 +9,7 @@ import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../encryption.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../openai.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
-import type { HostedStoreDatabase } from "../store/database.js";
+import type { HostedStoreDatabase, HostedStoreRun } from "../store/database.js";
 import { type HostedStore, hostedStore, storeWriter } from "../store/index.js";
 import { readApiKeyFor } from "../vault-keys.js";
 import type { VaultKeyRow } from "../vault-route.js";
@@ -39,6 +39,8 @@ interface OpenAiAccess {
 
 export interface BrainHostSeams {
   readonly db: () => HostedStoreDatabase;
+  /** The runner the store's own effects are answered through, this deployment's edge. */
+  readonly run: HostedStoreRun;
   readonly store: () => HostedStore;
   /** The writer over the catalog's tool set, composed once; its composition probes every declared schema. */
   readonly writer: () => Promise<StoreWriter>;
@@ -83,7 +85,7 @@ export function productionBrainHostSeams(): BrainHostSeams {
   const store = once(() =>
     hostedStore({ db: db(), keys: payloadKeyRing(vaultSecret()), run: runWeb }),
   );
-  const writer = once(() => storeWriter({ db: db(), tools: CATALOG_TOOL_SET }));
+  const writer = once(() => storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET }));
   const vaultRows = async (userId: string): Promise<readonly VaultKeyRow[]> =>
     db()
       .select({ providerId: providerKey.providerId, ciphertext: providerKey.ciphertext })
@@ -91,6 +93,7 @@ export function productionBrainHostSeams(): BrainHostSeams {
       .where(eq(providerKey.userId, userId));
   return {
     db,
+    run: runWeb,
     store,
     writer,
     ownership: {

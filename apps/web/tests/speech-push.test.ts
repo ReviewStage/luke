@@ -37,7 +37,9 @@ import {
 } from "../server/hosted/speech-push";
 import {
   claimSpeech,
+  type HostedStoreDatabase,
   markSpeechPushed,
+  type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
   SPEECH_OFFER,
@@ -66,14 +68,18 @@ const BRIEFING = "One fixture agent finished and another is waiting on you.";
 const SESSION = { providerId: "conductor", providerSessionId: "s-push-fixture" } as const;
 
 let clock = NOW;
-const store: SpeechSweepStore = {
+/** The sweep's store and the push pass's in one: the push's own two reads are still Drizzle's. */
+const store: SpeechSweepStore & { readonly db: HostedStoreDatabase } = {
   db: database.db,
+  run: database.run,
   writer: await storeWriter({
-    db: database.db,
+    run: database.run,
     tools: CATALOG_TOOL_SET,
     now: () => new Date(clock),
   }),
 };
+
+const openOffers = (query: OpenSpeechOffersQuery) => database.run(openSpeechOffers(query));
 
 const NOTHING: SpeechPushOutcome = {
   pushed: 0,
@@ -345,7 +351,7 @@ test("Mac inactive: the briefing is pushed once to the most recently seen device
     { kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED, deviceId: phone },
   ]);
   assert.notEqual(phone, older);
-  assert.deepEqual(await openSpeechOffers(database.db, { userId }), []);
+  assert.deepEqual(await openOffers({ userId }), []);
 
   clock = NOW + 60_000;
   assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
@@ -443,7 +449,7 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
     turns: 0,
   });
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId })).map((open) => open.state),
+    (await openOffers({ userId })).map((open) => open.state),
     [SPEECH_STATE.HELD],
   );
   assert.deepEqual(sent, []);
@@ -509,9 +515,7 @@ test("an account with no token-holding device leaves the offer standing for the 
   });
   assert.deepEqual(sent, []);
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userIds: accounts }))
-      .map((open) => open.messageId)
-      .sort(),
+    (await openOffers({ userIds: accounts })).map((open) => open.messageId).sort(),
     [standing.messageId, alone.messageId, wordless.messageId].sort(),
   );
 
@@ -547,7 +551,7 @@ test("a send Apple refuses or the network drops leaves that offer settled and co
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId: refused })).map((open) => open.messageId),
+    (await openOffers({ userId: refused })).map((open) => open.messageId),
     [spared.messageId],
   );
   // The next tick, with Apple answering, delivers the one left standing and the settled one is not sent again.
@@ -557,7 +561,7 @@ test("a send Apple refuses or the network drops leaves that offer settled and co
     pushed: 1,
   });
   assert.equal(recovered.sent.length, 1);
-  assert.deepEqual(await openSpeechOffers(database.db, { userId: refused }), []);
+  assert.deepEqual(await openOffers({ userId: refused }), []);
 
   const gone = await database.createUser();
   const stale = await device(gone, {
@@ -583,7 +587,7 @@ test("a send Apple refuses or the network drops leaves that offer settled and co
     ],
   );
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId: gone })).map((open) => open.messageId),
+    (await openOffers({ userId: gone })).map((open) => open.messageId),
     [second.messageId],
   );
 });
@@ -615,14 +619,14 @@ test("a pass spends its budget and leaves the rest standing unsettled for the ne
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userId })).map((open) => open.messageId),
+    (await openOffers({ userId })).map((open) => open.messageId),
     [second.messageId],
   );
   assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId], clock: () => wall }), {
     ...NOTHING,
     pushed: 1,
   });
-  assert.deepEqual(await openSpeechOffers(database.db, { userId }), []);
+  assert.deepEqual(await openOffers({ userId }), []);
 });
 
 test("a pass reads only the accounts it is told", async () => {
@@ -641,9 +645,7 @@ test("a pass reads only the accounts it is told", async () => {
   });
   assert.equal(sent.length, 1);
   assert.deepEqual(
-    (await openSpeechOffers(database.db, { userIds: [mine, theirs] })).map(
-      (open) => open.messageId,
-    ),
+    (await openOffers({ userIds: [mine, theirs] })).map((open) => open.messageId),
     [other.messageId],
   );
   assert.deepEqual(

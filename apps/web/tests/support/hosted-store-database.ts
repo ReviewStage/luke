@@ -11,7 +11,12 @@ import { DRIZZLE_MIGRATIONS_FOLDER } from "../../server/db/effect-migrator";
 import * as schema from "../../server/db/schema";
 import { sqlClientOverPool } from "../../server/db/sql-client";
 import { payloadKeyRing } from "../../server/hosted/encryption";
-import { type HostedStore, type HostedStoreDatabase, hostedStore } from "../../server/hosted/store";
+import {
+  type HostedStore,
+  type HostedStoreDatabase,
+  type HostedStoreRun,
+  hostedStore,
+} from "../../server/hosted/store";
 import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-client";
 
 /**
@@ -36,6 +41,8 @@ export interface HostedStoreTestDatabase {
   readonly store: HostedStore;
   /** The same client the store's effects run against, for a test that reads one itself. */
   readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
+  /** The runner the store, the writers, and the speech module are handed here, over that client. */
+  readonly run: HostedStoreRun;
   /** Inserts a user row for one test, answering the id every other row hangs from. */
   createUser(): Promise<string>;
   close(): Promise<void>;
@@ -46,10 +53,12 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
   const opened = connectionString ? await openNodePostgres(connectionString) : await openPglite();
   const keys = payloadKeyRing(TEST_PAYLOAD_SECRET);
   const runtime = ManagedRuntime.make(opened.sql);
+  const run: HostedStoreRun = (effect) => runtime.runPromise(effect);
   return {
     db: opened.db,
     sql: opened.sql,
-    store: hostedStore({ db: opened.db, keys, run: (effect) => runtime.runPromise(effect) }),
+    run,
+    store: hostedStore({ db: opened.db, keys, run }),
     async createUser() {
       const id = `user-${randomUUID()}`;
       await opened.db.insert(schema.user).values({
