@@ -22,7 +22,15 @@ type alone, so a sideband drops it by type before anything reads it.
 `RENDERER_CLIENT_EVENTS` and `RENDERER_SERVER_EVENTS` are what an untrusted
 window's data channel may send and is shown: the microphone switch, the
 hang-up, the lifecycle, both captions, usage, error, and info; every append
-and every delegation stays with the trusted side.
+and every delegation stays with the trusted side. The phase (`LIVE_STATUS`)
+and the transport-level vocabularies (`LIVE_CLIENT_EVENT`, `LIVE_SERVER_EVENT`,
+`LIVE_CLOSE_REASON`, `LIVE_DELEGATION_TARGET`) each carry an Effect
+`Schema.Literal` beside the `as const` object they derive from
+(`LiveStatusSchema`, `LiveClientEventTypeSchema`, and so on), spread from
+`Object.values` like every vocabulary in this migration; nothing here parses
+an inbound value against them yet, since the wire grammar's own parsing
+still runs through `@sidecar/wire`'s `s.*` schemas and the JSON Schema
+goldens they emit.
 
 `session.ts` is the creation contract: the sessions path and the attach
 path, `liveSessionConfig`, which sets the client delegation, `store: false`,
@@ -31,7 +39,17 @@ for WebRTC (no `audio.format`, no tools, no speed, no truncation), the
 `liveCreateRequest` body, the `liveCreateAnswerSchema` that reads the id and
 SDP answer back, and the outcome set and `LiveDiagnostics` shape the host
 reports voice's availability with. A diagnostics document carries no
-credential material.
+credential material. `LIVE_TRANSPORT_TYPE` and `LIVE_DELEGATION_TYPE` are
+each a schema of their own single value (`LiveTransportTypeSchema`,
+`LiveDelegationTypeSchema`). Every non-attempt, non-success member of
+`LIVE_SESSION_OUTCOME` also has its own `Schema.TaggedError` class
+(`NoApiKeyRefusal`, `HttpErrorRefusal`, and so on, listed whole as
+`LIVE_SESSION_REFUSALS`), each carrying the legacy string as its `code` field
+so a caller that throws or yields the class and one still comparing
+`LIVE_SESSION_OUTCOME`'s string with `===` agree on the same wire value; the
+plain enum and every caller's existing `{ outcome, ... }` union are
+unchanged, since converting those callers to the typed error is its own,
+later PR.
 
 `instructions.ts` is the prompt a session is created with, in the Live
 prompting guide's shape and no longer: an identity block of a few sentences,

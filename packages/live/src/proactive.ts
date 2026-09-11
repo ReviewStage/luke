@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { chunkForAppend } from "./chunks.js";
 import { trimmedText } from "./trimmed-text.js";
 
@@ -22,6 +23,8 @@ export const PROACTIVE_SPEECH_KIND = {
 
 export type ProactiveSpeechKind =
   (typeof PROACTIVE_SPEECH_KIND)[keyof typeof PROACTIVE_SPEECH_KIND];
+
+export const ProactiveSpeechKindSchema = Schema.Literal(...Object.values(PROACTIVE_SPEECH_KIND));
 
 export interface BriefingSpeech {
   kind: typeof PROACTIVE_SPEECH_KIND.BRIEFING;

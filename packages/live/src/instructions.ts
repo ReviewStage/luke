@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+
 /**
  * What a session is created with, in the shape the Live prompting guide
  * recommends and nothing longer: the live model has a small window and
@@ -18,6 +20,8 @@ export const LIVE_SCENE = {
 
 export type LiveScene = (typeof LIVE_SCENE)[keyof typeof LIVE_SCENE];
 
+export const LiveSceneSchema = Schema.Literal(...Object.values(LIVE_SCENE));
+
 /** The sections a session's instructions are composed from, in the guide's order. */
 export const INSTRUCTION_SECTION = {
   IDENTITY: "identity",
@@ -27,6 +31,8 @@ export const INSTRUCTION_SECTION = {
 } as const;
 
 export type InstructionSection = (typeof INSTRUCTION_SECTION)[keyof typeof INSTRUCTION_SECTION];
+
+export const InstructionSectionSchema = Schema.Literal(...Object.values(INSTRUCTION_SECTION));
 
 export interface InstructionBlock {
   section: InstructionSection;

@@ -7,6 +7,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Schema } from "effect";
 
 /**
  * The Live wire grammar: how far a session has progressed, the events both
@@ -32,6 +33,8 @@ export const LIVE_STATUS = {
 } as const;
 
 export type LiveStatus = (typeof LIVE_STATUS)[keyof typeof LIVE_STATUS];
+
+export const LiveStatusSchema = Schema.Literal(...Object.values(LIVE_STATUS));
 
 /**
  * Whether a spoken exchange is live: the session coming up for a press, the
@@ -73,6 +76,8 @@ export const LIVE_CLIENT_EVENT = {
 
 export type LiveClientEventType = (typeof LIVE_CLIENT_EVENT)[keyof typeof LIVE_CLIENT_EVENT];
 
+export const LiveClientEventTypeSchema = Schema.Literal(...Object.values(LIVE_CLIENT_EVENT));
+
 export const LIVE_SERVER_EVENT = {
   SESSION_STARTED: "session.started",
   SESSION_CLOSED: "session.closed",
@@ -95,6 +100,8 @@ export const LIVE_SERVER_EVENT = {
 
 export type LiveServerEventType = (typeof LIVE_SERVER_EVENT)[keyof typeof LIVE_SERVER_EVENT];
 
+export const LiveServerEventTypeSchema = Schema.Literal(...Object.values(LIVE_SERVER_EVENT));
+
 /** Why a session ended, as `session.closed` names it. */
 export const LIVE_CLOSE_REASON = {
   CLOSE_REQUESTED: "close_requested",
@@ -106,6 +113,8 @@ export const LIVE_CLOSE_REASON = {
 
 export type LiveCloseReason = (typeof LIVE_CLOSE_REASON)[keyof typeof LIVE_CLOSE_REASON];
 
+export const LiveCloseReasonSchema = Schema.Literal(...Object.values(LIVE_CLOSE_REASON));
+
 export const LIVE_DELEGATION_TARGET = {
   CLIENT: "client",
   RESPONSES: "responses",
@@ -113,6 +122,8 @@ export const LIVE_DELEGATION_TARGET = {
 
 export type LiveDelegationTarget =
   (typeof LIVE_DELEGATION_TARGET)[keyof typeof LIVE_DELEGATION_TARGET];
+
+export const LiveDelegationTargetSchema = Schema.Literal(...Object.values(LIVE_DELEGATION_TARGET));
 
 /**
  * An identifier as the service wrote it. Session and delegation ids are
