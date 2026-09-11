@@ -37,6 +37,12 @@ export interface JsonStateFile<T> {
  * One small JSON record on disk, read and written synchronously. Synchronous
  * because the introduction's completion is read before `whenReady` resolves,
  * and no writer here waits on anything a promise could carry.
+ *
+ * @deprecated The synchronous face over `node:fs`, kept for the composers
+ * that still call it directly (`onboarding-state.ts`, `device-registration.ts`,
+ * and the desktop's own last-run-version file) rather than a `Layer`.
+ * `jsonStateFileEffect` in `@sidecar/host/effect` is the replacement, over
+ * `FileSystem` and a `Schema.Struct`; each composer converts in its own PR.
  */
 export function jsonStateFile<T>(options: JsonStateFileOptions<T>): JsonStateFile<T> {
   const filePath = () => path.join(options.directory(), options.fileName);

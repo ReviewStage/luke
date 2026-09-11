@@ -19,6 +19,11 @@ export {
   type StandingHost,
 } from "./host.js";
 export {
+  type JsonStateFileEffect,
+  type JsonStateFileEffectOptions,
+  jsonStateFileEffect,
+} from "./json-state-file.js";
+export {
   HostKernelTag,
   HostService,
   hostKernelLayer,
