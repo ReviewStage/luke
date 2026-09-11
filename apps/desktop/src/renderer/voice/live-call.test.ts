@@ -970,6 +970,46 @@ it.effect(
 );
 
 it.effect(
+  "a session opened for Luke's own speech sends nothing until pressed, then the same switches and close a press sends",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const opening = f.call.open({ byPress: false });
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* answered(opening);
+      // No session configuration, tool list, or instructions crosses for a
+      // session nobody pressed for: the briefing's own vocabulary is empty
+      // until the developer presses.
+      assert.deepEqual(f.sentTypes(), []);
+      const unmuting = f.call.unmute();
+      yield* settle;
+      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+      yield* answered(unmuting);
+      const muting = f.call.mute();
+      yield* settle;
+      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+      yield* answered(muting);
+      const closing = f.call.close();
+      yield* settle;
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+        event_id: "closed",
+        reason: "close_requested",
+        usage: { seconds: 1 },
+      });
+      yield* answered(closing);
+      assert.deepEqual(f.channel().sent, [
+        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
+        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
+        { type: LIVE_CLIENT_EVENT.CLOSE, event_id: "peer-3" },
+      ]);
+    }),
+);
+
+it.effect(
   "the peer belongs to the scope it was acquired into: one close, whichever way the scope ends",
   () =>
     Effect.gen(function* () {
