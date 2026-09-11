@@ -82,8 +82,17 @@ export interface DeploymentActor {
   readonly admits: Readonly<Record<BrainHostTurn, boolean>>;
 }
 
-/** The routes a deployment actor may reach: a message opening a session or following one up, and no other. */
+/** The routes a deployment actor may reach: a message opening a session or following one up, and the cancel of one turn of a session; no other. */
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
+/**
+ * The cancel is admitted because the honour of a waiting ask's Stop runs where
+ * the start is seen, in the deployment's hook, which holds no bearer of the
+ * account's; it is narrower than the message routes the same principal already
+ * holds, since a message makes Luke run a turn and take actions and a cancel
+ * can only stop one, and the carrier names the turn it stops. A cancel carries
+ * no kind of turn, so the turn table does not apply to it.
+ */
+const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
 
 /**
  * The route authenticator for the deployment acting for an account, minted
@@ -92,8 +101,9 @@ const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
  * opened the session reads the deployment, in the role the turn kind names.
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
- * message, or names a kind of turn the table does not admit is refused here,
- * before any later authenticator could admit it as something else.
+ * message or a cancel, or is a message naming a kind of turn the table does
+ * not admit is refused here, before any later authenticator could admit it
+ * as something else.
  */
 export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
   return withAuthChallenges((request) => {
@@ -104,13 +114,15 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
     }
     const attributes = requestAttributes(request.headers);
     const turn = attributes[BRAIN_HOST_ATTRIBUTE.TURN];
-    if (
-      request.method !== "POST" ||
-      !MESSAGE_ROUTE.test(new URL(request.url).pathname) ||
-      !isWireString(turn) ||
-      !isBrainHostTurn(turn) ||
-      !actor.admits[turn]
-    ) {
+    const pathname = new URL(request.url).pathname;
+    const cancel = request.method === "POST" && CANCEL_ROUTE.test(pathname);
+    const message =
+      request.method === "POST" &&
+      MESSAGE_ROUTE.test(pathname) &&
+      isWireString(turn) &&
+      isBrainHostTurn(turn) &&
+      actor.admits[turn];
+    if (!cancel && !message) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
     return {

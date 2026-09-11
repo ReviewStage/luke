@@ -437,10 +437,25 @@ test("the deployment is a principal of its own type acting for the named account
     await refusal(() => actor(scheduled("not an account", BRAIN_HOST_TURN.OBSERVATION))),
     BRAIN_HOST_REFUSAL.NO_ACCOUNT,
   );
+  // The cancel of one turn is admitted for the account, with no kind of turn to name: the honour of
+  // a waiting ask's Stop runs in the deployment's hook, which holds no bearer of the account's.
+  const cancel = await actor(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`));
+  assert.equal(actedForAccount(cancel ?? null), "user-a");
+  assert.deepEqual(cancel?.attributes, {
+    [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: CONVERSATION_ID,
+    [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: "user-a",
+  });
+  assert.equal(
+    await refusal(() =>
+      actor(scheduled(undefined, undefined, `/eve/v1/session/${SESSION_A}/cancel`)),
+    ),
+    BRAIN_HOST_REFUSAL.NO_ACCOUNT,
+  );
   for (const forbidden of [
     scheduled("user-a", BRAIN_HOST_TURN.TYPED),
     scheduled("user-a", undefined),
-    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}/cancel`),
+    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`, "GET"),
+    scheduled("user-a", undefined, "/eve/v1/session/cancel"),
     scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
     scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, "/eve/v1/info", "GET"),
   ]) {
