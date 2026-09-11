@@ -1,90 +1,142 @@
+import { ACTION_REFUSAL } from "@sidecar/actions";
 import {
-  ACTION_KIND,
-  type ActionRequest,
-  type ActionRoster,
-  admit,
-  type SessionActionKind,
-} from "@sidecar/actions";
-import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+  PRODUCT_EVENT,
+  PRODUCT_SESSION_ACTION,
+  type ProductSessionAction,
+  type RecordProductEvent,
+} from "@sidecar/analytics";
 import {
-  isSessionWriteResult,
+  HOSTED_ACTION_FAILURE,
+  type HostedActionClient,
+  type HostedActionFailure,
+  type HostedActionOutcome,
+  type HostedActionTarget,
+} from "@sidecar/hosted";
+import {
+  isCloudAgentProviderId,
+  type Session,
   type SessionIdentity,
   type SessionWriteResult,
+  sessionWithIdentity,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
-import type { SessionActionPerformer } from "./session-action-performer.js";
 
 /**
- * What a row's own write needs: the roster admission reads for itself — a
- * fresh observation, then the sessions an action may name — and the performer
- * that carries only what admission minted. Nothing here holds a session or an
- * adapter; a row names an identity and a control id, and every word of what
- * reaches a provider is read back out of the roster by `admit`.
+ * What a row's own write needs: the sessions the rows draw, read at the
+ * press, the service call that carries the write, and the redraw a landed
+ * write earns. Nothing here holds a roster of its own or an adapter: a row
+ * names an identity and a control id, and every word of what reaches a
+ * provider is read back out of the stored snapshot by the service's own
+ * admission.
  */
 export interface SessionRowActionsDependencies {
-  roster: ActionRoster;
-  performer: Pick<SessionActionPerformer, "perform">;
+  /** The roster the rows were drawn from, as it stands at the press. */
+  drawn: () => readonly Session[];
+  client: Pick<HostedActionClient, "sendMessage" | "executeControl">;
+  /** Draws the roster again, so a write that moved a session is seen rather than remembered. */
+  refresh: () => Promise<void>;
+  recordProductEvent: RecordProductEvent;
 }
 
 /**
  * The two writes a session's own row asks for: the message typed into its
  * composer and the press of a control its provider advertised. They are the
- * developer's own acts, so they run under the developer's origin and no
- * guard — a press opens its turn and its effect in the same breath — but they
- * run the whole gauntlet a spoken ask does: `admit` reads the roster afresh,
- * the target has to be one it holds, the advertised entry itself becomes what
- * the action carries, and the text is refused rather than cut. A refusal is
- * an answer for the row, never a throw, because a write is the user's own act
- * and what became of it belongs beside the field it left.
+ * developer's own acts, and they are admitted where the roster is: the
+ * service admits each against the stored snapshot the row was drawn from,
+ * by the same `admit()` every action runs, builds the write from that
+ * snapshot's own advertisement, and answers what the provider said. The one
+ * thing decided here is that the row still stands — a session the drawn
+ * roster no longer holds is refused without a call, as it always was. A
+ * refusal is an answer for the row, never a throw, because a write is the
+ * user's own act and what became of it belongs beside the field it left.
  */
 export interface SessionRowActions {
   sendMessage(identity: SessionIdentity, text: string): Promise<SessionWriteResult>;
   executeControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
 }
 
-const UNREADABLE_ANSWER =
-  "The write was handed on, and its provider answered in a shape this build cannot read.";
+const ROW_ANSWER = {
+  NO_ENDPOINT: "That session's provider documents no way in from this Mac.",
+  NOT_SENT: "Luke could not reach his service under your account; sign in and try again.",
+  REFUSED: "Luke's service refused the request before it reached the provider.",
+  UNSAID: "The provider refused the write and said nothing more.",
+  LOST: "The write was handed on, and its answer was lost; it may have landed.",
+  UNREADABLE:
+    "The write was handed on, and its provider answered in a shape this build cannot read.",
+} as const;
+
+/**
+ * A failure short of an answer, as the row hears it. A call that never left
+ * or was turned away ran nothing and is a refusal; one that left and lost its
+ * answer, or came back unreadable, may have landed, and the row must neither
+ * call it failed nor repeat it.
+ */
+const FAILURE_RESULT = {
+  [HOSTED_ACTION_FAILURE.NOT_SENT]: {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: ROW_ANSWER.NOT_SENT,
+  },
+  [HOSTED_ACTION_FAILURE.REFUSED]: {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: ROW_ANSWER.REFUSED,
+  },
+  [HOSTED_ACTION_FAILURE.LOST]: { status: UNKNOWN_ACTION_STATUS, reason: ROW_ANSWER.LOST },
+  [HOSTED_ACTION_FAILURE.UNREADABLE]: {
+    status: UNKNOWN_ACTION_STATUS,
+    reason: ROW_ANSWER.UNREADABLE,
+  },
+} as const satisfies Readonly<Record<HostedActionFailure, SessionWriteResult>>;
+
+function writeResult(outcome: HostedActionOutcome): SessionWriteResult {
+  if ("failure" in outcome) return FAILURE_RESULT[outcome.failure];
+  const { answer } = outcome;
+  if (answer.result === ACTION_RESULT_STATUS.ACCEPTED) {
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  }
+  return { status: answer.result, reason: answer.reason ?? ROW_ANSWER.UNSAID };
+}
 
 export function createSessionRowActions(
   dependencies: SessionRowActionsDependencies,
 ): SessionRowActions {
-  const { roster, performer } = dependencies;
+  const { drawn, client, refresh, recordProductEvent } = dependencies;
 
-  const carry = async (request: ActionRequest<SessionActionKind>): Promise<SessionWriteResult> => {
-    const admitted = await admit(request, { origin: RUN_ORIGIN.USER, roster });
-    if (admitted.kind === undefined) {
-      return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.reason };
+  const carry = async (
+    identity: SessionIdentity,
+    counted: ProductSessionAction,
+    call: (target: HostedActionTarget) => Promise<HostedActionOutcome>,
+  ): Promise<SessionWriteResult> => {
+    const session = sessionWithIdentity(identity, drawn());
+    if (!session)
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: ACTION_REFUSAL.NO_SESSION };
+    const providerId = session.providerId;
+    if (!isCloudAgentProviderId(providerId)) {
+      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: ROW_ANSWER.NO_ENDPOINT };
     }
-    const result = await performer.perform(admitted);
-    // The performer has run by here, so an answer this build cannot read is
-    // not a refusal: the effect may have happened, and the row must neither
-    // call it failed nor repeat it.
-    return isSessionWriteResult(result)
-      ? result
-      : { status: UNKNOWN_ACTION_STATUS, reason: UNREADABLE_ANSWER };
+    const result = writeResult(
+      await call({ providerId, providerSessionId: session.providerSessionId }),
+    );
+    // A rejection redraws like an acceptance: a write whose answer never
+    // arrived may still have landed, so the rows must catch up with the
+    // snapshot rather than keep advertising what it may have already taken.
+    if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) void refresh().catch(() => undefined);
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
+      recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
+        provider_id: providerId,
+        session_action: counted,
+      });
+    }
+    return result;
   };
 
-  // The fields are keyed by the action's own schema names — the dialect
-  // admission already reads for a tool call — so a row's ask and a spoken one
-  // meet the same admitter over the same names.
   return {
     sendMessage: (identity, text) =>
-      carry({
-        kind: ACTION_KIND.MESSAGE,
-        fields: {
-          provider_id: identity.providerId,
-          provider_session_id: identity.providerSessionId,
-          text,
-        },
-      }),
+      carry(identity, PRODUCT_SESSION_ACTION.MESSAGE_SEND, (target) =>
+        client.sendMessage(target, text),
+      ),
     executeControl: (identity, controlId) =>
-      carry({
-        kind: ACTION_KIND.CONTROL,
-        fields: {
-          provider_id: identity.providerId,
-          provider_session_id: identity.providerSessionId,
-          control_id: controlId,
-        },
-      }),
+      carry(identity, PRODUCT_SESSION_ACTION.CONTROL_RUN, (target) =>
+        client.executeControl(target, controlId),
+      ),
   };
 }

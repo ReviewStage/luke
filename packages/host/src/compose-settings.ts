@@ -7,7 +7,6 @@ import {
 } from "@sidecar/analytics";
 import {
   CREDENTIAL_PROVIDER_ID,
-  type CredentialProviderId,
   isCredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
@@ -60,8 +59,6 @@ interface SettingsLinks {
   reconcileSpeech: () => void;
   refreshSupersetWorkspaceHost: () => Promise<void>;
   broadcastWorkspaceProjects: () => Promise<void>;
-  /** One provider's sessions read again after its key changed. */
-  refreshCredentialAdapter: (providerId: CredentialProviderId) => void;
   refreshIssues: () => void;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
 }
@@ -448,7 +445,6 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
         () => store.setApiKey(providerId, apiKey),
         async (saved) => {
           if (saved.reason) return;
-          links.get().refreshCredentialAdapter(providerId);
           if (providerId === CREDENTIAL_PROVIDER_ID.LINEAR) links.get().refreshIssues();
           if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
             await links.get().applyVoiceCredential();

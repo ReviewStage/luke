@@ -19,7 +19,7 @@ import {
   gatewayOk,
   invalid,
 } from "@sidecar/gateway";
-import { hostedVoiceServiceOrigin } from "@sidecar/hosted";
+import { type AccountToken, hostedVoiceServiceOrigin } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { lateRef } from "@sidecar/wire";
 import type { Composer, ComposerContext } from "./composer.js";
@@ -54,6 +54,13 @@ export interface AccountComposer extends Composer {
   snapshot: () => AccountSnapshot;
   signedIn: () => boolean;
   capabilitiesActive: () => boolean;
+  /**
+   * The signed-in account as a hosted client is handed it. A run that sends
+   * nothing reads no token, so every call made under it refuses on its own
+   * before anything travels, which is what keeps a fixture or evidence run
+   * off the network.
+   */
+  readonly token: AccountToken;
   applyVoiceCredential: () => Promise<void>;
   sessionReplayState: () => Promise<{ permitted: boolean; accountId?: string }>;
   link: (links: AccountLinks) => void;
@@ -115,6 +122,17 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
   function capabilitiesActive(): boolean {
     return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
   }
+
+  // The holder is the account's own address, so a call's one retry after a
+  // 401 can tell a renewed token from a different person's: a sign-out and
+  // sign-in between the attempt and its retry reads as the caller's account
+  // gone, never as a fresh bearer to carry the old account's payload under.
+  const token: AccountToken = {
+    readAccessToken: async () =>
+      runMode.sendsNetwork ? (await settings.store.readAccount())?.accessToken : undefined,
+    refreshAccount: session.refreshOnce,
+    readAccountKey: async () => (await settings.store.readAccount())?.email,
+  };
 
   const voiceCapabilities = new VoiceCapabilityAssembler({
     settings: settings.store,
@@ -226,6 +244,7 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
     snapshot: () => account,
     signedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
     capabilitiesActive,
+    token,
     applyVoiceCredential,
     sessionReplayState,
     link: (next) => links.set(next),

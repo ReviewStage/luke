@@ -1,7 +1,6 @@
 import type { StoredAccount } from "@sidecar/credentials";
 import { HostedDeviceClient } from "@sidecar/hosted";
 import type { AccountComposer } from "./compose-account.js";
-import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { DeviceRegistration, deviceStateFile } from "./device-registration.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -23,7 +22,6 @@ export interface DevicesComposer extends Composer {
 
 export interface DevicesDependencies {
   kernel: HostKernel;
-  settings: SettingsComposer;
   account: AccountComposer;
 }
 
@@ -35,15 +33,13 @@ export interface DevicesDependencies {
  * nothing.
  */
 export function composeDevices(dependencies: DevicesDependencies): DevicesComposer {
-  const { kernel, settings, account } = dependencies;
+  const { kernel, account } = dependencies;
   const { runMode, report } = kernel;
 
   const registration = new DeviceRegistration({
     client: new HostedDeviceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      readAccessToken: async () =>
-        runMode.sendsNetwork ? (await settings.store.readAccount())?.accessToken : undefined,
-      refreshAccount: account.session.refreshOnce,
+      ...account.token,
     }),
     state: deviceStateFile(() => kernel.stateRoot, report),
     mintInstallationId: kernel.createId,

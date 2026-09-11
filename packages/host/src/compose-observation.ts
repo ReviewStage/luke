@@ -6,9 +6,8 @@ import {
   type ProductDiagnosticKind,
   productSessionCountBucket,
 } from "@sidecar/analytics";
-import type { BrainRoster, BrainWakeEvent } from "@sidecar/brain";
+import type { BrainRoster } from "@sidecar/brain";
 import { sessionContextText } from "@sidecar/brain";
-import type { CredentialProviderId } from "@sidecar/credentials";
 import {
   carried,
   GATEWAY_EVENT,
@@ -17,14 +16,12 @@ import {
   gatewayOk,
   invalid,
 } from "@sidecar/gateway";
+import { HostedActionClient, HostedRosterClient } from "@sidecar/hosted";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
-  claudeDesktopApplications,
-  conductorApplications,
   conductorLocalWorkspacePlugin,
   ObservationHookRegistry,
-  type ObservationSpoolWatcher,
   type ProviderRegistration,
   providerRegistrations,
   SUPERSET_SIGN_IN_STAGE,
@@ -32,9 +29,6 @@ import {
   supersetPlugin,
   supersetPressedLink,
   type WorkspaceHostEnrichment,
-  type WorkspaceHostRegistration,
-  watchObservationSpool,
-  workspaceHostRegistrations,
 } from "@sidecar/providers";
 import { ObservationLoop } from "@sidecar/runtime";
 import {
@@ -67,7 +61,6 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
-import { wakeEventsFromHooks } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { IssuesComposer } from "./compose-issues.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -78,7 +71,13 @@ import {
   type SessionActionPerformer,
 } from "./session-action-performer.js";
 import { createSessionRowActions } from "./session-row-actions.js";
+import { drawSnapshotRoster } from "./snapshot-roster.js";
 
+/**
+ * How often the stored snapshot is drawn again: the cadence the service's
+ * own scheduled pass refreshes it at, so a faster tick would read the same
+ * roster twice and a slower one would show a chat's move a tick late.
+ */
 const SESSION_REFRESH_INTERVAL_MS = 60_000;
 
 const DIAGNOSTIC_COUNTED_AS = {
@@ -95,9 +94,8 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
   );
 }
 
-/** What observation reaches in the brain: a hook's wake, and the look the pass ends with. */
+/** What observation reaches in the brain: the look the pass ends with. */
 interface ObservationLinks {
-  wake: (events: readonly BrainWakeEvent[]) => void;
   rosterLook: () => void;
   /** The roster the clients draw moved; the live session is told the same view once it settles. */
   rosterChanged: () => void;
@@ -118,7 +116,6 @@ export interface ObservationComposer extends Composer {
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
   broadcastWorkspaceProjects: () => Promise<void>;
   readSupersetWorkspaceHost: () => Promise<WorkspaceHostEnrichment>;
-  refreshCredentialAdapter: (providerId: CredentialProviderId) => void;
   /** The sessions an action may name: the drawn roster less the voice's own. */
   actableSessions: () => readonly Session[];
   roster: () => BrainRoster;
@@ -159,8 +156,14 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
   }
 
   const sessionRegistry = new SessionRoster();
-  const conductorSessionApplications = conductorApplications();
-  const claudeDesktopSessionApplications = claudeDesktopApplications();
+  const rosterClient = new HostedRosterClient({
+    serviceBaseUrl: kernel.hostedServiceBaseUrl,
+    ...account.token,
+  });
+  const actionClient = new HostedActionClient({
+    serviceBaseUrl: kernel.hostedServiceBaseUrl,
+    ...account.token,
+  });
   // The local counterpart of the cloud Conductor adapter's creation path: it
   // reads the repositories Conductor holds and creates a workspace in one by
   // handing Conductor's own creation deep link to the operating system, through
@@ -172,18 +175,10 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     options.environment.SUPERSET_HOME_DIR ?? path.join(options.homeDirectory, ".superset");
   const superset = supersetPlugin({ homeDirectory: supersetHomeDirectory });
   const supersetCli = superset.cli;
-  const supersetWorkspaceHost: WorkspaceHostRegistration = {
-    observationFailureLabel: "Superset observation",
-    read: () => readSupersetWorkspaceHost(),
-    emptyEnrichment: (_providerId, observations) => observations,
-  };
-  const workspaceHosts = workspaceHostRegistrations({
-    superset: supersetWorkspaceHost,
-    conductorApplications: conductorSessionApplications,
-    claudeDesktopApplications: claudeDesktopSessionApplications,
-  });
   // The hook spool and every provider script live under the explicit state
-  // root, the same directory Luke always kept them in.
+  // root, the same directory Luke always kept them in; nothing registers a
+  // hook or watches the spool any more, and the plugins here observe nothing.
+  // They stand for the reads the brain still makes through them.
   const observationHooks = new ObservationHookRegistry(() => kernel.stateRoot);
   const providerRegistry = providerRegistrations({
     readApiKey: (providerId) => settingsStore.readApiKey(providerId),
@@ -194,7 +189,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     (providerId) => providerRegistry[providerId],
   );
 
-  let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
   const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
   let unsubscribeSessions: (() => void) | undefined;
   let lastWorkspaceProjects: string | undefined;
@@ -219,10 +213,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return superset;
     if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaces;
     return isProviderId(providerId) ? providerRegistry[providerId].plugin : undefined;
-  }
-
-  function pluginForCredential(providerId: CredentialProviderId) {
-    return orderedRegistrations.find((entry) => entry.credential?.id === providerId)?.plugin;
   }
 
   function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
@@ -408,55 +398,17 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     recordProductEvent: settings.recordProductEvent,
   });
 
-  // A row's own send or press is admitted here, in the host, against the same
-  // roster the brain's actions are: a fresh pass first, then the sessions an
-  // action may name, so a control the provider withdrew a moment ago is
-  // refused rather than carried on the row's stale picture of it.
+  // A row's own send or press is admitted where its roster is: the service
+  // admits it against the stored snapshot the row was drawn from, the same
+  // observation and not a second one read here, so a control the provider
+  // withdrew since the last pass is refused there rather than carried on the
+  // row's stale picture of it.
   const rowActions = createSessionRowActions({
-    roster: {
-      read: async () => {
-        await loop.refresh();
-        return actableSessions();
-      },
-    },
-    performer: sessionActions,
+    drawn: actableSessions,
+    client: actionClient,
+    refresh: () => loop.refresh(),
+    recordProductEvent: settings.recordProductEvent,
   });
-
-  async function applyLocalSessionHooks(): Promise<void> {
-    if (!runMode.observesProviders || options.registerProviderHooks === false) return;
-    await Promise.all(
-      orderedRegistrations.map(async ({ plugin, registerObservationHook }) => {
-        if (!registerObservationHook) return;
-        try {
-          await registerObservationHook();
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          report(`${plugin.provider.displayName} hook registration failed: ${message}`);
-        }
-      }),
-    );
-    watchObservationSpools();
-  }
-
-  function watchObservationSpools(): void {
-    if (spoolWatchers.length > 0) return;
-    spoolWatchers = orderedRegistrations.flatMap(({ plugin, observationSpool }) => {
-      if (!observationSpool) return [];
-      const providerId = plugin.provider.id;
-      return [
-        watchObservationSpool({
-          spoolDirectory: observationSpool.directory(),
-          events: observationSpool.events,
-          onEvents: (events) => {
-            void (async () => {
-              await loop.refresh().catch(() => undefined);
-              links.get().wake(wakeEventsFromHooks(providerId, events, sessionRegistry, now()));
-            })();
-          },
-        }),
-      ];
-    });
-  }
 
   async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
     try {
@@ -472,68 +424,16 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     }
   }
 
-  async function refreshProviderSessions(generation: number): Promise<void> {
-    const actionsWereEnabled = superset.activeOrganization() !== undefined;
-    const conductorRepositoriesPromise = conductorLocalWorkspaces.refresh().catch((error) => {
-      report(
-        `Conductor repository observation failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
-    const hostEnrichments = await Promise.all(
-      workspaceHosts.map((host) =>
-        host.read().catch((error) => {
-          report(
-            `${host.observationFailureLabel} failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          return host.emptyEnrichment;
-        }),
-      ),
-    );
-    await conductorRepositoriesPromise;
-    const supersetActionsEnabled = superset.activeOrganization() !== undefined;
-    if (actionsWereEnabled !== supersetActionsEnabled) {
-      if (supersetActionsEnabled) {
-        kernel.emit(GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED, {
-          stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
-          organizations: [],
-        });
-      } else {
-        supersetSignIn.cancel();
-      }
-    }
-    await Promise.all([
-      ...orderedRegistrations.map(async ({ plugin }) => {
-        try {
-          await sessionRegistry.refresh(plugin, (providerId, observations) =>
-            hostEnrichments.reduce(
-              (enriched, enrichment) => enrichment(providerId, enriched),
-              observations,
-            ),
-          );
-        } catch (error) {
-          report(
-            `Session observation failed (${plugin.provider.id}): ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }),
-      (async () => {
-        try {
-          await sessionRegistry.refresh(superset);
-        } catch (error) {
-          report(
-            `Session observation failed (${superset.provider.id}): ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      })(),
-    ]);
-    if (!loop.isCurrent(generation)) return;
-    void broadcastWorkspaceProjects();
-  }
-
   const loop = new ObservationLoop({
     gate: observationGate,
     intervalMs: SESSION_REFRESH_INTERVAL_MS,
-    run: refreshProviderSessions,
+    run: (generation) =>
+      drawSnapshotRoster({
+        client: rosterClient,
+        registry: sessionRegistry,
+        isCurrent: () => loop.isCurrent(generation),
+        report,
+      }),
     afterRun: () => {
       links.get().rosterLook();
     },
@@ -715,10 +615,6 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     workspaceProjectOffered,
     broadcastWorkspaceProjects,
     readSupersetWorkspaceHost,
-    refreshCredentialAdapter: (providerId) => {
-      const plugin = pluginForCredential(providerId);
-      if (plugin) void sessionRegistry.refresh(plugin);
-    },
     actableSessions,
     roster: () => {
       const at = now();
@@ -738,18 +634,10 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     startObservation,
     stopObservation,
     link: (next) => links.set(next),
-    start: async () => {
-      void applyLocalSessionHooks().catch((error) => {
-        report(
-          `Local session hook registration failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
-    },
+    start: async () => undefined,
     stop: async () => {
       unsubscribeSessions?.();
       unsubscribeSessions = undefined;
-      for (const watcher of spoolWatchers) watcher.close();
-      spoolWatchers = [];
       supersetSignIn.shutdown();
     },
   };

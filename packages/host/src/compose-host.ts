@@ -65,7 +65,7 @@ export function composeHost(options: HostSeams): Host {
 
   const settings = composeSettings({ kernel });
   const account = composeAccount({ kernel, settings });
-  const devices = composeDevices({ kernel, settings, account });
+  const devices = composeDevices({ kernel, account });
   const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
   const issues = composeIssues({ kernel, settings, observationGate });
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
@@ -99,7 +99,6 @@ export function composeHost(options: HostSeams): Host {
       await observation.readSupersetWorkspaceHost();
     },
     broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
-    refreshCredentialAdapter: observation.refreshCredentialAdapter,
     refreshIssues: issues.refresh,
     workspaceProjectOffered: observation.workspaceProjectOffered,
   });
@@ -114,7 +113,6 @@ export function composeHost(options: HostSeams): Host {
     releaseDevice: (stored) => devices.release(stored),
   });
   observation.link({
-    wake: (events) => brain.wiring.wake(events),
     rosterLook: () => brain.wiring.rosterLook(),
     rosterChanged: () => live.service.rosterChanged(),
   });
