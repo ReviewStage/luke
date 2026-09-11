@@ -1,0 +1,412 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
+import { FakeClock } from "@sidecar/runtime/testing";
+import {
+  ASK_UNRECORDED_NOTE,
+  LIVE_BRAIN_RUN_END,
+  LIVE_BRAIN_RUN_EVENT,
+  LIVE_BRAIN_SUBMISSION,
+  type LiveBrain,
+  type LiveBrainAsk,
+  type LiveBrainRunEvent,
+  type LiveBrainSubmission,
+  LiveSessionService,
+  type LiveSessionSource,
+  sidebandOverSocket,
+} from "@sidecar/voice/live-session";
+import { FakeLiveSocket } from "@sidecar/voice/testing";
+import { type ToolSet, tool } from "ai";
+import { asc, eq } from "drizzle-orm";
+import { afterAll, test } from "vitest";
+import { z } from "zod";
+import {
+  CONVERSATION_ENTRY_KIND,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type UserMessageMetadata,
+} from "../server/core";
+import { CONVERSATION_KIND, conversations, messages } from "../server/db/storage-schema";
+import {
+  VOICE_SEGMENT_ROLE,
+  voiceSessions,
+  voiceTranscriptSegments,
+} from "../server/db/voice-schema";
+import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  storeWriter,
+  VOICE_WRITE_REFUSAL,
+  type VoiceTarget,
+  type VoiceWriteResult,
+  voiceWriter,
+} from "../server/hosted/store";
+import {
+  LIVE_CLIENT_EVENT,
+  type LiveAppendEvent,
+  type LiveClientEvent,
+  UTTERANCE_GAP_MS,
+  UTTERANCE_SETTLE_MARGIN_MS,
+} from "../server/live";
+import { hostedLiveRecord } from "../server/voice/live-record";
+import { observedSideband } from "../server/voice/live-sideband";
+import { voiceSessionRecord } from "../server/voice/session-record";
+import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { delegated, heard, said, sessionStarted } from "./support/live-events";
+
+/**
+ * The live session service over the hosted record, on the real migrations in
+ * PGlite: a synthetic session's stream — no real spoken word, title, or
+ * session — driven through the service exactly as the voice service would
+ * drive it, and the rows it leaves read back. What these tests hold to is the
+ * plan's split and the service's own rule that the record precedes the
+ * speech: the developer's spoken ask is the one message, cut from the
+ * segments the deltas wrote, and a reply is spoken only once that ask is on
+ * record, while nothing Luke said becomes a message.
+ */
+
+const NOW = Date.parse("2026-09-10T12:00:00.000Z");
+
+const database = await openHostedStoreTestDatabase();
+afterAll(() => database.close());
+
+const TOOLS: ToolSet = {
+  announce: tool({
+    description: "Says a briefing aloud.",
+    inputSchema: z.object({ briefing: z.string() }),
+    outputSchema: z.object({}),
+  }),
+};
+
+const store = await storeWriter({ db: database.db, tools: TOOLS, now: () => new Date(NOW) });
+const sessionRecord = voiceSessionRecord(database.db, () => NOW);
+const writer = voiceWriter({ db: database.db, store });
+
+/**
+ * A user with a main conversation, and the live session's row unless the test
+ * wants none. Every row is the test's own: the user is fresh, and the live
+ * session id is minted rather than counted, because on CI every store test
+ * file runs against one Postgres and `live_session_id` is unique across them.
+ */
+async function target(registered = true): Promise<VoiceTarget> {
+  const userId = await database.createUser();
+  const [row] = await database.db
+    .insert(conversations)
+    .values({ userId, kind: CONVERSATION_KIND.MAIN })
+    .returning({ id: conversations.id });
+  assert.ok(row);
+  const liveSessionId = `sess_${randomUUID()}`;
+  if (registered) await sessionRecord.register({ userId, sessionId: liveSessionId });
+  return { userId, liveSessionId, conversation: { userId, conversationId: row.id } };
+}
+
+class FakeBrain implements LiveBrain {
+  readonly asks: LiveBrainAsk[] = [];
+  readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  #runs = 0;
+
+  async submitAsk(ask: LiveBrainAsk): Promise<LiveBrainSubmission> {
+    this.asks.push(ask);
+    this.#runs += 1;
+    return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+  }
+
+  onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+
+  standingRosterView(): string {
+    return "roster: one session";
+  }
+
+  /** The run answers: every action settled, one sentence, and its end. */
+  reply(runId: string, sentence: string): void {
+    const events: LiveBrainRunEvent[] = [
+      { kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId },
+      { kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence },
+      { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId, end: LIVE_BRAIN_RUN_END.COMPLETED },
+    ];
+    for (const event of events) for (const listener of [...this.#listeners]) listener(event);
+  }
+}
+
+/** The service composed as the voice service composes it: the record observing the sideband ahead of the service. */
+function stand(live: VoiceTarget) {
+  const clock = new FakeClock();
+  const brain = new FakeBrain();
+  const record = hostedLiveRecord({ writer, target: live });
+  const socket = new FakeLiveSocket();
+  const observed: Promise<VoiceWriteResult>[] = [];
+  const source: LiveSessionSource = {
+    create: async (input) => ({
+      sessionId: live.liveSessionId,
+      sdpAnswer: `answer-for-${input.sdpOffer}`,
+      attach: async () =>
+        observedSideband(sidebandOverSocket(socket), (event) => {
+          observed.push(record.observe(event));
+        }),
+    }),
+    setVoice: () => undefined,
+    diagnostics: () => {
+      throw new Error("not read here");
+    },
+  };
+  let ids = 0;
+  const service = new LiveSessionService({
+    source: () => source,
+    brain,
+    record,
+    conversationEntries: () => [],
+    quietNow: async () => false,
+    releaseHeldBriefings: () => undefined,
+    emit: () => undefined,
+    now: () => clock.now,
+    schedule: clock.schedule,
+    cancel: clock.cancel,
+    createId: () => `id-${++ids}`,
+    report: () => undefined,
+  });
+  return {
+    clock,
+    brain,
+    socket,
+    service,
+    observed,
+    async open() {
+      const created = await service.createSession("offer");
+      assert.ok(created);
+      socket.receive(sessionStarted(live.liveSessionId));
+    },
+    commentary(): LiveAppendEvent[] {
+      return socket.sent
+        .map((frame): LiveClientEvent => JSON.parse(frame))
+        .filter(
+          (event): event is LiveAppendEvent => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+        );
+    },
+  };
+}
+
+/** Waits for a database-backed write to land; the assertion is the caller's. */
+async function until(predicate: () => boolean, what: string): Promise<void> {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    if (predicate()) return;
+    await sleep(5);
+  }
+  assert.fail(`timed out waiting for ${what}`);
+}
+
+async function sessionRowId(liveSessionId: string): Promise<string> {
+  const [row] = await database.db
+    .select({ id: voiceSessions.id })
+    .from(voiceSessions)
+    .where(eq(voiceSessions.liveSessionId, liveSessionId));
+  assert.ok(row);
+  return row.id;
+}
+
+async function segments(liveSessionId: string) {
+  const rows = await database.db
+    .select({
+      seq: voiceTranscriptSegments.seq,
+      role: voiceTranscriptSegments.role,
+      text: voiceTranscriptSegments.text,
+      startMs: voiceTranscriptSegments.startMs,
+      endMs: voiceTranscriptSegments.endMs,
+    })
+    .from(voiceTranscriptSegments)
+    .where(eq(voiceTranscriptSegments.voiceSessionId, await sessionRowId(liveSessionId)))
+    .orderBy(asc(voiceTranscriptSegments.seq));
+  return rows.map((row) => [row.seq, row.role, row.text, row.startMs, row.endMs]);
+}
+
+async function messageRows(conversation: ConversationTarget) {
+  return database.db
+    .select({
+      clientId: messages.clientId,
+      role: messages.role,
+      parts: messages.parts,
+      metadata: messages.metadata,
+    })
+    .from(messages)
+    .where(eq(messages.conversationId, conversation.conversationId))
+    .orderBy(asc(messages.seq));
+}
+
+const IGNORED = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED } as const;
+const WRITTEN = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN } as const;
+
+test("a spoken ask is the one message, cut from the segments including a delta that arrived after the delegation, and the reply is spoken under the delegation once the ask is on record", async () => {
+  const live = await target();
+  const f = stand(live);
+  await f.open();
+
+  f.socket.receive(said("Hi there.", 0, 900));
+  f.socket.receive(heard("What needs me", 1000, 1800));
+  f.socket.receive(delegated("dl_1", 2500));
+  // Spoken before the delegation, delivered after it: still the ask's.
+  f.socket.receive(heard(" right now?", 1800, 2400));
+  await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
+  f.brain.reply("run-1", "Nothing yet.");
+  await until(() => f.commentary().length === 1, "the reply to be spoken");
+
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  const metadata: UserMessageMetadata = {
+    author: MESSAGE_AUTHOR.DEVELOPER,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: voiceSessionId,
+    delegation_id: "dl_1",
+    from_ms: 1000,
+    to_ms: 2500,
+  };
+  assert.deepEqual(await messageRows(live.conversation), [
+    {
+      clientId: "dl_1",
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: "What needs me right now?", state: "done" }],
+      metadata,
+    },
+  ]);
+  assert.deepEqual(await segments(live.liveSessionId), [
+    [1, VOICE_SEGMENT_ROLE.ASSISTANT, "Hi there.", 0, 900],
+    [2, VOICE_SEGMENT_ROLE.USER, "What needs me", 1000, 1800],
+    [3, VOICE_SEGMENT_ROLE.USER, " right now?", 1800, 2400],
+  ]);
+  assert.deepEqual(
+    f.commentary().map((event) => [event.type, event.delegation_id, event.content]),
+    [[LIVE_CLIENT_EVENT.COMMENTARY_APPEND, "dl_1", "Nothing yet."]],
+  );
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, WRITTEN, IGNORED, WRITTEN]);
+});
+
+test("an utterance that settled before its delegation arrived is still the delegation's ask on record before its reply is spoken", async () => {
+  const live = await target();
+  const f = stand(live);
+  await f.open();
+
+  f.socket.receive(heard("Open the failing one.", 1000, 2200));
+  await Promise.all(f.observed);
+  // The settle timer writes the utterance with no delegation, and the service counts it written.
+  await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  assert.deepEqual(await messageRows(live.conversation), []);
+
+  f.socket.receive(delegated("dl_late", 5000));
+  await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
+  f.brain.reply("run-1", "Opening it.");
+  await until(() => f.commentary().length === 1, "the reply to be spoken");
+
+  assert.deepEqual(
+    (await messageRows(live.conversation)).map((row) => [row.clientId, row.role, row.parts]),
+    [
+      [
+        "dl_late",
+        MESSAGE_ROLE.USER,
+        [{ type: "text", text: "Open the failing one.", state: "done" }],
+      ],
+    ],
+  );
+  assert.deepEqual(
+    f.commentary().map((event) => [event.delegation_id, event.content]),
+    [["dl_late", "Opening it."]],
+  );
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, IGNORED]);
+});
+
+test("a delegation delivered ahead of the words it is about is held, and is the ask on record once the service composes it on the words", async () => {
+  const live = await target();
+  const f = stand(live);
+  await f.open();
+
+  f.socket.receive(delegated("dl_early", 2500));
+  await Promise.all(f.observed);
+  assert.equal(f.brain.asks.length, 0);
+  assert.deepEqual(await messageRows(live.conversation), []);
+
+  f.socket.receive(heard("What needs me?", 1000, 2400));
+  await until(() => f.brain.asks.length === 1, "the retained delegation to be composed");
+  f.brain.reply("run-1", "Nothing yet.");
+  await until(() => f.commentary().length === 1, "the reply to be spoken");
+
+  assert.deepEqual(
+    (await messageRows(live.conversation)).map((row) => [row.clientId, row.parts]),
+    [["dl_early", [{ type: "text", text: "What needs me?", state: "done" }]]],
+  );
+  assert.deepEqual(
+    f.commentary().map((event) => [event.delegation_id, event.content]),
+    [["dl_early", "Nothing yet."]],
+  );
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, IGNORED, WRITTEN]);
+});
+
+test("an ask the record refuses is answered with the unrecorded note alone, and its reply is dropped", async () => {
+  const live = await target(false);
+  const f = stand(live);
+  await f.open();
+
+  f.socket.receive(heard("Stop the fixture.", 600, 1800));
+  f.socket.receive(delegated("dl_2", 2000));
+  await until(() => f.commentary().length === 1, "the refusal to be spoken");
+  f.brain.reply("run-1", "Stopping it.");
+  await sleep(20);
+
+  assert.deepEqual(
+    f.commentary().map((event) => [event.delegation_id, event.content]),
+    [["dl_2", ASK_UNRECORDED_NOTE]],
+  );
+  assert.deepEqual(await messageRows(live.conversation), []);
+  const refused = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION } as const;
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, refused, IGNORED]);
+});
+
+test("the record door answers from the stream: a delegation is held until its ask is written, a repeated write is the same message, an unseen delegation is refused, and neither an undelegated utterance nor Luke's words reach a row", async () => {
+  const live = await target();
+  const record = hostedLiveRecord({ writer, target: live });
+  const utterance = {
+    rowId: 1,
+    voiceSessionId: live.liveSessionId,
+    askContext: undefined,
+    startMs: 0,
+    endMs: 900,
+    recordedAt: NOW,
+  };
+
+  assert.deepEqual(await record.observe(heard("Open the failing one.", 0, 900)), WRITTEN);
+  assert.equal(
+    await record.writeDeveloperUtterance({
+      ...utterance,
+      text: "Open the failing one.",
+      delegationId: null,
+    }),
+    true,
+  );
+  assert.equal(
+    await record.writeLukeUtterance({
+      ...utterance,
+      role: CONVERSATION_ENTRY_KIND.REPLY,
+      text: "Opening it.",
+    }),
+    true,
+  );
+  assert.equal(
+    await record.writeDeveloperUtterance({ ...utterance, text: "x", delegationId: "dl_unseen" }),
+    false,
+  );
+  assert.deepEqual(await messageRows(live.conversation), []);
+
+  assert.deepEqual(await record.observe(delegated("dl_3", 1000)), IGNORED);
+  assert.deepEqual(await messageRows(live.conversation), []);
+  const ask = { ...utterance, text: "Open the failing one.", delegationId: "dl_3" };
+  assert.equal(await record.writeDeveloperUtterance(ask), true);
+  assert.equal(await record.writeDeveloperUtterance(ask), true);
+  assert.deepEqual(
+    (await messageRows(live.conversation)).map((row) => [row.clientId, row.role]),
+    [["dl_3", MESSAGE_ROLE.USER]],
+  );
+  assert.deepEqual(await segments(live.liveSessionId), [
+    [1, VOICE_SEGMENT_ROLE.USER, "Open the failing one.", 0, 900],
+  ]);
+});

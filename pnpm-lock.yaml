@@ -241,6 +241,9 @@ importers:
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../../packages/surface
+      '@sidecar/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../../packages/wire

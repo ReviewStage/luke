@@ -86,10 +86,10 @@ close, over two units of its own — `append-channel.ts`, one session's sends in
 order, each awaiting its acknowledgment or the error naming it and settled
 spoken by the output transcript, and `proactive-queue.ts`, the briefings and
 beats waiting for a session under the announcement hold. The machinery is
-transport-neutral and lives in a package so that a second composition, the
-hosted voice service's, can hold a sideband beside this host's, which
-composes it over main's agent and the desktop's Conversation writer. It
-reaches Luke's judgment only through `LiveBrain`: a
+transport-neutral and lives in a package because two compositions hold a
+sideband: this host's, over main's agent and the desktop's Conversation
+writer, and the hosted voice service's in `apps/web/server/voice/`, over the
+Postgres record. It reaches Luke's judgment only through `LiveBrain`: a
 transport-neutral contract of ids and plain data — submit a spoken ask under
 the service's own submission id, hear the run seams by name, read the
 redacted roster view — and nothing in the service imports `@sidecar/brain`.
