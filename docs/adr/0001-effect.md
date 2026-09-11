@@ -347,6 +347,18 @@ something this bridge runs. P5-14 deletes the bridge once the turn runner and
 `WakeCapture`, its one caller, hold a fiber of their own instead of this
 class.
 
+`AskLedger#submit` in `packages/brain/src/asks.ts` is on the allowlist too, and
+a plain `Ref` rather than a `SynchronizedRef`: the pending-submission map's
+decision — an in-flight duplicate joins the first, a mismatched question or
+origin under the same id is a conflict, and only a submission that is neither
+cancels housekeeping and starts `#accept` — is itself synchronous, and a
+`SynchronizedRef`'s own permit acquisition is one turn later even when
+uncontended, which let a housekeeping turn this decision means to outrank slip
+in ahead of it; a plain `Ref`'s `modify` never suspends, so `Effect.runSync`
+answers in the same turn the caller's own `await` resumes in, exactly as the
+hand-rolled `Map` did. It goes in P5-14 once this class runs on a fiber of its
+own rather than answering a caller's `Promise`.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -387,6 +399,7 @@ design decision stated as such:
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
 | `migrateStoreSchemaSync` door over `migrateStoreSchema` | P5-09 | P5-11 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
+| `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P5-14 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P5-14 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |

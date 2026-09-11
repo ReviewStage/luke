@@ -6,6 +6,7 @@ import {
 } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
+import { Effect, Ref } from "effect";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -30,6 +31,17 @@ interface PendingSubmission {
   origin: BrainSubmission["origin"];
   result: Promise<BrainSubmissionResult>;
 }
+
+/**
+ * What one submission id decides, read and written as a single step: an
+ * answer already settled — the words joining an in-flight one, refused as a
+ * conflict, reused from a persisted acceptance, or refused as full — needs no
+ * cleanup, while a freshly started one is registered so a retry of the same id
+ * can find and join it before its own write has landed.
+ */
+type SubmitDecision =
+  | { readonly kind: "answer"; readonly result: Promise<BrainSubmissionResult> }
+  | { readonly kind: "started"; readonly result: Promise<BrainSubmissionResult> };
 
 export interface AskLedgerOptions {
   seam: AgentSeam;
@@ -57,7 +69,23 @@ export class AskLedger {
   readonly #options: AskLedgerOptions;
   readonly #seam: AgentSeam;
   readonly #runs = new Map<string, RunControl>();
-  readonly #pendingSubmissions = new Map<string, PendingSubmission>();
+  /**
+   * The same key finds the first answer, the same key with other words or
+   * another origin is a conflict, and an in-flight duplicate joins the first
+   * rather than starting a second effect: one `Ref` makes the read of this
+   * map and the write that registers a fresh submission one atomic step, so
+   * a retry racing the submission that is still being accepted can never
+   * open a second run under the same id. A plain `Ref` rather than a
+   * `SynchronizedRef` is deliberate: the decision this guards is itself
+   * synchronous — a submission that starts fresh cancels housekeeping and
+   * opens `#accept` in the same turn a developer's ask always has, never a
+   * turn later — and a `SynchronizedRef`'s permit is exactly one turn later,
+   * which let a housekeeping turn this same decision means to outrank slip
+   * in ahead of it.
+   */
+  readonly #pendingSubmissions: Ref.Ref<Map<string, PendingSubmission>> = Ref.unsafeMake(
+    new Map<string, PendingSubmission>(),
+  );
   readonly #listeners = new Set<BrainRequestsListener>();
   /** Where an ask that arrives while this conversation is busy waits, under the queue's own mode and bounds. */
   readonly #queue: PendingInputQueue;
@@ -113,11 +141,8 @@ export class AskLedger {
 
   /** Settles once every acceptance still being written has landed or been refused. */
   async drainPendingSubmissions(): Promise<void> {
-    await Promise.all(
-      [...this.#pendingSubmissions.values()].map((pending) =>
-        pending.result.catch(() => undefined),
-      ),
-    );
+    const pending = Effect.runSync(Ref.get(this.#pendingSubmissions));
+    await Promise.all([...pending.values()].map((entry) => entry.result.catch(() => undefined)));
   }
 
   /** Hears the whole list on every change to any record. */
@@ -177,8 +202,9 @@ export class AskLedger {
       };
     }
     // The generation's context is awaited before the pending checks below, so
-    // that from the check to the registration nothing is awaited and two
-    // retries of one id cannot both slip past each other into two runs.
+    // that two retries of one id racing this point read the same generation;
+    // the check and the registration themselves are one atomic step on the
+    // `Ref` below, so neither can slip past the other regardless.
     const opened = await generation.opened;
     if (generation !== this.#seam.generation() || this.#seam.stopped()) {
       return {
@@ -201,42 +227,87 @@ export class AskLedger {
       outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
       reason: BRAIN_SUBMISSION_REJECTION.CONFLICT,
     };
-    const pending = this.#pendingSubmissions.get(submission.submissionId);
-    if (pending) return sameAsk(pending) ? pending.result : conflict;
-    const existing = this.records().find(
-      (record) => record.submissionId === submission.submissionId,
-    );
-    if (existing) {
-      return sameAsk(existing)
-        ? {
-            outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
-            runId: existing.runId,
-            acceptedAt: existing.acceptedAt,
-          }
-        : conflict;
-    }
-    if (!this.#options.store.admits(generation.id)) {
-      // The record count is a hard bound on the file: a run the store could
-      // not then write is refused at the door, in a word the host can say.
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-        reason: BRAIN_SUBMISSION_REJECTION.FULL,
-      };
-    }
-    // A developer's ask outranks housekeeping: maintenance still waiting its
-    // turn is cancelled so the ask does not queue behind a compaction.
-    this.#options.cancelMaintenance();
-    const result = this.#accept(generation, { ...submission, question });
-    this.#pendingSubmissions.set(submission.submissionId, {
-      question,
-      origin: submission.origin,
-      result,
-    });
+    /**
+     * Every way this submission id can be decided, read and answered as one
+     * atomic step against the pending map: an in-flight duplicate joins the
+     * first's own promise, a persisted acceptance is reused, a mismatched
+     * question or origin under either is a conflict, a full store is refused
+     * at the door, and only a submission that is none of those starts
+     * `#accept` and registers its promise for the next retry to find.
+     *
+     * `Ref.modify`'s callback runs only once the effect below is actually
+     * executed, so `#accept` is invoked no earlier than that — never at the
+     * moment this decision is merely being described — and, being a plain
+     * `Ref`, that execution never suspends: `cancelMaintenance` still runs in
+     * the same turn a caller's `await` on this method resumes in, exactly as
+     * it did before this map moved behind an Effect primitive.
+     *
+     * This is `Effect.runSync` outside a runtime edge, the strangler shim
+     * `docs/adr/0001-effect.md` lists for `AskLedger#submit`; it goes with
+     * P5-14's turn runner, once this class runs on a fiber of its own rather
+     * than answering a caller's `Promise`.
+     */
+    const decideSubmission = (
+      pending: Map<string, PendingSubmission>,
+    ): readonly [SubmitDecision, Map<string, PendingSubmission>] => {
+      const held = pending.get(submission.submissionId);
+      if (held) {
+        const result = sameAsk(held) ? held.result : Promise.resolve(conflict);
+        return [{ kind: "answer", result }, pending];
+      }
+      const existing = this.records().find(
+        (record) => record.submissionId === submission.submissionId,
+      );
+      if (existing) {
+        const result = Promise.resolve<BrainSubmissionResult>(
+          sameAsk(existing)
+            ? {
+                outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
+                runId: existing.runId,
+                acceptedAt: existing.acceptedAt,
+              }
+            : conflict,
+        );
+        return [{ kind: "answer", result }, pending];
+      }
+      if (!this.#options.store.admits(generation.id)) {
+        // The record count is a hard bound on the file: a run the store
+        // could not then write is refused at the door, in a word the host
+        // can say.
+        const result = Promise.resolve<BrainSubmissionResult>({
+          outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+          reason: BRAIN_SUBMISSION_REJECTION.FULL,
+        });
+        return [{ kind: "answer", result }, pending];
+      }
+      // A developer's ask outranks housekeeping: maintenance still waiting
+      // its turn is cancelled so the ask does not queue behind a compaction.
+      this.#options.cancelMaintenance();
+      const result = this.#accept(generation, { ...submission, question });
+      const registered = new Map(pending);
+      registered.set(submission.submissionId, { question, origin: submission.origin, result });
+      return [{ kind: "started", result }, registered];
+    };
+    const decision = Effect.runSync(Ref.modify(this.#pendingSubmissions, decideSubmission));
+    if (decision.kind === "answer") return decision.result;
     try {
-      return await result;
+      return await decision.result;
     } finally {
-      this.#pendingSubmissions.delete(submission.submissionId);
+      this.#forgetPending(submission.submissionId, decision.result);
     }
+  }
+
+  /** Forgets a submission's pending entry once its own answer has settled, never one that replaced it. */
+  #forgetPending(submissionId: string, result: Promise<BrainSubmissionResult>): void {
+    Effect.runSync(
+      Ref.update(this.#pendingSubmissions, (pending) => {
+        const held = pending.get(submissionId);
+        if (held?.result !== result) return pending;
+        const next = new Map(pending);
+        next.delete(submissionId);
+        return next;
+      }),
+    );
   }
 
   async #accept(
