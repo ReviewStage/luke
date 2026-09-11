@@ -239,8 +239,12 @@ and the transports subscribe to it with callbacks, so the class builds a
 an emit, a reconnect, and the close of admissions synchronously against the
 services it made ahead of the runtime. P7-02 composed the host as a `Layer`
 and left the class standing, because the in-process transports and the
-desktop's host service still hold it; it goes when P6-04 moves the transports
-onto the layers and P8-04 the desktop's host service. The socket binding
+desktop's host service still hold it; P6-04 left the transports as they
+stood — moving `ServerBoundTransport`'s callers onto the layers directly
+turned out to change the request's own microtask timing enough to break the
+transports' own reconnection-race tests, so it goes once a later PR moves
+the transports onto the layers, and P8-04 the desktop's host service. The
+socket binding
 (`packages/gateway/src/websocket.ts`) holds the class no longer: it provides
 the `Protocol` a server is built over rather than attaching to one already
 built, and composes `layerGatewayServer` over it itself, so what it needs of
@@ -260,6 +264,30 @@ bounded, forking the close as a daemon and reporting what did not close in
 time rather than waiting on it. `hostLayerFromSeams(options)` beside
 it is `hostKernelLayerFromSeams` one level up. P8-01 takes `hostLayer` on the
 desktop's own runtime, and P12-05 deletes the adaptor with `createHostKernel`.
+
+`shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
+allowlist: the coordinator's fixed quit order — admissions closed, the
+cancellation and the settling raced against one shared deadline, whatever a
+cut step already produced kept in a `Ref`, and the unresolved count always
+persisted after — is `shutdownGatewayEffect`, an `Effect.timeoutTo` over a
+sequential effect built from the host's own `GatewayShutdownSteps` promises,
+but the host's coordinator (`packages/host/src/compose-host.ts`) still holds
+a plain async `stop()` over those same promise-returning steps, so
+`shutdownGateway` runs the effect to that promise in place. P7-10 (the drain)
+composes the host's quit as an effect directly and deletes this door.
+`retryAttachWhileDetached` in `packages/gateway/src/attachment.ts` is on the
+allowlist too, and for its own reason rather than a caller's: nothing in this
+build composes it yet — the client this policy is for is the one a socket
+attaches, which does not exist before P8-04 — so the door forks
+`retryAttachWhileDetachedEffect`'s backoff loop on its own scope and answers a
+release closure over `Fiber.interrupt` rather than one built by an edge that
+holds it. `retryAttachWhileDetachedEffect` is itself the whole policy: the
+pause doubles on a `Schedule.exponential` unioned with a `Schedule.spaced`
+ceiling, and the attempt is forked into the ambient `Scope`, so interrupting
+it — closing the scope the door made, or the one an edge builds instead —
+cancels a pause still being waited out rather than merely gating the call it
+would have made. P8-04 hands the desktop's operator that scope directly and
+deletes the door.
 
 `StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
 allowlist as the two OpenClaw ports' reach into the store. The store's worker
@@ -595,8 +623,10 @@ design decision stated as such:
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
-| `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
-| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | P6-04, P8-04 |
+| `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
+| `GatewayServer`, the promise-and-callback adaptor over `layerGatewayServer` | P6-02 | P7-01, P7-02 |
+| `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
+| `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | P8-04 |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08 |

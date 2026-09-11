@@ -1,3 +1,5 @@
+import { Duration, Effect, Fiber, Queue, Ref, type Scope } from "effect";
+
 export const ATTACH_RETRY_DEFAULTS = {
   /** The first pause before a failed attach is tried again; each next pause doubles up to the cap. */
   INITIAL_DELAY_MS: 5_000,
@@ -11,10 +13,13 @@ export interface AttachRetryPorts {
   attached?: () => boolean;
   /** Tries once to reach a host; whether it did is heard on the attached stream, not answered here. */
   attach: () => Promise<void>;
-  setTimeout?: (work: () => void, delayMs: number) => { unref?: () => void } | undefined;
   initialDelayMs?: number;
   maximumDelayMs?: number;
   report: (message: string) => void;
+}
+
+function nextDelayMs(delayMs: number, maximumDelayMs: number): number {
+  return Math.min(delayMs * 2, maximumDelayMs);
 }
 
 /**
@@ -22,38 +27,68 @@ export interface AttachRetryPorts {
  * reachable answers the typed disconnected error until an explicit attach,
  * and a host that was merely slow to answer would otherwise leave the client
  * with none for good. So every detachment is followed by another attach
- * after a growing pause, capped, until one attaches or the returned release
- * ends the retries; nothing is drawn for it, and the disconnected posture
+ * after a growing pause, capped, until one attaches or the fiber running this
+ * effect is interrupted; nothing is drawn for it, and the disconnected posture
  * stands meanwhile. This is the policy a client over a socket needs; the
  * client composed in this process reaches its host without one.
+ *
+ * The attempt itself is forked into the ambient `Scope`, so interrupting the
+ * fiber that runs this effect — closing that scope — cancels a pause still
+ * being waited out and never calls `attach` again; nothing else here needs
+ * cancelling, since a repeated "not attached" while one is already pending
+ * schedules nothing new.
  */
-export function retryAttachWhileDetached(ports: AttachRetryPorts): () => void {
-  const schedule = ports.setTimeout ?? ((work, delayMs) => setTimeout(work, delayMs));
+export function retryAttachWhileDetachedEffect(
+  ports: AttachRetryPorts,
+): Effect.Effect<never, never, Scope.Scope> {
   const initialDelayMs = ports.initialDelayMs ?? ATTACH_RETRY_DEFAULTS.INITIAL_DELAY_MS;
   const maximumDelayMs = ports.maximumDelayMs ?? ATTACH_RETRY_DEFAULTS.MAXIMUM_DELAY_MS;
-  let delayMs = initialDelayMs;
-  let released = false;
-  let scheduled = false;
-  const consider = (attached: boolean): void => {
-    if (attached) {
-      delayMs = initialDelayMs;
-      return;
+  return Effect.gen(function* () {
+    const queue = yield* Queue.unbounded<boolean>();
+    const unsubscribe = ports.onAttachedChanged((attached) => Queue.unsafeOffer(queue, attached));
+    yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+    const delayRef = yield* Ref.make(initialDelayMs);
+    const pendingRef = yield* Ref.make(false);
+    if (ports.attached?.() === false) yield* Queue.offer(queue, false);
+
+    while (true) {
+      const attached = yield* Queue.take(queue);
+      if (attached) {
+        yield* Ref.set(delayRef, initialDelayMs);
+        continue;
+      }
+      const pending = yield* Ref.get(pendingRef);
+      if (pending) continue;
+      yield* Ref.set(pendingRef, true);
+      const delayMs = yield* Ref.get(delayRef);
+      ports.report(`the Gateway is not attached; trying again in ${Math.round(delayMs / 1000)} s`);
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          yield* Effect.sleep(Duration.millis(delayMs));
+          yield* Ref.set(pendingRef, false);
+          yield* Effect.tryPromise({ try: () => ports.attach(), catch: () => undefined }).pipe(
+            Effect.ignore,
+          );
+        }),
+      );
+      yield* Ref.set(delayRef, nextDelayMs(delayMs, maximumDelayMs));
     }
-    if (scheduled || released) return;
-    scheduled = true;
-    ports.report(`the Gateway is not attached; trying again in ${Math.round(delayMs / 1000)} s`);
-    const timer = schedule(() => {
-      scheduled = false;
-      if (released) return;
-      void ports.attach();
-    }, delayMs);
-    timer?.unref?.();
-    delayMs = Math.min(delayMs * 2, maximumDelayMs);
-  };
-  const unsubscribe = ports.onAttachedChanged(consider);
-  if (ports.attached?.() === false) consider(false);
+  });
+}
+
+/**
+ * The Promise-facing door over {@link retryAttachWhileDetachedEffect} for a
+ * caller that still holds a release closure rather than a fiber. Its own
+ * scope lives exactly as long as the fiber it forks, and releasing interrupts
+ * that fiber rather than waiting for the interruption to finish, which is all
+ * a release ever guaranteed.
+ *
+ * @deprecated Strangler shim over {@link retryAttachWhileDetachedEffect}; P8-04
+ * moves the desktop operator onto the effect directly and deletes this door.
+ */
+export function retryAttachWhileDetached(ports: AttachRetryPorts): () => void {
+  const fiber = Effect.runFork(Effect.scoped(retryAttachWhileDetachedEffect(ports)));
   return () => {
-    released = true;
-    unsubscribe();
+    Effect.runFork(Fiber.interrupt(fiber));
   };
 }
