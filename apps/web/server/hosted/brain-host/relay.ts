@@ -141,7 +141,7 @@ export interface RelayStanding {
 }
 
 export interface StreamRelaySeams {
-  readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn">;
+  readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn" | "attachAskLines">;
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
   readonly asks: AskDeliveryBinding;
   /** Carries the Stop an ask took while it waited, the moment eve's start names the turn it ran in: eve's cancel scoped to that turn, and the row's stamp. */
@@ -422,7 +422,21 @@ export class StreamRelay {
     const turn = standing.state.get().turns[eveTurnId];
     if (!turn) return;
     const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
-    if (receivedLine === RECEIVED_LINE.TRANSCRIPT) return;
+    if (receivedLine === RECEIVED_LINE.TRANSCRIPT) {
+      // The developer's line is the transcript's, under the ask's own id; a row
+      // written before the ask learned this turn is tied to it here, and one
+      // written after lands tied by the writer's own read of the ask.
+      const attached = await this.#seams.writer.attachAskLines(
+        standing.target,
+        hostTurnId(standing.sessionId, eveTurnId),
+      );
+      if (!attached.ok) {
+        this.#seams.report(
+          `The store refused to tie turn ${eveTurnId}'s line to it: ${attached.refusal}.`,
+        );
+      }
+      return;
+    }
     const written = await this.#tell(eveTurnId, standing, {
       kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
       message: userMessage(

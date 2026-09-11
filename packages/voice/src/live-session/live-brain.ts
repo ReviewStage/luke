@@ -49,7 +49,7 @@ export type LiveBrainRunEvent =
     };
 
 export interface LiveBrainAsk {
-  /** The service's own id for this one submission; a retry of it finds the same run. */
+  /** The delegation's id, as the session minted it: the one id the submission and the developer's recorded line share, so a retry finds the same run and a record can tie the line to the run's turn. */
   submissionId: string;
   /** The role-labelled transcript span the delegation is about, the developer's latest line marked as the ask. */
   question: string;

@@ -5,6 +5,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
   ACTION_TOOL,
+  ASK_ORIGIN,
   BRAIN_REQUEST_FAILURE,
   BRAIN_RUN_EVENT,
   BRAIN_TOOL,
@@ -232,17 +233,50 @@ test("a typed ask lands as one turn and its messages through the writer: the wor
   assert.deepEqual(refusals, []);
 });
 
-test("a spoken turn's received message writes no user row, since the developer's line is the transcript's under the delegation; a typed turn's still does, so one utterance is one line either way", async () => {
+test("a spoken turn's received message writes no user row: the developer's line is the transcript's under the ask's own id, and the turn ties that row to itself where it stood unattached; a typed turn's received message is its user row, so one utterance is one line either way", async () => {
   const spoken = await conversation();
   const typed = await conversation();
-  await play(spokenTurn("turn_0", NOW), standingFor(spoken, BRAIN_HOST_TURN.SPOKEN));
+  const spokenStanding = standingFor(spoken, BRAIN_HOST_TURN.SPOKEN);
+  // The service's ask under the delegation's id, dispatched into this eve session, and the
+  // transcript row the voice writer cut for it, written before eve's turn started.
+  const delegationId = `dl_${randomUUID()}`;
+  const record = askRecord(database.run);
+  const ask = await record.record({
+    userId: spoken.userId,
+    conversationId: spoken.conversationId,
+    clientId: delegationId,
+    origin: ASK_ORIGIN.SPOKEN,
+    question: "what changed?",
+    createdAt: new Date(NOW),
+  });
+  await record.dispatchOnce(spoken, ask.id, async () => ({
+    sessionId: spokenStanding.sessionId,
+    deliveryId: "delivery-1",
+  }));
+  const transcript = await writer.recordUserMessage(spoken, {
+    clientId: delegationId,
+    turnOfAsk: true,
+    text: "What changed?",
+    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+  });
+  assert.ok(transcript.ok);
+  await play(spokenTurn("turn_0", NOW, ["delivery-1"]), spokenStanding);
   await play(typedTurn("turn_0", 0), standingFor(typed, BRAIN_HOST_TURN.TYPED));
 
   const spokenRows = await rows(spoken);
   const typedRows = await rows(typed);
+  const spokenTurnId = hostTurnId(spokenStanding.sessionId, "turn_0");
   assert.deepEqual(
-    spokenRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
-    [[MESSAGE_ROLE.ASSISTANT, true]],
+    spokenRows.messageRows.map((row) => [
+      row.role,
+      row.clientId,
+      row.turnId,
+      row.finishedAt !== null,
+    ]),
+    [
+      [MESSAGE_ROLE.USER, delegationId, spokenTurnId, true],
+      [MESSAGE_ROLE.ASSISTANT, spokenTurnId, spokenTurnId, true],
+    ],
   );
   assert.deepEqual(
     typedRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
@@ -255,6 +289,32 @@ test("a spoken turn's received message writes no user row, since the developer's
     [spokenRows.turnRows[0]?.status, typedRows.turnRows[0]?.status],
     [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED],
   );
+  // The other half: a row written after its ask learned a turn on record lands tied at its insert.
+  const laterDelegation = `dl_${randomUUID()}`;
+  const later = await record.record({
+    userId: spoken.userId,
+    conversationId: spoken.conversationId,
+    clientId: laterDelegation,
+    origin: ASK_ORIGIN.SPOKEN,
+    question: "and now?",
+    createdAt: new Date(NOW),
+  });
+  await record.dispatchOnce(spoken, later.id, async () => ({
+    sessionId: spokenStanding.sessionId,
+    deliveryId: "delivery-2",
+    turnId: spokenTurnId,
+  }));
+  const laterRow = await writer.recordUserMessage(spoken, {
+    clientId: laterDelegation,
+    turnOfAsk: true,
+    text: "And now?",
+    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+  });
+  assert.ok(laterRow.ok);
+  const written = (await readMessagesByConversationTyped(database.run, spoken.conversationId)).find(
+    (row) => row.id === laterRow.id,
+  );
+  assert.equal(written?.turnId, spokenTurnId);
   assert.deepEqual(refusals, []);
 });
 
@@ -639,6 +699,7 @@ test("a turn whose answer the store refuses ends failed for persistence rather t
           ? Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
           : writer.consume(to, event),
       enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,
@@ -667,6 +728,7 @@ test("a turn start whose write throws keeps nothing in relay state, so the start
         }
         return writer.enqueueTurn(to, enqueue);
       },
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,
@@ -696,6 +758,7 @@ test("a turn whose ask the store refuses writes no answer and ends failed for pe
           ? Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
           : writer.consume(to, event),
       enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,
@@ -735,6 +798,7 @@ test("a turn end the store refuses keeps the turn in relay state, so the boundar
         return writer.consume(to, event);
       },
       enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,

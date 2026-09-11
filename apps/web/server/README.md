@@ -640,9 +640,15 @@ message for a spoken turn is the question the service composed around those
 words, which stands on the ask's record and is not written as a user row,
 where a typed ask's, an observation's, and a hold release's are;
 `BRAIN_HOST_TURN_KIND` says for each kind whose row the received message is,
-so the relay consults the table rather than a branch. That line stands in the
-device's view as a group of its own, since no turn owns it, and its place
-beside the reply's group follows the order the two writes landed in.
+so the relay consults the table rather than a branch. The line and the ask
+share one id, the delegation's, which the service submits the ask under, so
+the line is tied to the turn the ask ran whichever write lands second: the
+voice writer reads the ask's turn under the conversation's lock as it writes
+the row, and the relay, at a spoken turn's received message, ties to the turn
+any row of the turn's asks still standing without one, under the same lock.
+The race is removed rather than won, and the line stands in the device's view
+inside the turn's group; its place within the group follows the store's
+sequence.
 
 ### Briefings claimed before they are spoken
 

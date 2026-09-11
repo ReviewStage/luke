@@ -380,6 +380,7 @@ export function voiceWriter({ run, store }: VoiceWriterOptions): VoiceWriter {
     };
     const written = await store.recordUserMessage(target.conversation, {
       clientId: created.delegation.id,
+      turnOfAsk: true,
       text,
       metadata,
     });

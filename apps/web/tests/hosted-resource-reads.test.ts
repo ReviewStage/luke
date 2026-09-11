@@ -426,12 +426,19 @@ const REPLAY_SLOT = {
   openai: { itemId: "rs_fixture_0f3a1c22", reasoningEncryptedContent: "Zml4dHVyZS1vcGFxdWU=" },
 };
 
-test("a spoken ask's transcript row, which no turn owns, is answered as a group of its own under its message id with no turn beside it, and the turn's group holds the reply alone", async () => {
+test("a spoken ask's transcript row tied to its turn is answered inside the turn's group beside the reply, not as a group of its own; a row no turn owns still stands alone under its message id", async () => {
   const userId = await database.createUser();
   const main = await insertConversation(userId);
   const spoken = await insertTurn(userId, main, { origin: TURN_ORIGIN.SPOKEN });
-  const transcript = await insertMessage(userId, main, 1, {
+  const reply = await insertMessage(userId, main, 1, {
+    turnId: spoken,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
+  });
+  const transcript = await insertMessage(userId, main, 2, {
     clientId: "dl_1",
+    turnId: spoken,
     metadata: {
       author: MESSAGE_AUTHOR.DEVELOPER,
       channel: MESSAGE_CHANNEL.VOICE,
@@ -442,26 +449,33 @@ test("a spoken ask's transcript row, which no turn owns, is answered as a group 
     },
     parts: [{ type: "text", text: "What needs me?" }],
   });
-  const reply = await insertMessage(userId, main, 2, {
-    turnId: spoken,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
+  const unowned = await insertMessage(userId, main, 3, {
+    clientId: "dl_2",
+    metadata: {
+      author: MESSAGE_AUTHOR.DEVELOPER,
+      channel: MESSAGE_CHANNEL.VOICE,
+      voice_session_id: "vs_1",
+      delegation_id: "dl_2",
+      from_ms: 3000,
+      to_ms: 4000,
+    },
+    parts: [{ type: "text", text: "And now?" }],
   });
 
   const answer = await answered(
     await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES))),
     conversationMessagesAnswerSchema,
   );
+  // Membership, never order: the row's place inside its group follows the store's sequence today.
   assert.deepEqual(
     answer.groups.map((group) => [
       group.turnId,
       group.turn?.id,
-      group.messages.map((row) => String(row.message.id)),
+      new Set(group.messages.map((row) => String(row.message.id))),
     ]),
     [
-      [transcript, undefined, [transcript]],
-      [spoken, spoken, [reply]],
+      [spoken, spoken, new Set([reply, transcript])],
+      [unowned, undefined, new Set([unowned])],
     ],
   );
 });

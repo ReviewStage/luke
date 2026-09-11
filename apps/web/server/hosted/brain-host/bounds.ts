@@ -113,12 +113,13 @@ export function isBrainHostTurn(value: string): value is BrainHostTurn {
  * delegation's id, while eve's input is the question the service composed
  * around it, already on record on the ask. Writing that input as a user row
  * too would leave two developer lines for one utterance, read back to the
- * brain twice, so the relay writes none for a spoken turn.
+ * brain twice, so the relay writes none for a spoken turn and instead ties the
+ * transcript's row, which shares the ask's client id, to the turn.
  */
 export const RECEIVED_LINE = {
   /** The relay writes eve's received message as the turn's user row. */
   RELAY: "relay",
-  /** The transcript's row, another writer's, is the line; the relay writes none. */
+  /** The transcript's row, another writer's under the ask's own id, is the line; the relay writes none and ties that row to the turn. */
   TRANSCRIPT: "transcript",
 } as const;
 

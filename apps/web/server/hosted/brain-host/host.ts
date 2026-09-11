@@ -155,6 +155,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     writer: {
       consume: async (target, event) => (await seams.writer()).consume(target, event),
       enqueueTurn: async (target, enqueue) => (await seams.writer()).enqueueTurn(target, enqueue),
+      attachAskLines: async (target, turnId) =>
+        (await seams.writer()).attachAskLines(target, turnId),
     },
     asks: askRecord(seams.run),
     // A Stop an ask took while it waited is carried the moment its turn starts, by the deployment

@@ -231,9 +231,22 @@ interface CompactionWrite {
 interface UserMessageWrite {
   readonly clientId: string;
   readonly turnId?: string;
+  /**
+   * The row's turn is the ask's that shares its client id, read under the same
+   * lock the row is written under: a spoken ask's transcript row and the ask
+   * the service submitted for it carry one id, the delegation's, so the row
+   * lands attached to the turn the ask already learned, and a turn the ask
+   * learns later is attached by the relay at the turn's received message.
+   */
+  readonly turnOfAsk?: true;
   readonly text: string;
   readonly metadata: UserMessageMetadata;
 }
+
+/** What the relay's attach did for one turn: the user rows it tied to the turn, by id; or the conversation no longer stands. */
+type AskLinesAttached =
+  | { readonly ok: true; readonly attached: readonly string[] }
+  | typeof NO_CONVERSATION;
 
 /** Where the developer's earlier spoken asks on one voice session end, for the next to be cut from. */
 interface SpokenAskEnd {
@@ -310,6 +323,13 @@ export interface StoreWriter {
     target: ConversationTarget,
     message: UserMessageWrite,
   ): Promise<UserMessageWriteResult>;
+  /**
+   * Ties to the turn every user row whose client id is an ask's the turn ran,
+   * where the row stands with no turn yet: the other half of `turnOfAsk`, for
+   * a row written before the ask learned its turn. Under the conversation's
+   * lock, so a row being written meanwhile is seen once it lands, never missed.
+   */
+  attachAskLines(target: ConversationTarget, turnId: string): Promise<AskLinesAttached>;
   /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
   spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Promise<SpokenAskEndResult>;
 }
@@ -1420,14 +1440,80 @@ function recordUserMessage(
       parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
     });
     if (!read.ok) return read;
+    const turnId =
+      write.turnId ??
+      (write.turnOfAsk
+        ? yield* askTurnOf({
+            conversationId: context.target.conversationId,
+            clientId: write.clientId,
+          })
+        : undefined);
     const id = yield* insertMessage(context, {
       clientId: write.clientId,
-      turnId: write.turnId,
+      turnId,
       message: read.message,
       finishedAt: context.now(),
     });
     return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
   });
+}
+
+/**
+ * The turn an ask of the conversation has learned, by the ask's client id,
+ * where the turn's row stands: a first ask learns its turn's id at dispatch,
+ * before eve's start writes the row, and a message names only a turn on
+ * record, so until then the row lands unattached and the relay ties it at
+ * the turn's received message, under this same lock.
+ */
+function askTurnOf(key: {
+  readonly conversationId: string;
+  readonly clientId: string;
+}): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.map(findAskTurn(key), (found) =>
+    Option.match(found, { onNone: () => undefined, onSome: (row) => row.turnId ?? undefined }),
+  );
+}
+
+const findAskTurn = SqlSchema.findOne({
+  Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
+  Result: Schema.Struct({
+    turnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("turn_id")),
+  }),
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select asks.turn_id
+        from asks
+        join turns on turns.id = asks.turn_id
+        where asks.conversation_id = ${key.conversationId} and asks.client_id = ${key.clientId}
+      `,
+    ),
+});
+
+const attachTurnAskLines = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
+  Result: RowIdSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        update messages
+        set turn_id = ${key.turnId}::uuid
+        from asks
+        where asks.conversation_id = ${key.conversationId}
+          and asks.turn_id = ${key.turnId}::uuid
+          and messages.conversation_id = asks.conversation_id
+          and messages.client_id = asks.client_id
+          and messages.turn_id is null
+        returning messages.id
+      `,
+    ),
+});
+
+function attachAskLines(context: WriterContext, turnId: string): Write<AskLinesAttached> {
+  return Effect.map(
+    attachTurnAskLines({ conversationId: context.target.conversationId, turnId }),
+    (rows) => ({ ok: true, attached: rows.map((row) => row.id) }),
+  );
 }
 
 /**
@@ -1528,6 +1614,8 @@ export async function storeWriter({
       underConversation(target, (context) => recordEvent(context, event)),
     recordUserMessage: (target, message) =>
       underConversation(target, (context) => recordUserMessage(context, message)),
+    attachAskLines: (target, turnId) =>
+      underConversation(target, (context) => attachAskLines(context, turnId)),
     spokenAskEnd: (target, end) =>
       underConversation(target, (context) => spokenAskEnd(context, end)),
   };

@@ -14,12 +14,16 @@ import { stampedEveEvent } from "./eve-events";
 export const FIRST_EVE_TURN = "turn_0";
 
 /** One spoken ask's turn: a transcript read, then a two-sentence answer. */
-export function spokenTurn(turnId: string, now: number): readonly MessageStreamEvent[] {
+export function spokenTurn(
+  turnId: string,
+  now: number,
+  deliveryIds?: readonly string[],
+): readonly MessageStreamEvent[] {
   const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
     stampedEveEvent(event, now);
   const sequence = 0;
   return [
-    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stampedEveEvent({ type: "turn.started", data: { turnId, sequence } }, now, deliveryIds),
     stamped({ type: "message.received", data: { turnId, sequence, message: "what changed?" } }),
     stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
     stamped({

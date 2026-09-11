@@ -677,8 +677,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       renderAskContext(context),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
     ].join("\n");
+    // The delegation's id is the submission's: the record writes the developer's
+    // utterance under it, so an ask and the line it leaves share one id and a
+    // record that learns the ask's turn can attach the line to it.
     const submission = await this.#options.brain.submitAsk({
-      submissionId: this.#options.createId(),
+      submissionId: delegationId,
       question,
     });
     // The delegated write runs whether or not the settle timer wrote the
