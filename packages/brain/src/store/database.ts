@@ -1,11 +1,14 @@
-import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
+import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
+import type { SqlClient } from "@effect/sql/SqlClient";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import type { Layer } from "effect";
 import {
   STORE_SCHEMA_FLOOR,
   STORE_SCHEMA_MIGRATIONS,
   STORE_SCHEMA_STATEMENTS,
   STORE_SCHEMA_VERSION,
 } from "./schema.js";
+import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
 
 /**
  * The agent's database connection, spoken to synchronously. It runs on the
@@ -21,44 +24,36 @@ import {
  * between. Foreign keys cascade a session's rows with it: replacing a
  * generation deletes the old one's checkpoints, cursors, requests, and
  * receipts in the same statement that removes the session.
+ *
+ * The handle is opened by `sql-node-sqlite.ts`, and the same handle stands
+ * behind `sql`, the `@effect/sql` client the table modules move onto in
+ * P5-10a..d; the synchronous `prepare`, `exec`, and `transaction` below are
+ * the surface they move off, kept until the last of them has.
  */
 
 export const AGENT_DATABASE_FILE = "agent.sqlite";
-const INCREMENTAL_AUTO_VACUUM = 2;
 
 export class StoreDatabase {
   readonly #db: DatabaseSync;
   #transactionDepth = 0;
+  /**
+   * This handle as an `@effect/sql` client. The client and the synchronous
+   * surface share one connection and one transaction stack, so a transaction
+   * is owned by one of them at a time: an Effect run inside `transaction()`
+   * would issue its own BEGIN against the one already open.
+   */
+  readonly sql: Layer.Layer<SqlClient>;
 
   private constructor(db: DatabaseSync) {
     this.#db = db;
+    this.sql = layerFromHandle(db);
   }
 
   /** Opens or creates the database at `location` and brings its schema to this build's version. */
   static open(location: string): StoreDatabase {
-    const db = new DatabaseSync(location);
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA synchronous = FULL");
-    db.exec("PRAGMA foreign_keys = ON");
-    const database = new StoreDatabase(db);
-    database.#adoptIncrementalVacuum();
+    const database = new StoreDatabase(openDatabaseHandle(location));
     database.#migrateSchema();
     return database;
-  }
-
-  /**
-   * Freed pages are handed back to the file system on request rather than
-   * kept, so a deletion the disk budget makes is a deletion the file's size
-   * shows. A database created before the mode was set is rebuilt once to
-   * adopt it; VACUUM cannot run inside a transaction, so it runs here, before
-   * the schema migration opens one.
-   */
-  #adoptIncrementalVacuum(): void {
-    // SAFETY: PRAGMA auto_vacuum answers one integer column named auto_vacuum.
-    const mode = this.#db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number };
-    if (mode.auto_vacuum === INCREMENTAL_AUTO_VACUUM) return;
-    this.#db.exec("PRAGMA auto_vacuum = INCREMENTAL");
-    this.#db.exec("VACUUM");
   }
 
   /** Returns freed pages to the file system and truncates the WAL, so the physical measurement sees a deletion. */
@@ -135,10 +130,12 @@ export class StoreDatabase {
     );
   }
 
+  /** @deprecated A table module moves onto `sql` in P5-10a..d, and this goes with the last one. */
   prepare(sql: string): StatementSync {
     return this.#db.prepare(sql);
   }
 
+  /** @deprecated A table module moves onto `sql` in P5-10a..d, and this goes with the last one. */
   exec(sql: string): void {
     this.#db.exec(sql);
   }
@@ -148,6 +145,9 @@ export class StoreDatabase {
    * inside it becomes a savepoint, so an operation that is atomic on its own
    * is also atomic as one step of a larger one, and a failure anywhere rolls
    * the whole outer transaction back.
+   *
+   * @deprecated `sql.withTransaction` nests the same way, and a table module
+   * moves onto it in P5-10a..d; this goes with the last one.
    */
   transaction<T>(work: () => T): T {
     const depth = this.#transactionDepth;

@@ -593,7 +593,9 @@ Canonical commands:
   model's context alone. The database is the brain's store
   (`packages/brain/src/store/`): one SQLite file
   per agent under Luke's own application data (`agents/main/agent.sqlite`),
-  written only from its own worker thread, with a table for each kind of
+  spoken to through an `@effect/sql` client built over Node's own
+  `node:sqlite` and no native driver, written only from its own worker
+  thread, with a table for each kind of
   thing the envelope holds — the model's checkpoint items, the transcript
   cursors, the requests, the action receipts — beside each conversation's
   own lines, its retained transcript, the recovery archives of deleted

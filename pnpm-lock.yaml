@@ -12,12 +12,18 @@ catalogs:
     '@effect-atom/atom-react':
       specifier: 0.7.0
       version: 0.7.0
+    '@effect/experimental':
+      specifier: 0.61.1
+      version: 0.61.1
     '@effect/platform':
       specifier: 0.97.2
       version: 0.97.2
     '@effect/platform-node':
       specifier: 0.108.0
       version: 0.108.0
+    '@effect/sql':
+      specifier: 0.52.1
+      version: 0.52.1
     '@effect/vitest':
       specifier: 0.30.0
       version: 0.30.0
@@ -427,9 +433,15 @@ importers:
 
   packages/brain:
     dependencies:
+      '@effect/experimental':
+        specifier: 'catalog:'
+        version: 0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2)
       '@effect/platform':
         specifier: 'catalog:'
         version: 0.97.2(effect@3.22.2)
+      '@effect/sql':
+        specifier: 'catalog:'
+        version: 0.52.1(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2)
       '@sidecar/actions':
         specifier: workspace:*
         version: link:../actions
@@ -458,6 +470,12 @@ importers:
         specifier: 'catalog:'
         version: 3.22.2
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 0.108.0(@effect/cluster@0.60.2(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/sql@0.52.1(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/workflow@0.19.1(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(@effect/rpc@0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/sql@0.52.1(@effect/experimental@0.61.1(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2))(effect@3.22.2)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.2)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
