@@ -1,5 +1,5 @@
-import { handleProjects } from "../hosted/projects.js";
-import { hostedVaultRoute } from "../hosted/vault-route.js";
+import { observationApp } from "../observation-app.js";
+import { routeFromHttpApp } from "../route-effect.js";
 
 /** Lists where the signed-in user's keys can create a workspace. */
-export default hostedVaultRoute(handleProjects);
+export default routeFromHttpApp(observationApp());
