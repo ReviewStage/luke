@@ -98,7 +98,13 @@ it.layer(testSqlClient)("the dashboard's aggregates over @effect/sql", (it) => {
       assert.equal(source.systemHealth.database.reachable, true);
       assert.ok(source.systemHealth.database.latencyMs >= 0);
       assert.ok(source.users.total >= 2);
-      assert.deepEqual(source.users.signInMethods, { google: 1, github: 1, other: 0 });
+      // The sign-in chart counts every linked account in the table, which no
+      // window bounds, so on a shared database the seed can state the floor
+      // each bucket reaches and not the bucket itself — the same reason
+      // `users.total` above is a floor. `tests/admin-metrics.test.ts` pins the
+      // per-method fold itself, distinct pairs and all.
+      assert.ok(source.users.signInMethods.google >= 1);
+      assert.ok(source.users.signInMethods.github >= 1);
       assert.deepEqual(
         [...source.users.signupsByDay].toSorted(),
         [

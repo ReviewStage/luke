@@ -352,12 +352,14 @@ database. Each read still answers for its own parameters and its own body,
 and the group carries that answer as it came, status, headers, and bytes, the
 way the auth group carries Better Auth's. `server/admin/admin-route.ts` is
 the one place that hands the group this deployment's real session resolver,
-database, and integration presence booleans. The overview's own aggregates are
-`readAdminMetricsSource`'s effects over the ambient `SqlClient`, run at the
-edge like every other converted read, and `tests/admin-metrics-queries.test.ts`
-pins what they answer for a seeded window under both scopes; the roster, the
-account detail, the day detail, and the favorite write are still Drizzle
-queries taking `getDatabase()`.
+database, and integration presence booleans. Every query behind it is an
+effect over the ambient `SqlClient`, run at the edge like every other
+converted read, so the file names no database at all: the roster's scope and
+search conditions are `sql` fragments rather than concatenated text, and the
+search term stays a bound parameter with its own wildcards escaped.
+`tests/admin-metrics-queries.test.ts` pins the overview's aggregates for a
+seeded window under both scopes, and `tests/admin-roster-queries.test.ts` the
+roster, the day detail, the account page, and the star.
 
 Every admin answer is viewer-gated account data, refusals included, so each
 one carries `no-store`; `fixtures/admin-refusal/` records the five the group
