@@ -4,7 +4,7 @@ This package is the desktop-to-service wire boundary. It owns the hosted
 service paths (`service-paths.ts`), one wire module per domain — vault,
 device, observe, conversation, projects, mint, act, live, and the service
 vocabulary they share — each a `Schema` declaration rather than a hand-written
-reader, and the realtime credential contract, and depends only on lower
+reader, and the realtime credential contract (`realtime-contract.ts`, with the reader of a mint response into it), and depends only on lower
 wire/session vocabulary and `@sidecar/live` for the Live voice set and the
 `InitialItem` shape (that package imports nothing of this one, so the edge
 points down). The two clients here are `vault-client.ts`, the desktop's side of

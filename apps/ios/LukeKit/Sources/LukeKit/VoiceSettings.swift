@@ -1,8 +1,8 @@
 import Foundation
 
 /// Transcribed from `REALTIME_VOICE` in
-/// `packages/realtime/src/realtime-voice-settings.ts`, which stays the source
-/// of truth: the mint refuses a voice outside it.
+/// `packages/actions/src/remote-mint-legacy.ts`, which stays the source of
+/// truth: the mint refuses a voice outside it.
 public enum RealtimeVoice: String, CaseIterable, Sendable, Identifiable {
     case alloy
     case ash

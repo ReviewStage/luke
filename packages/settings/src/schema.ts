@@ -1,3 +1,4 @@
+import { isRealtimeVoice } from "@sidecar/actions";
 import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
@@ -11,7 +12,6 @@ import {
   isAppSettingId,
 } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
-import { isRealtimeVoice } from "@sidecar/realtime";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   isProviderId,

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
-import type { RealtimeVoice, RealtimeVoiceSpeed } from "@sidecar/realtime";
-import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import type { RealtimeVoice, RealtimeVoiceSpeed } from "../server/core";
+import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
 import { handleVoiceMint } from "../server/hosted/voice-mint";

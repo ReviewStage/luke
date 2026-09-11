@@ -78,8 +78,9 @@ flattened before they enter one.
 hosted voice service's socket frames and the service paths are
 `@sidecar/hosted`'s. The sideband over `ws`, the session service that owns
 the one session, and the renderer's peer are the host's and the desktop's.
-The phone's Realtime mint document stays in `@sidecar/realtime` until the
-phone moves.
+The phone's Realtime mint document is `@sidecar/actions`'s
+`remote-mint-legacy.ts`, beside the phone's own action tools, until the phone
+moves.
 
 ## Tests
 

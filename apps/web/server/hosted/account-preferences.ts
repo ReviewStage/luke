@@ -1,10 +1,10 @@
-import { isRealtimeVoiceSpeed, type RealtimeVoiceSpeed } from "@sidecar/realtime";
 import {
   type AccountPreferences,
   accountPreferencesFromWire,
   RETIRED_ACCOUNT_PREFERENCE_FIELD,
 } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { isRealtimeVoiceSpeed, type RealtimeVoiceSpeed } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
 /**

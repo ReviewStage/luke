@@ -10,7 +10,6 @@
  * trace may record is a product decision, not an implementation detail.
  */
 
-import { REALTIME_CLIENT_EVENT } from "@sidecar/realtime";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 
 /**
@@ -48,6 +47,9 @@ export function isAgentWireTrace(value: UnparsedWireValue): value is AgentWireTr
   return isRecord(value) && isTraceDirection(value.direction) && isRecord(value.event);
 }
 
+/** The Realtime client event a tapped trace still carries the phone's press audio in. */
+const REALTIME_AUDIO_APPEND_EVENT = "input_audio_buffer.append";
+
 /**
  * Strips the one payload a trace must not carry whole: the developer's own
  * voice. An audio append is base64 microphone samples — megabytes an hour of
@@ -57,7 +59,7 @@ export function isAgentWireTrace(value: UnparsedWireValue): value is AgentWireTr
  * exists to show.
  */
 export function sanitizedTraceEvent(event: WireRecord): WireRecord {
-  if (event.type !== REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND) return event;
+  if (event.type !== REALTIME_AUDIO_APPEND_EVENT) return event;
   const audio = event.audio;
   if (!isWireString(audio)) return event;
   const padding = audio.endsWith("==") ? 2 : audio.endsWith("=") ? 1 : 0;

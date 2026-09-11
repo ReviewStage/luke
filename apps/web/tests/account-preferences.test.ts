@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PROVIDER_ID } from "@sidecar/session";
 import type { WireBoundaryInput } from "@sidecar/wire";
+import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core";
 import type { HostedAccountPreferences } from "../server/hosted/account-preferences";
 import {
   type AccountPreferencesRow,

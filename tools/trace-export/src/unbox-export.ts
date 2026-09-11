@@ -15,7 +15,6 @@
 
 import { hostedBrainToolCatalog } from "@sidecar/brain";
 import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "@sidecar/devtrace/vocabulary";
-import { REALTIME_CLIENT_EVENT, REALTIME_SERVER_EVENT } from "@sidecar/realtime";
 import {
   isRecord,
   recordFromJsonLine,
@@ -33,6 +32,18 @@ export interface UnboxExportOptions {
 }
 
 const DEFAULT_TRACE_NAME = "luke-agent-trace";
+
+/** The Realtime events a recorded trace of an earlier build's voice window carries, replayed as they were written. */
+const REALTIME_CLIENT_EVENT = {
+  SESSION_UPDATE: "session.update",
+  CONVERSATION_ITEM_CREATE: "conversation.item.create",
+  RESPONSE_CREATE: "response.create",
+} as const;
+
+const REALTIME_SERVER_EVENT = {
+  INPUT_AUDIO_TRANSCRIPTION_COMPLETED: "conversation.item.input_audio_transcription.completed",
+  RESPONSE_DONE: "response.done",
+} as const;
 const UNKNOWN_MODEL = "gpt-realtime";
 const BRAIN_GENERATION_NAME = "brain-turn";
 /**

@@ -4,11 +4,11 @@ import {
   CONTEXT_ITEM_KIND,
   contextItemId,
   REALTIME_DEFAULTS,
+  REALTIME_SCENE,
   realtimeClientSecretRequest,
+  realtimeSessionInstructions,
   remoteRealtimeClientSecretRequest,
   remoteRealtimeToolDefinitions,
-  SCENE,
-  sessionInstructions,
 } from "../server/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
@@ -83,7 +83,7 @@ test("a phone or watch mint keeps its own narrowed session document on the share
   assert.deepEqual(sent, remoteRealtimeClientSecretRequest());
   assert.deepEqual(sent.session.tools, remoteRealtimeToolDefinitions());
   assert.notDeepEqual(sent.session.tools, realtimeClientSecretRequest().session.tools);
-  assert.equal(sent.session.instructions, sessionInstructions(SCENE.PHONE));
+  assert.equal(sent.session.instructions, realtimeSessionInstructions(REALTIME_SCENE.PHONE));
   assert.notEqual(sent.session.instructions, realtimeClientSecretRequest().session.instructions);
   // No caller cancellation is joined here: the upstream signal is the helper's
   // own timeout, not aborted, exactly as before the brain route shared it.

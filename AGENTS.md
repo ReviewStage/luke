@@ -1400,7 +1400,6 @@ works in that subtree:
 | `packages/AGENTS.md` | The acyclic package graph, the `.js` import rule, the Vercel doors, and how a barrel leaks |
 | `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the plugins |
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
-| `packages/realtime/AGENTS.md` | What the transport package owns, and what the conversation model does not |
 | `packages/gateway/AGENTS.md` | The protocol as the contract, its three doors, and injected authentication |
 | `packages/host/AGENTS.md` | The host's seams, why it draws nothing, and the one drain |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
