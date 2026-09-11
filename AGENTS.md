@@ -517,9 +517,11 @@ Canonical commands:
   process today and reaches it over the in-process transport; a process on
   the other side of the socket is the same host reached over another
   transport, and nothing above the transport changes, because the desktop is
-  one operator client either way. The whole quit is `Host.stop()`, the
-  closing of the one `Scope` the host's composers were built in, in one
-  place and in one order, so no caller can run the steps in another. What the desktop keeps for itself is the
+  one operator client either way. The whole quit is one `Scope` closing: the
+  desktop's entry disposes the one `ManagedRuntime` its launch was built on,
+  and the host's composers were built in that scope, so the drain and every
+  stop run in one place and in one order and no caller can run the steps in
+  another. What the desktop keeps for itself is the
   windows, the keys, the Dock, the login item, the media duck, the output
   and microphone watchers, the microphone permission, the updater, the
   feedback courier, and the introduction; every act the bridge admits reaches
