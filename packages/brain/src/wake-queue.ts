@@ -1,5 +1,6 @@
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
-import { sameObservation } from "./observation-inbox.js";
+import { Effect } from "effect";
+import { makeWakeEventQueue, type WakeEventQueue } from "./effect/wake-queue.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
@@ -23,18 +24,27 @@ export interface WakeQueueOptions {
   flush: (events: readonly BrainWakeEvent[]) => void;
 }
 
+/**
+ * Where the wakes themselves stand is `../effect/wake-queue.ts`'s `Queue`;
+ * this class is the synchronous facade every caller here still holds, and
+ * `Effect.runSync` is the bridge, safe because every operation that module
+ * exposes is one that never suspends. It is a named strangler shim —
+ * `docs/adr/0001-effect.md` carries it — deleted in P5-14 once the turn
+ * runner and its callers hold a fiber of their own instead of this class.
+ */
 export class WakeQueue {
   readonly #options: WakeQueueOptions;
-  #pending: BrainWakeEvent[] = [];
+  readonly #queue: WakeEventQueue;
   #timer: ScheduledTimer | undefined;
 
   constructor(options: WakeQueueOptions) {
     this.#options = options;
+    this.#queue = Effect.runSync(makeWakeEventQueue(options.capacity));
   }
 
   /** How many wakes are waiting for their turn to open. */
   size(): number {
-    return this.#pending.length;
+    return Effect.runSync(this.#queue.size);
   }
 
   /**
@@ -46,19 +56,14 @@ export class WakeQueue {
    */
   push(events: readonly BrainWakeEvent[]): void {
     if (events.length === 0) return;
-    for (const event of events) {
-      if (!this.#pending.some((held) => sameObservation(held, event))) this.#pending.push(event);
-    }
-    while (this.#pending.length > this.#options.capacity) this.#pending.shift();
+    Effect.runSync(this.#queue.push(events));
     this.#arm(this.#options.coalesceMs);
   }
 
   /** Drains every pending wake for a turn the host is opening anyway, and disarms the window. */
   take(): readonly BrainWakeEvent[] {
     this.#disarm();
-    const events = this.#pending;
-    this.#pending = [];
-    return events;
+    return Effect.runSync(this.#queue.take);
   }
 
   /**
@@ -67,7 +72,7 @@ export class WakeQueue {
    * once a quiet has passed, at the coalescing window's length at least.
    */
   requeue(events: readonly BrainWakeEvent[], delayMs: number): void {
-    this.#pending.unshift(...events);
+    Effect.runSync(this.#queue.requeueFront(events));
     this.#arm(delayMs);
   }
 
@@ -79,7 +84,7 @@ export class WakeQueue {
   /** Drops every pending wake and disarms the window: the memory they described is gone. */
   clear(): void {
     this.#disarm();
-    this.#pending = [];
+    Effect.runSync(this.#queue.clear);
   }
 
   #arm(delayMs: number): void {

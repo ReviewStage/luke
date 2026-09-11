@@ -308,6 +308,19 @@ pubsub whenever nothing has fired since the last event — is not guaranteed
 to settle synchronously. P5-14 deletes both runs once a turn runs on a fiber
 of the agent's own and a subscriber can read the `Stream` directly.
 
+`WakeQueue`'s `push`, `take`, `requeue`, and `clear` in
+`packages/brain/src/wake-queue.ts` are on the allowlist too: the wakes
+themselves live in `packages/brain/src/effect/wake-queue.ts`'s `Queue`, and
+every operation that module answers is one that never suspends — an
+unbounded queue's offer always succeeds at once, and a stream bounded to a
+size already read never waits for a next element — so each is run with
+`Effect.runSync` rather than moved to a fiber of the class's own. The
+coalescing timer itself is untouched, since it is still the injected
+`schedule`/`cancel` seam a real elapsed-time wait stands behind, not
+something this bridge runs. P5-14 deletes the bridge once the turn runner and
+`WakeCapture`, its one caller, hold a fiber of their own instead of this
+class.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -341,6 +354,7 @@ design decision stated as such:
 | `LiveCall`'s `open`/`unmute`/`mute`/`close` over the renderer's runtime | P9-03 | P9-08 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P5-14 |
+| `WakeQueue`'s `push`/`take`/`requeue`/`clear` over `Effect.runSync` | P5-02 | P5-14 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
 | `migrateStoreSchemaSync` door over `migrateStoreSchema` | P5-09 | P5-11 |
