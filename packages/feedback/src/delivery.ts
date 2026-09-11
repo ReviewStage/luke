@@ -1,4 +1,10 @@
-import { type CloudFetch, text } from "@sidecar/wire";
+import * as HttpBody from "@effect/platform/HttpBody";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
+import type * as HttpClientResponse from "@effect/platform/HttpClientResponse";
+import { type CloudFetch, HTTP_METHOD, text } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Data, Duration, Effect } from "effect";
 import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
@@ -24,55 +30,120 @@ const FEEDBACK_REFUSAL = {
   REFUSED: "The feedback service could not take this right now. Try again in a moment.",
 } as const;
 
+/** The content type a serialized body names, the one type this call sends. */
+const JSON_CONTENT_TYPE = "application/json";
+
+/** The name a deadline ends a request under, kept beside the timeout error it names. */
+const DEADLINE_ERROR_NAME = "TimeoutError";
+
+/**
+ * The range a `Response` calls `ok`, restated because what is read here is a
+ * status rather than a `Response`.
+ */
+const OK_STATUS = {
+  FIRST: 200,
+  PAST: 300,
+} as const;
+
+function answeredOk(status: number): boolean {
+  return status >= OK_STATUS.FIRST && status < OK_STATUS.PAST;
+}
+
 export interface FeedbackDeliveryOptions {
   url?: string;
-  fetch?: CloudFetch;
   requestTimeoutMs?: number;
 }
 
 /**
- * Carries one submission to the fixed endpoint and answers in the user's
- * terms. A refusal is an answer for the composer, never a throw: sending
- * feedback is the user's own action, and what became of it belongs beside the
- * field it left. Nothing about the submission is ever logged — a message to
- * the founders is the user's words, and status codes alone diagnose the path.
+ * What one send ended with before its status was read: a client that could
+ * not carry it, or the deadline. The name is the error's kind and never its
+ * words, which are never logged for a message that is the user's own.
  */
-export class FeedbackDelivery {
-  readonly #url: string;
-  readonly #fetch: CloudFetch;
-  readonly #requestTimeoutMs: number;
+class FeedbackTransportError extends Data.TaggedError("FeedbackTransportError")<{
+  readonly errorName: string | undefined;
+}> {}
 
-  constructor(options: FeedbackDeliveryOptions = {}) {
-    this.#url = text(options.url) ?? FEEDBACK_DEFAULTS.URL;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
+function errorName(cause: unknown): string | undefined {
+  return cause instanceof Error ? cause.name : undefined;
+}
+
+function report(message: string): void {
+  process.stderr.write(`${message}\n`);
+}
+
+/**
+ * Carries one submission to the fixed endpoint over the ambient `HttpClient`,
+ * bounded by the call's own deadline, and answers in the user's terms. A
+ * refusal is an answer, never a failure: sending feedback is the user's own
+ * action, and what became of it belongs beside the field it left. Nothing
+ * about the submission is ever logged — a message to the founders is the
+ * user's words, and status codes alone diagnose the path.
+ */
+export interface FeedbackDeliveryEffects {
+  readonly url: string;
+  readonly requestTimeoutMs: number;
+  deliver(
+    submission: FeedbackSubmission,
+  ): Effect.Effect<FeedbackResult, never, HttpClient.HttpClient>;
+}
+
+/** The delivery as effects over `@effect/platform`'s `HttpClient` tag. */
+export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): FeedbackDeliveryEffects {
+  const url = text(options.url) ?? FEEDBACK_DEFAULTS.URL;
+  const requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
+  const deadline = Duration.millis(requestTimeoutMs);
+
+  function requested(
+    submission: FeedbackSubmission,
+  ): Effect.Effect<
+    HttpClientResponse.HttpClientResponse,
+    FeedbackTransportError,
+    HttpClient.HttpClient
+  > {
+    const request = HttpClientRequest.make(HTTP_METHOD.POST)(url, {
+      body: HttpBody.raw(JSON.stringify(submission), { contentType: JSON_CONTENT_TYPE }),
+    });
+    return Effect.catchAll(HttpClient.execute(request), (error) =>
+      Effect.fail(new FeedbackTransportError({ errorName: errorName(error.cause) })),
+    );
   }
 
-  async deliver(submission: FeedbackSubmission): Promise<FeedbackResult> {
-    let response: Response;
-    try {
-      response = await this.#fetch(this.#url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(submission),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `Feedback delivery did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return { delivered: false, reason: FEEDBACK_REFUSAL.UNREACHABLE };
-    }
-    if (!response.ok) {
-      this.#report(`Feedback delivery failed with status ${response.status}`);
-      return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
-    }
-    return { delivered: true };
-  }
+  return {
+    url,
+    requestTimeoutMs,
+    deliver: (submission) =>
+      requested(submission).pipe(
+        Effect.timeoutFail({
+          duration: deadline,
+          onTimeout: () => new FeedbackTransportError({ errorName: DEADLINE_ERROR_NAME }),
+        }),
+        Effect.map((response): FeedbackResult => {
+          if (answeredOk(response.status)) return { delivered: true };
+          report(`Feedback delivery failed with status ${response.status}`);
+          return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
+        }),
+        Effect.catchAll((failure) => {
+          report(`Feedback delivery did not complete: ${failure.errorName ?? "unknown error"}`);
+          return Effect.succeed<FeedbackResult>({
+            delivered: false,
+            reason: FEEDBACK_REFUSAL.UNREACHABLE,
+          });
+        }),
+      ),
+  };
+}
 
-  #report(message: string): void {
-    process.stderr.write(`${message}\n`);
-  }
+export interface FeedbackDeliveryFetchOptions extends FeedbackDeliveryOptions {
+  /**
+   * @deprecated The `fetch` seam a caller not yet holding an `HttpClient`
+   * hands over; deleted with `CloudFetch` in P12-04.
+   */
+  fetch?: CloudFetch;
+}
+
+/** The promise-answering face of {@link FeedbackDeliveryEffects}. */
+export interface FeedbackDeliveryCourier {
+  deliver(submission: FeedbackSubmission): Promise<FeedbackResult>;
 }
 
 /**
@@ -80,11 +151,24 @@ export class FeedbackDelivery {
  * endpoint is public and the destination is fixed — so unlike the evaluator
  * this never answers with nothing; only the address can be overridden, for
  * testing the path against a local server.
+ *
+ * @deprecated Provides `layerFromCloudFetch` over the caller's own `fetch`
+ * and runs the effect; superseded by {@link feedbackDelivery}, which answers
+ * effects over the ambient `HttpClient`. Deleted with `CloudFetch` in P12-04.
  */
 export function feedbackDeliveryFromEnvironment(
-  options: FeedbackDeliveryOptions = {},
-): FeedbackDelivery {
+  options: FeedbackDeliveryFetchOptions = {},
+): FeedbackDeliveryCourier {
   const url = text(options.url) ?? text(process.env[FEEDBACK_ENVIRONMENT.URL]);
-  const deliveryOptions = url ? { ...options, url } : options;
-  return new FeedbackDelivery(deliveryOptions);
+  const delivery = feedbackDelivery({
+    ...(url === undefined ? undefined : { url }),
+    ...(options.requestTimeoutMs === undefined
+      ? undefined
+      : { requestTimeoutMs: options.requestTimeoutMs }),
+  });
+  const client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+  return {
+    deliver: (submission) =>
+      Effect.runPromise(Effect.provide(delivery.deliver(submission), client)),
+  };
 }
