@@ -2767,3 +2767,65 @@ more than a positive one bought with a deploy.**
 **One side note it flagged and correctly discounted:** #1018's preview for `e4aa2973` built Ready in
 65 s under the Vite preset. Single-app as expected, and **uninformative** — consistent with the
 duration heuristic already retracted, and named as uninformative rather than offered as evidence.
+
+
+## 2026-09-11 — The review-thread audit: what "zero open threads" was worth
+
+**Cause of the audit.** C8 found that **`cursor[bot]` auto-resolves its own review threads when it
+re-reviews a new SHA, without re-raising the findings** — six threads on its stack, `resolvedBy` the
+bot on every one, the worker resolved none, `isOutdated=false` throughout (so **not** GitHub's
+outdated-line collapse). **Five of the six were real and still in the code.** Since "complete verdict
+set, zero open threads, CLEAN" had been the merge condition all day, and every worker had force-pushed
+repeatedly, the condition was worth auditing rather than trusting.
+
+**Scope and result.** **85 threads across 42 of our PRs merged today** (the other workstream excluded;
+its orchestrator was told the trap and given the query). Every bot-resolved thread and both open
+threads read **against `origin/main`**, not against the thread text.
+
+| | count |
+|---|---|
+| bot-resolved, **not** outdated (the signature) | 13 over 10 PRs |
+| bot-resolved and outdated | 9 |
+| human-resolved | 61 |
+| **open on a merged PR** | **2** |
+| PRs with no threads at all | 20 |
+
+**Three findings stand, all now tracked:**
+
+- **LUKE-169 (Urgent, human-resolved).** #1129's High — two concurrent first asks with different client
+  ids both open an eve session, and the loser's ask reads `queued` forever. The bot **found** it; the
+  worker resolved the thread with **a reply pasted from a different finding**.
+- **LUKE-170 (High, open at merge).** #970's — `?? null` collapses "calendar not yet observed" into
+  "no meeting", clearing a valid hold, so **Luke may speak into a meeting** for one poll interval after
+  a relaunch. Found by the worker **in its own PR**, reported in full.
+- **LUKE-171 (Medium, open at merge).** #957's — an open naming no turn kind is admitted and the
+  session **runs under no prompt for life**. Mitigated in practice: the only opener sends the header.
+
+**Everything else was addressed.** Which is the result worth stating as loudly as the findings: the
+bot's auto-resolution is **usually correct**, and 61 human resolutions held up but for one.
+
+**Two structural facts the audit established, each now a rule.**
+
+**1. The queue checks resolved threads at enqueue, not at merge.** Both open-at-merge threads have the
+same shape: the bot's review landed **while the PR was already in the queue** — #970 thread 03:08:37Z,
+merged 03:11:07Z; #957 thread 06:05:10Z, merged 06:08:02Z. **Neither was ignored; neither was seen.**
+Waiting for a complete bot verdict set on the exact head before enqueueing closes most of it; watching
+for new threads between enqueue and merge closes the rest. **A queue position is not a reservation** —
+the same sentence as the migration slot's, for the same reason.
+
+**2. `resolvedBy` separates bot from person and nothing finer**, since every worker acts through one
+account. And **`resolvedBy: cursor[bot]` with `isOutdated: false` is the sharp signal** — where the
+lines did not move, the bot closed a thread it was not re-raising. Five of six wrong under that
+combination; zero of three wrong where `isOutdated` was true.
+
+**The method that made it trustworthy.** Verdicts were read from **the merged commit**, not the thread.
+Where the worker could not fully verify — #881, read from the signature and doc rather than the
+comparison — it **said so**. Where a fix addressed the finding but left residue — #938's
+same-microsecond same-row update, still invisible — it **reported the residue beside the verdict**. And
+on **its own six PRs it showed the working**, claim against merged behaviour, one line each, because a
+self-review's clean verdict is the weakest result in the set.
+
+**One candidate left open rather than asserted:** `compose-calendars.ts:237`'s
+`[...(observations ?? []), ...]` may make `calendarMeetings` an empty array while Google observations
+are merely unread — which would defeat LUKE-170's undefined-versus-null fix. To be read as part of
+LUKE-170 rather than claimed now.
