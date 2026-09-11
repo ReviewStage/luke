@@ -14,9 +14,11 @@
  * (its "ear") and the model the stop key silences (its "mouth") are two
  * verbs of the one seam a host composes whole.
  *
- * `liveVoiceBridgeLayer` is a strangler shim: P7-07 (compose-speech) deletes
- * it once the host hands the orchestrator its bridge as a `Layer` directly,
- * rather than through the constructor argument it stands in for.
+ * `liveVoiceBridgeLayer` is a strangler shim: the orchestrator's one caller
+ * is the renderer's `use-voice-session.ts`, never a `packages/host`
+ * composer, so P9-03 (the renderer's own voice lane) deletes it once that
+ * caller hands the orchestrator its bridge as a `Layer` directly, rather
+ * than through the constructor argument it stands in for.
  */
 import { Context, Layer } from "effect";
 import type { LiveVoiceBridge } from "../orchestrator/live-voice-orchestrator.js";
@@ -26,6 +28,6 @@ export class LiveVoiceBridgeTag extends Context.Tag("@sidecar/voice/LiveVoiceBri
   LiveVoiceBridge
 >() {}
 
-/** @deprecated Wraps the existing bridge object as a `Layer`; P7-07 deletes it with the constructor argument it stands in for. */
+/** @deprecated Wraps the existing bridge object as a `Layer`; P9-03 deletes it with the constructor argument it stands in for. */
 export const liveVoiceBridgeLayer = (bridge: LiveVoiceBridge): Layer.Layer<LiveVoiceBridgeTag> =>
   Layer.succeed(LiveVoiceBridgeTag, bridge);

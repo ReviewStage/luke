@@ -5,9 +5,12 @@
  * untouched, and so is `LiveSessionService` itself, so this is a second
  * door onto the same value, not a replacement for the first.
  *
- * `liveRecordLayer` is a strangler shim: P7-07 (compose-speech) deletes it
- * once the host hands the live session service its record as a `Layer`
- * directly, rather than through the constructor argument it stands in for.
+ * `liveRecordLayer` is a strangler shim: P7-07 (`compose-live.ts`) is its
+ * first real caller, building the plain record in `compose-host.ts` and
+ * handing it to the live composer through this tag, but the shim itself
+ * stands until `LiveSessionService`'s own constructor reads the tag rather
+ * than taking a plain `record` field, a `packages/voice` change beyond a
+ * host composer.
  */
 import { Context, Layer } from "effect";
 import type { LiveRecord } from "../live-session/live-record.js";
@@ -17,6 +20,6 @@ export class LiveRecordTag extends Context.Tag("@sidecar/voice/LiveRecord")<
   LiveRecord
 >() {}
 
-/** @deprecated Wraps the existing record object as a `Layer`; P7-07 deletes it with the constructor argument it stands in for. */
+/** @deprecated Wraps the existing record object as a `Layer`; stands until `LiveSessionService`'s constructor reads the tag itself. */
 export const liveRecordLayer = (record: LiveRecord): Layer.Layer<LiveRecordTag> =>
   Layer.succeed(LiveRecordTag, record);

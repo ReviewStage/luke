@@ -115,8 +115,9 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  *
  * @deprecated `beginTalk`, `endTalk`, and `stopSpeaking` answer promises
  * because this orchestrator still holds its own runtime rather than a caller's
- * fiber. P7-07 (compose-speech) deletes the promise-facing shape once the host
- * takes the fiber directly.
+ * fiber. Its one caller is the renderer's `use-voice-session.ts`, never a
+ * `packages/host` composer, so P9-03 (the renderer's own voice lane) deletes
+ * the promise-facing shape once that caller runs on its own fiber.
  */
 export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;

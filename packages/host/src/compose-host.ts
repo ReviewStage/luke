@@ -18,6 +18,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   Cause,
   type Context,
@@ -53,6 +54,8 @@ import { type Environment, HostSeamsObject, Reporter, RunMode } from "./effect/s
 import type { HostSeams } from "./host-kernel.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
+import { conversationLiveRecord } from "./voice/conversation-live-record.js";
+import { brainAgentLiveBrain } from "./voice/live-brain-adapter.js";
 
 /**
  * How long the quit waits for the store to close after the drain has
@@ -166,7 +169,19 @@ export const hostAssemblyLayer: Layer.Layer<
         dropBriefings: () => live.service.dropBriefings(),
       },
     });
-    const live = composeLive({ kernel, settings, account, calendars, observation, brain });
+    // The brain and record the live session speaks through are built here,
+    // where the brain composer stands, and handed to the composer as
+    // `@sidecar/voice/effect` layers rather than as constructor arguments.
+    const liveBrain = brainAgentLiveBrain({ agent: () => brain.wiring.current() });
+    const liveRecord = conversationLiveRecord({
+      recordConversationEntry: (entry, recordedAt, sessionKey) =>
+        brain.store.recordConversationEntry(entry, recordedAt, sessionKey),
+      createEventId: kernel.createId,
+    });
+    const live = yield* Effect.provide(
+      composeLive({ settings, account, calendars, observation, brain }),
+      Layer.mergeAll(liveBrainLayer(liveBrain), liveRecordLayer(liveRecord)),
+    );
 
     // Every edge a composer could not take as a constructor argument, in one
     // list: each is a cycle the concerns genuinely have, and reading one before

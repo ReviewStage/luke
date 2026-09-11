@@ -173,7 +173,17 @@ host's implementation is the desktop's Conversation writer in
 `voice/conversation-live-record.ts`. The trusted sideband's socket seam is
 implemented over `ws` in `voice/socket-over-ws.ts`, so `@sidecar/voice`
 stays free of it and the live-session door can be bundled into a web
-function. The live service is the one sink for
+function. `compose-live.ts` is over the kernel as a tag rather than a constructor
+argument, like every converted composer; the sibling composers it still
+reaches — settings, account, calendars, observation, brain — stay
+constructor arguments, since the cycles between them forbid tags. The one
+brain and the one record it hands `LiveSessionService` are built in
+`compose-host.ts`, where the brain composer stands, and handed in as
+`@sidecar/voice/effect`'s `LiveBrainTag`/`LiveRecordTag` layers rather than
+through `compose-live.ts`'s own constructor arguments; its idle, settle, and
+finalize timers are `@sidecar/runtime/effect`'s `timersFromRuntime` over the
+Effect runtime the composition runs on, in place of Node's own `setTimeout`.
+The live service is the one sink for
 everything Luke says unprompted: `compose-live.ts` takes every briefing from
 the brain, every run's streamed reply to speak, and the two onboarding
 beats. A briefing or reply with no session standing makes the service say it

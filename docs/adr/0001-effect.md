@@ -429,15 +429,17 @@ on the runtime it was handed, opening the call as an `Effect.acquireRelease`
 acquire and closing it as the release, and `LiveVoiceCall`'s four verbs answer
 Effects run on that same runtime, but `beginTalk`, `endTalk`, and
 `stopSpeaking` above them still answer promises of their own, run to one on
-the orchestrator's runtime rather than a caller's fiber. P7-07 (compose-speech)
-deletes the seam once the host holds the fiber directly. Beside it,
+the orchestrator's runtime rather than a caller's fiber. The orchestrator's
+one caller is the renderer's `use-voice-session.ts`, never a host composer, so
+P9-03 (the renderer's own voice lane, not P7-07) deletes the seam once that
+caller runs on its own fiber rather than awaiting these promises. Beside it,
 `ReattachingSocket`'s recovery in `packages/voice/src/live-session-source.ts`
 is on the allowlist too, and for its own reason rather than a caller's: the
 socket it wraps is a plain, synchronous `LiveSocket`, so the tries themselves
 are a fiber this class forks and interrupts on its own, with no promise
-anywhere above it waiting to be freed of one. P7-07 deletes it together with
-the orchestrator's, once the host composes the voice window's whole
-lifecycle as Effect.
+anywhere above it waiting to be freed of one. P9-03 deletes it together with
+the orchestrator's, for the same reason: both are reached only from the
+renderer's voice call machinery, never from `packages/host`.
 
 `HostedStoreRun` in `apps/web/server/hosted/store/database.ts` is on the
 allowlist as the door rather than as a runtime: a module of the hosted store
@@ -682,11 +684,11 @@ design decision stated as such:
 | `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | P7-06 |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
-| `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P7-07 |
-| `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P7-07 |
-| `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | P7-07 |
-| `LiveVoiceBridgeTag` / `liveVoiceBridgeLayer(bridge)` over the plain `LiveVoiceBridge` object | P6-08 | P7-07 |
-| `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | P7-07 |
+| `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P9-03 — its one caller is the renderer's `use-voice-session.ts`, never a `packages/host` composer |
+| `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P9-03, for the same reason |
+| `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
+| `LiveVoiceBridgeTag` / `liveVoiceBridgeLayer(bridge)` over the plain `LiveVoiceBridge` object | P6-08 | P9-03 — its one caller is the renderer's orchestrator |
+| `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `promiseAgentRuntime`, the `Promise` door over `AgentRuntimeEffect` | P5-14b | P7-08 |
 | `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P7-08 |
