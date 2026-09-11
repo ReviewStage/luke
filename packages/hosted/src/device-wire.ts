@@ -1,10 +1,13 @@
 import {
+  effectSchema,
   isWireString,
-  RECORD_EXTRA_KEYS,
+  SCHEMA_REFUSAL,
   type Schema,
   s,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { emitJsonSchema, readEither, toSchemaRead, wireRefusal } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 import { isWireUuid, WIRE_UUID_LENGTH, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -12,6 +15,11 @@ import { isWireUuid, WIRE_UUID_LENGTH, wireUuidSchema } from "./service-wire.js"
  * The three endpoints on one path — register, heartbeat, forget — take and
  * answer the shapes declared here, and the desktop, the service, and the
  * Swift transcription in `LukeKit/DeviceClient.swift` mirror this one file.
+ *
+ * Every request and answer below is composed directly with Effect's
+ * `Schema.Struct` rather than through the `s.*` facade; {@link fromEffect} is
+ * what still answers the facade's `read`/`parse`/`jsonSchema` for the
+ * callers that hold one.
  */
 
 /** The platforms a device row may name. Shared on the wire with the Swift `DevicePlatform`. */
@@ -71,13 +79,46 @@ export function deviceTokenIsStorable(token: string): boolean {
   );
 }
 
-/** A push token as it travels: lowercased so one device never stands twice under two spellings. */
-const pushTokenSchema: Schema<string> = s.refine(
-  s.map(s.text({ max: DEVICE_TOKEN_BOUNDS.MAX_LENGTH }), (token) => token.toLowerCase()),
-  deviceTokenIsStorable,
-);
+/**
+ * The Effect schema a declaration was composed from, adapted to the facade
+ * still-held callers use: `read` through `readEither`, `jsonSchema` through
+ * the emitter walking the same schema.
+ */
+function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
+  const read = readEither(core);
+  return s.reader({
+    read: (value) => toSchemaRead(read(value)),
+    jsonSchema: () => emitJsonSchema(core),
+  });
+}
 
-const pushEnvironmentSchema: Schema<PushEnvironment> = s.enumOf(PUSH_ENVIRONMENT_LIST);
+/** A text trimmed and refused when left with nothing, the facade's `s.text` default. */
+function trimmedText(maximumChars: number): EffectSchema.Schema<string, string> {
+  return EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+    strict: true,
+    decode: (value) => value.trim(),
+    encode: (value) => value,
+  }).pipe(
+    EffectSchema.filter((value) => value.trim().length > 0, {
+      schemaId: EffectSchema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+    EffectSchema.maxLength(maximumChars),
+  );
+}
+
+/** A push token as it travels: lowercased so one device never stands twice under two spellings. */
+const pushToken = EffectSchema.transform(
+  trimmedText(DEVICE_TOKEN_BOUNDS.MAX_LENGTH),
+  EffectSchema.String,
+  {
+    strict: true,
+    decode: (value) => value.toLowerCase(),
+    encode: (value) => value,
+  },
+).pipe(EffectSchema.filter(deviceTokenIsStorable));
+
+const pushEnvironment = EffectSchema.Literal(...PUSH_ENVIRONMENT_LIST);
 
 /**
  * Every id on this wire is a UUID: the installation id a client mints once
@@ -89,7 +130,14 @@ export const DEVICE_ID_LENGTH = WIRE_UUID_LENGTH;
 
 export const isDeviceWireId = isWireUuid;
 
+/**
+ * The facade's own declaration, kept as-is: `rating-wire.ts` composes this
+ * field into an `s.record` of its own, so its type stays the builder's
+ * `Schema<string>` until that module converts too.
+ */
 export const deviceWireIdSchema: Schema<string> = wireUuidSchema;
+
+const deviceId = effectSchema(deviceWireIdSchema);
 
 /** Whether a token and its gateway arrived together: one without the other addresses nothing. */
 function pushFieldsPaired(fields: {
@@ -116,25 +164,27 @@ export interface DeviceRegisterRequest {
   pushEnvironment?: PushEnvironment;
 }
 
-export const deviceRegisterRequestSchema: Schema<DeviceRegisterRequest> = s.refine(
-  s.record({
-    platform: s.enumOf(DEVICE_PLATFORM_LIST),
-    installationId: deviceWireIdSchema,
-    pushToken: pushTokenSchema.optional(),
-    pushEnvironment: pushEnvironmentSchema.optional(),
-  }),
-  pushFieldsPaired,
-);
+const deviceRegisterRequestCore = EffectSchema.Struct({
+  platform: EffectSchema.Literal(...DEVICE_PLATFORM_LIST),
+  installationId: deviceId,
+  pushToken: EffectSchema.optionalWith(pushToken, { exact: true }),
+  pushEnvironment: EffectSchema.optionalWith(pushEnvironment, { exact: true }),
+}).pipe(EffectSchema.filter(pushFieldsPaired));
+
+export const deviceRegisterRequestSchema: Schema<DeviceRegisterRequest> =
+  fromEffect(deviceRegisterRequestCore);
 
 /** Confirms a registration and names the row the service minted or already held. */
 export interface DeviceRegisterAnswer {
   deviceId: string;
 }
 
-export const deviceRegisterAnswerSchema: Schema<DeviceRegisterAnswer> = s.record(
-  { deviceId: deviceWireIdSchema },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const deviceRegisterAnswerCore = EffectSchema.Struct({ deviceId }).annotations({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+
+export const deviceRegisterAnswerSchema: Schema<DeviceRegisterAnswer> =
+  fromEffect(deviceRegisterAnswerCore);
 
 /**
  * A heartbeat moves the row's last-seen instant and may carry two optional
@@ -151,14 +201,25 @@ export interface DeviceHeartbeatRequest {
   pushEnvironment?: PushEnvironment;
 }
 
-export const deviceHeartbeatRequestSchema: Schema<DeviceHeartbeatRequest> = s.refine(
-  s.record({
-    deviceId: deviceWireIdSchema,
-    activeUntil: s.wholeNumber({ minimum: 0 }).optional(),
-    pushToken: s.union([pushTokenSchema, s.literal(null)]).optional(),
-    pushEnvironment: pushEnvironmentSchema.optional(),
-  }),
-  pushFieldsPaired,
+const deviceHeartbeatRequestCore = EffectSchema.Struct({
+  deviceId,
+  activeUntil: EffectSchema.optionalWith(
+    EffectSchema.Int.pipe(EffectSchema.greaterThanOrEqualTo(0)),
+    {
+      exact: true,
+    },
+  ),
+  pushToken: EffectSchema.optionalWith(
+    EffectSchema.Union(pushToken, EffectSchema.Literal(null)).annotations(
+      wireRefusal(SCHEMA_REFUSAL.MALFORMED),
+    ),
+    { exact: true },
+  ),
+  pushEnvironment: EffectSchema.optionalWith(pushEnvironment, { exact: true }),
+}).pipe(EffectSchema.filter(pushFieldsPaired));
+
+export const deviceHeartbeatRequestSchema: Schema<DeviceHeartbeatRequest> = fromEffect(
+  deviceHeartbeatRequestCore,
 );
 
 /** Whether the heartbeat found the row; `false` tells the client to register again. */
@@ -166,26 +227,31 @@ export interface DeviceHeartbeatAnswer {
   seen: boolean;
 }
 
-export const deviceHeartbeatAnswerSchema: Schema<DeviceHeartbeatAnswer> = s.record(
-  { seen: s.boolean() },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const deviceHeartbeatAnswerCore = EffectSchema.Struct({ seen: EffectSchema.Boolean }).annotations({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+
+export const deviceHeartbeatAnswerSchema: Schema<DeviceHeartbeatAnswer> =
+  fromEffect(deviceHeartbeatAnswerCore);
 
 /** Forgets the row at sign-out. */
 export interface DeviceForgetRequest {
   deviceId: string;
 }
 
-export const deviceForgetRequestSchema: Schema<DeviceForgetRequest> = s.record({
-  deviceId: deviceWireIdSchema,
-});
+const deviceForgetRequestCore = EffectSchema.Struct({ deviceId });
+
+export const deviceForgetRequestSchema: Schema<DeviceForgetRequest> =
+  fromEffect(deviceForgetRequestCore);
 
 /** Confirms whether a sign-out found and removed the device's row. */
 export interface DeviceForgetAnswer {
   deleted: boolean;
 }
 
-export const deviceForgetAnswerSchema: Schema<DeviceForgetAnswer> = s.record(
-  { deleted: s.boolean() },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const deviceForgetAnswerCore = EffectSchema.Struct({ deleted: EffectSchema.Boolean }).annotations({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+
+export const deviceForgetAnswerSchema: Schema<DeviceForgetAnswer> =
+  fromEffect(deviceForgetAnswerCore);
