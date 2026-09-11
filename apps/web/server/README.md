@@ -82,6 +82,29 @@ or removing a route; the bundle step and `repository-checks.sh` both refuse a
 stub that is missing, stale, or has no route behind it. `api/feedback.mjs` is
 the one hand-written function and stays plain ESM for the same reason.
 
+## Where a function runs an Effect
+
+`server/runtime.ts` holds the one `ManagedRuntime` this app has, memoized at
+module scope, and `runWeb(effect)` is the only place `apps/web` runs an effect.
+Vercel keeps a warm instance's module registry between invocations, so the
+first invocation of a cold start builds the layer and every later one on that
+instance reuses the services it built; a runtime built where the work lives
+would be a second copy of every service a `Context.Tag` was supposed to
+identify. `docs/adr/0001-effect.md` names this edge with the process's others.
+
+The layer carries what a Vercel function's own platform already offers, which
+today is an `HttpClient` over `fetch`. `@effect/platform-node` is not on it:
+`repository-checks.sh` refuses that specifier and `@effect/sql*` under `api/`,
+because a Node-reaching companion behind this door would have to be traced into
+every bundle. A function is handed no shutdown hook — an instance is frozen
+between invocations and discarded without notice — so nothing in production
+disposes the runtime; `disposeWebRuntime()` exists so a test can end the one it
+started.
+
+`effect` and `@effect/platform` are declared dependencies of this app, which is
+what leaves them external to the bundles rather than inlined into each of them,
+so Vercel's builder traces one copy from `apps/web/node_modules`.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so
