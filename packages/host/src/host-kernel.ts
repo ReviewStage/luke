@@ -2,6 +2,7 @@ import path from "node:path";
 import type { StorePort } from "@sidecar/brain/store";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
 import type { WireValue } from "@sidecar/wire";
+import type { MachinePresence } from "./device-presence.js";
 import {
   HOST_NODE_CAPABILITY,
   HOST_NODE_OPEN_KIND,
@@ -28,6 +29,12 @@ export interface HostSeams {
   now: () => number;
   createId: () => string;
   report: (message: string) => void;
+  /**
+   * The machine's own idle time and lock state, read by the client that runs
+   * on it, for the presence this installation's device row reports. A host
+   * with no client on the machine reports no presence.
+   */
+  machinePresence?: () => MachinePresence;
   /**
    * Hears the protocol's shutdown method: the client's explicit Quit, or a
    * newer build draining this one. The process hosting the runtime leaves in

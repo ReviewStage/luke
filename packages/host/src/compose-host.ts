@@ -62,11 +62,11 @@ export function composeHost(options: HostSeams): Host {
 
   const settings = composeSettings({ kernel });
   const account = composeAccount({ kernel, settings });
-  const devices = composeDevices({ kernel, account });
   const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
   const issues = composeIssues({ kernel, settings, observationGate });
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
   const calendars = composeCalendars({ kernel, settings, observationGate });
+  const devices = composeDevices({ kernel, account, calendars });
   const brain = composeBrain({
     kernel,
     settings,

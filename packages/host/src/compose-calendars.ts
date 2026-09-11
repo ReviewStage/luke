@@ -71,6 +71,13 @@ export interface CalendarsComposer extends Composer {
   readonly loop: ObservationLoop;
   observedCalendars: () => readonly ObservedAccountCalendars[];
   announcementsQuietNow: (at: number) => Promise<boolean>;
+  /**
+   * When the meeting hold standing at `at` ends, or nothing while none
+   * stands: a meeting covering the instant, under the quiet-during-meetings
+   * setting. It is the fact the device row reports and nothing decided from
+   * it; the manual pause has no end and is no instant.
+   */
+  meetingQuietUntil: (at: number) => Promise<number | undefined>;
   /** Whether the calendar step of onboarding still stands over the panel. */
   gateOwed: () => boolean;
   gateOfferable: () => Promise<boolean>;
@@ -187,6 +194,15 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
       kernel.emit(GATEWAY_EVENT.ANNOUNCEMENTS_HELD_CHANGED, { held: holding });
     }
     return holding;
+  }
+
+  async function meetingQuietUntil(at: number): Promise<number | undefined> {
+    if (calendarMeetings === undefined) return undefined;
+    const end = activeMeetingEnd(calendarMeetings, at);
+    if (end === undefined) return undefined;
+    return (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field))
+      ? end
+      : undefined;
   }
 
   async function refreshAnnouncementHold(): Promise<void> {
@@ -489,6 +505,7 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
     loop,
     observedCalendars: () => observedCalendars,
     announcementsQuietNow,
+    meetingQuietUntil,
     gateOwed: calendarOnboardingGateOwed,
     gateOfferable: calendarGateOfferable,
     onboarding: () => onboardingState,

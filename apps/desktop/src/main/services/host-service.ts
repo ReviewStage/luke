@@ -58,6 +58,8 @@ export interface HostServiceDependencies {
   config: DesktopConfig;
   /** The client's own credential protection; the host encrypts nothing without it. */
   cipher: HostSeams["cipher"];
+  /** This machine's idle time and lock state, for the presence its device row reports; a test host reports none. */
+  machinePresence?: HostSeams["machinePresence"];
 }
 
 /**
@@ -68,7 +70,7 @@ export interface HostServiceDependencies {
  * transport, and one node.
  */
 export function createHostService(dependencies: HostServiceDependencies): HostService {
-  const { config, cipher } = dependencies;
+  const { config, cipher, machinePresence } = dependencies;
   const { runMode } = config;
   const links: LateRef<HostServiceLinks> = lateRef("the host service's links");
 
@@ -89,6 +91,7 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
     now: Date.now,
     createId: () => randomUUID(),
     report: config.report,
+    machinePresence,
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, in `before-quit`.
     onShutdownRequested: () => config.quit(),

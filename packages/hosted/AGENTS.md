@@ -13,12 +13,14 @@ for the Live voice set and the
 `InitialItem` shape (that package imports nothing of this one, so the edge
 points down). The clients here are `vault-client.ts`, the desktop's side of
 the three vault routes, `device-client.ts`, its side of the one devices
-path, `roster-client.ts`, its read of the stored roster the observe path
-answers, beside the mapping of that wire's rows onto the session
-vocabulary's observations (advertisements as presence alone, since what a
-control targets never travels), and `action-client.ts`, its side of the two
-session actions a row asks for; each sits in this package because it speaks
-nothing but hosted vocabulary and holds no credential of its own. Behavior that needs
+path, `changes-client.ts`, its side of the change-signal poll that carries
+the device's presence and quiet instants, `roster-client.ts`, its read of the
+stored roster the observe path answers, beside the mapping of that wire's
+rows onto the session vocabulary's observations (advertisements as presence
+alone, since what a control targets never travels), and `action-client.ts`,
+its side of the two session actions a row asks for; each sits in this package
+because it speaks nothing but hosted vocabulary and holds no credential of
+its own. Behavior that needs
 anything above this boundary belongs above it: the brain's hosted client lives
 in `@sidecar/brain`, the hosted live session source in `@sidecar/voice`, the
 account preference client in `@sidecar/host` because the snapshot it carries is

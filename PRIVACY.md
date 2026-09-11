@@ -342,12 +342,15 @@ your account if you delete that.
 app, that installation registers itself with our service as one device row.
 The row holds which platform it is, when it was last seen (refreshed on a
 timer by the Mac and each time the phone comes to the foreground), an
-optional push token, and two fields for the Mac that are not yet
-collected: a presence instant and a quiet-until instant, the end of a meeting
-its calendar hold observes, each an instant and nothing else. No app reports
-either today; when the Mac does, it reports them on the same poll it uses to
-learn what changed, and the service records them and decides nothing from
-them beyond holding speech while a quiet instant stands. The
+optional push token, and two instants the Mac reports about once a minute
+on the same poll it uses to learn what changed: a presence instant, set only
+while your Mac has seen input in the last two minutes and its screen is
+unlocked, and a quiet-until instant, the end of a meeting its calendar hold
+observes while you have Luke quiet during meetings. Each is an instant and
+nothing else — not what you typed, not which app you were in, not the
+meeting's title, which never reaches the Mac either — and the service
+records them and decides nothing from them beyond holding speech while a
+quiet instant stands. The phone and the watch report neither. The
 installation is named by an id the app made up once for itself; it is not a
 credential, and neither is a push token, which only our own Apple key can
 address. Signing into a different account on the same device moves its one
