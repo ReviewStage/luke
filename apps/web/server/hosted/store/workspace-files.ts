@@ -1,6 +1,7 @@
-import { and, asc, eq } from "drizzle-orm";
-import { workspaceFile } from "../../db/schema.js";
-import type { HostedStoreDatabase, UserSeal } from "./database.js";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
+import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
  * The identity workspace and the notebook, one row per user per file. A path
@@ -8,7 +9,75 @@ import type { HostedStoreDatabase, UserSeal } from "./database.js";
  * segment — so a row can never name a file outside the workspace; the
  * contents are sealed whole and rewritten whole, the way the desktop's
  * workspace files land through a rename.
+ *
+ * The first module here on `@effect/sql`: every read and write below is an
+ * `Effect<A, SqlError | ParseError, SqlClient>`, the statement is the client's
+ * own tagged template, and the row a statement answers is decoded by a
+ * `Schema` rather than trusted. The rule about a path is that schema too, so
+ * one declaration both refuses the path and names the refusal.
  */
+
+/**
+ * How a statement here fails: the driver's own refusal, or a row or a path the
+ * schema refused, which is what puts the path rule in the same channel as the
+ * database's own answer.
+ */
+type WorkspaceFileFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const PATH_SEPARATOR = "/";
+
+/**
+ * A workspace-relative path, refused where it could name a file outside the
+ * workspace. Every statement below takes its path through this schema, so the
+ * refusal is the same wherever a path arrives and no query is prepared for one.
+ */
+const WorkspacePathSchema = Schema.String.pipe(
+  Schema.filter(
+    (path) =>
+      path.length > 0 &&
+      !path.startsWith(PATH_SEPARATOR) &&
+      !path.includes("\\") &&
+      path
+        .split(PATH_SEPARATOR)
+        .every((segment) => segment.length > 0 && segment !== "." && segment !== ".."),
+    { message: () => "a workspace path is relative and names no parent" },
+  ),
+);
+
+const FileKeySchema = Schema.Struct({
+  userId: Schema.String,
+  path: WorkspacePathSchema,
+});
+
+const FileWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  path: WorkspacePathSchema,
+  sealedContent: Schema.String,
+  now: Schema.Number,
+});
+
+/** The row as `workspace_file` holds it, contents still sealed. */
+const SealedWorkspaceFileSchema = Schema.Struct({
+  path: Schema.String,
+  sealedContent: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_content")),
+  createdAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("created_at")),
+  updatedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("updated_at")),
+});
+
+/** What a listing row carries: the path and when it last changed, never a word of the file. */
+const WorkspaceFileListingSchema = Schema.Struct({
+  path: Schema.String,
+  updatedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("updated_at")),
+});
+
+/** The path a write landed on, which is how a conditional write answers whether it did. */
+const WrittenPathSchema = Schema.Struct({ path: Schema.String });
+
+export type WorkspaceFileListing = Schema.Schema.Type<typeof WorkspaceFileListingSchema>;
 
 export interface WorkspaceFileRecord {
   readonly path: string;
@@ -17,102 +86,123 @@ export interface WorkspaceFileRecord {
   readonly updatedAt: number;
 }
 
-export interface WorkspaceFileListing {
-  readonly path: string;
-  readonly updatedAt: number;
-}
+const findFile = SqlSchema.findOne({
+  Request: FileKeySchema,
+  Result: SealedWorkspaceFileSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select path, sealed_content, created_at, updated_at
+        from workspace_file
+        where user_id = ${key.userId} and path = ${key.path}
+      `,
+    ),
+});
 
-const PATH_SEPARATOR = "/";
+const upsertFile = SqlSchema.void({
+  Request: FileWriteSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into workspace_file (user_id, path, sealed_content, created_at, updated_at)
+        values (${write.userId}, ${write.path}, ${write.sealedContent}, ${write.now}, ${write.now})
+        on conflict (user_id, path) do update
+          set sealed_content = excluded.sealed_content, updated_at = excluded.updated_at
+      `,
+    ),
+});
 
-function isWorkspacePath(path: string): boolean {
-  if (path.length === 0 || path.startsWith(PATH_SEPARATOR) || path.includes("\\")) return false;
-  return path
-    .split(PATH_SEPARATOR)
-    .every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
-}
+const insertFile = SqlSchema.findAll({
+  Request: FileWriteSchema,
+  Result: WrittenPathSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into workspace_file (user_id, path, sealed_content, created_at, updated_at)
+        values (${write.userId}, ${write.path}, ${write.sealedContent}, ${write.now}, ${write.now})
+        on conflict (user_id, path) do nothing
+        returning path
+      `,
+    ),
+});
 
-function assertWorkspacePath(path: string): void {
-  if (!isWorkspacePath(path)) throw new Error("a workspace path is relative and names no parent");
-}
+const removeFile = SqlSchema.findAll({
+  Request: FileKeySchema,
+  Result: WrittenPathSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        delete from workspace_file
+        where user_id = ${key.userId} and path = ${key.path}
+        returning path
+      `,
+    ),
+});
 
-export async function readWorkspaceFile(
-  db: HostedStoreDatabase,
+const findFiles = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: WorkspaceFileListingSchema,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`
+        select path, updated_at
+        from workspace_file
+        where user_id = ${userId}
+        order by path asc
+      `,
+    ),
+});
+
+export function readWorkspaceFile(
   seal: UserSeal,
   userId: string,
   path: string,
-): Promise<WorkspaceFileRecord | undefined> {
-  assertWorkspacePath(path);
-  const [row] = await db
-    .select()
-    .from(workspaceFile)
-    .where(and(eq(workspaceFile.userId, userId), eq(workspaceFile.path, path)));
-  if (!row) return undefined;
-  return {
-    path: row.path,
-    content: seal.open(row.sealedContent),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
+): Effect.Effect<Option.Option<WorkspaceFileRecord>, WorkspaceFileFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findFile({ userId, path }),
+    Option.map((row) => ({
+      path: row.path,
+      content: seal.open(row.sealedContent),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    })),
+  );
 }
 
 /** Writes the file whole, creating it or replacing it. */
-export async function writeWorkspaceFile(
-  db: HostedStoreDatabase,
+export function writeWorkspaceFile(
   seal: UserSeal,
   userId: string,
   path: string,
   content: string,
   now: number,
-): Promise<void> {
-  assertWorkspacePath(path);
-  const sealedContent = seal.seal(content);
-  await db
-    .insert(workspaceFile)
-    .values({ userId, path, sealedContent, createdAt: now, updatedAt: now })
-    .onConflictDoUpdate({
-      target: [workspaceFile.userId, workspaceFile.path],
-      set: { sealedContent, updatedAt: now },
-    });
+): Effect.Effect<void, WorkspaceFileFailure, SqlClient.SqlClient> {
+  return upsertFile({ userId, path, sealedContent: seal.seal(content), now });
 }
 
 /** Writes the file only where none stands: the seeding a launch does once, and an edit never undone by an upgrade. */
-export async function seedWorkspaceFile(
-  db: HostedStoreDatabase,
+export function seedWorkspaceFile(
   seal: UserSeal,
   userId: string,
   path: string,
   content: string,
   now: number,
-): Promise<boolean> {
-  assertWorkspacePath(path);
-  const inserted = await db
-    .insert(workspaceFile)
-    .values({ userId, path, sealedContent: seal.seal(content), createdAt: now, updatedAt: now })
-    .onConflictDoNothing()
-    .returning({ path: workspaceFile.path });
-  return inserted.length > 0;
+): Effect.Effect<boolean, WorkspaceFileFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    insertFile({ userId, path, sealedContent: seal.seal(content), now }),
+    (written) => written.length > 0,
+  );
 }
 
-export async function deleteWorkspaceFile(
-  db: HostedStoreDatabase,
+export function deleteWorkspaceFile(
   userId: string,
   path: string,
-): Promise<boolean> {
-  assertWorkspacePath(path);
-  const removed = await db
-    .delete(workspaceFile)
-    .where(and(eq(workspaceFile.userId, userId), eq(workspaceFile.path, path)))
-    .returning({ path: workspaceFile.path });
-  return removed.length > 0;
+): Effect.Effect<boolean, WorkspaceFileFailure, SqlClient.SqlClient> {
+  return Effect.map(removeFile({ userId, path }), (removed) => removed.length > 0);
 }
 
-export async function listWorkspaceFiles(
-  db: HostedStoreDatabase,
+export function listWorkspaceFiles(
   userId: string,
-): Promise<readonly WorkspaceFileListing[]> {
-  return db
-    .select({ path: workspaceFile.path, updatedAt: workspaceFile.updatedAt })
-    .from(workspaceFile)
-    .where(eq(workspaceFile.userId, userId))
-    .orderBy(asc(workspaceFile.path));
+): Effect.Effect<readonly WorkspaceFileListing[], WorkspaceFileFailure, SqlClient.SqlClient> {
+  return findFiles(userId);
 }

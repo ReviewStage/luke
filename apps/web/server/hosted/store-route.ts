@@ -1,5 +1,6 @@
 import { getDatabase } from "../db/index.js";
 import type { Route } from "../route.js";
+import { runWeb } from "../runtime.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
@@ -25,7 +26,7 @@ function deploymentStore(): HostedStore | undefined {
   if (composed) return composed;
   const secret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET]?.trim();
   if (!secret) return undefined;
-  composed = hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret) });
+  composed = hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret), run: runWeb });
   return composed;
 }
 

@@ -7,8 +7,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
 import { Effect, Layer, Stream } from "effect";
+import { DRIZZLE_MIGRATIONS_FOLDER } from "../../server/db/effect-migrator.js";
 import { createPool } from "../../server/db/index.js";
-import { MIGRATIONS_FOLDER, STORE_TEST_DATABASE_ENVIRONMENT } from "./hosted-store-database.js";
 
 /**
  * The `SqlClient` the store's own tests will read, standing over the same two
@@ -18,6 +18,11 @@ import { MIGRATIONS_FOLDER, STORE_TEST_DATABASE_ENVIRONMENT } from "./hosted-sto
  * is the production layer's own client; the PGlite half is the small connection
  * below, because no `@effect/sql-pglite` ships against the 3.x Effect line.
  */
+
+/** The env var naming a Postgres the store tests should run against instead of PGlite. */
+export const STORE_TEST_DATABASE_ENVIRONMENT = {
+  URL: "LUKE_STORE_TEST_DATABASE_URL",
+} as const;
 
 const ROW_MODE = {
   ARRAY: "array",
@@ -53,27 +58,35 @@ function pgliteConnection(client: PGlite): SqlConnection.Connection {
   };
 }
 
+/**
+ * A `SqlClient` over a PGlite the caller already opened and still closes
+ * itself, so a harness holding one database can read it through this client
+ * and through the Drizzle handle beside it.
+ */
+export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlClient> =>
+  Layer.scoped(
+    SqlClient.SqlClient,
+    SqlClient.make({
+      acquirer: Effect.succeed(pgliteConnection(client)),
+      compiler: PgClient.makeCompiler(),
+      spanAttributes: [],
+    }),
+  ).pipe(Layer.provide(Reactivity.layer));
+
 /** A PGlite carrying the same generated migrations the store's tests run against. */
 async function openMigratedPglite(): Promise<PGlite> {
   const client = new PGlite();
-  await migratePglite(drizzlePglite(client), { migrationsFolder: MIGRATIONS_FOLDER });
+  await migratePglite(drizzlePglite(client), { migrationsFolder: DRIZZLE_MIGRATIONS_FOLDER });
   return client;
 }
 
 function pgliteSqlClientOver(open: () => Promise<PGlite>) {
-  return Layer.scoped(
-    SqlClient.SqlClient,
-    Effect.gen(function* () {
-      const client = yield* Effect.acquireRelease(Effect.promise(open), (client) =>
-        Effect.promise(() => client.close()),
-      );
-      return yield* SqlClient.make({
-        acquirer: Effect.succeed(pgliteConnection(client)),
-        compiler: PgClient.makeCompiler(),
-        spanAttributes: [],
-      });
-    }),
-  ).pipe(Layer.provide(Reactivity.layer));
+  return Layer.unwrapScoped(
+    Effect.map(
+      Effect.acquireRelease(Effect.promise(open), (client) => Effect.promise(() => client.close())),
+      sqlClientOverPglite,
+    ),
+  );
 }
 
 const pgliteSqlClient = pgliteSqlClientOver(openMigratedPglite);

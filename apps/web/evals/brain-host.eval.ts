@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { ManagedRuntime } from "effect";
 import { defineEval } from "eve/evals";
 import { Pool } from "pg";
 import { SCRIPTED_FACT } from "../agent/scripted-model";
@@ -18,6 +19,7 @@ import {
   unparsedWire,
 } from "../server/core";
 import * as schema from "../server/db/schema";
+import { sqlClientOverPool } from "../server/db/sql-client";
 import { CONVERSATION_KIND, conversations, messages, turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -83,6 +85,7 @@ export default defineEval({
     const { connectionString, secret } = named;
     const pool = new Pool({ connectionString, max: 1 });
     const db = drizzle(pool, { schema });
+    const runtime = ManagedRuntime.make(sqlClientOverPool(pool));
     try {
       await db
         .insert(schema.user)
@@ -146,7 +149,11 @@ export default defineEval({
       assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.equal(answer.parts.filter((part) => isTextUIPart(part)).length, 1);
 
-      const store = hostedStore({ db, keys: payloadKeyRing(secret) });
+      const store = hostedStore({
+        db,
+        keys: payloadKeyRing(secret),
+        run: (effect) => runtime.runPromise(effect),
+      });
       const facts = await store.facts.list(LOCAL_DEV_PRINCIPAL);
       assert.equal(facts.filter((fact) => fact.words === SCRIPTED_FACT).length, 1);
       const [row] = await db
@@ -155,6 +162,7 @@ export default defineEval({
         .where(eq(conversations.id, conversation.id));
       assert.equal(row?.runtimeSessionId, accepted.sessionId);
     } finally {
+      await runtime.dispose();
       await pool.end();
     }
   },

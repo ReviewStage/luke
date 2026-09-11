@@ -1,4 +1,5 @@
 import type { ToolSet } from "ai";
+import { Effect, Option } from "effect";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
@@ -165,7 +166,7 @@ export interface HostedStore {
   };
 }
 
-export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
+export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore {
   const sealFor = (userId: string) => userSeal(keys, userId);
   return {
     messages: {
@@ -200,13 +201,14 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
       replace: (userId, facts, now) => replaceFacts(db, sealFor(userId), userId, facts, now),
     },
     workspace: {
-      read: (userId, path) => readWorkspaceFile(db, sealFor(userId), userId, path),
+      read: (userId, path) =>
+        run(Effect.map(readWorkspaceFile(sealFor(userId), userId, path), Option.getOrUndefined)),
       write: (userId, path, content, now) =>
-        writeWorkspaceFile(db, sealFor(userId), userId, path, content, now),
+        run(writeWorkspaceFile(sealFor(userId), userId, path, content, now)),
       seed: (userId, path, content, now) =>
-        seedWorkspaceFile(db, sealFor(userId), userId, path, content, now),
-      delete: (userId, path) => deleteWorkspaceFile(db, userId, path),
-      list: (userId) => listWorkspaceFiles(db, userId),
+        run(seedWorkspaceFile(sealFor(userId), userId, path, content, now)),
+      delete: (userId, path) => run(deleteWorkspaceFile(userId, path)),
+      list: (userId) => run(listWorkspaceFiles(userId)),
     },
     roster: {
       read: (userId) => readRosterSnapshot(db, sealFor(userId), userId),

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { type CloudAgentProviderId, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { getDatabase } from "../../db/index.js";
 import { providerKey } from "../../db/schema.js";
+import { runWeb } from "../../runtime.js";
 import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
@@ -79,7 +80,9 @@ function vaultSecret(): string {
 
 export function productionBrainHostSeams(): BrainHostSeams {
   const db = once(() => getDatabase());
-  const store = once(() => hostedStore({ db: db(), keys: payloadKeyRing(vaultSecret()) }));
+  const store = once(() =>
+    hostedStore({ db: db(), keys: payloadKeyRing(vaultSecret()), run: runWeb }),
+  );
   const writer = once(() => storeWriter({ db: db(), tools: CATALOG_TOOL_SET }));
   const vaultRows = async (userId: string): Promise<readonly VaultKeyRow[]> =>
     db()
