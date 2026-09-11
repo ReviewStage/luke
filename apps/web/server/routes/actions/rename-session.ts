@@ -1,5 +1,5 @@
-import { handleRenameSessionAction } from "../../hosted/action-session.js";
-import { hostedVaultRoute } from "../../hosted/vault-route.js";
+import { actionsApp } from "../../actions-app.js";
+import { routeFromHttpApp } from "../../route-effect.js";
 
-/** Renames an observed session itself — the chat. */
-export default hostedVaultRoute(handleRenameSessionAction);
+/** Every action endpoint, which is the group in `server/actions-app.ts`; this file only answers on this path. */
+export default routeFromHttpApp(actionsApp());

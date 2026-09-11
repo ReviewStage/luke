@@ -182,6 +182,20 @@ outside the group, and `tests/auth-app.test.ts` answers each twice — through
 the group and by calling the handler the way the route called it before — and
 compares the two.
 
+## The actions group
+
+`server/actions-app.ts` is the actions route group: the six endpoints
+(`message`, `control`, `agent`, `rename-session`, `rename-workspace`,
+`workspace`) through which the phone and desktop ask the hosted tier to act
+on an observed cloud session, or create one, on the developer's behalf (root
+`AGENTS.md` "Acts on a session"). Each endpoint's own handler in
+`server/hosted/action-session.ts` is already the whole of admission, the
+roster read, and dispatch, so the group carries the request across the
+`HttpApi` boundary and back the way `server/auth-app.ts` carries Better
+Auth's, and the hosted vocabulary's own `not-found` answers any path outside
+the six. `fixtures/actions-route/` records one accepted and one rejected
+answer, and `tests/actions-app.test.ts` holds the group to them.
+
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so

@@ -1,5 +1,5 @@
-import { handleAgentAction } from "../../hosted/action-session.js";
-import { hostedVaultRoute } from "../../hosted/vault-route.js";
+import { actionsApp } from "../../actions-app.js";
+import { routeFromHttpApp } from "../../route-effect.js";
 
-/** Starts another agent in the workspace an observed session runs in. */
-export default hostedVaultRoute(handleAgentAction);
+/** Every action endpoint, which is the group in `server/actions-app.ts`; this file only answers on this path. */
+export default routeFromHttpApp(actionsApp());
