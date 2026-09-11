@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.js",
     "./protocol": "./src/protocol.js",
+    "./rpc": "./src/rpc.js",
     "./testing": "./src/testing.js",
     "./websocket": "./src/websocket.js"
   },
@@ -15,11 +16,15 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/platform": "catalog:",
+    "@effect/rpc": "catalog:",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/wire": "workspace:*",
-    "ws": "catalog:"
+    "ws": "catalog:",
+    "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "8.18.1",
     "typescript": "catalog:",

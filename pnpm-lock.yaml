@@ -21,6 +21,9 @@ catalogs:
     '@effect/platform-node':
       specifier: 0.108.0
       version: 0.108.0
+    '@effect/rpc':
+      specifier: 0.76.2
+      version: 0.76.2
     '@effect/sql':
       specifier: 0.52.1
       version: 0.52.1
@@ -633,16 +636,28 @@ importers:
 
   packages/gateway:
     dependencies:
+      '@effect/platform':
+        specifier: 'catalog:'
+        version: 0.97.2(effect@3.22.2)
+      '@effect/rpc':
+        specifier: 'catalog:'
+        version: 0.76.2(@effect/platform@0.97.2(effect@3.22.2))(effect@3.22.2)
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
       ws:
         specifier: 'catalog:'
         version: 8.21.3
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 0.30.0(effect@3.22.2)(vitest@3.2.7(@types/debug@4.1.13)(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
