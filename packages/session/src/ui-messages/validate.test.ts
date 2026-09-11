@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   MESSAGE_AUTHOR,
@@ -18,6 +17,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
+import { test } from "vitest";
 import { z } from "zod";
 import { isStoredToolPart, TOOL_PART_STATE } from "./tool-parts.js";
 import { readStoredUIMessages, type StoredUIMessage } from "./validate.js";

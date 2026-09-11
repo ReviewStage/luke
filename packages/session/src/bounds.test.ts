@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { sessionChangeNumber } from "@sidecar/session";
+import { test } from "vitest";
 
 test("reads the pull request's number off every host's address shape", () => {
   assert.equal(sessionChangeNumber("https://github.com/reviewstage/luke/pull/245"), 245);

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   isRosterRelevant,
   normalizeSession,
@@ -9,6 +8,7 @@ import {
   type SessionStatus,
   sessionRosterRetentionMs,
 } from "@sidecar/session";
+import { test } from "vitest";
 
 const TEST_NOW = Date.parse("2026-09-09T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;

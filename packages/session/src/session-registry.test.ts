@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
@@ -11,6 +10,7 @@ import {
   type SessionProvider,
   SessionRoster,
 } from "@sidecar/session";
+import { test } from "vitest";
 import {
   ACTION_KIND,
   advertisedActionFor,

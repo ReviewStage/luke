@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { RENDERER_CLIENT_EVENTS, RENDERER_SERVER_EVENTS } from "./events.js";
 import { LIVE_SCENE, sessionInstructions } from "./instructions.js";
 import { developerSeedItem } from "./seed.js";

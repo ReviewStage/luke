@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   CONVERSATION_EVENT_KIND,
@@ -14,6 +13,7 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
+import { test } from "vitest";
 import { z } from "zod";
 import {
   CONVERSATION_VIEW_ACTION_OUTCOME,

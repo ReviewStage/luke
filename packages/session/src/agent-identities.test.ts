@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { AGENT_IDENTITY, agentIdentityFor } from "@sidecar/session";
+import { test } from "vitest";
 
 const IDENTITY_BY_KIND = {
   claude: AGENT_IDENTITY.CLAUDE_CODE,

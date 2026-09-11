@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -7,6 +6,7 @@ import {
   maximumConversationEntries,
   maximumConversationEntryLength,
 } from "@sidecar/session";
+import { test } from "vitest";
 import {
   conversationSeedItems,
   LIVE_INPUT_BOUNDS,

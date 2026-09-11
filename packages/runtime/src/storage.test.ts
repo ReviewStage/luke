@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { CONVERSATION_KIND, sessionKey } from "./identifiers.js";
 import {
   ARCHIVE_ENCODING,

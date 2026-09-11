@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { normalizeSession } from "../normalize.js";
 import { SESSION_STATUS } from "../session-status.js";
 import {

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   maximumObservedWorkspaceProjects,
   normalizeObservedWorkspaceProjects,
@@ -8,6 +7,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
+import { test } from "vitest";
 
 function project(overrides: Partial<ObservedWorkspaceProject>): ObservedWorkspaceProject {
   return {

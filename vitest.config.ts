@@ -7,6 +7,10 @@ export default defineConfig({
   test: {
     projects: [
       "packages/wire",
+      "packages/runtime",
+      "packages/session",
+      "packages/guide",
+      "packages/live",
       "packages/gateway",
       "packages/devtrace",
       "packages/settings",
