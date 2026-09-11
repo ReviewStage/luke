@@ -379,8 +379,10 @@ Canonical commands:
   (`@sidecar/guide`'s `LUKE_PERSONA`), handed to the prompt as its own section
   right after the identity line and never a workspace file, so every surface
   that gives Luke a voice moves together when it changes. A spoken ask's turn
-  is the one exception: the live voice model that delegated it carries the
-  persona itself, so that turn is prepared with no persona section and,
+  is the one exception: the words the developer hears are the live voice
+  model's, and that model speaks under three sentences of the GPT Live
+  prompting guide's template rather than a persona, so the turn behind it is
+  prepared with no persona section and,
   ahead of the identity line, the GPT Live delegation guide's backend
   preamble (`@sidecar/brain`'s `BACKEND_PREAMBLE`, the guide's own words),
   and the diagnostics show that section like every other. A

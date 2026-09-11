@@ -51,17 +51,19 @@ plain enum and every caller's existing `{ outcome, ... }` union are
 unchanged, since converting those callers to the typed error is its own,
 later PR.
 
-`instructions.ts` is the prompt a session is created with, in the Live
-prompting guide's shape and no longer: an identity block of a few sentences,
-then `Backchannel policy:`, `Interruption policy:`, and `Delegation policy:`
-with `Backend tools:`, `Delegate to the backend when:`, and `Do not delegate
-to the backend when:`, closed by the guide's two lines about delegating first
-and never guessing. The persona is rewritten short here rather than pasted
-from `@sidecar/guide`: the guide's persona stays the brain's, whose words the
-voice says, and the guide names pasting a long prompt wholesale as the
-migration mistake. Two scenes stand, `DESKTOP` with the brain as its backend
-and `INTRODUCTION` with none, and `sessionInstructionBlocks` exposes which
-sections a scene emits so a test asserts the decision and not the words.
+`instructions.ts` is the prompt a session is created with: the Live prompting
+guide's starter template with its brackets filled in and nothing beside them.
+Both scenes share one body — the template's three identity sentences,
+`Backchannel policy:`, and `Interruption policy:` — and differ only in the
+`Delegation policy:` block, whose capabilities and concrete conditions are
+what the guide's Delegation section asks for. `DESKTOP` names the brain's;
+`INTRODUCTION` names none and says never, because the accountless endpoint
+wires no carrier, so a model told it had backend tools would emit a
+delegation nobody reads. Only one line departs from the words the guide
+prints: the identity reads "chief of staff" where the template reads "voice
+assistant". Every optional control from the guide's appendix is absent until
+listening shows a behavior it would change, and no persona stands here at
+all: `@sidecar/guide`'s is the brain's, whose words the voice says.
 `greetingInstruction` is the introduction's opening, sent as one
 instructions append after `session.started` by the voice service, from the
 trusted side; `introductionSeedItems` is the one developer message the
@@ -76,10 +78,11 @@ on this one and this one depends on neither.
 lines as `input` messages in their own roles (developer and user as
 `input_text`, assistant as `output_text`, no `system`), and nothing else —
 no note addressed to the model, no roster — held under the API's 128
-messages and 8,192 estimated tokens by dropping the oldest lines first. That
-the history above is memory rather than a fresh ask is the identity block's
-line in `instructions.ts`, where an instruction belongs, since a developer
-message trailing the history is one more thing the model may answer. `transcript.ts` is the record of what was said on one
+messages and 8,192 estimated tokens by dropping the oldest lines first. No
+instruction about that history stands in `instructions.ts` either: telling the
+model to read it as memory rather than as a fresh ask is exactly the kind of
+rule the guide says to add only once listening shows it is needed.
+`transcript.ts` is the record of what was said on one
 session: `TranscriptLedger` keeps every fragment exactly as received with its
 place on the session timeline, groups them into utterances by
 `UTTERANCE_GAP_MS` per speaker with overlap allowed and late fragments
@@ -107,5 +110,6 @@ The tests here cover only what this package owns, as values and structure:
 event type membership, `delegation_id` present-and-null against an id,
 `client_event_id` correlation, config keys present and absent, the permission
 arrays, seed roles and bounds, ledger grouping and ask context since an
-offset, chunk bounds and round trips, and which instruction sections a scene
-emits. No test reads the prose.
+offset, chunk bounds and round trips, and an identity block bounded to the
+template's three lines over scenes that differ in their delegation policy
+alone. No test reads the prose.

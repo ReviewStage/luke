@@ -14,12 +14,7 @@ import {
   LiveServerEventTypeSchema,
   LiveStatusSchema,
 } from "./events.js";
-import {
-  INSTRUCTION_SECTION,
-  InstructionSectionSchema,
-  LIVE_SCENE,
-  LiveSceneSchema,
-} from "./instructions.js";
+import { LIVE_SCENE, LiveSceneSchema } from "./instructions.js";
 import { PROACTIVE_SPEECH_KIND, ProactiveSpeechKindSchema } from "./proactive.js";
 import {
   DisabledByFixtureRefusal,
@@ -86,7 +81,6 @@ test("the single-valued transport and delegation constants are schemas of exactl
 
 test("a scene and its instruction sections hold their own sets alone", () => {
   settlesVocabulary(LiveSceneSchema, Object.values(LIVE_SCENE));
-  settlesVocabulary(InstructionSectionSchema, Object.values(INSTRUCTION_SECTION));
 });
 
 test("proactive speech is one of the kinds this build knows how to word", () => {
