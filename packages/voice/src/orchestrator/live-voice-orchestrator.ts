@@ -94,14 +94,14 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  * orchestrator was handed: it acquires the call by opening it, waits to be
  * told the call should end, and releases it by closing it, so a call is
  * closed exactly once whichever way its life ends — on its own status, on the
- * host's word, or on `stop`'s interruption. `LiveVoiceCall` is still four
- * promises, so `#ensureSession` and every public verb that reaches it still
- * run on that runtime rather than build one of their own.
+ * host's word, or on `stop`'s interruption. `LiveVoiceCall`'s four verbs
+ * answer Effects, run on that same runtime, but `#ensureSession` and every
+ * public verb above them still answers a Promise of its own.
  *
  * @deprecated `beginTalk`, `endTalk`, and `stopSpeaking` answer promises
- * because {@link LiveVoiceCall} is what they hold; each runs its effect on
- * the runtime this orchestrator was handed. P7-07 (compose-speech) deletes
- * the promise-facing shape once the host takes the fiber directly.
+ * because this orchestrator still holds its own runtime rather than a caller's
+ * fiber. P7-07 (compose-speech) deletes the promise-facing shape once the host
+ * takes the fiber directly.
  */
 export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;
@@ -192,7 +192,7 @@ export class LiveVoiceOrchestrator {
     // A key let go of during the opening leaves the session muted, and the
     // mute is still sent: the press's device rode the offer, and only the
     // release takes it back.
-    if (call) await (this.#pressHeld ? call.unmute() : call.mute());
+    if (call) await this.#run(this.#pressHeld ? call.unmute() : call.mute());
     // The press is answered once the session hears the developer; between the
     // offer and the unmute the session passes through muted, which is not the
     // exchange ending.
@@ -210,7 +210,7 @@ export class LiveVoiceOrchestrator {
     this.#pressHeld = false;
     if (this.#opening) return;
     const call = this.#call;
-    if (call?.standing) await call.mute();
+    if (call?.standing) await this.#run(call.mute());
   }
 
   /**
@@ -230,7 +230,7 @@ export class LiveVoiceOrchestrator {
     const call = this.#call;
     if (!call?.standing) return false;
     await this.#bridge.stopSpeaking();
-    await call.mute();
+    await this.#run(call.mute());
     return true;
   }
 
@@ -263,7 +263,7 @@ export class LiveVoiceOrchestrator {
         void this.#ensureSession({ byPress: false }).then(async (call) => {
           const resume = this.#resumeListening;
           this.#resumeListening = false;
-          if (call && resume && this.#pressHeld) await call.unmute();
+          if (call && resume && this.#pressHeld) await this.#run(call.unmute());
         });
         return;
       case LIVE_SESSION_PHASE.CLOSING:
@@ -380,9 +380,8 @@ export class LiveVoiceOrchestrator {
     opened: Deferred.Deferred<LiveVoiceCall | undefined>,
   ): Effect.Effect<void, never, Scope.Scope> {
     return Effect.gen(this, function* () {
-      const standing = yield* Effect.acquireRelease(
-        Effect.promise(() => call.open({ byPress: input.byPress })),
-        () => Effect.promise(() => call.close()),
+      const standing = yield* Effect.acquireRelease(call.open({ byPress: input.byPress }), () =>
+        call.close(),
       );
       this.#opening = undefined;
       if (!standing) {

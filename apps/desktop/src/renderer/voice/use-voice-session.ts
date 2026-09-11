@@ -12,7 +12,7 @@ import { type RefObject, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { VOICE_COMMAND, voiceExchangeKind } from "#shared/messages/voice-view";
-import { act, useAct } from "../act";
+import { useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererRuntimeNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
@@ -28,20 +28,6 @@ import { startVoiceLevelMeter } from "./voice-level-meter";
  * a short clock loses less of the sentence than a longer one would.
  */
 const REMOTE_AUDIO_RETRY_MS = 1_000;
-
-/** Everything the policy asks of the main process, over the one bridge this window has. */
-const BRIDGE: LiveVoiceBridge = {
-  reportView: (view, exchange) =>
-    window.sidecar.reportVoiceView(
-      view,
-      exchange === undefined ? undefined : voiceExchangeKind(exchange),
-    ),
-  requestMicrophone: async () =>
-    (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
-  hostedUnavailableNote: async () =>
-    hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
-  stopSpeaking: () => act(ACT_KIND.VOICE_STOP_SPEAKING).catch(() => false),
-};
 
 /**
  * The two streams the meters listen to and the element plays, each a writable
@@ -72,8 +58,21 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const remote = useAtomValue(remoteStreamAtom);
   const callRef = useRef<LiveCall | undefined>(undefined);
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
+  /** Everything the policy asks of the main process, over the one bridge this window has. */
+  const bridge: LiveVoiceBridge = {
+    reportView: (view, exchange) =>
+      window.sidecar.reportVoiceView(
+        view,
+        exchange === undefined ? undefined : voiceExchangeKind(exchange),
+      ),
+    requestMicrophone: async () =>
+      (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
+    hostedUnavailableNote: async () =>
+      hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
+    stopSpeaking: () => act(ACT_KIND.VOICE_STOP_SPEAKING).catch(() => false),
+  };
   orchestratorRef.current ??= new LiveVoiceOrchestrator({
-    bridge: BRIDGE,
+    bridge,
     runtime: rendererRuntimeNow(),
     createCall: (events) => {
       const call = new LiveCall({

@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "./act";
+import { actRequest } from "./act";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
 import { rendererRegistry } from "./renderer-runtime";
@@ -40,7 +40,13 @@ void (async () => {
     // holding and refuses every other sender outright, and a takeover that
     // stands down here hands the screen back at once rather than covering it
     // with nothing.
-    tell(ACT_KIND.INTRODUCTION_ABANDON, { reason: "The window could not read its state." });
+    void window.sidecar
+      .act(
+        actRequest(ACT_KIND.INTRODUCTION_ABANDON, {
+          reason: "The window could not read its state.",
+        }),
+      )
+      .catch(() => undefined);
     console.error("The window's state could not be read; nothing is drawn.", error);
   }
 })();

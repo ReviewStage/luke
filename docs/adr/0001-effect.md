@@ -156,7 +156,19 @@ are the process's own edges, one runtime each:
   `apps/desktop/src/renderer/renderer-runtime.ts` builds: the module is
   instantiated once per bundle, so the panel and the voice window each get
   their own registry and their own runtime under it, and an atom's work runs
-  on the runtime of the window that mounted it.
+  on the runtime of the window that mounted it. Within a bundle, a component
+  or a hook reaches that same edge two ways and no other: an `Atom` on the
+  registry the root provided (`act.ts`'s `actAtom`, `use-app-state.ts`'s
+  `appStateAtom`), or `rendererRuntimeNow()` for work that is a fiber of its
+  own rather than an atom's, run through `Runtime.runFork` or
+  `Runtime.runPromise` on the value it answers. Every place that does the
+  latter today is named rather than left for a grep to rediscover:
+  `voice/use-voice-session.ts`'s remote-audio retry, `voice/live-call.ts`'s
+  own session-life fiber and its armed bounds, and
+  `introduction/introduction-takeover.tsx`'s one `runCallEffect` helper,
+  through which every verb it asks of its own `LiveCall` runs. A fiber built
+  on a runtime constructed anywhere else in the bundle is the thing this rule
+  forbids, not the pattern above.
 - `apps/desktop/src/main/store-worker.ts`, the brain store's own worker
   thread, through `NodeRuntime.runMain(NodeWorkerRunner.launch(...))`. It is
   bundled apart from `main.ts` because a worker starts from its own file, so
@@ -331,32 +343,14 @@ owns. P7-06 moves the calendars composer onto the host's own runtime, at
 which point both run there instead and each disappears with its
 `Effect.runPromise`.
 
-`runAct` in `apps/desktop/src/renderer/act.ts` is on the same allowlist: the
-act channel itself is an `Atom.fn` on the panel and voice roots' own runtime,
-reached through `useAct()`'s `useAtomSet` inside a component or a hook, but
-`settings/writes.ts`'s static `SETTINGS_WRITES` object and `index.tsx`'s
-bootstrap-failure path both call an act outside any render tree, with no
-component to hold a hook's return value. `runAct` sets the atom and reads its
-result back to a promise there instead. P9-08 deletes it once nothing outside
-a hook still asks for an act.
-
-`LiveCall`'s `open`, `unmute`, `mute`, and `close` in
-`apps/desktop/src/renderer/voice/live-call.ts` are on the allowlist on the same
-terms as every other: the session's life is a fiber it forks on the renderer's
-own runtime and every bound of it an `Effect.sleep` in that fiber's scope, but
-`LiveVoiceCall` — what the policy above the peer holds — is four promises, so
-each verb runs its effect on the runtime the call was handed rather than on one
-it built. The clock the captions are stamped from is read there too. P9-08
-deletes the promise-facing seam once the hooks and the orchestrator take the
-fiber.
-
 `LiveVoiceOrchestrator`'s `beginTalk`, `endTalk`, and `stopSpeaking` in
 `packages/voice/src/orchestrator/live-voice-orchestrator.ts` are on the
-allowlist for the same shape of reason: the standing call's whole life is now
-one fiber the orchestrator forks on the runtime it was handed, opening the
-call as an `Effect.acquireRelease` acquire and closing it as the release, but
-`LiveVoiceCall` is still the four promises above, so each verb still runs its
-effect on that runtime rather than building one. P7-07 (compose-speech)
+allowlist: the standing call's whole life is one fiber the orchestrator forks
+on the runtime it was handed, opening the call as an `Effect.acquireRelease`
+acquire and closing it as the release, and `LiveVoiceCall`'s four verbs answer
+Effects run on that same runtime, but `beginTalk`, `endTalk`, and
+`stopSpeaking` above them still answer promises of their own, run to one on
+the orchestrator's runtime rather than a caller's fiber. P7-07 (compose-speech)
 deletes the seam once the host holds the fiber directly. Beside it,
 `ReattachingSocket`'s recovery in `packages/voice/src/live-session-source.ts`
 is on the allowlist too, and for its own reason rather than a caller's: the
@@ -591,8 +585,6 @@ design decision stated as such:
 | `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | P7-06 |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
-| `runAct` Promise door over the act `Atom.fn` | P9-02 | P9-08 |
-| `LiveCall`'s `open`/`unmute`/`mute`/`close` over the renderer's runtime | P9-03 | P9-08 |
 | `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P7-07 |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P7-07 |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | P7-07 |
@@ -669,3 +661,20 @@ bytes identically before and after, so the gap between that number and the
 645,185 `bundle-budget.json` still records is drift the panel bundle
 accumulated since P9-03's baseline, unrelated to this PR. Both bundles stay
 under their recorded ceilings, so the budget is left as P9-01 recorded it.
+
+P9-08 deletes `runAct`'s `Effect.runPromiseExit` and `LiveCall`'s `#run`
+(`Runtime.runPromise`) and `#now` (`Runtime.runSync`), turning `LiveCall`'s
+four verbs into the Effects `LiveVoiceCall` now declares, and gives
+`introduction-takeover.tsx` the one `runCallEffect` helper named above,
+through which its own direct use of `LiveCall` reaches the renderer's
+runtime, in place of a run at each of its six call sites. No module and no
+combinator new to either bundle is named by the change — `renderer.js` moved
+from 645,185 to 639,579 gzipped bytes, a 5,606-byte shrink from the deleted
+code, and the new baseline is recorded. `voice.js` moved from 321,864 to
+324,789, a 2,925-byte growth despite the deletions: the four verbs now return
+their Effects directly rather than through a Promise-returning wrapper, which
+changes which branches of `Deferred`, `Effect.race`, and `Effect.gen` esbuild
+keeps live rather than naming anything new. The growth is 0.9%, well inside
+the budget's 15% slack, so the baseline is left as P9-01 recorded it: a
+baseline moves only for a deliberate library adoption, not for drift a
+deletion happened to leave behind.

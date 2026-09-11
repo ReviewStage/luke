@@ -14,7 +14,7 @@ import type {
   SupersetControl,
   WorkspaceProviderOption,
 } from "./controls";
-import { SETTINGS_WRITES } from "./writes";
+import { useSettingsWrites } from "./writes";
 
 /**
  * Everything the connection rows are judged from and acted through, assembled
@@ -69,6 +69,7 @@ export function useConnectionInput(input: {
   panelOpen: boolean;
 }): ConnectionInput | undefined {
   const [refreshing, setRefreshing] = useState(false);
+  const writes = useSettingsWrites();
   const { view, settings } = input;
   if (!view || !settings) return undefined;
   return {
@@ -87,7 +88,7 @@ export function useConnectionInput(input: {
     linear: input.linear,
     superset: input.superset,
     workspaceProviders: input.workspaceProviders,
-    writes: SETTINGS_WRITES,
+    writes,
     panelOpen: input.panelOpen,
     refreshing,
     onRefreshCalendars: () => {

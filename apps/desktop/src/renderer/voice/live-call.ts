@@ -25,17 +25,7 @@ import type {
   LiveVoiceCallOpening,
 } from "@sidecar/voice/orchestrator";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
-import {
-  Clock,
-  Deferred,
-  Duration,
-  Effect,
-  Exit,
-  type Fiber,
-  FiberId,
-  Runtime,
-  type Scope,
-} from "effect";
+import { Deferred, Duration, Effect, Exit, type Fiber, FiberId, Runtime, type Scope } from "effect";
 import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
@@ -120,11 +110,9 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  * is released then — or when the fiber is interrupted — exactly once, because
  * a scope closes once. Every bound the call keeps is an `Effect.sleep` forked
  * into that same scope, so nothing is left armed behind a session that ended.
- *
- * @deprecated The four verbs answer promises because {@link LiveVoiceCall} is
- * what the policy above the peer still holds, so each runs its effect on the
- * runtime the call was handed rather than on one of its own. P9-08 deletes the
- * promise-facing seam once the hooks and the orchestrator take the fiber.
+ * The four verbs {@link LiveVoiceCall} declares answer Effects rather than
+ * Promises: the orchestrator above the peer runs each on the fiber it already
+ * holds, so nothing here converts one to the other.
  */
 export class LiveCall implements LiveVoiceCall {
   readonly #options: LiveCallOptions;
@@ -162,7 +150,6 @@ export class LiveCall implements LiveVoiceCall {
     this.#runtime = options.runtime;
     this.#captions = new LiveCaptions({
       onRows: (rows) => this.#onRows(rows),
-      now: () => this.#now(),
     });
   }
 
@@ -182,10 +169,10 @@ export class LiveCall implements LiveVoiceCall {
     return this.standing && this.#micLive;
   }
 
-  open(opening: LiveVoiceCallOpening): Promise<boolean> {
+  open(opening: LiveVoiceCallOpening): Effect.Effect<boolean> {
     const negotiating = this.#opening;
-    if (negotiating) return this.#run(Deferred.await(negotiating));
-    if (this.#lifecycle) return Promise.resolve(this.standing);
+    if (negotiating) return Deferred.await(negotiating);
+    if (this.#lifecycle) return Effect.succeed(this.standing);
     const opened = Deferred.unsafeMake<boolean>(FiberId.none);
     this.#opening = opened;
     this.#lifecycle = Runtime.runFork(this.#runtime)(
@@ -193,7 +180,7 @@ export class LiveCall implements LiveVoiceCall {
         Effect.ensuring(this.#settleOpening(opened, false)),
       ),
     );
-    return this.#run(Deferred.await(opened));
+    return Deferred.await(opened);
   }
 
   /**
@@ -203,8 +190,8 @@ export class LiveCall implements LiveVoiceCall {
    * stopped and off the line, since the mute that release sent found nothing
    * to release.
    */
-  unmute(): Promise<boolean> {
-    return this.#run(this.#unmuteEffect());
+  unmute(): Effect.Effect<boolean> {
+    return this.#unmuteEffect();
   }
 
   /**
@@ -217,21 +204,19 @@ export class LiveCall implements LiveVoiceCall {
    * the key being up is the developer's decision and the device is theirs.
    * The answer stays the session's own word on the switch.
    */
-  mute(): Promise<boolean> {
+  mute(): Effect.Effect<boolean> {
     const held = this.#muting;
-    if (held) return this.#run(Deferred.await(held));
+    if (held) return Deferred.await(held);
     const peer = this.#peer;
-    if (!peer || !this.#started || this.#ended) return Promise.resolve(false);
+    if (!peer || !this.#started || this.#ended) return Effect.succeed(false);
     this.#muteEpoch += 1;
     const muting = Deferred.unsafeMake<boolean>(FiberId.none);
     this.#muting = muting;
-    return this.#run(
-      Effect.onExit(this.#muteAndRelease(peer), (exit) =>
-        Effect.sync(() => {
-          this.#muting = undefined;
-          Deferred.unsafeDone(muting, exit);
-        }),
-      ),
+    return Effect.onExit(this.#muteAndRelease(peer), (exit) =>
+      Effect.sync(() => {
+        this.#muting = undefined;
+        Deferred.unsafeDone(muting, exit);
+      }),
     );
   }
 
@@ -240,8 +225,8 @@ export class LiveCall implements LiveVoiceCall {
    * handler already stands, `session.close` goes, and everything stays open
    * until `session.closed` arrives or the bound passes.
    */
-  close(): Promise<void> {
-    return this.#run(this.#closeEffect());
+  close(): Effect.Effect<void> {
+    return this.#closeEffect();
   }
 
   /** Luke audible on the remote track, from the level meter: the one source of the speaking status, held through his pauses. */
@@ -628,14 +613,6 @@ export class LiveCall implements LiveVoiceCall {
   #nextId(): string {
     this.#ids += 1;
     return `peer-${this.#ids}`;
-  }
-
-  #now(): number {
-    return Runtime.runSync(this.#runtime)(Clock.currentTimeMillis);
-  }
-
-  #run<A>(effect: Effect.Effect<A>): Promise<A> {
-    return Runtime.runPromise(this.#runtime)(effect);
   }
 
   /**

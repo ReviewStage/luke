@@ -1,7 +1,7 @@
 import { CalendarIntegrations } from "./connections-page";
 import type { SettingsPanelProps } from "./settings-panel";
 import { settingsRowsInput, useConnectionInput } from "./use-connection-input";
-import { SETTINGS_WRITES } from "./writes";
+import { useSettingsWrites } from "./writes";
 
 /**
  * The calendar block the onboarding gate borrows: the same rows the Connections
@@ -15,6 +15,7 @@ export function CalendarGateReview({
 }: {
   settings: SettingsPanelProps;
 }): React.JSX.Element | null {
+  const writes = useSettingsWrites();
   const snapshot = settings.settings;
   const connections = useConnectionInput({
     ...(snapshot
@@ -33,5 +34,5 @@ export function CalendarGateReview({
     panelOpen: settings.panelOpen,
   });
   if (!connections) return null;
-  return <CalendarIntegrations input={connections} writes={SETTINGS_WRITES} />;
+  return <CalendarIntegrations input={connections} writes={writes} />;
 }
