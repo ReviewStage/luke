@@ -28,8 +28,14 @@ issues, observation, calendars, brain, live — that owns its own mutable
 state, its own timers, and the Gateway methods of its domain, and answers
 `start()` and `stop()` for exactly what it began. The devices composer answers
 no method at all: it is this installation's device row on the service,
-registered when the account gate opens, kept warm by a timer, and forgotten
-at sign-out on the departing account's own token. The merge folds their
+registered when the account gate opens, kept warm by the change-signal poll,
+and forgotten at sign-out on the departing account's own token. Each poll
+restates two facts of this machine and decides nothing from them: the instant
+its presence holds until, from the idle time and lock state the client reads
+off the machine and hands in as the `machinePresence` seam, and the instant
+the calendar's meeting hold ends, asked of the calendars composer; `null`
+where neither holds, so a registration that cleared them is never followed
+by a stale hold restated from memory. The merge folds their
 method tables into one and refuses a method two of them claim, so which
 concern answers a method is checked at construction rather than left to the
 fold's order. `client.bootstrap` is the one method no composer owns: it reads

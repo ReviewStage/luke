@@ -1,9 +1,11 @@
+import { powerMonitor } from "electron";
 import { AppStateStore, initialAppState } from "../app-state";
 import { createElectronUpdaterEngine } from "../update-installer";
 import type { DesktopConfig } from "./desktop-config";
 import { createHostService } from "./host-service";
 import { createKeychainService } from "./keychain-service";
 import { stopInReverse } from "./lifecycle";
+import { createMachinePresence } from "./machine-presence";
 import { createNativeNode, type NativeNode } from "./native-node";
 import { createOperatorClient, type OperatorClient } from "./operator-client";
 import type { DesktopService } from "./service";
@@ -67,7 +69,12 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
    */
   let quitting = false;
   const keychain = createKeychainService();
-  const host = createHostService({ config, cipher: keychain.cipher });
+  const presence = createMachinePresence(powerMonitor);
+  const host = createHostService({
+    config,
+    cipher: keychain.cipher,
+    machinePresence: presence.read,
+  });
   // Nothing to install without a signed build, a network, and the platform
   // Squirrel serves; the row says so rather than offering a press that could
   // not land, and the document says so from its first version.
@@ -140,7 +147,7 @@ export function composeDesktop(config: DesktopConfig): DesktopServices {
    * never arrived must not be drawn over, and which read the updater's
    * snapshot in their own bootstrap.
    */
-  const machine = [keychain, telemetry, native] as const;
+  const machine = [keychain, presence, telemetry, native] as const;
   const all: readonly DesktopService[] = [...machine, host, operator, updates, windows];
   let stopping: Promise<void> | undefined;
   let stopped = false;

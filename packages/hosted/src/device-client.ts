@@ -10,14 +10,10 @@ import type { AccountToken } from "./account-token.js";
 import {
   type DeviceForgetAnswer,
   type DeviceForgetRequest,
-  type DeviceHeartbeatAnswer,
-  type DeviceHeartbeatRequest,
   type DeviceRegisterAnswer,
   type DeviceRegisterRequest,
   deviceForgetAnswerSchema,
   deviceForgetRequestSchema,
-  deviceHeartbeatAnswerSchema,
-  deviceHeartbeatRequestSchema,
   deviceRegisterAnswerSchema,
   deviceRegisterRequestSchema,
 } from "./device-wire.js";
@@ -66,28 +62,18 @@ function registerRecord(request: DeviceRegisterRequest): WireRecord {
   };
 }
 
-function heartbeatRecord(request: DeviceHeartbeatRequest): WireRecord {
-  return {
-    deviceId: request.deviceId,
-    ...(request.activeUntil !== undefined ? { activeUntil: request.activeUntil } : undefined),
-    ...(request.pushToken !== undefined ? { pushToken: request.pushToken } : undefined),
-    ...(request.pushEnvironment !== undefined
-      ? { pushEnvironment: request.pushEnvironment }
-      : undefined),
-  };
-}
-
 function forgetRecord(request: DeviceForgetRequest): WireRecord {
   return { deviceId: request.deviceId };
 }
 
 /**
  * The desktop's side of the device record: register this installation at
- * sign-in, move its last-seen instant on a timer, and forget it at sign-out.
+ * sign-in and forget it at sign-out; between the two, the change-signal poll
+ * in `changes-client.ts` is what moves the row's last-seen instant.
  * Every ask is the shared account call — the token read fresh per attempt, a
  * 401 refreshed and retried once, every answer validated by the shared wire
  * contract — and a failure resolves to nothing, because no row press waits on
- * it: a registration that did not land is tried again by the next heartbeat.
+ * it: a registration that did not land is tried again by the next poll.
  * A request the service would refuse by shape is refused here without
  * traveling at all.
  */
@@ -106,15 +92,6 @@ export class HostedDeviceClient {
     return this.#ask(
       { method: DEVICE_METHOD.REGISTER, body: registerRecord(admitted) },
       (payload) => deviceRegisterAnswerSchema.parse(payload),
-    );
-  }
-
-  heartbeat(request: DeviceHeartbeatRequest): Promise<DeviceHeartbeatAnswer | undefined> {
-    const admitted = deviceHeartbeatRequestSchema.parse(heartbeatRecord(request));
-    if (admitted === undefined) return Promise.resolve(undefined);
-    return this.#ask(
-      { method: DEVICE_METHOD.HEARTBEAT, body: heartbeatRecord(admitted) },
-      (payload) => deviceHeartbeatAnswerSchema.parse(payload),
     );
   }
 

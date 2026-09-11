@@ -51,6 +51,7 @@ export {
   hostedBrainEmbedRequestFromWire,
   hostedBrainRespondRequestFromWire,
 } from "./brain-contract.js";
+export { HostedChangesClient, type HostedChangesClientOptions } from "./changes-client.js";
 export {
   type HostedConversationAnswer,
   type HostedConversationMessage,

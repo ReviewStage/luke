@@ -1,16 +1,17 @@
 import {
+  type ChangesAnswer,
+  type ChangesRequest,
   DEVICE_PLATFORM,
   type DepartingCredential,
   type DeviceForgetAnswer,
   type DeviceForgetRequest,
-  type DeviceHeartbeatAnswer,
-  type DeviceHeartbeatRequest,
   type DeviceRegisterAnswer,
   type DeviceRegisterRequest,
   isDeviceWireId,
 } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { text, type WireRecord } from "@sidecar/wire";
+import { DEVICE_POLL_INTERVAL_MS, type DevicePresenceReport } from "./device-presence.js";
 import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
 
 /** The device record, in the app's own state directory. */
@@ -59,18 +60,11 @@ export function deviceStateFile(
   });
 }
 
-/**
- * How often a signed-in Mac moves its last-seen instant. Presence — the
- * instant input was last seen and the screen unlocked — is not reported yet,
- * so the heartbeat carries nothing but the row's id; a few minutes keeps the
- * row warm without a request per screen glance.
- */
-export const DEVICE_HEARTBEAT_INTERVAL_MS = 5 * 60_000;
-
-/** The three calls the registration makes, as the hosted client answers them. */
+/** The three calls the registration makes, as the hosted clients answer them. */
 export interface DeviceRegistrationClient {
   register: (request: DeviceRegisterRequest) => Promise<DeviceRegisterAnswer | undefined>;
-  heartbeat: (request: DeviceHeartbeatRequest) => Promise<DeviceHeartbeatAnswer | undefined>;
+  /** The change-signal poll, which is also the row's heartbeat and carries its presence. */
+  poll: (request: ChangesRequest) => Promise<ChangesAnswer | undefined>;
   forget: (
     request: DeviceForgetRequest,
     departing?: DepartingCredential,
@@ -82,19 +76,32 @@ export interface DeviceRegistrationOptions {
   state: JsonStateFile<DeviceState>;
   /** Mints the installation id once, on the first registration this state root ever makes. */
   mintInstallationId: () => string;
+  /** What this machine reports of itself on each poll, read at the poll and never held between them. */
+  presence: () => Promise<DevicePresenceReport>;
   schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel: (timer: ScheduledTimer) => void;
-  heartbeatIntervalMs?: number;
+  pollIntervalMs?: number;
+  /** Hears a beat that failed; the next beat is armed either way. */
+  report?: (message: string) => void;
 }
 
 /**
  * This Mac's device row, kept standing while an account is signed in. `start`
- * registers the installation and arms the heartbeat; each beat moves the
- * row's last-seen instant, and re-registers when the service no longer holds
- * the row or a registration never landed. `stop` disarms the beat, and at a
+ * registers the installation, polls once, and arms the poll; each poll moves
+ * the row's last-seen instant and restates both of its instants — presence
+ * and the meeting hold — as they stand at that moment, `null` where neither
+ * holds, so a registration that cleared them is never followed by a stale
+ * hold re-asserted from memory. A registration clears both on the service,
+ * so every registration that lands is followed by a poll at once rather than
+ * a minute of the row reading absent. A poll answered unseen re-registers,
+ * as does one after a registration that never landed. A beat that fails is
+ * reported and the next one is armed all the same: the loop never ends on an
+ * error, since nothing else would restart it. `stop` disarms the poll, and at a
  * sign-out also asks the service to forget the row, on the token of the
  * account that is leaving. Every answer is checked against the generation
  * that asked, so a call still out when the account changed installs nothing.
+ * What the poll answers of the resources' heads is not read here: the reads
+ * behind them are another concern's.
  */
 export class DeviceRegistration {
   readonly #options: DeviceRegistrationOptions;
@@ -113,7 +120,7 @@ export class DeviceRegistration {
 
   constructor(options: DeviceRegistrationOptions) {
     this.#options = options;
-    this.#intervalMs = options.heartbeatIntervalMs ?? DEVICE_HEARTBEAT_INTERVAL_MS;
+    this.#intervalMs = options.pollIntervalMs ?? DEVICE_POLL_INTERVAL_MS;
   }
 
   /** Whether a registration stands: started, and not yet stopped. */
@@ -130,8 +137,7 @@ export class DeviceRegistration {
     if (this.#standing) return;
     this.#standing = true;
     const generation = ++this.#generation;
-    await this.#settle(() => this.#register(generation));
-    this.#arm(generation);
+    await this.#settle(() => this.#beat(generation));
   }
 
   async stop(options: { forget: DepartingCredential | false }): Promise<void> {
@@ -158,10 +164,13 @@ export class DeviceRegistration {
     await forgetting;
   }
 
-  /** Runs `work` once the call under way has settled, and holds the slot until it has. */
+  /** Runs `work` once the call under way has settled, and holds the slot until it has, however it ended. */
   #settle(work: () => Promise<void>): Promise<void> {
     const next = this.#inFlight.then(work);
-    this.#inFlight = next;
+    this.#inFlight = next.then(
+      () => undefined,
+      () => undefined,
+    );
     return next;
   }
 
@@ -173,17 +182,33 @@ export class DeviceRegistration {
     })).installationId;
   }
 
-  async #register(generation: number): Promise<void> {
+  /** Registers the installation; answers the row's id where the registration landed for this generation. */
+  async #register(generation: number): Promise<string | undefined> {
     const installationId = this.#installationId();
     const answer = await this.#options.client.register({
       platform: DEVICE_PLATFORM.MACOS,
       installationId,
     });
-    if (generation !== this.#generation || answer === undefined) return;
+    if (generation !== this.#generation || answer === undefined) return undefined;
     this.#options.state.update((current) => ({
       installationId: current?.installationId ?? installationId,
       deviceId: answer.deviceId,
     }));
+    return answer.deviceId;
+  }
+
+  /** One poll carrying the presence read now; answers whether the service still holds the row, or nothing for no answer. */
+  async #poll(generation: number, deviceId: string): Promise<boolean | undefined> {
+    const presence = await this.#options.presence();
+    if (generation !== this.#generation) return undefined;
+    const answer = await this.#options.client.poll({ deviceId, ...presence });
+    return generation === this.#generation ? answer?.seen : undefined;
+  }
+
+  /** Registers and, where the registration landed, polls at once so the row never reads absent for want of a report. */
+  async #registerAndPoll(generation: number): Promise<void> {
+    const deviceId = await this.#register(generation);
+    if (deviceId !== undefined) await this.#poll(generation, deviceId);
   }
 
   #arm(generation: number): void {
@@ -195,14 +220,17 @@ export class DeviceRegistration {
   }
 
   async #beat(generation: number): Promise<void> {
-    const deviceId = this.#options.state.read()?.deviceId;
-    if (deviceId === undefined) {
-      await this.#register(generation);
-    } else {
-      const answer = await this.#options.client.heartbeat({ deviceId });
-      if (generation === this.#generation && answer?.seen === false) {
-        await this.#register(generation);
+    try {
+      const deviceId = this.#options.state.read()?.deviceId;
+      if (deviceId === undefined) {
+        await this.#registerAndPoll(generation);
+      } else if ((await this.#poll(generation, deviceId)) === false) {
+        await this.#registerAndPoll(generation);
       }
+    } catch (error) {
+      this.#options.report?.(
+        `The device poll failed and will be tried again: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     this.#arm(generation);
   }

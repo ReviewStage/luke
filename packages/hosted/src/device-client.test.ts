@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { HostedDeviceClient } from "./device-client.js";
-import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "./device-wire.js";
+import { DEVICE_PLATFORM } from "./device-wire.js";
 
 const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -72,31 +72,8 @@ test("a request the service would refuse by shape never travels", async () => {
     }),
     undefined,
   );
-  assert.equal(await devices.heartbeat({ deviceId: DEVICE_ID, activeUntil: -5 }), undefined);
   assert.equal(await devices.forget({ deviceId: "" }), undefined);
   assert.equal(requests.length, 0);
-});
-
-test("a heartbeat is a PUT carrying only the fields it means to change", async () => {
-  const { requests, fetchLike } = service([
-    () => new Response(JSON.stringify({ seen: true }), { status: 200 }),
-  ]);
-
-  const answer = await client({ fetch: fetchLike }).heartbeat({
-    deviceId: DEVICE_ID,
-    pushToken: "ab".repeat(32),
-    pushEnvironment: PUSH_ENVIRONMENT.SANDBOX,
-  });
-  assert.deepEqual(answer, { seen: true });
-
-  const [request] = requests;
-  assert.equal(request?.url, "https://tryluke.dev/api/devices");
-  assert.equal(request?.init.method, "PUT");
-  assert.deepEqual(JSON.parse(String(request?.init.body)), {
-    deviceId: DEVICE_ID,
-    pushToken: "ab".repeat(32),
-    pushEnvironment: PUSH_ENVIRONMENT.SANDBOX,
-  });
 });
 
 test("a forget is a DELETE naming the device and reads whether a row went", async () => {
@@ -140,7 +117,7 @@ test("a 401 refreshes the account and retries once on the new token", async () =
   let refreshes = 0;
   const { requests, fetchLike } = service([
     () => new Response(JSON.stringify({ error: "invalid-token" }), { status: 401 }),
-    () => new Response(JSON.stringify({ seen: true }), { status: 200 }),
+    () => new Response(JSON.stringify({ deviceId: DEVICE_ID }), { status: 200 }),
   ]);
 
   const answer = await client({
@@ -149,9 +126,9 @@ test("a 401 refreshes the account and retries once on the new token", async () =
     refreshAccount: async () => {
       refreshes += 1;
     },
-  }).heartbeat({ deviceId: DEVICE_ID });
+  }).register({ platform: DEVICE_PLATFORM.MACOS, installationId: INSTALLATION_ID });
 
-  assert.deepEqual(answer, { seen: true });
+  assert.deepEqual(answer, { deviceId: DEVICE_ID });
   assert.equal(refreshes, 1);
   assert.equal(requests.length, 2);
   assert.equal(new Headers(requests[1]?.init.headers).get("authorization"), "Bearer token-2");
@@ -180,7 +157,7 @@ test("a refusal, a malformed answer, or no token resolves to nothing", async () 
     await client({
       fetch: signedOut.fetchLike,
       readAccessToken: async () => undefined,
-    }).heartbeat({ deviceId: DEVICE_ID }),
+    }).forget({ deviceId: DEVICE_ID }),
     undefined,
   );
   assert.equal(signedOut.requests.length, 0);

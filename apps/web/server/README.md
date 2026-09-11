@@ -634,8 +634,9 @@ account, at sign-out, and when Apple answers that the token is gone. The
 handler is `server/hosted/devices.ts` and the writes `server/hosted/device-store.ts`.
 Beside the presence window stands `quiet_until`, the instant a meeting hold
 the device observes ends; both arrive on the change-signal poll
-(`server/routes/changes.ts`), which moves the row exactly as the heartbeat does, and
-both are written by nothing on the Mac today. A quiet instant holds speech
+(`server/routes/changes.ts`), which moves the row exactly as the heartbeat does; the Mac
+reports both on every poll, presence from its idle time and lock state and the
+quiet instant from its calendar hold, and the phone reports neither yet. A quiet instant holds speech
 and nothing more: a delivery reads it to wait, never to decide, reword, or
 act. The push token reaches the sender below in a later change.
 

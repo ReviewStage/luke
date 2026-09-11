@@ -12,7 +12,7 @@ import { user } from "./auth-schema.js";
  * repeating the installation id. Presence (`active_until`) is written only by a
  * platform that can read its own input activity, and the meeting hold
  * (`quiet_until`) by one that reads a calendar; both arrive on the
- * change-signal poll, and the Mac begins to send them in a later change. A push token is not a credential:
+ * change-signal poll, which the Mac sends and the phone does not yet. A push token is not a credential:
  * nothing but this deployment's own Apple key can address it. Every row goes
  * with the account, at sign-out, and when Apple reports its token gone.
  */
