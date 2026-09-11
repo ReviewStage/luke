@@ -394,8 +394,10 @@ smallest of them: the open is an `acquireRelease` in a `Scope` that closes the
 handle, and this face runs it for the adapters that still close the handle
 themselves in a `finally`. P6-11a and P6-11b move each adapter's read into a
 scope. The hook spool has no such face at all: `observationSpoolEvents` is a
-`Stream` and P6-12 runs it where the hook wiring lives, so nothing in that
-package forks a fiber of its own.
+`Stream`, and nothing in this build runs it — the hook wiring P6-12 would
+have run it under is gone, so the window it groups on is settled on the
+stream's own terms in `packages/providers/AGENTS.md` — which leaves nothing
+in that package forking a fiber of its own.
 
 ## Strangler shims and their deletions
 

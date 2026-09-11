@@ -220,6 +220,78 @@ describe("the observation spool stream", () => {
     ),
   );
 
+  it.effect("reports two hooks two milliseconds apart inside one window as one batch", () =>
+    withSpool((watch, spoolDirectory) =>
+      Effect.gen(function* () {
+        const collected = yield* collectBatches(spoolDirectory);
+        yield* writeSpoolFile(spoolDirectory, "session-a.json", '{"event":"stop"}');
+        yield* writeSpoolFile(spoolDirectory, "session-b.json", '{"event":"prompt"}');
+
+        yield* watch.emit("session-a.json");
+        yield* TestClock.adjust(Duration.millis(2));
+        yield* watch.emit("session-b.json");
+
+        assert.deepEqual(ids(yield* awaitBatches(collected, 1)), [["session-a", "session-b"]]);
+      }),
+    ),
+  );
+
+  it.effect("reports two hooks two milliseconds apart across the beat as two batches", () =>
+    withSpool((watch, spoolDirectory) =>
+      Effect.gen(function* () {
+        const collected = yield* collectBatches(spoolDirectory);
+        yield* writeSpoolFile(spoolDirectory, "session-a.json", '{"event":"stop"}');
+        yield* writeSpoolFile(spoolDirectory, "session-b.json", '{"event":"prompt"}');
+
+        yield* TestClock.adjust(Duration.millis(DEBOUNCE_MS - 2));
+        yield* watch.emit("session-a.json");
+        yield* TestClock.adjust(Duration.millis(2));
+        yield* watch.emit("session-b.json");
+
+        assert.deepEqual(ids(yield* awaitBatches(collected, 2)), [["session-a"], ["session-b"]]);
+      }),
+    ),
+  );
+
+  it.effect("reports one session's straddling hooks as the one event, dated once", () =>
+    withSpool((watch, spoolDirectory) =>
+      Effect.gen(function* () {
+        const collected = yield* collectBatches(spoolDirectory);
+        yield* writeSpoolFile(spoolDirectory, "session-a.json", '{"event":"stop"}');
+
+        yield* TestClock.adjust(Duration.millis(DEBOUNCE_MS - 2));
+        yield* watch.emit("session-a.json");
+        yield* TestClock.adjust(Duration.millis(2));
+        yield* watch.emit("session-a.json");
+
+        const batches = yield* awaitBatches(collected, 2);
+        assert.deepEqual(named(batches[0] ?? []), [
+          { providerSessionId: "session-a", event: HOOK_EVENT.STOP },
+        ]);
+        assert.deepEqual(batches[1], batches[0]);
+      }),
+    ),
+  );
+
+  it.effect("drops the entry whose read throws and keeps reporting", () =>
+    withSpool((watch, spoolDirectory) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const collected = yield* collectBatches(spoolDirectory);
+        yield* fileSystem.makeDirectory(path.join(spoolDirectory, "unreadable.json"));
+        yield* writeSpoolFile(spoolDirectory, "readable.json", '{"event":"stop"}');
+
+        yield* watch.emit("unreadable.json");
+        yield* watch.emit("readable.json");
+        assert.deepEqual(ids(yield* awaitBatches(collected, 1)), [["readable"]]);
+
+        yield* writeSpoolFile(spoolDirectory, "later.json", '{"event":"prompt"}');
+        yield* watch.emit("later.json");
+        assert.deepEqual(ids(yield* awaitBatches(collected, 1)), [["later"]]);
+      }),
+    ),
+  );
+
   it.effect("reports nothing for a window whose files all fail to read", () =>
     withSpool((watch, spoolDirectory) =>
       Effect.gen(function* () {

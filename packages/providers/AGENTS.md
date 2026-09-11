@@ -58,24 +58,34 @@ rate-limited failure standing. The hook spool is a `Stream` over
 `FileSystem.watch`, grouped into the window a batch is read in and re-armed
 by `Stream.retry` on a spaced schedule, so a spool directory hook
 installation has not created yet and a watcher that fails later are the same
-answer, tried again later. The window is `groupedWithin`'s beat rather than
-the anchored one the hand-rolled debounce opened at its first id, which is a
-deliberate difference and the one behaviour this move did not preserve: two
-hooks a few milliseconds apart can straddle a boundary and arrive as two
-batches, so the run that consumes the stream has to tolerate a session named
-twice — which it must anyway, since a hook delivered twice is one entry. A provider's own SQLite file is opened read-only
-inside a `Scope` that closes it, and never through the store's opener in
-`@sidecar/brain`, which sets pragmas and may `VACUUM` — writes a provider's
-file must never take.
+answer, tried again later. The window stays `groupedWithin`'s beat rather
+than the anchored one the hand-rolled debounce opened at its first id, and
+the difference is settled rather than inherited: two hooks two milliseconds
+apart do straddle a boundary and arrive as two batches, and neither batch
+costs a reader anything to undo. Two sessions straddling are one wake each
+either way, since a wake is minted per event and never per batch; one session
+straddling is read from the same spool file twice, so both batches carry that
+file's own event and its `mtime` — the one mark the brain's inbox folds into
+one entry. What the beat costs is the redundant read and never a second
+entry, so no anchored pull loop stands here. A read that throws costs its own
+entry and neither the batch nor the stream, because the spool only sharpens
+the timing of state the adapters read on their own pass anyway. A provider's
+own SQLite file is opened read-only inside a `Scope` that closes it, and
+never through the store's opener in `@sidecar/brain`, which sets pragmas and
+may `VACUUM` — writes a provider's file must never take.
 
 Two of the three keep a promise face as a strangler shim, each `@deprecated`
 and listed in `docs/adr/0001-effect.md`: `cloudPass` runs its request effects
 because an adapter's `collect` and every caller of a provider write still
 hold a promise, and `openReadOnlyDatabase` answers a handle the caller closes
 itself in a `finally`. P6-11a and P6-11b move the adapters onto the effects.
-The spool has no promise face: `observationSpoolEvents` is the whole of it,
-and P6-12 runs that stream where the hook wiring lives, which is also what
-decides what a batch is delivered to and what a reader that throws costs.
+The spool has no promise face and, in this build, no consumer either:
+`observationSpoolEvents` is the whole of it. The hook wiring that would have
+run it is gone — the local loop registers no hook and watches no spool now
+that the rows draw the stored roster snapshot — so the window and the dropped
+read above are settled on the stream's own terms, and a build that wakes on
+hook events again provides `FileSystem` where it runs the stream and needs
+nothing else of it.
 
 Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over
