@@ -2896,9 +2896,25 @@ both meaning absent, and is also why the object is the wrong thing to assert on.
 | **CI** — `ci.yml`'s service image | **postgres:17** |
 | **every local reproduction today** | **16.12** |
 
-**Three major versions across the three places the store suite runs, and none of the testing versions
-is the one we ship.** CI has been proving the store against a database we do not run; no local run has
-ever touched the one we do.
+**AMENDED THE SAME EVENING, AND THE FINDING SHRINKS. The sentence above is wrong.** I wrote *"three
+major versions across the three places the store suite runs, and none of the testing versions is the one
+we ship"*, and *"no local run has ever touched the one we do."* **Both are false.**
+
+**PGlite 0.5.8 embeds PostgreSQL 18.3** — `select version()` from a fresh PGlite answers
+*"PostgreSQL 18.3 (PGlite 0.5.8) on wasm32"*. So **`check.sh` and the four CI test shards have been
+running the store tests on the production major all along.** The only place on 17 was the **single
+`postgres` job**: the one real-Postgres pass of migrations plus `test:store` over
+`LUKE_STORE_TEST_DATABASE_URL`.
+
+**My error was conflating two kinds of local run.** C3's *"every local reproduction today ran 16.12"* was
+about the **real-Postgres reproductions it was standing up to chase the flake**, not about `check.sh`,
+which uses PGlite. I generalised one to the other and then called it the largest finding of the day. **It
+is not. It is one CI job a major version behind, and a one-line pin.** The largest findings of the day
+are the `cursor[bot]` auto-resolution and the unscoped cross-file delete.
+
+**What remains true and still worth fixing:** the `postgres` job — the only pass that exercises the real
+migrations against a real server — ran **17** while production runs **18.6**, so anything that differs
+between them on that path was untested. Pin it to `postgres:18`.
 
 **Why it matters past the flake.** Anything that differs between 17 and 18 is **untested** — planner
 choices under contention, `SELECT … FOR UPDATE` interactions, sequence and identity handling, error
