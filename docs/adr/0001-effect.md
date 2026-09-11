@@ -127,7 +127,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Five strangler shims are on that allowlist for as long as they live.
+Eight strangler shims are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -179,6 +179,17 @@ beside the call and runs the effect there to answer the `Promise` its own
 public methods still keep. They go in P12-04 too, once a caller of these
 clients runs the effect on its own runtime edge instead.
 
+`ProductEventSender`'s `start`, `stop`, and `flush` in
+`packages/analytics/src/sender.ts` are the eighth, on the same terms as
+`ObservationLoop`: the flush cadence is a `Schedule` forked into a `Scope` the
+sender owns, and the batch itself an effect over `accountCall`, but the
+settings composer that constructs and arms this sender
+(`packages/host/src/compose-settings.ts`) is still a promise calling
+synchronous methods, so the runtime the sender was handed or built is what
+runs them rather than the host's own. P7-03 deletes the runtime this class
+holds once that composer is a `Layer` and can hand the sender an edge to fork
+on instead.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so
@@ -200,6 +211,7 @@ design decision stated as such:
 | `BrainTransport#send`'s internal `runCall` | P5-05 | P5-14 |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
+| `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |

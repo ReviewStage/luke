@@ -1,13 +1,17 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
-  type AccountCall,
+  type AccountCallEffects,
   type AccountToken,
   accountBearer,
+  accountCall,
   CALL_FAULT,
   callAnswered,
-  createAccountCall,
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
+import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { type CloudFetch, HTTP_METHOD, positiveInteger } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Duration, Effect, Exit, type Layer, Runtime, Schedule, Scope } from "effect";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
@@ -50,6 +54,8 @@ export interface ProductEventSenderOptions extends AccountToken {
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
   queueLimit?: number;
+  /** The runtime the flush cadence forks on, for a test that drives its own clock. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 /**
@@ -71,7 +77,9 @@ export interface ProductEventSenderOptions extends AccountToken {
  * so there is nothing here to name a person with.
  */
 export class ProductEventSender {
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
+  readonly #runtime: Runtime.Runtime<never>;
   readonly #appVersion: string;
   readonly #sends: boolean;
   readonly #now: () => number;
@@ -81,16 +89,27 @@ export class ProductEventSender {
   /** Nested rather than an interpolated key: the name and the discriminator stay apart. */
   readonly #recordedDays = new Map<ProductEventName, Map<string, string>>();
   #armed = false;
-  #timer: NodeJS.Timeout | undefined;
+  #scope: Scope.CloseableScope | undefined;
   #inFlight: Promise<void> | undefined;
 
+  /**
+   * One flush, delayed by the cadence and then repeated on it — never an
+   * immediate one, so the events a caller queues right after `start()` ride
+   * the first tick rather than an empty flush ahead of it.
+   */
+  readonly #tick: Effect.Effect<void> = Effect.suspend(() => {
+    this.markDayActive();
+    return Effect.promise(() => this.flush());
+  });
+
   constructor(options: ProductEventSenderOptions) {
-    this.#call = createAccountCall({
+    this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
-      fetch: options.fetch,
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
     this.#appVersion = options.appVersion;
     this.#sends = options.sends;
     this.#now = options.now ?? Date.now;
@@ -162,43 +181,66 @@ export class ProductEventSender {
     this.#armed = true;
   }
 
-  /** Starts the timed flush. The timer never holds the process open. */
+  /**
+   * Starts the timed flush, in a fiber the sender's own scope interrupts.
+   *
+   * @deprecated Runs its own runtime rather than being handed one at an edge,
+   * because the settings composer that owns this sender is still a promise
+   * calling two synchronous methods rather than a `Layer`; P7-03 deletes the
+   * runtime this class holds once that composer forks the cadence on the
+   * host's own.
+   */
   start(): void {
-    if (this.#timer) return;
-    // Unlike the update check there is no flush here: letting the launch
-    // events ride the first tick is what makes the first batch carry more
-    // than one event.
-    this.#timer = setInterval(() => {
-      // The day is marked on the tick rather than at launch alone, because a
-      // Luke left running crosses midnight without relaunching — which is the
-      // whole case this event exists for, and marking it only at launch would
-      // make it a second, worse copy of `app:launch`.
-      this.markDayActive();
-      void this.flush();
-    }, this.#flushIntervalMs);
-    this.#timer.unref();
-  }
-
-  stop(): void {
-    if (this.#timer) clearInterval(this.#timer);
-    this.#timer = undefined;
-    this.#queue.length = 0;
+    if (this.#scope) return;
+    const runSync = Runtime.runSync(this.#runtime);
+    const scope = runSync(Scope.make());
+    this.#scope = scope;
+    // The day is marked on the tick rather than at launch alone, because a
+    // Luke left running crosses midnight without relaunching — which is the
+    // whole case this event exists for, and marking it only at launch would
+    // make it a second, worse copy of `app:launch`.
+    const delayed = Effect.delay(this.#tick, Duration.millis(this.#flushIntervalMs));
+    runSync(
+      Effect.provideService(
+        scheduleRepeat(Schedule.spaced(Duration.millis(this.#flushIntervalMs)), delayed),
+        Scope.Scope,
+        scope,
+      ),
+    );
   }
 
   /**
-   * Sends what is queued, at most one request at a time. Never throws: a
-   * failure is a count nobody has, which is the trade this whole pipeline
-   * makes.
+   * The scope is dropped and the queue cleared synchronously; closing the
+   * scope is not awaited, for the same reason cancelling a timer never was:
+   * what it has to guarantee is that no further tick starts, never that a
+   * request already under way has ended.
+   *
+   * @deprecated On the same allowlisted runtime as {@link start}; P7-03
+   * deletes it with the runtime this class holds.
+   */
+  stop(): void {
+    const scope = this.#scope;
+    this.#scope = undefined;
+    this.#queue.length = 0;
+    if (scope) Runtime.runFork(this.#runtime)(Scope.close(scope, Exit.void));
+  }
+
+  /**
+   * Sends what is queued, at most one request at a time. Never fails: a
+   * request `accountCall` could not carry is a count nobody has, which is the
+   * trade this whole pipeline makes.
+   *
+   * @deprecated The promise face over `#flushEffect`, kept because every
+   * caller — the composer, the gateway's `analytics.record`, this file's own
+   * tests — still holds a `ProductEventSender` rather than an `Effect`; on the
+   * same allowlisted runtime as {@link start}, and gone with it in P7-03.
    */
   flush(): Promise<void> {
-    this.#inFlight ??= this.#send().then(
-      () => {
-        this.#inFlight = undefined;
-      },
-      () => {
-        this.#inFlight = undefined;
-      },
-    );
+    this.#inFlight ??= Runtime.runPromise(this.#runtime)(
+      Effect.provide(this.#flushEffect(), this.#client),
+    ).finally(() => {
+      this.#inFlight = undefined;
+    });
     return this.#inFlight;
   }
 
@@ -206,29 +248,36 @@ export class ProductEventSender {
     return this.#sends && this.#armed;
   }
 
-  async #send(): Promise<void> {
-    if (this.#queue.length === 0) return;
-    // Gone whatever becomes of the request, save for the one end that never
-    // authenticated at all.
-    const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
-    const answer = await this.#call.send({
-      method: HTTP_METHOD.POST,
-      path: HOSTED_SERVICE_PATH.EVENTS,
-      headers: {
-        // This sender is the desktop's; the iOS app runs its own Swift
-        // sender and names itself the same way.
-        [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.DESKTOP,
-      },
-      body: JSON.stringify({ events }),
+  #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
+    return Effect.suspend(() => {
+      if (this.#queue.length === 0) return Effect.void;
+      // Gone whatever becomes of the request, save for the one end that never
+      // authenticated at all.
+      const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
+      return Effect.map(
+        this.#call.send({
+          method: HTTP_METHOD.POST,
+          path: HOSTED_SERVICE_PATH.EVENTS,
+          headers: {
+            // This sender is the desktop's; the iOS app runs its own Swift
+            // sender and names itself the same way.
+            [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.DESKTOP,
+          },
+          body: JSON.stringify({ events }),
+        }),
+        (answer) => {
+          // Signed out is temporary and nobody's fault, and nothing was asked
+          // of the service, so the batch waits rather than being spent. An
+          // account that changed under a refreshed token is not that case:
+          // those counts were queued by an account this request can no longer
+          // name, and they go.
+          if (!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL) {
+            this.#queue.unshift(...events);
+            this.#trimQueue();
+          }
+        },
+      );
     });
-    // Signed out is temporary and nobody's fault, and nothing was asked of the
-    // service, so the batch waits rather than being spent. An account that
-    // changed under a refreshed token is not that case: those counts were
-    // queued by an account this request can no longer name, and they go.
-    if (!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL) {
-      this.#queue.unshift(...events);
-      this.#trimQueue();
-    }
   }
 
   #trimQueue(): void {

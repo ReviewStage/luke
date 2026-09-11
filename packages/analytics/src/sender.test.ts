@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   HTTP_STATUS,
@@ -6,6 +7,7 @@ import {
   recordedRequest,
   recordingFetch,
 } from "@sidecar/wire/testing";
+import { Effect, TestClock } from "effect";
 import { test } from "vitest";
 import {
   PRODUCT_EVENT,
@@ -282,38 +284,47 @@ test("a call site handing a value outside the allowlist queues nothing", async (
   assert.deepEqual(requests, []);
 });
 
-test("a run left open marks each day it crosses, not only its launch day", async () => {
-  let now = NOON;
-  const { sender, requests } = sharingSender({ now: () => now, flushIntervalMs: 10 });
-  sender.markDayActive();
-  sender.start();
+it.effect("a run left open marks each day it crosses, not only its launch day", () =>
+  Effect.gen(function* () {
+    let now = NOON;
+    const runtime = yield* Effect.runtime<never>();
+    const { sender, requests } = sharingSender({ now: () => now, flushIntervalMs: 10, runtime });
+    sender.markDayActive();
+    sender.start();
 
-  // Two ticks inside the launch day add nothing: the day is already marked.
-  await new Promise((resolve) => setTimeout(resolve, 35));
-  assert.equal(requests.length, 1);
-  assert.deepEqual(sentEvents(recordedRequest(requests)).length, 1);
+    // Two ticks inside the launch day add nothing: the day is already marked.
+    yield* TestClock.adjust("10 millis");
+    yield* TestClock.adjust("10 millis");
+    yield* TestClock.adjust("10 millis");
+    assert.equal(requests.length, 1);
+    assert.deepEqual(sentEvents(recordedRequest(requests)).length, 1);
 
-  // The day turns while the app stays open, which is the case the marker
-  // exists for — without a tick it would be a second copy of app:launch.
-  now = NOON + DAY_MS;
-  await new Promise((resolve) => setTimeout(resolve, 35));
-  sender.stop();
+    // The day turns while the app stays open, which is the case the marker
+    // exists for — without a tick it would be a second copy of app:launch.
+    now = NOON + DAY_MS;
+    yield* TestClock.adjust("10 millis");
+    yield* TestClock.adjust("10 millis");
+    sender.stop();
 
-  const marked = requests.flatMap((request) =>
-    sentEvents(request).filter((event) => event.name === PRODUCT_EVENT.APP_DAY_ACTIVE),
-  );
-  assert.equal(marked.length, 2);
-  assert.deepEqual(
-    marked.map((event) => event.at),
-    [NOON, NOON + DAY_MS],
-  );
-});
+    const marked = requests.flatMap((request) =>
+      sentEvents(request).filter((event) => event.name === PRODUCT_EVENT.APP_DAY_ACTIVE),
+    );
+    assert.equal(marked.length, 2);
+    assert.deepEqual(
+      marked.map((event) => event.at),
+      [NOON, NOON + DAY_MS],
+    );
+  }),
+);
 
-test("stopping drops what was queued rather than holding the quit open", async () => {
-  const { sender, requests } = sharingSender();
-  sender.start();
-  sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-  sender.stop();
-  await sender.flush();
-  assert.deepEqual(requests, []);
-});
+it.effect("stopping drops what was queued rather than holding the quit open", () =>
+  Effect.gen(function* () {
+    const runtime = yield* Effect.runtime<never>();
+    const { sender, requests } = sharingSender({ runtime });
+    sender.start();
+    sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+    sender.stop();
+    yield* Effect.promise(() => sender.flush());
+    assert.deepEqual(requests, []);
+  }),
+);

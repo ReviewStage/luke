@@ -308,6 +308,12 @@ with the bridge that answers the seam from a runtime. A test written on
 `../effect/timers.test.ts` is the pattern — and for `temporaryDirectoryScoped`,
 an `Effect` over `@effect/platform`'s `FileSystem` that is this same
 guarantee stated as an `acquireRelease` rather than a `TestContext` callback.
+`@sidecar/analytics/sender` is the same door the other way around: the
+package's barrel is vocabulary only, read by the renderer for the event names
+and value sets it may ask the main process to record, while `ProductEventSender`
+— which flushes on a `Schedule` over `@sidecar/runtime/effect`'s
+`scheduleRepeat`, and so resolves that door's whole `effect` surface, `node:fs`
+included — stands behind its own subpath the renderer never opens.
 
 `@sidecar/brain` is the reason the rule exists twice in one package: the barrel
 is a door the web functions and the renderer open, and the store beneath it
