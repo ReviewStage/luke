@@ -883,3 +883,35 @@ for a rewrite and wrong for a falsehood — `PRIVACY.md` is the file CLAUDE.md n
 learns any of this happens*, and it is currently wrong about where the developer's conversation
 lives. Filed as **LUKE-161** with the minimum true statement as its scope, **owner Dean's call**,
 because deciding what a privacy document says about a live service is not an implementation detail.
+
+
+## 2026-09-11 — eve's `session_not_active` 409 is a startup race, not a retirement signal (orchestrator, from C2b-2a's Bugbot finding)
+
+**The finding, confirmed and fixed in `4c8aa713`, and the one most likely to have been misdiagnosed
+in production.** C2b-2a's eve wrapper read a 409 `session_not_active` as RETIRED at once. eve's docs
+say that **one** 409 covers three different things: an **unknown** session, a **terminal** one, and
+one **not yet active** — the command inbox still starting after the `202`. The SDK itself retries it
+three times, at **250 / 500 / 1000 ms**, before concluding terminal.
+
+**As written, a queued follow-up arriving while the inbox was still coming up would have been read
+as retirement and reopened a second eve session for a live conversation** — precisely the race
+C1's forward-only claim exists to lose safely. The symptom would have been a conversation that
+occasionally forgot itself under load, with every test green.
+
+**The fix:** the wrapper follows the SDK's schedule as a data table
+(`SESSION_NOT_ACTIVE_RETRY_MS`), reads **accepted** the moment the inbox is up, and concludes
+**retired** only past the last wait; reopening stays the host's under the forward-only claim.
+Tested in both directions — not-active, not-active, accepted; and four not-actives to RETIRED.
+
+**Two conditions on the module, both about what a later reader will assume:**
+
+- **The table names the pinned eve version it mirrors (0.53.1).** The numbers are the SDK's, not
+  ours to tune, and a dependency bump should be a visible decision about whether the table still
+  matches rather than a silent divergence.
+- **The backstop is named beside the mechanism.** **The retry makes a wrong RETIRED rare; C1's
+  forward-only claim makes it safe.** Two guarantees, and a reader who meets only the retry will
+  think the timing is load-bearing for correctness. It is load-bearing for not losing a session
+  pointlessly. Same shape as C5a's two races, one door.
+
+**Scope beyond C2b: every path that sends to eve inherits this**, including the ask handlers that
+C8's in-process call goes through. C2b-2b's send path carries it by construction.
