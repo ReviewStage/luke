@@ -2927,3 +2927,39 @@ created and nothing is newly wrong. It lands on a quiet queue with someone watch
 **The general shape, which is the day's own lesson at the infrastructure level:** the version was a
 **status nobody had read** — three places each confident, none compared, and every green store run all
 day was true about something other than production.
+
+
+## 2026-09-11 — Schema: `roster_consumed`, and the deploy window it is designed around
+
+**LUKE-166's migration `0025_c3_roster_consumed` is purely additive:** `CREATE TABLE roster_consumed`
+— **`user_id` primary key referencing the user**, **`sealed_body`**, **`observed_at`** — plus its
+foreign key. **Nothing dropped or altered.**
+
+**Two things about its shape are right and worth recording as the pattern rather than the instance.**
+
+**It is sealed and it cascades.** `sealed_body` under the user's own payload key ring, keyed by
+`user_id` with the foreign key, so it is reachable by account deletion. **That is precisely the shape
+`prompts` lacked** — `hash` primary key, no `user_id`, no cascade, `text` unsealed — which took an
+escalation to Dean and ended in the table being dropped entirely. **C3 built it correctly without
+being asked.** A roster carries session titles and branch names; it is the developer's data and it
+belongs sealed.
+
+**Expand, then contract, deliberately.** `roster_diff` **stays in place and unread** after this PR: the
+opener no longer lists or consumes it, the pass no longer writes it, and the only statement still
+naming it is `forgetIneligible`'s delete — **harmless on a standing table and kept so the sweep leaves
+no orphan rows.** The drop is a **later PR**, whose body can say *"nothing has read this since
+`<sha>`"*. This is the first PR in the rework to be designed around the rule that **migrations run
+before the new code is live**, rather than to discover it.
+
+**The deploy window's cost, stated by its author rather than found later.** `roster_consumed` is empty
+at the migration, so each account's **first visit has no bookmark**. The opener **adopts the snapshot
+and wakes nothing**, which means:
+
+- **no wake storm** — the alternative, treating an absent consumed roster as "everything is new", would
+  brief every session of every account at once on the deploy;
+- **at most the change pending in that one window is lost** — the same cost today's degraded mode pays
+  when eve refuses, bounded to a single deploy rather than to 20 changed passes.
+
+**The trade is in the PR body.** A one-time transitional read of `roster_diff` would lose nothing, at
+the price of keeping a read of a table about to be dropped and a second cleanup to remove it. **Not
+taken, and the reason is recorded rather than the choice alone.**
