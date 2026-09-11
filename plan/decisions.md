@@ -335,3 +335,40 @@ from `nodejs.org` through nvm inside the **required** `TypeScript checks`, so a 
 connection reset fails the gate (`curl: (35) Recv failure`). It flaked once on #1018. Workers are
 told to rerun and not to look in their own diffs, and not to fix it inside an unrelated PR. If it
 recurs it becomes its own ticket rather than a tax every one of the remaining tickets pays.
+
+
+## 2026-09-11 — C2c's scope transfer, the mutation check as a standard, and one shared stamper (orchestrator)
+
+C2c (LUKE-158) merged as `c903460a` **without its route half**, because C2b's PR was not open
+when it finished. Recorded here so the transfer is visible rather than folklore.
+
+**Ruling: the route-level ownership tests ride C2b-2, and are not optional there.** No follow-up
+ticket. A door merges with its refusals asserted, or main carries an unasserted door for however
+long a follow-up waits. C2b-2 owes, at the HTTP layer: another account's conversation refused, an
+unrecorded session id refused, a cleared conversation refused — and **if that PR approaches the
+~800-line bound, the refusal tests are not what gets cut.**
+
+I considered a separate ticket so a second pair of eyes wrote them adversarially, which is the
+real argument for splitting them, and declined it: the Security Reviewer runs adversarially on
+every PR, and the standard below gets most of the rest without a slot or a window.
+
+**The mutation check is now the standard for lane C.** C2c proved four guarantees by removing
+each and watching a test fail. A tests-only PR whose suite cannot fail is the exact failure mode
+of a tests-only PR, and naming the falsification is what makes it evidence. Two of its tests are
+load-bearing in a way worth keeping: **the concurrent start in both orders with the loser relaying
+nothing** (a weaker test leaves one row while both callers proceed), and **a rotated session's tool
+call refused before any seam** — the placement, not the outcome, is the property, since C1's
+Security Agent found eve dispatching a durable, unmetered, unrecorded run before a
+correct-but-too-late refusal.
+
+**One shared eve event stamper: `tests/support/eve-events.ts` (`stampedEveEvent`).** The relay and
+ownership tests share it, C7 is pointed at it by name, and C2b and C5 use it too. Three private
+copies of one spelling is how `timestamptz` went wrong a directory away, and E6b spent part of its
+PR collapsing exactly that.
+
+**One dependency re-derived, in the loosening direction: C7 does not need C2's ask routes.** Its
+ticket says "After C2", but what it needs is a turn and its events, and both are on main — C1
+writes `turns`, B5 writes `events` numbered per conversation. A test opens a turn through C1's own
+composition, as C2c's merged tests do. C7 therefore started immediately rather than waiting on
+C2b, which matters because C7 is the narrowest link on the critical path: C7 → C8 → E5 → all five
+of lane G.
