@@ -126,8 +126,8 @@ export interface ActionProjects {
    * one can land or override a provider or project the ask actually named.
    */
   defaults(): Promise<{
-    defaultProviderId?: string;
-    defaultProjectIds?: Readonly<Partial<Record<string, string>>>;
+    defaultProviderId?: string | undefined;
+    defaultProjectIds?: Readonly<Partial<Record<string, string>>> | undefined;
   }>;
   /** The models a creation or a spawn may name, per provider, as the build documents them. */
   agentModels(providerId: string): readonly WorkspaceAgentModels[];
@@ -275,7 +275,10 @@ interface AdmittedReads {
   sessions(): Promise<readonly Session[] | undefined>;
   projects(): Promise<readonly ObservedWorkspaceProject[] | undefined>;
   defaults(): Promise<
-    | { defaultProviderId?: string; defaultProjectIds?: Readonly<Partial<Record<string, string>>> }
+    | {
+        defaultProviderId?: string | undefined;
+        defaultProjectIds?: Readonly<Partial<Record<string, string>>> | undefined;
+      }
     | undefined
   >;
 }

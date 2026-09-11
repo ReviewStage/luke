@@ -17,6 +17,12 @@ import {
   type LiveVoiceView,
 } from "./live-voice-orchestrator.js";
 
+/** The id a call carries once it has started; naming one is saying it started. */
+function sessionIdOf(call: FakeCall): string {
+  assert.ok(call.sessionId);
+  return call.sessionId;
+}
+
 /** A call that records the verbs it was asked and answers for its status. */
 let sessions = 0;
 
@@ -281,7 +287,7 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   // A second wanted while it stands opens nothing more.
   f.orchestrator.obeySessionChange({
     phase: LIVE_SESSION_PHASE.WANTED,
-    sessionId: first.sessionId,
+    sessionId: sessionIdOf(first),
   });
   assert.equal(f.calls.length, 1);
   assert.deepEqual(first.openings, [{ byPress: false }]);
@@ -290,7 +296,7 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   // after it.
   await f.orchestrator.beginTalk();
   assert.equal(first.unmutes, 1);
-  const lost = first.sessionId;
+  const lost = sessionIdOf(first);
   first.settle(LIVE_STATUS.IDLE);
   f.orchestrator.obeySessionChange({
     phase: LIVE_SESSION_PHASE.CLOSED,
@@ -311,7 +317,7 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   assert.equal(second.closes, 0);
   f.orchestrator.obeySessionChange({
     phase: LIVE_SESSION_PHASE.CLOSING,
-    sessionId: second.sessionId,
+    sessionId: sessionIdOf(second),
   });
   await drainMicrotasks();
   assert.equal(second.closes, 1);
@@ -329,7 +335,7 @@ test("a session lost after the key was let go of does not listen again on the ne
   // Lost before the mute's status landed: the last status the call reported was listening.
   first.status = LIVE_STATUS.LISTENING;
   first.events.onStatus(LIVE_STATUS.LISTENING);
-  const lost = first.sessionId;
+  const lost = sessionIdOf(first);
   first.settle(LIVE_STATUS.IDLE);
   f.orchestrator.obeySessionChange({
     phase: LIVE_SESSION_PHASE.CLOSED,
@@ -356,7 +362,7 @@ test("a session closed by the host's own decision does not listen again on the n
   // let go of and hangs up behind, and the next wanted opens a new one.
   f.orchestrator.obeySessionChange({
     phase: LIVE_SESSION_PHASE.CLOSED,
-    sessionId: first.sessionId,
+    sessionId: sessionIdOf(first),
     reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
   });
   await drainMicrotasks();

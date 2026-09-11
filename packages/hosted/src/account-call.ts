@@ -37,7 +37,7 @@ export interface CallCredential {
    * caller's account gone, never as a fresh bearer to carry the old account's
    * payload under.
    */
-  holder?: () => Promise<string | undefined>;
+  holder?: (() => Promise<string | undefined>) | undefined;
 }
 
 /** The ends a call reaches before any status is read. */
@@ -76,19 +76,19 @@ interface CallRequest {
   /** The path under the call's own base address. */
   path: string;
   /** The serialized body, which is also what names the request's content type. */
-  body?: string;
+  body?: string | undefined;
   /** Extra headers the build fixes; the authorization and content type are the call's own. */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
   /** The caller's own cancellation, joined with the call's deadline. */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
 }
 
 export interface AccountCallOptions {
   /** The service origin; any trailing separator is trimmed once. */
   baseUrl: string;
   credential: CallCredential;
-  fetch?: CloudFetch;
-  requestTimeoutMs?: number;
+  fetch?: CloudFetch | undefined;
+  requestTimeoutMs?: number | undefined;
 }
 
 /**

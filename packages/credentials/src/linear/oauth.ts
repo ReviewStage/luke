@@ -159,7 +159,10 @@ function grantFrom(payload: UnparsedWireValue, now: number): LinearGrant | undef
 export async function exchangeLinearCode(
   config: LinearSignInConfig,
   input: { code: string; redirectUri: string; codeVerifier: string },
-  options: { fetchImplementation?: typeof fetch; now?: () => number } = {},
+  options: {
+    fetchImplementation?: typeof fetch | undefined;
+    now?: (() => number) | undefined;
+  } = {},
 ): Promise<LinearSignInOutcome> {
   const body = new URLSearchParams({
     code: input.code,

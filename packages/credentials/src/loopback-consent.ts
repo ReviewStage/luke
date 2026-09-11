@@ -121,7 +121,7 @@ export interface LoopbackConsentOptions<Grant> {
    */
   statePrefix?: string;
   /** Whose mark the landing card carries; omitted draws Luke's alone. */
-  source?: LoopbackConnectionSource;
+  source?: LoopbackConnectionSource | undefined;
   pages: LoopbackConsentPages;
   reasons: LoopbackConsentReasons;
   /** The consent page's URL, built from the state and the bound redirect. */
@@ -134,7 +134,7 @@ export interface LoopbackConsentOptions<Grant> {
    * reaches for Electron itself.
    */
   openExternal(url: string): void | Promise<void>;
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
 }
 
 /**

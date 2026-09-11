@@ -10,7 +10,7 @@ import {
   freshBrainState,
   retainedBrainState,
 } from "./envelope.js";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
+import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS, type BrainRequestStatus } from "./requests.js";
 
 /**
  * The envelope itself: what a stored file reads as, what it never reads as,
@@ -76,6 +76,18 @@ function terminal(index: number, overrides: Partial<BrainPersistedState["request
     conversationRecordedAt: NOW + index + 2,
     ...overrides,
   };
+}
+
+/** The same record with no settled instant at all: a run still going. */
+function going(index: number, status: BrainRequestStatus) {
+  const { settledAt: _unsettled, ...record } = terminal(index);
+  return { ...record, status };
+}
+
+/** The same record with no recorded instant at all: an end Conversation has not taken. */
+function unpublished(index: number) {
+  const { conversationRecordedAt: _untaken, ...record } = terminal(index);
+  return record;
 }
 
 function journalFor(runId: string, calls = 1) {
@@ -160,8 +172,8 @@ test("the reset marker round-trips, and a marker that is present but unreadable 
 test("retention keeps 200 records, oldest ended runs and their journals going first, and never touches a run still going", () => {
   const requests = [
     ...Array.from({ length: 205 }, (_, index) => terminal(index)),
-    terminal(900, { status: BRAIN_REQUEST_STATUS.RUNNING, settledAt: undefined }),
-    terminal(901, { status: BRAIN_REQUEST_STATUS.QUEUED, settledAt: undefined }),
+    going(900, BRAIN_REQUEST_STATUS.RUNNING),
+    going(901, BRAIN_REQUEST_STATUS.QUEUED),
   ];
   const journal = requests.flatMap((record) => journalFor(record.runId));
   const retained = retainedBrainState({ ...freshBrainState("gen-1", NOW), requests, journal });
@@ -186,7 +198,7 @@ test("retention keeps 200 records, oldest ended runs and their journals going fi
 
 test("an ended run whose end the thread has not taken is kept past the count, however old", () => {
   const requests = Array.from({ length: 203 }, (_, index) =>
-    terminal(index, index < 3 ? { conversationRecordedAt: undefined } : {}),
+    index < 3 ? unpublished(index) : terminal(index),
   );
   const retained = retainedBrainState({ ...freshBrainState("gen-1", NOW), requests, journal: [] });
   // The three unpublished are the oldest, yet the next three go instead.

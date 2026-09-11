@@ -179,7 +179,7 @@ function eventFromEntry(entry: BrainObservationEntry): BrainWakeEvent {
 /** What makes two observations the same one: the same hook for the same session at the same instant. */
 export interface ObservationMark {
   readonly kind: BrainWakeKind;
-  readonly hookEvent?: string;
+  readonly hookEvent?: string | undefined;
   readonly atMs: number;
   readonly identity: SessionIdentity;
 }

@@ -80,7 +80,7 @@ import React, { useId } from "react";
 void React;
 
 interface MarkProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 function ClaudeCodeMark({ className }: MarkProps): React.JSX.Element {

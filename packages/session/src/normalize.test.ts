@@ -149,7 +149,7 @@ test("the Claude app's own scheme is an address a row may open", () => {
 });
 
 test("keeps a sound diff summary and drops a suspect or empty one whole", () => {
-  const withDiff = (diff: Parameters<typeof normalizeSession>[1]["detail"]) =>
+  const withDiff = (diff: NonNullable<Parameters<typeof normalizeSession>[1]["detail"]>) =>
     normalizeSession(
       { id: "codex", displayName: "Codex" },
       {
@@ -184,16 +184,16 @@ test("keeps a sound diff summary and drops a suspect or empty one whole", () => 
 });
 
 test("keeps the agent behind a hosted session, and drops one saying nothing", () => {
+  const observed = {
+    providerSessionId: "chat-1",
+    title: "Hosted chat",
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt: TEST_NOW,
+  } as const;
   const withAgent = (agent: Parameters<typeof normalizeSession>[1]["agent"]) =>
     normalizeSession(
       { id: "conductor", displayName: "Conductor" },
-      {
-        providerSessionId: "chat-1",
-        title: "Hosted chat",
-        status: SESSION_STATUS.WORKING,
-        lastActivityAt: TEST_NOW,
-        agent,
-      },
+      agent === undefined ? observed : { ...observed, agent },
     ).agent;
 
   assert.deepEqual(withAgent({ id: "claude-code", displayName: "Claude Code" }), {

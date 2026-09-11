@@ -43,7 +43,7 @@ export interface LoopbackPage {
   badge: string;
   title: string;
   body: string;
-  source?: LoopbackConnectionSource;
+  source?: LoopbackConnectionSource | undefined;
 }
 
 /**

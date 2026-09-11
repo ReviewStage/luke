@@ -52,7 +52,11 @@ export interface Generation {
    * reading the gate, so a write that lands late is counted and never
    * repeated.
    */
-  flush: { read: boolean; lastCompactionCount?: number; settling?: Promise<void> };
+  flush: {
+    read: boolean;
+    lastCompactionCount?: number | undefined;
+    settling?: Promise<void> | undefined;
+  };
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
   /** Runs accepted in memory but not yet checkpointed; not yet acknowledged to anyone. */

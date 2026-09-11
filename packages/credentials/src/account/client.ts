@@ -65,10 +65,13 @@ export interface AccountClientOptions {
 }
 
 export class AccountClientError extends Error {
-  readonly status?: number;
-  readonly oauthError?: string;
+  readonly status?: number | undefined;
+  readonly oauthError?: string | undefined;
 
-  constructor(message: string, options: { status?: number; oauthError?: string } = {}) {
+  constructor(
+    message: string,
+    options: { status?: number | undefined; oauthError?: string | undefined } = {},
+  ) {
     super(message);
     this.name = "AccountClientError";
     this.status = options.status;

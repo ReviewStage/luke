@@ -218,7 +218,7 @@ export interface TextOptions extends DescribedOptions {
  * bound the parser holds and the node omits is drift in the direction that
  * misleads a model.
  */
-function stringNode(bounds: { max?: number; allowEmpty?: boolean }): JsonSchemaNode {
+function stringNode(bounds: { max: number | undefined; allowEmpty?: boolean }): JsonSchemaNode {
   const node: StringNodeDraft = { type: "string" };
   if (bounds.allowEmpty !== true) node.minLength = 1;
   if (bounds.max !== undefined) node.maxLength = bounds.max;

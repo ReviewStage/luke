@@ -7,7 +7,7 @@ import {
   MAXIMUM_TERMINAL_REQUESTS,
 } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
+import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS, type BrainRequestStatus } from "./requests.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
@@ -63,6 +63,18 @@ function terminal(index: number, overrides: Partial<BrainPersistedState["request
     conversationRecordedAt: NOW + index + 2,
     ...overrides,
   };
+}
+
+/** The same record with no settled instant at all: a run still going. */
+function going(index: number, status: BrainRequestStatus) {
+  const { settledAt: _unsettled, ...record } = terminal(index);
+  return { ...record, status };
+}
+
+/** The same record with no recorded instant at all: an end Conversation has not taken. */
+function unpublished(index: number) {
+  const { conversationRecordedAt: _untaken, ...record } = terminal(index);
+  return record;
 }
 
 function journalFor(runId: string, calls = 1) {
@@ -228,9 +240,9 @@ test("a write that would still leave the envelope over the count is refused, and
   await store.load();
   // Every record is a run still going, so retention has nothing eligible to
   // let go of and the bound can only be met by writing fewer.
-  const going = (index: number) =>
-    terminal(index, { status: BRAIN_REQUEST_STATUS.RUNNING, settledAt: undefined });
-  const over = Array.from({ length: MAXIMUM_TERMINAL_REQUESTS + 5 }, (_, index) => going(index));
+  const over = Array.from({ length: MAXIMUM_TERMINAL_REQUESTS + 5 }, (_, index) =>
+    going(index, BRAIN_REQUEST_STATUS.RUNNING),
+  );
   assert.equal(
     await store.write(lease, "gen-1", (state) => ({ ...state, requests: over })),
     false,
@@ -440,7 +452,7 @@ test("load admits a file only within its bounds and rewrites the disk to match w
   const overfull = fakeBrainStateRepository({
     ...freshBrainState("gen-1", NOW),
     requests: Array.from({ length: MAXIMUM_TERMINAL_REQUESTS + 1 }, (_, index) =>
-      terminal(index, { conversationRecordedAt: undefined }),
+      unpublished(index),
     ),
   });
   assert.equal((await make(overfull).load()).requests.length, 0);
@@ -463,7 +475,6 @@ test("the record count is a hard bound: admission closes at capacity and a write
   });
   const lease = store.lease();
   await store.load();
-  const unpublished = (index: number) => terminal(index, { conversationRecordedAt: undefined });
   assert.equal(store.admits("gen-1"), true);
   assert.equal(
     await store.write(lease, "gen-1", (state) => ({
