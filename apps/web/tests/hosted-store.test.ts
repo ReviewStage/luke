@@ -196,7 +196,7 @@ test("a pass advances the snapshot and its diff together, diffs wait sealed unti
   assert.deepEqual(await roster.pendingDiffs(other), []);
 });
 
-test("a pass record moves the attempt every time, the whole read only on success, and forgetting reaches the keyless and the unseen", async () => {
+test("a pass record moves the attempt every time, the whole read only on success, and forgetting reaches the keyless and the unseen it is told of and no account beside them", async () => {
   const userId = await database.createUser();
   const { roster } = database.store;
   assert.equal(await roster.pass(userId), undefined);
@@ -238,7 +238,10 @@ test("a pass record moves the attempt every time, the whole read only on success
       lastSeenAt: new Date(NOW - 1),
     },
   ]);
-  for (const id of [userId, keyed, unseen]) {
+  // Keyless and unseen like `userId`, but outside the accounts the sweep is
+  // told of: what another test file's account looks like on a shared Postgres.
+  const bystander = await database.createUser();
+  for (const id of [userId, keyed, unseen, bystander]) {
     await roster.advance(
       id,
       { body: "{}", observedAt: NOW },
@@ -247,15 +250,21 @@ test("a pass record moves the attempt every time, the whole read only on success
     );
     await roster.recordPass(id, { attemptedAt: NOW });
   }
-  await roster.forgetIneligible({ providerIds: ["conductor"], seenAfter: NOW });
+  await roster.forgetIneligible({
+    providerIds: ["conductor"],
+    seenAfter: NOW,
+    userIds: [userId, keyed, unseen],
+  });
   for (const gone of [userId, unseen]) {
     assert.equal(await roster.read(gone), undefined);
     assert.deepEqual(await roster.pendingDiffs(gone), []);
     assert.equal(await roster.pass(gone), undefined);
   }
-  assert.equal((await roster.read(keyed))?.observedAt, NOW);
-  assert.equal((await roster.pendingDiffs(keyed)).length, 1);
-  assert.equal((await roster.pass(keyed))?.attemptedAt, NOW);
+  for (const standing of [keyed, bystander]) {
+    assert.equal((await roster.read(standing))?.observedAt, NOW);
+    assert.equal((await roster.pendingDiffs(standing)).length, 1);
+    assert.equal((await roster.pass(standing))?.attemptedAt, NOW);
+  }
 });
 
 test("deleting the user row cascades through every notebook, fact, and roster table and leaves another user's rows standing", async () => {
