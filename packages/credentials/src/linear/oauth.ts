@@ -1,3 +1,6 @@
+import * as HttpBody from "@effect/platform/HttpBody";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -5,6 +8,8 @@ import {
   isWireString,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { Cause, Duration, Effect, Exit, type Layer } from "effect";
 // The one consent trip every provider Luke asks consent of runs: the loopback,
 // the PKCE, and the landing page are all its, so no two of Luke's sign-ins can
 // drift into different servers, weaker verifiers, or differently dressed tabs.
@@ -100,6 +105,61 @@ export const LINEAR_REDIRECT_URIS: readonly string[] = LOOPBACK_PORTS.map(
 
 const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 
+const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
+
+/**
+ * One request to Linear's OAuth endpoints over the ambient `HttpClient`, under
+ * the deadline every one of them keeps. A client that could not carry it, or a
+ * body that outlived the deadline, ends the request as the failure
+ * `Cause.squash` unwraps back to the caller, which is where each of the three
+ * callers below already reads a thrown error as its own answer: a sentence for
+ * the exchange, `UNREACHABLE` for the refresh, `false` for the revocation.
+ *
+ * The body is read inside the deadline and the answer rebuilt from what it
+ * read, because every caller here reads the payload after this returns and a
+ * deadline that covered the headers alone would leave a stalled body waiting
+ * where `AbortSignal.timeout` used to end it. A token response is a handful of
+ * fields, so there is nothing to stream.
+ *
+ * @deprecated This is the CloudFetch-shaped seam on the `Effect.runPromise`
+ * allowlist in `docs/adr/0001-effect.md`: `exchangeLinearCode`,
+ * `refreshLinearGrant`, and `revokeLinearGrant` still answer a Promise over a
+ * `CloudFetch`-shaped `fetch` option, so the request built over the ambient
+ * `HttpClient` is run to a promise here rather than left to a caller's own
+ * fiber. Deleted with `CloudFetch` and `layerFromCloudFetch` in P12-04.
+ */
+function timedRequest(
+  client: Layer.Layer<HttpClient.HttpClient>,
+  request: HttpClientRequest.HttpClientRequest,
+): Promise<Response> {
+  const answer = HttpClient.execute(request).pipe(
+    Effect.flatMap((response) =>
+      Effect.map(
+        response.text,
+        // An empty body travels as none at all: a `Response` refuses one for
+        // the statuses that carry no body, and a revocation may answer with one.
+        (body) =>
+          new Response(body || null, { status: response.status, headers: response.headers }),
+      ),
+    ),
+    Effect.timeoutFail({
+      duration: Duration.millis(TOKEN_REQUEST_TIMEOUT_MS),
+      onTimeout: () => new DOMException("The request timed out", "TimeoutError"),
+    }),
+  );
+  return Effect.runPromiseExit(Effect.provide(answer, client)).then((exit) => {
+    if (Exit.isSuccess(exit)) return exit.value;
+    throw Cause.squash(exit.cause);
+  });
+}
+
+/** The one shape every OAuth call here posts: a form body and no secret. */
+function tokenRequest(url: string, body: URLSearchParams): HttpClientRequest.HttpClientRequest {
+  return HttpClientRequest.post(url, {
+    body: HttpBody.raw(body.toString(), { contentType: FORM_CONTENT_TYPE }),
+  });
+}
+
 /**
  * One connected Linear workspace's credentials. The refresh token is absent
  * where Linear issued none — it grants long-lived access tokens to some
@@ -172,13 +232,10 @@ export async function exchangeLinearCode(
     code_verifier: input.codeVerifier,
   });
   try {
-    const fetchImplementation = options.fetchImplementation ?? fetch;
-    const response = await fetchImplementation(LINEAR_TOKEN_URL, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-    });
+    const response = await timedRequest(
+      layerFromCloudFetch(options.fetchImplementation ?? fetch),
+      tokenRequest(LINEAR_TOKEN_URL, body),
+    );
     if (!response.ok) return { reason: "Linear refused the sign-in exchange." };
     const grant = grantFrom(await response.json(), (options.now ?? Date.now)());
     if (!grant) return { reason: "Linear answered the sign-in without a token." };
@@ -258,14 +315,10 @@ export async function revokeLinearGrant(
   fetchImplementation: typeof fetch = fetch,
 ): Promise<boolean> {
   try {
-    const response = await fetchImplementation(LINEAR_REVOKE_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ token, token_type_hint: tokenType }).toString(),
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-    });
+    const response = await timedRequest(
+      layerFromCloudFetch(fetchImplementation),
+      tokenRequest(LINEAR_REVOKE_URL, new URLSearchParams({ token, token_type_hint: tokenType })),
+    );
     return response.ok;
   } catch {
     return false;
@@ -315,15 +368,12 @@ export async function refreshLinearGrant(
     client_id: config.clientId,
     grant_type: "refresh_token",
   });
-  const fetchImplementation = options.fetchImplementation ?? fetch;
   let response: Response;
   try {
-    response = await fetchImplementation(LINEAR_TOKEN_URL, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-    });
+    response = await timedRequest(
+      layerFromCloudFetch(options.fetchImplementation ?? fetch),
+      tokenRequest(LINEAR_TOKEN_URL, body),
+    );
   } catch {
     return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
   }

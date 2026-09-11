@@ -240,6 +240,22 @@ does, and both still answer their callers — `AccountClient`,
 Promise rather than a fiber, so each runs its request to a promise in place.
 Both go with `CloudFetch` and `layerFromCloudFetch` in P12-04.
 
+`LoopbackConsent`'s `signIn` in
+`packages/credentials/src/loopback-consent.ts` is another, and the only one
+whose scope holds a listening socket: the trip itself is `signInEffect()`,
+whose `Scope` binds the loopback server and closes it on a grant, on the
+deadline, and on an interruption alike, while the settings rows that press
+this hold a Promise, so the scope is opened and closed here rather than by a
+caller's own fiber. P7-06 deletes it once the composers that own these flows
+are Layers holding a scope of their own. `timedRequest` in
+`packages/credentials/src/linear/oauth.ts` is beside its namesake in
+`account/client.ts` and on exactly the same terms: Linear's three OAuth
+calls — the code exchange, the refresh, and the revocation — each build a
+request over the ambient `HttpClient` from a `CloudFetch`-shaped `fetch`
+option and each still answer their callers a Promise, so the request is run
+to one in place. It goes with `CloudFetch` and `layerFromCloudFetch` in
+P12-04.
+
 `singleFlight`'s returned closure in `packages/credentials/src/single-flight.ts`
 is on the allowlist too, and the only one not shaped by `CloudFetch`: its two
 callers, `AccountSessionManager.refresh` and `LinearCredentials`'s own
@@ -336,6 +352,8 @@ design decision stated as such:
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
 | `LinearIssueTracker#post` | P4-03 | P12-04 |
 | `singleFlight`'s Promise-returning closure | P4-03 | P7-04, P7-06 |
+| `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | P7-06 |
+| `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
 | `runAct` Promise door over the act `Atom.fn` | P9-02 | P9-08 |
 | `LiveCall`'s `open`/`unmute`/`mute`/`close` over the renderer's runtime | P9-03 | P9-08 |
