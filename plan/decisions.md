@@ -958,3 +958,32 @@ starvation test that fails under the mutation dropping the exclusion.
 **re-held only when the quiet instant moves later** — idempotent on the *hold* rather than on the
 tick, so a meeting extended by ten minutes writes a second held event and a meeting merely still
 standing does not.
+
+
+## 2026-09-11 — `test:store` is a definition, not an inventory (orchestrator, from C2b-2a)
+
+**Gate finding, the tenth, and a sibling of the ninth.** `test:store` in `apps/web/package.json` is
+an **explicit file list**. A store-backed test left out of it **runs on PGlite and nowhere else** —
+so a guarantee that exists *because* of real Postgres is asserted only against a substitute.
+
+C2b-2a's `hosted-standing-main.test.ts` was outside the list: a compare-and-set under a **partial
+unique index**, the loser reading the winner's row, and a `23505` that Drizzle wraps in `cause`.
+PGlite is Postgres-derived and very probably behaves identically — **and "very probably" is what
+that list exists to remove.** Same shape as every other gate finding tonight: the check that appears
+to cover the thing does not cover the thing.
+
+**Ruling: add it, in 2a rather than deferring.** One more bot cycle against a guarantee that would
+otherwise sit behind the `asks` table decision, which is the one item in this graph with no
+estimate. And **joining the list means joining the shared CI database** (gate finding 9), so the
+file's scoping to accounts it created stops being good practice and becomes a requirement — stated
+in the body as deliberate.
+
+**A small ticket worth considering later, not now:** something that fails when a test reaching
+real-Postgres helpers is absent from the list, so this cannot be done quietly. Two gate findings in
+one morning came from a list or a check that looked authoritative and was not.
+
+**And one reproduction detail worth more than it looks:** `db:migrate` wants
+**`DATABASE_URL_UNPOOLED`**, not `DATABASE_URL`. Otherwise the connection error reads like a schema
+problem. C2b reproduced the CI condition with Postgres 16 in Docker and ran 18 files / 151 tests in
+parallel — the strongest green this rework has produced, and the standard now asked of C3, D3 and
+G4.
