@@ -53,6 +53,17 @@ export {
 } from "./brain-contract.js";
 export { HostedChangesClient, type HostedChangesClientOptions } from "./changes-client.js";
 export {
+  type ConversationClearAnswer,
+  conversationClearAnswerSchema,
+} from "./conversation-clear-wire.js";
+export {
+  CONVERSATION_READ_FAILURE,
+  type ConversationReadResult,
+  HostedConversationClient,
+  type HostedConversationClientOptions,
+  type ReadPageQuery,
+} from "./conversation-client.js";
+export {
   type HostedConversationAnswer,
   type HostedConversationMessage,
   hostedConversationAnswerSchema,
@@ -161,12 +172,14 @@ export {
   encodeTurnReadCursor,
   READ_CURSOR_BOUNDS,
   READ_PAGE_BOUNDS,
+  READ_QUERY,
   readLimitSchema,
   type SequencePosition,
   type SequenceReadCursor,
   sequenceReadCursorSchema,
   type TurnReadCursor,
   turnReadCursorSchema,
+  unreadableRowRefusalSchema,
 } from "./reads-wire.js";
 export {
   REALTIME_CALLS_PATH,

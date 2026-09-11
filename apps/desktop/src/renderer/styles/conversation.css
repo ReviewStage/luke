@@ -376,6 +376,17 @@
   font-size: 12px;
 }
 
+/* The one thing said about a read the service refused: a quiet line under
+   the thread, in the dates' voice, and never a row of the thread itself. */
+.conversation-notice {
+  margin: 0;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-align: center;
+}
+
 /* An action Luke carried is a row, not a bubble: what was done, in the quiet
    voice the dates use, led by a mark for the kind of thing it was and ended
    on the mark of the provider it reached. It reads from Luke's side of the

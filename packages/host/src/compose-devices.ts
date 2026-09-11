@@ -20,6 +20,8 @@ export interface DevicesComposer extends Composer {
    * credential is cleared; handed nothing, the row stands for the next launch.
    */
   release: (departing: StoredAccount | undefined) => Promise<void>;
+  /** The row's id as the service last answered it, or nothing before a registration lands. */
+  deviceId: () => string | undefined;
 }
 
 export interface DevicesDependencies {
@@ -85,6 +87,7 @@ export function composeDevices(dependencies: DevicesDependencies): DevicesCompos
     methods: {},
     register,
     release,
+    deviceId: () => registration.deviceId(),
     start: async () => undefined,
     // A quit is not a sign-out: the poll stops and the row stands for the next launch.
     stop: () => release(undefined),

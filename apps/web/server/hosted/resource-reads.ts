@@ -20,6 +20,7 @@ import {
   encodeTurnReadCursor,
   RATING_EVENT_PAYLOAD,
   READ_PAGE_BOUNDS,
+  READ_QUERY,
   readLimitSchema,
   type Schema,
   type SequenceReadCursor,
@@ -78,11 +79,6 @@ export interface ResourceReadOptions {
   store: Pick<HostedStore, "messages" | "events" | "turns" | "directory">;
   now?: () => number;
 }
-
-const READ_QUERY = {
-  AFTER: "after",
-  LIMIT: "limit",
-} as const;
 
 type ReadGate = { readonly userId: string; readonly query: URLSearchParams } | Response;
 

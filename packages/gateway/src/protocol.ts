@@ -41,6 +41,8 @@ const GATEWAY_METHODS = {
   SHUTDOWN: { name: "gateway.shutdown", mutates: true },
   CONVERSATION_LINES: { name: "conversation.lines", mutates: false },
   CONVERSATION_DELETE: { name: "conversation.delete", mutates: true },
+  /** The Conversation tab's Clear as the service's soft delete of the account's main conversation. */
+  CONVERSATION_CLEAR: { name: "conversation.clear", mutates: true },
   RUN_SUBMIT: { name: "run.submit", mutates: true },
   RUN_CANCEL: { name: "run.cancel", mutates: true },
   RUN_WAIT: { name: "run.wait", mutates: false },
@@ -284,6 +286,8 @@ export type GatewayResponse =
 export const GATEWAY_EVENT = {
   RUNS_CHANGED: "runs.changed",
   CONVERSATION_CHANGED: "conversation.changed",
+  /** The Conversation as the service's reads compose it, whole, whenever a poll moved it. */
+  CONVERSATION_VIEW_CHANGED: "conversationView.changed",
   DIRECTORY_CHANGED: "directory.changed",
   CHILD_CHANGED: "child.changed",
   CONFIGURATION_CHANGED: "configuration.changed",

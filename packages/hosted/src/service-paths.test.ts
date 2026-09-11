@@ -15,6 +15,14 @@ test("the device registration has a stable endpoint path", () => {
   assert.equal(HOSTED_SERVICE_PATH.DEVICES, "/api/devices");
 });
 
+test("Clear stands beside the Conversation's reads under the same prefix", () => {
+  assert.equal(HOSTED_SERVICE_PATH.CONVERSATION_CLEAR, "/api/conversation/clear");
+  assert.notEqual(
+    HOSTED_SERVICE_PATH.CONVERSATION_CLEAR,
+    HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES,
+  );
+});
+
 test("the voice service's paths are two distinct function routes of the service", () => {
   assert.deepEqual(Object.values(VOICE_SERVICE_PATH), [
     "/api/voice/sessions",

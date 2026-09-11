@@ -17,10 +17,13 @@ path, `changes-client.ts`, its side of the change-signal poll that carries
 the device's presence and quiet instants, `roster-client.ts`, its read of the
 stored roster the observe path answers, beside the mapping of that wire's
 rows onto the session vocabulary's observations (advertisements as presence
-alone, since what a control targets never travels), and `action-client.ts`,
-its side of the two session actions a row asks for; each sits in this package
-because it speaks nothing but hosted vocabulary and holds no credential of
-its own. Behavior that needs
+alone, since what a control targets never travels), `action-client.ts`,
+its side of the two session actions a row asks for, and
+`conversation-client.ts`, its side of the Conversation's per-resource reads
+and Clear, which holds no cursor or row either — what a device keeps of the
+Conversation is its caller's; each sits in this package because it speaks
+nothing but hosted vocabulary and holds no credential of its own. Behavior
+that needs
 anything above this boundary belongs above it: the brain's hosted client lives
 in `@sidecar/brain`, the hosted live session source in `@sidecar/voice`, the
 account preference client in `@sidecar/host` because the snapshot it carries is

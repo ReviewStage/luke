@@ -5,7 +5,12 @@ import {
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
 import { ProviderMark } from "@sidecar/panel";
-import type { ConversationEntry, SessionApplicationId } from "@sidecar/session";
+import type {
+  ConversationEntry,
+  ConversationViewSnapshot,
+  SessionApplicationId,
+  SessionIdentity,
+} from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
@@ -189,13 +194,17 @@ export interface PanelBodyProps {
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   /** A row's writes and its pull-request open, handed down to every row and tray header. */
   writes: SessionWriteHandlers;
-  /** The conversation between the developer and Luke, this launch's and what survived the last. */
-  conversationLines: readonly ConversationEntry[];
+  /** The conversation between the developer and Luke, as the host's reads of the service compose it. */
+  conversation: ConversationViewSnapshot;
+  /** Every session the roster holds, so an action's chip names a session by its current title. */
+  roster: readonly SessionView[];
+  /** A session row's own press by identity, for the chip naming the session an action reached. */
+  onOpenChat: (identity: SessionIdentity) => void;
   /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
   /** Whether a spoken turn is still owed its first words, so the thread holds its place. */
   spokenAskPending: boolean;
-  /** Clears that same thread from the view, Luke's next context, and the stored file. */
+  /** Clears that same thread on the service, for every Mac signed in to the account. */
   onClearConversationConversation: () => void;
   /** The brain's runs, so Conversation draws Luke's turn while one is going and the composer offers its stop. */
   brainRequests: readonly BrainRequestSnapshot[];
@@ -250,7 +259,9 @@ export function PanelBody({
   onOpenSession,
   onOpenSessionApplication,
   writes,
-  conversationLines,
+  conversation,
+  roster,
+  onOpenChat,
   liveConversationEntries,
   spokenAskPending,
   onClearConversationConversation,
@@ -330,8 +341,8 @@ export function PanelBody({
   const settingsNote = updateAvailable(settings.updates.update)
     ? updateRow(settings.updates.update).detail
     : undefined;
-  // Clear retires recorded lines, so only a thread holding some offers it.
-  const offerConversationClear = tab === PANEL_TAB.CONVERSATION && conversationLines.length > 0;
+  // Clear retires recorded turns, so only a thread holding some offers it.
+  const offerConversationClear = tab === PANEL_TAB.CONVERSATION && conversation.groups.length > 0;
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the buttons beside it say
@@ -375,7 +386,9 @@ export function PanelBody({
         <SettingsPanel {...settings} />
       ) : tab === PANEL_TAB.CONVERSATION ? (
         <ConversationPanel
-          entries={conversationLines}
+          view={conversation}
+          roster={roster}
+          onOpenChat={onOpenChat}
           live={liveConversationEntries}
           spokenAskPending={spokenAskPending}
           requests={brainRequests}

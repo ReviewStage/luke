@@ -12,6 +12,7 @@
     "./store-shapes": "./src/store/shapes.js",
     "./store-worker": "./src/store/worker-entry.js",
     "./testing": "./src/testing.js",
+    "./tool-set": "./src/tool-set.js",
     "./ui-message-context": "./src/ui-message-context.js"
   },
   "types": "./src/index.ts",

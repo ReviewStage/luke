@@ -32,7 +32,9 @@ import {
   readLimitSchema,
   sequenceReadCursorSchema,
   turnReadCursorSchema,
+  unreadableRowRefusalSchema,
 } from "./reads-wire.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const FIXTURE_DIRECTORY = path.join(fileURLToPath(import.meta.url), "../../fixtures/reads");
 
@@ -318,5 +320,33 @@ test("the change-signal answer fixture reads every head as the cursor a caught-u
   assert.deepEqual(
     changesAnswerSchema.parse({ seen: false, messages: answer.messages, events: answer.events }),
     { seen: false, messages: answer.messages, events: answer.events },
+  );
+});
+
+test("the unreadable-row refusal reads to the row it names and nothing else reads as one", () => {
+  assert.deepEqual(
+    unreadableRowRefusalSchema.parse({
+      error: HOSTED_API_ERROR.UNREADABLE_ROW,
+      unreadableRow: { conversationId: MAIN.toUpperCase(), seq: 4 },
+    }),
+    { conversationId: MAIN, seq: 4 },
+  );
+  assert.equal(
+    unreadableRowRefusalSchema.parse({
+      error: HOSTED_API_ERROR.UNAVAILABLE,
+      unreadableRow: { conversationId: MAIN, seq: 4 },
+    }),
+    undefined,
+  );
+  assert.equal(
+    unreadableRowRefusalSchema.parse({
+      error: HOSTED_API_ERROR.UNREADABLE_ROW,
+      unreadableRow: { conversationId: MAIN, seq: 0 },
+    }),
+    undefined,
+  );
+  assert.equal(
+    unreadableRowRefusalSchema.parse({ error: HOSTED_API_ERROR.UNREADABLE_ROW }),
+    undefined,
   );
 });

@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "opened": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "openedAt": {
+      "type": "number",
+      "minimum": 0
+    },
+    "cleared": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "opened",
+    "openedAt",
+    "cleared"
+  ],
+  "additionalProperties": false
+}

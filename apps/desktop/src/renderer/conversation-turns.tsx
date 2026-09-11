@@ -44,7 +44,9 @@ import {
   CONVERSATION_ENTRY_SPEAKER,
   type ConversationEntrySpeaker,
   ConversationThinkingRow,
-} from "./conversation-panel";
+  ConversationTimeBreak,
+} from "./conversation-rows";
+import { opensConversationTimeBreak } from "./conversation-time-break";
 import { TOOL_ROW_STATUS, type ToolRow, type ToolRowChip, toolRow } from "./conversation-tool-row";
 import { MarkdownMessage } from "./markdown-message";
 import type { SessionView } from "./session-model";
@@ -741,19 +743,29 @@ function turnRows(
   );
 }
 
+/** When a turn's rows begin and end: its earliest and latest message, which is what dates the silence around it. */
+function groupSpan(group: ConversationViewTurnGroup) {
+  const instants = group.messages.map((message) => message.createdAt);
+  return { first: Math.min(...instants), last: Math.max(...instants) };
+}
+
 /**
  * The thread as turns. Each group's messages draw in sequence, its actions
  * fold under a count once there are two, and the group's working — its
  * details and its failed actions — closes the group under one fold, so a
  * refusal is read inside the turn that tried it and never as a row of its
  * own. A turn still running ends in Luke's wait, driven by the turn row's
- * own status and nothing else.
+ * own status and nothing else. A turn that followed a long silence is dated
+ * over it, and whatever the caller hands in as children — the lines still
+ * being said, the developer's place, a wait no stored turn carries yet —
+ * closes the list, so the thread is one list under one snap point.
  */
 export function ConversationTurns({
   groups,
   roster = [],
   onOpenChat,
   now,
+  children,
 }: {
   groups: readonly ConversationViewTurnGroup[];
   /**
@@ -767,10 +779,16 @@ export function ConversationTurns({
   onOpenChat?: (identity: SessionIdentity) => void;
   /** The instant a running turn's wait is read against; passed down because only the app knows which clock is honest. */
   now: number;
+  /** Rows drawn after the last turn, inside the same list. */
+  children?: React.ReactNode;
 }): React.JSX.Element {
+  let previousAt: number | undefined;
   return (
     <ol className="conversation-list">
       {groups.flatMap((group) => {
+        const span = groupSpan(group);
+        const dated = opensConversationTimeBreak(previousAt, span.first);
+        previousAt = span.last;
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
         const drawn = group.messages.map((message) => messageRows(message, judgment, roster));
@@ -783,6 +801,15 @@ export function ConversationTurns({
         );
         const folded = drawn.flatMap((message) => message.folded);
         return [
+          ...(dated
+            ? [
+                <ConversationTimeBreak
+                  key={`${group.turnId}:break`}
+                  recordedAt={span.first}
+                  now={now}
+                />,
+              ]
+            : []),
           ...rows,
           ...(folded.length === 0
             ? []
@@ -805,6 +832,7 @@ export function ConversationTurns({
             : []),
         ];
       })}
+      {children}
     </ol>
   );
 }

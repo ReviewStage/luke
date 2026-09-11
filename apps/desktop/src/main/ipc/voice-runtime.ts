@@ -37,10 +37,10 @@ export interface VoiceRuntimeDependencies {
   liveDiagnostics: () => Promise<LiveDiagnostics | undefined>;
   recordProductEvent: RecordProductEvent;
   /**
-   * The Conversation Clear, carried out here before the voice window is told, and
-   * answering whether the erasure completed on disk: the view and every
-   * context are emptied either way, and a false answer is what the panel
-   * shows as a Clear that did not finish.
+   * The Conversation Clear, begun here as the voice window is told, and
+   * answering whether the service took it: the thread every panel draws is the
+   * service's, so a false answer is what the panel shows as a Clear that did
+   * not go, while the voice window has already retired its own turns at the press.
    */
   clearConversation: () => boolean | Promise<boolean>;
   /** Whether a panel is recording a chord, which holds the talk and stop presses. */
@@ -65,17 +65,17 @@ export function voiceRuntimeActRows(
   return {
     // A panel's command to the voice window. The act's schema has already
     // bounded it; here it is checked to come from a panel — the voice window
-    // does not command itself — and handed on. A Clear is carried out here
-    // first, because the main process is the thread's store and every panel's
-    // relay; the voice window is told to retire its own turns at the fence,
-    // whatever the disk later answers, and the panel hears whether the
-    // erasure completed.
+    // does not command itself — and handed on. A Clear is begun here first,
+    // because the main process is every panel's relay to the service that
+    // holds the thread; the voice window is told to retire its own turns at
+    // the press, whatever the service later answers, and the panel hears
+    // whether the Clear went.
     async [ACT_KIND.VOICE_COMMAND]({ command }, { panel }) {
       if (!panel) return undefined;
-      // The Clear's fence is raised in this call's synchronous prefix, and
-      // the voice window is told in the same breath — before the disk is
-      // waited on — so its turns, marks, and context retire with main's.
-      // Its answer, the disk's, comes after and goes to the panel alone.
+      // The Clear is begun in this call's synchronous prefix, and the voice
+      // window is told in the same breath — before the service is waited on
+      // — so its turns, marks, and context retire at once. The answer, the
+      // service's, comes after and goes to the panel alone.
       const erasing =
         command === VOICE_COMMAND.CLEAR_CONVERSATION ? dependencies.clearConversation() : undefined;
       voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });

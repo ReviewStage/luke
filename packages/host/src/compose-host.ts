@@ -9,6 +9,7 @@ import {
   gatewayOk,
   shutdownGateway,
 } from "@sidecar/gateway";
+import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationSupervisor } from "@sidecar/runtime";
 import {
@@ -21,6 +22,7 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { composeAccount } from "./compose-account.js";
 import { composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
+import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
 import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
@@ -67,6 +69,21 @@ export function composeHost(options: HostSeams): Host {
   const observation = composeObservation({ kernel, settings, account, issues, observationGate });
   const calendars = composeCalendars({ kernel, settings, observationGate });
   const devices = composeDevices({ kernel, account, calendars });
+  const conversation = composeConversation({
+    kernel,
+    account,
+    devices,
+    // Both clients carry the account's own token, holder fence included, so
+    // the one retry after a 401 can tell a renewed bearer from another person's.
+    heads: new HostedChangesClient({
+      serviceBaseUrl: kernel.hostedServiceBaseUrl,
+      ...account.token,
+    }),
+    client: new HostedConversationClient({
+      serviceBaseUrl: kernel.hostedServiceBaseUrl,
+      ...account.token,
+    }),
+  });
   const brain = composeBrain({
     kernel,
     settings,
@@ -127,13 +144,19 @@ export function composeHost(options: HostSeams): Host {
     settings,
     account,
     devices,
+    conversation,
     issues,
     observation,
     calendars,
     brain,
     live,
   ];
-  const supervisor = new ObservationSupervisor([observation.loop, issues.loop, calendars.loop]);
+  const supervisor = new ObservationSupervisor([
+    observation.loop,
+    issues.loop,
+    calendars.loop,
+    conversation.loop,
+  ]);
 
   async function startAccountCapabilities(): Promise<void> {
     if (!account.capabilitiesActive()) return;
@@ -151,6 +174,7 @@ export function composeHost(options: HostSeams): Host {
 
   async function stopAccountCapabilities(): Promise<void> {
     supervisor.setEnabled(false);
+    conversation.reset();
     await devices.release(undefined);
     observation.stopObservation();
     issues.stopObservation();
@@ -187,7 +211,7 @@ export function composeHost(options: HostSeams): Host {
         sessions: carried(observation.rosterForClients()),
         sessionsSettled: observation.rosterSettled(),
         announcementsHeld: quiet,
-        conversationLines: carried(brain.store.thread().entries()),
+        conversationView: carried(conversation.snapshot()),
         workspaceProjects: carried(
           account.capabilitiesActive()
             ? normalizeObservedWorkspaceProjects(
@@ -243,6 +267,7 @@ export function composeHost(options: HostSeams): Host {
     settings,
     account,
     devices,
+    conversation,
     brain,
     calendars,
     observation,

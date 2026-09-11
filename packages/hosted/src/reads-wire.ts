@@ -7,6 +7,7 @@ import {
   type ConversationViewTurn,
   type SessionIdentity,
   TOOL_PART_STATE,
+  type UnreadableRow,
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
@@ -26,7 +27,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 
 /**
  * The per-resource reads a device polls, and the one change signal that says
@@ -53,6 +54,12 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 export const READ_PAGE_BOUNDS = {
   MAX_LIMIT: 200,
   PREVIEW_ROWS: 2,
+} as const;
+
+/** The two query parameters every per-resource read takes: the cursor to read on from, and the page bound. */
+export const READ_QUERY = {
+  AFTER: "after",
+  LIMIT: "limit",
 } as const;
 
 export const READ_CURSOR_BOUNDS = {
@@ -530,6 +537,25 @@ export const brainTurnsAnswerSchema: Schema<BrainTurnsAnswer> = s.record(
     hasMore: s.boolean(),
   },
   { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+);
+
+/**
+ * The one refusal a messages read answers with a body a device acts on: a
+ * page holding a row this build cannot read is refused whole, naming the
+ * row, and a device must surface it rather than draw the page as empty.
+ */
+export const unreadableRowRefusalSchema: Schema<UnreadableRow> = s.map(
+  s.record(
+    {
+      error: s.literal(HOSTED_API_ERROR.UNREADABLE_ROW),
+      unreadableRow: s.record(
+        { conversationId: wireUuidSchema, seq: s.wholeNumber({ minimum: 1 }) },
+        { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+      ),
+    },
+    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+  ),
+  (refusal) => refusal.unreadableRow,
 );
 
 /**

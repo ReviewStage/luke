@@ -20,11 +20,11 @@ that line: the ipcMain registrations stayed in `apps/desktop/src/main/ipc/`,
 and resolving this Mac's EventKit helper bundle stayed in
 `apps/desktop/src/main/native/`.
 
-## One composition, eight concerns
+## One composition, nine concerns
 
 `composeHost` constructs, links, merges, and starts; it holds no state of a
 concern's own. Each concern is a composer — settings, account, devices,
-issues, observation, calendars, brain, live — that owns its own mutable
+conversation, issues, observation, calendars, brain, live — that owns its own mutable
 state, its own timers, and the Gateway methods of its domain, and answers
 `start()` and `stop()` for exactly what it began. The devices composer answers
 no method at all: it is this installation's device row on the service,
@@ -35,7 +35,13 @@ its presence holds until, from the idle time and lock state the client reads
 off the machine and hands in as the `machinePresence` seam, and the instant
 the calendar's meeting hold ends, asked of the calendars composer; `null`
 where neither holds, so a registration that cleared them is never followed
-by a stale hold restated from memory. The merge folds their
+by a stale hold restated from memory. The conversation composer is the
+Conversation as the service holds it: on its own five-second loop it asks the
+change signal where each resource stands, reads only what moved behind the
+cursors this device holds, folds the pages into one picture
+(`conversation-view-sync.ts`), tells every client when it moved, and answers
+the tab's Clear as the service's soft delete; nothing of the local store is
+read for it. The merge folds their
 method tables into one and refuses a method two of them claim, so which
 concern answers a method is checked at construction rather than left to the
 fold's order. `client.bootstrap` is the one method no composer owns: it reads
