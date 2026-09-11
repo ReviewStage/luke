@@ -217,6 +217,7 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
+| `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

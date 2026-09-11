@@ -317,12 +317,13 @@ included — stands behind its own subpath the renderer never opens.
 
 `@sidecar/brain` is the reason the rule exists twice in one package: the barrel
 is a door the web functions and the renderer open, and the store beneath it
-reaches `node:sqlite`, so the store and its worker entry each get a subpath and
-the barrel exports neither. `@sidecar/brain/envelope` is the third: the
-envelope's shape and its readings are what everything under `brain/src/store/`
-needs, and reaching them through the barrel — or through `state-store.ts`,
-which is the store class over them — would pull the whole brain into the module
-that only has to read a row back. `@sidecar/brain/store-shapes` is the fourth,
+reaches `node:sqlite` — and, through `store/sql-node-sqlite.ts`'s `SqlClient`
+over that same handle, `@effect/sql` and `@effect/experimental` — so the store
+and its worker entry each get a subpath and the barrel exports neither.
+`@sidecar/brain/envelope` is the third: the envelope's shape and its readings
+are what everything under `brain/src/store/` needs, and reaching them through
+the barrel — or through `state-store.ts`, which is the store class over them —
+would pull the whole brain into the module that only has to read a row back. `@sidecar/brain/store-shapes` is the fourth,
 in the other direction: the stored shapes and their readings (the envelope
 delta a save carries, the transcript payload a row keeps), Node-free, so the
 hosted tier's Postgres store under `apps/web/server/hosted/store/` writes and
