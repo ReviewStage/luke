@@ -45,7 +45,8 @@ public final class ConversationStore {
     public static let maximumPagesPerPoll = 5
 
     private let client: ConversationReadClient
-    private let ratingClient: MessageRatingClient
+    /// Absent on a screen that draws no rating control, the watch's, which then constructs nothing it never calls.
+    private let ratingClient: MessageRatingClient?
     private let deviceId: @MainActor () -> String?
     private let now: @Sendable () -> Date
 
@@ -53,7 +54,7 @@ public final class ConversationStore {
     /// before a registration has landed.
     public init(
         client: ConversationReadClient,
-        ratingClient: MessageRatingClient,
+        ratingClient: MessageRatingClient? = nil,
         deviceId: @escaping @MainActor () -> String?,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
@@ -67,7 +68,7 @@ public final class ConversationStore {
     /// from, so before this installation's row is registered there is nothing
     /// to send one as, and the control waits rather than promising a write
     /// the service would refuse.
-    public var canRate: Bool { deviceId() != nil }
+    public var canRate: Bool { deviceId() != nil && ratingClient != nil }
 
     /// Records the developer's verdict on one of Luke's messages: the write
     /// runs under the account's retry and holder fence, and its answer is
@@ -77,10 +78,12 @@ public final class ConversationStore {
     /// a message the account no longer holds, and one that is not Luke's —
     /// are both a control drawn on a row the thread has since moved past.
     public func rate(_ message: RateableMessage, _ rating: MessageRating, account: any AccountTokenProviding) async -> Bool {
-        guard let holder = account.accountEmail, let deviceId = deviceId() else { return false }
+        guard let holder = account.accountEmail, let deviceId = deviceId(), let ratingClient else {
+            return false
+        }
         do {
             let answer = try await account.authorized {
-                try await self.ratingClient.rate(
+                try await ratingClient.rate(
                     messageId: message.messageId, rating, deviceId: deviceId, accessToken: $0
                 )
             }

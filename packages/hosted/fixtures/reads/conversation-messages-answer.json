@@ -147,7 +147,10 @@
               "kind": "announce",
               "unspoken": false
             }
-          ]
+          ],
+          "rating": {
+            "rating": "up"
+          }
         }
       ]
     }

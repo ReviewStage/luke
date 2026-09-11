@@ -515,7 +515,12 @@ brain's own per-session context — are read from the instant the standing
 main was opened, which the main's entry carries as `openedAt`: their rows
 from before it never travel, their rows after it do, and the conversations
 themselves stand untouched. The window is a cut on what a read returns, never
-a rule of the view's selection. The change signal answers each resource's head as the cursor a
+a rule of the view's selection. A message in the answer carries the developer's latest rating of it,
+folded from the rating events as an announcement's unspoken mark is folded
+from the speech events, so a client reads the current rating from the page
+it is on and never from the events resource's beginning; the events remain
+the record, one row per rating, and a re-rating is a newer row the fold then
+answers. The change signal answers each resource's head as the cursor a
 caught-up device would hold — from the conversation rows' counters and one
 ordered look at the turns, never the rows themselves — beside the roster
 snapshot's instant, and the same call is the device's heartbeat: its row

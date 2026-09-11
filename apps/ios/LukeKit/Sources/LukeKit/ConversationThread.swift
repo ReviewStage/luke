@@ -6,10 +6,10 @@ import Foundation
 /// answered on every read until it is finished — replaces the copy held
 /// rather than standing beside it; the rows of a conversation an answer no
 /// longer lists are dropped, which is how a Clear reaches a screen that drew
-/// them; a turn is replaced by id as its stamps move; the latest speech
-/// event on an announcement decides whether it reads as unspoken; and the
-/// latest rating event on a message is the verdict its control shows, since
-/// a second rating is a second event and never an edit. The three
+/// them; a turn is replaced by id as its stamps move; and the marks the
+/// service folded onto each message — an announcement's unspoken mark, the
+/// developer's latest rating — are amended by the newer events read since,
+/// a second rating being a second event and never an edit. The three
 /// cursors are the strings the service minted, echoed back on the next read
 /// and never composed here. Every device that reads to the end holds the same
 /// rows in the same order, because the order is the view's own: a group's
@@ -23,12 +23,13 @@ public struct ConversationThread: Equatable, Sendable {
     private var groups: [String: Group] = [:]
     private var latestSpeech: [String: SpeechMark] = [:]
     private var latestRating: [String: RatingMark] = [:]
-    /// Whether the events read has reached the end of the record once. The
-    /// messages answer already folds every speech event up to the moment it
-    /// was read, so while the events are still being replayed from their
-    /// beginning the marks held here are older than that fold and stand
-    /// behind it; once the replay has caught up they carry everything the
-    /// fold did and whatever came after, and only then do they amend it.
+    /// Whether the events read stands at or past the fold. The messages
+    /// answer already folds every speech mark and rating up to the moment it
+    /// was read, so while events are being replayed from their beginning the
+    /// marks held here are older than that fold and stand behind it; once the
+    /// replay has caught up — or the events cursor was seeded from the
+    /// signal's head, with nothing older to replay — they carry everything
+    /// the fold did and whatever came after, and only then do they amend it.
     private var eventsCaughtUp = false
 
     private struct Group: Equatable, Sendable {
@@ -45,10 +46,15 @@ public struct ConversationThread: Equatable, Sendable {
         let kind: ConversationEventKind
     }
 
-    /// The latest rating a message has, by the same sequence; a payload the wire does not spell a verdict in marks nothing.
+    /// The latest rating a message has, by the same sequence; a payload the
+    /// wire does not spell a verdict in marks nothing. A mark this device wrote
+    /// itself is newer than anything held or folded and amends at once; one
+    /// read back from the events waits, like a speech mark, until the events
+    /// read stands at or past the fold.
     private struct RatingMark: Equatable, Sendable {
         let seq: Int
         let rating: MessageRating
+        let own: Bool
     }
 
     /// The key a rating event's verdict travels under in its payload — `RATING_EVENT_PAYLOAD_FIELDS`.
@@ -92,18 +98,23 @@ public struct ConversationThread: Equatable, Sendable {
     }
 
     public mutating func apply(_ answer: ConversationEventsAnswer) {
-        for event in answer.events { record(event) }
+        for event in answer.events { take(event, own: false) }
         eventsCursor = answer.next
         if !answer.hasMore { eventsCaughtUp = true }
     }
 
+    /// Takes a rating this device just wrote, from the answer that recorded
+    /// it, so the control shows the verdict before the next poll reads it
+    /// back. Being this device's own write it is newer than anything held or
+    /// folded, so it amends at once rather than waiting on the events read.
+    public mutating func record(_ event: ConversationReadEvent) {
+        take(event, own: true)
+    }
+
     /// Takes one event as the latest word about its message where it is
     /// newer than the one held: a speech event moves the announcement's mark,
-    /// a rating event the message's verdict. The events read hands every
-    /// event here, and a rating this device just wrote arrives the same way,
-    /// from the answer that recorded it, so the control shows the verdict
-    /// before the next poll reads it back.
-    public mutating func record(_ event: ConversationReadEvent) {
+    /// a rating event the message's verdict.
+    private mutating func take(_ event: ConversationReadEvent, own: Bool) {
         if event.kind.isSpeech {
             let standing = latestSpeech[event.messageId]
             if standing == nil || standing!.seq < event.seq {
@@ -116,28 +127,41 @@ public struct ConversationThread: Equatable, Sendable {
         }
         let standing = latestRating[event.messageId]
         if standing == nil || standing!.seq < event.seq {
-            latestRating[event.messageId] = RatingMark(seq: event.seq, rating: rating)
+            latestRating[event.messageId] = RatingMark(seq: event.seq, rating: rating, own: own)
         }
     }
 
-    /// The developer's latest verdict on each message the thread holds.
+    /// The developer's latest verdict on each message the thread holds: the
+    /// rating the service folded onto the message, amended by a rating this
+    /// device wrote since, and by the rating events read since once the events
+    /// read stands at or past the fold.
     public var ratings: [String: MessageRating] {
-        latestRating.mapValues(\.rating)
+        var verdicts: [String: MessageRating] = [:]
+        for group in groups.values {
+            for message in group.messages.values {
+                if let rating = message.rating?.rating { verdicts[message.message.id] = rating }
+            }
+        }
+        for (id, mark) in latestRating where eventsCaughtUp || mark.own {
+            verdicts[id] = mark.rating
+        }
+        return verdicts
     }
 
-    /// Takes the change signal's head for the turns, for a device that has
-    /// read nothing yet: the messages read that follows carries every turn
-    /// row as it then stands, so the turns start from where they are rather
-    /// than from the beginning of the record. The events are never seeded:
-    /// the messages read folds a briefing's speech marks but not the ratings,
-    /// which only the events themselves carry, so a device reads them from
-    /// the beginning once and behind its cursor after. A device already
-    /// holding messages adopts nothing — a stamp that moved since its last
-    /// read is only found by reading — and a resource already read keeps its
-    /// own cursor.
+    /// Takes the change signal's heads for the turns and the events, for a
+    /// device that has read nothing yet: the messages read that follows
+    /// carries every turn row as it then stands and folds every speech mark
+    /// and rating up to the moment it is read, so both start from where they
+    /// are rather than from the beginning of the record. An events read
+    /// seeded this way has nothing older than the fold to replay, so its
+    /// marks amend the fold at once. A device already holding anything
+    /// adopts nothing — a stamp that moved since its last read is only found
+    /// by reading — and a resource already read keeps its own cursor.
     public mutating func adoptHeads(from changes: ChangesAnswer) {
-        guard messagesCursor == nil, turnsCursor == nil, let turns = changes.turns else { return }
-        turnsCursor = turns
+        guard messagesCursor == nil, turnsCursor == nil, eventsCursor == nil else { return }
+        if let turns = changes.turns { turnsCursor = turns }
+        eventsCursor = changes.events
+        eventsCaughtUp = true
     }
 
     /// The turn groups in the view's order, each message's tool decisions
@@ -177,7 +201,11 @@ public struct ConversationThread: Equatable, Sendable {
             return tool
         }
         return ConversationReadMessage(
-            message: message.message, seq: message.seq, createdAt: message.createdAt, tools: tools
+            message: message.message,
+            seq: message.seq,
+            createdAt: message.createdAt,
+            tools: tools,
+            rating: message.rating
         )
     }
 }

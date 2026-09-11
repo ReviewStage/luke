@@ -343,6 +343,27 @@
                       }
                     ]
                   }
+                },
+                "rating": {
+                  "type": "object",
+                  "properties": {
+                    "rating": {
+                      "type": "string",
+                      "enum": [
+                        "up",
+                        "down"
+                      ]
+                    },
+                    "note": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "rating"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [

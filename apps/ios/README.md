@@ -206,10 +206,13 @@ write this screen makes: `MessageRatingClient` puts the verdict and this
 device's id to `PUT /api/conversation/messages/{id}/rating` through the same
 `authorized()` retry and holder fence every phone client runs under, the
 answer is recorded locally as the rating event it made, and the control's
-state is the latest `rating` event on the message, read from the events
-resource like any other device's, so a verdict given on the Mac shows here
-and one given here shows there. A second press is a second event, never an
-edit. The developer's own ask and the brain's notes to itself draw no thumbs,
+state is the rating the service folded onto the message, amended by any
+newer `rating` event read since — this device's own, or another's — so a
+verdict given on the Mac shows here and one given here shows there, and a
+fresh launch reads no events from the record's beginning: the events cursor
+seeds from the change signal's head like the turns'. A second press is a
+second event, never an edit. The watch, which draws no control, constructs
+the store without a rating client. The developer's own ask and the brain's notes to itself draw no thumbs,
 since the service refuses a rating on either; the count that follows a
 recorded rating carries the verdict and whether the message was a reply or a
 briefing, never the message or its id.
