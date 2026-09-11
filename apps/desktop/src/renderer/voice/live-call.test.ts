@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { TRACE_DIRECTION } from "@sidecar/devtrace/vocabulary";
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
 import {
@@ -12,6 +11,7 @@ import {
 import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
 import type { WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   LiveCall,
   MICROPHONE_ACK_TIMEOUT_MS,

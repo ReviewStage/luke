@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { HOST_NODE_OPEN_KIND } from "@sidecar/host";
+import { test } from "vitest";
 import { createNodeOpen } from "./node-open";
 
 const CHAT_URL = "https://example.invalid/chat/1";

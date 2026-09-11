@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { runModeFor } from "@sidecar/host";
 import type { WireRecord } from "@sidecar/wire";
 import type { WebContents } from "electron";
+import { test } from "vitest";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/messages/voice-view";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { CAPTION_TONE, pointOverStrip, type SpokenStripContent, stripHoldNext } from "./strip-hold";
 
 const WORDS: SpokenStripContent = {

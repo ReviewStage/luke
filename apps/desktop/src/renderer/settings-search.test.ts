@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
@@ -10,6 +9,7 @@ import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from 
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
+import { test } from "vitest";
 import {
   type SettingsSearchEntry,
   type SettingsSearchInput,

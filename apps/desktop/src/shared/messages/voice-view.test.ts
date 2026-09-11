@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { LIVE_STATUS } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   IDLE_VOICE_VIEW,
   isLiveStatus,

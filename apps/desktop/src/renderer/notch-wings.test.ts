@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { wingMarkCapacity, wingPileOffset } from "@sidecar/panel";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_MIN_WIDTH } from "@sidecar/surface";
+import { test } from "vitest";
 import { peekSideWidth, signInLabelFit, wingSlots } from "./notch-wings";
 import type { ProviderTally } from "./session-model";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { TRANSCRIPT_SPEAKER, UTTERANCE_GAP_MS, UTTERANCE_SETTLE_MARGIN_MS } from "@sidecar/live";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
+import { test } from "vitest";
 import { LiveCaptions } from "#renderer/voice/live-captions";
 import { lukeCaption, lukeOutputQuiet } from "./introduction-quiet";
 

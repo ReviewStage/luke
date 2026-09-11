@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
 

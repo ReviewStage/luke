@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "@sidecar/feedback";
+import { test } from "vitest";
 import {
   accountSignature,
   type FeedbackEntry,

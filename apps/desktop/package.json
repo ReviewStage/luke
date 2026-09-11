@@ -33,7 +33,7 @@
     "package": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --publish never",
     "release": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package",
     "start": "pnpm build:native && pnpm build && electron .",
-    "test": "tsx --test 'src/**/*.test.ts'",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
@@ -69,8 +69,8 @@
     "react-dom": "catalog:",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
-    "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "dependencies": {
     "@sentry/electron": "7.18.0",

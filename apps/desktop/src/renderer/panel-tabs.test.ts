@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { PANEL_TAB, panelTabForKey } from "./panel-tabs";
 
 test("panel tabs wrap with horizontal arrows", () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { test } from "vitest";
 import {
   type CredentialEntry,
   type CredentialEntryControl,

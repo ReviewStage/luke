@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CAPSULE_SIDE_WIDTH } from "@sidecar/surface";
+import { test } from "vitest";
 import { capsuleFaceCenter, capsuleHeight } from "./introduction-flight";
 
 /** The 14-inch housing every proportion in the repo is measured against. */

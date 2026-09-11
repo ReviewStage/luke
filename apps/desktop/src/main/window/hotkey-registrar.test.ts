@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import type { BrowserWindow } from "electron";
+import { test } from "vitest";
 import { channels } from "#shared/bridge";
 import type { TalkKeyEdges } from "../native/talk-key";
 import {

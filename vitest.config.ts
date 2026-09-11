@@ -14,6 +14,7 @@ export default defineConfig({
       "tools/ios-parity",
       "tools/trace-export",
       "packages/providers",
+      "apps/desktop",
     ],
   },
 });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { sharedInFlight } from "./screen-geometry";
 
 test("concurrent reads share one probe, and a later read probes again", async () => {

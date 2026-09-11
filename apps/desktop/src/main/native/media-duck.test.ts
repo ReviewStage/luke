@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { fakeNativeHelper } from "#testing/native-helper";
 import { MediaDuckController } from "./media-duck";
 import type { NativeHelperProcess } from "./native-helper";

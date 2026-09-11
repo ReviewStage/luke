@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { outputSilent, VOLUME_HINT_REARM_MS, volumeHintDismissed } from "./volume-hint";
 
 test("an output nobody can read is audible, never silent", () => {

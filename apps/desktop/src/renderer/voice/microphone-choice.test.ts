@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { LID_STATE, MICROPHONE_TRANSPORT, type MicrophoneRoute } from "#shared/messages/audio";
 import {
   type EnumeratedMicrophone,

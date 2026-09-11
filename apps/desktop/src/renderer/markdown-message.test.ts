@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { test } from "vitest";
 import { MarkdownMessage } from "./markdown-message";
 
 function render(words: string, className?: string): string {

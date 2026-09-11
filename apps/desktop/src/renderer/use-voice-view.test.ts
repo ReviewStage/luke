@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   BRAIN_ASK_REFUSAL,
   BRAIN_SUBMISSION_OUTCOME,
@@ -9,6 +8,7 @@ import {
 import type { BrainAskSubmissionResult } from "@sidecar/brain/requests-wire";
 import { LIVE_STATUS } from "@sidecar/live";
 import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "@sidecar/voice/orchestrator";
+import { test } from "vitest";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
   ASK_UNSENT_REASON,

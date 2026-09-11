@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import type { OutputAudioState } from "#shared/messages/audio";
 import { fakeNativeHelper } from "#testing/native-helper";
 import { type OutputVolumeWatch, outputVolumeWatcher, parseOutputLine } from "./output-volume";

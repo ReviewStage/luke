@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { SESSION_LIST_ALL } from "@sidecar/actions";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import {
@@ -9,6 +8,7 @@ import {
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
 import { settingsView } from "@sidecar/settings/testing";
+import { test } from "vitest";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import {
   ERRAND_TARGET,

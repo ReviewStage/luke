@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { FOCUS_FRAME_LIMIT, focusSeek } from "./focus-seek";
 
 /**
