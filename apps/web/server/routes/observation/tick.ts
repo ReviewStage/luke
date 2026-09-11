@@ -20,6 +20,7 @@ import {
   sweepSpeech,
 } from "../../hosted/store/index.js";
 import type { Route } from "../../route.js";
+import { runWeb } from "../../runtime.js";
 
 const CLOUD_PROVIDER_IDS = Object.values(CLOUD_AGENT_PROVIDER_ID);
 
@@ -49,7 +50,7 @@ const route: Route = {
     const database = getDatabase();
     const encryptionSecret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET]?.trim() || undefined;
     const store = encryptionSecret
-      ? hostedStore({ db: database, keys: payloadKeyRing(encryptionSecret) })
+      ? hostedStore({ db: database, keys: payloadKeyRing(encryptionSecret), run: runWeb })
       : undefined;
     const apnsCredentials = apnsCredentialsFromEnvironment(process.env);
     const sender = apnsCredentials ? new ApnsSender({ credentials: apnsCredentials }) : undefined;

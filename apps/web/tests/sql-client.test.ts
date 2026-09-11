@@ -6,9 +6,9 @@ import { testSqlClient } from "./support/sql-client.js";
 
 /**
  * What the client answers, on whichever dialect this run stands over. The store
- * itself still runs on Drizzle; these are the two things the layer has to do
- * before anything is moved onto it — speak to the database at all, and read a
- * table the generated migrations created.
+ * is moving onto it a module at a time; these are the two things the layer has
+ * to do before any of them — speak to the database at all, and read a table the
+ * generated migrations created.
  */
 it.layer(testSqlClient)("the web SQL client", (it) => {
   it.effect("answers a statement of its own", () =>

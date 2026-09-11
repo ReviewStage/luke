@@ -120,9 +120,12 @@ The `SqlClient` is `PgClient.layerFromPool` over a pool built to the same
 `POOL_LIMITS` Drizzle's is, one connection per warm instance, and not
 `PgClient.layer`, which runs `SELECT 1` while the layer builds: an eager round
 trip there would land on the cold start of every function, including the ones
-that never query. `pg` connects on its first query instead. Nothing reads the
-client yet — the store is still Drizzle's — so the two stand side by side until
-the hosted store moves onto `@effect/sql`. What the layer does need at build
+that never query. `pg` connects on its first query instead. The hosted store is
+moving onto the client a module at a time, so the two stand side by side over
+the one database: `server/hosted/store/workspace-files.ts` reads and writes
+through this client, every other module still through Drizzle, and the store is
+handed its edge's own runner to answer the promises the routes hold — `runWeb`
+in a function, the store tests' runtime in a test. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 
@@ -528,7 +531,10 @@ diffs and pass record. Every row is keyed by `user_id` and cascades with the
 user row, so `server/routes/account/delete.ts` erases them with the account.
 The roster tables are read and written by the scheduled observation below and
 the routes that serve it. `server/hosted/store/` is the store the brain host
-composes against.
+composes against; its modules are being moved onto `@effect/sql`, and one there
+is an `Effect<A, SqlError | ParseError, SqlClient>` whose rows a `Schema`
+decodes and whose path rule is that schema too, answered to a promise-holding
+route through the `HostedStoreRun` seam the store is composed with.
 
 The notebook, the facts, and the roster keep their `sealed_*` columns: the
 payload envelope in `server/hosted/encryption.ts`, AES-256-GCM under the

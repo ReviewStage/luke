@@ -276,6 +276,16 @@ it built. The clock the captions are stamped from is read there too. P9-08
 deletes the promise-facing seam once the hooks and the orchestrator take the
 fiber.
 
+`HostedStoreRun` in `apps/web/server/hosted/store/database.ts` is on the
+allowlist as the door rather than as a runtime: a module of the hosted store
+moved onto `@effect/sql` answers an `Effect<A, SqlError | ParseError,
+SqlClient>`, while the `HostedStore` methods above it answer the promises the
+routes still hold, so the store is handed the runner of whichever edge composed
+it — `runWeb` in a web function, the store tests' own runtime over the database
+their Drizzle handle stands on — and builds nothing itself. P10-14 deletes it
+with the Drizzle half, once every module here is an effect and the routes take
+one.
+
 `Maintenance`'s `#writeFlushMarker` in `packages/brain/src/maintenance.ts` is on
 the allowlist too: its own caller still holds a `Promise<Settled<...>>` for
 the flush marker's write outcome, so `writeFlushMarkerEffect` — an
@@ -332,6 +342,7 @@ design decision stated as such:
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08 |
 | `migrateStoreSchemaSync` door over `migrateStoreSchema` | P5-09 | P5-11 |
+| `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

@@ -4,6 +4,7 @@ import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import { getDatabase } from "../db/index.js";
 import { providerKey } from "../db/schema.js";
 import type { Route } from "../route.js";
+import { runWeb } from "../runtime.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "./bearer.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
@@ -48,7 +49,7 @@ function storeFor(secret: string): HostedStore {
   if (storeUnderSecret?.secret !== secret) {
     storeUnderSecret = {
       secret,
-      store: hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret) }),
+      store: hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret), run: runWeb }),
     };
   }
   return storeUnderSecret.store;
