@@ -132,6 +132,10 @@ are the process's own edges, one runtime each:
   instantiated once per bundle, so the panel and the voice window each get
   their own registry and their own runtime under it, and an atom's work runs
   on the runtime of the window that mounted it.
+- `apps/desktop/src/main/store-worker.ts`, the brain store's own worker
+  thread, through `NodeRuntime.runMain(NodeWorkerRunner.launch(...))`. It is
+  bundled apart from `main.ts` because a worker starts from its own file, so
+  it is a runtime edge of its own rather than a second use of the app's.
 
 `Effect.runPromise`, `Effect.runSync`, and `Effect.runFork` belong nowhere
 else: a runtime built where the work lives is a second runtime, and two
@@ -216,10 +220,11 @@ P7-02 hand the layer to the host itself and delete the door.
 allowlist as the two OpenClaw ports' reach into the store. The store's worker
 is an Rpc server: `store-operations.ts` declares every operation once as an
 `RpcGroup`, `worker-host.ts` answers each on the worker's own runtime edge
-(`worker-entry.ts`'s `NodeRuntime.runMain` over `NodeWorkerRunner.launch`),
-one request at a time, and the handlers run the table effects over the one
-client the database built at its open, so no operation runs an effect of
-its own any more and the hand-rolled envelope, `wire.ts`, is gone with
+(`apps/desktop/src/main/store-worker.ts`'s `NodeRuntime.runMain` over
+`NodeWorkerRunner.launch`, and the same launch spawned directly by the
+store-client test), one request at a time, and the handlers run the table
+effects over the one client the database built at its open, so no operation
+runs an effect of its own any more and the hand-rolled envelope, `wire.ts`, is gone with
 `migrateStoreSchemaSync`, whose migration the open now runs on the runtime
 that opens it. What still runs synchronously is `archives.ts` and
 `maintenance-run.ts`: each is a port of OpenClaw `b7528507` that imports

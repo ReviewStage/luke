@@ -223,7 +223,7 @@ for. A package that holds both a wire vocabulary and a Node flow gives the
 vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
 `@sidecar/credentials/snapshot`,
 `@sidecar/providers/superset/sign-in-stage`, `@sidecar/runtime/vocabulary`,
-`@sidecar/brain/store`, `@sidecar/brain/store-worker`), or
+`@sidecar/brain/store`), or
 the renderer bundle fails to resolve `node:http` behind a string constant it
 wanted to draw. What that door holds back has since grown: the loopback
 consent trip behind `@sidecar/credentials`'s barrel serves its landing page on
@@ -362,7 +362,7 @@ included — stands behind its own subpath the renderer never opens.
 is a door the web functions and the renderer open, and the store beneath it
 reaches `node:sqlite` — and, through `store/sql-node-sqlite.ts`'s `SqlClient`
 over that same handle, `@effect/sql` and `@effect/experimental` — so the store
-and its worker entry each get a subpath and the barrel exports neither. A
+gets a subpath of its own and the barrel exports none of it. A
 table module under `brain/src/store/` is an `Effect` over that client and
 nothing else — it takes no handle, reads its rows through `@effect/sql`'s
 `SqlSchema` against a schema declared beside it rather than a cast, and
@@ -371,8 +371,10 @@ instead of stating it twice. The worker over those modules is an
 `@effect/rpc` server: `store/store-operations.ts` declares every operation
 once as an `RpcGroup`, `store/worker-host.ts` answers it one request at a
 time on the worker-runner protocol with the table effects run over the one
-client the open built, `store/worker-entry.ts` is the runtime edge that
-launches it, and `store/store-client.ts` is the main thread's `RpcClient`
+client the open built, `apps/desktop/src/main/store-worker.ts` is the
+runtime edge that launches it in production, `store/worker-entry.ts` is the
+same launch spawned directly by the store-client test, and
+`store/store-client.ts` is the main thread's `RpcClient`
 over a one-worker `NodeWorker` pool behind the Promise face the host still
 holds; `inProcessStoreTransport` serves the same handlers in the calling
 thread for a test. The synchronous function a table module still exports is
