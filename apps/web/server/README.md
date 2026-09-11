@@ -443,44 +443,34 @@ and any Preview that needs a working vault) alongside `DATABASE_URL`.
 
 ## Hosted conversation store
 
-The tables under `server/db/conversation-schema.ts`, `workspace-schema.ts`,
-and `roster-schema.ts` hold the hosted brain's
-conversation per account: the conversation directory, the standing generation
-with its checkpoint items, cursors, inbox, runs, and action receipts, the
-conversation lines, the retained transcript and its compaction boundaries, the
-identity workspace and daily notes, the remembered facts, and the latest roster
-snapshot with its diffs and pass record. `briefing-schema.ts` declares a table
-nothing writes or reads any more — a briefing's delivery is events on its
-message, below — and stands only until the migration that drops it. Every row is
-keyed by `user_id` and cascades with the user row, so `server/routes/account/delete.ts`
-erases them with the account. The roster tables are read and written by the
-scheduled observation below and the routes that serve it; nothing reads the
-conversation tables yet. `server/hosted/store/` is the store the brain host
-will compose against, implementing the storage contracts the desktop's SQLite
-store implements under `packages/brain/src/store`.
+The tables under `server/db/storage-schema.ts`, `workspace-schema.ts`, and
+`roster-schema.ts` hold the hosted brain's conversation per account: the
+conversation rows the storage rework settled on, the identity workspace and
+daily notes, the remembered facts, and the latest roster snapshot with its
+diffs and pass record. Every row is keyed by `user_id` and cascades with the
+user row, so `server/routes/account/delete.ts` erases them with the account.
+The roster tables are read and written by the scheduled observation below and
+the routes that serve it. `server/hosted/store/` is the store the brain host
+composes against.
 
-Every user-derived column is a `sealed_*` column: the payload envelope in
-`server/hosted/encryption.ts`, AES-256-GCM under the vault's
-`PROVIDER_KEY_ENCRYPTION_SECRET`, written as `<keyId>:base64(nonce || ciphertext
-|| tag)` and bound to the row's user id as authenticated data. The key id is
-what makes a rotation possible: the ring names the current key and every key
-an envelope on record may still name, and the vault's own key format is left
-exactly as it was. Ids, keys, sequences, instants, states, and fixed vocabulary
-words stand clear so they can be indexed; a line's idempotency key is the
-SHA-256 of its identity, since a value-keyed line's identity is its words.
+The v1 tables — the conversation directory, the standing generation with its
+checkpoint items, cursors, inbox, runs, and action receipts, the conversation
+lines, the retained transcript and its compaction boundaries — mirrored the
+desktop's SQLite store and were dropped, with the briefing table and the
+never-written `conversation_lease`, once every reader had moved to the rows
+below; `drizzle/0021_g4_drop_v1_conversation_tables.sql` is the drop.
 
-The store keeps the SQLite store's invariants: a save is a compare-and-set on
-the standing generation and a stale handle is refused whole; the transcript is
-written in the same transaction as the checkpoint and never cascades with a
-generation; conversation lines carry their own retention and cutoff; a
-generation whose rows cannot be opened or read is reported unreadable and is
-repaired by the store that observed it. Clear is a hard delete of the
-conversation's lines, transcript, and boundaries at or before its instant,
-with no recovery archive and no maintenance ladder.
+The notebook, the facts, and the roster keep their `sealed_*` columns: the
+payload envelope in `server/hosted/encryption.ts`, AES-256-GCM under the
+vault's `PROVIDER_KEY_ENCRYPTION_SECRET`, written as `<keyId>:base64(nonce ||
+ciphertext || tag)` and bound to the row's user id as authenticated data. The
+key id is what makes a rotation possible: the ring names the current key and
+every key an envelope on record may still name, and the vault's own key format
+is left exactly as it was. Ids, keys, sequences, instants, states, and fixed
+vocabulary words stand clear so they can be indexed.
 
-Beside those v1 tables stand the storage rework's, under
-`server/db/storage-schema.ts`: `conversations`, `messages`, `turns`,
-`conversation_lease`, `events`, `prompts`, `tool_sets`, and
+The conversation tables under `server/db/storage-schema.ts` are
+`conversations`, `messages`, `turns`, `events`, `prompts`, `tool_sets`, and
 `provider_cursors`, the shape `plan/storage-plan.md` on the
 `orchestration/storage-plan` branch settles on. A conversation row names its
 kind (main, observed, child, or thread), the provider session it observes,
@@ -529,8 +519,8 @@ prompt written by every turn is one row a turn's hash names without a foreign
 key. A provider cursor is where the observation of one provider session last
 reached, one row per session per account, advanced in the same transaction as
 the observation message it produced and referenced by no message. Nothing in
-these tables is sealed, and nothing reads them yet: the v1 tables are dropped
-only after every reader has moved.
+these tables is sealed: the content is readable by an operator, and the read
+routes answer it as rows.
 
 The store writer, `server/hosted/store/writer.ts`, is the one path by which a
 `messages`, `turns`, or `events` row is written, and

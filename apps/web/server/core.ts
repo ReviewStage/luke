@@ -11,7 +11,6 @@ export * from "@sidecar/actions";
 export { ACTION_KIND, type ActionKind } from "@sidecar/actions";
 export * from "@sidecar/analytics";
 export * from "@sidecar/brain";
-export * from "@sidecar/brain/store-shapes";
 export * from "@sidecar/brain/tool-set";
 export * from "@sidecar/hosted";
 // The runtime's barrel and its vocabulary door carry no name in common, so

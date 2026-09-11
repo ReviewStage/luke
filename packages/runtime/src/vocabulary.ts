@@ -69,7 +69,6 @@ export {
   type ReasoningSummary,
   RUN_END_REASON,
   RUNTIME_EVENT,
-  type RunEndReason,
   type RuntimeCheckpoint,
   type RuntimeCompaction,
   type RuntimeEvent,

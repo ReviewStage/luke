@@ -479,8 +479,6 @@ export const RUN_END_REASON = {
   LOOP_GUARD: "loop_guard",
 } as const;
 
-export type RunEndReason = (typeof RUN_END_REASON)[keyof typeof RUN_END_REASON];
-
 /** What a run ended as: the reason, and what it carries for that reason. */
 export type RuntimeRunEnd =
   | {
