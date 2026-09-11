@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+
 /**
  * The wire boundary: the values that arrive from outside this build, the
  * defensive readers that decode them, and the HTTP vocabulary the readers
@@ -24,27 +26,76 @@ export type WireValue = WirePrimitive | WireRecord | readonly WireValue[];
 export type UnparsedWireValue = WireValue | undefined;
 
 /**
- * Narrows a wire value to string. `typeof` rather than the runtime tag,
- * because `Object.prototype.toString.call(new String("x"))` is
- * `"[object String]"`: a boxed primitive arriving over structured clone would
- * satisfy the tag and then fail every string operation the caller believes it
- * has narrowed to.
+ * A record's own shape: not `null`, not an array, and not a boxed primitive
+ * or a class instance arriving over structured clone, which carry a
+ * prototype no plain object literal has. This is the one place that shape is
+ * decided; {@link isWireRecordValue} and {@link WireValueSchema} below both
+ * read it back rather than restating it.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is the wire boundary's own decoder, called only from Schema.is below.
+function isPlainWireRecordShape(value: unknown): value is WireRecord {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This predicate is the wire boundary's own decoder; every guard above narrows by calling it.
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  if (Object.prototype.toString.call(value) !== "[object Object]") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/** A record whose own shape is a wire record and whose every value is itself one. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is the wire boundary's own decoder, called only from Schema.is below.
+function isWireRecordValue(value: unknown): value is WireRecord {
+  if (!isPlainWireRecordShape(value)) return false;
+  return Object.values(value).every((entry) => readsWireValue(entry));
+}
+
+/**
+ * Any value JSON can carry, as an Effect `Schema` declared beside the type it
+ * validates: a primitive, a record whose own values are themselves wire
+ * values, or an array of them. `Schema.suspend` is what lets the record and
+ * array arms refer to the whole union before it finishes being declared.
+ */
+export const WireValueSchema: Schema.Schema<WireValue> = Schema.suspend(
+  (): Schema.Schema<WireValue> =>
+    Schema.Union(
+      Schema.String,
+      Schema.Number,
+      Schema.Boolean,
+      Schema.Null,
+      Schema.declare(isWireRecordValue),
+      Schema.Array(WireValueSchema),
+    ),
+);
+
+const readsWireValue = Schema.is(WireValueSchema);
+
+const readsWireString = Schema.is(Schema.String);
+
+/**
+ * Narrows a wire value to string. Effect's `Schema.is` narrows by `typeof`
+ * rather than the runtime tag, because `Object.prototype.toString.call(new
+ * String("x"))` is `"[object String]"`: a boxed primitive arriving over
+ * structured clone would satisfy the tag and then fail every string
+ * operation the caller believes it has narrowed to.
  */
 export function isWireString(value: UnparsedWireValue): value is string {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard is the wire boundary's own decoder; every other module narrows by calling it.
-  return typeof value === "string";
+  return readsWireString(value);
 }
+
+const readsOptionalWireString = Schema.is(Schema.Union(Schema.String, Schema.Undefined));
 
 /** An optional wire string: present as a string, or absent. */
 export function isOptionalWireString(value: UnparsedWireValue): value is string | undefined {
-  return value === undefined || isWireString(value);
+  return readsOptionalWireString(value);
 }
 
-/** Narrows a wire value to number; `typeof` for the reason {@link isWireString} gives. */
+const readsWireNumber = Schema.is(Schema.Number);
+
+/** Narrows a wire value to number; by `typeof` for the reason {@link isWireString} gives. */
 export function isWireNumber(value: UnparsedWireValue): value is number {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard is the wire boundary's own decoder; every other module narrows by calling it.
-  return typeof value === "number";
+  return readsWireNumber(value);
 }
+
+const readsUnitLevel = Schema.is(Schema.Number.pipe(Schema.finite(), Schema.between(0, 1)));
 
 /**
  * A level a fraction of full, as every volume and pace on the wire is said:
@@ -53,7 +104,7 @@ export function isWireNumber(value: UnparsedWireValue): value is number {
  * multiplies by it.
  */
 export function isUnitLevel(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isFinite(value) && value >= 0 && value <= 1;
+  return readsUnitLevel(value);
 }
 
 /** A non-empty array of wire numbers, or nothing; `width` pins the length when the caller knows it. */
@@ -85,17 +136,21 @@ export function numberVectors(
   return vectors;
 }
 
-/** Narrows a wire value to boolean; `typeof` for the reason {@link isWireString} gives. */
+const readsWireBoolean = Schema.is(Schema.Boolean);
+
+/** Narrows a wire value to boolean; by `typeof` for the reason {@link isWireString} gives. */
 export function isWireBoolean(value: UnparsedWireValue): value is boolean {
-  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- This guard is the wire boundary's own decoder; every other module narrows by calling it.
-  return typeof value === "boolean";
+  return readsWireBoolean(value);
 }
 
+const readsWireRecordShape = Schema.is(Schema.declare(isPlainWireRecordShape));
+
+/**
+ * A record's own shape, not whether its values are wire values: a record
+ * nested in a record `isRecord` has not yet looked inside is still a record.
+ */
 export function isRecord(value: UnparsedWireValue): value is WireRecord {
-  if (value === null || value === undefined) return false;
-  if (Object.prototype.toString.call(value) !== "[object Object]") return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  return readsWireRecordShape(value);
 }
 
 export function text(value: UnparsedWireValue): string | undefined {
@@ -104,13 +159,15 @@ export function text(value: UnparsedWireValue): string | undefined {
   return normalized || undefined;
 }
 
+const readsInstant = Schema.is(Schema.Number.pipe(Schema.finite(), Schema.nonNegative()));
+
 /**
  * An instant on the wire: epoch milliseconds, finite and never before the
  * epoch, so a record claiming a negative or infinite time reads as no time at
  * all rather than as an arithmetic hazard downstream.
  */
 export function isInstant(value: UnparsedWireValue): value is number {
-  return isWireNumber(value) && Number.isFinite(value) && value >= 0;
+  return readsInstant(value);
 }
 
 export function wholeNumber(value: UnparsedWireValue): number | undefined {
@@ -241,6 +298,8 @@ export const HTTP_METHOD = {
 
 export type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
 
+export const HttpMethodSchema = Schema.Literal(...Object.values(HTTP_METHOD));
+
 /** The statuses this build branches on at the HTTP boundary. */
 export const HTTP_STATUS = {
   UNAUTHORIZED: 401,
@@ -250,6 +309,10 @@ export const HTTP_STATUS = {
   CONFLICT: 409,
   TOO_MANY_REQUESTS: 429,
 } as const;
+
+export type HttpStatus = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS];
+
+export const HttpStatusSchema = Schema.Literal(...Object.values(HTTP_STATUS));
 
 /**
  * The fetch a caller is given, so a test can answer for the network.
