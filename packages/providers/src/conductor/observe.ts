@@ -65,7 +65,7 @@ import {
 
 /** What the identity read reported, kept for as long as the credential stands. */
 export interface ConductorPassCache {
-  userId?: string;
+  userId?: string | undefined;
   projects: readonly ConductorProject[];
 }
 

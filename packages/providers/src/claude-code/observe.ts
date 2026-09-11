@@ -78,18 +78,18 @@ export const CLAUDE_CODE_PROVIDER: SessionProvider = {
 };
 
 export interface ParsedClaudeSessionTail {
-  activity?: string;
-  aiTitle?: string;
-  customTitle?: string;
-  apiError?: string;
-  branch?: string;
-  cwd?: string;
-  eventType?: ClaudeEventType;
-  model?: string;
-  pullRequestUrl?: string;
-  stopReason?: string;
-  timestampMs?: number;
-  usedTool?: boolean;
+  activity?: string | undefined;
+  aiTitle?: string | undefined;
+  customTitle?: string | undefined;
+  apiError?: string | undefined;
+  branch?: string | undefined;
+  cwd?: string | undefined;
+  eventType?: ClaudeEventType | undefined;
+  model?: string | undefined;
+  pullRequestUrl?: string | undefined;
+  stopReason?: string | undefined;
+  timestampMs?: number | undefined;
+  usedTool?: boolean | undefined;
 }
 
 async function archivedSessionsIn(projectDirectory: string): Promise<ReadonlyMap<string, boolean>> {

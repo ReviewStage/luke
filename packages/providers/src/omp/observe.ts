@@ -56,8 +56,8 @@ function timestampMsFrom(record: WireRecord): number | undefined {
 }
 
 interface OpenTool {
-  name?: string;
-  intent?: string;
+  name?: string | undefined;
+  intent?: string | undefined;
 }
 
 function rememberOpenTool(open: Map<string, OpenTool>, id: string, tool: OpenTool): void {
@@ -79,18 +79,18 @@ function activityFromOpenTools(open: ReadonlyMap<string, OpenTool>): string | un
 }
 
 export interface ParsedOmpSession {
-  cwd?: string;
-  title?: string;
-  model?: string;
-  timestampMs?: number;
-  activity?: string;
-  failure?: string;
-  turnFailed?: boolean;
-  turnAborted?: boolean;
-  sessionClosed?: boolean;
-  fatalExit?: boolean;
-  openTools?: boolean;
-  lastRole?: string;
+  cwd?: string | undefined;
+  title?: string | undefined;
+  model?: string | undefined;
+  timestampMs?: number | undefined;
+  activity?: string | undefined;
+  failure?: string | undefined;
+  turnFailed?: boolean | undefined;
+  turnAborted?: boolean | undefined;
+  sessionClosed?: boolean | undefined;
+  fatalExit?: boolean | undefined;
+  openTools?: boolean | undefined;
+  lastRole?: string | undefined;
 }
 
 function parseHead(head: string): Pick<ParsedOmpSession, "cwd" | "title"> {

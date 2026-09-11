@@ -13,8 +13,8 @@ import { defaultOmpHome } from "./records.js";
 import { linesFromOmpRecord, ompTranscriptFilePath } from "./transcript.js";
 
 export interface OmpPluginOptions {
-  ompHome?: string;
-  now?: () => number;
+  ompHome?: string | undefined;
+  now?: (() => number) | undefined;
 }
 
 /**

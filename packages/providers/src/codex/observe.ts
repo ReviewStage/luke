@@ -86,11 +86,11 @@ function activityFromCall(payload: WireRecord): string | undefined {
 }
 
 interface ParsedCodexRollout {
-  activity?: string;
-  error?: string;
-  turnComplete?: boolean;
+  activity?: string | undefined;
+  error?: string | undefined;
+  turnComplete?: boolean | undefined;
   /** Whether a realtime voice conversation is live over this thread, when the tail says. */
-  realtimeVoiceLive?: boolean;
+  realtimeVoiceLive?: boolean | undefined;
 }
 
 /**

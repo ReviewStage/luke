@@ -8,7 +8,7 @@ import { type CodexStateLocation, rolloutPathForThread, threadRows } from "./sta
 import { codexRolloutRefusal, linesFromCodexRecord } from "./transcript.js";
 
 export interface CodexLocalPluginOptions {
-  codexHome?: string;
+  codexHome?: string | undefined;
   sqliteHome?: string;
   now?: () => number;
   sqlite?: SqliteModuleLoader;

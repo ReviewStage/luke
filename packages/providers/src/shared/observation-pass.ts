@@ -27,7 +27,7 @@ export function rosterHolder(): RosterHolder {
 
 /** Everything one file-backed provider decides about its own pass. */
 export interface ObservationPassInput<Candidate extends SessionFileCandidate, Parsed> {
-  now?: () => number;
+  now?: (() => number) | undefined;
   discover(): Promise<readonly Candidate[]>;
   /** Provider lookup state built once per pass, before any parse. */
   prepare?(candidates: readonly Candidate[]): Promise<void> | void;
