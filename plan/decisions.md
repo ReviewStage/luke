@@ -786,3 +786,35 @@ exists to catch. Added to the standing addendum.
 Also corrected: both titles take **the ticket as scope** (`refactor(LUKE-132)`, not
 `refactor(voice)`), per the repository's Conventional Commits rule for Linear work. LUKE-132 is
 marked Done when the lift is whole, as LUKE-129 and LUKE-139 are running.
+
+
+## 2026-09-11 — The barrel leak in C8's a2, and why it would have been invisible (orchestrator, from #1041)
+
+Recorded because the class matters more than the instance, and because this rework adds the first
+edge from `apps/web` into a package that also holds Node-shaped flows.
+
+C8's a2 declares `@sidecar/voice` as a workspace dependency of `apps/web` (no third-party addition)
+and imports correctly through the door in one file — `import type { LiveRecord } from
+"@sidecar/voice/live-session"` — and **through the barrel in another**:
+`import { type LiveSideband, type LiveSocket, sidebandOverSocket } from "@sidecar/voice"`, with both
+new test files doing the same.
+
+`packages/AGENTS.md`: *"A barrel is an all-or-nothing door. Importing a package resolves its whole
+export graph, not the one name asked for."* So `apps/web`'s bundle resolves
+`packages/voice/src/index.ts` entire — `live-socket.ts`, `live-session-source.ts`,
+`capability-assembler.ts` and their imports — rather than the live-session door built for exactly
+this purpose.
+
+**Nothing is broken today, and that is the trap rather than the reassurance.** The barrel is clean
+now, so the bundle resolves and `check.sh` is green. It becomes a Vercel build failure the first
+time anyone adds a socket- or Electron-shaped import anywhere in that package — and the person who
+breaks it will not have read this PR and will have done nothing wrong by their own lights. The
+rollout's constraint (**`packages/voice` names no `ws`**) was verified from the diff and holds: the
+only `ws` import C8 added is `packages/host/src/voice/socket-over-ws.ts`, the adapter on the host
+side. A barrel import is how a verified constraint gets undone anyway.
+
+**Required: import the door in source and tests; if a symbol is not behind it, export it there.**
+`sidebandOverSocket`, `LiveSideband` and `LiveSocket` belong behind the same door as `LiveRecord`,
+since they are what the web side consumes. And the body says `apps/web` reaches that package
+**only through subpath doors** — checkable from the diff, the way "names no `ws`" was made
+checkable. Added to the standing addendum.
