@@ -14,12 +14,8 @@ import {
 import {
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
-  type ChangesAnswer,
-  type ChangesRequest,
   type ConversationEventsAnswer,
   type ConversationMessagesAnswer,
-  changesAnswerSchema,
-  changesRequestSchema,
   conversationEventsAnswerSchema,
   conversationMessagesAnswerSchema,
   READ_QUERY,
@@ -36,8 +32,8 @@ export interface HostedConversationClientOptions extends AccountToken {
 
 /** One page's ask: the cursor the previous answer handed back, or none for the beginning, and the page bound. */
 export interface ReadPageQuery {
-  readonly after?: string;
-  readonly limit?: number;
+  readonly after?: string | undefined;
+  readonly limit?: number | undefined;
 }
 
 /**

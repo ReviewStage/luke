@@ -75,7 +75,10 @@ export function composeHost(options: HostSeams): Host {
     devices,
     // Both clients carry the account's own token, holder fence included, so
     // the one retry after a 401 can tell a renewed bearer from another person's.
-    heads: new HostedChangesClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
+    heads: new HostedChangesClient({
+      serviceBaseUrl: kernel.hostedServiceBaseUrl,
+      ...account.token,
+    }),
     client: new HostedConversationClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       ...account.token,

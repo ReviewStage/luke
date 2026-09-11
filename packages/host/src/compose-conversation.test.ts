@@ -27,7 +27,11 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import { test } from "vitest";
-import { type ConversationReadsClient, composeConversation } from "./compose-conversation.js";
+import {
+  type ConversationHeadsClient,
+  type ConversationReadsClient,
+  composeConversation,
+} from "./compose-conversation.js";
 
 const MAIN = "3c000000-0000-4000-8000-000000000001";
 const TURN = "1a000000-0000-4000-8000-000000000001";
