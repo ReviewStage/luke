@@ -314,6 +314,40 @@ test("speech.spoken is written once, on the first output delta at or after the a
   });
 });
 
+test("one delta past the ends of two acknowledged appends marks both briefings", async () => {
+  const live = await target();
+  const first = await briefing(live.conversation);
+  const [row] = await database.db
+    .insert(messages)
+    .values({
+      userId: live.userId,
+      conversationId: live.conversation.conversationId,
+      seq: 99,
+      clientId: "second-briefing",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [{ type: "text", text: "A second briefing.", state: "done" }],
+      metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    })
+    .returning({ id: messages.id });
+  assert.ok(row);
+  const voice = writer();
+  voice.noteAppend(live, { clientEventId: "append-a", messageId: first });
+  voice.noteAppend(live, { clientEventId: "append-b", messageId: row.id });
+  await voice.consume(live, appended("append-a", 0, 1000));
+  await voice.consume(live, appended("append-b", 1000, 2000));
+  assert.deepEqual(await voice.consume(live, said("Both said.", 2000, 3000)), WRITTEN);
+  assert.deepEqual(
+    (await speechEvents(live.conversation)).map((event) => [event.kind, event.messageId]),
+    [
+      [CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, first],
+      [CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, row.id],
+    ],
+  );
+  // Neither is marked a second time.
+  await voice.consume(live, said("And more.", 3000, 4000));
+  assert.equal((await speechEvents(live.conversation)).length, 2);
+});
+
 test("an append whose message is gone is refused at the speech, not the segment", async () => {
   const live = await target();
   const voice = writer();

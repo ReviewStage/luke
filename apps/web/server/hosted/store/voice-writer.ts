@@ -192,7 +192,10 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
    * A briefing is known to have been said when the session's own voice
    * follows the append: the first output delta that begins at or after the
    * appended commentary's end writes `speech.spoken` on the briefing's
-   * message, once, and the append is forgotten.
+   * message, once, and the append is forgotten. Every append the delta has
+   * reached is marked by it, since two briefings appended back to back may
+   * both be answered by one delta and a second would otherwise wait for
+   * speech that never comes.
    */
   async function markSpoken(
     target: VoiceTarget,
@@ -200,6 +203,7 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
     voiceSessionId: string,
   ): Promise<VoiceWriteResult | undefined> {
     const appends = appendsOf(target.liveSessionId);
+    let outcome: VoiceWriteResult | undefined;
     for (const [clientEventId, append] of appends) {
       if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
       appends.delete(clientEventId);
@@ -209,12 +213,19 @@ export function voiceWriter({ db, store }: VoiceWriterOptions): VoiceWriter {
         // Which session said it, and when on that session's clock.
         payload: { voice_session_id: voiceSessionId, at_ms: delta.start_ms },
       });
-      if (written.ok) return WRITTEN;
-      return written.refusal === STORE_WRITE_REFUSAL.NO_MESSAGE
-        ? { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_MESSAGE }
-        : { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_CONVERSATION };
+      if (written.ok) {
+        outcome ??= WRITTEN;
+      } else {
+        outcome = {
+          ok: false,
+          refusal:
+            written.refusal === STORE_WRITE_REFUSAL.NO_MESSAGE
+              ? VOICE_WRITE_REFUSAL.NO_MESSAGE
+              : VOICE_WRITE_REFUSAL.NO_CONVERSATION,
+        };
+      }
     }
-    return undefined;
+    return outcome;
   }
 
   function placeAppend(target: VoiceTarget, appended: CommentaryAppended): VoiceWriteResult {
