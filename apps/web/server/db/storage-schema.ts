@@ -168,9 +168,9 @@ export const turns = pgTable(
     status: text("status").$type<TurnStatus>().notNull(),
     model: text("model"),
     reasoningEffort: text("reasoning_effort"),
-    /** The content address of the prompt the turn ran under. */
+    /** The content address of the prompt the turn ran under: the one its session composed at its start, a `prompts` row. */
     promptHash: text("prompt_hash"),
-    /** The content address of the tool set the turn was offered. */
+    /** The content address of the tool set the turn was offered, a `tool_sets` row. */
     toolSetHash: text("tool_set_hash"),
     responseIds: text("response_ids").array(),
     usage: jsonb("usage").$type<BrainRunUsage>(),

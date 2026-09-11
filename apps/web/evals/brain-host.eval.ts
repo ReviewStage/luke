@@ -8,6 +8,7 @@ import { Pool } from "pg";
 import { SCRIPTED_FACT } from "../agent/scripted-model";
 import {
   ACTION_TOOL,
+  BRAIN_TURN_TRIGGER,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -20,11 +21,19 @@ import {
 } from "../server/core";
 import * as schema from "../server/db/schema";
 import { sqlClientOverPool } from "../server/db/sql-client";
-import { CONVERSATION_KIND, conversations, messages, turns } from "../server/db/storage-schema";
+import {
+  CONVERSATION_KIND,
+  conversations,
+  messages,
+  prompts,
+  toolSets,
+  turns,
+} from "../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { hostedToolDeclarations } from "../server/hosted/brain-host/tools";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../server/hosted/encryption";
-import { hostedStore } from "../server/hosted/store";
+import { hostedStore, promptHashOf, toolSetHashOf } from "../server/hosted/store";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask under
@@ -128,6 +137,16 @@ export default defineEval({
       assert.ok(turn);
       assert.equal(turn.origin, TURN_ORIGIN.TYPED);
       assert.equal(turn.status, TURN_STATUS.SETTLED);
+      // What the turn ran under, carried from the session's start through eve's
+      // durable state to the turn row, each hash naming a row that holds it.
+      assert.ok(turn.promptHash);
+      assert.ok(turn.toolSetHash);
+      const [prompt] = await db.select().from(prompts).where(eq(prompts.hash, turn.promptHash));
+      assert.ok(prompt);
+      assert.equal(promptHashOf(prompt.text), turn.promptHash);
+      assert.equal(turn.toolSetHash, toolSetHashOf(hostedToolDeclarations(BRAIN_TURN_TRIGGER.ASK)));
+      const [toolSet] = await db.select().from(toolSets).where(eq(toolSets.hash, turn.toolSetHash));
+      assert.ok(toolSet);
 
       const messageRows = await db
         .select()

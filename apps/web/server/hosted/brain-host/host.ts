@@ -86,6 +86,24 @@ interface HostedTurnKind {
   readonly trigger: BrainTurnTrigger;
 }
 
+/** The prompt a session runs under and the content address its turns are recorded under. */
+interface HostedSessionPrompt {
+  readonly text: string;
+  readonly hash: string;
+}
+
+/**
+ * What the eve project keeps of the session's prompt between the start that
+ * composed it and the turns that run under it: the content address alone,
+ * absent until the session has composed one. It lives in eve's durable
+ * session state, because the prompt applies at session scope and the turn
+ * row must name the prompt the model actually reads rather than one composed
+ * again from rows that may have changed since.
+ */
+export interface SessionPromptRecord {
+  readonly hash?: string;
+}
+
 /** The turn id eve's `turn.started` event carries, read off the event a resolver is handed; nothing for any other shape. */
 export function eveTurnIdOf(event: UnparsedWireValue): string | undefined {
   if (!isRecord(event) || !isRecord(event.data)) return undefined;
@@ -101,8 +119,8 @@ export interface BrainHost {
   turnKindOf(auth: SessionAuth): HostedTurnKind | undefined;
   /** The turn eve just started, keyed as the store keys it; nothing for a request that named no kind. */
   turnOf(auth: SessionAuth, sessionId: string, eveTurnId: string): HostedTurn | undefined;
-  /** The prompt a session runs under, composed from the workspace rows under the hosted policy. */
-  prompt(admitted: AdmittedConversation, trigger: BrainTurnTrigger): Promise<string>;
+  /** The prompt a session runs under, composed from the workspace rows under the hosted policy and recorded once by its hash. */
+  prompt(admitted: AdmittedConversation, trigger: BrainTurnTrigger): Promise<HostedSessionPrompt>;
   /** The standing context one turn opens with: roster, projects, facts, and the recent exchange, as data. */
   standingContext(admitted: AdmittedConversation): Promise<string>;
   /** The conversation so far, for a session opened over a conversation with words already said; nothing otherwise. */
@@ -120,12 +138,13 @@ export interface BrainHost {
   model(admitted: AdmittedConversation): LanguageModel | undefined;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): Promise<boolean>;
-  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session. */
+  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
     admitted: AdmittedConversation,
     session: SessionContext["session"],
     state: RelayStateStore,
+    prompt: SessionPromptRecord,
   ): Promise<void>;
 }
 
@@ -225,7 +244,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         policy: hostedTurnPolicy(trigger),
         ...(modelId !== undefined ? { model: modelId } : undefined),
       });
-      return built.text;
+      const hash = await store.prompts.record(built.text, new Date(seams.now()));
+      return { text: built.text, hash };
     },
 
     async standingContext(admitted) {
@@ -318,15 +338,31 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     sessionStarted: (admitted, sessionId) =>
       seams.run(claimRuntimeSession(admitted.target, sessionId, new Date(seams.now()))),
 
-    relay: (event, admitted, session, state) => {
+    async relay(event, admitted, session, state, prompt) {
       const model = seams.scriptedModel()
         ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
         : seams.openAi()?.modelId;
+      const turn = turnKindOf(session.auth.current);
+      // The tool set is recorded as each turn starts, from the same declarations
+      // the tools resolver hands eve for the same kind of turn, so the hash
+      // names what the model is offered and not a list kept beside it, and
+      // the row it names stands whatever happened to the table since.
+      const toolSetHash =
+        event.type === "turn.started" && turn !== undefined
+          ? await seams
+              .store()
+              .toolSets.record(
+                hostedToolDeclarations(BRAIN_HOST_TURN_KIND[turn].trigger),
+                new Date(seams.now()),
+              )
+          : undefined;
       return relay.handle(event, {
         sessionId: session.id,
         target: admitted.target,
-        turn: turnKindOf(session.auth.current),
+        turn,
         ...(model !== undefined ? { model } : undefined),
+        ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
+        ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
         state,
       });
     },
