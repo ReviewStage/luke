@@ -19,6 +19,7 @@ import {
   transcriptReadTailBytes,
 } from "@sidecar/session";
 import { recordFromJsonLine, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import {
   type FileWindow,
   fileStats,
@@ -27,6 +28,7 @@ import {
   readTailWindow,
   tailRecords,
 } from "./local-files.js";
+import { runAdapterRead } from "./promise-face.js";
 
 export const transcriptLine = {
   developer: (words: string) => `Developer: ${words}`,
@@ -130,17 +132,20 @@ function recordsFromWindow(window: FileWindow, isTail: boolean): RecordsSince {
   };
 }
 
-export async function readRecordsSince(
+export function readRecordsSince(
   filePath: string,
   cursor: string | undefined,
   maximumBytes: number,
-): Promise<RecordsSince> {
-  const offset = cursorOffset(cursor);
-  if (offset !== undefined) {
-    const window = await readRange(filePath, offset, maximumBytes);
-    if (offset <= window.fileSize) return recordsFromWindow(window, false);
-  }
-  return recordsFromWindow(await readTailWindow(filePath, maximumBytes), true);
+): Effect.Effect<RecordsSince> {
+  return Effect.gen(function* () {
+    const offset = cursorOffset(cursor);
+    if (offset !== undefined) {
+      const window = yield* Effect.promise(() => readRange(filePath, offset, maximumBytes));
+      if (offset <= window.fileSize) return recordsFromWindow(window, false);
+    }
+    const tail = yield* Effect.promise(() => readTailWindow(filePath, maximumBytes));
+    return recordsFromWindow(tail, true);
+  });
 }
 
 /**
@@ -155,21 +160,26 @@ export class TranscriptPathCache {
 
   readonly #paths = new Map<string, string>();
 
-  async resolve(
+  resolve(
     providerSessionId: string,
-    locate: () => Promise<string | undefined>,
-  ): Promise<string | undefined> {
-    const remembered = this.#paths.get(providerSessionId);
-    if (remembered !== undefined && (await fileStats(remembered))?.isFile()) return remembered;
-    this.#paths.delete(providerSessionId);
-    const located = await locate();
-    if (located === undefined) return undefined;
-    this.#paths.set(providerSessionId, located);
-    const oldest = this.#paths.keys().next();
-    if (this.#paths.size > TranscriptPathCache.MAXIMUM_ENTRIES && !oldest.done) {
-      this.#paths.delete(oldest.value);
-    }
-    return located;
+    locate: () => Effect.Effect<string | undefined>,
+  ): Effect.Effect<string | undefined> {
+    return Effect.gen(this, function* () {
+      const remembered = this.#paths.get(providerSessionId);
+      if (remembered !== undefined) {
+        const stats = yield* Effect.promise(() => fileStats(remembered));
+        if (stats?.isFile()) return remembered;
+      }
+      this.#paths.delete(providerSessionId);
+      const located = yield* locate();
+      if (located === undefined) return undefined;
+      this.#paths.set(providerSessionId, located);
+      const oldest = this.#paths.keys().next();
+      if (this.#paths.size > TranscriptPathCache.MAXIMUM_ENTRIES && !oldest.done) {
+        this.#paths.delete(oldest.value);
+      }
+      return located;
+    });
   }
 }
 
@@ -187,7 +197,7 @@ const TRANSCRIPT_NOT_FOUND = {
 /** How one provider's stored records become transcript lines. */
 export interface JsonlTranscriptInput {
   /** Where this session's record file is, or nothing when there is none. */
-  locate(providerSessionId: string): Promise<string | undefined>;
+  locate(providerSessionId: string): Effect.Effect<string | undefined>;
   /**
    * Why this build will not render a file it did find, when the provider has
    * a reason — Codex compresses an old rollout, and a bounded window cannot
@@ -201,8 +211,32 @@ export interface JsonlTranscriptInput {
 }
 
 export interface JsonlTranscriptReader {
-  read(providerSessionId: string): Promise<ProviderTranscriptResult>;
-  readSince(providerSessionId: string, cursor?: string): Promise<ProviderTranscriptSinceResult>;
+  read(providerSessionId: string): Effect.Effect<ProviderTranscriptResult>;
+  readSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Effect.Effect<ProviderTranscriptSinceResult>;
+}
+
+/** The two transcript reads a plugin advertises, as the plugin seam takes them. */
+export interface PromiseTranscriptReads {
+  transcript(providerSessionId: string): Promise<ProviderTranscriptResult>;
+  transcriptSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult>;
+}
+
+/**
+ * @deprecated The promise face of a {@link JsonlTranscriptReader}, for the
+ * plugin seam the host still holds; deleted with P7-05.
+ */
+export function promiseTranscriptReads(reader: JsonlTranscriptReader): PromiseTranscriptReads {
+  return {
+    transcript: (providerSessionId) => runAdapterRead(reader.read(providerSessionId)),
+    transcriptSince: (providerSessionId, cursor) =>
+      runAdapterRead(reader.readSince(providerSessionId, cursor)),
+  };
 }
 
 /**
@@ -217,37 +251,45 @@ export interface JsonlTranscriptReader {
 export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscriptReader {
   const paths = new TranscriptPathCache();
   return {
-    async read(providerSessionId) {
-      // A whole-tail read walks the provider's directory itself: it happens
-      // once at a developer's ask, where the incremental read repeats on
-      // every wake and is what the path cache exists for.
-      const filePath = await input.locate(providerSessionId);
-      if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
-      const refusal = input.refuses?.(filePath);
-      if (refusal !== undefined) return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
-      const tail = await readTail(filePath, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
-      const transcript = boundedTranscript(
-        tailRecords(tail).flatMap((record) => input.lines(record)),
-      );
-      return transcript === undefined
-        ? TRANSCRIPT_NOT_FOUND
-        : { status: ACTION_RESULT_STATUS.ACCEPTED, transcript };
-    },
+    read: (providerSessionId) =>
+      Effect.gen(function* () {
+        // A whole-tail read walks the provider's directory itself: it happens
+        // once at a developer's ask, where the incremental read repeats on
+        // every wake and is what the path cache exists for.
+        const filePath = yield* input.locate(providerSessionId);
+        if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
+        const refusal = input.refuses?.(filePath);
+        if (refusal !== undefined) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
+        }
+        const tail = yield* Effect.promise(() =>
+          readTail(filePath, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES),
+        );
+        const transcript = boundedTranscript(
+          tailRecords(tail).flatMap((record) => input.lines(record)),
+        );
+        return transcript === undefined
+          ? TRANSCRIPT_NOT_FOUND
+          : { status: ACTION_RESULT_STATUS.ACCEPTED, transcript };
+      }),
 
-    async readSince(providerSessionId, cursor) {
-      const filePath = await paths.resolve(providerSessionId, () =>
-        input.locate(providerSessionId),
-      );
-      if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
-      const refusal = input.refuses?.(filePath);
-      if (refusal !== undefined) return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
-      const since = await readRecordsSince(filePath, cursor, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        text: boundedTranscript(since.records.flatMap((record) => input.lines(record))) ?? "",
-        cursor: since.cursor,
-        truncated: since.truncated,
-      };
-    },
+    readSince: (providerSessionId, cursor) =>
+      Effect.gen(function* () {
+        const filePath = yield* paths.resolve(providerSessionId, () =>
+          input.locate(providerSessionId),
+        );
+        if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
+        const refusal = input.refuses?.(filePath);
+        if (refusal !== undefined) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
+        }
+        const since = yield* readRecordsSince(filePath, cursor, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          text: boundedTranscript(since.records.flatMap((record) => input.lines(record))) ?? "",
+          cursor: since.cursor,
+          truncated: since.truncated,
+        };
+      }),
   };
 }

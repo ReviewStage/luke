@@ -1,5 +1,6 @@
 import type { SessionProviderPlugin } from "@sidecar/session";
-import { jsonlTranscriptReader } from "../shared/jsonl-transcript.js";
+import { Effect } from "effect";
+import { jsonlTranscriptReader, promiseTranscriptReads } from "../shared/jsonl-transcript.js";
 import { observationPass } from "../shared/observation-pass.js";
 import {
   discoverOmpSessions,
@@ -28,22 +29,19 @@ export function ompPlugin(options: OmpPluginOptions = {}): SessionProviderPlugin
   const ompHome = options.ompHome ?? defaultOmpHome();
   const pass = observationPass<OmpSessionFileCandidate, ParsedOmpSession>({
     now: options.now,
-    discover: () => discoverOmpSessions(ompHome),
-    parse: parseOmpSessionFile,
-    observation: ompObservation,
+    discover: () => Effect.promise(() => discoverOmpSessions(ompHome)),
+    parse: (candidate) => Effect.promise(() => parseOmpSessionFile(candidate)),
+    observation: (input) => Effect.succeed(ompObservation(input)),
   });
   const transcripts = jsonlTranscriptReader({
-    locate: (providerSessionId) => ompTranscriptFilePath(ompHome, providerSessionId),
+    locate: (providerSessionId) =>
+      Effect.promise(() => ompTranscriptFilePath(ompHome, providerSessionId)),
     lines: linesFromOmpRecord,
   });
   return {
     provider: OMP_PROVIDER,
-    observe: () => pass.run(),
+    observe: () => pass.runPromise(),
     latest: () => pass.latest(),
-    reads: {
-      transcript: (providerSessionId) => transcripts.read(providerSessionId),
-      transcriptSince: (providerSessionId, cursor) =>
-        transcripts.readSince(providerSessionId, cursor),
-    },
+    reads: promiseTranscriptReads(transcripts),
   };
 }

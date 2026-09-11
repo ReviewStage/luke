@@ -78,7 +78,8 @@ Two of the three keep a promise face as a strangler shim, each `@deprecated`
 and listed in `docs/adr/0001-effect.md`: `cloudPass` runs its request effects
 because an adapter's `collect` and every caller of a provider write still
 hold a promise, and `openReadOnlyDatabase` answers a handle the caller closes
-itself in a `finally`. P6-11a and P6-11b move the adapters onto the effects.
+itself in a `finally`, which is now Conductor's and Superset's alone.
+P6-11b moves the cloud adapters onto the effects.
 The spool has no promise face and, in this build, no consumer either:
 `observationSpoolEvents` is the whole of it. The hook wiring that would have
 run it is gone — the local loop registers no hook and watches no spool now
@@ -86,6 +87,24 @@ that the rows draw the stored roster snapshot — so the window and the dropped
 read above are settled on the stream's own terms, and a build that wakes on
 hook events again provides `FileSystem` where it runs the stream and needs
 nothing else of it.
+
+The on-disk adapters are already there. What Claude Code and Codex read is
+an `Effect`: the observation pass discovers, parses and assembles as effects
+over a parse cache held in a `Ref`; the JSONL transcript reader's two reads
+and the path cache behind the incremental one are effects; and Codex's state
+database is asked inside a `Scope` that closes the handle, through
+`scopedReadOnlyDatabase`, with a question that answers nothing for a schema
+this build does not know and dies for anything else. What each plugin
+publishes is unchanged, because `SessionProviderPlugin` is still promises:
+`runAdapterRead` in `shared/promise-face.ts` is the one `@deprecated` place
+those effects are run — `ObservationPass#runPromise`,
+`promiseTranscriptReads`, and Codex's own `observe` — and P7-05 deletes it
+when observation is composed as effects. Every one of those reads is still a
+read: an adapter opens the provider's files for reading alone, and a value
+test over a manifest of each home — its files, sizes, dates and hashes —
+pins that a pass and both transcript reads leave the home exactly as they
+found it, the provider's own hook configuration file included, since the
+registration that merges into that one is not the plugin.
 
 Every provider passes one contract suite. `describeProviderContract` in
 `@sidecar/providers/testing` states the trust constraints as tests over

@@ -18,6 +18,7 @@ import {
   type WireRecord,
   wholeNumber,
 } from "@sidecar/wire";
+import { Effect } from "effect";
 import {
   type HookStatusRefinement,
   hookRefinedStatus,
@@ -437,39 +438,51 @@ export function claudeObservation(input: {
   };
 }
 
-export function discoverClaudeSessions(claudeHome: string): Promise<SessionFileCandidate[]> {
-  return discoverSessionFiles({
-    projectsDirectory: path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY),
-    maximumProjectDirectories: CLAUDE_OBSERVATION_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-    sessionFilesIn,
-  });
+export function discoverClaudeSessions(
+  claudeHome: string,
+): Effect.Effect<readonly SessionFileCandidate[]> {
+  return Effect.promise(() =>
+    discoverSessionFiles({
+      projectsDirectory: path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY),
+      maximumProjectDirectories: CLAUDE_OBSERVATION_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+      sessionFilesIn,
+    }),
+  );
 }
 
-export async function parseClaudeSessionFile(
+export function parseClaudeSessionFile(
   candidate: SessionFileCandidate,
-): Promise<ParsedClaudeSessionTail> {
-  const tail = await readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES);
-  let parsed = parseClaudeSessionTail(tail);
-  // A truncated tail holding no conversation clock says nothing about when
-  // the session last moved, and the file's date is exactly what a bulk
-  // touch falsifies — so one deeper read goes looking for the conversation
-  // before the fallback is trusted. A file read whole is never re-read:
-  // there is nothing further back to find.
-  if (
-    parsed.timestampMs === undefined &&
-    Buffer.byteLength(tail, "utf8") >= LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES
-  ) {
-    const rescued = parseClaudeSessionTail(
-      await readTail(candidate.filePath, CLAUDE_OBSERVATION_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
+): Effect.Effect<ParsedClaudeSessionTail> {
+  return Effect.gen(function* () {
+    const tail = yield* Effect.promise(() =>
+      readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES),
     );
-    if (rescued.timestampMs !== undefined) parsed = rescued;
-  }
-  if (!parsed.customTitle) {
-    const titles = titlesFromHead(
-      await readHead(candidate.filePath, CLAUDE_OBSERVATION_DEFAULTS.READ_HEAD_BYTES),
-    );
-    parsed.customTitle = titles.customTitle;
-    parsed.aiTitle ??= titles.aiTitle;
-  }
-  return parsed;
+    let parsed = parseClaudeSessionTail(tail);
+    // A truncated tail holding no conversation clock says nothing about when
+    // the session last moved, and the file's date is exactly what a bulk
+    // touch falsifies — so one deeper read goes looking for the conversation
+    // before the fallback is trusted. A file read whole is never re-read:
+    // there is nothing further back to find.
+    if (
+      parsed.timestampMs === undefined &&
+      Buffer.byteLength(tail, "utf8") >= LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES
+    ) {
+      const rescued = parseClaudeSessionTail(
+        yield* Effect.promise(() =>
+          readTail(candidate.filePath, CLAUDE_OBSERVATION_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
+        ),
+      );
+      if (rescued.timestampMs !== undefined) parsed = rescued;
+    }
+    if (!parsed.customTitle) {
+      const titles = titlesFromHead(
+        yield* Effect.promise(() =>
+          readHead(candidate.filePath, CLAUDE_OBSERVATION_DEFAULTS.READ_HEAD_BYTES),
+        ),
+      );
+      parsed.customTitle = titles.customTitle;
+      parsed.aiTitle ??= titles.aiTitle;
+    }
+    return parsed;
+  });
 }

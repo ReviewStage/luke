@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { it } from "@effect/vitest";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { type TestContext, test } from "vitest";
+import { Effect } from "effect";
+import type { TestContext } from "vitest";
 import { defaultSqliteModule, textFromRow } from "../shared/local-sqlite.js";
 import { rolloutPathForThread, threadRows } from "./state.js";
 
@@ -45,12 +47,14 @@ function writeStateDatabase(
   }
 }
 
-async function seed(
+function seed(
   directory: string,
   threads: readonly { id: string; cwd: string; rolloutPath?: string }[],
-): Promise<void> {
-  await fs.mkdir(directory, { recursive: true });
-  writeStateDatabase(directory, threads);
+): Effect.Effect<void> {
+  return Effect.promise(async () => {
+    await fs.mkdir(directory, { recursive: true });
+    writeStateDatabase(directory, threads);
+  });
 }
 
 /** Restores whatever the shell had, so one case cannot decide another's. */
@@ -64,16 +68,18 @@ function withSqliteHome(t: TestContext, value: string | undefined): void {
   });
 }
 
-async function observedThreadIds(
+function observedThreadIds(
   codexHome: string,
   sqliteHome?: string,
-): Promise<readonly (string | undefined)[]> {
-  const rows = await threadRows({
-    codexHome,
-    ...(sqliteHome === undefined ? undefined : { sqliteHome }),
-    sqlite: defaultSqliteModule,
-  });
-  return rows.map((row) => textFromRow(row, "id"));
+): Effect.Effect<readonly (string | undefined)[]> {
+  return Effect.map(
+    threadRows({
+      codexHome,
+      ...(sqliteHome === undefined ? undefined : { sqliteHome }),
+      sqlite: defaultSqliteModule,
+    }),
+    (rows) => rows.map((row) => textFromRow(row, "id")),
+  );
 }
 
 /**
@@ -123,84 +129,97 @@ const LOCATION_CASE: readonly {
 ];
 
 for (const locationCase of LOCATION_CASE) {
-  test(locationCase.name, async (t) => {
-    const codexHome = await temporaryDirectory(t, "luke-codex-state-");
-    withSqliteHome(
-      t,
-      locationCase.environmentHome === undefined
-        ? undefined
-        : path.join(codexHome, locationCase.environmentHome),
-    );
-    if (locationCase.configuration) {
-      await fs.writeFile(path.join(codexHome, "config.toml"), locationCase.configuration);
-    }
-    for (const directory of locationCase.seed) {
-      await seed(path.join(codexHome, directory), [
-        { id: directory, cwd: `/Users/test/${directory}` },
-      ]);
-    }
-
-    assert.deepEqual(
-      await observedThreadIds(
-        codexHome,
-        locationCase.explicitHome === undefined
+  it.effect(locationCase.name, (t) =>
+    Effect.gen(function* () {
+      const codexHome = yield* Effect.promise(() => temporaryDirectory(t, "luke-codex-state-"));
+      withSqliteHome(
+        t,
+        locationCase.environmentHome === undefined
           ? undefined
-          : path.join(codexHome, locationCase.explicitHome),
-      ),
-      [locationCase.threadId],
-    );
-  });
+          : path.join(codexHome, locationCase.environmentHome),
+      );
+      const configuration = locationCase.configuration;
+      if (configuration) {
+        yield* Effect.promise(() =>
+          fs.writeFile(path.join(codexHome, "config.toml"), configuration),
+        );
+      }
+      for (const directory of locationCase.seed) {
+        yield* seed(path.join(codexHome, directory), [
+          { id: directory, cwd: `/Users/test/${directory}` },
+        ]);
+      }
+
+      assert.deepEqual(
+        yield* observedThreadIds(
+          codexHome,
+          locationCase.explicitHome === undefined
+            ? undefined
+            : path.join(codexHome, locationCase.explicitHome),
+        ),
+        [locationCase.threadId],
+      );
+    }),
+  );
 }
 
-test("falls back when a higher-priority database has an unusable schema", async (t) => {
-  const codexHome = await temporaryDirectory(t, "luke-codex-state-");
-  withSqliteHome(t, undefined);
-  await fs.mkdir(path.join(codexHome, "sqlite"), { recursive: true });
-  const malformed = new DatabaseSync(path.join(codexHome, "sqlite", CODEX_STATE_DATABASE), {});
-  try {
-    malformed.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
-  } finally {
-    malformed.close();
-  }
-  await seed(codexHome, [{ id: "legacy-valid", cwd: "/Users/test/legacy-valid" }]);
+it.effect("falls back when a higher-priority database has an unusable schema", (t) =>
+  Effect.gen(function* () {
+    const codexHome = yield* Effect.promise(() => temporaryDirectory(t, "luke-codex-state-"));
+    withSqliteHome(t, undefined);
+    yield* Effect.promise(() => fs.mkdir(path.join(codexHome, "sqlite"), { recursive: true }));
+    const malformed = new DatabaseSync(path.join(codexHome, "sqlite", CODEX_STATE_DATABASE), {});
+    try {
+      malformed.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
+    } finally {
+      malformed.close();
+    }
+    yield* seed(codexHome, [{ id: "legacy-valid", cwd: "/Users/test/legacy-valid" }]);
 
-  assert.deepEqual(await observedThreadIds(codexHome), ["legacy-valid"]);
-});
+    assert.deepEqual(yield* observedThreadIds(codexHome), ["legacy-valid"]);
+  }),
+);
 
-test("answers nothing where Codex has no state database at all", async (t) => {
-  const codexHome = await temporaryDirectory(t, "luke-codex-state-");
-  withSqliteHome(t, undefined);
+it.effect("answers nothing where Codex has no state database at all", (t) =>
+  Effect.gen(function* () {
+    const codexHome = yield* Effect.promise(() => temporaryDirectory(t, "luke-codex-state-"));
+    withSqliteHome(t, undefined);
 
-  assert.deepEqual(await observedThreadIds(codexHome), []);
-});
+    assert.deepEqual(yield* observedThreadIds(codexHome), []);
+  }),
+);
 
-test("answers nothing when node's SQLite module is unavailable", async (t) => {
-  const codexHome = await temporaryDirectory(t, "luke-codex-state-");
-  withSqliteHome(t, undefined);
-  await seed(codexHome, [{ id: "codex-active", cwd: "/Users/test/luke" }]);
-  // SAFETY: the loader throws exactly the shape Node throws for a runtime
-  // built without `node:sqlite`, which is the case under test.
-  const error = new Error("No such built-in module: node:sqlite") as NodeJS.ErrnoException;
-  error.code = "ERR_UNKNOWN_BUILTIN_MODULE";
+it.effect("answers nothing when node's SQLite module is unavailable", (t) =>
+  Effect.gen(function* () {
+    const codexHome = yield* Effect.promise(() => temporaryDirectory(t, "luke-codex-state-"));
+    withSqliteHome(t, undefined);
+    yield* seed(codexHome, [{ id: "codex-active", cwd: "/Users/test/luke" }]);
+    // SAFETY: the loader throws exactly the shape Node throws for a runtime
+    // built without `node:sqlite`, which is the case under test.
+    const error = new Error("No such built-in module: node:sqlite") as NodeJS.ErrnoException;
+    error.code = "ERR_UNKNOWN_BUILTIN_MODULE";
 
-  const rows = await threadRows({
-    codexHome,
-    sqlite: async () => {
-      throw error;
-    },
-  });
+    const rows = yield* threadRows({
+      codexHome,
+      sqlite: async () => {
+        throw error;
+      },
+    });
 
-  assert.deepEqual(rows, []);
-});
+    assert.deepEqual(rows, []);
+  }),
+);
 
-test("names a thread's rollout from the thread's own row, never from its id", async (t) => {
-  const codexHome = await temporaryDirectory(t, "luke-codex-state-");
-  withSqliteHome(t, undefined);
-  await seed(codexHome, [
-    { id: "codex-live", cwd: "/Users/test/luke", rolloutPath: "/tmp/rollout-live.jsonl" },
-  ]);
-  const location = { codexHome, sqlite: defaultSqliteModule };
+it.effect("names a thread's rollout from the thread's own row, never from its id", (t) =>
+  Effect.gen(function* () {
+    const codexHome = yield* Effect.promise(() => temporaryDirectory(t, "luke-codex-state-"));
+    withSqliteHome(t, undefined);
+    yield* seed(codexHome, [
+      { id: "codex-live", cwd: "/Users/test/luke", rolloutPath: "/tmp/rollout-live.jsonl" },
+    ]);
+    const location = { codexHome, sqlite: defaultSqliteModule };
 
-  assert.equal(await rolloutPathForThread(location, "codex-live"), "/tmp/rollout-live.jsonl");
-  assert.equal(await rolloutPathForThread(location, "'; DROP TABLE threads; --"), undefined);
-});
+    assert.equal(yield* rolloutPathForThread(location, "codex-live"), "/tmp/rollout-live.jsonl");
+    assert.equal(yield* rolloutPathForThread(location, "'; DROP TABLE threads; --"), undefined);
+  }),
+);

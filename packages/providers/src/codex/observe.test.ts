@@ -14,6 +14,7 @@ import {
 } from "@sidecar/session";
 import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
+import { homeManifest } from "../testing/index.js";
 import { codexLocalPlugin } from "./index.js";
 import { isCodexRealtimeDelegationText } from "./records.js";
 
@@ -874,4 +875,53 @@ test("observes nothing where Codex has no local state database", async (t) => {
 
   assert.deepEqual(await plugin.observe(), []);
   assert.deepEqual(plugin.latest(), []);
+});
+
+// "Never write provider transcripts or session-state files. Reading them is
+// what Luke is for; writing to them is never." The pass opens Codex's own
+// state database read-only inside a scope that closes it, and the rollout
+// read is a bounded tail, so the home holding both — and Codex's own
+// `hooks.json`, the one surface the hook registration is allowed to merge
+// into and which this plugin never touches — stands byte for byte.
+test("observing and reading a transcript writes nothing under Codex's home", async (t) => {
+  const { codexHome, plugin } = await codexHomeWith(t, {
+    threads: [
+      {
+        rollout: [
+          {
+            type: "response_item",
+            payload: {
+              type: "message",
+              role: "user",
+              content: [{ type: "input_text", text: "Fix the flaky test" }],
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "Fixed and green." }],
+            },
+          },
+        ],
+      },
+    ],
+  });
+  await fs.writeFile(path.join(codexHome, "hooks.json"), '{"hooks":{}}\n');
+  const before = await homeManifest(codexHome);
+
+  await plugin.observe();
+  const read = await plugin.reads?.transcript?.(THREAD_ID);
+  const since = await plugin.reads?.transcriptSince?.(THREAD_ID);
+  // A read that found nothing would leave the home untouched for the wrong
+  // reason, so both reads answering is part of what is being pinned.
+  assert.equal(read?.status, "accepted");
+  assert.equal(since?.status, "accepted");
+  await plugin.reads?.transcriptSince?.(
+    THREAD_ID,
+    since?.status === "accepted" ? since.cursor : undefined,
+  );
+
+  assert.deepEqual(await homeManifest(codexHome), before);
 });
