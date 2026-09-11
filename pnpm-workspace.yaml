@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "apps/web/eve"
   - "packages/*"
   - "tools/*"
 

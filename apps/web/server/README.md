@@ -1050,6 +1050,26 @@ DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
 LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
 ```
 
+## The eve app root
+
+The hosted brain's eve agent lives in `eve/`, beside `server/`, as a flat eve
+app root with its own `package.json` (`@luke/eve`, a workspace member whose one
+dependency is `eve`) and its evals under `eve/evals/`. The layout is
+load-bearing for the deployment: eve resolves the directory that holds
+`agent.ts` and declares `eve` as its app root, and writes its build output
+there (`.vercel/output` under Vercel, `.output` locally), so the eve Vercel
+project's Root Directory is `apps/web/eve` and its build command is a plain
+`eve build`. A directory named `agent` under `apps/web` would resolve as eve's
+nested layout instead, with the app root at `apps/web` and the output one level
+above where that project reads it, which is what the earlier co-located shape
+had to relocate by hand through eve's internal environment variables. The
+agent still reaches `server/` by relative import and nothing else: neither
+package depends on the other, so `pnpm install --filter @luke/web...` pulls
+nothing of eve's and the web build never traces into `eve/` (the function
+bundle guard refuses it). `tests/eve-layout.test.ts` runs the real build under
+Vercel's marker and asserts where the output landed, so a dependency bump that
+changed discovery fails the check rather than the deploy.
+
 ## Scheduled Conductor observation
 
 `server/routes/observation/tick.ts` is what Vercel's cron calls: `vercel.json`

@@ -5,7 +5,6 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { ManagedRuntime } from "effect";
 import { defineEval } from "eve/evals";
 import { Pool } from "pg";
-import { SCRIPTED_FACT } from "../agent/scripted-model";
 import {
   ACTION_TOOL,
   BRAIN_TURN_TRIGGER,
@@ -18,21 +17,22 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
-} from "../server/core";
-import * as schema from "../server/db/schema";
-import { sqlClientOverPool } from "../server/db/sql-client";
+} from "../../server/core";
+import * as schema from "../../server/db/schema";
+import { sqlClientOverPool } from "../../server/db/sql-client";
 import {
   CONVERSATION_KIND,
   conversations,
   messages,
   toolSets,
   turns,
-} from "../server/db/storage-schema";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
-import { hostedToolDeclarations } from "../server/hosted/brain-host/tools";
-import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../server/hosted/encryption";
-import { hostedStore, toolSetHashOf } from "../server/hosted/store";
+} from "../../server/db/storage-schema";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
+import { hostTurnId } from "../../server/hosted/brain-host/ids";
+import { hostedToolDeclarations } from "../../server/hosted/brain-host/tools";
+import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption";
+import { hostedStore, toolSetHashOf } from "../../server/hosted/store";
+import { SCRIPTED_FACT } from "../scripted-model";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask under
