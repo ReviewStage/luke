@@ -34,6 +34,8 @@ import {
   FakeClient,
   gatedClient,
   type Harness,
+  heldPerformer,
+  holdNextWrite,
   message,
   NOW,
   PLAIN_PREPARATION,
@@ -41,7 +43,7 @@ import {
   settle,
   submit,
 } from "./harness.js";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
+import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
 import {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -226,10 +228,10 @@ it.effect(
         BRAIN_RUN_EVENT.SLOW_STEP,
         BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
         BRAIN_RUN_EVENT.STEP_STARTED,
-        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ACTIONS_SETTLED,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.TURN_ENDED,
       ]);
@@ -477,6 +479,125 @@ it.effect(
 );
 
 it.effect(
+  "the reply is relayed as it forms: the settle and every sentence leave before the checkpoint that carries the answer, and the end still comes last",
+  () =>
+    Effect.gen(function* () {
+      const inner = new FakeClient();
+      const gated = gatedClient(inner);
+      const h = yield* effectHarness({ client: gated.client });
+      const events = listen(h);
+      inner.answers.push(answered([message("The tests pass. Nothing needs you!")]));
+      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "how is it going?")));
+      yield* Effect.promise(() => settle());
+      // The next save is the turn's final checkpoint: no tool answered, so
+      // nothing was checkpointed between the start and the answer.
+      const held = holdNextWrite(h.repository);
+      gated.open();
+      yield* Effect.promise(() => settle());
+      assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+      ]);
+      assert.equal(ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED).length, 1);
+      assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+      held.release();
+      yield* Effect.promise(() => settle());
+      assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      // The final words, told again at the run's end, add no sentence a listener already heard.
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
+        ["The tests pass.", "Nothing needs you!"],
+      );
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "a run revoked while its action is out relays nothing: the words beside the call are dropped, and its end is the only relayed moment",
+  () =>
+    Effect.gen(function* () {
+      const held = heldPerformer();
+      const h = yield* effectHarness({ actions: held.actions });
+      const events = listen(h);
+      h.client.answers.push(
+        answered([message("Sending."), messageAbc("send_1")]),
+        answered([message("Sent.")]),
+      );
+      const runId = acceptedRunId(
+        yield* Effect.promise(() => submit(h, "tell abc to run the tests")),
+      );
+      yield* Effect.promise(() => settle());
+      assert.equal(held.performed.length, 1);
+      yield* Effect.promise(() => h.agent.cancelAsk(runId));
+      for (const release of held.releases.splice(0)) release();
+      yield* Effect.promise(() => settle());
+      assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+      assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
+        BRAIN_RUN_EVENT.SLOW_STEP,
+        BRAIN_RUN_EVENT.ENDED,
+      ]);
+      assert.deepEqual(kinds(events).at(-1), BRAIN_RUN_EVENT.TURN_ENDED);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "a run whose checkpoint failed mid-way relays only after the final write, and its record says the persistence failed with the reply carried",
+  () =>
+    Effect.gen(function* () {
+      const inner = new FakeClient();
+      const gated = gatedClient(inner);
+      const h = yield* effectHarness({ client: gated.client });
+      const events = listen(h);
+      inner.answers.push(answered([readAbc]), answered([message("Read it.")]));
+      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "what did abc do?")));
+      yield* Effect.promise(() => settle());
+      // The next save is the checkpoint after the read's result; refusing it
+      // leaves that result unrecorded until the final write carries it.
+      const held = holdNextWrite(h.repository);
+      gated.open();
+      yield* Effect.promise(() => settle());
+      assert.deepEqual(
+        relayed(events).map((event) => event?.kind),
+        [BRAIN_RUN_EVENT.SLOW_STEP],
+      );
+      held.release(false);
+      yield* Effect.promise(() => settle());
+      const record = yield* Effect.promise(() => h.agent.waitAsk(runId, 1));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+      assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+      assert.equal(record?.text, "Read it.");
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+        BRAIN_RUN_EVENT.SLOW_STEP,
+        BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
   "an ask cancelled while it waits behind another turn ends alone, at sequence one of a turn named by its own id",
   () =>
     Effect.gen(function* () {
@@ -581,9 +702,9 @@ it.effect(
         BRAIN_RUN_EVENT.TURN_STARTED,
         BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.STEP_STARTED,
-        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ACTIONS_SETTLED,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.TURN_ENDED,
       ]);
@@ -644,9 +765,9 @@ it.effect(
         BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.STEP_STARTED,
         BRAIN_RUN_EVENT.REASONING_COMPLETED,
-        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ACTIONS_SETTLED,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.TURN_ENDED,
       ]);
@@ -768,17 +889,19 @@ it.effect(
       );
       assertOneTurn(events, first);
       // The steered words are told as they are taken, before the inference that
-      // was running answers, so the two steps' boundaries follow both asks.
+      // was running answers, so the two steps' boundaries follow both asks; the
+      // first answer's words are relayed as it lands, before the steered words
+      // are read, and the second answer's follow its own step.
       assert.deepEqual(kinds(events), [
         BRAIN_RUN_EVENT.TURN_STARTED,
         BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.STEP_STARTED,
-        BRAIN_RUN_EVENT.STEP_STARTED,
-        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ACTIONS_SETTLED,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.STEP_STARTED,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.TURN_ENDED,
@@ -823,10 +946,10 @@ it.effect(
         BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.STEP_STARTED,
-        BRAIN_RUN_EVENT.STEP_STARTED,
-        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ACTIONS_SETTLED,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.TURN_ENDED,
       ]);

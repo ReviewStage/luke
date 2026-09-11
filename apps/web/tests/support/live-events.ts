@@ -54,6 +54,17 @@ export function appended(clientEventId: string, startMs: number, endMs: number):
   };
 }
 
+/** The acknowledgment of one thinking append, which speaks nothing and so sits at no place on the session's clock. */
+export function thinkingAppended(clientEventId: string): LiveServerEvent {
+  return {
+    type: LIVE_SERVER_EVENT.THINKING_APPENDED,
+    event_id: liveEventId(),
+    client_event_id: clientEventId,
+    start_ms: 0,
+    end_ms: 0,
+  };
+}
+
 /** A client delegation the model created at one offset on the session's clock. */
 export function delegated(delegationId: string, offsetMs: number): LiveServerEvent {
   return {
