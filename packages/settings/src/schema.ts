@@ -38,12 +38,14 @@ import {
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Either, Schema } from "effect";
 import {
   choiceAnalytics,
   choiceSetting,
   hotkeySetting,
   keyedSetting,
   optional,
+  settingGuardFromEither,
   storedSetting,
   toggleSetting,
 } from "./schema-builders.js";
@@ -89,8 +91,12 @@ export const VOICE_SOURCE = {
 
 export type VoiceSource = (typeof VOICE_SOURCE)[keyof typeof VOICE_SOURCE];
 
+export const VoiceSourceSchema = Schema.Literal(...Object.values(VOICE_SOURCE));
+
+const readsVoiceSource = Schema.is(VoiceSourceSchema);
+
 export function isVoiceSource(value: UnparsedWireValue): value is VoiceSource {
-  return value === VOICE_SOURCE.ACCOUNT || value === VOICE_SOURCE.KEY;
+  return readsVoiceSource(value);
 }
 
 /* The default-workspace row's word for no default at all. An empty value
@@ -158,9 +164,9 @@ const conductorAgentRowDrawn = (view: SettingsVisibility): boolean =>
 function workspaceAgentDefaultsGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<WorkspaceAgentDefaults | undefined> {
-  if (value === undefined) return { valid: true, value: undefined };
+  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
   if (!isRecord(value)) {
-    return { valid: false, value: undefined };
+    return settingGuardFromEither(Either.left(undefined));
   }
   const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> &
     Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>> = {};
@@ -174,7 +180,9 @@ function workspaceAgentDefaultsGuard(
     if (!isProviderId(providerId) || !parsed) continue;
     defaults[providerId] = parsed;
   }
-  return { valid: true, value: Object.keys(defaults).length > 0 ? defaults : undefined };
+  return settingGuardFromEither(
+    Either.right(Object.keys(defaults).length > 0 ? defaults : undefined),
+  );
 }
 
 /**
@@ -187,15 +195,15 @@ function workspaceAgentDefaultsGuard(
 function sessionFiltersGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<readonly SessionFilter[] | undefined> {
-  if (value === undefined) return { valid: true, value: undefined };
-  if (!Array.isArray(value)) return { valid: false, value: undefined };
+  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
+  if (!Array.isArray(value)) return settingGuardFromEither(Either.left(undefined));
   const filters: SessionFilter[] = [];
   for (const candidate of value) {
     if (!isWireString(candidate) || !isSessionFilter(candidate)) continue;
     if (filters.includes(candidate)) continue;
     filters.push(candidate);
   }
-  return { valid: true, value: filters.length > 0 ? filters : undefined };
+  return settingGuardFromEither(Either.right(filters.length > 0 ? filters : undefined));
 }
 
 const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
@@ -208,12 +216,12 @@ const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
  * someone is still asking.
  */
 function sessionSearchQueryGuard(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
-  if (value === undefined) return { valid: true, value: undefined };
-  if (!isWireString(value)) return { valid: false, value: undefined };
+  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
+  if (!isWireString(value)) return settingGuardFromEither(Either.left(undefined));
   if (value.trim() === "" || value.length > MAXIMUM_SESSION_SEARCH_QUERY_LENGTH) {
-    return { valid: true, value: undefined };
+    return settingGuardFromEither(Either.right(undefined));
   }
-  return { valid: true, value };
+  return settingGuardFromEither(Either.right(value));
 }
 
 const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
@@ -221,9 +229,9 @@ const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
 function workspaceProjectDefaultsGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined> {
-  if (value === undefined) return { valid: true, value: undefined };
+  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
   if (!isRecord(value)) {
-    return { valid: false, value: undefined };
+    return settingGuardFromEither(Either.left(undefined));
   }
   const defaults: Partial<Record<WorkspaceProviderId, string>> = {};
   for (const [providerId, candidate] of Object.entries(value)) {
@@ -234,7 +242,9 @@ function workspaceProjectDefaultsGuard(
     }
     defaults[providerId] = providerProjectId;
   }
-  return { valid: true, value: Object.keys(defaults).length > 0 ? defaults : undefined };
+  return settingGuardFromEither(
+    Either.right(Object.keys(defaults).length > 0 ? defaults : undefined),
+  );
 }
 
 export const APP_SETTING_SCHEMA = {

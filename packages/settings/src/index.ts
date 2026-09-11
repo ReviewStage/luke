@@ -19,6 +19,7 @@ export {
   type SettingsVisibility,
   VOICE_SOURCE,
   type VoiceSource,
+  VoiceSourceSchema,
 } from "./schema.js";
 export {
   ACCOUNT_PREFERENCE_FIELDS,
@@ -38,6 +39,7 @@ export {
   RETIRED_ACCOUNT_PREFERENCE_FIELD,
   SETTING_PAGE,
   type SettingEntryValue,
+  SettingsResetScopeSchema,
   type SettingsRowsInput,
   type StoredAppSettings,
   sameSettingEntry,

@@ -826,6 +826,9 @@ importers:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
+      effect:
+        specifier: 'catalog:'
+        version: 3.22.2
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

@@ -27,6 +27,7 @@
     "@sidecar/live": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/surface": "workspace:*",
-    "@sidecar/wire": "workspace:*"
+    "@sidecar/wire": "workspace:*",
+    "effect": "catalog:"
   }
 }

@@ -6,6 +6,7 @@ import {
   appToggleText,
 } from "@sidecar/guide";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Either, Schema } from "effect";
 import {
   type AppSettingGuideSettings,
   type AppSettingSchemaEntry,
@@ -29,27 +30,40 @@ import { parseVoiceHotkey, VOICE_HOTKEY_NONE } from "./voice-hotkey.js";
 const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
 const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: false, value });
 
+/**
+ * Every guard settles as an `Either` before it ever becomes a `{ valid, value
+ * }` pair: a `Right` is what a guard accepted, and a `Left` carries the same
+ * value a caller sees on refusal (the default, or `undefined`), because the
+ * exported shape keeps a value on both branches even where the failure
+ * channel usually would not.
+ */
+export const settingGuardFromEither = <Value>(
+  either: Either.Either<Value, Value>,
+): SettingGuardResult<Value> =>
+  Either.isRight(either) ? valid(either.right) : invalid(either.left);
+
 export function optional<Value extends UnparsedWireValue>(
   value: UnparsedWireValue,
   guard: (candidate: UnparsedWireValue) => candidate is Value,
 ): SettingGuardResult<Value | undefined> {
   if (value === undefined) return valid(undefined);
-  return guard(value) ? valid(value) : invalid(undefined);
+  return settingGuardFromEither(guard(value) ? Either.right(value) : Either.left(undefined));
 }
 
 function boolean(defaultValue: boolean) {
+  const isBoolean = Schema.is(Schema.Boolean);
   return (value: UnparsedWireValue): SettingGuardResult<boolean> =>
-    value === true || value === false ? valid(value) : invalid(defaultValue);
+    settingGuardFromEither(isBoolean(value) ? Either.right(value) : Either.left(defaultValue));
 }
 
 function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
   if (value === undefined) return valid(undefined);
-  if (!isWireString(value)) return invalid(undefined);
+  if (!isWireString(value)) return settingGuardFromEither(Either.left(undefined));
   // A deletion is a choice the parser cannot spell: no chord at all, with no
   // default standing in behind the absence.
-  if (value === VOICE_HOTKEY_NONE) return valid(VOICE_HOTKEY_NONE);
+  if (value === VOICE_HOTKEY_NONE) return settingGuardFromEither(Either.right(VOICE_HOTKEY_NONE));
   const parsed = parseVoiceHotkey(value);
-  return parsed ? valid(parsed) : invalid(undefined);
+  return settingGuardFromEither(parsed ? Either.right(parsed) : Either.left(undefined));
 }
 
 const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
