@@ -24,9 +24,12 @@ import {
   type AskRow,
   acceptAsk,
   askStanding,
-  type BrainAskOptions,
+  type BrainTurnCancelOptions,
   handleBrainAsk,
   handleBrainTurn,
+  handleBrainTurnCancel,
+  STOP_REFUSAL,
+  stopAsk,
 } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { eveOrigin } from "../server/hosted/brain-host/eve-origin";
@@ -41,6 +44,8 @@ import {
   conversationOwnedBy,
   recordedRuntimeSession,
 } from "../server/hosted/brain-host/recorded-session";
+import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { STORE_WRITE_EFFECT, STORE_WRITE_REFUSAL, storeWriter } from "../server/hosted/store";
 import { ASK_DISPATCH_REFUSAL, newestSession } from "../server/hosted/store/asks";
 import type { HostedStoreRun } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -57,6 +62,13 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
+
+/** The store writer over the test database, for the one write a Stop makes on a turn's row. */
+const writer = await storeWriter({
+  run: database.run,
+  tools: CATALOG_TOOL_SET,
+  now: () => new Date(NOW),
+});
 
 const NOW = 1_800_000_000_000;
 const ORIGIN = "https://luke.test";
@@ -198,7 +210,7 @@ interface Harness {
   clock: number;
   /** What the world does while a held read sleeps; the clock moves by the sleep either way. */
   whileSleeping: () => Promise<void>;
-  options(request: Request, userId: string | undefined): BrainAskOptions;
+  options(request: Request, userId: string | undefined): BrainTurnCancelOptions;
 }
 
 function harness(): Harness {
@@ -214,6 +226,7 @@ function harness(): Harness {
       resolveUserId: async () => userId,
       run: database.run,
       store: database.store,
+      writer,
       asks,
       eve: (authorization) => {
         eve.bearers.push(authorization);
@@ -422,6 +435,12 @@ test("the gates each refuse on their own: method, bearer, body, the path's id, a
       ),
     ),
     [400, HOSTED_API_ERROR.INVALID_REQUEST],
+  );
+  assert.deepEqual(
+    await errorOf(
+      await handleBrainTurnCancel(h.options(turnRequest(userId, randomUUID()), userId)),
+    ),
+    [405, HOSTED_API_ERROR.METHOD_NOT_ALLOWED],
   );
   assert.deepEqual(h.eve.calls, []);
 });
@@ -708,6 +727,134 @@ test("the in-process ask answers what the ask route answers: the same record aga
     refusal: ASK_REFUSAL.NOT_FOUND,
   });
   assert.equal(h.eve.calls.length, 1);
+});
+
+function cancelRequest(userId: string, id: string | undefined): Request {
+  return turnRequest(userId, id, {}, "POST");
+}
+
+test("a Stop on a running turn is eve's cancel of the conversation's recorded session and a stamp on the row; on an ask still waiting it is a stamp on the record and reaches eve not at all", async () => {
+  const userId = await database.createUser();
+  const h = harness();
+  const sessionId = mintSession();
+  const conversationId = await conversation(userId, { runtimeSessionId: sessionId });
+  const turnId = await turnRow(userId, conversationId);
+  const cancelled = await handleBrainTurnCancel(h.options(cancelRequest(userId, turnId), userId));
+  assert.equal(cancelled.status, 200);
+  const answer = hostedBrainTurnAnswerSchema.parse(await body(cancelled));
+  assert.equal(answer?.cancelRequestedAt, NOW);
+  assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId }]);
+  const [row] = await database.store.turns.named(userId, [turnId]);
+  assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
+
+  const asked = hostedBrainAskAnswerSchema.parse(
+    await body(
+      await handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId }), userId)),
+    ),
+  );
+  assert.ok(asked);
+  const record = h.asks.rows.get(asked.id);
+  assert.ok(record);
+  h.asks.rows.set(asked.id, beforeItsTurn(record));
+  const callsBefore = h.eve.calls.length;
+  const stamped = await handleBrainTurnCancel(h.options(cancelRequest(userId, asked.id), userId));
+  assert.equal(stamped.status, 200);
+  const stampedAnswer = hostedBrainTurnAnswerSchema.parse(await body(stamped));
+  assert.equal(stampedAnswer?.status, TURN_STATUS.QUEUED);
+  assert.equal(stampedAnswer?.cancelRequestedAt, NOW);
+  assert.equal(h.asks.rows.get(asked.id)?.cancelRequestedAt?.getTime(), NOW);
+  assert.equal(h.eve.calls.length, callsBefore);
+});
+
+test("the in-process Stop answers what the cancel route answers: for a running turn, for a waiting ask, for a turn whose conversation records no session, and for another account's id", async () => {
+  const owner = await database.createUser();
+  const other = await database.createUser();
+  const h = harness();
+  const recorded = await conversation(owner, { runtimeSessionId: mintSession() });
+  const running = await turnRow(owner, recorded);
+  const unrecordedOwner = await database.createUser();
+  const unrecorded = await conversation(unrecordedOwner);
+  const orphan = await turnRow(unrecordedOwner, unrecorded);
+  const asked = hostedBrainAskAnswerSchema.parse(
+    await body(
+      await handleBrainAsk(
+        h.options(askRequest(owner, { ...ASK, conversationId: recorded }), owner),
+      ),
+    ),
+  );
+  assert.ok(asked);
+  const record = h.asks.rows.get(asked.id);
+  assert.ok(record);
+  h.asks.rows.set(asked.id, beforeItsTurn(record));
+  const seams = {
+    store: database.store,
+    run: database.run,
+    asks: h.asks,
+    writer,
+    eve: h.eve,
+    now: () => h.clock,
+  };
+
+  for (const id of [running, asked.id]) {
+    const viaRoute = hostedBrainTurnAnswerSchema.parse(
+      await body(await handleBrainTurnCancel(h.options(cancelRequest(owner, id), owner))),
+    );
+    assert.ok(viaRoute);
+    assert.deepEqual(await stopAsk(seams, owner, id), { ok: true, answer: viaRoute });
+    assert.deepEqual(
+      await errorOf(await handleBrainTurnCancel(h.options(cancelRequest(other, id), other))),
+      [404, HOSTED_API_ERROR.NOT_FOUND],
+    );
+    assert.deepEqual(await stopAsk(seams, other, id), {
+      ok: false,
+      refusal: STOP_REFUSAL.NOT_FOUND,
+    });
+  }
+  assert.deepEqual(
+    await errorOf(
+      await handleBrainTurnCancel(
+        h.options(cancelRequest(unrecordedOwner, orphan), unrecordedOwner),
+      ),
+    ),
+    [409, HOSTED_API_ERROR.NOT_RUNNING],
+  );
+  assert.deepEqual(await stopAsk(seams, unrecordedOwner, orphan), {
+    ok: false,
+    refusal: STOP_REFUSAL.NOT_RUNNING,
+  });
+  const [row] = await database.store.turns.named(unrecordedOwner, [orphan]);
+  assert.equal(row?.cancelRequestedAt, null);
+});
+
+test("the writer stamps a Stop on a turn the conversation holds once, and refuses a turn it does not hold and a conversation that does not stand", async () => {
+  const userId = await database.createUser();
+  const conversationId = await conversation(userId);
+  const turnId = await turnRow(userId, conversationId);
+  const target = { userId, conversationId };
+  assert.deepEqual(await writer.requestTurnCancel(target, { turnId, at: new Date(NOW) }), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.WRITTEN,
+  });
+  assert.deepEqual(await writer.requestTurnCancel(target, { turnId, at: new Date(NOW + 9) }), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.REPEATED,
+  });
+  const [row] = await database.store.turns.named(userId, [turnId]);
+  assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
+  assert.deepEqual(
+    await writer.requestTurnCancel(target, { turnId: randomUUID(), at: new Date(NOW) }),
+    {
+      ok: false,
+      refusal: STORE_WRITE_REFUSAL.NO_TURN,
+    },
+  );
+  assert.deepEqual(
+    await writer.requestTurnCancel(
+      { userId, conversationId: randomUUID() },
+      { turnId, at: new Date(NOW) },
+    ),
+    { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION },
+  );
 });
 
 test("a held read answers the moment the turn settles, and at the bound with the turn as it then stands", async () => {

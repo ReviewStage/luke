@@ -31,6 +31,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "conversation/messages/rating",
     query: "id=$1",
   },
+  { src: "/api/brain/turns/([^/]+)/cancel", route: "brain/turns/cancel", query: "id=$1" },
   { src: "/api/brain/turns/([^/]+)/events", route: "brain/turns/events", query: "id=$1" },
   { src: "/api/brain/turns/([^/]+)", route: "brain/turns/turn", query: "id=$1" },
 ];

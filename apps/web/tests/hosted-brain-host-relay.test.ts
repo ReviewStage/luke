@@ -68,6 +68,7 @@ const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,
   asks: askRecord(database.run),
+  stopTurn: async () => undefined,
   offer: (target, turnId) =>
     offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
   now: () => NOW,
@@ -630,6 +631,7 @@ test("a turn whose answer the store refuses ends failed for persistence rather t
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
     asks: askRecord(database.run),
+    stopTurn: async () => undefined,
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
@@ -655,6 +657,7 @@ test("a turn start whose write throws keeps nothing in relay state, so the start
   let failures = 1;
   const failing = new StreamRelay({
     asks: askRecord(database.run),
+    stopTurn: async () => undefined,
     writer: {
       consume: (to, event) => writer.consume(to, event),
       enqueueTurn: (to, enqueue) => {
@@ -686,6 +689,7 @@ test("a turn whose ask the store refuses writes no answer and ends failed for pe
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
     asks: askRecord(database.run),
+    stopTurn: async () => undefined,
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED && event.message.role === MESSAGE_ROLE.USER
@@ -721,6 +725,7 @@ test("a turn end the store refuses keeps the turn in relay state, so the boundar
   let refuseEnds = 1;
   const refusing = new StreamRelay({
     asks: askRecord(database.run),
+    stopTurn: async () => undefined,
     writer: {
       consume: (to, event) => {
         if (event.kind === BRAIN_RUN_EVENT.TURN_ENDED && refuseEnds > 0) {

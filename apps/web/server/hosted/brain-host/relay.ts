@@ -144,6 +144,13 @@ export interface StreamRelaySeams {
   readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn">;
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
   readonly asks: AskDeliveryBinding;
+  /** Carries the Stop an ask took while it waited, the moment eve's start names the turn it ran in: eve's cancel scoped to that turn, and the row's stamp. */
+  readonly stopTurn: (
+    target: ConversationTarget,
+    sessionId: string,
+    eveTurnId: string,
+    turnId: string,
+  ) => Promise<void>;
   /** Puts a turn's briefing on offer, once its announce call is on the journal; answers whether the offer landed. */
   readonly offer: (target: ConversationTarget, turnId: string) => Promise<boolean>;
   readonly now: () => number;
@@ -382,8 +389,17 @@ export class StreamRelay {
       }
       // eve folds the asks that waited into one turn and stamps their deliveries on its events,
       // so the start is where each ask learns the turn it ran in; a start emitted again names
-      // the same deliveries and binds nothing new.
+      // the same deliveries and binds nothing new. The Stop is honoured over every ask bound to
+      // the turn, not only the rows this start bound: the ask that opened the session was bound
+      // at its dispatch with no delivery, and a follow-up's stamp may land after its binding.
+      // A stop that throws drops the turn from relay state with the rest of this block, so the
+      // start eve emits again reaches the stamp and carries it; a start that finds its turn under
+      // way never comes this far and carries nothing twice.
       await this.#seams.asks.bindDeliveries(standing.target, deliveryIds, turnId);
+      const stopped = await this.#seams.asks.stoppedOn(standing.target, turnId);
+      if (stopped.length > 0) {
+        await this.#seams.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
+      }
       const written = await this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TURN_STARTED,
         origin,

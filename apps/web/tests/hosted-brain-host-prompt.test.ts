@@ -59,6 +59,7 @@ function unreached(name: string): () => never {
 
 const seams: BrainHostSeams = {
   db: () => database.db,
+  eveOrigin: () => undefined,
   run: database.run,
   store: () => database.store,
   writer: async () => writer,

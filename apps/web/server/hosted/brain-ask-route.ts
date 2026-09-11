@@ -17,25 +17,33 @@ import { hostedStoreRoute } from "./store-route.js";
 
 const asks = askRecord(runWeb);
 
-function brainAskRoute(handler: (options: BrainAskOptions) => Promise<Response>): Route {
+/** An ask route over its handler; a handler that holds more than the ask routes do names it through `widen`. */
+export function brainAskRoute<Options extends BrainAskOptions>(
+  handler: (options: Options) => Promise<Response>,
+  widen: (options: BrainAskOptions) => Options,
+): Route {
   return hostedStoreRoute(({ request, resolveUserId, store }) =>
-    handler({
-      request,
-      resolveUserId,
-      store,
-      run: runWeb,
-      asks,
-      eve: (authorization) =>
-        eveSessions({
-          origin: eveOrigin(new URL(request.url).origin),
-          caller: { kind: EVE_CALLER.ACCOUNT, authorization },
-        }),
-    }),
+    handler(
+      widen({
+        request,
+        resolveUserId,
+        store,
+        run: runWeb,
+        asks,
+        eve: (authorization) =>
+          eveSessions({
+            origin: eveOrigin(new URL(request.url).origin),
+            caller: { kind: EVE_CALLER.ACCOUNT, authorization },
+          }),
+      }),
+    ),
   );
 }
 
+const asIs = (options: BrainAskOptions): BrainAskOptions => options;
+
 /** `POST /api/brain/ask`. */
-export const brainAskRouteHandler: Route = brainAskRoute(handleBrainAsk);
+export const brainAskRouteHandler: Route = brainAskRoute(handleBrainAsk, asIs);
 
 /** `GET /api/brain/turns/{id}`, the path's id rewritten into the query. */
-export const brainTurnRouteHandler: Route = brainAskRoute(handleBrainTurn);
+export const brainTurnRouteHandler: Route = brainAskRoute(handleBrainTurn, asIs);

@@ -16,13 +16,14 @@ import {
 } from "../core.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./brain-host/bounds.js";
 import {
+  EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
 import { hostTurnId } from "./brain-host/ids.js";
 import { standingMain } from "./brain-host/main.js";
-import { conversationOwnedBy } from "./brain-host/recorded-session.js";
+import { conversationOwnedBy, recordedRuntimeSession } from "./brain-host/recorded-session.js";
 import {
   errorResponse,
   HOSTED_API_ERROR,
@@ -34,6 +35,7 @@ import { createRateBrake } from "./rate-brake.js";
 import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow } from "./store/asks.js";
 import type { HostedStoreRun } from "./store/database.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
+import type { StoreWriter } from "./store/writer.js";
 
 export type { AskRecord, AskRow } from "./store/asks.js";
 
@@ -183,11 +185,19 @@ function queuedAnswer(ask: AskRow): HostedBrainTurnAnswer {
 }
 
 /** Where an id stands, as the turn read answers it, with the record and the row it was read from. */
-export interface AskStanding {
-  readonly answer: HostedBrainTurnAnswer;
-  readonly ask: AskRow | undefined;
-  readonly turn: StoredTurnRecord | undefined;
-}
+export type AskStanding =
+  | {
+      readonly answer: HostedBrainTurnAnswer;
+      /** The ask the id named, where it was an ask's id; a turn's own id names no ask. */
+      readonly ask: AskRow | undefined;
+      readonly turn: StoredTurnRecord;
+    }
+  | {
+      readonly answer: HostedBrainTurnAnswer;
+      readonly ask: AskRow;
+      /** An ask eve has not started a turn for stands on its own record alone. */
+      readonly turn: undefined;
+    };
 
 /** What the standing read needs: the turn rows, the runner the conversation's standing is read on, and the ask record. */
 export interface AskStandingReads {
@@ -392,4 +402,117 @@ export async function handleBrainTurn(options: BrainAskOptions): Promise<Respons
   }
   if (standing === undefined) return notFound();
   return jsonResponse(HOSTED_HTTP_STATUS.OK, standing.answer);
+}
+
+/** Why a Stop was not carried: nothing of the caller's stands under the id, no session runs the turn, or eve did not take the cancel. */
+export const STOP_REFUSAL = {
+  NOT_FOUND: "not_found",
+  NOT_RUNNING: "not_running",
+  UPSTREAM: "upstream",
+} as const;
+
+export type StopOutcome =
+  | { readonly ok: true; readonly answer: HostedBrainTurnAnswer }
+  | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.NOT_FOUND }
+  | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.NOT_RUNNING }
+  | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.UPSTREAM; readonly status: number };
+
+/** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, eve as the caller reaches it, and the clock. */
+export interface StopSeams extends AskStandingReads {
+  readonly asks: Pick<AskRecord, "named" | "cancelRequested">;
+  readonly writer: Pick<StoreWriter, "requestTurnCancel">;
+  readonly eve: EveSessions;
+  readonly now: () => number;
+}
+
+/**
+ * Stops one ask over plain arguments, so the route and the voice function
+ * carry the same Stop. A turn already settled is answered as it stands and
+ * nothing is asked of eve. An ask eve has not yet started a turn for takes
+ * the stamp on its record, for the start that names its delivery to honour.
+ * A turn under way is eve's cancel of the session's turn, which is the one
+ * the row says is running since a conversation runs one session and one
+ * turn at a time, and then the stamp on the row; a conversation that records
+ * no session has nothing running to stop and is refused as such.
+ */
+export async function stopAsk(seams: StopSeams, userId: string, id: string): Promise<StopOutcome> {
+  const standing = await askStanding(seams, userId, id);
+  if (standing === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
+  if (TERMINAL_TURN_STATUSES.has(standing.answer.status))
+    return { ok: true, answer: standing.answer };
+  const at = new Date(seams.now());
+  let turn: StoredTurnRecord;
+  if (standing.turn === undefined) {
+    await seams.asks.cancelRequested(standing.ask.id, at);
+    // The stamp and the start's binding are two writes with no lock between them, so the ask is
+    // read again once the stamp stands: a start that bound it meanwhile has read the row before
+    // the stamp and carries nothing, and the Stop is then eve's cancel of that turn from here. A
+    // start that binds it after this read finds the stamp and carries it. Either order stops the
+    // turn once; neither leaves a turn running that its client was told is stopped.
+    const stampedAt = standing.ask.cancelRequestedAt ?? at;
+    const stampedAnswer: StopOutcome = {
+      ok: true,
+      answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() },
+    };
+    const bound = await seams.asks.named(userId, standing.ask.id);
+    if (bound?.turnId === undefined) return stampedAnswer;
+    const [started] = await seams.store.turns.named(userId, [bound.turnId]);
+    if (started === undefined) return stampedAnswer;
+    turn = started;
+  } else {
+    turn = standing.turn;
+  }
+  // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
+  // is answered as it stands: the route's cancel names eve's session and not its turn, so a
+  // second cancel could reach the turn queued after this one. Recording eve's turn id on the row
+  // (LUKE-180) is what scopes it; until then a stamp that stands is the one cancel this turn gets.
+  const answer = turn === standing.turn ? standing.answer : turnAnswer(id, turn);
+  if (TERMINAL_TURN_STATUSES.has(turn.status)) return { ok: true, answer };
+  if (turn.cancelRequestedAt) {
+    return { ok: true, answer: { ...answer, cancelRequestedAt: turn.cancelRequestedAt.getTime() } };
+  }
+  const target = { userId, conversationId: turn.conversationId };
+  const sessionId = await seams.run(recordedRuntimeSession(target));
+  if (sessionId === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_RUNNING };
+  const cancelled = await seams.eve.cancel(sessionId);
+  if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
+    return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
+  }
+  const stamped = await seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
+  if (!stamped.ok) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
+  return { ok: true, answer: { ...answer, cancelRequestedAt: at.getTime() } };
+}
+
+/** `POST /api/brain/turns/{id}/cancel`: the gate and the path's id, then `stopAsk` under the caller's own bearer. */
+/** What the Stop route holds beyond the ask routes: the writer, for the one write a Stop makes on a turn's row. Only the cancel function composes it, so the read routes' bundles never reach the writer. */
+export interface BrainTurnCancelOptions extends BrainAskOptions {
+  writer: Pick<StoreWriter, "requestTurnCancel">;
+}
+
+export async function handleBrainTurnCancel(options: BrainTurnCancelOptions): Promise<Response> {
+  const admitted = await gate(options, "POST");
+  if (admitted instanceof Response) return admitted;
+  const id = pathId(options.request);
+  if (id instanceof Response) return id;
+  const outcome = await stopAsk(
+    {
+      store: options.store,
+      run: options.run,
+      asks: options.asks,
+      writer: options.writer,
+      eve: options.eve(admitted.authorization),
+      now: options.now ?? Date.now,
+    },
+    admitted.userId,
+    id,
+  );
+  if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.OK, outcome.answer);
+  switch (outcome.refusal) {
+    case STOP_REFUSAL.NOT_FOUND:
+      return notFound();
+    case STOP_REFUSAL.NOT_RUNNING:
+      return errorResponse(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NOT_RUNNING);
+    case STOP_REFUSAL.UPSTREAM:
+      return upstream(outcome.status);
+  }
 }

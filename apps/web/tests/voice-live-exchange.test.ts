@@ -87,6 +87,7 @@ const asks = askRecord(database.run);
 const relay = new StreamRelay({
   writer,
   asks,
+  stopTurn: async () => undefined,
   offer: (target, turnId) =>
     offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
   now: () => NOW,

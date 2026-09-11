@@ -8,6 +8,7 @@ import { getDatabase } from "./db/index.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
+import { eveOrigin as eveOriginFor } from "./hosted/brain-host/eve-origin.js";
 import { EVE_CALLER, eveSessions } from "./hosted/brain-host/eve-sessions.js";
 import {
   NOTHING_OPENED,
@@ -55,12 +56,6 @@ import { runWeb } from "./runtime.js";
 const CLOUD_PROVIDER_IDS = Object.values(CLOUD_AGENT_PROVIDER_ID);
 
 const NOTHING_SWEPT: SpeechSweepOutcome = { held: 0, released: 0, expired: 0, turns: 0 };
-
-/** The environment the opener reads beside the tick's own: where eve answers, when the deployment's own origin is not it. */
-const OPENER_ENVIRONMENT = {
-  /** The origin eve's `/eve/v1/*` routes answer on; absent, the origin the tick itself was called on, which the deployment's rewrites carry into the eve service. */
-  EVE_ORIGIN: "LUKE_EVE_ORIGIN",
-} as const;
 
 const NOTHING_PUSHED: SpeechPushOutcome = {
   pushed: 0,
@@ -257,8 +252,7 @@ async function observationTickHandler(request: Request): Promise<Response> {
     : undefined;
   const cronSecret =
     environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
-  const eveOrigin =
-    process.env[OPENER_ENVIRONMENT.EVE_ORIGIN]?.trim() || new URL(request.url).origin;
+  const eveOrigin = eveOriginFor(new URL(request.url).origin);
   const vaultRows = (userId: string) => runWeb(readStoredVaultKeys(userId));
 
   const options: ObservationTickOptions = {

@@ -32,6 +32,7 @@ import {
   SESSION_STANDING,
 } from "./conversation.js";
 import { readWorkspaceDefaults } from "./defaults.js";
+import { EVE_CALLER, eveSessions } from "./eve-sessions.js";
 import { hostTurnId } from "./ids.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
 import { hostedActionCarrier, hostedFactsWriter } from "./performer.js";
@@ -44,6 +45,7 @@ import {
   readHostedRoster,
 } from "./roster.js";
 import { rotationSeedText } from "./seed.js";
+import { carryStop } from "./stop-carrier.js";
 import {
   type HostedToolDeclaration,
   hostedToolDeclarations,
@@ -155,6 +157,28 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       enqueueTurn: async (target, enqueue) => (await seams.writer()).enqueueTurn(target, enqueue),
     },
     asks: askRecord(seams.run),
+    // A Stop an ask took while it waited is carried the moment its turn starts, by the deployment
+    // acting for the account, since the hook that sees the start holds no bearer of the account's;
+    // a deployment with no secret or no origin for eve reports the Stop it could not carry.
+    stopTurn: async (target, sessionId, eveTurnId, turnId) => {
+      const secret = seams.deploymentSecret();
+      const origin = seams.eveOrigin();
+      if (secret === undefined || origin === undefined) {
+        console.warn(`The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`);
+        return;
+      }
+      const eve = eveSessions({
+        origin,
+        caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
+      });
+      await carryStop(
+        { eve, writer: await seams.writer(), now: seams.now, report: (m) => console.warn(m) },
+        target,
+        sessionId,
+        eveTurnId,
+        turnId,
+      );
+    },
     offer: async (target, turnId) =>
       offerBriefing(
         { run: seams.run, writer: await seams.writer(), now: seams.now },

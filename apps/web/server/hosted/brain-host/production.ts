@@ -50,6 +50,8 @@ export interface BrainHostSeams {
   readonly ownership: SessionOwnership;
   /** The secret the deployment acts for an account under at eve's door, the tick's own; nothing while the environment names none. */
   readonly deploymentSecret: () => string | undefined;
+  /** The origin eve answers on from inside its own service, or nothing where the deployment names none. */
+  readonly eveOrigin: () => string | undefined;
   /** Luke's own OpenAI access, or nothing when the deployment holds no key and the hosted brain is off. */
   readonly openAi: () => OpenAiAccess | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of OpenAI. */
@@ -91,6 +93,9 @@ const findVaultRows = SqlSchema.findAll({
     ),
 });
 
+/** Vercel's own name for the deployment's host, present on every function of the deployment. */
+const VERCEL_ENVIRONMENT = { URL: "VERCEL_URL" } as const;
+
 function once<Value>(build: () => Value): () => Value {
   let built: { value: Value } | undefined;
   return () => {
@@ -125,6 +130,11 @@ export function productionBrainHostSeams(): BrainHostSeams {
         runWeb(conversationOwnedBy(userId, conversationId)),
     },
     deploymentSecret: () => process.env[OBSERVATION_ENVIRONMENT.CRON_SECRET]?.trim() || undefined,
+    eveOrigin: () => {
+      const named = process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN]?.trim();
+      const own = process.env[VERCEL_ENVIRONMENT.URL]?.trim();
+      return named || (own ? `https://${own}` : undefined);
+    },
     // The auth service opens the database as it is imported, so it is reached
     // only when a bearer is checked and never by discovery of these files.
     userInfo: async (input) => {
