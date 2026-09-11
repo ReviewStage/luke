@@ -1,4 +1,12 @@
-import { RECORD_EXTRA_KEYS, type Schema, s, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  effectSchema,
+  SCHEMA_REFUSAL,
+  type Schema,
+  s,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
+import { emitJsonSchema, readEither, toSchemaRead, wireRefusal } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 import { wireUuidSchema, writtenText } from "./service-wire.js";
 
 /**
@@ -17,7 +25,41 @@ import { wireUuidSchema, writtenText } from "./service-wire.js";
  * again from its cursor. The same words as the brain's own run stream, spelled
  * here because the wire cannot reach the brain; a test above both holds them
  * equal.
+ *
+ * Every declaration below is composed directly as an Effect `Schema`, under
+ * its own `<name>Effect` export; the plain `<name>` export beside it is the
+ * same declaration read through `fromEffect` (the pattern P1-04 established
+ * in `packages/wire/src/ui-message-metadata.ts`), which is what
+ * `decodeTurnEventFrame` below and `apps/web/server/hosted/turn-event-stream.ts`
+ * still call `.parse()` on. The facade twin is the strangler shim P12-08
+ * deletes, once every caller declares against the `Effect` export directly.
  */
+
+/**
+ * The Effect schema a declaration was composed from, adapted to the facade
+ * still-held callers use: `read` through `readEither`, `jsonSchema` through
+ * the emitter walking the same schema.
+ */
+function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
+  const read = readEither(core);
+  return s.reader({
+    read: (value) => toSchemaRead(read(value)),
+    jsonSchema: () => emitJsonSchema(core),
+  });
+}
+
+/**
+ * A record that ignores a key a newer service added, which is what an answer
+ * does. Each record states its own rule, because Effect hands a struct's
+ * parse options down to the structs inside it.
+ */
+const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** An integer at or above its minimum, the way `s.wholeNumber({ minimum })` reads one. */
+function wholeNumber(minimum: number) {
+  return EffectSchema.Int.pipe(EffectSchema.greaterThanOrEqualTo(minimum));
+}
 
 export const TURN_EVENT_KIND = {
   /** The turn began a step slow enough to be worth telling the developer about; at most once per turn. */
@@ -53,7 +95,9 @@ export const TURN_END = {
 export type TurnEnd = (typeof TURN_END)[keyof typeof TURN_END];
 
 /** The cursor as the query carries it under `READ_QUERY.AFTER`: the number of the last event taken, zero for none. */
-export const turnEventCursorSchema: Schema<number> = s.wholeNumber({ minimum: 0 });
+export const turnEventCursorSchemaEffect = wholeNumber(0);
+
+export const turnEventCursorSchema: Schema<number> = fromEffect(turnEventCursorSchemaEffect);
 
 /** What every event of the stream carries beside its own fields: the turn it belongs to and its place in that turn. */
 interface TurnEventBase {
@@ -70,41 +114,34 @@ export type TurnEventBody =
 
 export type TurnEvent = TurnEventBody & TurnEventBase;
 
-const eventBase = {
-  turnId: wireUuidSchema,
-  seq: s.wholeNumber({ minimum: 1 }),
+const eventBaseEffect = {
+  turnId: effectSchema(wireUuidSchema),
+  seq: wholeNumber(1),
 } as const;
 
-/** An answer ignores a key a newer service adds, the rule every wire answer here keeps. */
-const ANSWER = { extraKeys: RECORD_EXTRA_KEYS.IGNORE } as const;
+export const turnEventSchemaEffect = EffectSchema.Union(
+  tolerantRecord({
+    ...eventBaseEffect,
+    kind: EffectSchema.Literal(TURN_EVENT_KIND.SLOW_STEP),
+    step: EffectSchema.Literal(...Object.values(TURN_SLOW_STEP)),
+  }),
+  tolerantRecord({
+    ...eventBaseEffect,
+    kind: EffectSchema.Literal(TURN_EVENT_KIND.ACTIONS_SETTLED),
+  }),
+  tolerantRecord({
+    ...eventBaseEffect,
+    kind: EffectSchema.Literal(TURN_EVENT_KIND.REPLY_SENTENCE),
+    sentence: effectSchema(writtenText),
+  }),
+  tolerantRecord({
+    ...eventBaseEffect,
+    kind: EffectSchema.Literal(TURN_EVENT_KIND.ENDED),
+    end: EffectSchema.Literal(...Object.values(TURN_END)),
+  }),
+).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-export const turnEventSchema: Schema<TurnEvent> = s.union([
-  s.record(
-    {
-      ...eventBase,
-      kind: s.literal(TURN_EVENT_KIND.SLOW_STEP),
-      step: s.enumOf(Object.values(TURN_SLOW_STEP)),
-    },
-    ANSWER,
-  ),
-  s.record({ ...eventBase, kind: s.literal(TURN_EVENT_KIND.ACTIONS_SETTLED) }, ANSWER),
-  s.record(
-    {
-      ...eventBase,
-      kind: s.literal(TURN_EVENT_KIND.REPLY_SENTENCE),
-      sentence: writtenText,
-    },
-    ANSWER,
-  ),
-  s.record(
-    {
-      ...eventBase,
-      kind: s.literal(TURN_EVENT_KIND.ENDED),
-      end: s.enumOf(Object.values(TURN_END)),
-    },
-    ANSWER,
-  ),
-]);
+export const turnEventSchema: Schema<TurnEvent> = fromEffect(turnEventSchemaEffect);
 
 /**
  * The stream's framing, as the Server-Sent Events format has it: one frame is
