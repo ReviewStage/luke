@@ -13,6 +13,7 @@ import {
   type CloudWriteRoute,
   textFromRecord,
 } from "../shared/cloud-wire.js";
+import { runAdapterRead } from "../shared/promise-face.js";
 import {
   CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
   CONDUCTOR_CANCEL_ADVERTISEMENT,
@@ -113,7 +114,7 @@ async function write(
 ): Promise<{ outcome: ProviderActionResult; body?: WireRecord }> {
   const apiKey = await pass.readApiKey();
   if (!apiKey) return { outcome: MISSING_KEY };
-  return pass.write(apiKey, route, subject);
+  return runAdapterRead(pass.write(apiKey, route, subject));
 }
 
 export function conductorActions(pass: CloudPass): ActionHandlers {

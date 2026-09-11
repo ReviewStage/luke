@@ -122,6 +122,10 @@ test("a changed roster moves the snapshot and records the diff; an unchanged one
   assert.equal(decoded?.errorChanged.length, 1);
 });
 
+// The 429 cadence now runs on the fiber's own clock rather than an injected
+// `sleep` seam, so this pass genuinely spends the backoff budget's waits —
+// bounded by `RATE_LIMIT_BACKOFF.PASS_CEILING_MS` — and the timeout is raised
+// to cover them.
 test("a pass the provider rate limits past its backoff leaves the previous snapshot standing and is recorded as failed", async () => {
   const store = memoryObservationStore();
   const healthy = api();
@@ -134,7 +138,6 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
     now: TEST_TIME,
   });
 
-  const waits: number[] = [];
   const limited = api(TEST_CONDUCTOR_STATUS.ERROR);
   const outcome = await observeAndSnapshot({
     userId: "user-1",
@@ -150,9 +153,6 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
         return limited.fetch(url, init);
       },
       now: () => TEST_TIME + 60_000,
-      sleep: async (ms) => {
-        waits.push(ms);
-      },
     },
     now: TEST_TIME + 60_000,
   });
@@ -161,7 +161,6 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
   assert.equal(outcome.failure, CLOUD_OBSERVE_FAILURE.RATE_LIMITED);
   assert.equal(outcome.observedAt, TEST_TIME);
   assert.equal(outcome.roster?.providers[0]?.observations[0]?.status, SESSION_STATUS.WORKING);
-  assert.ok(waits.length > 0);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME);
   assert.deepEqual(await store.roster.pendingDiffs("user-1"), []);
   assert.deepEqual(store.passes.get("user-1"), {
@@ -169,7 +168,7 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
     failure: CLOUD_OBSERVE_FAILURE.RATE_LIMITED,
     observedAt: TEST_TIME,
   });
-});
+}, 15_000);
 
 test("a refused key, an unreachable provider, and an unreadable key each fail the pass by name", async () => {
   const store = memoryObservationStore();

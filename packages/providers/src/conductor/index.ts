@@ -2,6 +2,7 @@ import { type ProviderSessionObservation, WORKSPACE_TASK_SUPPORT } from "@sideca
 import type { CloudFetch } from "@sidecar/wire";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
+import { runAdapterRead } from "../shared/promise-face.js";
 import { conductorActions } from "./actions.js";
 import {
   conductorConversationEnds,
@@ -22,7 +23,6 @@ export interface ConductorPluginOptions {
   fetch?: CloudFetch;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
-  sleep?: (ms: number) => Promise<void>;
   onDiagnostic?: AdapterDiagnosticCallback;
   /**
    * The roster the brain's transcript reads answer for, when a host holds
@@ -81,7 +81,7 @@ export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPl
 
   return {
     provider: CONDUCTOR_PROVIDER,
-    observe: () => pass.run(),
+    observe: () => runAdapterRead(pass.run()),
     latest: () => pass.latest(),
     lastObservationFailure: () => pass.lastFailure(),
 

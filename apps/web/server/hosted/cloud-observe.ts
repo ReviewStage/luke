@@ -44,7 +44,6 @@ export interface CloudObserveSeams {
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
   now?: () => number;
-  sleep?: (ms: number) => Promise<void>;
 }
 
 /** What one provider's pass reported, and whether it may be trusted as the whole roster. */
@@ -73,7 +72,6 @@ export async function observeCloudProviders(options: {
       readApiKey: options.readApiKey(providerId),
       ...(options.seams.fetch ? { fetch: options.seams.fetch } : undefined),
       ...(options.seams.now ? { now: options.seams.now } : undefined),
-      ...(options.seams.sleep ? { sleep: options.seams.sleep } : undefined),
     }),
   );
   const results = await Promise.allSettled(plugins.map((plugin) => plugin.observe()));

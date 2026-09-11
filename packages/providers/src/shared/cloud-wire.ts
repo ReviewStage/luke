@@ -7,7 +7,8 @@
 
 import { UNKNOWN_WORKSPACE_LABEL } from "@sidecar/session";
 import { isRecord, positiveInteger, text, type WireRecord } from "@sidecar/wire";
-import { Data, Duration, Schedule } from "effect";
+import { Data, Duration, type Effect, Schedule } from "effect";
+import type { AdapterFailure } from "./adapter-failure.js";
 
 const GIT_SUFFIX = ".git";
 
@@ -140,7 +141,7 @@ export type CloudRequest = (
   segments: readonly string[],
   query?: Readonly<Record<string, string>>,
   options?: Readonly<{ timeoutMs?: number; document?: string }>,
-) => Promise<WireRecord>;
+) => Effect.Effect<WireRecord, AdapterFailure>;
 
 /**
  * One documented write a provider takes for one of its sessions: the route and

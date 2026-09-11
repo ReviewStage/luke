@@ -10,6 +10,7 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { localSessionStatus } from "../shared/hook-status.js";
 import {
   discoverSessionFiles,
@@ -279,22 +280,33 @@ async function sessionFilesIn(
   );
 }
 
-export function discoverOmpSessions(ompHome: string): Promise<OmpSessionFileCandidate[]> {
-  return discoverSessionFiles({
-    projectsDirectory: path.join(ompHome, OMP_SESSIONS_DIRECTORY),
-    maximumProjectDirectories: OMP_OBSERVATION_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-    sessionFilesIn,
-  });
+export function discoverOmpSessions(
+  ompHome: string,
+): Effect.Effect<readonly OmpSessionFileCandidate[]> {
+  return Effect.promise(() =>
+    discoverSessionFiles({
+      projectsDirectory: path.join(ompHome, OMP_SESSIONS_DIRECTORY),
+      maximumProjectDirectories: OMP_OBSERVATION_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+      sessionFilesIn,
+    }),
+  );
 }
 
-export async function parseOmpSessionFile(
+export function parseOmpSessionFile(
   candidate: OmpSessionFileCandidate,
-): Promise<ParsedOmpSession> {
-  const [head, tail] = await Promise.all([
-    readHead(candidate.filePath, OMP_OBSERVATION_DEFAULTS.READ_HEAD_BYTES),
-    readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES),
-  ]);
-  return parseOmpSession(head, tail);
+): Effect.Effect<ParsedOmpSession> {
+  return Effect.map(
+    Effect.all(
+      [
+        Effect.promise(() =>
+          readHead(candidate.filePath, OMP_OBSERVATION_DEFAULTS.READ_HEAD_BYTES),
+        ),
+        Effect.promise(() => readTail(candidate.filePath, LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES)),
+      ],
+      { concurrency: "unbounded" },
+    ),
+    ([head, tail]) => parseOmpSession(head, tail),
+  );
 }
 
 export function ompObservation(input: {

@@ -29,8 +29,8 @@ export function ompPlugin(options: OmpPluginOptions = {}): SessionProviderPlugin
   const ompHome = options.ompHome ?? defaultOmpHome();
   const pass = observationPass<OmpSessionFileCandidate, ParsedOmpSession>({
     now: options.now,
-    discover: () => Effect.promise(() => discoverOmpSessions(ompHome)),
-    parse: (candidate) => Effect.promise(() => parseOmpSessionFile(candidate)),
+    discover: () => discoverOmpSessions(ompHome),
+    parse: parseOmpSessionFile,
     observation: (input) => Effect.succeed(ompObservation(input)),
   });
   const transcripts = jsonlTranscriptReader({

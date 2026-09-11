@@ -14,6 +14,7 @@ import { ADAPTER_FAILURE, AdapterFailure } from "../shared/adapter-failure.js";
 import type { CloudPass } from "../shared/cloud-pass.js";
 import { isDefined, recordsFromPage, textFromRecord } from "../shared/cloud-wire.js";
 import { boundedTranscript, transcriptLine } from "../shared/jsonl-transcript.js";
+import { runAdapterRead } from "../shared/promise-face.js";
 import { CONDUCTOR_PROVIDER_NAME, UUID_PATTERN } from "./vocabulary.js";
 import {
   CONDUCTOR_CONVERSATION_BOUNDS,
@@ -61,18 +62,20 @@ async function messagesPage(
   query: Readonly<Record<string, string>>,
 ): Promise<WireRecord> {
   let body: WireRecord = {};
-  await pass.credentialBoundRead(
-    [
-      CONDUCTOR_ROUTE_SEGMENT.V0,
-      CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
-      providerSessionId,
-      CONDUCTOR_ROUTE_SEGMENT.MESSAGES,
-    ],
-    query,
-    undefined,
-    (answer) => {
-      body = answer;
-    },
+  await runAdapterRead(
+    pass.credentialBoundRead(
+      [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        CONDUCTOR_ROUTE_SEGMENT.MESSAGES,
+      ],
+      query,
+      undefined,
+      (answer) => {
+        body = answer;
+      },
+    ),
   );
   return body;
 }

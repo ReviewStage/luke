@@ -408,27 +408,29 @@ answers in the same turn the caller's own `await` resumes in, exactly as the
 hand-rolled `Map` did. It goes in P5-14b once this class runs on a fiber of its
 own rather than answering a caller's `Promise`.
 
-`cloudPass` in `packages/providers/src/shared/cloud-pass.ts` is on the
-allowlist for the shared cloud machinery: its reads and its one write are
-effects over an `HttpClient` built from the caller's own `CloudFetch`, and the
-429 cadence is a `Schedule` stepped on the fiber's clock, but an adapter's
-`collect` still hands back a promise and every caller of a provider write
-still holds one, so each request is run where the promise face answers.
-`Cause.squash` is what the run rethrows, so the `AdapterFailure` a caller
-already branches on is the failure it reads rather than the fiber's wrapping
-of it. P6-11b moves the cloud adapters onto the effects and deletes the
-face.
+`cloudPass` in `packages/providers/src/shared/cloud-pass.ts` no longer needs an
+allowlist entry: its reads and its one write are effects over an `HttpClient`
+built from the caller's own `CloudFetch`, the 429 cadence is a `Schedule`
+stepped on the fiber's clock, and `run`, `write`, and `credentialBoundRead` are
+themselves effects now that Conductor — the one adapter that rides it — is on
+them too. `Cause.squash` is still what `runAdapterRead` rethrows at the door
+where `SessionProviderPlugin` still holds a promise, so the `AdapterFailure` a
+caller already branches on is the failure it reads rather than the fiber's
+wrapping of it, but that is `promise-face.ts`'s allowlist entry, not a second
+one of `cloudPass`'s own.
 
 `openReadOnlyDatabase` in the same package's `local-sqlite.ts` is the
 smallest of them: the open is an `acquireRelease` in a `Scope` that closes the
 handle, and this face runs it for the adapters that still close the handle
-themselves in a `finally`. Codex's state reader now asks inside a scope of its
-own, so what is left of this face is Conductor's and Superset's, which P6-11b
-moves. The hook spool has no such face at all: `observationSpoolEvents` is a
-`Stream`, and nothing in this build runs it — the hook wiring P6-12 would
-have run it under is gone, so the window it groups on is settled on the
-stream's own terms in `packages/providers/AGENTS.md` — which leaves nothing
-in that package forking a fiber of its own.
+themselves in a `finally`. Codex's state reader and Conductor's two local
+SQLite reads (`applications.ts`'s session index, `local-workspaces.ts`'s
+repository index) now ask inside a scope of their own, so what is left of this
+face is Superset's alone, which P6-11c moves. The hook spool has no such face
+at all: `observationSpoolEvents` is a `Stream`, and nothing in this build runs
+it — the hook wiring P6-12 would have run it under is gone, so the window it
+groups on is settled on the stream's own terms in
+`packages/providers/AGENTS.md` — which leaves nothing in that package forking
+a fiber of its own.
 
 `GenerationHolder` in `packages/brain/src/generation-holder.ts` and
 `retireGeneration` in `packages/brain/src/generation.ts` are on the allowlist
@@ -450,17 +452,24 @@ nothing from `effect`; its Effect surface stays in `state-store.effect.ts`.
 P5-14b deletes both runs once the agent's turns run on fibers of its own and
 the adoption is decided inside one.
 
-`runAdapterRead` in the same package's `promise-face.ts` is the one face the
-on-disk adapters answer a `SessionProviderPlugin` from. Claude Code's and
-Codex's reads are effects — the observation pass over a `Ref`-held parse
-cache, the JSONL transcript reader and its path cache, and Codex's state
-database inside a scope — while the plugin seam the host holds is still
-`observe(): Promise<...>` and two promise-returning reads, so the run happens
-in this one place rather than in each adapter: `ObservationPass#runPromise`,
-`promiseTranscriptReads`, and Codex's own `observe` all call it. These reads
-tolerate everything an absent or unreadable provider directory answers, so
-the face rethrows `Cause.squash` and a caller reads the defect it always did.
-P7-05 composes observation as effects and deletes it.
+`runAdapterRead` in the same package's `promise-face.ts` is the one face every
+adapter answers a `SessionProviderPlugin` from. Claude Code's and Codex's reads
+are effects — the observation pass over a `Ref`-held parse cache, the JSONL
+transcript reader and its path cache, and Codex's state database inside a
+scope — while the plugin seam the host holds is still `observe(): Promise<...>`
+and two promise-returning reads, so the run happens in this one place rather
+than in each adapter: `ObservationPass#runPromise`, `promiseTranscriptReads`,
+and Codex's own `observe` all call it, and OMP's plugin is the same shape over
+the same two shared faces. Conductor's cloud pass joins it the same way: its
+own `observe`, its actions' one write, and its conversation reads' one
+credential-bound read are each effects now that `cloudPass` is, so its plugin
+calls the same face rather than a second one of its own, and its two local
+SQLite reads (`applications.ts`, `local-workspaces.ts`) call it too, each over
+`Effect.scoped(scopedReadOnlyDatabase(...))`. These reads tolerate everything
+an absent or unreadable provider directory, or an unauthorized or unreachable
+credential, answers, so the face rethrows `Cause.squash` and a caller reads the
+failure or the defect it always did. P7-05 composes observation as effects and
+deletes it.
 
 ## Strangler shims and their deletions
 
@@ -485,9 +494,8 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-01, P7-02 |
-| `cloudPass`'s Promise face over its request effects | P6-10 | P6-11b |
-| `openReadOnlyDatabase` Promise door over `scopedReadOnlyDatabase` | P6-10 | P6-11b |
-| `runAdapterRead`, the on-disk adapters' Promise face over their read effects | P6-11a | P7-05 |
+| `openReadOnlyDatabase` Promise door over `scopedReadOnlyDatabase` | P6-10 | P6-11c |
+| `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | P7-05 |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P5-14b |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
