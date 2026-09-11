@@ -22,6 +22,7 @@ import {
   isRecord,
   isWireString,
   SCHEMA_REFUSAL,
+  UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
@@ -51,7 +52,10 @@ import {
 } from "./ui-message-context.js";
 
 const RUNTIME = { id: "tool-loop", version: 1 };
-const LOST = JSON.stringify({ status: "unknown", reason: "the result was lost" });
+const LOST_RESULT = { status: UNKNOWN_ACTION_STATUS, reason: "the result was lost" } as const;
+const LOST = JSON.stringify(LOST_RESULT);
+/** How the SDK marks a tool result's output to the model when it is an answer rather than an error. */
+const MODEL_RESULT_OUTPUT = { JSON: "json" } as const;
 const MODEL = "gpt-5.4-mini";
 const PROVIDER = "openai";
 const REPLAY: ReplayTarget = { provider: PROVIDER, model: MODEL };
@@ -212,6 +216,9 @@ function replyParts(
     { type: "text", text: TURN.REPLY, state: "done" },
   ];
 }
+
+/** How many of a reply's parts stand before the crash the interrupted fixtures model: the step's start, its reasoning, and the call. */
+const PARTS_THROUGH_CALL = 3;
 
 const ASK_ROW = userRow("3f1c9a2e-7b4d-4e8f-9a01-2b3c4d5e6f70", TURN.ASK);
 const REPLY_ROW = assistantRow("5a2d7b3c-8e4f-4a9b-8c12-3d4e5f6a7b81", replyParts(), MODEL);
@@ -633,6 +640,34 @@ test("compact drops the rows the derivation no longer reads, keeps the rest in w
   assert.equal(context.compact(), 0);
 });
 
+test("a call left unanswered is shown to the model as an answer whose envelope says unknown, the same from both engines", async () => {
+  const responses = new ResponsesContextEngine(RUNTIME);
+  responses.bootstrap(undefined, LOST);
+  responses.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: TURN.ASK });
+  responses.ingest({
+    kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
+    items: [reasoningItem(TURN.REASONING_BEFORE_CALL), functionCallItem()],
+  });
+  const resumed = new ResponsesContextEngine(RUNTIME);
+  resumed.bootstrap(responses.checkpoint(), LOST);
+  const interrupted = assistantRow(
+    "m2",
+    replyParts(TOOL_PART_STATE.INPUT_AVAILABLE).slice(0, PARTS_THROUGH_CALL),
+    MODEL,
+  );
+  const { context, bootstrap } = await bootstrapped([ASK_ROW, interrupted]);
+  assert.deepEqual(bootstrap, { loaded: true, repaired: 1 });
+
+  const fromCheckpoint = shownByResponses(resumed.assemble({ ephemeral: [] }));
+  const fromRows = shownByModelMessages(await context.assemble({ ephemeral: [] }));
+  assert.deepEqual(fromRows, fromCheckpoint);
+  assert.deepEqual(
+    fromRows.map((item) => item.kind),
+    [SHOWN.USER, SHOWN.REASONING, SHOWN.CALL, SHOWN.RESULT],
+  );
+  assert.deepEqual(fromRows[3], { kind: SHOWN.RESULT, callId: TURN.CALL_ID, output: LOST_RESULT });
+});
+
 test("a call the record left unanswered is answered with the lost result, and the record is not rewritten", async () => {
   for (const [state, extra] of [
     [TOOL_PART_STATE.INPUT_AVAILABLE, {}],
@@ -648,7 +683,7 @@ test("a call the record left unanswered is answered with the lost result, and th
     ]);
     const answered = messages.find(isTool);
     assert.deepEqual(answered ? resultParts(answered).map((part) => part.output) : [], [
-      { type: "error-text", value: LOST },
+      { type: MODEL_RESULT_OUTPUT.JSON, value: LOST_RESULT },
     ]);
     const kept = context.checkpoint().items[1];
     const parts = kept && isRecord(kept.message) ? kept.message.parts : undefined;

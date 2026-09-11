@@ -19,6 +19,7 @@ import {
 import { readStoredUIMessages, type StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   isWireString,
+  recordFromJsonLine,
   SCHEMA_REFUSAL,
   type SchemaPath,
   type SchemaRead,
@@ -189,8 +190,16 @@ function preparedToolPart(
       ? { callProviderMetadata: part.callProviderMetadata }
       : undefined),
   };
+  // A call a crash left unanswered is answered with the host's lost result, the
+  // envelope saying its effect is unknown: an answer, not an error, because an
+  // error reads to the model as a failure it may repeat, and an action whose
+  // effect is unknown is never retried on Luke's own initiative.
   if (!isSettled(part)) {
-    return { ...call, state: TOOL_PART_STATE.OUTPUT_ERROR, errorText: options.lostResultJson };
+    return {
+      ...call,
+      state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+      output: recordFromJsonLine(options.lostResultJson) ?? options.lostResultJson,
+    };
   }
   const result =
     replayed && part.resultProviderMetadata !== undefined
