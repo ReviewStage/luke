@@ -32,7 +32,6 @@ function swap(stage: (typeof CONFIRM_STAGE)[keyof typeof CONFIRM_STAGE] | undefi
   return renderToStaticMarkup(
     createElement(ConfirmSwap, {
       ...asking,
-      // biome-ignore lint/correctness/noChildrenProp: a colocated test runs as `.ts` and cannot write JSX, and `createElement`'s third argument does not satisfy a required `children` prop
       children: createElement("button", { type: "button" }, "Connect"),
     }),
   );

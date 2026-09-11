@@ -404,7 +404,7 @@ export class LiveCall implements LiveVoiceCall {
 
   #send(event: LiveClientEvent): void {
     const peer = this.#peer;
-    if (!peer || peer.channel.readyState !== "open") return;
+    if (peer?.channel.readyState !== "open") return;
     const data = JSON.stringify(event);
     const payload = decodeLivePayload(data);
     if (payload) this.#options.onWireEvent?.(TRACE_DIRECTION.CLIENT, payload);

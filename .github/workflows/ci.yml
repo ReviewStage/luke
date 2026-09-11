@@ -4,8 +4,6 @@ on:
   pull_request:
   merge_group:
     types: [checks_requested]
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -68,6 +66,22 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: "16.2"
+      # The Electron binary and electron-builder's DMG tooling are downloaded
+      # per install unless their caches survive the runner; both are pinned by
+      # the lockfile, so its hash is the whole key.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      # The helpers are rebuilt only when their sources, the scripts that
+      # compile them, or the toolchain change: build-native.mjs keeps a stamp
+      # of those beside each output and skips one whose stamp still matches.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: apps/desktop/.build/native
+          key: native-helpers-${{ runner.os }}-xcode16.2-${{ hashFiles('apps/desktop/native/**', 'apps/desktop/scripts/build-native.mjs', 'apps/desktop/scripts/package-config.mjs', 'apps/desktop/scripts/package-layout.mjs', 'apps/desktop/scripts/app-icon.mjs', 'design/brand/icon/**') }}
       - run: ./scripts/evidence.sh
       - name: Preserve visual evidence
         id: visual-evidence

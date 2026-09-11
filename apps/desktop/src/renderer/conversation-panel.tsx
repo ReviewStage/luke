@@ -390,12 +390,7 @@ export function ConversationPanel({
                   : [row];
               })}
               {live.map((entry, index) => (
-                <ConversationEntryRow
-                  // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
-                  key={`live:${entry.kind}:${index}`}
-                  entry={entry}
-                  streaming
-                />
+                <ConversationEntryRow key={`live:${entry.kind}:${index}`} entry={entry} streaming />
               ))}
               {/* After the lines still being said: the newest spoken turn's
                   place, held while its first words are still on the service's

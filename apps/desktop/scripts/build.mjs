@@ -153,11 +153,11 @@ await Promise.all([
   ),
 ]);
 
-await Promise.all([
-  ...Object.entries(DOCK_ICON_IMAGES).map(([name, source]) =>
+await Promise.all(
+  Object.entries(DOCK_ICON_IMAGES).map(([name, source]) =>
     fs.copyFile(path.join(brandRoot, "icon", source), path.join(outputRoot, "icon", name)),
   ),
-]);
+);
 
 // The panel's and the voice window's bundles are the two that a browser context
 // parses at every window open, so their compressed size is a cost the user pays
@@ -182,7 +182,7 @@ if (process.env.LUKE_UPDATE_BUNDLE_BUDGET === "1") {
     `${JSON.stringify({ ...budget, gzipBytes: measured }, undefined, 2)}\n`,
   );
   for (const [bundle, bytes] of Object.entries(measured)) {
-    console.log(`bundle budget recorded: ${bundle} ${bytes} gzipped bytes`);
+    process.stdout.write(`bundle budget recorded: ${bundle} ${bytes} gzipped bytes\n`);
   }
 } else {
   const exceeded = Object.entries(measured).flatMap(([bundle, bytes]) => {

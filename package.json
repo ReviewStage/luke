@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
-    "check": "pnpm lint && pnpm knip && pnpm typecheck && pnpm test && pnpm build",
+    "check": "node scripts/check.mjs",
     "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",
@@ -17,10 +17,11 @@
     "lint:fix": "biome check --write .",
     "oxlint": "./scripts/oxlint.sh",
     "package": "pnpm --filter @luke/desktop package",
+    "package:dir": "pnpm --filter @luke/desktop package:dir",
     "prepare": "husky",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
-    "test": "pnpm test:harness && pnpm --recursive --if-present run test",
+    "test": "pnpm test:harness && vitest run && pnpm --recursive --parallel --if-present run test:node",
     "test:harness": "node --test scripts/*.test.mjs apps/ios/*.test.mjs tools/oxlint/anti-slop/*.test.mjs",
     "trace:export": "tsx tools/trace-export/src/cli.ts",
     "typecheck": "pnpm --recursive --if-present run typecheck"

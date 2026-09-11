@@ -115,7 +115,6 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: the generated rules interpolate only keys and colors the filter above validated against identifier and color-format allowlists.
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(

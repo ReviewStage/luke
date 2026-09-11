@@ -1019,7 +1019,7 @@ export class SettingsStore {
           .toString("base64");
         // Every other provider's grant is carried over, so connecting one never
         // disturbs another.
-        const grants = { ...(persisted.grants ?? {}) };
+        const grants = { ...persisted.grants };
         grants[providerId] = { tokenCipher, expiresAt: grant.expiresAt };
         return { ...persisted, grants };
       },

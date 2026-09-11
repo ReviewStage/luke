@@ -127,11 +127,7 @@ export function ChangelogPage(): React.JSX.Element {
                   {formatReleaseDate(release.date)}
                 </time>
               </div>
-              <div
-                className="document"
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: release.html is parsed from CHANGELOG.md, a repository file fixed at build time, not user input.
-                dangerouslySetInnerHTML={{ __html: release.html }}
-              />
+              <div className="document" dangerouslySetInnerHTML={{ __html: release.html }} />
             </section>
           ))}
         </div>

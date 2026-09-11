@@ -20,3 +20,13 @@ catalogs:
   web:
     typescript: 6.0.3
     "@types/node": 22.20.1
+
+# Every dependency here builds nothing this repository needs: esbuild runs from
+# its platform package, @sentry/cli is only reached with an auth token no check
+# carries, and the other two are transitive Windows and polyfill packages. Listed
+# so an install says so once instead of printing the approval box every time.
+ignoredBuiltDependencies:
+  - "@sentry/cli"
+  - core-js
+  - electron-winstaller
+  - esbuild

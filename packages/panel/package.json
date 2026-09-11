@@ -7,7 +7,7 @@
     ".": "./src/index.js"
   },
   "scripts": {
-    "test": "tsx --test 'src/**/*.test.ts'",
+    "test:node": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {

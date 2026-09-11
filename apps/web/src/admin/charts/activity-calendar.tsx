@@ -214,7 +214,6 @@ export function ActivityCalendar({
                 </div>
                 {week.days.map((day, slot) =>
                   day === undefined ? (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: an empty slot has no identity beyond its weekday position.
                     <div key={slot} aria-hidden="true" />
                   ) : (
                     <CalendarDayCell

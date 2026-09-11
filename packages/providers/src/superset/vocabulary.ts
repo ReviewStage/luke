@@ -29,7 +29,7 @@ const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]
  * carry.
  */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is what this pattern is for — the rule guards against writing one by accident.
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/gu;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/gu; // eslint-disable-line no-control-regex -- the same reason: the control range is the thing matched.
 
 /**
  * One line of a CLI's output, fit to be read on a row: no escape sequences,

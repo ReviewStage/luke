@@ -42,6 +42,7 @@
         }
       },
       "style": {
+        "noDescendingSpecificity": "off",
         "useExportType": "error",
         "useImportType": "error"
       }

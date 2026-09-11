@@ -22,4 +22,4 @@ if [[ -r "$HOME/.nvm/nvm.sh" && -f "$SIDECAR_REPO_ROOT/.nvmrc" ]]; then
 fi
 
 cd "$SIDECAR_REPO_ROOT"
-exec pnpm exec oxlint --config .oxlintrc.json "$@"
+exec pnpm exec oxlint --config .oxlintrc.json --deny-warnings "$@"

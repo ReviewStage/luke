@@ -12,7 +12,7 @@ sidecar_require_command plutil
 sidecar_ensure_dependencies
 
 cd "$SIDECAR_REPO_ROOT"
-pnpm package
+pnpm package:dir
 PACKAGED_APP=$(node -e "import('./apps/desktop/scripts/package-layout.mjs').then((layout) => process.stdout.write(layout.packagedAppPath(process.cwd())))")
 APP_EXECUTABLE="$PACKAGED_APP/Contents/MacOS/Luke"
 if [[ ! -x "$APP_EXECUTABLE" ]]; then
