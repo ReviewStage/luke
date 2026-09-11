@@ -26,6 +26,7 @@ export {
   type JsonSchemaGoldenTool,
   type JsonSchemaSource,
   jsonSchemaGoldenRoot,
+  matchJsonSchemaGolden,
   type RecordedJsonSchemas,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,

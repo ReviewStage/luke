@@ -27,7 +27,20 @@ proven to be the same strings where `@sidecar/actions` declares the whole of it.
 A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
 which both parses the untrusted value and emits the JSON Schema a model is
 shown for it. A hand-written parser beside a hand-written schema is two
-statements of the same rule that can drift.
+statements of the same rule that can drift. The node a model is shown is
+produced by wire's own emitter and never by Effect's `JSONSchema.make`: the
+`s.*` builder answers it today, and for an Effect `Schema` it is
+`packages/wire/src/effect/json-schema.ts`'s `emitJsonSchema`, which walks the
+schema's AST into the same `JsonSchemaNode`, key for key and in the same
+order, reading only wire's own annotations — the description `describeWire`
+sets under `WireDescriptionAnnotationId`, the refusal word `wireRefusal`
+sets on a filter or transformation, and the node `verbatimJsonSchema`
+declares beside a reader — and never Effect's `title` or `description`,
+which Effect writes on every primitive and every built-in filter. A decode
+failure becomes a `SchemaRefusalError` in the same three refusal words the
+builder answers, through `readEither`; `toSchemaRead` is the strangler shim
+that hands the `Either` to a caller still holding a `SchemaRead`, deleted
+with it in P12-07.
 
 What a schema emits is recorded rather than described. Every tool definition
 the action catalog produces, every schema the hosted wire and the live
@@ -182,15 +195,17 @@ wanted to draw.
 `@sidecar/wire/effect` is the same door for the Effect bridges that stand
 beside the hand-rolled base while both are still in use — the `Scope`,
 `Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
-`CloudFetch` — kept off the main barrel so a caller that only wants the wire
-vocabulary never resolves `effect`. A door is not what keeps `effect` out of a
-bundle generally, and `@sidecar/session` is where that stops being true: its
-fixed value sets are declared as `Schema.Literal` beside the `as const` object
-they derive from, and each `is*` guard over one is that schema's own `Schema.is`,
-so a renderer naming a single guard resolves `Schema`, `SchemaAST`, and
-`ParseResult`. That is the deliberate cost `docs/adr/0001-effect.md` records
-against the desktop's bundle budget: one copy per bundle, paid once, and what
-the door still keeps out is a Node-reaching companion like `@effect/platform`.
+`CloudFetch`, and the JSON Schema emitter with its `readEither` and
+`toSchemaRead` — kept off the main barrel so a caller that only wants the
+wire vocabulary never resolves `effect`. A door is not what keeps `effect` out
+of a bundle generally, and `@sidecar/session` is where that stops being true:
+its fixed value sets are declared as `Schema.Literal` beside the `as const`
+object they derive from, and each `is*` guard over one is that schema's own
+`Schema.is`, so a renderer naming a single guard resolves `Schema`,
+`SchemaAST`, and `ParseResult`. That is the deliberate cost
+`docs/adr/0001-effect.md` records against the desktop's bundle budget: one copy
+per bundle, paid once, and what the door still keeps out is a Node-reaching
+companion like `@effect/platform`.
 
 A subpath is also how a package keeps something out of a bundle that has no
 use for it. `@sidecar/session/fixtures` is the synthetic snapshot the fixture
