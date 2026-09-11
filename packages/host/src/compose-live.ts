@@ -23,6 +23,7 @@ import {
   voiceHotkeyLabel,
 } from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
+import { LiveSessionService } from "@sidecar/voice/live-session";
 import { lateRef } from "@sidecar/wire";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -30,9 +31,8 @@ import type { BrainComposer } from "./compose-brain.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { Composer, ComposerContext } from "./composer.js";
+import { conversationLiveRecord } from "./voice/conversation-live-record.js";
 import { brainAgentLiveBrain } from "./voice/live-brain-adapter.js";
-import { conversationLiveRecord } from "./voice/live-record.js";
-import { LiveSessionService } from "./voice/live-session-service.js";
 
 /** What the live session reaches in the brain that re-decides a held briefing. */
 interface LiveLinks {

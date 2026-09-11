@@ -22,14 +22,11 @@ import {
 } from "@sidecar/live";
 import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
-import type {
-  LiveSessionOpened,
-  LiveSessionSource,
-  LiveSideband,
-  SocketClose,
-} from "@sidecar/voice";
 import type { WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
+import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
+import type { LiveSideband, SocketClose } from "../live-socket.js";
+import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
@@ -46,7 +43,6 @@ import {
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
-import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./live-sideband.js";
 import { LIVE_TRACE_DECISION, type LiveTraceRecord } from "./live-trace.js";
 
 /** The acknowledgment each append type earns, as the API names them. */

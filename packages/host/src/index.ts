@@ -40,4 +40,4 @@ export { createGatewayService } from "./service.js";
 export { OPEN_REFUSAL, type SessionActionPerformer } from "./session-action-performer.js";
 export type { SessionRowActions } from "./session-row-actions.js";
 export { storeWorkerPath } from "./store-path.js";
-export { openSocketOverWs } from "./voice/live-sideband.js";
+export { openSocketOverWs } from "./voice/socket-over-ws.js";

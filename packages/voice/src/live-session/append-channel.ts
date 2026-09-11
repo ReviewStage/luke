@@ -1,6 +1,6 @@
 import { LIVE_CLIENT_EVENT, type LiveAppendEvent } from "@sidecar/live";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
-import type { LiveSideband } from "@sidecar/voice";
+import type { LiveSideband } from "../live-socket.js";
 import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
 
 /**

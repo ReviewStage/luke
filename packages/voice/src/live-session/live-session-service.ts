@@ -31,8 +31,10 @@ import {
 } from "@sidecar/live";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
-import type { LiveSessionOpened, LiveSessionSource, LiveSideband } from "@sidecar/voice";
+import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
+import type { LiveSideband } from "../live-socket.js";
 import { AppendChannel } from "./append-channel.js";
+import { closeGracefully, SIDEBAND_CLOSE_OUTCOME } from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
@@ -42,7 +44,6 @@ import {
   type LiveBrainRunEvent,
 } from "./live-brain.js";
 import type { LiveRecord } from "./live-record.js";
-import { closeGracefully, SIDEBAND_CLOSE_OUTCOME } from "./live-sideband.js";
 import {
   LIVE_TRACE_DECISION,
   LIVE_TRACE_KIND,
@@ -58,18 +59,22 @@ import {
 import { rosterAppendContent, rosterSeedItem, seedBudgetBesideRoster } from "./roster-context.js";
 
 /**
- * The one voice session and everything the host owes it. It opens when the
- * renderer offers a peer for the talk key, or when Luke has something to say
- * and no session stands; it is seeded from Luke's own record and the roster;
- * it is fed every append the host makes, each awaiting its acknowledgment;
- * it hands each delegation to the brain as a spoken ask and streams the
- * reply back as commentary once every action in the run has settled; it
- * writes both speakers' settled utterances into the record; and it closes
- * gracefully on idle, on the renderer's hang-up, and on the drain, recording
- * the usage the final event confirms. The renderer owns the microphone and
- * the hang-up; the host owns every append and the close decision, one owner
- * per action as the server-controls guide has it. The brain is reached only
- * through `LiveBrain`, and the record only through `LiveRecord`.
+ * The one voice session and everything its trusted side owes it. It opens
+ * when the peer offers itself for the talk key, or when Luke has something to
+ * say and no session stands; it is seeded from Luke's own record and the
+ * roster; it is fed every append the trusted side makes, each awaiting its
+ * acknowledgment; it hands each delegation to the brain as a spoken ask and
+ * streams the reply back as commentary once every action in the run has
+ * settled; it writes both speakers' settled utterances into the record; and
+ * it closes gracefully on idle, on the peer's hang-up, and on the drain,
+ * recording the usage the final event confirms. The peer owns the microphone
+ * and the hang-up; the trusted side owns every append and the close
+ * decision, one owner per action as the server-controls guide has it. The
+ * service is transport-neutral on purpose — whoever holds the sideband
+ * composes it: the desktop's host today, the hosted voice service where it
+ * owns the exchange — so the brain is reached only through `LiveBrain`, the
+ * record only through `LiveRecord`, and the session only through the
+ * `LiveSessionSource` and `LiveSideband` seams.
  */
 
 /** Rapid roster changes are combined into one append of the latest state. */
