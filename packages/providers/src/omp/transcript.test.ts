@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { dispatchRead } from "@sidecar/session";
-import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
+import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
+import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { ompPlugin } from "./index.js";
 import { OMP_SESSIONS_DIRECTORY } from "./records.js";
 import { ompTranscriptFilePath } from "./transcript.js";

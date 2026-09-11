@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import test, { type TestContext } from "node:test";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
+import { type TestContext, test } from "vitest";
 import { SupersetCli } from "./cli.js";
 import { SupersetSignIn, validSupersetSignInCode } from "./sign-in.js";
 import { SUPERSET_SIGN_IN_STAGE } from "./sign-in-stage.js";
@@ -24,7 +24,7 @@ class FakeChild extends EventEmitter {
 
 async function homeWithCli(t: TestContext): Promise<string> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-sign-in-"));
-  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  t.onTestFinished(() => fs.rm(home, { recursive: true, force: true }));
   await fs.mkdir(path.join(home, "bin"), { recursive: true });
   await fs.writeFile(path.join(home, "bin", "superset"), "#!/bin/sh\n");
   return home;

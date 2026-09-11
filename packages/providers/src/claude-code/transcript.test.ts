@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { dispatchRead, OMISSION_MARKER } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
 import {
   boundedTranscript,
   jsonlTranscriptReader,
@@ -51,7 +51,7 @@ const CLAUDE_PROJECTS_DIRECTORY = "projects";
 
 async function temporaryClaudeHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-transcript-"));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return directory;

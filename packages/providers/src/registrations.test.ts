@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { PROVIDER_ID, PROVIDER_ID_LIST, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
+import { test } from "vitest";
 import { providerRegistrations } from "./registrations.js";
 
 const registrations = providerRegistrations({

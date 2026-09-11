@@ -5,6 +5,6 @@ import { defineConfig } from "vitest/config";
 // per-package `node --test` scripts until each is swapped.
 export default defineConfig({
   test: {
-    projects: ["packages/wire", "tools/ios-parity", "tools/trace-export"],
+    projects: ["packages/wire", "tools/ios-parity", "tools/trace-export", "packages/providers"],
   },
 });

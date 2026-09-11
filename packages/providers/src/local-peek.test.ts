@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { PROVIDER_ID } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
 import { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
 
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
@@ -15,7 +15,7 @@ const TEST_CLAUDE_EVENT_TYPE = {
 
 async function temporaryDirectory(t: TestContext, prefix: string): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return directory;

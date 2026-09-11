@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test, { type TestContext } from "node:test";
 import {
   ACTION_KIND,
   advertisedActionFor,
@@ -16,12 +15,13 @@ import {
   SESSION_STATUS,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
+import { type TestContext, test } from "vitest";
 import { supersetHostState } from "./reader.js";
 import { SUPERSET_CONTROL_ID } from "./vocabulary.js";
 
 async function temporarySupersetHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-"));
-  t.after(async () => fs.rm(directory, { recursive: true, force: true }));
+  t.onTestFinished(async () => fs.rm(directory, { recursive: true, force: true }));
   return directory;
 }
 

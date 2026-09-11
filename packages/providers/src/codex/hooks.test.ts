@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { HOOK_EVENT } from "../shared/hook-merge.js";
 import { CODEX_HOOK_EVENT, CODEX_HOOK_SCRIPT_NAME, CODEX_HOOK_SPEC } from "./hooks.js";
 

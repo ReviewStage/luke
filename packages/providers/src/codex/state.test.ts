@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test, { type TestContext } from "node:test";
-import { temporaryDirectory } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
 import { defaultSqliteModule, textFromRow } from "../shared/local-sqlite.js";
+import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { rolloutPathForThread, threadRows } from "./state.js";
 
 const CODEX_STATE_DATABASE = "state_5.sqlite";
@@ -58,7 +58,7 @@ function withSqliteHome(t: TestContext, value: string | undefined): void {
   const previous = process.env[CODEX_SQLITE_HOME];
   if (value === undefined) delete process.env[CODEX_SQLITE_HOME];
   else process.env[CODEX_SQLITE_HOME] = value;
-  t.after(() => {
+  t.onTestFinished(() => {
     if (previous === undefined) delete process.env[CODEX_SQLITE_HOME];
     else process.env[CODEX_SQLITE_HOME] = previous;
   });

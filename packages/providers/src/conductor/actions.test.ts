@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   advertisedActionFor,
@@ -7,6 +6,7 @@ import {
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import { admittedForTest } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import { CLOUD_ADAPTER_DEFAULTS } from "../shared/cloud-wire.js";
 import {
   fakeConductorApi,

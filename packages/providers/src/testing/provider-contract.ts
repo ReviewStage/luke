@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { type ActionKind, type ActionRequest, admit } from "@sidecar/actions";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
@@ -31,8 +30,8 @@ import {
   type JsonObject,
   type JsonValue,
   recordedRoutes,
-  temporaryDirectory,
 } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
 import {
   assertGoldenJson,
   assertGoldenText,
@@ -41,6 +40,7 @@ import {
   recordedApi,
   seedHome,
 } from "./fixture-recording.js";
+import { temporaryDirectory } from "./temporary-directory.js";
 
 /** How this provider is observed at all, which decides which cases run. */
 export const PROVIDER_OBSERVATION = {

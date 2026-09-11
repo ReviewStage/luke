@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ACTION_KIND,
   ACTION_RESULT_STATUS,
@@ -15,6 +14,7 @@ import {
 } from "@sidecar/session";
 import { type CloudFetch, isWireString } from "@sidecar/wire";
 import { admittedForTest, HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import { ADAPTER_FAILURE } from "./adapter-failure.js";
 import { type CloudPass, type CloudSessionPlugin, cloudPass } from "./cloud-pass.js";

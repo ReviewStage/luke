@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test, { type TestContext } from "node:test";
 import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
@@ -13,7 +12,9 @@ import {
   SessionRoster,
   type SessionStatus,
 } from "@sidecar/session";
-import { type ParsedJsonObject, temporaryDirectory } from "@sidecar/wire/testing";
+import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { type TestContext, test } from "vitest";
+import { temporaryDirectory } from "../testing/temporary-directory.js";
 import { codexLocalPlugin } from "./index.js";
 import { isCodexRealtimeDelegationText } from "./records.js";
 

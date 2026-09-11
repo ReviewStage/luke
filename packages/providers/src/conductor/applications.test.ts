@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test, { type TestContext } from "node:test";
 import {
   HOSTED_AGENT_ID,
   PROVIDER_ID,
@@ -12,6 +11,7 @@ import {
   SESSION_LOCATION,
   SESSION_STATUS,
 } from "@sidecar/session";
+import { type TestContext, test } from "vitest";
 import { conductorApplications } from "./applications.js";
 
 const TEST_CONDUCTOR_AGENT_TYPE = {
@@ -23,7 +23,7 @@ const TEST_CONDUCTOR_AGENT_TYPE = {
 
 async function temporaryDatabasePath(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-conductor-client-"));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return path.join(directory, "conductor.db");

@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
 import { PROVIDER_ID, SESSION_STATUS } from "@sidecar/session";
+import { type TestContext, test } from "vitest";
 import { claudeDesktopApplications } from "../claude-code/applications.js";
 import { conductorApplications } from "../conductor/applications.js";
 import { type WorkspaceHostRegistration, workspaceHostRegistrations } from "./workspace-hosts.js";
 
 async function temporaryDirectory(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-workspace-hosts-"));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return directory;

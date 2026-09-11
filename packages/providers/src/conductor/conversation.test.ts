@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { dispatchConversation, dispatchRead, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import { HTTP_STATUS } from "@sidecar/wire/testing";
+import { test } from "vitest";
 import {
   fakeConductorApi,
   IDLE_SESSION_UUID,
