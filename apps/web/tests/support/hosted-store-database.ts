@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type * as SqlClient from "@effect/sql/SqlClient";
+import { NodeContext } from "@effect/platform-node";
+import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzleNodePostgres } from "drizzle-orm/node-postgres";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
-import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
-import { type Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { Pool } from "pg";
-import { DRIZZLE_MIGRATIONS_FOLDER } from "../../server/db/effect-migrator";
+import { runWebMigrations } from "../../server/db/effect-migrator";
 import * as schema from "../../server/db/schema";
 import { sqlClientOverPool } from "../../server/db/sql-client";
 import { payloadKeyRing } from "../../server/hosted/encryption";
@@ -24,18 +24,19 @@ import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-clie
  * Postgres dialect: PGlite in process by default, so `check.sh` needs no
  * service, or the Postgres named by `LUKE_STORE_TEST_DATABASE_URL`, which the
  * CI job points at its service container after `db:migrate` has run there. A
- * PGlite is migrated here, because it is opened empty; a Postgres is not,
- * because `db:migrate` is the one runner that records what it applied.
+ * PGlite is migrated here, through the same `runWebMigrations` the production
+ * runner applies, because it is opened empty; a Postgres is not, because
+ * `db:migrate` is the one runner that records what it applied.
  *
- * One database, read through both halves of the store's migration: the Drizzle
- * handle the modules still on it take, and a `SqlClient` over the very same
- * connection for the modules on `@effect/sql`, so a row a test writes through
- * one is the row the other reads. The runtime over that client is the store's
- * `run` seam here, the way `runWeb` is in a function.
+ * The Drizzle handle stands over the same connection for the modules and test
+ * files P10-14c has not yet moved onto `@effect/sql`; it runs no migration of
+ * its own and reads whatever `runWebMigrations` already applied.
+ *
+ * @deprecated The `db` field and the Drizzle handle behind it are what
+ * P10-14c2 (the last remaining-drizzle slice, tracked beside P10-14a/b/c in
+ * `docs/adr/0001-effect.md`) removes, once every test file reaches the
+ * `sql` client below directly instead.
  */
-
-export const TEST_PAYLOAD_SECRET = "c".repeat(64);
-
 export interface HostedStoreTestDatabase {
   readonly db: HostedStoreDatabase;
   readonly store: HostedStore;
@@ -48,6 +49,8 @@ export interface HostedStoreTestDatabase {
   close(): Promise<void>;
 }
 
+export const TEST_PAYLOAD_SECRET = "c".repeat(64);
+
 export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestDatabase> {
   const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
   const opened = connectionString ? await openNodePostgres(connectionString) : await openPglite();
@@ -59,14 +62,17 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
     sql: opened.sql,
     run,
     store: hostedStore({ db: opened.db, keys, run }),
-    async createUser() {
+    createUser() {
       const id = `user-${randomUUID()}`;
-      await opened.db.insert(schema.user).values({
-        id,
-        name: "Test User",
-        email: `${id}@luke.test`,
-      });
-      return id;
+      return run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`
+            insert into "user" (id, name, email)
+            values (${id}, ${"Test User"}, ${`${id}@luke.test`})
+          `;
+        }),
+      ).then(() => id);
     },
     async close() {
       await runtime.dispose();
@@ -83,9 +89,14 @@ interface OpenedDatabase {
 
 async function openPglite(): Promise<OpenedDatabase> {
   const client = new PGlite();
-  const db = drizzlePglite(client, { schema });
-  await migratePglite(db, { migrationsFolder: DRIZZLE_MIGRATIONS_FOLDER });
-  return { db, sql: sqlClientOverPglite(client), close: () => client.close() };
+  const sql = sqlClientOverPglite(client);
+  const migrationRuntime = ManagedRuntime.make(Layer.mergeAll(sql, NodeContext.layer));
+  try {
+    await migrationRuntime.runPromise(runWebMigrations());
+  } finally {
+    await migrationRuntime.dispose();
+  }
+  return { db: drizzlePglite(client, { schema }), sql, close: () => client.close() };
 }
 
 /** Migrates nothing: `db:migrate` is what applies the migrations to a Postgres. */

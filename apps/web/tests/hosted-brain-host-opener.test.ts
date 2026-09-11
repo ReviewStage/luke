@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { SqlClient } from "@effect/sql";
-import { and, eq, isNull } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
@@ -18,14 +17,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  events,
-  messages,
-  providerCursors,
-  turns,
-} from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -54,7 +46,7 @@ import {
   releasedBriefings,
   storeWriter,
 } from "../server/hosted/store";
-import { userSeal } from "../server/hosted/store/database";
+import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
 import { keepConsumedRoster, writeRosterSnapshot } from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 
@@ -230,18 +222,51 @@ function seams(
   };
 }
 
+const IdRowSchema = Schema.Struct({ id: Schema.String });
+
+const CursorRowSchema = Schema.Struct({ cursor: Schema.String });
+
 async function cursorOf(userId: string, who: SessionIdentity): Promise<string | undefined> {
-  const [row] = await database.db
-    .select({ cursor: providerCursors.cursor })
-    .from(providerCursors)
-    .where(
-      and(
-        eq(providerCursors.userId, userId),
-        eq(providerCursors.providerId, who.providerId),
-        eq(providerCursors.providerSessionId, who.providerSessionId),
-      ),
-    );
-  return row?.cursor;
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select cursor from provider_cursors
+        where user_id = ${userId}
+          and provider_id = ${who.providerId}
+          and provider_session_id = ${who.providerSessionId}
+      `;
+    }),
+  );
+  const row = rows[0];
+  return row === undefined ? undefined : Schema.decodeUnknownSync(CursorRowSchema)(row).cursor;
+}
+
+function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update conversations set runtime_session_id = ${sessionId} where id = ${conversationId}
+      `;
+    }),
+  );
+}
+
+function insertSettledTurn(userId: string, conversationId: string, at: Date): Promise<string> {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        insert into turns (user_id, conversation_id, origin, status, queued_at, settled_at)
+        values (
+          ${userId}, ${conversationId}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.SETTLED}, ${at}, ${at}
+        )
+        returning id
+      `;
+      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
+    }),
+  );
 }
 
 /** Where the opener's bookmark over the roster stands: the instant of the snapshot it last heard through, and the sessions it holds. */
@@ -260,24 +285,32 @@ async function bookmarkOf(
   };
 }
 
+const ObservedConversationRowSchema = Schema.Struct({
+  id: Schema.String,
+  providerSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("provider_session_id"),
+  ),
+  runtimeSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("runtime_session_id"),
+  ),
+});
+
 async function observedConversations(
   userId: string,
 ): Promise<{ id: string; providerSessionId: string | null; runtimeSessionId: string | null }[]> {
-  return database.db
-    .select({
-      id: conversations.id,
-      providerSessionId: conversations.providerSessionId,
-      runtimeSessionId: conversations.runtimeSessionId,
-    })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.userId, userId),
-        eq(conversations.kind, CONVERSATION_KIND.OBSERVED),
-        isNull(conversations.deletedAt),
-      ),
-    )
-    .orderBy(conversations.providerSessionId);
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select id, provider_session_id, runtime_session_id from conversations
+        where user_id = ${userId}
+          and kind = ${CONVERSATION_KIND.OBSERVED}
+          and deleted_at is null
+        order by provider_session_id
+      `;
+    }),
+  );
+  return rows.map((row) => Schema.decodeUnknownSync(ObservedConversationRowSchema)(row));
 }
 
 /** Three passes each moving one session since the opener last visited, so its bookmark stands three passes behind the snapshot. */
@@ -350,10 +383,7 @@ test("a conversation already running in an eve session is sent to, not reopened;
   const { userId } = await threePassesAboutOneSession();
   const conversationId = await database.store.directory.observed(userId, identity("s-1"), NOW);
   assert.ok(conversationId);
-  await database.db
-    .update(conversations)
-    .set({ runtimeSessionId: SESSION_ID })
-    .where(eq(conversations.id, conversationId));
+  await setConversationRuntimeSessionId(conversationId, SESSION_ID);
   const current = fakeEve();
   const rosterNow = hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000);
   await openObservationTurns(seams({ eve: current.eve, roster: rosterNow }), userId);
@@ -369,10 +399,7 @@ test("a conversation already running in an eve session is sent to, not reopened;
     NOW,
   );
   assert.ok(retiredConversation);
-  await database.db
-    .update(conversations)
-    .set({ runtimeSessionId: SESSION_ID })
-    .where(eq(conversations.id, retiredConversation));
+  await setConversationRuntimeSessionId(retiredConversation, SESSION_ID);
   const retired = fakeEve((handed) =>
     handed.kind === "send" ? { outcome: EVE_SEND_OUTCOME.RETIRED } : ACCEPTING(handed),
   );
@@ -867,52 +894,48 @@ async function releasedConversation(
   const target = { userId, conversationId };
   const decided: { briefing: string; decidedAt: number }[] = [];
   for (let index = 0; index < (options.briefings ?? 1); index += 1) {
-    const [turn] = await database.db
-      .insert(turns)
-      .values({
-        userId,
-        conversationId,
-        origin: TURN_ORIGIN.ROSTER_DIFF,
-        status: TURN_STATUS.SETTLED,
-        queuedAt: new Date(NOW - 60_000 + index),
-        settledAt: new Date(NOW - 60_000 + index),
-      })
-      .returning({ id: turns.id });
-    assert.ok(turn);
-    const [message] = await database.db
-      .insert(messages)
-      .values({
-        userId,
-        conversationId,
-        seq: index + 1,
-        turnId: turn.id,
-        clientId: turn.id,
-        role: MESSAGE_ROLE.ASSISTANT,
-        // SAFETY: a stored announce part in the SDK's own shape, as the relay writes one.
-        parts: [
-          {
-            type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
-            toolCallId: `call-${index}`,
-            state: "output-available",
-            input: { briefing: `Fixture briefing ${index + 1}.` },
-            output: { status: "accepted" },
-          },
-        ] as unknown as (typeof messages.$inferInsert)["parts"],
-        metadata: { author: MESSAGE_AUTHOR.BRAIN },
-        createdAt: new Date(NOW - 60_000 + index),
-        finishedAt: new Date(NOW - 60_000 + index),
-      })
-      .returning({ id: messages.id });
-    assert.ok(message);
-    await database.db.insert(events).values({
-      userId,
-      conversationId,
-      seq: index + 1,
-      messageId: message.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
-      payload: { reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED },
-      createdAt: new Date(options.releasedAt ?? NOW - 30_000),
-    });
+    const at = new Date(NOW - 60_000 + index);
+    const turnId = await insertSettledTurn(userId, conversationId, at);
+    const parts = JSON.stringify([
+      {
+        type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
+        toolCallId: `call-${index}`,
+        state: "output-available",
+        input: { briefing: `Fixture briefing ${index + 1}.` },
+        output: { status: "accepted" },
+      },
+    ]);
+    const metadata = JSON.stringify({ author: MESSAGE_AUTHOR.BRAIN });
+    const messageId = await database.run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const rows = yield* sql`
+          insert into messages (
+            user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata, created_at, finished_at
+          )
+          values (
+            ${userId}, ${conversationId}, ${index + 1}, ${turnId}, ${turnId}, ${MESSAGE_ROLE.ASSISTANT},
+            ${parts}::jsonb, ${metadata}::jsonb, ${at}, ${at}
+          )
+          returning id
+        `;
+        return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
+      }),
+    );
+    const payload = JSON.stringify({ reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED });
+    await database.run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`
+          insert into events (user_id, conversation_id, seq, message_id, kind, payload, created_at)
+          values (
+            ${userId}, ${conversationId}, ${index + 1}, ${messageId},
+            ${CONVERSATION_EVENT_KIND.SPEECH_EXPIRED}, ${payload}::jsonb,
+            ${new Date(options.releasedAt ?? NOW - 30_000)}
+          )
+        `;
+      }),
+    );
     decided.push({ briefing: `Fixture briefing ${index + 1}.`, decidedAt: NOW - 60_000 + index });
   }
   if (options.carried) {
@@ -934,11 +957,15 @@ async function releasedConversation(
 }
 
 async function queuedRows(conversationId: string): Promise<string[]> {
-  const rows = await database.db
-    .select({ id: turns.id })
-    .from(turns)
-    .where(and(eq(turns.conversationId, conversationId), eq(turns.status, TURN_STATUS.QUEUED)));
-  return rows.map((row) => row.id);
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select id from turns where conversation_id = ${conversationId} and status = ${TURN_STATUS.QUEUED}
+      `;
+    }),
+  );
+  return rows.map((row) => Schema.decodeUnknownSync(IdRowSchema)(row).id);
 }
 
 test("a conversation's queued hold releases become one hold_release message listing the briefings the hold released, and the rows go once eve has it", async () => {
@@ -974,10 +1001,15 @@ test("a hold-release row the relay has moved to running is the run's record and 
   const released = await releasedConversation(userId, "s-1", { rows: 1 });
   const [running] = released.queued;
   assert.ok(running);
-  await database.db
-    .update(turns)
-    .set({ status: TURN_STATUS.RUNNING, startedAt: new Date(NOW - 1_000) })
-    .where(eq(turns.id, running));
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${new Date(NOW - 1_000)}
+        where id = ${running}
+      `;
+    }),
+  );
   const { eve, handed } = fakeEve();
 
   const outcome = await openHoldReleaseTurns(
@@ -987,11 +1019,13 @@ test("a hold-release row the relay has moved to running is the run's record and 
 
   assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 0 });
   assert.deepEqual(handed, []);
-  const [row] = await database.db
-    .select({ status: turns.status })
-    .from(turns)
-    .where(eq(turns.id, running));
-  assert.deepEqual(row, { status: TURN_STATUS.RUNNING });
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select status from turns where id = ${running}`;
+    }),
+  );
+  assert.deepEqual(rows[0], { status: TURN_STATUS.RUNNING });
 });
 
 test("a hold release eve refuses leaves its rows queued; one whose briefings a hold-release message already names goes without a turn, said rather than sent", async () => {
@@ -1083,39 +1117,45 @@ test("a re-decision carries every release no hold-release message has named, how
   const userId = await accountSeeing(roster([observation("s-1")]));
   const released = await releasedConversation(userId, "s-1", { rows: 1, briefings: 12 });
   // One more, released earlier and named by the re-decision that carried it.
-  const [earlier] = await database.db
-    .insert(messages)
-    .values({
-      userId,
-      conversationId: released.conversationId,
-      seq: 40,
-      clientId: "earlier-announcement",
-      role: MESSAGE_ROLE.ASSISTANT,
-      // SAFETY: a stored announce part in the SDK's own shape, as the relay writes one.
-      parts: [
-        {
-          type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
-          toolCallId: "call-earlier",
-          state: "output-available",
-          input: { briefing: "An earlier briefing." },
-          output: { status: "accepted" },
-        },
-      ] as unknown as (typeof messages.$inferInsert)["parts"],
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
-      createdAt: new Date(NOW - 120_000),
-      finishedAt: new Date(NOW - 120_000),
-    })
-    .returning({ id: messages.id });
-  assert.ok(earlier);
-  await database.db.insert(events).values({
-    userId,
-    conversationId: released.conversationId,
-    seq: 40,
-    messageId: earlier.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
-    payload: { reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED },
-    createdAt: new Date(NOW - 60_000),
-  });
+  const earlierParts = JSON.stringify([
+    {
+      type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
+      toolCallId: "call-earlier",
+      state: "output-available",
+      input: { briefing: "An earlier briefing." },
+      output: { status: "accepted" },
+    },
+  ]);
+  const earlierMetadata = JSON.stringify({ author: MESSAGE_AUTHOR.BRAIN });
+  const earlierId = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        insert into messages (
+          user_id, conversation_id, seq, client_id, role, parts, metadata, created_at, finished_at
+        )
+        values (
+          ${userId}, ${released.conversationId}, ${40}, ${"earlier-announcement"}, ${MESSAGE_ROLE.ASSISTANT},
+          ${earlierParts}::jsonb, ${earlierMetadata}::jsonb, ${new Date(NOW - 120_000)}, ${new Date(NOW - 120_000)}
+        )
+        returning id
+      `;
+      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
+    }),
+  );
+  const earlierPayload = JSON.stringify({ reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED });
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        insert into events (user_id, conversation_id, seq, message_id, kind, payload, created_at)
+        values (
+          ${userId}, ${released.conversationId}, ${40}, ${earlierId},
+          ${CONVERSATION_EVENT_KIND.SPEECH_EXPIRED}, ${earlierPayload}::jsonb, ${new Date(NOW - 60_000)}
+        )
+      `;
+    }),
+  );
   const carried = await writer.recordUserMessage(
     { userId, conversationId: released.conversationId },
     {
@@ -1131,27 +1171,31 @@ test("a re-decision carries every release no hold-release message has named, how
   // Three sentences for a recurrence, in the order a row travels: the fixture's rows stand, the drain reads them, eve receives them. A failure here says which of the three it was.
   const expected = Array.from({ length: 12 }, (_, index) => `Fixture briefing ${index + 1}.`);
   const target = { userId, conversationId: released.conversationId };
-  const releaseEvents = await database.db
-    .select({ seq: events.seq })
-    .from(events)
-    .where(
-      and(
-        eq(events.conversationId, released.conversationId),
-        eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED),
-      ),
-    )
-    .orderBy(events.seq);
+  const releaseEvents = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select seq from events
+        where conversation_id = ${released.conversationId}
+          and kind = ${CONVERSATION_EVENT_KIND.SPEECH_EXPIRED}
+        order by seq
+      `;
+    }),
+  );
   assert.deepEqual(
-    releaseEvents.map((row) => row.seq),
+    releaseEvents.map((row) => Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq)),
     [...Array.from({ length: 12 }, (_, index) => index + 1), 40],
   );
-  const rows = await database.db
-    .select({ seq: messages.seq })
-    .from(messages)
-    .where(eq(messages.conversationId, released.conversationId))
-    .orderBy(messages.seq);
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select seq from messages where conversation_id = ${released.conversationId} order by seq
+      `;
+    }),
+  );
   assert.deepEqual(
-    rows.map((row) => row.seq),
+    rows.map((row) => Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq)),
     [...Array.from({ length: 12 }, (_, index) => index + 1), 40, 41],
   );
   const read = await database.run(releasedBriefings(target, { limit: 64 }));

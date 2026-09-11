@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import * as SqlClient from "@effect/sql/SqlClient";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_STATUS } from "@sidecar/wire";
-import { eq } from "drizzle-orm";
+import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import { ASK_REFUSAL, acceptAsk, askStanding } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -39,13 +40,43 @@ afterAll(() => database.close());
 const NOW = 1_800_000_000_000;
 const asks = askRecord(database.run);
 
+const IdRowSchema = Schema.Struct({ id: Schema.String });
+
 async function conversation(userId: string): Promise<string> {
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
+  const row = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        insert into conversations (user_id, kind)
+        values (${userId}, ${CONVERSATION_KIND.MAIN})
+        returning id
+      `;
+      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+    }),
+  );
   return row.id;
+}
+
+function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update conversations set runtime_session_id = ${sessionId} where id = ${conversationId}
+      `;
+    }),
+  );
+}
+
+function stampConversationDeletedAt(conversationId: string, deletedAt: Date) {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update conversations set deleted_at = ${deletedAt} where id = ${conversationId}
+      `;
+    }),
+  );
 }
 
 function write(userId: string, conversationId: string, clientId = randomUUID()) {
@@ -217,10 +248,7 @@ test("over the real record, a follow-up ask stands queued under its own id until
   const userId = await database.createUser();
   const conversationId = await conversation(userId);
   const sessionId = `wrun_${randomUUID()}`;
-  await database.db
-    .update(conversations)
-    .set({ runtimeSessionId: sessionId })
-    .where(eq(conversations.id, conversationId));
+  await setConversationRuntimeSessionId(conversationId, sessionId);
   const eve = eveAccepting(sessionId);
   const seams = { run: database.run, asks, eve, now: () => NOW };
   const reads = { store: database.store, run: database.run, asks };
@@ -328,10 +356,7 @@ test("a dispatch on a conversation cleared since the ask was admitted runs nothi
   const userId = await database.createUser();
   const conversationId = await conversation(userId);
   const ask = await asks.record(write(userId, conversationId));
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: new Date(NOW) })
-    .where(eq(conversations.id, conversationId));
+  await stampConversationDeletedAt(conversationId, new Date(NOW));
   let dispatched = 0;
   const outcome = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
     dispatched += 1;
@@ -349,10 +374,7 @@ test("an ask whose conversation is cleared between its admission and its dispatc
   const clearingBeforeDispatch = {
     ...asks,
     dispatchOnce: async (...args: Parameters<typeof asks.dispatchOnce>) => {
-      await database.db
-        .update(conversations)
-        .set({ deletedAt: new Date(NOW) })
-        .where(eq(conversations.id, conversationId));
+      await stampConversationDeletedAt(conversationId, new Date(NOW));
       return asks.dispatchOnce(...args);
     },
   };

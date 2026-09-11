@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { Effect } from "effect";
 import { afterAll, test } from "vitest";
-import { toolSets } from "../server/db/storage-schema";
 import {
   type OfferedToolSchema,
   promptHashOf,
@@ -10,6 +10,12 @@ import {
   toolSetHashOf,
 } from "../server/hosted/store/content-addressed";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+
+const readToolSetRows = (hash: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    return yield* sql`select hash, schemas from tool_sets where hash = ${hash}`;
+  });
 
 /**
  * The content addresses over the real migrations on PGlite: a prompt is a
@@ -52,7 +58,7 @@ test("the same tool set recorded twice is one row holding the declarations as of
 
   assert.equal(second, first);
   assert.equal(first, toolSetHashOf(offered));
-  const rows = await database.db.select().from(toolSets).where(eq(toolSets.hash, first));
+  const rows = await database.run(readToolSetRows(first));
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0]?.schemas, offered);
 });

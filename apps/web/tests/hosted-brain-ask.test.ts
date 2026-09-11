@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import * as SqlClient from "@effect/sql/SqlClient";
 import {
   ASK_ORIGIN,
   HOSTED_API_ERROR,
@@ -10,12 +11,13 @@ import {
 import {
   TURN_ORIGIN,
   TURN_STATUS,
+  type TurnStatus,
   type UnparsedWireValue,
   type WireBoundaryInput,
 } from "@sidecar/wire";
-import { eq } from "drizzle-orm";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND, conversations, turns } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-schema";
 import {
   ASK_REFUSAL,
   type AskRecord,
@@ -270,37 +272,97 @@ async function errorOf(response: Response): Promise<[number, string]> {
   return [response.status, read.error];
 }
 
+const IdRowSchema = Schema.Struct({ id: Schema.String });
+
+interface ConversationOverrides {
+  readonly runtimeSessionId?: string;
+  readonly deletedAt?: Date;
+}
+
 async function conversation(
   userId: string,
-  values: Partial<typeof conversations.$inferInsert> = {},
+  overrides: ConversationOverrides = {},
 ): Promise<string> {
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN, ...values })
-    .returning({ id: conversations.id });
-  assert.ok(row);
+  const row = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        insert into conversations (user_id, kind, runtime_session_id, deleted_at)
+        values (
+          ${userId}, ${CONVERSATION_KIND.MAIN},
+          ${overrides.runtimeSessionId ?? null}, ${overrides.deletedAt ?? null}
+        )
+        returning id
+      `;
+      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+    }),
+  );
   return row.id;
+}
+
+interface TurnOverrides {
+  readonly status?: TurnStatus;
+  readonly settledAt?: Date;
+  readonly cancelRequestedAt?: Date;
 }
 
 async function turnRow(
   userId: string,
   conversationId: string,
-  values: Partial<typeof turns.$inferInsert> = {},
+  overrides: TurnOverrides = {},
 ): Promise<string> {
-  const [row] = await database.db
-    .insert(turns)
-    .values({
-      userId,
-      conversationId,
-      origin: TURN_ORIGIN.TYPED,
-      status: TURN_STATUS.RUNNING,
-      queuedAt: new Date(NOW),
-      startedAt: new Date(NOW),
-      ...values,
-    })
-    .returning({ id: turns.id });
-  assert.ok(row);
+  const row = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        insert into turns (
+          user_id, conversation_id, origin, status,
+          queued_at, started_at, settled_at, cancel_requested_at
+        )
+        values (
+          ${userId}, ${conversationId}, ${TURN_ORIGIN.TYPED}, ${overrides.status ?? TURN_STATUS.RUNNING},
+          ${new Date(NOW)}, ${new Date(NOW)}, ${overrides.settledAt ?? null}, ${overrides.cancelRequestedAt ?? null}
+        )
+        returning id
+      `;
+      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+    }),
+  );
   return row.id;
+}
+
+function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update conversations set runtime_session_id = ${sessionId} where id = ${conversationId}
+      `;
+    }),
+  );
+}
+
+function stampConversationDeletedAt(conversationId: string, deletedAt: Date) {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update conversations set deleted_at = ${deletedAt} where id = ${conversationId}
+      `;
+    }),
+  );
+}
+
+function settleTurn(turnId: string, settledAt: Date) {
+  return database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update turns set status = ${TURN_STATUS.SETTLED}, settled_at = ${settledAt}
+        where id = ${turnId}
+      `;
+    }),
+  );
 }
 
 const ASK = { question: "what changed?", origin: ASK_ORIGIN.TYPED, clientId: CLIENT_ID };
@@ -416,10 +478,7 @@ test("the first ask opens the conversation's session under the caller's own bear
   assert.equal(recorded.turnId, hostTurnId(recorded.sessionId, EVE_FIRST_TURN_ID));
   assert.equal(recorded.deliveryId, undefined);
 
-  await database.db
-    .update(conversations)
-    .set({ runtimeSessionId: recorded.sessionId })
-    .where(eq(conversations.id, accepted.conversationId));
+  await setConversationRuntimeSessionId(accepted.conversationId, recorded.sessionId);
   const second = await handleBrainAsk(
     h.options(
       askRequest(userId, { ...ASK, clientId: randomUUID(), origin: ASK_ORIGIN.SPOKEN }),
@@ -570,10 +629,7 @@ test("a turn read answers a turn row's stamps under the id asked by, an ask with
     [404, HOSTED_API_ERROR.NOT_FOUND],
   );
 
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: new Date(NOW) })
-    .where(eq(conversations.id, conversationId));
+  await stampConversationDeletedAt(conversationId, new Date(NOW));
   assert.deepEqual(
     await errorOf(await handleBrainTurn(h.options(turnRequest(owner, asked.id), owner))),
     [404, HOSTED_API_ERROR.NOT_FOUND],
@@ -613,10 +669,7 @@ test("the in-process standing read answers what the turn route answers: for a qu
     assert.equal(await askStanding(reads, other, id), undefined);
   }
 
-  await database.db
-    .update(conversations)
-    .set({ deletedAt: new Date(NOW) })
-    .where(eq(conversations.id, conversationId));
+  await stampConversationDeletedAt(conversationId, new Date(NOW));
   for (const id of [asked.id, turnId]) {
     assert.deepEqual(
       await errorOf(await handleBrainTurn(h.options(turnRequest(owner, id), owner))),
@@ -666,10 +719,7 @@ test("a held read answers the moment the turn settles, and at the bound with the
   h.whileSleeping = async () => {
     sleeps += 1;
     if (sleeps !== 2) return;
-    await database.db
-      .update(turns)
-      .set({ status: TURN_STATUS.SETTLED, settledAt: new Date(NOW + 1_000) })
-      .where(eq(turns.id, turnId));
+    await settleTurn(turnId, new Date(NOW + 1_000));
   };
   const settling = await handleBrainTurn(
     h.options(turnRequest(userId, turnId, { [TURN_WAIT_QUERY]: "5000" }), userId),
