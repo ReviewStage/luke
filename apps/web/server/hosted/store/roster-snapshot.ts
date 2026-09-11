@@ -11,6 +11,7 @@ import {
   notInArray,
   or,
 } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import {
   devices,
   observationPass,
@@ -284,6 +285,14 @@ export interface ObservationEligibility {
   readonly providerIds: readonly string[];
   /** The earliest device last-seen instant that still counts as the account being in use. */
   readonly seenAfter: number;
+  /**
+   * The accounts the sweep may reach; every account where absent, which is
+   * the tick's call. A caller over a database other accounts are writing at
+   * the same time — a test file beside others on one Postgres — names its
+   * own, so an account that holds no key because nobody gave it one is not
+   * swept out from under the file that made it.
+   */
+  readonly userIds?: readonly string[] | undefined;
 }
 
 /**
@@ -305,17 +314,14 @@ export async function forgetObservationIneligible(
     .select({ userId: devices.userId })
     .from(devices)
     .where(gte(devices.lastSeenAt, new Date(eligibility.seenAfter)));
+  const ineligible = (userId: PgColumn) =>
+    and(
+      or(notInArray(userId, keyed), notInArray(userId, seen)),
+      eligibility.userIds !== undefined ? inArray(userId, [...eligibility.userIds]) : undefined,
+    );
   await db.transaction(async (tx) => {
-    await tx
-      .delete(rosterSnapshot)
-      .where(or(notInArray(rosterSnapshot.userId, keyed), notInArray(rosterSnapshot.userId, seen)));
-    await tx
-      .delete(rosterDiff)
-      .where(or(notInArray(rosterDiff.userId, keyed), notInArray(rosterDiff.userId, seen)));
-    await tx
-      .delete(observationPass)
-      .where(
-        or(notInArray(observationPass.userId, keyed), notInArray(observationPass.userId, seen)),
-      );
+    await tx.delete(rosterSnapshot).where(ineligible(rosterSnapshot.userId));
+    await tx.delete(rosterDiff).where(ineligible(rosterDiff.userId));
+    await tx.delete(observationPass).where(ineligible(observationPass.userId));
   });
 }

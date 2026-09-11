@@ -156,7 +156,7 @@ export interface HostedStore {
     consumeDiff(userId: string, id: string, now: number): Promise<boolean>;
     pass(userId: string): Promise<ObservationPassRecord | undefined>;
     recordPass(userId: string, attempt: { attemptedAt: number; failure?: string }): Promise<void>;
-    /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for. */
+    /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for, or of the named ones alone. */
     forgetIneligible(eligibility: ObservationEligibility): Promise<void>;
   };
   speech: {
