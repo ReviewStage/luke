@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { LIVE_VOICE } from "@sidecar/live";
 import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
+import { test } from "vitest";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import {
   ACCOUNT_PREFERENCE_FIELDS,

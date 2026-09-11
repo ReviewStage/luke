@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { PROVIDER_ID, SESSION_APPLICATION_ID, SESSION_FILTER } from "@sidecar/session";
+import { test } from "vitest";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 
 const guard = APP_SETTING_SCHEMA.sessionFilters.guard;

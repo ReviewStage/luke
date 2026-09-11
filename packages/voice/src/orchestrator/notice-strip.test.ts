@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import { test } from "vitest";
 import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
 
 function strip() {

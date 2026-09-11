@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 
 const guard = APP_SETTING_SCHEMA.sessionSearchQuery.guard;

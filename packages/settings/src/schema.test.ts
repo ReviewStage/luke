@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { isRealtimeVoice } from "@sidecar/actions";
 import { PRODUCT_SETTING_VALUE } from "@sidecar/analytics";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
@@ -11,6 +10,7 @@ import {
 } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
 import { PROVIDER_ID, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
+import { test } from "vitest";
 import {
   APP_SETTING_SCHEMA,
   SETTING_ROWS,

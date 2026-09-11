@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
 import { BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
+import { test } from "vitest";
 import { AgentTraceWriter } from "./trace-writer.js";
 import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "./vocabulary.js";
 

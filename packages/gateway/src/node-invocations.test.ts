@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { test } from "vitest";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
 import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
