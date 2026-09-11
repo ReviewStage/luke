@@ -1,7 +1,7 @@
-import { getDatabase } from "../db/index.js";
 import { handleChanges } from "../hosted/change-signal.js";
 import { deviceSeams } from "../hosted/device-store.js";
 import { hostedStoreRoute } from "../hosted/store-route.js";
+import { runWeb } from "../runtime.js";
 
 /**
  * The change signal a device polls: where every resource's read stands now,
@@ -10,5 +10,5 @@ import { hostedStoreRoute } from "../hosted/store-route.js";
  * file hands it the deployment's store and device writes.
  */
 export default hostedStoreRoute((route) =>
-  handleChanges({ ...route, touchDevice: deviceSeams(getDatabase()).touchDevice }),
+  handleChanges({ ...route, touchDevice: deviceSeams(runWeb).touchDevice }),
 );

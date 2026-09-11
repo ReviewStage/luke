@@ -46,7 +46,7 @@ const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const STRANGER_DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae8";
 const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
 
-const seams = deviceSeams(database.db);
+const seams = deviceSeams(database.run);
 
 function changesRequest(body: WireValue | undefined, method = "POST", authorized = true): Request {
   const headers = new Headers({ "content-type": "application/json" });

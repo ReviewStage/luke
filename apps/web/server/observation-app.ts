@@ -202,7 +202,7 @@ async function observationTickHandler(request: Request): Promise<Response> {
           store: { db: database, run: runWeb, writer },
           tools: CATALOG_TOOL_SET,
           send: (notification) => sender.send(notification),
-          forgetDevice: deviceSeams(database).forgetDevice,
+          forgetDevice: deviceSeams(runWeb).forgetDevice,
         },
         { now },
       );

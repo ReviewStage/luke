@@ -1,338 +1,313 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
-import { test } from "vitest";
-import { devices } from "../server/db/devices-schema";
-import { deviceSeams } from "../server/hosted/device-store";
-
-const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
-const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
-const TOKEN = "0a".repeat(32);
-const NOW = new Date("2026-09-09T12:00:00.000Z");
-
-type DeviceDatabase = Parameters<typeof deviceSeams>[0];
-
-/** What the seams write into a column: an id, a platform, a token, an instant, or a cleared value. */
-type WrittenValue = string | Date | null;
-
-type WrittenColumns = Record<string, WrittenValue>;
-
-interface RecordedWrite {
-  kind: "update" | "insert" | "delete" | "select";
-  values?: WrittenColumns;
-  set?: WrittenColumns;
-  target?: typeof devices.installationId;
-  hasWhere: boolean;
-}
+import { Effect, Schema } from "effect";
+import { forgetDevice, registerDevice, touchDevice } from "../server/hosted/device-store";
+import { testSqlClient } from "./support/sql-client";
 
 /**
- * A database that answers the write chains the device seams make, recording
- * what each was asked. The chain mirrors drizzle's fluent insert, update, and
- * delete, and `transaction` hands the same recorder back as the transaction.
+ * The device seams read as what they now are: effects over the ambient
+ * `SqlClient`. Every case reads the row back off the table rather than a
+ * recorded write chain, which is what the promise-shaped `deviceSeams` no
+ * longer offers a caller to intercept.
+ *
+ * Synthetic fixtures: no real installation, device, or token anywhere.
  */
-function deviceDatabase(answers: {
-  updatedRows: number;
-  deletedRows: number;
-  /** Whether the account holds the row a heartbeat names; the heartbeat's own update answers `updatedRows`. */
-  heldRows?: number;
-}) {
-  const writes: RecordedWrite[] = [];
-  const rows = (count: number) => Array.from({ length: count }, () => ({ deviceId: DEVICE_ID }));
-  const heldRows = answers.heldRows ?? answers.updatedRows;
-  // A where() is awaited bare by the token eviction and chained into returning()
-  // by every other write, so the fake answers as a real promise carrying both.
-  const settled = (count: number) =>
-    Object.assign(Promise.resolve(rows(count)), { returning: async () => rows(count) });
-  const recorder = {
-    select() {
-      const write: RecordedWrite = { kind: "select", hasWhere: false };
-      writes.push(write);
-      return {
-        from(table: typeof devices) {
-          assert.equal(table, devices);
-          return {
-            where() {
-              write.hasWhere = true;
-              return { limit: async () => rows(heldRows) };
-            },
-          };
-        },
-      };
-    },
-    update(table: typeof devices) {
-      assert.equal(table, devices);
-      return {
-        set(set: WrittenColumns) {
-          const write: RecordedWrite = { kind: "update", set, hasWhere: false };
-          writes.push(write);
-          return {
-            where() {
-              write.hasWhere = true;
-              return settled(answers.updatedRows);
-            },
-          };
-        },
-      };
-    },
-    insert(table: typeof devices) {
-      assert.equal(table, devices);
-      return {
-        values(values: WrittenColumns) {
-          const write: RecordedWrite = { kind: "insert", values, hasWhere: false };
-          writes.push(write);
-          return {
-            onConflictDoUpdate(update: {
-              target: typeof devices.installationId;
-              set: WrittenColumns;
-            }) {
-              write.target = update.target;
-              write.set = update.set;
-              return { returning: async () => [{ deviceId: String(values.id) }] };
-            },
-          };
-        },
-      };
-    },
-    delete(table: typeof devices) {
-      assert.equal(table, devices);
-      const write: RecordedWrite = { kind: "delete", hasWhere: false };
-      writes.push(write);
-      return {
-        where() {
-          write.hasWhere = true;
-          return settled(answers.deletedRows);
-        },
-      };
-    },
-    transaction: <Result>(run: (transaction: DeviceDatabase) => Promise<Result>) => run(database),
-  };
-  // SAFETY: Test double implements only the write chains deviceSeams exercises.
-  const database = recorder as unknown as DeviceDatabase;
-  return { database, writes };
-}
 
-test("a first registration inserts the row under the account with the minted id", async () => {
-  const { database, writes } = deviceDatabase({ updatedRows: 0, deletedRows: 0 });
-  const answer = await deviceSeams(database).registerDevice(
-    "user-1",
-    { installationId: INSTALLATION_ID, platform: DEVICE_PLATFORM.MACOS, push: undefined },
-    () => DEVICE_ID,
-    NOW,
-  );
+const NOW = new Date("2026-09-09T12:00:00.000Z");
+const LATER = new Date(NOW.getTime() + 120_000);
+const TOKEN = "0a".repeat(32);
 
-  assert.deepEqual(answer, { deviceId: DEVICE_ID });
-  assert.equal(writes.length, 1);
-  const [insert] = writes;
-  assert.equal(insert?.kind, "insert");
-  assert.deepEqual(insert?.values, {
-    id: DEVICE_ID,
-    userId: "user-1",
-    installationId: INSTALLATION_ID,
-    platform: DEVICE_PLATFORM.MACOS,
-    lastSeenAt: NOW,
-    activeUntil: null,
-    quietUntil: null,
-    pushToken: null,
-    pushEnvironment: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
-  assert.equal(insert?.target, devices.installationId);
-  assert.deepEqual(
-    insert?.set,
-    {
-      userId: "user-1",
-      platform: DEVICE_PLATFORM.MACOS,
-      lastSeenAt: NOW,
-      activeUntil: null,
-      quietUntil: null,
-      updatedAt: NOW,
-    },
-    "a registration without a token leaves the one on file, and clears the instants a previous sign-in reported",
-  );
+const openUser = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const userId = `user-${randomUUID()}`;
+  yield* sql`
+    insert into "user" (id, name, email)
+    values (${userId}, ${"Test User"}, ${`${userId}@luke.test`})
+  `;
+  return userId;
 });
 
-test("a registration re-keys the installation's row to the account that presents it", () => {
-  const { database, writes } = deviceDatabase({ updatedRows: 0, deletedRows: 0 });
-  return deviceSeams(database)
-    .registerDevice(
-      "user-2",
-      { installationId: INSTALLATION_ID, platform: DEVICE_PLATFORM.IOS, push: undefined },
-      () => DEVICE_ID,
-      NOW,
-    )
-    .then(() => {
-      const [insert] = writes;
-      assert.equal(insert?.target, devices.installationId);
-      assert.equal(insert?.set?.userId, "user-2");
-      assert.equal(Object.hasOwn(insert?.set ?? {}, "createdAt"), false);
-      assert.equal(Object.hasOwn(insert?.set ?? {}, "installationId"), false);
-    });
+const DeviceRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  installationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("installation_id")),
+  platform: Schema.String,
+  activeUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("active_until"),
+  ),
+  quietUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
+    Schema.fromKey("quiet_until"),
+  ),
+  pushToken: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("push_token"),
+  ),
+  pushEnvironment: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("push_environment"),
+  ),
+  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
+  updatedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("updated_at")),
 });
 
-test("a registration with a push token takes it off any other installation first", async () => {
-  const { database, writes } = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
-  await deviceSeams(database).registerDevice(
-    "user-1",
-    {
-      installationId: INSTALLATION_ID,
-      platform: DEVICE_PLATFORM.IOS,
-      push: { token: TOKEN, environment: PUSH_ENVIRONMENT.SANDBOX },
-    },
-    () => DEVICE_ID,
-    NOW,
-  );
-
-  assert.deepEqual(
-    writes.map((write) => write.kind),
-    ["update", "insert"],
-  );
-  const [eviction, insert] = writes;
-  assert.deepEqual(eviction?.set, { pushToken: null, pushEnvironment: null, updatedAt: NOW });
-  assert.equal(eviction?.hasWhere, true);
-  assert.equal(insert?.values?.pushToken, TOKEN);
-  assert.equal(insert?.values?.pushEnvironment, PUSH_ENVIRONMENT.SANDBOX);
-  assert.equal(insert?.set?.pushToken, TOKEN);
-});
-
-test("a bare heartbeat moves only the instants, scoped by account and row", async () => {
-  const { database, writes } = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
-  const seen = await deviceSeams(database).touchDevice(
-    "user-1",
-    { deviceId: DEVICE_ID, activeUntil: undefined, push: undefined },
-    NOW,
-  );
-
-  assert.equal(seen, true);
-  assert.deepEqual(
-    writes.map((write) => write.kind),
-    ["select", "update"],
-  );
-  assert.deepEqual(writes[1]?.set, { lastSeenAt: NOW, updatedAt: NOW });
-  assert.equal(writes[1]?.hasWhere, true);
-});
-
-test("a heartbeat naming a row the account does not hold evicts no token", async () => {
-  const { database, writes } = deviceDatabase({ updatedRows: 0, deletedRows: 0, heldRows: 0 });
-  const seen = await deviceSeams(database).touchDevice(
-    "user-1",
-    {
-      deviceId: DEVICE_ID,
-      activeUntil: undefined,
-      push: { token: TOKEN, environment: PUSH_ENVIRONMENT.SANDBOX },
-    },
-    NOW,
-  );
-
-  assert.equal(seen, false);
-  assert.deepEqual(
-    writes.map((write) => write.kind),
-    ["select"],
-    "another account's token is stripped only by a row that takes it",
-  );
-});
-
-test("a heartbeat carries presence, a new push address, or a cleared one", async () => {
-  const presence = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
-  await deviceSeams(presence.database).touchDevice(
-    "user-1",
-    { deviceId: DEVICE_ID, activeUntil: new Date(NOW.getTime() + 120_000), push: undefined },
-    NOW,
-  );
-  assert.deepEqual(presence.writes[1]?.set, {
-    lastSeenAt: NOW,
-    updatedAt: NOW,
-    activeUntil: new Date(NOW.getTime() + 120_000),
+const readDeviceByInstallation = (installationId: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const rows = yield* sql`select * from devices where installation_id = ${installationId}`;
+    return yield* Schema.decodeUnknown(DeviceRowSchema)(rows[0]);
   });
 
-  const quiet = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
-  await deviceSeams(quiet.database).touchDevice(
-    "user-1",
-    {
-      deviceId: DEVICE_ID,
-      activeUntil: null,
-      quietUntil: new Date(NOW.getTime() + 1_800_000),
-      push: undefined,
-    },
-    NOW,
-  );
-  assert.deepEqual(quiet.writes[1]?.set, {
-    lastSeenAt: NOW,
-    updatedAt: NOW,
-    activeUntil: null,
-    quietUntil: new Date(NOW.getTime() + 1_800_000),
-  });
+it.layer(testSqlClient)("the device seams over @effect/sql", (it) => {
+  it.effect("a first registration inserts the row under the account with the minted id", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const installationId = randomUUID();
+      const deviceId = randomUUID();
 
-  const unquieted = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
-  await deviceSeams(unquieted.database).touchDevice(
-    "user-1",
-    { deviceId: DEVICE_ID, activeUntil: undefined, quietUntil: null, push: undefined },
-    NOW,
-  );
-  assert.deepEqual(unquieted.writes[1]?.set, {
-    lastSeenAt: NOW,
-    updatedAt: NOW,
-    quietUntil: null,
-  });
+      const answer = yield* registerDevice({
+        id: deviceId,
+        userId,
+        installationId,
+        platform: DEVICE_PLATFORM.MACOS,
+        now: NOW,
+        push: undefined,
+      });
+      assert.deepEqual(answer, { deviceId });
 
-  const retokened = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
-  await deviceSeams(retokened.database).touchDevice(
-    "user-1",
-    {
-      deviceId: DEVICE_ID,
-      activeUntil: undefined,
-      push: { token: TOKEN, environment: PUSH_ENVIRONMENT.PRODUCTION },
-    },
-    NOW,
+      const row = yield* readDeviceByInstallation(installationId);
+      assert.deepEqual(row, {
+        id: deviceId,
+        userId,
+        installationId,
+        platform: DEVICE_PLATFORM.MACOS,
+        activeUntil: null,
+        quietUntil: null,
+        pushToken: null,
+        pushEnvironment: null,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+    }),
   );
-  assert.deepEqual(
-    retokened.writes.map((write) => write.kind),
-    ["select", "update", "update"],
-  );
-  assert.deepEqual(retokened.writes[1]?.set, {
-    pushToken: null,
-    pushEnvironment: null,
-    updatedAt: NOW,
-  });
-  assert.deepEqual(retokened.writes[2]?.set, {
-    lastSeenAt: NOW,
-    updatedAt: NOW,
-    pushToken: TOKEN,
-    pushEnvironment: PUSH_ENVIRONMENT.PRODUCTION,
-  });
 
-  const cleared = deviceDatabase({ updatedRows: 1, deletedRows: 0 });
-  await deviceSeams(cleared.database).touchDevice(
-    "user-1",
-    { deviceId: DEVICE_ID, activeUntil: undefined, push: null },
-    NOW,
-  );
-  assert.deepEqual(
-    cleared.writes.map((write) => write.kind),
-    ["select", "update"],
-  );
-  assert.deepEqual(cleared.writes[1]?.set, {
-    lastSeenAt: NOW,
-    updatedAt: NOW,
-    pushToken: null,
-    pushEnvironment: null,
-  });
-});
+  it.effect(
+    "a registration re-keys the installation's row to the account that presents it, clearing the instants a previous sign-in reported",
+    () =>
+      Effect.gen(function* () {
+        const firstUser = yield* openUser;
+        const secondUser = yield* openUser;
+        const installationId = randomUUID();
+        const deviceId = randomUUID();
 
-test("a heartbeat for a row the account does not hold moves nothing and says so", async () => {
-  const { database } = deviceDatabase({ updatedRows: 0, deletedRows: 0 });
-  const seen = await deviceSeams(database).touchDevice(
-    "user-1",
-    { deviceId: DEVICE_ID, activeUntil: undefined, push: undefined },
-    NOW,
+        yield* registerDevice({
+          id: deviceId,
+          userId: firstUser,
+          installationId,
+          platform: DEVICE_PLATFORM.MACOS,
+          now: NOW,
+          push: undefined,
+        });
+        const rekeyed = yield* registerDevice({
+          id: randomUUID(),
+          userId: secondUser,
+          installationId,
+          platform: DEVICE_PLATFORM.IOS,
+          now: LATER,
+          push: undefined,
+        });
+
+        assert.deepEqual(rekeyed, { deviceId }, "the existing row's id stands, not the new mint");
+        const row = yield* readDeviceByInstallation(installationId);
+        assert.equal(row.userId, secondUser);
+        assert.equal(row.platform, DEVICE_PLATFORM.IOS);
+        assert.deepEqual(row.createdAt, NOW);
+        assert.deepEqual(row.updatedAt, LATER);
+      }),
   );
-  assert.equal(seen, false);
-});
 
-test("a forget deletes the account's own row and answers whether one went", async () => {
-  const present = deviceDatabase({ updatedRows: 0, deletedRows: 1 });
-  assert.equal(await deviceSeams(present.database).forgetDevice("user-1", DEVICE_ID), true);
-  assert.deepEqual(present.writes, [{ kind: "delete", hasWhere: true }]);
+  it.effect("a registration with a push token takes it off any other installation first", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const installationA = randomUUID();
+      const installationB = randomUUID();
 
-  const absent = deviceDatabase({ updatedRows: 0, deletedRows: 0 });
-  assert.equal(await deviceSeams(absent.database).forgetDevice("user-1", DEVICE_ID), false);
+      yield* registerDevice({
+        id: randomUUID(),
+        userId,
+        installationId: installationA,
+        platform: DEVICE_PLATFORM.IOS,
+        now: NOW,
+        push: { token: TOKEN, environment: PUSH_ENVIRONMENT.SANDBOX },
+      });
+      yield* registerDevice({
+        id: randomUUID(),
+        userId,
+        installationId: installationB,
+        platform: DEVICE_PLATFORM.IOS,
+        now: LATER,
+        push: { token: TOKEN, environment: PUSH_ENVIRONMENT.PRODUCTION },
+      });
+
+      const rowA = yield* readDeviceByInstallation(installationA);
+      const rowB = yield* readDeviceByInstallation(installationB);
+      assert.equal(rowA.pushToken, null);
+      assert.equal(rowB.pushToken, TOKEN);
+      assert.equal(rowB.pushEnvironment, PUSH_ENVIRONMENT.PRODUCTION);
+    }),
+  );
+
+  it.effect(
+    "a bare heartbeat moves only the instants, and one for a row the account does not hold evicts no token and answers false",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const installationId = randomUUID();
+        const deviceId = randomUUID();
+        yield* registerDevice({
+          id: deviceId,
+          userId,
+          installationId,
+          platform: DEVICE_PLATFORM.MACOS,
+          now: NOW,
+          push: undefined,
+        });
+
+        const seen = yield* touchDevice({
+          userId,
+          deviceId,
+          now: LATER,
+          activeUntil: undefined,
+          quietUntil: undefined,
+          push: undefined,
+        });
+        assert.equal(seen, true);
+        const touched = yield* readDeviceByInstallation(installationId);
+        assert.deepEqual(touched.updatedAt, LATER);
+        assert.equal(touched.activeUntil, null);
+
+        const stranger = yield* openUser;
+        const unseen = yield* touchDevice({
+          userId: stranger,
+          deviceId,
+          now: LATER,
+          activeUntil: undefined,
+          quietUntil: undefined,
+          push: { token: TOKEN, environment: PUSH_ENVIRONMENT.SANDBOX },
+        });
+        assert.equal(unseen, false);
+        const untouched = yield* readDeviceByInstallation(installationId);
+        assert.equal(untouched.pushToken, null);
+      }),
+  );
+
+  it.effect("a heartbeat carries presence, a new push address, or a cleared one", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const installationId = randomUUID();
+      const deviceId = randomUUID();
+      yield* registerDevice({
+        id: deviceId,
+        userId,
+        installationId,
+        platform: DEVICE_PLATFORM.MACOS,
+        now: NOW,
+        push: undefined,
+      });
+
+      yield* touchDevice({
+        userId,
+        deviceId,
+        now: LATER,
+        activeUntil: LATER,
+        quietUntil: undefined,
+        push: undefined,
+      });
+      assert.deepEqual((yield* readDeviceByInstallation(installationId)).activeUntil, LATER);
+
+      yield* touchDevice({
+        userId,
+        deviceId,
+        now: LATER,
+        activeUntil: undefined,
+        quietUntil: undefined,
+        push: { token: TOKEN, environment: PUSH_ENVIRONMENT.PRODUCTION },
+      });
+      const retokened = yield* readDeviceByInstallation(installationId);
+      assert.equal(retokened.pushToken, TOKEN);
+      assert.equal(retokened.pushEnvironment, PUSH_ENVIRONMENT.PRODUCTION);
+
+      yield* touchDevice({
+        userId,
+        deviceId,
+        now: LATER,
+        activeUntil: undefined,
+        quietUntil: undefined,
+        push: null,
+      });
+      const cleared = yield* readDeviceByInstallation(installationId);
+      assert.equal(cleared.pushToken, null);
+      assert.equal(cleared.pushEnvironment, null);
+    }),
+  );
+
+  it.effect("a heartbeat with a push token evicts it from any other row first", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const installationA = randomUUID();
+      const installationB = randomUUID();
+      const deviceB = randomUUID();
+      yield* registerDevice({
+        id: randomUUID(),
+        userId,
+        installationId: installationA,
+        platform: DEVICE_PLATFORM.IOS,
+        now: NOW,
+        push: { token: TOKEN, environment: PUSH_ENVIRONMENT.SANDBOX },
+      });
+      yield* registerDevice({
+        id: deviceB,
+        userId,
+        installationId: installationB,
+        platform: DEVICE_PLATFORM.IOS,
+        now: NOW,
+        push: undefined,
+      });
+
+      yield* touchDevice({
+        userId,
+        deviceId: deviceB,
+        now: LATER,
+        activeUntil: undefined,
+        quietUntil: undefined,
+        push: { token: TOKEN, environment: PUSH_ENVIRONMENT.PRODUCTION },
+      });
+
+      const rowA = yield* readDeviceByInstallation(installationA);
+      const rowB = yield* readDeviceByInstallation(installationB);
+      assert.equal(rowA.pushToken, null);
+      assert.equal(rowB.pushToken, TOKEN);
+    }),
+  );
+
+  it.effect("a forget deletes the account's own row and answers whether one went", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const installationId = randomUUID();
+      const deviceId = randomUUID();
+      yield* registerDevice({
+        id: deviceId,
+        userId,
+        installationId,
+        platform: DEVICE_PLATFORM.MACOS,
+        now: NOW,
+        push: undefined,
+      });
+
+      const stranger = yield* openUser;
+      assert.equal(yield* forgetDevice(stranger, deviceId), false);
+      assert.equal(yield* forgetDevice(userId, deviceId), true);
+      assert.equal(yield* forgetDevice(userId, deviceId), false);
+    }),
+  );
 });

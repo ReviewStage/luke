@@ -214,7 +214,7 @@ function fakeSender(answer: ApnsDelivery = APNS_DELIVERY.DELIVERED) {
     },
     forgetDevice: async (userId, deviceId) => {
       forgotten.push({ userId, deviceId });
-      return deviceSeams(database.db).forgetDevice(userId, deviceId);
+      return deviceSeams(database.run).forgetDevice(userId, deviceId);
     },
   };
   return { seams, sent, forgotten };
