@@ -1,12 +1,11 @@
 import { join, relative } from "node:path";
 import { build } from "esbuild";
 import { functionBundlePlan, packageNameOf } from "../server/function-bundles.js";
-import { FUNCTION_MAX_DURATION_SECONDS, functionPath } from "../server/function-durations.js";
-import { stubDrift } from "../server/function-stubs.js";
+import { bundlePath, stubDrift } from "../server/function-stubs.js";
 
 /**
- * Bundles every route under `server/routes/` into a plain ESM file under
- * `dist-functions/`, mirroring the tree, so Vercel's builder finds JavaScript
+ * Bundles the functions the routes under `server/routes/` are grouped into,
+ * each a plain ESM file under `dist-functions/`, so Vercel's builder finds JavaScript
  * and only traces dependencies. Handed TypeScript, the builder runs its own
  * compiler over each function's whole import graph separately — thirty-odd
  * passes over the same sixteen workspace packages, most of a deploy's build
@@ -27,7 +26,6 @@ import { stubDrift } from "../server/function-stubs.js";
  * here instead.
  */
 const WEB = join(import.meta.dirname, "..");
-const ROUTES = join(WEB, "server", "routes");
 
 const drift = await stubDrift({ web: WEB });
 if (drift.length > 0) {
@@ -54,12 +52,11 @@ if (undeclared.size > 0) {
   );
 }
 
+const durationOf = new Map(
+  plan.functions.map((definition) => [join(WEB, bundlePath(definition)), definition.maxDuration]),
+);
 for (const [file, output] of Object.entries(result.metafile.outputs)) {
-  const maxDuration = output.entryPoint
-    ? FUNCTION_MAX_DURATION_SECONDS.get(
-        functionPath(relative(ROUTES, join(WEB, output.entryPoint))),
-      )
-    : undefined;
+  const maxDuration = durationOf.get(join(WEB, file));
   // biome-ignore lint/suspicious/noConsole: a build script's output is its log — what it wrote, and how much of it.
   console.log(
     `bundled ${relative(WEB, file)} (${output.bytes} bytes${maxDuration === undefined ? "" : `, ${maxDuration}s`})`,

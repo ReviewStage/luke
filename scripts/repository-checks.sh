@@ -263,8 +263,10 @@ node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
 # Vercel registers api/ functions from the uploaded tree before the build runs,
-# so each route's committed api/**/*.js stub is what gets deployed; --check
-# fails if a route has no stub, a stub went stale, or a .js under api/ has no route.
+# so each function's committed api/*.js stub is what gets deployed, and the
+# vercel.json rewrites are what land a route on its grouped function; --check
+# fails if a function has no stub, a stub or rewrite went stale, or a .js under
+# api/ has no function.
 pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-stubs.ts --check
 
 # The public platform table is a direct projection of the session package's

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   brainTurnEventsPath,
@@ -29,7 +28,14 @@ import {
   UI_PART_TYPE,
 } from "../server/core";
 import { CONVERSATION_KIND, conversations } from "../server/db/storage-schema";
-import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
+import { DISPATCH_QUERY } from "../server/function-dispatch";
+import {
+  FUNCTION_GROUP,
+  FUNCTION_MAX_DURATION_SECONDS,
+  routeKeyOf,
+} from "../server/function-durations";
+import { apiRewrites } from "../server/function-rewrites";
+import { stubPath, webFunctions } from "../server/function-stubs";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -514,7 +520,7 @@ test("the stream's words are the brain's own: the event kinds are members of the
   assert.deepEqual(TURN_SLOW_STEP, SLOW_STEP_KIND);
 });
 
-test("the function's duration outlasts an attachment, the rewrite hands the path's id over, and the route carries the duration", () => {
+test("the function's duration outlasts an attachment, the rewrite hands the path's id over, and the route carries the duration", async () => {
   assert.ok(
     TURN_EVENT_STREAM_BOUNDS.ATTACHMENT_MS < TURN_EVENT_STREAM_BOUNDS.MAX_DURATION_SECONDS * 1000,
   );
@@ -523,19 +529,19 @@ test("the function's duration outlasts an attachment, the rewrite hands the path
     FUNCTION_MAX_DURATION_SECONDS.get(TURN_EVENT_STREAM_PATH),
     TURN_EVENT_STREAM_BOUNDS.MAX_DURATION_SECONDS,
   );
-  // SAFETY: the file is this repository's own vercel.json, read for the rewrite checked below.
-  const vercel = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
-  ) as { routes: Array<{ src: string; dest: string }> };
-  const rewrite = vercel.routes.find((route) =>
-    route.dest.startsWith(`${TURN_EVENT_STREAM_PATH}.js?`),
+  const functions = await webFunctions(fileURLToPath(new URL("..", import.meta.url)));
+  const rewrite = apiRewrites(functions).find(
+    (candidate) =>
+      new URL(candidate.dest, "http://localhost").searchParams.get(DISPATCH_QUERY.ROUTE) ===
+      routeKeyOf(TURN_EVENT_STREAM_PATH),
   );
   assert.ok(rewrite);
   const turnId = TURN.id;
   const match = new RegExp(`^${rewrite.src}$`).exec(brainTurnEventsPath(turnId));
   assert.ok(match);
-  assert.equal(
-    rewrite.dest.replace("$1", match[1] ?? ""),
-    `${TURN_EVENT_STREAM_PATH}.js?id=${turnId}`,
-  );
+  const destination = new URL(rewrite.dest.replace("$1", match[1] ?? ""), "http://localhost");
+  const turnEvents = functions.find((definition) => definition.file === FUNCTION_GROUP.TURN_EVENTS);
+  assert.ok(turnEvents);
+  assert.equal(destination.pathname, `/${stubPath(turnEvents)}`);
+  assert.deepEqual(destination.searchParams.getAll("id"), [turnId]);
 });
