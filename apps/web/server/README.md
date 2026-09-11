@@ -122,8 +122,12 @@ The `SqlClient` is `PgClient.layerFromPool` over a pool built to the same
 trip there would land on the cold start of every function, including the ones
 that never query. `pg` connects on its first query instead. The hosted store is
 moving onto the client a module at a time, so the two stand side by side over
-the one database: `server/hosted/store/workspace-files.ts` reads and writes
-through this client, every other module still through Drizzle, and the store is
+the one database: `server/hosted/store/workspace-files.ts`,
+`standing-conversations.ts`, and `soft-delete.ts` read and write through this
+client, as does `roster-snapshot.ts` but for its one exported
+`readRosterSnapshot`, which `hosted-store.test.ts` still calls directly with
+the Drizzle handle to prove a sealed row does not open under another user's
+seal — every other module still through Drizzle — and the store is
 handed its edge's own runner to answer the promises the routes hold — `runWeb`
 in a function, the store tests' runtime in a test. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`

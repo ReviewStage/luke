@@ -185,13 +185,13 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
       latest: (userId, notAfter) => latestTurnPosition(db, userId, notAfter),
     },
     directory: {
-      standing: (userId) => standingConversations(db, userId),
+      standing: (userId) => run(standingConversations(userId)),
     },
     main: {
-      clear: (userId, now) => clearMainConversation(db, userId, now),
+      clear: (userId, now) => run(clearMainConversation(userId, now)),
     },
     retention: {
-      purgeCleared: (now) => purgeClearedConversations(db, now),
+      purgeCleared: (now) => run(purgeClearedConversations(now)),
     },
     ratings: {
       latest: (userId, messageId) => latestMessageRating(db, userId, messageId),
@@ -212,15 +212,15 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
     },
     roster: {
       read: (userId) => readRosterSnapshot(db, sealFor(userId), userId),
-      observedAt: (userId) => rosterSnapshotObservedAt(db, userId),
-      write: (userId, snapshot) => writeRosterSnapshot(db, sealFor(userId), userId, snapshot),
+      observedAt: (userId) => run(rosterSnapshotObservedAt(userId)),
+      write: (userId, snapshot) => run(writeRosterSnapshot(sealFor(userId), userId, snapshot)),
       advance: (userId, snapshot, diff, previousObservedAt) =>
-        advanceRosterSnapshot(db, sealFor(userId), userId, snapshot, diff, previousObservedAt),
-      pendingDiffs: (userId) => listPendingRosterDiffs(db, sealFor(userId), userId),
-      consumeDiff: (userId, id, now) => consumeRosterDiff(db, userId, id, now),
-      pass: (userId) => readObservationPass(db, userId),
-      recordPass: (userId, attempt) => recordObservationPass(db, userId, attempt),
-      forgetIneligible: (eligibility) => forgetObservationIneligible(db, eligibility),
+        run(advanceRosterSnapshot(sealFor(userId), userId, snapshot, diff, previousObservedAt)),
+      pendingDiffs: (userId) => run(listPendingRosterDiffs(sealFor(userId), userId)),
+      consumeDiff: (userId, id, now) => run(consumeRosterDiff(userId, id, now)),
+      pass: (userId) => run(readObservationPass(userId)),
+      recordPass: (userId, attempt) => run(recordObservationPass(userId, attempt)),
+      forgetIneligible: (eligibility) => run(forgetObservationIneligible(eligibility)),
     },
     speech: {
       open: (userId, limit) => openSpeechOffers(db, { userId, limit }),

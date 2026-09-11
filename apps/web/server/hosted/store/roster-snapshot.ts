@@ -1,31 +1,23 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  notInArray,
-  or,
-} from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
-import {
-  devices,
-  observationPass,
-  providerKey,
-  rosterDiff,
-  rosterSnapshot,
-} from "../../db/schema.js";
-import type { HostedStoreDatabase, UserSeal } from "./database.js";
+import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { eq } from "drizzle-orm";
+import { Effect, Option, type ParseResult, Schema } from "effect";
+import { rosterSnapshot } from "../../db/schema.js";
+import { EpochMillisColumnSchema, type HostedStoreDatabase, type UserSeal } from "./database.js";
 
 /**
  * The latest roster an observation pass reported for a user, one row
  * replaced whole on every pass. The body is whatever the pass serialized —
  * titles, branches, error lines — and is sealed; the instant it was observed
  * stands clear, because it is what decides whether the snapshot is current.
+ *
+ * Every function here but `readRosterSnapshot` itself is an
+ * `Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>` over
+ * `@effect/sql`. `readRosterSnapshot` stays on the Drizzle handle:
+ * `hosted-store.test.ts` calls it directly with `database.db` to prove a
+ * sealed row does not open under another user's seal, and that oracle is
+ * unchanged by this PR, so its one exported function keeps the signature the
+ * test already calls.
  */
 export interface RosterSnapshotRecord {
   readonly body: string;
@@ -65,221 +57,6 @@ export interface ObservationPassRecord {
   readonly failure?: string;
 }
 
-export async function readRosterSnapshot(
-  db: HostedStoreDatabase,
-  seal: UserSeal,
-  userId: string,
-): Promise<RosterSnapshotRecord | undefined> {
-  const [row] = await db.select().from(rosterSnapshot).where(eq(rosterSnapshot.userId, userId));
-  if (!row) return undefined;
-  return { body: seal.open(row.sealedBody), observedAt: row.observedAt };
-}
-
-/**
- * The instant of the snapshot standing, read without opening its body, so a
- * pass can replace a body this build cannot open or read — under a key the
- * ring no longer holds, or in a shape another build wrote — instead of
- * losing the compare-and-set against it forever.
- */
-export async function rosterSnapshotObservedAt(
-  db: HostedStoreDatabase,
-  userId: string,
-): Promise<number | undefined> {
-  const [row] = await db
-    .select({ observedAt: rosterSnapshot.observedAt })
-    .from(rosterSnapshot)
-    .where(eq(rosterSnapshot.userId, userId));
-  return row?.observedAt;
-}
-
-export async function writeRosterSnapshot(
-  db: HostedStoreDatabase,
-  seal: UserSeal,
-  userId: string,
-  snapshot: RosterSnapshotRecord,
-): Promise<void> {
-  const sealedBody = seal.seal(snapshot.body);
-  await db
-    .insert(rosterSnapshot)
-    .values({ userId, sealedBody, observedAt: snapshot.observedAt })
-    .onConflictDoUpdate({
-      target: rosterSnapshot.userId,
-      set: { sealedBody, observedAt: snapshot.observedAt },
-    });
-}
-
-/**
- * Replaces the snapshot and records the diff the pass read against the one
- * it replaced, in one transaction, so no reader finds a new snapshot with
- * no diff behind it or a diff ahead of the snapshot it describes. The write
- * is a compare-and-set on the instant of the snapshot the pass read: under
- * the user's pass row lock it checks that the snapshot standing is still
- * the one the diff was taken against, and answers false without writing
- * when another pass — the schedule, a fresh read, a seeding action — landed
- * first, so one transition is recorded once however many passes saw it. A
- * pass that found nothing changed hands no diff and only the snapshot moves.
- */
-export function advanceRosterSnapshot(
-  db: HostedStoreDatabase,
-  seal: UserSeal,
-  userId: string,
-  snapshot: RosterSnapshotRecord,
-  diff: RosterDiffInsert | undefined,
-  previousObservedAt: number | undefined,
-): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    await tx
-      .select({ userId: observationPass.userId })
-      .from(observationPass)
-      .where(eq(observationPass.userId, userId))
-      .for("update");
-    const [standing] = await tx
-      .select({ observedAt: rosterSnapshot.observedAt })
-      .from(rosterSnapshot)
-      .where(eq(rosterSnapshot.userId, userId));
-    if (standing?.observedAt !== previousObservedAt) return false;
-    await writeRosterSnapshot(tx, seal, userId, snapshot);
-    if (diff) await insertRosterDiff(tx, seal, userId, diff);
-    return true;
-  });
-}
-
-/**
- * Records one diff and holds the user's pending diffs to the bound, oldest
- * going first; a consumed diff has been read and is dropped on the next
- * insert rather than kept. An id already recorded is one diff.
- */
-async function insertRosterDiff(
-  db: HostedStoreDatabase,
-  seal: UserSeal,
-  userId: string,
-  diff: RosterDiffInsert,
-): Promise<boolean> {
-  const inserted = await db
-    .insert(rosterDiff)
-    .values({
-      userId,
-      id: diff.id,
-      observedAt: diff.observedAt,
-      previousObservedAt: diff.previousObservedAt,
-      sealedPayload: seal.seal(diff.payload),
-    })
-    .onConflictDoNothing()
-    .returning({ id: rosterDiff.id });
-  await db
-    .delete(rosterDiff)
-    .where(and(eq(rosterDiff.userId, userId), isNotNull(rosterDiff.consumedAt)));
-  const kept = await db
-    .select({ id: rosterDiff.id })
-    .from(rosterDiff)
-    .where(and(eq(rosterDiff.userId, userId), isNull(rosterDiff.consumedAt)))
-    .orderBy(desc(rosterDiff.observedAt), desc(rosterDiff.id))
-    .limit(MAXIMUM_PENDING_ROSTER_DIFFS);
-  await db.delete(rosterDiff).where(
-    and(
-      eq(rosterDiff.userId, userId),
-      isNull(rosterDiff.consumedAt),
-      notInArray(
-        rosterDiff.id,
-        kept.map((row) => row.id),
-      ),
-    ),
-  );
-  return inserted.length > 0;
-}
-
-/** The diffs still waiting to be consumed, oldest first; a row the ring cannot open is dropped, not the list. */
-export async function listPendingRosterDiffs(
-  db: HostedStoreDatabase,
-  seal: UserSeal,
-  userId: string,
-): Promise<readonly RosterDiffRecord[]> {
-  const rows = await db
-    .select()
-    .from(rosterDiff)
-    .where(and(eq(rosterDiff.userId, userId), isNull(rosterDiff.consumedAt)))
-    .orderBy(asc(rosterDiff.observedAt), asc(rosterDiff.id));
-  return rows.flatMap((row) => {
-    let payload: string;
-    try {
-      payload = seal.open(row.sealedPayload);
-    } catch {
-      return [];
-    }
-    return [
-      {
-        id: row.id,
-        observedAt: row.observedAt,
-        previousObservedAt: row.previousObservedAt,
-        payload,
-      },
-    ];
-  });
-}
-
-/** Marks one diff read; only a diff still pending can be, and only once. */
-export async function consumeRosterDiff(
-  db: HostedStoreDatabase,
-  userId: string,
-  id: string,
-  now: number,
-): Promise<boolean> {
-  const consumed = await db
-    .update(rosterDiff)
-    .set({ consumedAt: now })
-    .where(and(eq(rosterDiff.userId, userId), eq(rosterDiff.id, id), isNull(rosterDiff.consumedAt)))
-    .returning({ id: rosterDiff.id });
-  return consumed.length > 0;
-}
-
-export async function readObservationPass(
-  db: HostedStoreDatabase,
-  userId: string,
-): Promise<ObservationPassRecord | undefined> {
-  const [row] = await db.select().from(observationPass).where(eq(observationPass.userId, userId));
-  if (!row) return undefined;
-  return {
-    attemptedAt: row.attemptedAt,
-    ...(row.observedAt !== null ? { observedAt: row.observedAt } : undefined),
-    ...(row.failure !== null ? { failure: row.failure } : undefined),
-  };
-}
-
-/**
- * Records how a pass went. A whole read moves both instants and clears the
- * failure; a failed one moves the attempt, names the failure, and leaves the
- * last whole read standing, since that is still when the snapshot is from.
- * The record only ever moves forward: an attempt older than the one on
- * record — a pass that ran long and reports after a later one — writes
- * nothing, so no writer can put an account back at the head of the
- * schedule's order.
- */
-export async function recordObservationPass(
-  db: HostedStoreDatabase,
-  userId: string,
-  attempt: { attemptedAt: number; failure?: string },
-): Promise<void> {
-  const failure = attempt.failure ?? null;
-  const observedAt = failure === null ? attempt.attemptedAt : undefined;
-  await db
-    .insert(observationPass)
-    .values({
-      userId,
-      attemptedAt: attempt.attemptedAt,
-      observedAt: observedAt ?? null,
-      failure,
-    })
-    .onConflictDoUpdate({
-      target: observationPass.userId,
-      set: {
-        attemptedAt: attempt.attemptedAt,
-        failure,
-        ...(observedAt !== undefined ? { observedAt } : undefined),
-      },
-      setWhere: lte(observationPass.attemptedAt, attempt.attemptedAt),
-    });
-}
-
 /** Who the scheduled observation still runs for: a key to one of the providers, and an account seen since the instant. */
 export interface ObservationEligibility {
   readonly providerIds: readonly string[];
@@ -295,6 +72,361 @@ export interface ObservationEligibility {
   readonly userIds?: readonly string[] | undefined;
 }
 
+/** How a statement here fails: the driver's own refusal, or a row this build could not decode. */
+type RosterFailure = SqlError | ParseResult.ParseError;
+
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+export async function readRosterSnapshot(
+  db: HostedStoreDatabase,
+  seal: UserSeal,
+  userId: string,
+): Promise<RosterSnapshotRecord | undefined> {
+  const [row] = await db.select().from(rosterSnapshot).where(eq(rosterSnapshot.userId, userId));
+  if (!row) return undefined;
+  return { body: seal.open(row.sealedBody), observedAt: row.observedAt };
+}
+
+const RosterSnapshotObservedAtRowSchema = Schema.Struct({
+  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
+});
+
+const findObservedAt = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: RosterSnapshotObservedAtRowSchema,
+  execute: (userId) =>
+    statement((sql) => sql`select observed_at from roster_snapshot where user_id = ${userId}`),
+});
+
+/**
+ * The instant of the snapshot standing, read without opening its body, so a
+ * pass can replace a body this build cannot open or read — under a key the
+ * ring no longer holds, or in a shape another build wrote — instead of
+ * losing the compare-and-set against it forever.
+ */
+export function rosterSnapshotObservedAt(
+  userId: string,
+): Effect.Effect<number | undefined, RosterFailure, SqlClient.SqlClient> {
+  return Effect.map(findObservedAt(userId), (row) =>
+    Option.getOrUndefined(Option.map(row, (found) => found.observedAt)),
+  );
+}
+
+const RosterSnapshotWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  sealedBody: Schema.String,
+  observedAt: Schema.Number,
+});
+
+const upsertSnapshot = SqlSchema.void({
+  Request: RosterSnapshotWriteSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into roster_snapshot (user_id, sealed_body, observed_at)
+        values (${write.userId}, ${write.sealedBody}, ${write.observedAt})
+        on conflict (user_id) do update
+          set sealed_body = excluded.sealed_body, observed_at = excluded.observed_at
+      `,
+    ),
+});
+
+export function writeRosterSnapshot(
+  seal: UserSeal,
+  userId: string,
+  snapshot: RosterSnapshotRecord,
+): Effect.Effect<void, RosterFailure, SqlClient.SqlClient> {
+  return upsertSnapshot({
+    userId,
+    sealedBody: seal.seal(snapshot.body),
+    observedAt: snapshot.observedAt,
+  });
+}
+
+const lockObservationPass = (userId: string) =>
+  statement(
+    (sql) => sql`select user_id from observation_pass where user_id = ${userId} for update`,
+  );
+
+const RosterDiffWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  id: Schema.String,
+  observedAt: Schema.Number,
+  previousObservedAt: Schema.Number,
+  sealedPayload: Schema.String,
+});
+
+const RosterDiffIdRowSchema = Schema.Struct({ id: Schema.String });
+
+const insertDiffRow = SqlSchema.findAll({
+  Request: RosterDiffWriteSchema,
+  Result: RosterDiffIdRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into roster_diff (user_id, id, observed_at, previous_observed_at, sealed_payload)
+        values (${write.userId}, ${write.id}, ${write.observedAt}, ${write.previousObservedAt}, ${write.sealedPayload})
+        on conflict (user_id, id) do nothing
+        returning id
+      `,
+    ),
+});
+
+const deleteConsumedDiffs = SqlSchema.void({
+  Request: Schema.String,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`delete from roster_diff where user_id = ${userId} and consumed_at is not null`,
+    ),
+});
+
+const findKeptDiffIds = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: RosterDiffIdRowSchema,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`
+        select id from roster_diff
+        where user_id = ${userId} and consumed_at is null
+        order by observed_at desc, id desc
+        limit ${MAXIMUM_PENDING_ROSTER_DIFFS}
+      `,
+    ),
+});
+
+const pruneDiffsBeyondBound = (userId: string, keptIds: readonly string[]) =>
+  statement(
+    (sql) => sql`
+      delete from roster_diff
+      where user_id = ${userId} and consumed_at is null and not (${sql.in("id", keptIds)})
+    `,
+  );
+
+/**
+ * Records one diff and holds the user's pending diffs to the bound, oldest
+ * going first; a consumed diff has been read and is dropped on the next
+ * insert rather than kept. An id already recorded is one diff.
+ */
+function insertRosterDiff(
+  seal: UserSeal,
+  userId: string,
+  diff: RosterDiffInsert,
+): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const inserted = yield* insertDiffRow({
+      userId,
+      id: diff.id,
+      observedAt: diff.observedAt,
+      previousObservedAt: diff.previousObservedAt,
+      sealedPayload: seal.seal(diff.payload),
+    });
+    yield* deleteConsumedDiffs(userId);
+    const kept = yield* findKeptDiffIds(userId);
+    yield* pruneDiffsBeyondBound(
+      userId,
+      kept.map((row) => row.id),
+    );
+    return inserted.length > 0;
+  });
+}
+
+/**
+ * Replaces the snapshot and records the diff the pass read against the one
+ * it replaced, in one transaction, so no reader finds a new snapshot with
+ * no diff behind it or a diff ahead of the snapshot it describes. The write
+ * is a compare-and-set on the instant of the snapshot the pass read: under
+ * the user's pass row lock it checks that the snapshot standing is still
+ * the one the diff was taken against, and answers false without writing
+ * when another pass — the schedule, a fresh read, a seeding action — landed
+ * first, so one transition is recorded once however many passes saw it. A
+ * pass that found nothing changed hands no diff and only the snapshot moves.
+ */
+export function advanceRosterSnapshot(
+  seal: UserSeal,
+  userId: string,
+  snapshot: RosterSnapshotRecord,
+  diff: RosterDiffInsert | undefined,
+  previousObservedAt: number | undefined,
+): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* lockObservationPass(userId);
+        const standing = yield* rosterSnapshotObservedAt(userId);
+        if (standing !== previousObservedAt) return false;
+        yield* writeRosterSnapshot(seal, userId, snapshot);
+        if (diff !== undefined) yield* insertRosterDiff(seal, userId, diff);
+        return true;
+      }),
+    ),
+  );
+}
+
+const RosterDiffRowSchema = Schema.Struct({
+  id: Schema.String,
+  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
+  previousObservedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(
+    Schema.fromKey("previous_observed_at"),
+  ),
+  sealedPayload: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_payload")),
+});
+
+const findPendingDiffs = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: RosterDiffRowSchema,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`
+        select id, observed_at, previous_observed_at, sealed_payload
+        from roster_diff
+        where user_id = ${userId} and consumed_at is null
+        order by observed_at asc, id asc
+      `,
+    ),
+});
+
+/** The diffs still waiting to be consumed, oldest first; a row the ring cannot open is dropped, not the list. */
+export function listPendingRosterDiffs(
+  seal: UserSeal,
+  userId: string,
+): Effect.Effect<readonly RosterDiffRecord[], RosterFailure, SqlClient.SqlClient> {
+  return Effect.map(findPendingDiffs(userId), (rows) =>
+    rows.flatMap((row) => {
+      let payload: string;
+      try {
+        payload = seal.open(row.sealedPayload);
+      } catch {
+        return [];
+      }
+      return [
+        {
+          id: row.id,
+          observedAt: row.observedAt,
+          previousObservedAt: row.previousObservedAt,
+          payload,
+        },
+      ];
+    }),
+  );
+}
+
+const ConsumeDiffSchema = Schema.Struct({
+  userId: Schema.String,
+  id: Schema.String,
+  now: Schema.Number,
+});
+
+const consumeDiffRow = SqlSchema.findAll({
+  Request: ConsumeDiffSchema,
+  Result: RosterDiffIdRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        update roster_diff set consumed_at = ${write.now}
+        where user_id = ${write.userId} and id = ${write.id} and consumed_at is null
+        returning id
+      `,
+    ),
+});
+
+/** Marks one diff read; only a diff still pending can be, and only once. */
+export function consumeRosterDiff(
+  userId: string,
+  id: string,
+  now: number,
+): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
+  return Effect.map(consumeDiffRow({ userId, id, now }), (rows) => rows.length > 0);
+}
+
+const ObservationPassRowSchema = Schema.Struct({
+  attemptedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(
+    Schema.fromKey("attempted_at"),
+  ),
+  observedAt: Schema.propertySignature(Schema.NullOr(EpochMillisColumnSchema)).pipe(
+    Schema.fromKey("observed_at"),
+  ),
+  failure: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("failure")),
+});
+
+const findObservationPass = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: ObservationPassRowSchema,
+  execute: (userId) =>
+    statement(
+      (sql) =>
+        sql`select attempted_at, observed_at, failure from observation_pass where user_id = ${userId}`,
+    ),
+});
+
+export function readObservationPass(
+  userId: string,
+): Effect.Effect<ObservationPassRecord | undefined, RosterFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findObservationPass(userId),
+    Option.match({
+      onNone: () => undefined,
+      onSome: (row) => ({
+        attemptedAt: row.attemptedAt,
+        ...(row.observedAt !== null ? { observedAt: row.observedAt } : undefined),
+        ...(row.failure !== null ? { failure: row.failure } : undefined),
+      }),
+    }),
+  );
+}
+
+const ObservationPassWriteSchema = Schema.Struct({
+  userId: Schema.String,
+  attemptedAt: Schema.Number,
+  observedAt: Schema.NullOr(Schema.Number),
+  failure: Schema.NullOr(Schema.String),
+});
+
+const upsertObservationPass = SqlSchema.void({
+  Request: ObservationPassWriteSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into observation_pass (user_id, attempted_at, observed_at, failure)
+        values (${write.userId}, ${write.attemptedAt}, ${write.observedAt}, ${write.failure})
+        on conflict (user_id) do update
+          set attempted_at = excluded.attempted_at,
+              failure = excluded.failure,
+              observed_at = coalesce(excluded.observed_at, observation_pass.observed_at)
+          where observation_pass.attempted_at <= excluded.attempted_at
+      `,
+    ),
+});
+
+/**
+ * Records how a pass went. A whole read moves both instants and clears the
+ * failure; a failed one moves the attempt, names the failure, and leaves the
+ * last whole read standing, since that is still when the snapshot is from —
+ * `coalesce` is what leaves it standing on the row already there. The record
+ * only ever moves forward: an attempt older than the one on record — a pass
+ * that ran long and reports after a later one — writes nothing, so no writer
+ * can put an account back at the head of the schedule's order.
+ */
+export function recordObservationPass(
+  userId: string,
+  attempt: { attemptedAt: number; failure?: string },
+): Effect.Effect<void, RosterFailure, SqlClient.SqlClient> {
+  const failure = attempt.failure ?? null;
+  const observedAt = failure === null ? attempt.attemptedAt : null;
+  return upsertObservationPass({ userId, attemptedAt: attempt.attemptedAt, observedAt, failure });
+}
+
+function ineligibleWhere(sql: SqlClient.SqlClient, eligibility: ObservationEligibility) {
+  return sql`
+    (
+      user_id not in (select user_id from provider_key where ${sql.in("provider_id", eligibility.providerIds)})
+      or user_id not in (select user_id from devices where last_seen_at >= ${new Date(eligibility.seenAfter)})
+    )
+    ${eligibility.userIds !== undefined ? sql`and ${sql.in("user_id", eligibility.userIds)}` : sql``}
+  `;
+}
+
 /**
  * Drops everything the scheduled observation keeps for every user it no
  * longer runs for — no key to one of the named providers, or no device seen
@@ -302,26 +434,16 @@ export interface ObservationEligibility {
  * together, so a user whose key or account went, or who has not been seen
  * within the window, stops being observed and keeps no roster on record.
  */
-export async function forgetObservationIneligible(
-  db: HostedStoreDatabase,
+export function forgetObservationIneligible(
   eligibility: ObservationEligibility,
-): Promise<void> {
-  const keyed = db
-    .select({ userId: providerKey.userId })
-    .from(providerKey)
-    .where(inArray(providerKey.providerId, eligibility.providerIds));
-  const seen = db
-    .select({ userId: devices.userId })
-    .from(devices)
-    .where(gte(devices.lastSeenAt, new Date(eligibility.seenAfter)));
-  const ineligible = (userId: PgColumn) =>
-    and(
-      or(notInArray(userId, keyed), notInArray(userId, seen)),
-      eligibility.userIds !== undefined ? inArray(userId, [...eligibility.userIds]) : undefined,
-    );
-  await db.transaction(async (tx) => {
-    await tx.delete(rosterSnapshot).where(ineligible(rosterSnapshot.userId));
-    await tx.delete(rosterDiff).where(ineligible(rosterDiff.userId));
-    await tx.delete(observationPass).where(ineligible(observationPass.userId));
-  });
+): Effect.Effect<void, RosterFailure, SqlClient.SqlClient> {
+  return statement((sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* sql`delete from roster_snapshot where ${ineligibleWhere(sql, eligibility)}`;
+        yield* sql`delete from roster_diff where ${ineligibleWhere(sql, eligibility)}`;
+        yield* sql`delete from observation_pass where ${ineligibleWhere(sql, eligibility)}`;
+      }),
+    ),
+  ).pipe(Effect.asVoid);
 }
