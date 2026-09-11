@@ -1,4 +1,4 @@
-export type { LiveSessionSource } from "../live-session-source.js";
+export type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 export { type LiveSideband, type LiveSocket, sidebandOverSocket } from "../live-socket.js";
 export {
   LIVE_BRAIN_RUN_END,
@@ -15,5 +15,6 @@ export {
   ASK_UNRECORDED_NOTE,
   type BriefingDelivery,
   LiveSessionService,
+  type LiveSessionServiceOptions,
 } from "./live-session-service.js";
 export type { BeatKind } from "./proactive-queue.js";
