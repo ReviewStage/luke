@@ -714,3 +714,48 @@ shapes are a create-frame field (per session, widens their contract) or **by bui
 time, no wire change, the switch flips in our E5) — by build is my stated preference, because every
 other cutover in this rework worked that way and two live modes is two paths to test forever.
 **C8 is told not to invent a third mode** and to leave the attach seam explicit and unwired.
+
+
+## 2026-09-11 — `delegation_mode` is the API's target, not who answers; the service-owned exchange is BY BUILD (orchestrator, with the GPT-Live rollout)
+
+**Asked rather than assumed, and the assumption would have been wrong.** C8 needed to know how a
+desktop asks for a service-owned exchange, and `VOICE_DELEGATION_MODE = { CLIENT, RESPONSES }`
+already existed on `voice_sessions.delegation_mode`. Reusing it was the obvious move and is a
+falsehood: those two values are the **GPT Live session's delegation target as the OpenAI API
+defines it** — `CLIENT` means OpenAI emits `session.delegation.created` to whoever holds the
+session (the sideband), `RESPONSES` means OpenAI runs its own Responses backend. **Every desktop
+session is and stays `CLIENT`** (`packages/live`'s `session.ts` fixes `delegation.type = client`).
+
+**Who answers the delegation — the desktop host today, our service after C8 — is a different axis
+and not a mode of the session.** Had C8 written it onto that column, the row would have recorded
+something untrue about the OpenAI session and no later reader could have separated the two axes.
+
+**Ruling, both orchestrators agreeing: BY BUILD. No field on the create frame.** The frame is
+unchanged and **E5 flips the composition.** Two live modes on one wire is two paths to test
+forever. A later per-session need would be a **new** frame field and a product decision, never a
+reuse of `delegation_mode`.
+
+**Three facts from the rollout that change C8's work:** their **PR 13 (#955) is already merged**,
+so `packages/voice/src/orchestrator/*` is gone from main and there is nothing to stage around —
+C8 rebases onto main; a live-session entry in `@sidecar/voice` is agreed, with a constraint sharper
+than mine — **the package must never name `ws` at all**, because sockets arrive through the
+injected `openSocket` seam rather than an import; and they confirm **the service owns the append
+decision and the desktop never appends**, so claim-before-append is consistent on both sides.
+
+## The asymmetry between a hold and an expiry, ruled
+
+The rollout added that the desktop's `LiveSessionService` treats an **unspoken briefing as held and
+re-decided**, so "recorded unspoken" must stay **observable to the brain**. Ruling, so C5 and C8
+inherit one answer:
+
+- **Observable is required and already satisfied:** the `speech.expired` row stands, the view marks
+  the announcement unspoken, and the brain's standing context carries recent Conversation lines. The
+  trail is appended to, never overwritten.
+- **A hold's release queues a `hold_release` turn; a due expiry queues nothing, deliberately.** A
+  hold is a known, bounded reason the words were not said — the meeting ends, the reason is gone,
+  and the briefing deserves a fresh decision against the roster **as it then is**. A due expiry
+  means nobody could hear it inside its window, and queuing a re-decision would re-announce what
+  the brain thought half an hour ago; CLAUDE.md's rule is that a held briefing is re-decided rather
+  than **spoken stale**. Dropping it is the honest outcome and the trail is what keeps it from
+  being a silent one. **C5b states the asymmetry in its body**, because one a reader cannot find a
+  reason for gets "fixed" later.
