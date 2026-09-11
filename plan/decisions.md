@@ -85,3 +85,42 @@ the partial unique index making one standing main per account structural; `times
 v2 instant; `tokens_before` optional so an uncounted compaction is absent rather than zero; and
 `unknown` routed to `output-available` carrying the envelope so an unknown action is never drawn
 or read as a refusal.
+
+## 2026-09-11 04:0x — Two records from the audit's execution (orchestrator)
+
+**Item 6's residual did not move: C1 closed it.** `decisions.md` item 6 said the ownership
+fail-open for an unrecorded session id "moves to C2 with a named test". C1 (#957) closed it
+instead — `ownedAuth` refuses a session route with no recorded owner — and says so in its PR
+body. C2c (LUKE-158) is narrowed accordingly: the concurrency test (two concurrent starts on
+one conversation leave exactly one session), door hardening, and a named test for the
+unrecorded id anyway so the guarantee is asserted rather than inferred. Recorded because a
+reader of item 6 would otherwise look for this in C2c and find it already done.
+
+**Item 4's strip is compiler-kept, not remembered.** D2d (#1001) was asked whether making the
+strip structural was cheap; it was. `ClientUIMessage` is a branded type behind a module-private
+unique symbol in `@sidecar/session/ui-messages`, minted **only** by `clientUIMessage` (the
+strip), and the messages route's answer type names it — so a stored row cannot reach a response
+unstripped, and a future route that types its answer the same way cannot forget the call. Cost
+was one type on the route's answer plus one cast inside the strip.
+
+Three properties of that fix worth keeping if anyone revisits it:
+
+- **It strips `providerMetadata.openai` only**, keeping other providers' metadata. Over-stripping
+  would have been the easy mistake.
+- **It never mutates the stored row.** The opaque item stays in the database, because A7's engine
+  replays it under `ReplayTarget { provider, model }`.
+- **The brain's `REASONING_PROVIDER_KEY` is held equal to the session's `REPLAY_PROVIDER_KEY`
+  by a test**, so the key the brain writes and the key the stripper looks for cannot drift apart
+  silently.
+
+The route test asserts on the **parsed response body** against a row that genuinely carries
+`itemId` and `reasoningEncryptedContent`, and confirms the database row still has both. It was
+**mutation-checked**: with the strip replaced by a cast the test fails. A test that has been
+shown to fail without the fix is worth more than one that merely passes with it.
+
+**Scope of the leak it closed, stated precisely:** `handleConversationMessages` serialized each
+row exactly as `readStoredUIMessages` returned it, so any stored reasoning part carrying
+`providerMetadata.openai` left the service to every client. On the eve path that is at most the
+item id, since eve's stream carries no opaque item; a Responses-path row carries the full
+encrypted item. Only the Conversation messages read could carry a message — the turns and events
+routes carry no parts.
