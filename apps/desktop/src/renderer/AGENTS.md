@@ -30,8 +30,9 @@ That one subscription is an `Atom` over the stream of the bridge's deliveries,
 held in the registry `renderer-runtime.ts` makes and each root provides. The
 runtime beside that registry is the bundle's one Effect edge, and not the
 atoms' alone: `rendererRuntimeNow` hands it to work that is a fiber of its own
-rather than an atom's — the voice window's call — so nothing here builds a
-second runtime to fork on. The
+rather than an atom's — the voice window's call, and `LiveVoiceOrchestrator`'s
+own standing-call lifecycle above it — so nothing here builds a second runtime
+to fork on. The
 stream's scope is what installs the subscription, before anything is asked
 for, so the one read a root awaits is a bootstrap rather than a race, and the
 version rule above is a step of the stream rather than a comparison a reader

@@ -498,6 +498,36 @@ test("voice turning off closes the standing session, and stop closes it and repo
   assert.equal(g.views.length, reports);
 });
 
+test("an ended session releases once, whether it ends itself or stop interrupts it afterward", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  call.started();
+  await pressed;
+  // The call ends itself, without the orchestrator having asked it to.
+  call.settle(LIVE_STATUS.IDLE);
+  await drainMicrotasks();
+  assert.equal(call.closes, 1);
+  await f.orchestrator.stop();
+  await drainMicrotasks();
+  assert.equal(call.closes, 1);
+});
+
+test("stop interrupts a call still opening, and releases it once the open settles", async () => {
+  const f = fixture();
+  const pressed = f.orchestrator.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  assert.equal(call.closes, 0);
+  const stopped = f.orchestrator.stop();
+  call.started();
+  await pressed;
+  await stopped;
+  await drainMicrotasks();
+  assert.equal(call.closes, 1);
+});
+
 test("the host closing an older session leaves a call still waiting for its own answer standing", async () => {
   const f = fixture();
   const pressed = f.orchestrator.beginTalk();

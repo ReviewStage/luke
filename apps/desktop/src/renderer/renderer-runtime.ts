@@ -35,9 +35,11 @@ export const rendererRegistry = Registry.make({ scheduleTask });
 
 /**
  * The same runtime, for work that is a fiber of its own rather than an atom's:
- * the voice window's call forks its session's life and every bound of it here,
- * so a fiber outside the atoms still runs on the one runtime this bundle has.
- * The layer is built synchronously, so there is nothing to wait for.
+ * the voice window's call forks its session's life and every bound of it
+ * here, and `LiveVoiceOrchestrator` forks the standing call's own lifecycle
+ * on it too, so a fiber outside the atoms still runs on the one runtime this
+ * bundle has. The layer is built synchronously, so there is nothing to wait
+ * for.
  */
 export const rendererRuntimeNow = (): Runtime.Runtime<never> =>
   Result.getOrThrow(rendererRegistry.get(rendererRuntime));

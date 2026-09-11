@@ -316,6 +316,22 @@ it built. The clock the captions are stamped from is read there too. P9-08
 deletes the promise-facing seam once the hooks and the orchestrator take the
 fiber.
 
+`LiveVoiceOrchestrator`'s `beginTalk`, `endTalk`, and `stopSpeaking` in
+`packages/voice/src/orchestrator/live-voice-orchestrator.ts` are on the
+allowlist for the same shape of reason: the standing call's whole life is now
+one fiber the orchestrator forks on the runtime it was handed, opening the
+call as an `Effect.acquireRelease` acquire and closing it as the release, but
+`LiveVoiceCall` is still the four promises above, so each verb still runs its
+effect on that runtime rather than building one. P7-07 (compose-speech)
+deletes the seam once the host holds the fiber directly. Beside it,
+`ReattachingSocket`'s recovery in `packages/voice/src/live-session-source.ts`
+is on the allowlist too, and for its own reason rather than a caller's: the
+socket it wraps is a plain, synchronous `LiveSocket`, so the tries themselves
+are a fiber this class forks and interrupts on its own, with no promise
+anywhere above it waiting to be freed of one. P7-07 deletes it together with
+the orchestrator's, once the host composes the voice window's whole
+lifecycle as Effect.
+
 `HostedStoreRun` in `apps/web/server/hosted/store/database.ts` is on the
 allowlist as the door rather than as a runtime: a module of the hosted store
 moved onto `@effect/sql` answers an `Effect<A, SqlError | ParseError,
@@ -506,6 +522,8 @@ design decision stated as such:
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
 | `runAct` Promise door over the act `Atom.fn` | P9-02 | P9-08 |
 | `LiveCall`'s `open`/`unmute`/`mute`/`close` over the renderer's runtime | P9-03 | P9-08 |
+| `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P7-07 |
+| `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P7-07 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `runOnBrainRuntime`, the `Promise` a run's `done` answers | P5-14 | P5-14b |
 | `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P5-14b |

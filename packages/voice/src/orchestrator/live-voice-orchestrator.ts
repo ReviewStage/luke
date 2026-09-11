@@ -5,6 +5,7 @@ import {
 } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus, liveExchangeActive } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { Deferred, Effect, Exit, Fiber, FiberId, Runtime, type Scope } from "effect";
 import type { LiveCaptionRow, LiveVoiceCall, LiveVoiceCallEvents } from "./live-voice-call.js";
 import { NoticeStrip } from "./notice-strip.js";
 
@@ -55,6 +56,8 @@ export interface LiveVoiceBridge {
 export interface LiveVoiceOrchestratorOptions {
   bridge: LiveVoiceBridge;
   createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
+  /** The runtime the session's lifecycle fiber is forked on; `Runtime.defaultRuntime` for a caller (a test today) that holds none of its own. */
+  runtime?: Runtime.Runtime<never>;
 }
 
 const MICROPHONE_REFUSED_NOTE =
@@ -86,10 +89,24 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  * replaces it. No turn is committed, no reply is claimed, and no words are
  * written here: both speakers' lines are the host's, from the transcript its
  * sideband receives.
+ *
+ * The standing call's whole life is one fiber, forked on the runtime this
+ * orchestrator was handed: it acquires the call by opening it, waits to be
+ * told the call should end, and releases it by closing it, so a call is
+ * closed exactly once whichever way its life ends — on its own status, on the
+ * host's word, or on `stop`'s interruption. `LiveVoiceCall` is still four
+ * promises, so `#ensureSession` and every public verb that reaches it still
+ * run on that runtime rather than build one of their own.
+ *
+ * @deprecated `beginTalk`, `endTalk`, and `stopSpeaking` answer promises
+ * because {@link LiveVoiceCall} is what they hold; each runs its effect on
+ * the runtime this orchestrator was handed. P7-07 (compose-speech) deletes
+ * the promise-facing shape once the host takes the fiber directly.
  */
 export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;
   readonly #createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
+  readonly #runtime: Runtime.Runtime<never>;
   readonly #strip = new NoticeStrip({ onChanged: () => this.#touch() });
   #call: LiveVoiceCall | undefined;
   #surroundings: LiveVoiceSurroundings = {
@@ -109,7 +126,12 @@ export class LiveVoiceOrchestrator {
   #resumeListening = false;
   /** Whether the session standing was opened by a press rather than for Luke's own speech. */
   #openedByPress = false;
-  #opening: Promise<boolean> | undefined;
+  /** The open still negotiating: a second ask reads its answer rather than building a second call. */
+  #opening: Deferred.Deferred<LiveVoiceCall | undefined> | undefined;
+  /** The standing call's whole life, in the scope it was acquired into; interrupting this is what `stop` releases it with. */
+  #lifecycle: Fiber.RuntimeFiber<void> | undefined;
+  /** Completed once the standing call should end, which is what lets its lifecycle fiber close the scope and release it. */
+  #ending: Deferred.Deferred<void> | undefined;
   /**
    * Whether the talk key is down. A press's unmute follows the session it
    * opened only while this still stands, so a key let go of, or a stop
@@ -127,13 +149,18 @@ export class LiveVoiceOrchestrator {
   constructor(options: LiveVoiceOrchestratorOptions) {
     this.#bridge = options.bridge;
     this.#createCall = options.createCall;
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
+  }
+
+  #run<A>(effect: Effect.Effect<A>): Promise<A> {
+    return Runtime.runPromise(this.#runtime)(effect);
   }
 
   surround(surroundings: LiveVoiceSurroundings): void {
     const stoodAvailable = this.#surroundings.voiceAvailable;
     this.#surroundings = surroundings;
     if (surroundings.voiceAvailable === false && stoodAvailable !== false && this.#call) {
-      void this.#call.close();
+      this.#endCall();
     }
     this.#recomposeCaptions();
     this.#touch();
@@ -240,7 +267,7 @@ export class LiveVoiceOrchestrator {
         });
         return;
       case LIVE_SESSION_PHASE.CLOSING:
-        if (this.#aboutThisCall(change)) void this.#call?.close();
+        if (this.#aboutThisCall(change)) this.#endCall();
         return;
       case LIVE_SESSION_PHASE.CLOSED: {
         // A call still standing that the word is not about is left alone; no
@@ -257,13 +284,12 @@ export class LiveVoiceOrchestrator {
           (change.reason === LIVE_CLOSE_REASON.EXPIRED ||
             change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST);
         this.#lastListening = false;
-        const ended = this.#call;
-        if (ended) {
+        if (this.#call) {
           this.#call = undefined;
           this.#status = LIVE_STATUS.IDLE;
           this.#rows = [];
           this.#openedByPress = false;
-          void ended.close();
+          this.#endCall();
           this.#recomposeCaptions();
           this.#touch();
         }
@@ -286,11 +312,24 @@ export class LiveVoiceOrchestrator {
     return held !== undefined && (change.sessionId === undefined || change.sessionId === held);
   }
 
+  /**
+   * Interrupts the standing call's lifecycle fiber, which is what releases
+   * it: `Effect.acquireRelease`'s own guarantee closes it exactly once,
+   * whether the interruption lands mid-open or mid-standing.
+   */
   async stop(): Promise<void> {
     this.#stopped = true;
-    const call = this.#call;
+    const fiber = this.#lifecycle;
+    this.#lifecycle = undefined;
     this.#call = undefined;
-    if (call) await call.close();
+    if (fiber) await this.#run(Fiber.interrupt(fiber));
+  }
+
+  /** Signals the standing call's lifecycle fiber to end, which releases it by closing it exactly once. */
+  #endCall(): void {
+    const ending = this.#ending;
+    this.#ending = undefined;
+    if (ending) Deferred.unsafeDone(ending, Exit.void);
   }
 
   /**
@@ -298,35 +337,69 @@ export class LiveVoiceOrchestrator {
    * at a time: a second ask while the first is still negotiating waits for
    * it rather than offering the host a second peer.
    */
-  async #ensureSession(input: { byPress: boolean }): Promise<LiveVoiceCall | undefined> {
-    if (this.#call?.standing) return this.#call;
-    if (this.#opening) {
-      const opened = await this.#opening;
-      return opened ? this.#call : undefined;
-    }
-    this.#openedByPress = input.byPress;
-    this.#strip.clear();
-    const call = this.#createCall({
-      onStatus: (status) => this.#onStatus(call, status),
-      onCaptions: (rows) => this.#onCaptions(call, rows),
-      onError: (message) => this.#strip.showError(message),
-    });
-    this.#call = call;
-    this.#talkOpening = input.byPress;
-    this.#touch();
-    this.#opening = call.open({ byPress: input.byPress });
-    const opened = await this.#opening;
-    this.#opening = undefined;
-    if (!opened) {
-      this.#talkOpening = false;
-      if (this.#call === call) this.#call = undefined;
-      const unavailable = await this.#bridge.hostedUnavailableNote();
-      if (unavailable) this.#strip.showNotice(unavailable);
+  #ensureSession(input: { byPress: boolean }): Promise<LiveVoiceCall | undefined> {
+    return this.#run(this.#ensureSessionEffect(input));
+  }
+
+  #ensureSessionEffect(input: { byPress: boolean }): Effect.Effect<LiveVoiceCall | undefined> {
+    return Effect.suspend(() => {
+      if (this.#call?.standing) return Effect.succeed(this.#call);
+      const negotiating = this.#opening;
+      if (negotiating) return Deferred.await(negotiating);
+      const opened = Deferred.unsafeMake<LiveVoiceCall | undefined>(FiberId.none);
+      this.#opening = opened;
+      this.#openedByPress = input.byPress;
+      this.#strip.clear();
+      const call = this.#createCall({
+        onStatus: (status) => this.#onStatus(call, status),
+        onCaptions: (rows) => this.#onCaptions(call, rows),
+        onError: (message) => this.#strip.showError(message),
+      });
+      this.#call = call;
+      this.#talkOpening = input.byPress;
       this.#touch();
-      return undefined;
-    }
-    this.#touch();
-    return call;
+      this.#lifecycle = Runtime.runFork(this.#runtime)(
+        Effect.scoped(this.#lifecycleEffect(call, input, opened)),
+      );
+      return Deferred.await(opened);
+    });
+  }
+
+  /**
+   * The call's whole life, in the scope it was acquired into: opening it is
+   * the acquire, closing it the release, so a call that fails to open, ends
+   * on its own, is told to end, or has this fiber interrupted is closed
+   * exactly once either way. `opened` is settled on every exit, including an
+   * interruption that lands before the open itself decided anything, so a
+   * concurrent ask waiting on it is never left hanging on a call `stop`
+   * dropped before it stood.
+   */
+  #lifecycleEffect(
+    call: LiveVoiceCall,
+    input: { byPress: boolean },
+    opened: Deferred.Deferred<LiveVoiceCall | undefined>,
+  ): Effect.Effect<void, never, Scope.Scope> {
+    return Effect.gen(this, function* () {
+      const standing = yield* Effect.acquireRelease(
+        Effect.promise(() => call.open({ byPress: input.byPress })),
+        () => Effect.promise(() => call.close()),
+      );
+      this.#opening = undefined;
+      if (!standing) {
+        this.#talkOpening = false;
+        if (this.#call === call) this.#call = undefined;
+        const unavailable = yield* Effect.promise(() => this.#bridge.hostedUnavailableNote());
+        if (unavailable) this.#strip.showNotice(unavailable);
+        this.#touch();
+        yield* Deferred.succeed(opened, undefined);
+        return;
+      }
+      this.#touch();
+      yield* Deferred.succeed(opened, call);
+      const ending = Deferred.unsafeMake<void>(FiberId.none);
+      this.#ending = ending;
+      yield* Deferred.await(ending);
+    }).pipe(Effect.onExit(() => Effect.asVoid(Deferred.succeed(opened, undefined))));
   }
 
   #onStatus(call: LiveVoiceCall, status: LiveStatus): void {
@@ -340,6 +413,7 @@ export class LiveVoiceOrchestrator {
       this.#call = undefined;
       this.#rows = [];
       this.#openedByPress = false;
+      this.#endCall();
     }
     this.#recomposeCaptions();
     this.#touch();
