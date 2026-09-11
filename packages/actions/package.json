@@ -15,9 +15,11 @@
     "@sidecar/guide": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
-    "@sidecar/wire": "workspace:*"
+    "@sidecar/wire": "workspace:*",
+    "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
