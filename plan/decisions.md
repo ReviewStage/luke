@@ -759,3 +759,30 @@ inherit one answer:
   than **spoken stale**. Dropping it is the honest outcome and the trail is what keeps it from
   being a silent one. **C5b states the asymmetry in its body**, because one a reader cannot find a
   reason for gets "fixed" later.
+
+
+## 2026-09-11 — A move and a behaviour change are separate PRs (orchestrator, from C8's size check)
+
+C8's lift measured **1,331 changed lines** with rename detection: ~450 mechanical move, ~600 tests,
+~160 new web source, ~90 docs. **By arithmetic alone I would have let it through** — about 250
+lines of genuinely new logic, and E8 was accepted at 880 on exactly that reasoning.
+
+**Ruling: split it anyway, and the reason is the review and not the number.** A pure-move PR is
+reviewable by *proving nothing changed* — rename detection, unchanged bodies, the moved suites
+passing untouched. Mixing 160 lines of new source into it forces a reviewer to separate "what
+moved" from "what changed" by eye, **which is precisely where a behaviour change hides inside a
+move.** Both adversarial reviewers do a worse job on the combined diff than on either half.
+
+- **a1** `refactor(LUKE-132): move the live session machinery behind @sidecar/voice/live-session`
+- **a2** `feat(LUKE-132): the live record over the voice writer and the upstream sideband`
+
+**The moved tests go with the code in a1, not a2.** A move PR that leaves its tests behind is not a
+move; a1 grows and stays mechanical, and the moved suites passing with untouched bodies is the
+strongest evidence its claim is true. **a1's body must state that no behaviour changed, that the
+host composes from the new home unchanged, and what demonstrates it** — and must name individually
+any body that genuinely did change. One named exception is fine; an unnamed one is what the split
+exists to catch. Added to the standing addendum.
+
+Also corrected: both titles take **the ticket as scope** (`refactor(LUKE-132)`, not
+`refactor(voice)`), per the repository's Conventional Commits rule for Linear work. LUKE-132 is
+marked Done when the lift is whole, as LUKE-129 and LUKE-139 are running.
