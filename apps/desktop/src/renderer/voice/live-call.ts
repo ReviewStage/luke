@@ -32,6 +32,7 @@ import {
   LIVE_PEER_OUTCOME,
   type LivePeer,
   type LivePeerConnection,
+  type LiveSilence,
   stopDevice,
 } from "./live-peer";
 
@@ -68,6 +69,8 @@ export interface LiveCallOptions {
   events: LiveVoiceCallEvents;
   acts: LiveCallActs;
   createPeerConnection: () => LivePeerConnection;
+  /** The silence the sending line carries between presses, so the model's input timeline never stalls. */
+  createSilence: () => LiveSilence;
   openMicrophone: () => Promise<MediaStream>;
   onRemoteStream: (stream: MediaStream | undefined) => void;
   onLocalStream: (stream: MediaStream | undefined) => void;
@@ -99,11 +102,13 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  * microphone switch and the hang-up and nothing else: it sends the mute,
  * unmute, and close events the data channel permissions allow it, opens the
  * capture device for the unmute and releases it after the mute so the device
- * is open exactly while the talk key is held, flips the track only on the
- * acknowledgment, draws both speakers' captions from the transcript deltas,
- * reports its transport and its idle to the host, and reads Luke as speaking
- * from the remote track's playback level rather than from transcript events.
- * Every append is the host's, over its sideband.
+ * is open exactly while the talk key is held, leaves the peer's silent track
+ * on the line in the device's place so the model's input timeline keeps
+ * running, flips the track only on the acknowledgment, draws both speakers'
+ * captions from the transcript deltas, reports its transport and its idle to
+ * the host, and reads Luke as speaking from the remote track's playback level
+ * rather than from transcript events. Every append is the host's, over its
+ * sideband.
  *
  * The session's life is one fiber on the renderer's runtime, holding the scope
  * the peer was acquired into: the fiber ends when the call does, and the peer
@@ -229,13 +234,19 @@ export class LiveCall implements LiveVoiceCall {
     return this.#closeEffect();
   }
 
-  /** Luke audible on the remote track, from the level meter: the one source of the speaking status, held through his pauses. */
+  /**
+   * Luke audible on the remote track, from the level meter: the one source of
+   * the speaking status, held through his pauses. His speech is activity on
+   * the session as much as the developer's is, so a briefing only listened to
+   * keeps the idle window open too.
+   */
   reportRemoteAudioLevel(active: boolean): void {
     if (this.#speakingHangover !== undefined) {
       this.#disarm(this.#speakingHangover);
       this.#speakingHangover = undefined;
     }
     if (active) {
+      this.#noteActivity();
       if (this.#lukeSpeaking) return;
       this.#lukeSpeaking = true;
       this.#refreshStatus();
@@ -251,7 +262,13 @@ export class LiveCall implements LiveVoiceCall {
 
   /** Speech energy on the microphone, from the level meter: what resets the idle window. */
   reportMicrophoneActivity(active: boolean): void {
-    if (!active || !this.standing) return;
+    if (!active) return;
+    this.#noteActivity();
+  }
+
+  /** Either speaker heard: the idle window starts over, and an idle already reported is taken back. */
+  #noteActivity(): void {
+    if (!this.standing) return;
     if (this.#idleReported) {
       this.#idleReported = false;
       this.#options.acts.reportActivity(false);
@@ -321,6 +338,7 @@ export class LiveCall implements LiveVoiceCall {
       this.#setStatus(LIVE_STATUS.CONNECTING);
       const opened = yield* acquireLivePeer({
         createPeerConnection: this.#options.createPeerConnection,
+        createSilence: this.#options.createSilence,
         ...(opening.byPress ? { openMicrophone: this.#options.openMicrophone } : undefined),
         createSession: this.#options.acts.createSession,
         onRemoteStream: (stream) => this.#options.onRemoteStream(stream),
@@ -589,7 +607,7 @@ export class LiveCall implements LiveVoiceCall {
     Deferred.unsafeDone(this.#ending, Exit.void);
   }
 
-  /** Takes the device off the sending line and stops it, so the system's indicator goes out with the key. */
+  /** Takes the device off the sending line, silence in its place, and stops it, so the system's indicator goes out with the key. */
   #releaseDevice(peer: LivePeer): Effect.Effect<void> {
     return Effect.suspend(() => {
       const stream = peer.microphoneStream;
@@ -602,9 +620,15 @@ export class LiveCall implements LiveVoiceCall {
     });
   }
 
+  /**
+   * The silent track goes back on the line rather than nothing: a sender with
+   * no track stalls the input timeline the model paces its output against,
+   * and a reply appended into that stall waits for the next press. The device
+   * is stopped either way, since the key being up is what the indicator answers to.
+   */
   #takeOffLine(peer: LivePeer, stream: MediaStream): Effect.Effect<void> {
-    return Effect.tryPromise(() => peer.sender.replaceTrack(null)).pipe(
-      // A line already closed has nothing to take the track off; the device is stopped either way.
+    return Effect.tryPromise(() => peer.sender.replaceTrack(peer.silence)).pipe(
+      // A line already closed has nothing to swap the track on; the device is stopped either way.
       Effect.ignore,
       Effect.andThen(Effect.sync(() => stopDevice(stream))),
     );
