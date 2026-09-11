@@ -39,6 +39,10 @@ export const HOSTED_API_ERROR = {
   /** A tool name the service's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: "unknown-tool",
   METHOD_NOT_ALLOWED: "method-not-allowed",
+  /** The row the path names is not one this account holds; another account's and none at all read alike. */
+  NOT_FOUND: "not-found",
+  /** The message stands and is the caller's, but it is not one of Luke's, and only Luke's words take a rating. */
+  NOT_RATEABLE: "not-rateable",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];
@@ -84,4 +88,24 @@ export const hostedErrorSchema: Schema<HostedApiError> = s.map(
     { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
   ),
   (answer) => answer.error,
+);
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+/** The length of a UUID as its text form spells it. */
+export const WIRE_UUID_LENGTH = 36;
+
+export function isWireUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
+/**
+ * A row's or a device's id as the hosted wire takes it: the UUID text, case
+ * folded so the same id spelled two ways is one. A stored id column is
+ * `uuid`, and Postgres refuses any other text bound to it, so an id is held
+ * to this shape at the boundary rather than met as a failed query.
+ */
+export const wireUuidSchema: Schema<string> = s.refine(
+  s.map(s.text({ max: WIRE_UUID_LENGTH }), (id) => id.toLowerCase()),
+  isWireUuid,
 );

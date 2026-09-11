@@ -110,3 +110,8 @@ export const VOICE_SERVICE_PATH = {
   /** The accountless introduction session, metered by the function itself; no bearer. */
   INTRODUCTION: "/api/voice/introduction",
 } as const;
+
+/** Rate one of Luke's stored messages (PUT): the one hosted path with a row's id inside it rather than in a body. */
+export function conversationMessageRatingPath(messageId: string): string {
+  return `/api/conversation/messages/${encodeURIComponent(messageId)}/rating`;
+}

@@ -33,6 +33,10 @@
       "dest": "/api/auth/[...all].ts"
     },
     {
+      "src": "/api/conversation/messages/([^/]+)/rating",
+      "dest": "/api/conversation/messages/rating.ts?id=$1"
+    },
+    {
       "src": "/about",
       "dest": "/about.html"
     },

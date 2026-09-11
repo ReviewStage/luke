@@ -37,12 +37,14 @@ import {
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
+  latestMessageRating,
   listEvents,
   listMessages,
   listTurns,
   type MessageListRead,
   type SequenceCursor,
   type StoredEventRecord,
+  type StoredRatingRecord,
   type StoredTurnRecord,
   type TurnCursor,
 } from "./message-reads.js";
@@ -143,6 +145,10 @@ export interface HostedStore {
   retention: {
     /** The cron's purge of every conversation, of any account, stamped past the retention window. */
     purgeCleared(now: Date): Promise<number>;
+  };
+  ratings: {
+    /** The newest rating on one of the caller's messages, or nothing; ratings are written through `rateMessage` over the store writer. */
+    latest(userId: string, messageId: string): Promise<StoredRatingRecord | undefined>;
   };
   lines: {
     append(
@@ -267,6 +273,9 @@ export function hostedStore({ db, keys }: HostedStoreContext): HostedStore {
     retention: {
       purgeCleared: (now) => purgeClearedConversations(db, now),
     },
+    ratings: {
+      latest: (userId, messageId) => latestMessageRating(db, userId, messageId),
+    },
     lines: {
       append: (userId, sessionKey, entries, now) =>
         appendConversationLines(db, sealFor(userId), userId, sessionKey, entries, now),
@@ -323,12 +332,17 @@ export { BRIEFING_STATE } from "./briefings.js";
 export type { HostedStoreContext, HostedStoreDatabase } from "./database.js";
 export type { StoredMessageRecord } from "./message-reads.js";
 export {
+  RATING_REFUSAL,
+  type RatingStore,
+  type RatingWriteResult,
+  rateMessage,
+} from "./ratings.js";
+export {
   MAXIMUM_PENDING_ROSTER_DIFFS,
   type ObservationPassRecord,
   type RosterDiffRecord,
   type RosterSnapshotRecord,
 } from "./roster-snapshot.js";
-
 export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
 
 export {

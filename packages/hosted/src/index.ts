@@ -125,6 +125,12 @@ export {
   hostedProjectsAnswerSchema,
 } from "./projects-wire.js";
 export {
+  type HostedMessageRatingAnswer,
+  type HostedMessageRatingRequest,
+  hostedMessageRatingAnswerSchema,
+  hostedMessageRatingRequestSchema,
+} from "./rating-wire.js";
+export {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
   type RealtimeCredential,
@@ -144,13 +150,20 @@ export {
   RESPONSES_MESSAGE_ROLE,
   serializedRequestBytes,
 } from "./responses-input.js";
-export { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "./service-paths.js";
+export {
+  conversationMessageRatingPath,
+  HOSTED_SERVICE_PATH,
+  VOICE_SERVICE_PATH,
+} from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
   type HostedApiError,
   type HostedQuota,
   hostedErrorSchema,
   hostedQuotaSchema,
+  isWireUuid,
+  WIRE_UUID_LENGTH,
+  wireUuidSchema,
 } from "./service-wire.js";
 export { HostedVaultClient } from "./vault-client.js";
 export {
