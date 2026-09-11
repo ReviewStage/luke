@@ -3,7 +3,7 @@ import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { ImageIcon, WingFace as LukeFace, RemoveIcon } from "@sidecar/panel";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "./act";
+import { useAct } from "./act";
 import { useStagedFocus } from "./credential-entry";
 import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
 import {
@@ -91,6 +91,7 @@ export function FeedbackSlot({
   /** Reduced motion: the landing shows its words with the face at rest. */
   still: boolean;
 }): React.JSX.Element | null {
+  const { tell } = useAct();
   const field = useRef<HTMLTextAreaElement | null>(null);
   const filePicker = useRef<HTMLInputElement | null>(null);
   const previewButton = useRef<HTMLButtonElement | null>(null);

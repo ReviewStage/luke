@@ -16,7 +16,7 @@ import {
 } from "@sidecar/settings";
 import { Fragment, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "./act";
+import { useAct } from "./act";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { matchesTokens, searchTokens } from "./session-model";
@@ -392,6 +392,7 @@ export function SettingsSearch({
    */
   onEngagedChange: (engaged: boolean) => void;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
   return (
     <div className="settings-search-stand">

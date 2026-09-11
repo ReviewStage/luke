@@ -13,7 +13,7 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "../act";
+import { useAct } from "../act";
 import { Keycaps } from "../keycaps";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -81,6 +81,7 @@ function ShortcutRow({
   onChange: (accelerator: string | undefined) => Promise<ActionResult>;
   onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const [recording, setRecording] = useState(false);
   // The change is a round trip through the settings file and the system's
   // registrar, so the controls rest until the store has answered rather than

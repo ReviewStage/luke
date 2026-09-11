@@ -26,7 +26,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { type AppStateSnapshot, sessionReplayBootstrap } from "#shared/messages/app-state";
 import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages/session";
 import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
-import { act, tell, updateSetting } from "./act";
+import { useAct } from "./act";
 import { useAppActionCarrier } from "./app-action-carrier";
 import type { CalendarGateControl } from "./calendar-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
@@ -139,6 +139,7 @@ function useLeavingPanel(presentation: PanelPresentation): boolean {
 }
 
 export function App(): React.JSX.Element {
+  const { act, tell, updateSetting } = useAct();
   // Everything main holds, on the one channel it holds it on, and this
   // window's own facts beside it. There is no second reading to reconcile
   // against: what arrives is the whole document at a version that only rises.

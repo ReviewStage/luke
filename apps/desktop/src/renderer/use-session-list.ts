@@ -14,7 +14,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import type { SessionWriteResult, WorkspaceProviderId } from "#shared/messages/session";
 import { isWorkspaceProviderId } from "#shared/messages/session";
-import { act, tell, updateSetting } from "./act";
+import { useAct } from "./act";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -92,6 +92,7 @@ export interface SessionList {
  * all that, the presses that open a session, and the writes a row hands on.
  */
 export function useSessionList(options: UseSessionListOptions): SessionList {
+  const { act, tell, updateSetting } = useAct();
   const { state, liveSettings, settings, tab, dismissPanel, showSessionsTab } = options;
   const [view, setView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);

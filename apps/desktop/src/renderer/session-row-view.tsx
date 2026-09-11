@@ -13,7 +13,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { SessionOpenResult, SessionWriteResult } from "#shared/messages/session";
-import { tell } from "./act";
+import { useAct } from "./act";
 import {
   actsOnWorkspace,
   lastActivityLabel,
@@ -132,6 +132,7 @@ function SessionRowActions({
   withChange: boolean;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
   const [feedback, setFeedback] = useState<string | undefined>(undefined);

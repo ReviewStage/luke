@@ -1,7 +1,7 @@
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import { useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { tell } from "./act";
+import { useAct } from "./act";
 import { focusSeek } from "./focus-seek";
 import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { type ArrangedSessions, matchRanges, type SessionArrangement } from "./session-model";
@@ -97,6 +97,7 @@ export function SessionSearch({
    */
   onEngagedChange: (engaged: boolean) => void;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
   const matched = list.sessions.length;
 

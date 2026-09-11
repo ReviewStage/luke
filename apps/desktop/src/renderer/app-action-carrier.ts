@@ -13,7 +13,7 @@ import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
-import { act, tell, updateSetting, updateSettingEntry } from "./act";
+import { useAct } from "./act";
 import type { ErrandHold, PendingErrand } from "./errand-queue";
 import { NOTHING_HELD } from "./errand-queue";
 import { accountSignature, type FeedbackEntry, openedFeedbackEntry } from "./feedback-entry";
@@ -87,6 +87,7 @@ export interface UseAppActionCarrierOptions {
  * this installs the subscription and answers by the request's id.
  */
 export function useAppActionCarrier(options: UseAppActionCarrierOptions): void {
+  const { act, tell, updateSetting, updateSettingEntry } = useAct();
   const { presentationOf, changeMode, errands, feedback, sessionView, publishGuide } = options;
   /**
    * The store's own answer to this window's last spoken settings write, and

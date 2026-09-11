@@ -134,7 +134,7 @@ decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
 
-Fifteen strangler shims are on that allowlist for as long as they live.
+The strangler shims in the table below are on that allowlist for as long as they live.
 `cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
@@ -197,31 +197,31 @@ runs them rather than the host's own. P7-03 deletes the runtime this class
 holds once that composer is a `Layer` and can hand the sender an edge to fork
 on instead.
 
-`providerRegistrations` in `packages/providers/src/registrations.ts` is the
-ninth: the registry is `providersLayer`, one layer per registration merged so
-a repeated provider id fails the build, and the composers that hold it are
-still promises reading a record, so the layers are built and the `Providers`
-service read there. Every registration is synchronous, so the run is a
-`runSync` over a scope that closes at once, holding nothing; P7-01 and P7-02
-hand the layer to the host itself and delete the door.
+`providerRegistrations` in `packages/providers/src/registrations.ts` is on the
+same allowlist: the registry is `providersLayer`, one layer per registration
+merged so a repeated provider id fails the build, and the composers that hold
+it are still promises reading a record, so the layers are built and the
+`Providers` service read there. Every registration is synchronous, so the run
+is a `runSync` over a scope that closes at once, holding nothing; P7-01 and
+P7-02 hand the layer to the host itself and delete the door.
 
-`AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is the tenth:
-its callers are the host's composers, which still hold a plain object with
-`record*` methods rather than a fiber, so each tapped line — the entry an
+`AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is on the same
+terms: its callers are the host's composers, which still hold a plain object
+with `record*` methods rather than a fiber, so each tapped line — the entry an
 Effect `Logger` formats and the `FileSystem` write that carries it to disk —
 is run on the writer's own `ManagedRuntime` here. It is deleted once the host
 composer that holds it is a `Layer` able to hold that runtime itself, in
 Phase 7's devtrace composer conversion.
 
-`tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is the
-eleventh, on the same terms as `runCall`: the traced `respond` still answers
-the `ModelAdapter` interface's promise, so the `Effect.withSpan` wrapping the
-wrapped adapter's call is run to that promise here. It goes together with
+`tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is on the same
+terms as `runCall`: the traced `respond` still answers the `ModelAdapter`
+interface's promise, so the `Effect.withSpan` wrapping the wrapped adapter's
+call is run to that promise here. It goes together with
 `BrainTransport#send`'s `runCall` in P5-14.
 
 `timedRequest` in `packages/credentials/src/account/client.ts` and
 `LinearIssueTracker#post` in `packages/credentials/src/linear/tracker.ts` are
-the twelfth and thirteenth: both build a request over the ambient `HttpClient`
+on the same allowlist: both build a request over the ambient `HttpClient`
 from a `CloudFetch`-shaped `fetch` option, exactly as `createAccountCall`
 does, and both still answer their callers — `AccountClient`,
 `deleteHostedAccount`, and `LinearIssueTracker`'s `observe`/`execute` — a
@@ -229,7 +229,7 @@ Promise rather than a fiber, so each runs its request to a promise in place.
 Both go with `CloudFetch` and `layerFromCloudFetch` in P12-04.
 
 `singleFlight`'s returned closure in `packages/credentials/src/single-flight.ts`
-is the fourteenth, and the only one not shaped by `CloudFetch`: its two
+is on the allowlist too, and the only one not shaped by `CloudFetch`: its two
 callers, `AccountSessionManager.refresh` and `LinearCredentials`'s own
 renewal, hold a Promise from a package this migration has not yet reached, so
 the join over the internal `Semaphore` and `Deferred` is run to a promise for
@@ -237,12 +237,22 @@ them. P7-04 and P7-06 move each composer onto the host's own runtime; once
 both callers run on Effect themselves, this seam goes with them.
 
 `GoogleCalendarReader`'s `#run` in `packages/calendar/src/reader.ts` and
-`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are the fifteenth:
-`packages/host/src/compose-calendars.ts` still calls both synchronously, as
-promises, so each runs its request effect over the ambient `HttpClient` down
-to a promise where it is built rather than on a runtime it owns. P7-06 moves
-the calendars composer onto the host's own runtime, at which point both run
-there instead and each disappears with its `Effect.runPromise`.
+`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are on the same
+allowlist: `packages/host/src/compose-calendars.ts` still calls both
+synchronously, as promises, so each runs its request effect over the ambient
+`HttpClient` down to a promise where it is built rather than on a runtime it
+owns. P7-06 moves the calendars composer onto the host's own runtime, at
+which point both run there instead and each disappears with its
+`Effect.runPromise`.
+
+`runAct` in `apps/desktop/src/renderer/act.ts` is on the same allowlist: the
+act channel itself is an `Atom.fn` on the panel and voice roots' own runtime,
+reached through `useAct()`'s `useAtomSet` inside a component or a hook, but
+`settings/writes.ts`'s static `SETTINGS_WRITES` object and `index.tsx`'s
+bootstrap-failure path both call an act outside any render tree, with no
+component to hold a hook's return value. `runAct` sets the atom and reads its
+result back to a promise there instead. P9-08 deletes it once nothing outside
+a hook still asks for an act.
 
 ## Strangler shims and their deletions
 
@@ -273,6 +283,7 @@ design decision stated as such:
 | `LinearIssueTracker#post` | P4-03 | P12-04 |
 | `singleFlight`'s Promise-returning closure | P4-03 | P7-04, P7-06 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run | P4-05 | P7-06 |
+| `runAct` Promise door over the act `Atom.fn` | P9-02 | P9-08 |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | P5-10a..d |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |

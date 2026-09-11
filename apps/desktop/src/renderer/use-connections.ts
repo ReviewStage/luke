@@ -9,7 +9,7 @@ import { CONSENT_SERVICE_ID, type ConsentServiceId } from "#shared/consent-servi
 import { ACT_KIND } from "#shared/messages/acts";
 import type { SupersetSignInSnapshot } from "#shared/messages/session";
 import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
-import { act, tell, updateSettingEntry } from "./act";
+import { act, tell, useAct } from "./act";
 import type { ConsentConnectEntry } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -116,6 +116,7 @@ export interface Connections {
  * together: only here can one refuse to disturb another.
  */
 export function useConnections(options: UseConnectionsOptions): Connections {
+  const { act, tell, updateSettingEntry } = useAct();
   const {
     surface,
     credentialHeld,

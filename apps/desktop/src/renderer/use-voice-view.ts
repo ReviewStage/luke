@@ -10,7 +10,7 @@ import {
   type VoiceCommandOutcome,
   type VoiceView,
 } from "#shared/messages/voice-view";
-import { act, tell } from "./act";
+import { useAct } from "./act";
 import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
@@ -143,6 +143,7 @@ export interface VoiceViewState {
  * reload, close, or display change therefore costs the exchange nothing.
  */
 export function useVoiceView(): VoiceViewState {
+  const { act, tell } = useAct();
   const state = useAppState();
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.

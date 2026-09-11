@@ -19,7 +19,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { DisplayDiagnostic } from "#shared/messages/session";
-import { act, tell } from "../act";
+import { useAct } from "../act";
 import { NotchWings } from "../notch-wings";
 import { PANEL_PRESENTATION } from "../panel-state";
 import {
@@ -351,6 +351,7 @@ const ASKING_BEATS: ReadonlySet<IntroductionBeat> = new Set([
  * stands in its place rather than a fullscreen surface with nothing on it.
  */
 export function IntroductionTakeover(): React.JSX.Element | null {
+  const { tell } = useAct();
   const [state] = useState(appStateNow);
   const display = state?.window.display;
   useEffect(() => {
@@ -385,6 +386,7 @@ function IntroductionFlight({
   /** The display this takeover covers, which the voice window alone lacks. */
   display: DisplayDiagnostic;
 }): React.JSX.Element {
+  const { act, tell } = useAct();
   const [beat, setBeat] = useState<IntroductionBeat>(INTRODUCTION_BEAT.DARK);
   const beatRef = useRef<IntroductionBeat>(beat);
   const [voiceStatus, setVoiceStatus] = useState<LiveStatus>(LIVE_STATUS.IDLE);
