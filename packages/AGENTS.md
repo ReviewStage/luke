@@ -129,8 +129,12 @@ at run time, a break no build sees and production reports only as
 
 `apps/web/server/routes/` holds the function sources, and
 `apps/web/scripts/bundle-functions.ts` bundles each into a plain ESM file under
-`apps/web/api/` as the last step of the web build, with every workspace package
-inlined and only the web app's own declared runtime dependencies left external.
+`apps/web/dist-functions/` as the last step of the web build, with every
+workspace package inlined and only the web app's own declared runtime
+dependencies left external. The committed stubs under `apps/web/api/` are what
+Vercel discovers, since it registers functions from the uploaded tree before
+the build runs; each re-exports its bundle, and `pnpm --filter @luke/web
+functions:stubs` regenerates them after a route is added.
 Vercel's builder is handed JavaScript and only traces those externals, which is
 why server code names packages by bare specifier like everything else and why
 `apps/web/package.json` declares each one it names. Handed TypeScript instead,

@@ -222,6 +222,11 @@ node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 # source, four committed outputs in @sidecar/surface; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
+# Vercel registers api/ functions from the uploaded tree before the build runs,
+# so each route's committed api/**/*.js stub is what gets deployed; --check
+# fails if a route has no stub, a stub went stale, or a .js under api/ has no route.
+pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-stubs.ts --check
+
 # The public platform table is a direct projection of the session package's
 # narrow provider identity catalog. Privacy wording stays manually reviewed.
 pnpm --dir "$SIDECAR_REPO_ROOT/packages/session" exec tsx \

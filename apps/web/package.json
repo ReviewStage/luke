@@ -15,6 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx server/db/migrate.ts",
     "dev": "vite",
+    "functions:stubs": "tsx scripts/function-stubs.ts --write",
     "preview": "vite preview",
     "test": "vitest run",
     "test:store": "vitest run tests/hosted-store.test.ts tests/hosted-payload-envelope.test.ts tests/storage-schema.test.ts tests/voice-schema.test.ts tests/hosted-store-writer.test.ts tests/storage-reads.test.ts tests/voice-writer.test.ts tests/storage-ratings.test.ts tests/hosted-resource-reads.test.ts tests/hosted-change-signal.test.ts",
