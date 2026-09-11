@@ -357,8 +357,11 @@ their Drizzle handle stands on — and builds nothing itself. The store writer,
 the voice writer, the speech module, and the brain host's own seams take the
 same runner directly rather than through the store's context, because a route
 composes each of them apart from the store: it is the one door either way, and the transaction a write runs
-under is the client's own. P10-14 deletes it with the Drizzle half, once every
-module here is an effect and the routes take one.
+under is the client's own. Every module beneath it is already an effect as of
+P10-14a; P10-14 (the rest of it) deletes the Drizzle half this door never
+depended on, and P10-15 deletes this door itself, once `HostedStore`'s own
+public interface moves from promises to Effects across every brain-host and
+route caller — a distinct change from removing Drizzle.
 
 `createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
 for the same reason `HostedStoreRun` is: `RateBrake.check` is an
@@ -587,7 +590,7 @@ design decision stated as such:
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face (`settled`) over the store's Rpc client | P5-11 | P7-08 |
-| `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
+| `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-15 |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P7-08 |
 | `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P7-08 |

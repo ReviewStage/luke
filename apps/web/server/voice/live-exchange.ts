@@ -1,3 +1,4 @@
+import { SqlClient, SqlSchema } from "@effect/sql";
 import {
   type BriefingDelivery,
   type LiveSessionOpened,
@@ -5,8 +6,7 @@ import {
   type LiveSessionServiceOptions,
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
-import { eq } from "drizzle-orm";
-import { voiceSessions } from "../db/voice-schema.js";
+import { Effect, Option, Schema } from "effect";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { askRecord } from "../hosted/store/asks.js";
@@ -80,6 +80,25 @@ export interface HostedLiveExchange {
   stop(): Promise<void>;
 }
 
+/** A statement over the ambient client, so the query below reads as the query it is. */
+const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
+  Effect.flatMap(SqlClient.SqlClient, build);
+
+const VoiceSessionDeviceIdRowSchema = Schema.Struct({
+  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("device_id"),
+  ),
+});
+
+const findVoiceSessionDeviceId = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: VoiceSessionDeviceIdRowSchema,
+  execute: (liveSessionId) =>
+    statement(
+      (sql) => sql`select device_id from voice_sessions where live_session_id = ${liveSessionId}`,
+    ),
+});
+
 export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLiveExchange {
   const { userId, liveSessionId, conversationId, context, writer, report } = options;
   const store = hostedStore(context);
@@ -105,12 +124,12 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
   });
 
   /** The device the session's row names now, read at each look so a row completed after creation is seen. */
-  async function deviceId(): Promise<string | undefined> {
-    const [row] = await context.db
-      .select({ deviceId: voiceSessions.deviceId })
-      .from(voiceSessions)
-      .where(eq(voiceSessions.liveSessionId, liveSessionId));
-    return row?.deviceId ?? undefined;
+  function deviceId(): Promise<string | undefined> {
+    return context.run(
+      Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
+        Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullable(found.deviceId))),
+      ),
+    );
   }
 
   const briefings = hostedBriefings({

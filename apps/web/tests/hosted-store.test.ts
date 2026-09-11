@@ -306,8 +306,11 @@ test("a sealed row under one user does not open as another, and opens whole unde
   const snapshot = { body: JSON.stringify({ sessions: ["a"] }), observedAt: NOW };
   await database.store.roster.write(userId, snapshot);
 
-  await assert.rejects(readRosterSnapshot(database.db, userSeal(keys, other), userId));
-  assert.deepEqual(await readRosterSnapshot(database.db, userSeal(keys, userId), userId), snapshot);
+  await assert.rejects(database.run(readRosterSnapshot(userSeal(keys, other), userId)));
+  assert.deepEqual(
+    await database.run(readRosterSnapshot(userSeal(keys, userId), userId)),
+    snapshot,
+  );
 });
 
 test("an observed conversation is opened on its session's first diff and stands for every later one, one per session per account", async () => {
