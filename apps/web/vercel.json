@@ -17,6 +17,10 @@
           "dest": "/api/default.js?route=conversation/messages/rating&id=$1"
         },
         {
+          "src": "/api/brain/turns/([^/]+)/cancel",
+          "dest": "/api/default.js?route=brain/turns/cancel&id=$1"
+        },
+        {
           "src": "/api/brain/turns/([^/]+)/events",
           "dest": "/api/turn-events.js?route=brain/turns/events&id=$1"
         },
