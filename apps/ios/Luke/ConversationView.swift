@@ -262,20 +262,17 @@ private struct ReasoningRow: View {
     }
 }
 
-/// An action Luke carried, as a row rather than a bubble: what was done, led
-/// by a mark for the kind of thing it was — his face, under his own judgment
-/// — and ended on the mark of the provider it reached unless the chip already
-/// wears it. A refused or unknown outcome says why under the words; an
-/// accepted one shows the carrier's own note where it wrote one.
+/// An action Luke carried, as a row rather than a bubble: what was done, in
+/// one wrapping sentence led by a mark for the kind of thing it was — his
+/// face, under his own judgment — and ended on the mark of the provider it
+/// reached. The session's name is set inside the sentence, and while the
+/// roster still holds the session the sentence is a press onto its screen. A
+/// refused or unknown outcome says why under the words; an accepted one shows
+/// the carrier's own note where it wrote one.
 private struct ActionRow: View {
     let row: ConversationToolRow
     let judgment: ConversationJudgment
     let openSession: (RosterSession) -> Void
-
-    private var trailingProvider: String? {
-        guard let providerId = row.providerId, row.chip?.markId != providerId else { return nil }
-        return providerId
-    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -291,12 +288,11 @@ private struct ActionRow: View {
             .frame(width: 18, height: 18)
             .padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     words
                     if row.outcome == .pending {
                         ProgressView()
                             .controlSize(.mini)
-                            .padding(.leading, 6)
                             .accessibilityLabel("Under way")
                     }
                 }
@@ -313,7 +309,7 @@ private struct ActionRow: View {
                 }
             }
             Spacer(minLength: 8)
-            if let providerId = trailingProvider {
+            if let providerId = row.providerId {
                 RosterProviderMark(providerId: providerId)
                     .scaleEffect(20.0 / 30.0)
                     .frame(width: 20, height: 20)
@@ -327,25 +323,37 @@ private struct ActionRow: View {
         )
     }
 
-    /// The row's runs as one line of wrapping text, the chip a press where
-    /// the roster still holds its session and a name otherwise.
+    /// The runs as one `Text`, so the sentence wraps like any other line;
+    /// the session's name is set in the link's colour while its screen can
+    /// be opened, and the sentence is that press.
     @ViewBuilder
     private var words: some View {
-        // A chip is one run at most, so the text on either side of it is
-        // joined into one wrapping line with the chip laid inline.
-        let runs = row.runs
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
-                switch run {
-                case .text(let text):
-                    Text(text)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.inkSecondary)
-                case .chip(let chip):
-                    SessionChip(chip: chip, openSession: openSession)
-                }
+        if let session = row.chip?.session {
+            Button {
+                openSession(session)
+            } label: {
+                sentence
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(session.title)")
+        } else {
+            sentence
+        }
+    }
+
+    private var sentence: Text {
+        row.runs.reduce(Text("")) { sentence, run in
+            switch run {
+            case .text(let text):
+                sentence + Text(text).foregroundStyle(Color.inkSecondary)
+            case .chip(let chip):
+                sentence
+                    + Text(chip.text)
+                    .fontWeight(.medium)
+                    .foregroundStyle(chip.openable ? Color.inkLink : Color.ink)
             }
         }
+        .font(.subheadline)
     }
 
     private static func symbol(for row: ConversationToolRow) -> String {
@@ -361,46 +369,6 @@ private struct ActionRow: View {
         case .createWorkspace, .addAgent: return "plus"
         case .renameWorkspace, .renameSession: return "pencil"
         }
-    }
-}
-
-/// The chip naming the session an action reached: a press onto that
-/// session's own screen while the roster holds it, a name alone otherwise.
-private struct SessionChip: View {
-    let chip: ConversationToolRowChip
-    let openSession: (RosterSession) -> Void
-
-    var body: some View {
-        if let session = chip.session {
-            Button {
-                openSession(session)
-            } label: {
-                face
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(chip.text)")
-        } else {
-            face
-        }
-    }
-
-    private var face: some View {
-        HStack(spacing: 4) {
-            if let markId = chip.markId {
-                RosterProviderMark(providerId: markId)
-                    .scaleEffect(14.0 / 30.0)
-                    .frame(width: 14, height: 14)
-                    .accessibilityHidden(true)
-            }
-            Text(chip.text)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(chip.openable ? Color.inkLink : Color.ink)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 1)
-        .background(Color.cardFill, in: Capsule())
-        .overlay(Capsule().stroke(Color.cardStroke, lineWidth: 1))
     }
 }
 

@@ -24,7 +24,9 @@ public final class ConversationStore {
     }
 
     public private(set) var thread = ConversationThread()
-    /// The turn groups in the view's order, recomputed after every poll.
+    /// The turn groups in the view's order, recomputed after every page
+    /// applied, so the screen never reads a thread that has opened as one
+    /// with nothing in it while a catch-up is still paging.
     public private(set) var groups: [ConversationReadTurnGroup] = []
     public private(set) var failure: Failure?
 
@@ -87,7 +89,6 @@ public final class ConversationStore {
         } catch {
             failure = .unavailable
         }
-        groups = thread.turnGroups
     }
 
 
@@ -111,6 +112,7 @@ public final class ConversationStore {
             let cursor = thread.messagesCursor
             let answer = try await fenced.call { try await self.client.messages(after: cursor, accessToken: $0) }
             thread.apply(answer)
+            groups = thread.turnGroups
             guard answer.hasMore else { return }
         }
     }
@@ -120,6 +122,7 @@ public final class ConversationStore {
             let cursor = thread.turnsCursor
             let answer = try await fenced.call { try await self.client.turns(after: cursor, accessToken: $0) }
             thread.apply(answer)
+            groups = thread.turnGroups
             guard answer.hasMore else { return }
         }
     }
@@ -129,6 +132,7 @@ public final class ConversationStore {
             let cursor = thread.eventsCursor
             let answer = try await fenced.call { try await self.client.events(after: cursor, accessToken: $0) }
             thread.apply(answer)
+            groups = thread.turnGroups
             guard answer.hasMore else { return }
         }
     }
