@@ -392,7 +392,7 @@ private struct WatchFold<Content: View, Label: View>: View {
     @ViewBuilder let label: Label
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 withAnimation { isExpanded.toggle() }
             } label: {
@@ -403,13 +403,14 @@ private struct WatchFold<Content: View, Label: View>: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             if isExpanded {
-                content.padding(.top, 4)
+                content
             }
         }
     }
