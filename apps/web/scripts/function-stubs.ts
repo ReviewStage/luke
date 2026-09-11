@@ -37,10 +37,8 @@ const drift = (await stubDrift({ web: WEB })).filter(
 );
 if (drift.length > 0) {
   for (const entry of drift) {
-    // biome-ignore lint/suspicious/noConsole: the script's output is its report.
     console.error(`${entry.kind}: ${entry.path}`);
   }
-  // biome-ignore lint/suspicious/noConsole: the script's output is its report.
   console.error("run `pnpm --filter @luke/web functions:stubs` to regenerate the stubs under api/");
   exit(1);
 }
