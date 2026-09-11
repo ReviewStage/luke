@@ -33,7 +33,7 @@ import {
   edge,
   FakeClient,
   gatedClient,
-  harness,
+  type Harness,
   message,
   NOW,
   PLAIN_PREPARATION,
@@ -70,7 +70,7 @@ import {
   userMetadataOf,
 } from "./ui-messages.js";
 
-function listen(h: ReturnType<typeof harness>): BrainRunEvent[] {
+function listen(h: Harness): BrainRunEvent[] {
   const events: BrainRunEvent[] = [];
   h.agent.onRunEvent((event) => events.push(event));
   return events;
@@ -170,231 +170,255 @@ const SUMMARIZED_REASONING = {
   encrypted_content: "opaque",
 };
 
-test("a run that reads a transcript tells its slow step once, then its actions settling, then each sentence, then its end", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(
-    answered([readAbc]),
-    answered([message("The tests pass. Nothing needs you!")]),
-  );
-  const record = await ask(h, "how is it going?");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  const runId = record?.runId ?? "";
-  assert.deepEqual(relayed(events), [
-    { kind: BRAIN_RUN_EVENT.SLOW_STEP, runId, step: SLOW_STEP_KIND.TRANSCRIPT_READ },
-    { kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId },
-    { kind: BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence: "The tests pass." },
-    { kind: BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence: "Nothing needs you!" },
-    {
-      kind: BRAIN_RUN_EVENT.ENDED,
-      runId,
-      status: BRAIN_REQUEST_STATUS.SUCCEEDED,
-      text: "The tests pass. Nothing needs you!",
-      usage: { inputTokens: 200, outputTokens: 0, cachedInputTokens: 0, reasoningTokens: 0 },
-    },
-  ]);
-  await h.agent.stop();
-});
-
-test("a developer turn tells the documented sequence, every event stamped with the conversation and the turn and numbered without a gap", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(
-    answeredUnder("resp_1", [readAbc], { input: 900, output: 40, cached: 768, reasoning: 30 }),
-    answeredUnder("resp_2", [message("The tests pass. Nothing needs you!")], {
-      input: 1000,
-      output: 10,
-      cached: 896,
-      reasoning: 0,
+it.effect(
+  "a run that reads a transcript tells its slow step once, then its actions settling, then each sentence, then its end",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      h.client.answers.push(
+        answered([readAbc]),
+        answered([message("The tests pass. Nothing needs you!")]),
+      );
+      const record = yield* Effect.promise(() => ask(h, "how is it going?"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      const runId = record?.runId ?? "";
+      assert.deepEqual(relayed(events), [
+        { kind: BRAIN_RUN_EVENT.SLOW_STEP, runId, step: SLOW_STEP_KIND.TRANSCRIPT_READ },
+        { kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId },
+        { kind: BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence: "The tests pass." },
+        { kind: BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence: "Nothing needs you!" },
+        {
+          kind: BRAIN_RUN_EVENT.ENDED,
+          runId,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          text: "The tests pass. Nothing needs you!",
+          usage: { inputTokens: 200, outputTokens: 0, cachedInputTokens: 0, reasoningTokens: 0 },
+        },
+      ]);
+      yield* Effect.promise(() => h.agent.stop());
     }),
-  );
-  const record = await ask(h, "how is it going?");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  const runId = record?.runId ?? "";
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
-    BRAIN_RUN_EVENT.SLOW_STEP,
-    BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  assertOneTurn(events, runId);
+);
 
-  const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
-  assert.deepEqual(bare(started), {
-    kind: BRAIN_RUN_EVENT.TURN_STARTED,
-    origin: BRAIN_TURN_ORIGIN.SPOKEN,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
-    at: NOW,
-  });
+it.effect(
+  "a developer turn tells the documented sequence, every event stamped with the conversation and the turn and numbered without a gap",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      h.client.answers.push(
+        answeredUnder("resp_1", [readAbc], { input: 900, output: 40, cached: 768, reasoning: 30 }),
+        answeredUnder("resp_2", [message("The tests pass. Nothing needs you!")], {
+          input: 1000,
+          output: 10,
+          cached: 896,
+          reasoning: 0,
+        }),
+      );
+      const record = yield* Effect.promise(() => ask(h, "how is it going?"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      const runId = record?.runId ?? "";
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+        BRAIN_RUN_EVENT.SLOW_STEP,
+        BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      assertOneTurn(events, runId);
 
-  // The call is told with its parsed input before it runs, and its output after.
-  const [callStarted] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_STARTED);
-  assert.deepEqual(bare(callStarted), {
-    kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
-    callId: "read_1",
-    name: BRAIN_TOOL.READ_TRANSCRIPT,
-    input: { provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId },
-  });
-  const [callSettled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
-  assert.equal(callSettled?.callId, "read_1");
-  assert.equal(callSettled?.name, BRAIN_TOOL.READ_TRANSCRIPT);
-  assert.equal(callSettled?.settlement.state, TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE);
-  assert.equal(callSettled?.settlement.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.ok(isRecord(callSettled?.settlement.output));
-  assert.equal(callSettled?.settlement.output.status, ACTION_RESULT_STATUS.ACCEPTED);
+      const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
+      assert.deepEqual(bare(started), {
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        origin: BRAIN_TURN_ORIGIN.SPOKEN,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: NOW,
+      });
 
-  // The turn's messages: the developer's words first, the model's answer once
-  // it is on record, each saying what the storage vocabulary lets it say.
-  const [opening, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.equal(opening?.message.role, MESSAGE_ROLE.USER);
-  assert.deepEqual(opening?.message.metadata, SPOKEN_ASK);
-  assert.deepEqual(
-    opening?.message.parts.map((part) => part.type),
-    [UI_PART_TYPE.TEXT],
-  );
-  assert.equal(answer?.message.role, MESSAGE_ROLE.ASSISTANT);
-  assert.deepEqual(answer?.message.metadata, BRAIN_AUTHORED);
-  // Each inference's parts stand behind their own step boundary: the call the
-  // first answered with, then the words the second did.
-  assert.deepEqual(answer?.message.parts, [
-    STEP_START_PART,
-    {
-      type: toolPartType(BRAIN_TOOL.READ_TRANSCRIPT),
-      toolCallId: "read_1",
-      state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-      input: { provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId },
-      output: callSettled?.settlement.output,
-    },
-    STEP_START_PART,
-    {
-      type: UI_PART_TYPE.TEXT,
-      text: "The tests pass. Nothing needs you!",
-      state: UI_PART_STATE.DONE,
-    },
-  ]);
-  assert.notEqual(opening?.message.id, answer?.message.id);
-  // Both rows read back under the storage vocabulary exactly as they were told.
-  const messages = [opening?.message, answer?.message];
-  assert.deepEqual(await readStoredUIMessages(stored(messages), STORED_TOOLS), {
-    ok: true,
-    value: messages,
-  });
+      // The call is told with its parsed input before it runs, and its output after.
+      const [callStarted] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_STARTED);
+      assert.deepEqual(bare(callStarted), {
+        kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+        callId: "read_1",
+        name: BRAIN_TOOL.READ_TRANSCRIPT,
+        input: { provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId },
+      });
+      const [callSettled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
+      assert.equal(callSettled?.callId, "read_1");
+      assert.equal(callSettled?.name, BRAIN_TOOL.READ_TRANSCRIPT);
+      assert.equal(callSettled?.settlement.state, TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE);
+      assert.equal(callSettled?.settlement.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.ok(isRecord(callSettled?.settlement.output));
+      assert.equal(callSettled?.settlement.output.status, ACTION_RESULT_STATUS.ACCEPTED);
 
-  // The turn's end carries what the run kept: the same accounting its record ends with.
-  const [turnEnded] = ofKind(events, BRAIN_RUN_EVENT.TURN_ENDED);
-  const [ended] = ofKind(events, BRAIN_RUN_EVENT.ENDED);
-  assert.deepEqual(bare(turnEnded), {
-    kind: BRAIN_RUN_EVENT.TURN_ENDED,
-    status: BRAIN_REQUEST_STATUS.SUCCEEDED,
-    usage: { inputTokens: 1900, outputTokens: 50, cachedInputTokens: 1664, reasoningTokens: 30 },
-    responseIds: ["resp_1", "resp_2"],
-    at: NOW,
-  });
-  assert.deepEqual(ended?.usage, turnEnded?.usage);
-  assert.deepEqual(ended?.responseIds, turnEnded?.responseIds);
-  await h.agent.stop();
-});
+      // The turn's messages: the developer's words first, the model's answer once
+      // it is on record, each saying what the storage vocabulary lets it say.
+      const [opening, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+      assert.equal(opening?.message.role, MESSAGE_ROLE.USER);
+      assert.deepEqual(opening?.message.metadata, SPOKEN_ASK);
+      assert.deepEqual(
+        opening?.message.parts.map((part) => part.type),
+        [UI_PART_TYPE.TEXT],
+      );
+      assert.equal(answer?.message.role, MESSAGE_ROLE.ASSISTANT);
+      assert.deepEqual(answer?.message.metadata, BRAIN_AUTHORED);
+      // Each inference's parts stand behind their own step boundary: the call the
+      // first answered with, then the words the second did.
+      assert.deepEqual(answer?.message.parts, [
+        STEP_START_PART,
+        {
+          type: toolPartType(BRAIN_TOOL.READ_TRANSCRIPT),
+          toolCallId: "read_1",
+          state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+          input: { provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId },
+          output: callSettled?.settlement.output,
+        },
+        STEP_START_PART,
+        {
+          type: UI_PART_TYPE.TEXT,
+          text: "The tests pass. Nothing needs you!",
+          state: UI_PART_STATE.DONE,
+        },
+      ]);
+      assert.notEqual(opening?.message.id, answer?.message.id);
+      // Both rows read back under the storage vocabulary exactly as they were told.
+      const messages = [opening?.message, answer?.message];
+      assert.deepEqual(
+        yield* Effect.promise(() => readStoredUIMessages(stored(messages), STORED_TOOLS)),
+        {
+          ok: true,
+          value: messages,
+        },
+      );
 
-test("a run keeps every response id and the four counts summed over its answers, on its record and on its end", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(
-    answeredUnder("resp_1", [messageAbc("send_1")], {
-      input: 900,
-      output: 40,
-      cached: 768,
-      reasoning: 30,
+      // The turn's end carries what the run kept: the same accounting its record ends with.
+      const [turnEnded] = ofKind(events, BRAIN_RUN_EVENT.TURN_ENDED);
+      const [ended] = ofKind(events, BRAIN_RUN_EVENT.ENDED);
+      assert.deepEqual(bare(turnEnded), {
+        kind: BRAIN_RUN_EVENT.TURN_ENDED,
+        status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+        usage: {
+          inputTokens: 1900,
+          outputTokens: 50,
+          cachedInputTokens: 1664,
+          reasoningTokens: 30,
+        },
+        responseIds: ["resp_1", "resp_2"],
+        at: NOW,
+      });
+      assert.deepEqual(ended?.usage, turnEnded?.usage);
+      assert.deepEqual(ended?.responseIds, turnEnded?.responseIds);
+      yield* Effect.promise(() => h.agent.stop());
     }),
-    answeredUnder("resp_2", [message("Sent.")], {
-      input: 1000,
-      output: 10,
-      cached: 896,
-      reasoning: 0,
-    }),
-  );
-  const record = await ask(h, "tell abc to run the tests");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  const usage = {
-    inputTokens: 1900,
-    outputTokens: 50,
-    cachedInputTokens: 1664,
-    reasoningTokens: 30,
-  };
-  assert.deepEqual(record?.responseIds, ["resp_1", "resp_2"]);
-  assert.deepEqual(record?.usage, usage);
-  // The record on disk says the same, so a relaunch reads what the run cost.
-  const stored = h.repository.state?.requests.find((entry) => entry.runId === record?.runId);
-  assert.deepEqual(stored?.responseIds, ["resp_1", "resp_2"]);
-  assert.deepEqual(stored?.usage, usage);
-  const ended = events.find((event) => event.kind === BRAIN_RUN_EVENT.ENDED);
-  assert.ok(ended?.kind === BRAIN_RUN_EVENT.ENDED);
-  assert.deepEqual(ended.responseIds, ["resp_1", "resp_2"]);
-  assert.deepEqual(ended.usage, usage);
-  assert.equal(events.filter((event) => event.kind === BRAIN_RUN_EVENT.ENDED).length, 1);
-  await h.agent.stop();
-});
+);
 
-test("two provider writes are one slow step, and the reply streams only after both are journaled", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(
-    answered([message("Sending."), messageAbc("send_1")]),
-    answered([messageAbc("send_2")]),
-    answered([message("Both sent.")]),
-  );
-  const record = await ask(h, "tell them to run the tests, twice");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.equal(h.performed.length, 2);
-  assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
-    BRAIN_RUN_EVENT.SLOW_STEP,
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-  ]);
-  const [slow] = ofKind(events, BRAIN_RUN_EVENT.SLOW_STEP);
-  assert.equal(slow?.step, SLOW_STEP_KIND.PROVIDER_WRITE);
-  // Every sentence follows the settle, and the words said before the action
-  // are part of the reply as much as the words after.
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
-    ["Sending.", "Both sent."],
-  );
-  // Both calls are told started before settled, each under its own id, and the
-  // finished message holds both settled.
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_STARTED).map((event) => event.callId),
-    ["send_1", "send_2"],
-  );
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED).map((event) => event.settlement.state),
-    [TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE, TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE],
-  );
-  const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  const sent = toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE);
-  assert.deepEqual(
-    answer?.message.parts.map((part) => part.type),
-    [
-      UI_PART_TYPE.STEP_START,
-      UI_PART_TYPE.TEXT,
-      sent,
-      UI_PART_TYPE.STEP_START,
-      sent,
-      UI_PART_TYPE.STEP_START,
-      UI_PART_TYPE.TEXT,
-    ],
-  );
-  await h.agent.stop();
-});
+it.effect(
+  "a run keeps every response id and the four counts summed over its answers, on its record and on its end",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      h.client.answers.push(
+        answeredUnder("resp_1", [messageAbc("send_1")], {
+          input: 900,
+          output: 40,
+          cached: 768,
+          reasoning: 30,
+        }),
+        answeredUnder("resp_2", [message("Sent.")], {
+          input: 1000,
+          output: 10,
+          cached: 896,
+          reasoning: 0,
+        }),
+      );
+      const record = yield* Effect.promise(() => ask(h, "tell abc to run the tests"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      const usage = {
+        inputTokens: 1900,
+        outputTokens: 50,
+        cachedInputTokens: 1664,
+        reasoningTokens: 30,
+      };
+      assert.deepEqual(record?.responseIds, ["resp_1", "resp_2"]);
+      assert.deepEqual(record?.usage, usage);
+      // The record on disk says the same, so a relaunch reads what the run cost.
+      const stored = h.repository.state?.requests.find((entry) => entry.runId === record?.runId);
+      assert.deepEqual(stored?.responseIds, ["resp_1", "resp_2"]);
+      assert.deepEqual(stored?.usage, usage);
+      const ended = events.find((event) => event.kind === BRAIN_RUN_EVENT.ENDED);
+      assert.ok(ended?.kind === BRAIN_RUN_EVENT.ENDED);
+      assert.deepEqual(ended.responseIds, ["resp_1", "resp_2"]);
+      assert.deepEqual(ended.usage, usage);
+      assert.equal(events.filter((event) => event.kind === BRAIN_RUN_EVENT.ENDED).length, 1);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "two provider writes are one slow step, and the reply streams only after both are journaled",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      h.client.answers.push(
+        answered([message("Sending."), messageAbc("send_1")]),
+        answered([messageAbc("send_2")]),
+        answered([message("Both sent.")]),
+      );
+      const record = yield* Effect.promise(() => ask(h, "tell them to run the tests, twice"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.equal(h.performed.length, 2);
+      assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
+        BRAIN_RUN_EVENT.SLOW_STEP,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+      ]);
+      const [slow] = ofKind(events, BRAIN_RUN_EVENT.SLOW_STEP);
+      assert.equal(slow?.step, SLOW_STEP_KIND.PROVIDER_WRITE);
+      // Every sentence follows the settle, and the words said before the action
+      // are part of the reply as much as the words after.
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
+        ["Sending.", "Both sent."],
+      );
+      // Both calls are told started before settled, each under its own id, and the
+      // finished message holds both settled.
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_STARTED).map((event) => event.callId),
+        ["send_1", "send_2"],
+      );
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED).map((event) => event.settlement.state),
+        [TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE, TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE],
+      );
+      const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+      const sent = toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE);
+      assert.deepEqual(
+        answer?.message.parts.map((part) => part.type),
+        [
+          UI_PART_TYPE.STEP_START,
+          UI_PART_TYPE.TEXT,
+          sent,
+          UI_PART_TYPE.STEP_START,
+          sent,
+          UI_PART_TYPE.STEP_START,
+          UI_PART_TYPE.TEXT,
+        ],
+      );
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
 
 /** A model that answers what it is given and then never answers again. */
 class HangingClient extends FakeClient {
@@ -406,75 +430,83 @@ class HangingClient extends FakeClient {
   }
 }
 
-test("a run with no slow step still settles its actions before its sentences, and a cancelled queued run ends with its end alone, as a turn of its own", async () => {
-  const client = new HangingClient();
-  const h = harness({ client });
-  const events = listen(h);
-  client.answers.push(answered([message("Hello there.")]));
-  const first = await ask(h, "hello");
-  assert.equal(first?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-  ]);
-  events.length = 0;
+it.effect(
+  "a run with no slow step still settles its actions before its sentences, and a cancelled queued run ends with its end alone, as a turn of its own",
+  () =>
+    Effect.gen(function* () {
+      const client = new HangingClient();
+      const h = yield* effectHarness({ client });
+      const events = listen(h);
+      client.answers.push(answered([message("Hello there.")]));
+      const first = yield* Effect.promise(() => ask(h, "hello"));
+      assert.equal(first?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+      ]);
+      events.length = 0;
 
-  client.hang = true;
-  const accepted = await submit(h, "wait forever");
-  const runId = acceptedRunId(accepted);
-  await settle();
-  await h.agent.cancelAsk(runId);
-  await settle();
-  assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  // The run opened its turn before hanging, so the turn's start and its
-  // opening words precede the record's end, and the turn's end is the last word.
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  assertOneTurn(events, runId);
-  assert.deepEqual(bare(events[2]), {
-    kind: BRAIN_RUN_EVENT.ENDED,
-    runId,
-    status: BRAIN_REQUEST_STATUS.CANCELLED,
-  });
-  const [turnEnded] = ofKind(events, BRAIN_RUN_EVENT.TURN_ENDED);
-  assert.equal(turnEnded?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  assert.equal(turnEnded?.usage, undefined);
-  assert.deepEqual(turnEnded?.responseIds, []);
-  await h.agent.stop();
-});
+      client.hang = true;
+      const accepted = yield* Effect.promise(() => submit(h, "wait forever"));
+      const runId = acceptedRunId(accepted);
+      yield* Effect.promise(() => settle());
+      yield* Effect.promise(() => h.agent.cancelAsk(runId));
+      yield* Effect.promise(() => settle());
+      assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+      // The run opened its turn before hanging, so the turn's start and its
+      // opening words precede the record's end, and the turn's end is the last word.
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      assertOneTurn(events, runId);
+      assert.deepEqual(bare(events[2]), {
+        kind: BRAIN_RUN_EVENT.ENDED,
+        runId,
+        status: BRAIN_REQUEST_STATUS.CANCELLED,
+      });
+      const [turnEnded] = ofKind(events, BRAIN_RUN_EVENT.TURN_ENDED);
+      assert.equal(turnEnded?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+      assert.equal(turnEnded?.usage, undefined);
+      assert.deepEqual(turnEnded?.responseIds, []);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
 
-test("an ask cancelled while it waits behind another turn ends alone, at sequence one of a turn named by its own id", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  await h.agent.wake([edge(ABC)]);
-  inner.answers.push(answered([message("")]));
-  await h.clock.advance(NOW + 3_000);
-  const events = listen(h);
-  // An observation turn takes no steered words, so the ask waits in the queue.
-  const waiting = acceptedRunId(await submit(h, "later"));
-  await settle();
-  assert.equal(h.agent.request(waiting)?.status, BRAIN_REQUEST_STATUS.QUEUED);
-  await h.agent.cancelAsk(waiting);
-  assert.deepEqual(events, [
-    {
-      kind: BRAIN_RUN_EVENT.ENDED,
-      runId: waiting,
-      status: BRAIN_REQUEST_STATUS.CANCELLED,
-      conversationId: MAIN_SESSION_KEY,
-      turnId: waiting,
-      sequence: 1,
-    },
-  ]);
-  gated.open();
-  await settle();
-  await h.agent.stop();
-});
+it.effect(
+  "an ask cancelled while it waits behind another turn ends alone, at sequence one of a turn named by its own id",
+  () =>
+    Effect.gen(function* () {
+      const inner = new FakeClient();
+      const gated = gatedClient(inner);
+      const h = yield* effectHarness({ client: gated.client });
+      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      inner.answers.push(answered([message("")]));
+      yield* advanceHarness(NOW + 3_000);
+      const events = listen(h);
+      // An observation turn takes no steered words, so the ask waits in the queue.
+      const waiting = acceptedRunId(yield* Effect.promise(() => submit(h, "later")));
+      yield* Effect.promise(() => settle());
+      assert.equal(h.agent.request(waiting)?.status, BRAIN_REQUEST_STATUS.QUEUED);
+      yield* Effect.promise(() => h.agent.cancelAsk(waiting));
+      assert.deepEqual(events, [
+        {
+          kind: BRAIN_RUN_EVENT.ENDED,
+          runId: waiting,
+          status: BRAIN_REQUEST_STATUS.CANCELLED,
+          conversationId: MAIN_SESSION_KEY,
+          turnId: waiting,
+          sequence: 1,
+        },
+      ]);
+      gated.open();
+      yield* Effect.promise(() => settle());
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
 
 it.effect(
   "an observation turn tells its start, its words, its calls, its answer, and its end, and none of the relay's moments",
@@ -535,296 +567,348 @@ it.effect(
     }),
 );
 
-test("a child's task turn is told as a child's, with the task as its words and its record's end in its sequence", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(answered([message("Looked into it.")]));
-  const run = await h.agent.runChildTask("look into it", "child-run-1");
-  assert.ok(run);
-  await run.done;
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  assertOneTurn(events, run.runId);
-  const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
-  assert.equal(started?.origin, BRAIN_TURN_ORIGIN.CHILD);
-  assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.CHILD_TASK);
-  const [task, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.equal(task?.message.role, MESSAGE_ROLE.USER);
-  assert.deepEqual(task?.message.metadata, {
-    author: MESSAGE_AUTHOR.BRAIN,
-    source: OBSERVATION_SOURCE.CHILD,
-  });
-  assert.deepEqual(answer?.message.metadata, BRAIN_AUTHORED);
-  assert.deepEqual(answer?.message.parts, [
-    STEP_START_PART,
-    { type: UI_PART_TYPE.TEXT, text: "Looked into it.", state: UI_PART_STATE.DONE },
-  ]);
-  const [ended] = ofKind(events, BRAIN_RUN_EVENT.ENDED);
-  assert.equal(ended?.runId, run.runId);
-  assert.equal(ended?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  await h.agent.stop();
-});
+it.effect(
+  "a child's task turn is told as a child's, with the task as its words and its record's end in its sequence",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      h.client.answers.push(answered([message("Looked into it.")]));
+      const run = yield* Effect.promise(() => h.agent.runChildTask("look into it", "child-run-1"));
+      assert.ok(run);
+      yield* Effect.promise(() => run.done);
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      assertOneTurn(events, run.runId);
+      const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
+      assert.equal(started?.origin, BRAIN_TURN_ORIGIN.CHILD);
+      assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.CHILD_TASK);
+      const [task, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+      assert.equal(task?.message.role, MESSAGE_ROLE.USER);
+      assert.deepEqual(task?.message.metadata, {
+        author: MESSAGE_AUTHOR.BRAIN,
+        source: OBSERVATION_SOURCE.CHILD,
+      });
+      assert.deepEqual(answer?.message.metadata, BRAIN_AUTHORED);
+      assert.deepEqual(answer?.message.parts, [
+        STEP_START_PART,
+        { type: UI_PART_TYPE.TEXT, text: "Looked into it.", state: UI_PART_STATE.DONE },
+      ]);
+      const [ended] = ofKind(events, BRAIN_RUN_EVENT.ENDED);
+      assert.equal(ended?.runId, run.runId);
+      assert.equal(ended?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
 
-test("a hold's release is told under its own origin", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(answered([message("")]));
-  h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
-  await settle();
-  while (h.agent.busy()) await settle();
-  const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
-  assert.equal(started?.origin, BRAIN_TURN_ORIGIN.HOLD_RELEASE);
-  assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
-  const [released] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.deepEqual(released?.message.metadata, {
-    author: MESSAGE_AUTHOR.BRAIN,
-    source: OBSERVATION_SOURCE.HOLD_RELEASE,
-  });
-  assert.deepEqual(kinds(events).at(-1), BRAIN_RUN_EVENT.TURN_ENDED);
-  await h.agent.stop();
-});
+it.effect("a hold's release is told under its own origin", () =>
+  Effect.gen(function* () {
+    const h = yield* effectHarness();
+    const events = listen(h);
+    h.client.answers.push(answered([message("")]));
+    h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+    yield* Effect.promise(() => settle());
+    while (h.agent.busy()) yield* Effect.promise(() => settle());
+    const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
+    assert.equal(started?.origin, BRAIN_TURN_ORIGIN.HOLD_RELEASE);
+    assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
+    const [released] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+    assert.deepEqual(released?.message.metadata, {
+      author: MESSAGE_AUTHOR.BRAIN,
+      source: OBSERVATION_SOURCE.HOLD_RELEASE,
+    });
+    assert.deepEqual(kinds(events).at(-1), BRAIN_RUN_EVENT.TURN_ENDED);
+    yield* Effect.promise(() => h.agent.stop());
+  }),
+);
 
-test("a reasoning item is told with its summary and the opaque item, and the message keeps the summary beside the provider's replay data", async () => {
-  const h = harness();
-  const events = listen(h);
-  h.client.answers.push(answered([SUMMARIZED_REASONING, message("Only abc.")]));
-  const record = await ask(h, "who is waiting?");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.REASONING_COMPLETED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  const [reasoned] = ofKind(events, BRAIN_RUN_EVENT.REASONING_COMPLETED);
-  assert.deepEqual(bare(reasoned), {
-    kind: BRAIN_RUN_EVENT.REASONING_COMPLETED,
-    summary: "Only abc is waiting.",
-    item: SUMMARIZED_REASONING,
-  });
-  const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.deepEqual(answer?.message.parts, [
-    STEP_START_PART,
-    {
-      type: UI_PART_TYPE.REASONING,
-      id: "rs_1",
-      text: "Only abc is waiting.",
-      state: UI_PART_STATE.DONE,
-      providerMetadata: {
-        [REASONING_PROVIDER_KEY]: { itemId: "rs_1", reasoningEncryptedContent: "opaque" },
+it.effect(
+  "a reasoning item is told with its summary and the opaque item, and the message keeps the summary beside the provider's replay data",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      h.client.answers.push(answered([SUMMARIZED_REASONING, message("Only abc.")]));
+      const record = yield* Effect.promise(() => ask(h, "who is waiting?"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.REASONING_COMPLETED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      const [reasoned] = ofKind(events, BRAIN_RUN_EVENT.REASONING_COMPLETED);
+      assert.deepEqual(bare(reasoned), {
+        kind: BRAIN_RUN_EVENT.REASONING_COMPLETED,
+        summary: "Only abc is waiting.",
+        item: SUMMARIZED_REASONING,
+      });
+      const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+      assert.deepEqual(answer?.message.parts, [
+        STEP_START_PART,
+        {
+          type: UI_PART_TYPE.REASONING,
+          id: "rs_1",
+          text: "Only abc is waiting.",
+          state: UI_PART_STATE.DONE,
+          providerMetadata: {
+            [REASONING_PROVIDER_KEY]: { itemId: "rs_1", reasoningEncryptedContent: "opaque" },
+          },
+        },
+        { type: UI_PART_TYPE.TEXT, text: "Only abc.", state: UI_PART_STATE.DONE },
+      ]);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "a refused call settles as an error carrying the refusal's own reason, and the message's tool part says so",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness({
+        actions: performerWith(async () => refusedActionOutput("not now")).actions,
+      });
+      const events = listen(h);
+      h.client.answers.push(answered([messageAbc("send_x")]), answered([message("It refused.")]));
+      const record = yield* Effect.promise(() => ask(h, "tell abc to run the tests"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      const [settled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
+      assert.deepEqual(settled?.settlement, {
+        state: TOOL_CALL_SETTLEMENT.OUTPUT_ERROR,
+        output: { status: ACTION_OUTPUT_STATUS.REFUSED, reason: "not now" },
+        errorText: "not now",
+        status: ACTION_OUTPUT_STATUS.REFUSED,
+      });
+      const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+      assert.deepEqual(answer?.message.parts[0], STEP_START_PART);
+      assert.deepEqual(answer?.message.parts[1], {
+        type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
+        toolCallId: "send_x",
+        state: TOOL_PART_STATE.OUTPUT_ERROR,
+        input: {
+          provider_id: ABC.providerId,
+          provider_session_id: ABC.providerSessionId,
+          text: "run the tests",
+        },
+        errorText: "not now",
+      });
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "an action dispatched whose effect is uncertain settles as an answer carrying the envelope, never as an error, and the message's tool part keeps the envelope",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness({
+        actions: performerWith(async () => unknownActionOutput("the node closed first")).actions,
+      });
+      const events = listen(h);
+      h.client.answers.push(answered([messageAbc("send_u")]), answered([message("Unsure.")]));
+      const record = yield* Effect.promise(() => ask(h, "tell abc to run the tests"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      const [settled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
+      assert.deepEqual(settled?.settlement, {
+        state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
+        output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
+        status: ACTION_OUTPUT_STATUS.UNKNOWN,
+      });
+      const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+      assert.deepEqual(answer?.message.parts[0], STEP_START_PART);
+      assert.deepEqual(answer?.message.parts[1], {
+        type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
+        toolCallId: "send_u",
+        state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+        input: {
+          provider_id: ABC.providerId,
+          provider_session_id: ABC.providerSessionId,
+          text: "run the tests",
+        },
+        output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
+      });
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "an ask steered into a running turn is a message of that turn, and its record's end is numbered in that turn before the turn's own end",
+  () =>
+    Effect.gen(function* () {
+      const inner = new FakeClient();
+      const gated = gatedClient(inner);
+      const h = yield* effectHarness({ client: gated.client });
+      const events = listen(h);
+      inner.answers.push(
+        answered([message("First alone.")]),
+        answered([message("Both answered.")]),
+      );
+      const first = acceptedRunId(yield* Effect.promise(() => submit(h, "first?")));
+      yield* Effect.promise(() => settle());
+      const second = acceptedRunId(yield* Effect.promise(() => submit(h, "second?")));
+      yield* Effect.promise(() => settle());
+      assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+      gated.open();
+      yield* Effect.promise(() => settle());
+      assert.equal(
+        (yield* Effect.promise(() => h.agent.waitAsk(second, 1)))?.status,
+        BRAIN_REQUEST_STATUS.SUCCEEDED,
+      );
+      assertOneTurn(events, first);
+      // The steered words are told as they are taken, before the inference that
+      // was running answers, so the two steps' boundaries follow both asks.
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED).map((event) => event.message.role),
+        [MESSAGE_ROLE.USER, MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
+      );
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.ENDED).map((event) => event.runId),
+        [second, first],
+      );
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "a rider withdrawn mid-turn ends where it was withdrawn, numbered in the turn it left, and the turn still ends last",
+  () =>
+    Effect.gen(function* () {
+      const inner = new FakeClient();
+      const gated = gatedClient(inner);
+      const h = yield* effectHarness({ client: gated.client });
+      const events = listen(h);
+      inner.answers.push(answered([message("Alone again.")]));
+      const first = acceptedRunId(yield* Effect.promise(() => submit(h, "first?")));
+      yield* Effect.promise(() => settle());
+      const second = acceptedRunId(yield* Effect.promise(() => submit(h, "second?")));
+      yield* Effect.promise(() => settle());
+      yield* Effect.promise(() => h.agent.cancelAsk(second));
+      assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+      gated.open();
+      yield* Effect.promise(() => settle());
+      assert.equal(
+        (yield* Effect.promise(() => h.agent.waitAsk(first, 1)))?.status,
+        BRAIN_REQUEST_STATUS.SUCCEEDED,
+      );
+      assertOneTurn(events, first);
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        BRAIN_RUN_EVENT.ENDED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.ENDED).map((event) => [event.runId, event.status]),
+        [
+          [second, BRAIN_REQUEST_STATUS.CANCELLED],
+          [first, BRAIN_REQUEST_STATUS.SUCCEEDED],
+        ],
+      );
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect("every ask's turn is prepared with the spoken origin and told under it", () =>
+  Effect.gen(function* () {
+    const prepared: BrainTurnDescription[] = [];
+    const h = yield* effectHarness({
+      prepareTurn: (turn) => {
+        prepared.push(turn);
+        return PLAIN_PREPARATION(turn);
       },
-    },
-    { type: UI_PART_TYPE.TEXT, text: "Only abc.", state: UI_PART_STATE.DONE },
-  ]);
-  await h.agent.stop();
-});
+    });
+    const events = listen(h);
+    h.client.answers.push(answered([message("Yes.")]), answered([message("No.")]));
+    const spoken = yield* Effect.promise(() =>
+      h.agent.submitAsk({
+        submissionId: "spoken-1",
+        question: "is it done?",
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      }),
+    );
+    yield* Effect.promise(() => h.agent.waitAsk(acceptedRunId(spoken), 60_000));
+    assert.equal(
+      (yield* Effect.promise(() => ask(h, "and now?")))?.status,
+      BRAIN_REQUEST_STATUS.SUCCEEDED,
+    );
+    // The turn each ask opens, in order; the maintenance queued behind either
+    // one runs on its own schedule and is no part of what an ask's turn is
+    // prepared with.
+    assert.deepEqual(
+      prepared.filter((turn) => turn.kind === BRAIN_TURN_KIND.TURN),
+      [
+        {
+          kind: BRAIN_TURN_KIND.TURN,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          askOrigin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        },
+        {
+          kind: BRAIN_TURN_KIND.TURN,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          askOrigin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        },
+      ],
+    );
+    assert.deepEqual(
+      ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED).map((event) => event.origin),
+      [BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_ORIGIN.SPOKEN],
+    );
+    assert.deepEqual(
+      ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED)
+        .filter((event) => event.message.role === MESSAGE_ROLE.USER)
+        .map((event) => event.message.metadata),
+      [SPOKEN_ASK, SPOKEN_ASK],
+    );
+    yield* Effect.promise(() => h.agent.stop());
+  }),
+);
 
-test("a refused call settles as an error carrying the refusal's own reason, and the message's tool part says so", async () => {
-  const h = harness({ actions: performerWith(async () => refusedActionOutput("not now")).actions });
-  const events = listen(h);
-  h.client.answers.push(answered([messageAbc("send_x")]), answered([message("It refused.")]));
-  const record = await ask(h, "tell abc to run the tests");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  const [settled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
-  assert.deepEqual(settled?.settlement, {
-    state: TOOL_CALL_SETTLEMENT.OUTPUT_ERROR,
-    output: { status: ACTION_OUTPUT_STATUS.REFUSED, reason: "not now" },
-    errorText: "not now",
-    status: ACTION_OUTPUT_STATUS.REFUSED,
-  });
-  const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.deepEqual(answer?.message.parts[0], STEP_START_PART);
-  assert.deepEqual(answer?.message.parts[1], {
-    type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
-    toolCallId: "send_x",
-    state: TOOL_PART_STATE.OUTPUT_ERROR,
-    input: {
-      provider_id: ABC.providerId,
-      provider_session_id: ABC.providerSessionId,
-      text: "run the tests",
-    },
-    errorText: "not now",
-  });
-  await h.agent.stop();
-});
-
-test("an action dispatched whose effect is uncertain settles as an answer carrying the envelope, never as an error, and the message's tool part keeps the envelope", async () => {
-  const h = harness({
-    actions: performerWith(async () => unknownActionOutput("the node closed first")).actions,
-  });
-  const events = listen(h);
-  h.client.answers.push(answered([messageAbc("send_u")]), answered([message("Unsure.")]));
-  const record = await ask(h, "tell abc to run the tests");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  const [settled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
-  assert.deepEqual(settled?.settlement, {
-    state: TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE,
-    output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
-    status: ACTION_OUTPUT_STATUS.UNKNOWN,
-  });
-  const [, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.deepEqual(answer?.message.parts[0], STEP_START_PART);
-  assert.deepEqual(answer?.message.parts[1], {
-    type: toolPartType(ACTION_TOOL.SEND_SESSION_MESSAGE),
-    toolCallId: "send_u",
-    state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-    input: {
-      provider_id: ABC.providerId,
-      provider_session_id: ABC.providerSessionId,
-      text: "run the tests",
-    },
-    output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
-  });
-  await h.agent.stop();
-});
-
-test("an ask steered into a running turn is a message of that turn, and its record's end is numbered in that turn before the turn's own end", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  const events = listen(h);
-  inner.answers.push(answered([message("First alone.")]), answered([message("Both answered.")]));
-  const first = acceptedRunId(await submit(h, "first?"));
-  await settle();
-  const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
-  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
-  gated.open();
-  await settle();
-  assert.equal((await h.agent.waitAsk(second, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assertOneTurn(events, first);
-  // The steered words are told as they are taken, before the inference that
-  // was running answers, so the two steps' boundaries follow both asks.
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED).map((event) => event.message.role),
-    [MESSAGE_ROLE.USER, MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
-  );
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.ENDED).map((event) => event.runId),
-    [second, first],
-  );
-  await h.agent.stop();
-});
-
-test("a rider withdrawn mid-turn ends where it was withdrawn, numbered in the turn it left, and the turn still ends last", async () => {
-  const inner = new FakeClient();
-  const gated = gatedClient(inner);
-  const h = harness({ client: gated.client });
-  const events = listen(h);
-  inner.answers.push(answered([message("Alone again.")]));
-  const first = acceptedRunId(await submit(h, "first?"));
-  await settle();
-  const second = acceptedRunId(await submit(h, "second?"));
-  await settle();
-  await h.agent.cancelAsk(second);
-  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  gated.open();
-  await settle();
-  assert.equal((await h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assertOneTurn(events, first);
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.ACTIONS_SETTLED,
-    BRAIN_RUN_EVENT.REPLY_SENTENCE,
-    BRAIN_RUN_EVENT.ENDED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.ENDED).map((event) => [event.runId, event.status]),
-    [
-      [second, BRAIN_REQUEST_STATUS.CANCELLED],
-      [first, BRAIN_REQUEST_STATUS.SUCCEEDED],
-    ],
-  );
-  await h.agent.stop();
-});
-
-test("every ask's turn is prepared with the spoken origin and told under it", async () => {
-  const prepared: BrainTurnDescription[] = [];
-  const h = harness({
-    prepareTurn: (turn) => {
-      prepared.push(turn);
-      return PLAIN_PREPARATION(turn);
-    },
-  });
-  const events = listen(h);
-  h.client.answers.push(answered([message("Yes.")]), answered([message("No.")]));
-  const spoken = await h.agent.submitAsk({
-    submissionId: "spoken-1",
-    question: "is it done?",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
-  await h.agent.waitAsk(acceptedRunId(spoken), 60_000);
-  assert.equal((await ask(h, "and now?"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.deepEqual(prepared, [
-    {
-      kind: BRAIN_TURN_KIND.TURN,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
-      askOrigin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    },
-    {
-      kind: BRAIN_TURN_KIND.TURN,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
-      askOrigin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    },
-  ]);
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED).map((event) => event.origin),
-    [BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_ORIGIN.SPOKEN],
-  );
-  assert.deepEqual(
-    ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED)
-      .filter((event) => event.message.role === MESSAGE_ROLE.USER)
-      .map((event) => event.message.metadata),
-    [SPOKEN_ASK, SPOKEN_ASK],
-  );
-  await h.agent.stop();
-});
-
-test("a listener that throws ends no run", async () => {
-  const h = harness();
-  h.agent.onRunEvent(() => {
-    throw new Error("listener");
-  });
-  h.client.answers.push(answered([message("Fine.")]));
-  const record = await ask(h, "hello");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.equal(record?.text, "Fine.");
-  await h.agent.stop();
-});
+it.effect("a listener that throws ends no run", () =>
+  Effect.gen(function* () {
+    const h = yield* effectHarness();
+    h.agent.onRunEvent(() => {
+      throw new Error("listener");
+    });
+    h.client.answers.push(answered([message("Fine.")]));
+    const record = yield* Effect.promise(() => ask(h, "hello"));
+    assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+    assert.equal(record?.text, "Fine.");
+    yield* Effect.promise(() => h.agent.stop());
+  }),
+);
 
 test("every trigger has one origin: an ask is the developer's spoken one, the rest by the trigger alone", () => {
   assert.deepEqual(
