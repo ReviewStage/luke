@@ -195,6 +195,7 @@ async function hookedEvent(
     admitted,
     { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
     state,
+    {},
   );
   return true;
 }

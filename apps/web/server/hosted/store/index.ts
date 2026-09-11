@@ -1,6 +1,7 @@
 import type { ToolSet } from "ai";
 import { Effect, Option } from "effect";
 import type { SessionIdentity } from "../../core.js";
+import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
@@ -134,6 +135,15 @@ export interface HostedStore {
       now: number,
     ): Promise<readonly StoredFact[]>;
   };
+  /**
+   * The tool set a turn was offered, written once under the hash of what the
+   * model saw, which is what a turn row names. The prompt has no table: the
+   * turn row carries its hash and nothing else of it is kept.
+   */
+  toolSets: {
+    /** Writes the offered declarations where no row stands for their hash; answers the hash. */
+    record(schemas: readonly OfferedToolSchema[], now: Date): Promise<string>;
+  };
   workspace: {
     read(userId: string, path: string): Promise<WorkspaceFileRecord | undefined>;
     write(userId: string, path: string, content: string, now: number): Promise<void>;
@@ -206,6 +216,9 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
       list: (userId) => run(listFacts(sealFor(userId), userId)),
       replace: (userId, facts, now) => run(replaceFacts(sealFor(userId), userId, facts, now)),
     },
+    toolSets: {
+      record: (schemas, now) => recordToolSet(db, schemas, now),
+    },
     workspace: {
       read: (userId, path) =>
         run(Effect.map(readWorkspaceFile(sealFor(userId), userId, path), Option.getOrUndefined)),
@@ -234,6 +247,7 @@ export function hostedStore({ db, keys, run }: HostedStoreContext): HostedStore 
   };
 }
 
+export { promptHashOf, toolSetHashOf } from "./content-addressed.js";
 export type { HostedStoreContext, HostedStoreDatabase, HostedStoreRun } from "./database.js";
 export {
   findMessageByClientId,

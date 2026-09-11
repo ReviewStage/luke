@@ -6,6 +6,7 @@ import {
   type RelayStateStore,
 } from "../../server/hosted/brain-host/relay.js";
 import { host } from "../host.js";
+import { sessionPrompt } from "../session-prompt.js";
 
 /**
  * The relay from eve's stream into the store: every event eve records for a
@@ -34,7 +35,7 @@ export default defineHook({
       }
       const admitted = await host.admit(ctx.session.auth, ctx.session.id);
       if (!admitted.ok) return;
-      await host.relay(event, admitted, ctx.session, state);
+      await host.relay(event, admitted, ctx.session, state, sessionPrompt.get());
     },
   },
 });

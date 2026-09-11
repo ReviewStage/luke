@@ -18,7 +18,6 @@ import {
   conversations,
   events,
   messages,
-  prompts,
   providerCursors,
   toolSets,
   turns,
@@ -30,8 +29,8 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * cascades with its account, a child goes with its parent, the idempotency
  * key and the observed-session key refuse the duplicate and admit the
  * neighbour, a fresh conversation numbers its messages and events from one,
- * one claim stands per briefing, a prompt or tool set is one row however
- * often it is written, an observed session keeps one cursor per account, and
+ * one claim stands per briefing, a tool set is one row however often it is
+ * written, an observed session keeps one cursor per account, and
  * the v1 conversation tables and the briefing table are gone. The migration
  * runner's own bookkeeping table is not one of them: it records which of these
  * tables a database has, and is declared by no schema file.
@@ -425,19 +424,13 @@ test("an event keeps its kind, device, and payload as written", async () => {
   assert.ok(row.createdAt instanceof Date);
 });
 
-test("a prompt and a tool set are one row per hash however often they are written", async () => {
-  const prompt = { hash: "prompt-hash-1", text: "You are Luke." };
+test("a tool set is one row per hash however often it is written", async () => {
   const toolSet = { hash: "tools-hash-1", schemas: [{ name: "read_transcript" }] };
 
-  await database.db.insert(prompts).values(prompt);
-  await database.db.insert(prompts).values(prompt).onConflictDoNothing();
-  await assertUniqueViolation(database.db.insert(prompts).values(prompt));
   await database.db.insert(toolSets).values(toolSet);
   await database.db.insert(toolSets).values(toolSet).onConflictDoNothing();
+  await assertUniqueViolation(database.db.insert(toolSets).values(toolSet));
 
-  const promptRows = await database.db.select().from(prompts).where(eq(prompts.hash, prompt.hash));
-  assert.equal(promptRows.length, 1);
-  assert.equal(promptRows[0]?.text, prompt.text);
   const toolSetRows = await database.db
     .select()
     .from(toolSets)

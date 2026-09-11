@@ -128,6 +128,10 @@ export interface RelayStanding {
   readonly turn: BrainHostTurn | undefined;
   /** The model eve resolved the session's turns to, as the turn row records it; nothing where none is known. */
   readonly model?: string;
+  /** The content address of the prompt the session runs under, as the turn row records it; nothing before the session composed one. */
+  readonly promptHash?: string;
+  /** The content address of the tool set this turn is offered, as the turn row records it. */
+  readonly toolSetHash?: string;
   readonly state: RelayStateStore;
 }
 
@@ -363,6 +367,8 @@ export class StreamRelay {
         turnId,
         origin: TURN_ORIGIN_OF_HOST_TURN[kind],
         ...(standing.model !== undefined ? { model: standing.model } : undefined),
+        ...(standing.promptHash !== undefined ? { promptHash: standing.promptHash } : undefined),
+        ...(standing.toolSetHash !== undefined ? { toolSetHash: standing.toolSetHash } : undefined),
       });
       if (!queued.ok) {
         this.#seams.report(`The store refused to queue turn ${eveTurnId}: ${queued.refusal}.`);

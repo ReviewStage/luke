@@ -162,6 +162,13 @@
       "when": 1789139895228,
       "tag": "0023_c2b_asks",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789145475866,
+      "tag": "0024_c4_drop_prompts",
+      "breakpoints": true
     }
   ]
 }
