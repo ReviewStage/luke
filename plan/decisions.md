@@ -2593,3 +2593,135 @@ inequality asserted between two different scales is not.
 
 **Added to LUKE-163**, because a test that gets the scale wrong would **pass on a skipped
 migration** — the one failure it exists to catch. That test is what retires the slot rule.
+
+
+## 2026-09-11 — Incident: 34 minutes of total API failure from one value import
+
+**Closed 16:36:00Z. Cause confirmed inside Vercel's runtime by the recovery itself.**
+
+**The defect.** #1070 (`b9114944`, the wake cron) added **one runtime import** to
+`server/hosted/observation-tick.ts`: `NOTHING_OPENED` and the type `TurnOpeningOutcome` from
+`./brain-host/opener.js`. **Because `NOTHING_OPENED` is a value, esbuild followed it** — opener →
+`conversation.ts` → `brain-host/auth.ts` → `eve/channels/auth`, and → `eve-sessions.ts` →
+`@effect/platform/Headers`. And `observation-tick.ts` is reached by **every** function, through
+`hosted/environment.ts` (`HostedEnvironment`, read by every route) importing
+`OBSERVATION_ENVIRONMENT` from it.
+
+**Measured, not inferred:** eve went from **0 of 38 function bundles to 38 of 38**;
+`@effect/platform/Headers` from **14 to 38**; `@effect/sql` from 37 to 38 import lines. **Nothing else
+changed.** Before #1070 no api function loaded eve at all — the brain-host code ran only inside eve's
+own service.
+
+**A type-only import would have been erased and none of this would have happened.**
+
+**Impact.** Every bundled function answered **500 `FUNCTION_INVOCATION_FAILED`** from 16:02:23Z to
+16:36:00Z — `/api/brain/capabilities`, `/api/devices`, `/api/auth/get-session`,
+`/api/observation/tick`. The page served 200 throughout and the hand-written `api/feedback.mjs`
+answered 405 normally, which is what proved the bundles rather than the platform. **Cache-busted
+probes with `x-vercel-cache: MISS` confirmed the functions failed on every call.**
+
+**Why nothing caught it.** Typecheck passes (types resolve through the edge fine), the tests pass (a
+different module graph), the build passes (bundling this is legal), **the preview was green**, and the
+**deploy reported success**. `check.sh` was green. The failure existed only at **module load inside
+the Lambda** — a state no gate in the pipeline observed. **#1070's own preview functions were also
+500 and nobody probed them**, because a preview's "green" means *the checks passed*, not *the
+functions run*.
+
+**Diagnosis path, for the record.** Three hypotheses were raised and two were killed by evidence
+rather than argument: a **cycle or module-scope throw** (killed — bundles import cleanly in node under
+a production-like environment, identically to the parent), and **a `devDependency` become a runtime
+import** (killed — eve is a real dependency, and `@vercel/nft` traced 2,937 files including eve's 22
+files and its `#`-subpath internals, with only the two pre-existing optional warnings).
+`eve/channels/auth` also imports cleanly under Node 20.19, 22.20 and **24.14**, so eve's
+`engines: node>=24` is a declaration rather than a load-time failure. **The Lambda-side reason was
+never reproduced from outside**, and did not need to be: the **externals diff** localised the change
+regardless of which of the three the runtime choked on.
+
+**The fix (#1132, `5286681a`), three elements and no others:**
+
+1. `OBSERVATION_TICK_PATH` / `OBSERVATION_ENVIRONMENT` / `OBSERVATION_TICK` moved to
+   **`hosted/observation-bounds.ts`**, a leaf. Chosen over moving `NOTHING_OPENED` because **a bounds
+   module every route may read is a thing with a name**, and the tick keeps its own value import of
+   the opener legitimately.
+2. `recordedRuntimeSession` split out of `conversation.ts` into **`brain-host/recorded-session.ts`**,
+   so even the tick's own bundle never loads eve — **the opener talks to eve over HTTP and needs
+   nothing of its package.** That sentence is the layering rule the incident was missing.
+3. The bundle plan extracted to `server/function-bundles.ts`, so **the build script and the guard
+   share one plan.**
+
+**Verification, which is the part worth copying.** Not "eve is gone" but **every bundle's whole
+external set restored**: all 38 bundles' externals **identical** to the last deployment that served
+(846 bundle→external lines, zero differing), measured **independently by two workers with different
+scripts**, and confirmed by a **third** that reproduced 38-of-38 on the broken base without being
+asked. The claim it supports is stronger than the eve count: *whatever the Lambda choked on, it was
+among the externals that differed, and none differ now.*
+
+**The guard, which is the durable outcome.** A test over the esbuild **metafile** asserting **no
+`dist-functions` bundle imports `eve` or `eve/*`**, running in `check.sh` in 1.4 s. It was
+**demonstrated failing on the broken tree** ("received 38 bundles, expected []"). It reads each
+bundle's *actual* externals, so it catches **the next carrier** and not only today's path. Its stated
+blind spots: type-only imports (erased, and the right way to reach an eve type), modules no bundle
+reaches (harmless by that fact), and **being eve-specific by name** — which LUKE-167 closes by
+asserting each bundle's whole external set against a committed map, with **a negative test that
+breaks the guard on purpose**, because an unfalsified guard is a belief.
+
+**It has already paid for itself twice.** Within minutes of merging it caught a **second, unsuspected
+instance** in unmerged #1129 — `brain-ask.ts` → `conversation.ts` (for `conversationOwnedBy`, a
+**pure SQL read**) → `auth.ts` → `eve/channels/auth`, where `withAuthChallenges` and `ForbiddenError`
+are value imports. **Same class: a value reached through a module that also holds a leaf-shaped
+read.** Fixed by moving the read into #1132's eve-free leaf.
+
+**A general hazard now named:** a pure read living in a module that also holds value imports of a
+heavy package is a landmine, because importing the read drags the package. When you need one function
+out of such a module, **move the function to a leaf.**
+
+**And one still live, found by C4 while measuring:** `apps/web/agent/session-prompt.ts`
+**value**-imports `defineState` from `eve/context`, and is safe today **only because 0 of 38 bundles
+reach `apps/web/agent/*`**. #1070's exact shape, one edge away. It is LUKE-167's negative-test probe
+for that reason.
+
+### Four errors of mine
+
+1. **I handed five workers a measurement practice with a hole in it.** "Verify what your diff makes
+   reachable by bundling it" is right; I did not say **against which baseline**. Measured against a
+   base where #1070's edge was live, every bundle reaches eve on both sides and **your own edge is
+   invisible**. C2b measured, reported clean, and was wrong; the guard caught it. **Corrected to:
+   measure against a base you know to be clean, and verify against the guard rather than your own
+   script.**
+2. **I relayed a peer's inference to Dean as fact and sent him at a worse rollback target during a
+   live outage.** From "the parent is docs-only" I published "`ignoreCommand` skipped it, no
+   deployment exists" and told him to switch from `ec66c92a` to `06e30e6a`. Both halves were false:
+   `ec66c92a` deployed at 15:45:54Z (record 6396605308) and **is** what served 401s at 15:55Z,
+   because #1128 touched `apps/web` — **26 comment-only lines** in `devices-schema.ts`, enough to
+   defeat `ignoreCommand` and not enough to move a bundle. **Third instance of relaying an unverified
+   claim; the rule is widened to: anything Dean will click gets read from the record, or is labelled
+   unverified.**
+3. **I nearly had Dean un-pin a rollback that did not exist.** A `success` on `5286681a` **74 seconds**
+   after merge, against a consistent ~11 minutes, read to me as a pinned promotion. It was a
+   **preview** record — the merge group's build of the squash tree, created *before* the merge.
+   Retracted before he acted. **Rule: a deployment record has an environment; name it in every
+   report.** The timing was the right tell and pointed the right way; the error was reading a status
+   without its environment.
+4. **My hold raced an authorised enqueue for the second time today.** #1130 entered the queue at
+   16:05:07Z, seconds before the hold reached C2a, which pulled it at 16:06Z (`mergeQueueEntry` null,
+   state OPEN, never merged). **What worked was asking "are you already queued" rather than assuming**
+   — four workers answered with timestamps. That question is now part of the hold.
+
+### What the workers did that I want repeated
+
+**`api/feedback.mjs` answering 405** separated "the bundles" from "the platform" and every later step
+rested on it. **Two workers independently refused to report a number they could not stand behind**,
+finding a 302 to `sso-api` where a 401-versus-401 discrimination had been asked for — "there is no
+function response at all" is a better answer than a plausible one. **C2a corrected its own report
+three times**, including the correction that killed my rollback-target error. **C3 was asked whether
+it would merge its own fix onto a live outage and answered with the caveat it could not close**, which
+is why the 38-bundle equality became the merge condition rather than the eve count. **C4 proposed the
+negative test on its own file** — the one that would break the guard on purpose. And **nobody pressed
+enqueue.**
+
+### Still owed
+
+**The Protection Bypass for Automation secret**, which is now blocking three things rather than one:
+LUKE-164's preview probe, the runtime before-and-after on this incident (both previews answered 302
+to `sso-api` at the edge, so no worker could see a function's behaviour at all), and any future
+"the deployed shape works" assertion. **One ask, three reasons.**
