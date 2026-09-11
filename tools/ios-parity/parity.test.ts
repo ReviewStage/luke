@@ -17,7 +17,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  ACTION_FAMILY,
+  ACTION_OUTPUT_STATUS,
   ACTION_TOOL,
+  ACTIONS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
   remoteRealtimeToolDefinitions,
@@ -38,16 +41,30 @@ import {
   HOSTED_API_ERROR,
   HOSTED_SERVICE_PATH,
   PUSH_ENVIRONMENT,
+  READ_PAGE_BOUNDS,
   VAULT_KEY_MAX_LENGTH,
 } from "@sidecar/hosted";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   CONVERSATION_MESSAGE_AUTHOR,
+  CONVERSATION_VIEW_ACTION_OUTCOME,
+  CONVERSATION_VIEW_SOURCE,
+  CONVERSATION_VIEW_TOOL_KIND,
   PROVIDER_ID,
   SESSION_CONTROL_KIND,
+  TOOL_PART_STATE,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  CONVERSATION_EVENT_KIND,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@sidecar/wire";
 import { test } from "vitest";
 
 import {
@@ -307,6 +324,138 @@ test("the vault key bound is VAULT_KEY_MAX_LENGTH", () => {
     VAULT_KEY_MAX_LENGTH,
     "a bound looser than the server's lets an unusable key travel",
   );
+});
+
+/** The session family of the action table: the tools whose parts a Conversation row is drawn for. */
+const SESSION_ACTION_TOOLS = Object.values(ACTIONS).filter(
+  (tool) => tool.family === ACTION_FAMILY.SESSION,
+);
+
+test("MessageRole is MESSAGE_ROLE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/UIMessage.swift`), "MessageRole"),
+    MESSAGE_ROLE,
+    "a role the phone cannot name refuses the stored message whole",
+  );
+});
+
+test("MessageAuthor is MESSAGE_AUTHOR", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/UIMessage.swift`), "MessageAuthor"),
+    MESSAGE_AUTHOR,
+    "an author the phone cannot name refuses the stored message whole",
+  );
+});
+
+test("MessageChannel is MESSAGE_CHANNEL", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/UIMessage.swift`), "MessageChannel"),
+    MESSAGE_CHANNEL,
+    "a channel the phone cannot name refuses the developer's own ask",
+  );
+});
+
+test("ObservationSource is OBSERVATION_SOURCE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/UIMessage.swift`), "ObservationSource"),
+    OBSERVATION_SOURCE,
+    "an observation source the phone cannot name refuses the brain's own note",
+  );
+});
+
+test("ToolPartState is TOOL_PART_STATE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/UIMessage.swift`), "ToolPartState"),
+    TOOL_PART_STATE,
+    "a stored tool state the phone cannot name refuses the message that carries it",
+  );
+});
+
+test("TurnOrigin is TURN_ORIGIN", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ConversationReads.swift`), "TurnOrigin"),
+    TURN_ORIGIN,
+    "an origin the phone cannot name refuses the page and cannot mark Luke's own judgment",
+  );
+});
+
+test("TurnStatus is TURN_STATUS", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ConversationReads.swift`), "TurnStatus"),
+    TURN_STATUS,
+    "a status the phone cannot name refuses the page and cannot fold a running turn",
+  );
+});
+
+test("ConversationViewSourceKind is CONVERSATION_VIEW_SOURCE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ConversationReads.swift`), "ConversationViewSourceKind"),
+    CONVERSATION_VIEW_SOURCE,
+    "a source the phone cannot name refuses the page",
+  );
+});
+
+test("ConversationViewToolKind is CONVERSATION_VIEW_TOOL_KIND", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ConversationReads.swift`), "ConversationViewToolKind"),
+    CONVERSATION_VIEW_TOOL_KIND,
+    "a tool kind the phone cannot name refuses the page",
+  );
+});
+
+test("ConversationActionOutcome is CONVERSATION_VIEW_ACTION_OUTCOME", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ConversationReads.swift`), "ConversationActionOutcome"),
+    CONVERSATION_VIEW_ACTION_OUTCOME,
+    "the outcomes the phone words are the outcomes the view decides, or a row lies about an action",
+  );
+});
+
+test("ConversationEventKind is CONVERSATION_EVENT_KIND", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ConversationReads.swift`), "ConversationEventKind"),
+    CONVERSATION_EVENT_KIND,
+    "an event kind the phone cannot name refuses the events page",
+  );
+});
+
+test("ActionOutputStatus is ACTION_OUTPUT_STATUS", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ActionOutputEnvelope.swift`), "ActionOutputStatus"),
+    ACTION_OUTPUT_STATUS,
+    "an envelope status the phone cannot name reads as an unreadable answer",
+  );
+});
+
+test("ConversationActionKind is the session family of ACTION_KIND", () => {
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/ConversationToolRow.swift`), "ConversationActionKind"),
+    SESSION_ACTION_TOOLS.map((tool) => tool.kind),
+    "the kinds the phone words are the kinds the desktop words, so the two rows say the same set of things",
+  );
+});
+
+test("ConversationActionTool names the session family's tools", () => {
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/ConversationToolRow.swift`), "ConversationActionTool"),
+    SESSION_ACTION_TOOLS.map((tool) => tool.name),
+    "a session action tool the phone cannot name folds into the turn's details instead of drawing its row",
+  );
+});
+
+test("the read paths and page bound are the hosted contract's", () => {
+  const source = swift(`${KIT}/ConversationReadClient.swift`);
+  assert.equal(
+    `/${swiftStaticString(source, "messagesPath")}`,
+    HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES,
+  );
+  assert.equal(
+    `/${swiftStaticString(source, "eventsPath")}`,
+    HOSTED_SERVICE_PATH.CONVERSATION_EVENTS,
+  );
+  assert.equal(`/${swiftStaticString(source, "turnsPath")}`, HOSTED_SERVICE_PATH.BRAIN_TURNS);
+  assert.equal(`/${swiftStaticString(source, "changesPath")}`, HOSTED_SERVICE_PATH.CHANGES);
+  assert.equal(swiftStaticNumber(source, "maximumPageLimit"), READ_PAGE_BOUNDS.MAX_LIMIT);
 });
 
 test("a case with no raw value contributes its own name", () => {

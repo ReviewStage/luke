@@ -154,6 +154,57 @@ from the watch call and roster. The voice and speed chosen there are the
 phone's own, kept equal through the settings sync described under Watch below,
 so the wrist is a quick way to change them and never a second copy.
 
+## Conversation
+
+The Luke tab's toolbar opens the Conversation: the one long thread the
+account holds, read from the service's stored messages through the
+per-resource reads `packages/hosted`'s `reads-wire.ts` declares
+(`/api/conversation/messages`, `/api/conversation/events`,
+`/api/brain/turns`) and the change signal (`/api/changes`). It is the same
+thread the Mac's Conversation tab draws, selected and grouped by turn on the
+service; the phone words its rows itself.
+
+`LukeKit` holds everything but the drawing, so the watch can read the same
+thread later:
+
+- `UIMessage.swift` decodes a stored AI SDK `UIMessage` under the metadata
+  vocabulary of `@sidecar/wire` and the tool-part states of
+  `@sidecar/session`, refusing what `readStoredUIMessages` refuses.
+- `ActionOutputEnvelope.swift` reads an action tool's output envelope from
+  `@sidecar/actions`.
+- `ConversationReads.swift` decodes the four answers; `ConversationReadClient`
+  fetches them, echoing each cursor back exactly as the service minted it.
+- `ConversationThread` merges pages under the wire's contract: groups by turn
+  id, messages replaced by `seq` (a row still being written is answered again
+  on every read until it finishes), rows of a conversation no longer listed
+  dropped, turns replaced by id, and the latest speech event deciding whether
+  a briefing reads as unspoken. `ConversationStore` polls the change signal
+  while the screen is in the foreground and reads only the resources whose
+  head moved.
+- `ConversationToolRow` composes an action's row from the call's arguments
+  and the envelope with the phone's own wording; `ConversationTurnRows` turns a
+  group into rows — text bubbles, reasoning collapsed, announcements marked
+  when unspoken, actions folded under a count once a turn carries two, details
+  and refused actions folded under the turn, and a turn Luke opened himself
+  marked as his own judgment.
+
+The decoders are tested against the JSON fixtures the TypeScript packages
+commit — `packages/session/fixtures/ui-messages/`,
+`packages/session/fixtures/conversation-view/`, and
+`packages/hosted/fixtures/reads/` — read as the same bytes rather than
+Swift-shaped copies, so a shape the phone cannot decode is a finding about the
+wire. `tools/ios-parity` holds every enum the screen transcribes — roles,
+authors, channels, observation sources, tool-part states, turn origins and
+statuses, view sources and tool kinds, action outcomes, event kinds, envelope
+statuses, and the session action kinds and tool names a row is drawn for —
+equal to the TypeScript sets, which is what keeps the two platforms' rows
+saying the same set of things while each words them itself.
+
+The whole scroll carries PostHog's `postHogMask()`, the way the desktop's
+Conversation subtree carries the recording library's blocking class, so the
+thread's words, the sessions it names, and a refusal's reason are masked out
+of the session recording.
+
 ## Analytics
 
 The app runs the desktop's two analytics streams on this platform's terms,

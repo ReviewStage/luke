@@ -287,8 +287,9 @@ The iOS app records on the same terms: its own screens as screenshots, never
 anything else on your device, from the moment it opens, and shows the same
 things its screens show — session titles, branches, error text, and
 your name and email. A Conductor session's conversation, fetched onto that
-session's screen, is masked out of recordings the way the desktop's Conversation
-tab is blocked, so those messages reach your phone and nothing else. Text you
+session's screen, and your Conversation with Luke on its own screen are each
+masked out of recordings the way the desktop's Conversation tab is blocked, so
+those messages reach your phone and nothing else. Text you
 type into a field is masked, a message you sent stays masked when it is drawn
 back as a chat bubble, and a crash is reported on the next launch with its
 message and code path. Unlike the Mac

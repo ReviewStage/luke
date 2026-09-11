@@ -56,7 +56,11 @@ public final class DeviceRegistrar {
     }
 
     /// The row's id as the service last answered it, or nil before a registration lands.
-    public var deviceId: String? {
+    public var deviceId: String? { Self.storedDeviceId(in: store) }
+
+    /// The same reading for a caller that holds no registrar: the row id under
+    /// the key this class writes, or nil before a registration lands.
+    public static func storedDeviceId(in store: UserDefaults = .standard) -> String? {
         guard let stored = store.string(forKey: Key.deviceId)?.lowercased(),
               DeviceClient.isWireId(stored)
         else { return nil }
