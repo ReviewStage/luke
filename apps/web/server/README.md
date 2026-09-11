@@ -190,7 +190,12 @@ integrations set to publish a service's output under the service root instead,
 authored here by hand because the authored services graph is authoritative and
 eve generates nothing beside it. Public routing is the top-level `rewrites`:
 `/eve/v1/*` enters the eve service and everything else the web service, and a
-service's own routes run only once a request has entered it. The project's
+service's own routes run only once a request has entered it. That is why the
+generated `/api/` rewrites live under the web service's `routes` and the
+generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
+level beside `services`: Vercel ignores one there rather than erroring, so a
+file generated into the old location would pass every check and 404 every
+`/api/` route in production. The project's
 environment variables reach both services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
 `apps/web`, `packages`, or the workspace manifests deploys neither.
