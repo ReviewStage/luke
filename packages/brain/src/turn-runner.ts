@@ -115,6 +115,12 @@ interface TurnGathering {
   error?: string;
   /** Whether the run's slow step was already told; it is told once. */
   slowStepTold: boolean;
+  /** Whether the answer under way asked for tools, so its words wait for their results before they are relayed. */
+  answerCarriesCalls: boolean;
+  /** Whether the run's settle was already told; it is told once. */
+  settledTold: boolean;
+  /** How many of the reply's sentences have been relayed, so a later answer adds only the sentences after them. */
+  sentencesTold: number;
 }
 
 export interface TurnRunnerOptions {
@@ -497,6 +503,9 @@ export class TurnRunner {
       said: [],
       outputText: "",
       slowStepTold: false,
+      answerCarriesCalls: false,
+      settledTold: false,
+      sentencesTold: 0,
     };
     let preparation: BrainTurnPreparation | undefined;
     let policy: EffectiveToolPolicy | undefined;
@@ -627,17 +636,13 @@ export class TurnRunner {
         plan.deliveries.persisted();
         await context.afterTurn({ signal: turnContext.signal });
       }
-      // The answer is a message only once the checkpoint that carries every
-      // action's result has landed, and the reply is relayed only after that:
-      // nothing is said of the run before what it did is on record, and a
-      // revoked turn says nothing.
+      // The answer is a message only once the checkpoint that carries it has
+      // landed, and a revoked turn says nothing. The reply itself was relayed
+      // as it formed, once every action's result was on record; a run whose
+      // earlier checkpoint failed waited for this one, and is relayed now
+      // that the whole context is written.
       if (written && !this.#revoked(turnContext)) events.answered();
-      if (run.recorded && written && !this.#revoked(turnContext)) {
-        events.actionsSettled(run.runId);
-        for (const sentence of replySentences(gathering.outputText)) {
-          events.replySentence(run.runId, sentence);
-        }
-      }
+      if (written) this.#relayReply(turnContext, gathering);
       // A briefing leaves only from a turn that still stands: the stop or the
       // replacement that landed during the write — or during an earlier
       // briefing — withdraws every one not yet handed over, and a checkpoint
@@ -847,6 +852,7 @@ export class TurnRunner {
       switch (event.kind) {
         case RUNTIME_EVENT.ANSWERED:
           if (event.toolCalls > 0) gathering.iterations += 1;
+          gathering.answerCarriesCalls = event.toolCalls > 0;
           return;
         case RUNTIME_EVENT.RESPONSE:
           run.responseIds.push(event.responseId);
@@ -854,6 +860,13 @@ export class TurnRunner {
         case RUNTIME_EVENT.TEXT:
           gathering.said.push(event.text);
           gathering.outputText = joinReplyMessages(gathering.said);
+          // Words of an answer that asked for no tool are the reply forming:
+          // every action before them has its result checkpointed, so they are
+          // relayed now rather than after the turn's final write. Words beside
+          // a tool call wait for that call's result to be on record.
+          if (!gathering.answerCarriesCalls && !run.checkpointFailed) {
+            this.#relayReply(turnContext, gathering);
+          }
           return;
         case RUNTIME_EVENT.USAGE:
           if (event.usage.inputTokens !== undefined) {
@@ -950,6 +963,7 @@ export class TurnRunner {
           turnContext.events.finalText(end.text);
         }
         gathering.outputText = joinReplyMessages(gathering.said);
+        if (!turnContext.run.checkpointFailed) this.#relayReply(turnContext, gathering);
         if (end.incomplete) gathering.incomplete = incompleteDetail(end.incomplete);
         return undefined;
       case RUN_END_REASON.THROTTLED:
@@ -971,6 +985,29 @@ export class TurnRunner {
           end.reason === RUN_END_REASON.DEADLINE ? "execution deadline passed" : "turn revoked";
         return { outcome: TURN_OUTCOME.REVOKED };
     }
+  }
+
+  /**
+   * The reply as far as it has formed, relayed for a recorded run that still
+   * stands: the settle told once, then each sentence not yet told, in order.
+   * The sentences are counted rather than remembered, because a later answer
+   * only appends to the reply — the sentences before it are unchanged — so
+   * the final words, told again at the run's end where the runtime's end
+   * carried them, add nothing a listener already heard. A revoked turn
+   * relays nothing more, and what waited on a call's result is dropped.
+   */
+  #relayReply(turnContext: TurnContext, gathering: TurnGathering): void {
+    const { run, events } = turnContext;
+    if (!run.recorded || this.#revoked(turnContext)) return;
+    if (!gathering.settledTold) {
+      gathering.settledTold = true;
+      events.actionsSettled(run.runId);
+    }
+    const sentences = replySentences(gathering.outputText);
+    for (const sentence of sentences.slice(gathering.sentencesTold)) {
+      events.replySentence(run.runId, sentence);
+    }
+    gathering.sentencesTold = sentences.length;
   }
 
   #revoked(context: Pick<TurnContext, "signal">): boolean {
