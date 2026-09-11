@@ -269,14 +269,16 @@ it through a sibling named for it (`queue.ts` and `queue.effect.ts`, `lanes.ts`
 and `lanes.effect.ts`, `children.ts` and `children.effect.ts`; `workspace.ts`,
 `prompt.ts`, and `skills.ts` the same way; `tool-policy.ts` and
 `tool-policy.effect.ts`; `storage.ts` and `storage.effect.ts`; `@sidecar/brain`'s
-`store/maintenance-run.ts`, `store/archives.ts`, and `store/compression.ts`
-the same way, behind the store's own door rather than the barrel), which
-wraps the ported exports, states the port's refusals as tagged errors
-carrying the codes it already decides — reusing the port's own `as const`
-refusal set where it has one (`WORKSPACE_FILE_REFUSAL`, `CHILD_SPAWN_REFUSAL`),
-and stating a fresh one in the sibling where the port only decides the
+`compaction.ts`, `context-engine.ts`, and `state-store.ts` the same way, and
+its `store/maintenance-run.ts`, `store/archives.ts`, and `store/compression.ts`
+beside them, behind the store's own door rather than the barrel), which wraps
+the ported exports, states the port's refusals as tagged errors carrying the
+codes it already decides — reusing the port's own `as const` refusal set
+where it has one (`WORKSPACE_FILE_REFUSAL`, `CHILD_SPAWN_REFUSAL`), and
+stating a fresh one in the sibling where the port only decides the
 distinction without naming it (`QUEUE_REFUSAL`, `SKILL_LOAD_REFUSAL`,
 `TOOL_CALL_REFUSAL`, `STORAGE_DECODE_REFUSAL`, `CHILD_COMPLETION_REFUSAL`,
+`CompactionDeclined`, `CheckpointRefused`, `BrainStateWriteRefused`,
 `ARCHIVE_REFUSAL`, `ZstdUnsupported`) —
 and hands a caller any delay table the port states as a `Schedule` —
 `children.ts`'s own formula for its delivery backoff becomes
@@ -284,9 +286,11 @@ and hands a caller any delay table the port states as a `Schedule` —
 cap, since the port never held that cadence as a literal list to begin with.
 A pure function with no file, clock, or failure mode, like
 `buildSystemPrompt`, gets no sibling: an `Effect.sync` around it would wrap
-nothing, which is why `store/maintenance.ts` — a set of victim-selection
-functions that read records and answer victims, touching no file, clock, or
-caller that can fail — stands with no sibling of its own, and
+nothing, which is why `loop-guard.ts` — a sliding window read entirely
+synchronously, with no file, clock, or caller that can fail — and
+`store/maintenance.ts` — a set of victim-selection functions that read
+records and answer victims, touching no file, clock, or caller that can fail —
+each stand with no sibling of their own, and
 `store/maintenance-run.ts`'s own `runConversationMaintenanceEffect` wraps the
 pass's I/O with no refusal of its own to carry, since every boundary it runs
 already reports what it did rather than failing. `repository-checks.sh` names
