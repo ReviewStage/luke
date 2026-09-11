@@ -383,9 +383,25 @@ address. Signing into a different account on the same device moves its one
 row to that account rather than leaving a second. The row is deleted when
 you sign out on that device, when the phone and the watch part ways with the
 account, when Apple reports a push token gone, and alongside your account if
-you delete that. No push token is issued to the phone yet, and sending
-notifications ships as a separate feature; this describes only the
-registration.
+you delete that.
+
+**Briefing notifications.** When Luke decides to tell you something about your
+sessions and no device of yours is placed to say it — no Mac of yours
+reports itself active, or the active one has not taken the briefing within
+two minutes —
+our service sends the briefing to one of your devices as a push
+notification, through Apple's push notification service, addressed to the
+push token that device registered. The notification carries Luke's own
+words, the briefing exactly as he chose to say it, and nothing else: no
+session title, branch, path, error line, or identifier of any kind beyond
+what those words themselves contain. It is shown on the lock screen, so it
+is readable on a locked phone without unlocking it, and Apple carries it
+under its own terms on the way. A briefing is pushed at most once; one a
+device is already saying is never pushed; and while any of your devices
+reports a quiet-until instant, nothing is pushed until it lifts. The iOS
+app does not yet ask Apple for a push token, so until it does no
+notification reaches it; this describes what the service sends once one is
+registered.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached. A thumbs down
@@ -485,6 +501,12 @@ Send.
   Apple Watch apps. The counts go through our own service; the recordings,
   desktop clicks, and iOS errors that ride with them go from Luke to PostHog
   directly, and the watch app sends PostHog nothing directly.
+- Apple, for briefing notifications. When no device of yours is placed to
+  say a briefing, our service hands Luke's words to Apple's push notification
+  service, addressed to the push token your device registered, and Apple
+  delivers them to the lock screen, where they are readable without
+  unlocking. The notification carries those words and nothing else about
+  you or your sessions.
 - Sentry, for the anonymous exception, process-session, and native crash reports
   described above.
 - GitHub, to check for updates. These requests are unauthenticated and carry
