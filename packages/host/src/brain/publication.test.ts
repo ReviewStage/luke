@@ -18,23 +18,29 @@ import { followBrainRequests, publishRuns } from "./publication.js";
 
 const NOW = 1_800_000_000_000;
 
-function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord {
-  return {
-    runId: "run-1",
-    submissionId: "sub-1",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
-    question: "what needs me?",
-    status: BRAIN_REQUEST_STATUS.SUCCEEDED,
-    revision: 3,
-    acceptedAt: NOW,
-    startedAt: NOW + 1,
-    settledAt: NOW + 2,
-    text: "Two agents are waiting.",
-    performedActions: 0,
-    unknownActions: 0,
-    askRecordedAt: NOW,
-    ...overrides,
-  };
+type RecordOverrides = { [K in keyof BrainRequestRecord]?: BrainRequestRecord[K] | undefined };
+
+function record(overrides: RecordOverrides = {}): BrainRequestRecord {
+  // Object.assign rather than a spread: spreading a Partial marks every key it
+  // could carry optional, and the result stops being a BrainRequestRecord.
+  return Object.assign<BrainRequestRecord, RecordOverrides>(
+    {
+      runId: "run-1",
+      submissionId: "sub-1",
+      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      question: "what needs me?",
+      status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+      revision: 3,
+      acceptedAt: NOW,
+      startedAt: NOW + 1,
+      settledAt: NOW + 2,
+      text: "Two agents are waiting.",
+      performedActions: 0,
+      unknownActions: 0,
+      askRecordedAt: NOW,
+    },
+    overrides,
+  );
 }
 
 /** A brain that accepts every submission into one run and remembers what it was asked. */

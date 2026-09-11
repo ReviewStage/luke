@@ -554,6 +554,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // The memory provider is bound once here, over the performer above; a
     // host with none leaves the agent to refuse the tools itself.
     const memory = memoryFor(sessionKey);
+    const flushMarker = flushMarkerFor(sessionKey);
     return new BrainAgent({
       conversationId: sessionKey,
       observes: observed
@@ -569,7 +570,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         : undefined),
       children: children.accessFor(sessionKey),
       ...(memory ? { memory } : undefined),
-      ...(flushMarkerFor(sessionKey) ? { flushMarker: flushMarkerFor(sessionKey) } : undefined),
+      ...(flushMarker ? { flushMarker } : undefined),
       runtime: toolLoopRuntimeOver(model),
       actions,
       roster: dependencies.roster,

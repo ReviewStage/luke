@@ -184,13 +184,25 @@ async function composed(t: TestContext) {
       erase: async (at, cutoffBefore) => {
         await eraseGate;
         if (refuseErase) return undefined;
-        const outcome = await client.ask("conversations.delete", {
-          sessionKey: MAIN_SESSION_KEY,
-          now: at,
-          archiveId: `archive-${++ids}`,
-          keepSessionId: store.generationId(),
-          cutoffBefore: { value: cutoffBefore },
-        });
+        const generationId = store.generationId();
+        const archiveId = `archive-${++ids}`;
+        const outcome = await client.ask(
+          "conversations.delete",
+          generationId === undefined
+            ? {
+                sessionKey: MAIN_SESSION_KEY,
+                now: at,
+                archiveId,
+                cutoffBefore: { value: cutoffBefore },
+              }
+            : {
+                sessionKey: MAIN_SESSION_KEY,
+                now: at,
+                archiveId,
+                keepSessionId: generationId,
+                cutoffBefore: { value: cutoffBefore },
+              },
+        );
         return outcome ? { published: outcome.published } : undefined;
       },
       report: (message) => reports.push(message),

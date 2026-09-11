@@ -29,8 +29,10 @@ export function mergeMethods(composers: readonly Composer[]): GatewayMethodTable
   for (const composer of composers) {
     // SAFETY: a method table's keys are the method names it was built from.
     for (const method of Object.keys(composer.methods) as GatewayMethod[]) {
+      const handler = composer.methods[method];
+      if (handler === undefined) continue;
       if (merged[method]) throw new Error(`two composers answer ${method}`);
-      merged[method] = composer.methods[method];
+      merged[method] = handler;
     }
   }
   return merged;
