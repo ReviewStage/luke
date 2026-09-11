@@ -1,4 +1,5 @@
 import { RECORD_EXTRA_KEYS, s, TEXT_ENDS } from "@sidecar/wire";
+import { Schema } from "effect";
 import {
   type LiveClientEventType,
   type LiveServerEventSelector,
@@ -41,7 +42,11 @@ export function liveAttachPath(sessionId: string): string {
 
 export const LIVE_TRANSPORT_TYPE = "webrtc";
 
+export const LiveTransportTypeSchema = Schema.Literal(LIVE_TRANSPORT_TYPE);
+
 export const LIVE_DELEGATION_TYPE = "client";
+
+export const LiveDelegationTypeSchema = Schema.Literal(LIVE_DELEGATION_TYPE);
 
 export interface LiveSessionOptions {
   scene: LiveScene;
@@ -144,6 +149,69 @@ export const LIVE_SESSION_OUTCOME = {
 } as const;
 
 export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE_SESSION_OUTCOME];
+
+/**
+ * Every non-attempt, non-success outcome as its own tagged error, so a caller
+ * that wants a typed failure has one to carry rather than a bare string. Each
+ * class's `code` is the exact legacy string `LIVE_SESSION_OUTCOME` already
+ * names, so a caller still comparing that string with `===` and one that
+ * throws or yields the class agree on the same wire value.
+ */
+export class NoApiKeyRefusal extends Schema.TaggedError<NoApiKeyRefusal>()("NoApiKeyRefusal", {
+  code: Schema.Literal(LIVE_SESSION_OUTCOME.NO_API_KEY),
+}) {}
+
+export class DisabledByFixtureRefusal extends Schema.TaggedError<DisabledByFixtureRefusal>()(
+  "DisabledByFixtureRefusal",
+  { code: Schema.Literal(LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE) },
+) {}
+
+export class HttpErrorRefusal extends Schema.TaggedError<HttpErrorRefusal>()("HttpErrorRefusal", {
+  code: Schema.Literal(LIVE_SESSION_OUTCOME.HTTP_ERROR),
+}) {}
+
+export class NetworkErrorRefusal extends Schema.TaggedError<NetworkErrorRefusal>()(
+  "NetworkErrorRefusal",
+  { code: Schema.Literal(LIVE_SESSION_OUTCOME.NETWORK_ERROR) },
+) {}
+
+export class MalformedResponseRefusal extends Schema.TaggedError<MalformedResponseRefusal>()(
+  "MalformedResponseRefusal",
+  { code: Schema.Literal(LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE) },
+) {}
+
+export class SidebandFailedRefusal extends Schema.TaggedError<SidebandFailedRefusal>()(
+  "SidebandFailedRefusal",
+  { code: Schema.Literal(LIVE_SESSION_OUTCOME.SIDEBAND_FAILED) },
+) {}
+
+export class NotSignedInRefusal extends Schema.TaggedError<NotSignedInRefusal>()(
+  "NotSignedInRefusal",
+  { code: Schema.Literal(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN) },
+) {}
+
+export class QuotaExhaustedRefusal extends Schema.TaggedError<QuotaExhaustedRefusal>()(
+  "QuotaExhaustedRefusal",
+  { code: Schema.Literal(LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED) },
+) {}
+
+export class HostedUnavailableRefusal extends Schema.TaggedError<HostedUnavailableRefusal>()(
+  "HostedUnavailableRefusal",
+  { code: Schema.Literal(LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE) },
+) {}
+
+/** Every outcome-as-error class this module declares, for a test's own membership check. */
+export const LIVE_SESSION_REFUSALS = [
+  NoApiKeyRefusal,
+  DisabledByFixtureRefusal,
+  HttpErrorRefusal,
+  NetworkErrorRefusal,
+  MalformedResponseRefusal,
+  SidebandFailedRefusal,
+  NotSignedInRefusal,
+  QuotaExhaustedRefusal,
+  HostedUnavailableRefusal,
+] as const;
 
 /**
  * What the host knows about why voice is or is not available. It carries no

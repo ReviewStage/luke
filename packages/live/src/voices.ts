@@ -1,4 +1,5 @@
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { Schema } from "effect";
 
 /**
  * Every built-in voice the Live API speaks with, as the SDK's `BuiltInVoice`
@@ -34,14 +35,16 @@ export const LIVE_VOICE = {
 
 export type LiveVoice = (typeof LIVE_VOICE)[keyof typeof LIVE_VOICE];
 
+export const LiveVoiceSchema = Schema.Literal(...Object.values(LIVE_VOICE));
+
 /** Settings offers the voices in this order. */
 export const LIVE_VOICE_LIST: readonly LiveVoice[] = Object.values(LIVE_VOICE);
 
+const readsLiveVoice = Schema.is(LiveVoiceSchema);
+
 /** Guards a voice arriving from storage or IPC. */
 export function isLiveVoice(value: UnparsedWireValue): value is LiveVoice {
-  if (!isWireString(value)) return false;
-  // SAFETY: value is a string; list membership is the voice vocabulary contract check.
-  return LIVE_VOICE_LIST.includes(value as LiveVoice);
+  return readsLiveVoice(value);
 }
 
 /**
