@@ -2725,3 +2725,45 @@ enqueue.**
 LUKE-164's preview probe, the runtime before-and-after on this incident (both previews answered 302
 to `sso-api` at the edge, so no worker could see a function's behaviour at all), and any future
 "the deployed shape works" assertion. **One ask, three reasons.**
+
+
+## 2026-09-11 — The Vercel preset cannot be repo-controlled: LUKE-165 closed negative from source
+
+**Established from `vercel/vercel` itself, with no deploy.** A top-level `framework` beside a
+`services` key is **refused** — not honoured, not ignored.
+
+`packages/cli/src/util/validate-config.ts` (main), lines 851–863: with `services` (or
+`experimentalServicesV2`) present, any of `functions`, `installCommand`, `buildCommand`,
+`devCommand`, `ignoreCommand`, `outputDirectory` or **`framework`** at the top level is collected into
+`ambiguousTopLevel` and the validator **returns a `NowBuildError`**, code
+`SERVICES_AND_TOP_LEVEL_BUILD_SETTINGS`: *"The top-level property … cannot be used with … because the
+owning service is ambiguous."* An error return, not a warning. `validateConfig` is invoked by the
+CLI's build command (`packages/cli/src/commands/build/index.ts`, lines 60 and 499) — **the same path
+the platform runs in its build container** — so a deployment carrying both keys **fails at config
+validation before any service builds.**
+
+**Why the schema made it look possible**, which is the part worth keeping:
+`fs-detectors/src/services/detect-services.ts` has **no check on the project framework at all**.
+Services resolution triggers on the **`services` key**; with no key it falls back to layout
+auto-detection (Railway, Render, Procfile, blessed layouts). **So `framework: "services"` exists for
+projects whose services are auto-detected from layout, never for an authored `services` block.** Our
+shape — an authored eve service with a custom build — can only be selected by the dashboard preset.
+The schema listing the slug and our case being unreachable are both true.
+
+**Consequences, and they change a priority.** The preset/key split **cannot** be closed by a file.
+The incident class is closed by **ordering discipline** plus **LUKE-164's preview probe**, which makes
+LUKE-164 **the primary defence rather than the second line** — and makes the **Protection Bypass for
+Automation** secret it needs correspondingly more important. That secret now blocks three things:
+LUKE-164, the runtime evidence on the function-bundle outage, and any future "the deployed shape
+works" assertion.
+
+**Worth recording about how this was found.** C2a proposed the repo-controlled preset itself, then
+went to the source and **refuted its own proposal**, reporting the refutation rather than the parts
+that supported it. That is the third time in one afternoon the same worker has produced the evidence
+against its own claim — the "Skipped — Not affected" retraction, the duration heuristic it withdrew
+including for its own earlier readings, and this. **A negative finding from source, for free, is worth
+more than a positive one bought with a deploy.**
+
+**One side note it flagged and correctly discounted:** #1018's preview for `e4aa2973` built Ready in
+65 s under the Vite preset. Single-app as expected, and **uninformative** — consistent with the
+duration heuristic already retracted, and named as uninformative rather than offered as evidence.
