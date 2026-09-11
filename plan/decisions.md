@@ -283,3 +283,28 @@ the `devices` timestamps were already ruled on in the corrections entry and are 
 flight. Everything else the audit checked held — `response_ids` nullable, `unique (conversation_id,
 seq)` on messages and events, `unique (live_session_id)` on voice sessions, the standing-main
 partial unique index, and `conversation_lease` with no writer.
+
+
+## 2026-09-11 — One instant helper for every v2 column, and migration numbers are a shared namespace (orchestrator, from E6b)
+
+**The schema convention, which is the part that outlives this PR.** E6b (LUKE-160, #1017) moves
+`devices`' three instants to `timestamptz` under the ruling above, and does it **through one
+shared instant helper**, collapsing the private copies that `storage-schema.ts` and
+`voice-schema.ts` each kept. That is now how a v2 instant is declared: **one helper, no fourth
+private copy.** The rule "`timestamptz` on every v2 instant" was true and still got violated
+twice, because it lived in prose while the declaration lived in three places — a rule a type can
+carry should not be left to a reader's memory. C5, D3, and G4 use the helper.
+
+**Verified before approving:** `0019_d2_devices_quiet_until.sql` is the highest migration on main,
+so **0020 is E6b's and uncontested.** The conversion carries `AT TIME ZONE 'UTC'` so stored
+instants survive whatever zone the migrating session happens to run in, and the test is the part
+worth copying: 0000–0019 applied to PGlite under `Asia/Tokyo`, naive rows inserted, 0020 applied,
+epochs asserted — **and a mutation check with the `USING` clauses removed fails by exactly nine
+hours.** A migration test that cannot fail proves nothing; that one names its own falsification.
+
+**Standing rule from it: a migration number is a namespace shared across every PR in flight, and
+nothing enforces it.** Two branches can both write `0020` and both pass every check in isolation;
+the second one to merge is a broken deploy, not a merge conflict. So before claiming a number,
+read the highest on **main** and in every **open** PR, and say in the PR body which number you
+took. Added to the standing addendum every brief carries.
+
