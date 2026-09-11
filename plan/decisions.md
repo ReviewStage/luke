@@ -1767,3 +1767,37 @@ and it is the only thing that can: a reader comparing writer and parser by eye w
 **Eleven mutation checks across C3's three PRs**, and the shape of the newest is the one to copy —
 "carried filter dropped **fails three tests**": not one test naming the mechanism, three naming the
 consequences.
+
+
+## 2026-09-11 — Under eve, which delivery produced a message is not a property of the message (orchestrator, from C3's (c))
+
+**The third consequence of eve's folding, and worth seeing as one thing rather than three
+coincidences.**
+
+1. **It forced the `asks` record to exist** (with Dean): a folded turn has **one** received message,
+   so two client ids cannot map onto it, and no pre-minted row can be the turn eve runs.
+2. **It forced C2b's ordinal identity**: a retried step re-emits under a new `meta.id`, so the
+   reasoning item's id is minted from stable coordinates rather than taken from the event.
+3. **And now: a folded message carries the LAST delivery's kind**, so filtering C3's carried read on
+   the metadata source would have missed exactly the messages eve folded.
+
+**C3 found it while writing the round-trip test I asked for.** The read now filters on **the brain's
+authorship plus the marker's presence in the text**, newest first, bounded at 256 — and that answer
+is only available because the A lane named brain-authored user messages in the metadata. **That field
+was added for a different reason and is what stops a developer's typed ask impersonating a carried
+set.** Stated in the body so nobody "simplifies" the filter back to the source.
+
+**The round-trip test tests the right things:** quotes, braces, a newline and non-ASCII (the four
+that break a naive parse); the folded shape between two `[observed events]` items with blank lines
+(the arrival shape a reader would not think to construct); two items in one message (the case that
+silently drops one); and unreadable JSON, an observation item and empty text naming **nothing** —
+the half that matters most, because a parser answering "nothing" on garbage re-lists while one that
+throws takes the drain down with it.
+
+**`heldBriefingsNamed(text)` exported rather than private** is what makes the round trip testable at
+all: writer and reader are two named things a test holds together, rather than one function's halves
+that drift in a single edit.
+
+**C3's lane, complete pending one ruling:** three PRs, twelve changed or added tests in (c) alone,
+eleven mutations each failing a named test, every open question closed. Order when the ruling lands:
+(a), then (b) retargeted, then (c).
