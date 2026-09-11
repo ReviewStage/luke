@@ -18,8 +18,7 @@ import {
   gatewayRequestToWire,
   NODE_CAPABILITY_STATUS,
 } from "./protocol.js";
-import { GatewayServer } from "./server.js";
-import { TextLoopbackTransport } from "./testing.js";
+import { type GatewayTestHost, gatewayTestHost, TextLoopbackTransport } from "./testing.js";
 import { type GatewayTransport, InProcessTransport } from "./transport.js";
 
 const OPERATOR: GatewayClientIdentity = {
@@ -35,7 +34,7 @@ function recordOf(value: WireValue | undefined): WireRecord {
 }
 
 interface Harness {
-  server: GatewayServer;
+  host: GatewayTestHost;
   nodes: NodeRegistry;
   effects: string[];
   configurationRevision: { value: number };
@@ -43,14 +42,14 @@ interface Harness {
   snapshots: number;
 }
 
-function harness(replayWindow = 500): Harness {
+async function harness(replayWindow = 500): Promise<Harness> {
   const effects: string[] = [];
   const configurationRevision = { value: 1 };
   const sessionRevision = new Map<string, string>([["agent:main:main", "gen-1"]]);
   const nodes = new NodeRegistry();
   let ids = 0;
   const counters = { snapshots: 0 };
-  const server = new GatewayServer({
+  const host = await gatewayTestHost({
     methods: {
       [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
         effects.push(`submit ${String(params.submissionId)}`);
@@ -86,7 +85,7 @@ function harness(replayWindow = 500): Harness {
     replayWindow,
   });
   return {
-    server,
+    host,
     nodes,
     effects,
     configurationRevision,
@@ -99,10 +98,10 @@ function harness(replayWindow = 500): Harness {
 
 type TransportKind = "in-process" | "loopback";
 
-function transportFor(kind: TransportKind, server: GatewayServer, identity = OPERATOR) {
+function transportFor(kind: TransportKind, host: GatewayTestHost, identity = OPERATOR) {
   return kind === "in-process"
-    ? new InProcessTransport(server, identity)
-    : new TextLoopbackTransport(server, identity);
+    ? new InProcessTransport(host, identity)
+    : new TextLoopbackTransport(host, identity);
 }
 
 /** Holds every answer of the transport until the scheduled work is fired, so an event can land mid-request. */
@@ -137,8 +136,8 @@ function client(transport: GatewayTransport, onSnapshot?: (snapshot: WireValue) 
  */
 for (const kind of ["in-process", "loopback"] as const) {
   test(`[${kind}] a mutation carries an idempotency key, and the same key finds the first answer once`, async () => {
-    const h = harness();
-    const c = client(transportFor(kind, h.server));
+    const h = await harness();
+    const c = client(transportFor(kind, h.host));
     const first = await c.call(
       GATEWAY_METHOD.RUN_SUBMIT,
       { submissionId: "sub-1", question: "hi" },
@@ -161,7 +160,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     if (!other.ok) assert.equal(other.error.code, GATEWAY_ERROR.IDEMPOTENCY_CONFLICT);
     assert.deepEqual(h.effects, ["submit sub-1"]);
     // A raw request with no key is refused before any handler runs.
-    const bare = await transportFor(kind, h.server).request({
+    const bare = await transportFor(kind, h.host).request({
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       id: "raw-1",
       method: GATEWAY_METHOD.CONVERSATION_DELETE,
@@ -173,8 +172,8 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] two retries in flight together await one decision`, async () => {
-    const h = harness();
-    const c = client(transportFor(kind, h.server));
+    const h = await harness();
+    const c = client(transportFor(kind, h.host));
     const [a, b] = await Promise.all([
       c.call(GATEWAY_METHOD.RUN_SUBMIT, { submissionId: "s" }, { idempotencyKey: "k" }),
       c.call(GATEWAY_METHOD.RUN_SUBMIT, { submissionId: "s" }, { idempotencyKey: "k" }),
@@ -184,8 +183,8 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] a request built over a replaced lifetime or configuration is refused before its handler`, async () => {
-    const h = harness();
-    const c = client(transportFor(kind, h.server));
+    const h = await harness();
+    const c = client(transportFor(kind, h.host));
     const stale = await c.call(
       GATEWAY_METHOD.CONVERSATION_DELETE,
       {},
@@ -212,8 +211,8 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] unknown methods, unsupported versions, thrown handlers, and typed refusals all answer as errors`, async () => {
-    const h = harness();
-    const c = client(transportFor(kind, h.server));
+    const h = await harness();
+    const c = client(transportFor(kind, h.host));
     const unknown = await c.call(GATEWAY_METHOD.CHILD_LIST);
     assert.equal(unknown.ok, false);
     if (!unknown.ok) assert.equal(unknown.error.code, GATEWAY_ERROR.UNKNOWN_METHOD);
@@ -223,7 +222,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     const refused = await c.call(GATEWAY_METHOD.CONFIGURATION_UPDATE, {});
     assert.equal(refused.ok, false);
     if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.REFUSED);
-    const version = await transportFor(kind, h.server).request({
+    const version = await transportFor(kind, h.host).request({
       protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
       id: "v",
       method: GATEWAY_METHOD.RUN_LIST,
@@ -234,8 +233,8 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] a node may only offer itself; the operator's methods are refused to it`, async () => {
-    const h = harness();
-    const node = client(transportFor(kind, h.server, NODE));
+    const h = await harness();
+    const node = client(transportFor(kind, h.host, NODE));
     const refused = await node.call(GATEWAY_METHOD.RUN_LIST);
     assert.equal(refused.ok, false);
     if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.UNAUTHORIZED);
@@ -244,21 +243,21 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] events arrive numbered in order, and a gap is filled from the host's log before anything later is delivered`, async () => {
-    const h = harness();
-    const transport = transportFor(kind, h.server);
+    const h = await harness();
+    const transport = transportFor(kind, h.host);
     const c = client(transport);
     const seen: number[] = [];
     c.onEvery((event) => seen.push(event.sequence));
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     assert.deepEqual(seen, [1, 2]);
     // The wire loses two events; the third to arrive shows the gap.
     if (transport instanceof TextLoopbackTransport) transport.dropNextEvents(2);
     else transport.setConnected(false);
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-    h.server.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
     if (!(transport instanceof TextLoopbackTransport)) transport.setConnected(true);
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(seen, [1, 2, 3, 4, 5]);
@@ -266,30 +265,30 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] an event emitted while a reconnection is in flight is delivered once it settles, not at the next gap`, async () => {
-    const h = harness();
+    const h = await harness();
     const timers: Array<() => void> = [];
     const schedule = (work: () => void) => {
       timers.push(work);
     };
-    const inner = transportFor(kind, h.server);
+    const inner = transportFor(kind, h.host);
     const transport =
       inner instanceof TextLoopbackTransport
-        ? new TextLoopbackTransport(h.server, OPERATOR, { responseDelayMs: 50, schedule })
+        ? new TextLoopbackTransport(h.host, OPERATOR, { responseDelayMs: 50, schedule })
         : answeringLate(inner, schedule);
     const c = client(transport);
     const seen: number[] = [];
     c.onEvery((event) => seen.push(event.sequence));
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     // The wire loses event 2; event 3 shows the gap and opens the reconnection.
     if (transport instanceof TextLoopbackTransport) transport.dropNextEvents(1);
     else inner.setConnected(false);
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     inner.setConnected(true);
-    h.server.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
+    h.host.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(timers.length, 1);
     // The host has answered from sequence 3; event 4 is emitted before the client adopts that answer.
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     assert.deepEqual(seen, [1]);
     for (const fire of timers.splice(0)) fire();
     await new Promise((resolve) => setImmediate(resolve));
@@ -299,15 +298,15 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] a reconnection past the replay window is answered with a snapshot, never a silent skip`, async () => {
-    const h = harness(3);
-    const transport = transportFor(kind, h.server);
+    const h = await harness(3);
+    const transport = transportFor(kind, h.host);
     const adopted: WireValue[] = [];
     const c = client(transport, (snapshot) => adopted.push(snapshot));
     const seen: GatewayEvent[] = [];
     c.onEvery((event) => seen.push(event));
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     transport.setConnected(false);
-    for (let i = 0; i < 5; i += 1) h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    for (let i = 0; i < 5; i += 1) h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     transport.setConnected(true);
     await c.reconnect();
     assert.equal(seen.length, 1);
@@ -315,8 +314,8 @@ for (const kind of ["in-process", "loopback"] as const) {
     assert.equal(c.lastSequence(), 6);
     // Within the window, the replay carries every missed event instead.
     transport.setConnected(false);
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    h.host.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     transport.setConnected(true);
     await c.reconnect();
     assert.deepEqual(
@@ -332,8 +331,8 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] a disconnected transport answers every request disconnected rather than hanging`, async () => {
-    const h = harness();
-    const transport = transportFor(kind, h.server);
+    const h = await harness();
+    const transport = transportFor(kind, h.host);
     const c = client(transport);
     transport.setConnected(false);
     const answer = await c.call(GATEWAY_METHOD.RUN_LIST);
@@ -343,12 +342,12 @@ for (const kind of ["in-process", "loopback"] as const) {
   });
 
   test(`[${kind}] a disconnected required node answers a typed unavailable and nothing records the action as done`, async () => {
-    const h = harness();
-    const c = client(transportFor(kind, h.server));
+    const h = await harness();
+    const c = client(transportFor(kind, h.host));
     const changes: WireValue[] = [];
     c.on(GATEWAY_EVENT.NODE_CHANGED, (event) => changes.push(event.payload));
     h.nodes.onChange((nodes) => {
-      h.server.emit(GATEWAY_EVENT.NODE_CHANGED, {
+      h.host.emit(GATEWAY_EVENT.NODE_CHANGED, {
         nodes: nodes.map((node) => ({ ...node, capabilities: [...node.capabilities] })),
       });
     });
@@ -389,9 +388,9 @@ test("a method outside the vocabulary is refused by the writer before it reaches
 });
 
 test("a delayed answer still lands, and a late acknowledgement after it changes nothing more", async () => {
-  const h = harness();
+  const h = await harness();
   const timers: Array<() => void> = [];
-  const transport = new TextLoopbackTransport(h.server, OPERATOR, {
+  const transport = new TextLoopbackTransport(h.host, OPERATOR, {
     responseDelayMs: 50,
     schedule: (work) => {
       timers.push(work);

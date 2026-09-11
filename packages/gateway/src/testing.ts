@@ -1,9 +1,12 @@
 import type { WireValue } from "@sidecar/wire";
+import { Effect, Exit, Runtime, Scope } from "effect";
 import { unavailableInvocation } from "./invocations.js";
+import type { GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_ERROR,
   type GatewayClientIdentity,
   type GatewayEvent,
+  type GatewayEventKind,
   type GatewayRequest,
   type GatewayResponse,
   gatewayEventFromWire,
@@ -20,8 +23,60 @@ import {
   nodeInvocationFromWire,
   nodeInvocationToWire,
 } from "./protocol.js";
-import type { GatewayServer } from "./server.js";
+import {
+  type GatewayInProcessHost,
+  type GatewayServerLayerOptions,
+  gatewayInProcessHost,
+  gatewayMethodEffects,
+} from "./server.js";
 import { ServerBoundTransport } from "./transport.js";
+
+/** What a test composes an in-process host over: the server's own layer options, with the method table a host writes. */
+export interface GatewayTestHostOptions extends Omit<GatewayServerLayerOptions, "methods"> {
+  methods: GatewayMethodTable;
+}
+
+/** An in-process host a test holds, and the close of the scope its layers were built in. */
+export interface GatewayTestHost extends GatewayInProcessHost {
+  /** Appends one event to the log, as the host's own callback surfaces do, and answers what was numbered. */
+  readonly emit: (
+    kind: GatewayEventKind,
+    payload: WireValue,
+    identity?: { sessionKey?: string; runId?: string },
+  ) => GatewayEvent;
+  /** Closes the door to new work, as the quit does: every mutation but the shutdown is refused from here on. */
+  readonly closeAdmissions: () => void;
+  /** Lets the layers and the server's fiber go; nothing answers after this. */
+  readonly dispose: () => Promise<void>;
+}
+
+/**
+ * The in-process host a test composes: `layerGatewayInProcess` built in a
+ * scope of this harness's own, so a test holds the log, the admissions door,
+ * and the protocol's door without a process that owns them.
+ *
+ * @deprecated A strangler shim on the ADR's allowlist, deleted by P12-09:
+ * the runs here are the test's own edge while this package's suites are
+ * plain `test` bodies, and they go when those suites are written on
+ * `it.effect` and build the layers in the test's own scope.
+ */
+export async function gatewayTestHost(options: GatewayTestHostOptions): Promise<GatewayTestHost> {
+  const scope = Effect.runSync(Scope.make());
+  const host = await Effect.runPromise(
+    Effect.provideService(
+      gatewayInProcessHost({ ...options, methods: gatewayMethodEffects(options.methods) }),
+      Scope.Scope,
+      scope,
+    ),
+  );
+  return {
+    ...host,
+    emit: (kind, payload, identity) =>
+      Runtime.runSync(host.runtime)(host.log.emit(kind, payload, identity)),
+    closeAdmissions: () => Runtime.runSync(host.runtime)(host.admissions.close),
+    dispose: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+  };
+}
 
 /**
  * The transport a test carries the protocol over. It is here rather than
@@ -58,11 +113,11 @@ export class TextLoopbackTransport extends ServerBoundTransport {
   #missed: GatewayEvent[] = [];
 
   constructor(
-    server: GatewayServer,
+    host: GatewayInProcessHost,
     identity: GatewayClientIdentity,
     options: TextLoopbackTransportOptions = {},
   ) {
-    super(server, identity);
+    super(host, identity);
     this.#options = options;
   }
 
@@ -75,7 +130,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
         "the request did not survive the wire",
       );
     }
-    const response = await this.server.handle(carried, this.identity, this.hostConnection);
+    const response = await this.handle(carried);
     const delay = this.#options.responseDelayMs ?? 0;
     if (delay > 0) {
       const schedule = this.#options.schedule ?? ((work, ms) => setTimeout(work, ms));

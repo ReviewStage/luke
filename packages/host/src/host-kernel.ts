@@ -151,7 +151,7 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
     hostedServiceBaseUrl: hostedServiceBaseUrlFor(accountBaseUrl),
     nodes,
     emit: (kind, payload) => {
-      service.read().server.emit(kind, payload);
+      service.read().emit(kind, payload);
     },
     service: () => service.read(),
     setService: (next) => {

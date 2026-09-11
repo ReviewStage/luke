@@ -43,7 +43,7 @@ export function heldModel(): BareResponsesModel & { release: (answer: ModelRespo
  * The real agent, store, host, follower, and submission path composed as the
  * main process composes them, with only the model and the disk synthetic.
  */
-export function brainHarness() {
+export async function brainHarness() {
   const repository = fakeBrainStateRepository();
   let ids = 0;
   const store = new BrainStateStore({
@@ -62,7 +62,7 @@ export function brainHarness() {
     publishEmpty: () => broadcasts.push([]),
   });
   /** Submits as a client does, through the operator over the standing brain. */
-  const { submit } = operatorOverBrain({ current: () => host.current() });
+  const { submit } = await operatorOverBrain({ current: () => host.current() });
   const submitMany = async (count: number, from = 0) => {
     const runIds: string[] = [];
     for (let index = from; index < from + count; index += 1) {

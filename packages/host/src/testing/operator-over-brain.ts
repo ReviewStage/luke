@@ -3,7 +3,7 @@ import { GATEWAY_CLIENT_ROLE, GatewayClient, InProcessTransport } from "@sidecar
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import type { ConversationOperations } from "../conversation-operations.js";
 import { createGatewayOperator, type GatewayOperator } from "../operator.js";
-import { createGatewayService } from "../service.js";
+import { scopedGatewayService } from "./gateway-service.js";
 
 /**
  * Test support: the operator a client's ask crosses, stood over one brain and
@@ -12,11 +12,11 @@ import { createGatewayService } from "../service.js";
  * composing the rest of the host. Every other capability is an inert stand-in
  * a test of it would not use.
  */
-export function operatorOverBrain(options: {
+export async function operatorOverBrain(options: {
   current: () => BrainAgent | undefined;
-}): GatewayOperator {
+}): Promise<GatewayOperator> {
   let ids = 0;
-  const service = createGatewayService({
+  const { service } = await scopedGatewayService({
     brain: {
       current: options.current,
       agentForRun: options.current,
@@ -37,7 +37,7 @@ export function operatorOverBrain(options: {
   });
   return createGatewayOperator({
     client: new GatewayClient({
-      transport: new InProcessTransport(service.server, {
+      transport: new InProcessTransport(service.gateway, {
         clientId: "test-operator",
         role: GATEWAY_CLIENT_ROLE.OPERATOR,
       }),

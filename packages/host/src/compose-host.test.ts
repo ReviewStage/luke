@@ -6,11 +6,12 @@ import {
   GATEWAY_PROTOCOL_VERSION,
   type GatewayMethod,
   gatewayOk,
+  InProcessTransport,
 } from "@sidecar/gateway";
 import { ACTION_RESULT_STATUS, isRecord, lateRef } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { test } from "vitest";
-import { composeHost } from "./compose-host.js";
+import { composeHost, type Host } from "./compose-host.js";
 import { type Composer, mergeMethods } from "./composer.js";
 import { createHostKernel } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
@@ -45,6 +46,14 @@ function fixtureHost(stateRoot: string) {
     now: () => 0,
     createId: () => "id",
     report: () => undefined,
+  });
+}
+
+/** One client of the composed host, as the desktop's own operator is: one connection, every request on it. */
+function operatorTransport(host: Host): InProcessTransport {
+  return new InProcessTransport(host.gateway, {
+    clientId: "test",
+    role: GATEWAY_CLIENT_ROLE.OPERATOR,
   });
 }
 
@@ -99,15 +108,12 @@ test("the merge answers the bootstrap every concern contributes to, and starts a
   await host.start();
   // The one method no composer owns: it reads six of them, so an answer
   // proves the merge stood every concern up and linked their back-edges.
-  const response = await host.server.handle(
-    {
-      protocolVersion: GATEWAY_PROTOCOL_VERSION,
-      id: "bootstrap-1",
-      method: GATEWAY_METHOD.CLIENT_BOOTSTRAP,
-      params: {},
-    },
-    { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-  );
+  const response = await operatorTransport(host).request({
+    protocolVersion: GATEWAY_PROTOCOL_VERSION,
+    id: "bootstrap-1",
+    method: GATEWAY_METHOD.CLIENT_BOOTSTRAP,
+    params: {},
+  });
   assert.ok(response.ok);
   assert.ok(isRecord(response.result));
   assert.equal(response.result.calendarOnboardingOwed, false);
@@ -121,27 +127,22 @@ test("a row's write reaches the host as a method and is refused for a session th
   const host = fixtureHost(await temporaryDirectory(t));
   await host.start();
   const identity = { providerId: "conductor", providerSessionId: "chat-nobody-observed" };
+  const transport = operatorTransport(host);
   const [sent, pressed] = await Promise.all([
-    host.server.handle(
-      {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "send-1",
-        method: GATEWAY_METHOD.SESSION_SEND_MESSAGE,
-        params: { identity, text: "hello" },
-        idempotencyKey: "send-1",
-      },
-      { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-    ),
-    host.server.handle(
-      {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "press-1",
-        method: GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
-        params: { identity, controlId: "cancel-run" },
-        idempotencyKey: "press-1",
-      },
-      { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-    ),
+    transport.request({
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      id: "send-1",
+      method: GATEWAY_METHOD.SESSION_SEND_MESSAGE,
+      params: { identity, text: "hello" },
+      idempotencyKey: "send-1",
+    }),
+    transport.request({
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      id: "press-1",
+      method: GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
+      params: { identity, controlId: "cancel-run" },
+      idempotencyKey: "press-1",
+    }),
   ]);
   // A fixture host observes nothing, so admission's own roster refusal is the
   // answer for both writes: the method is wired, and nothing past admission ran.

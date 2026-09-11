@@ -6,7 +6,7 @@ import {
   type GatewayShutdownSteps,
   gatewayOk,
 } from "@sidecar/gateway";
-import type { GatewayServer } from "@sidecar/gateway/server";
+import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Cause, Chunk, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { HOST_CONCERN, HOST_START_ORDER } from "../compose-host.js";
 import type { Composer } from "../composer.js";
@@ -19,8 +19,8 @@ import {
   hostStandingLayer,
 } from "./host.js";
 
-// SAFETY: these tests hand the server through the assembly and back; none of them calls a method on it.
-const stubServer = (): GatewayServer => ({}) as GatewayServer;
+// SAFETY: these tests hand the in-process host through the assembly and back; none of them reads a part of it.
+const stubGateway = (): GatewayInProcessHost => ({}) as GatewayInProcessHost;
 
 const STEP = {
   START: "start",
@@ -59,7 +59,7 @@ const recordingComposer = (
 });
 
 const recordingAssembly = (log: Recorded[], startOrder: readonly Composer[]): HostAssembly => ({
-  server: stubServer(),
+  gateway: stubGateway(),
   startOrder,
   arm: async () => {
     log.push({ step: STEP.ARM });
@@ -109,7 +109,7 @@ describe("the standing host", () => {
 
         const context = yield* buildStanding(assembly, scope);
         const standing = Context.get(context, HostTag);
-        assert.equal(standing.server, assembly.server);
+        assert.equal(standing.gateway, assembly.gateway);
         assert.deepEqual(log, [
           { step: STEP.START, concern: "first" },
           { step: STEP.START, concern: "second" },

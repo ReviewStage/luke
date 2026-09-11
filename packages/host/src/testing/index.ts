@@ -9,4 +9,5 @@ export {
   brainHarness,
   heldModel,
 } from "./brain-harness.js";
+export { type ScopedGatewayService, scopedGatewayService } from "./gateway-service.js";
 export { operatorOverBrain } from "./operator-over-brain.js";

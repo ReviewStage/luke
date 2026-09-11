@@ -9,7 +9,7 @@ import { test } from "vitest";
 import { answerOf, brainHarness, heldModel } from "../testing/index.js";
 
 test("removing the capability under five outstanding runs leaves every run interrupted and marked, with no line written", async () => {
-  const c = brainHarness();
+  const c = await brainHarness();
   const client = heldModel();
   await c.host.replace(() => c.build(client));
   const agent = c.host.current();
@@ -49,7 +49,7 @@ test("removing the capability under five outstanding runs leaves every run inter
 });
 
 test("a successor replacing the agent under outstanding runs inherits every end marked, and owns the store alone", async () => {
-  const c = brainHarness();
+  const c = await brainHarness();
   const first = heldModel();
   await c.host.replace(() => c.build(first));
   const agent = c.host.current();
@@ -104,7 +104,7 @@ test("a successor replacing the agent under outstanding runs inherits every end 
 });
 
 test("a reset under outstanding runs discards them without publishing, and the successor starts clean", async () => {
-  const c = brainHarness();
+  const c = await brainHarness();
   const client = heldModel();
   await c.host.replace(() => c.build(client));
   const agent = c.host.current();

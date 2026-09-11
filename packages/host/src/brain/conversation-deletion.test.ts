@@ -198,7 +198,7 @@ async function composed(t: TestContext) {
   // The operator stands over whichever agent the ask names, as the host's
   // current brain would, so a rebuilt agent is submitted to like the first.
   let asking: BrainAgent | undefined;
-  const operator = operatorOverBrain({ current: () => asking });
+  const operator = await operatorOverBrain({ current: () => asking });
   const submit = async (agent: BrainAgent, question: string) => {
     asking = agent;
     const result = await operator.submit({
