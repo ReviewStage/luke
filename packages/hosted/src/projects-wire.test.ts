@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { hostedProjectsAnswerSchema } from "./projects-wire.js";
+import { hostedProjectsAnswerFromWire } from "./projects-wire.js";
 
 const PROJECT = {
   providerId: "conductor",
@@ -10,19 +10,19 @@ const PROJECT = {
 };
 
 test("an answer that listed no agent choices still lists its projects", () => {
-  assert.deepEqual(hostedProjectsAnswerSchema.parse({ projects: [PROJECT] }), {
+  assert.deepEqual(hostedProjectsAnswerFromWire({ projects: [PROJECT] }), {
     projects: [PROJECT],
     agentModels: [],
   });
-  assert.deepEqual(hostedProjectsAnswerSchema.parse({ projects: [], agentModels: "none" }), {
+  assert.deepEqual(hostedProjectsAnswerFromWire({ projects: [], agentModels: "none" }), {
     projects: [],
     agentModels: [],
   });
-  assert.equal(hostedProjectsAnswerSchema.parse({ agentModels: [] }), undefined);
+  assert.equal(hostedProjectsAnswerFromWire({ agentModels: [] }), undefined);
 });
 
 test("an agent offered without the models it runs under is no choice, so its row goes", () => {
-  const answer = hostedProjectsAnswerSchema.parse({
+  const answer = hostedProjectsAnswerFromWire({
     projects: [PROJECT],
     agentModels: [
       { providerId: "conductor", agent: "claude", models: [], efforts: [] },

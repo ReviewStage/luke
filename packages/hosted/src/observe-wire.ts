@@ -4,7 +4,14 @@ import {
   SESSION_STATUS,
   type SessionDetail,
 } from "@sidecar/session";
-import { RECORD_EXTRA_KEYS, type Schema, s, TEXT_ENDS } from "@sidecar/wire";
+import { effectSchema, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  declareReader,
+  emitJsonSchema,
+  readEither,
+  verbatimJsonSchema,
+} from "@sidecar/wire/effect";
+import { Either, Schema } from "effect";
 import { writtenText } from "./service-wire.js";
 
 /**
@@ -105,14 +112,116 @@ export interface ObserveAnswer {
 
 const OBSERVED_SESSION_STATUS_NAMES = Object.values(SESSION_STATUS);
 
-const observedSessionControlSchema: Schema<ObservedSessionControl> = s.record(
-  {
-    id: s.text(),
-    label: s.text(),
-    kind: s.dropRefused(s.enumOf(Object.values(SESSION_CONTROL_KIND), { ends: TEXT_ENDS.TRIM })),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+/**
+ * A declaration handed the interface it decodes into, since Effect's `Schema`
+ * is invariant in its decoded type and a struct assembled from field tables
+ * only agrees with that interface rather than restating it. The same claim
+ * the facade's own `schemaOver` made over its assembled AST.
+ */
+function schemaAs<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
+  return Schema.make<Value, UnparsedWireValue>(schema.ast);
+}
+
+/** A record that ignores a key a newer service added, which is what an answer always does. */
+const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
+  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/**
+ * A key a `dropRefused` field left holding `undefined` is dropped entirely,
+ * exactly as an absent optional key is: a struct's decode still writes the
+ * key when it arrived, even holding nothing.
+ */
+function omittingUndefinedKeys<Fields extends object, Encoded>(
+  schema: Schema.Schema<Fields, Encoded>,
+) {
+  return Schema.transform(schema, Schema.Unknown, {
+    strict: false,
+    decode: (value) =>
+      Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+    encode: (value) => value,
+  });
+}
+
+/** A trimmed text, refused when only whitespace remains. */
+const text: Schema.Schema<string, string> = Schema.transform(Schema.String, Schema.String, {
+  strict: true,
+  decode: (value) => value.trim(),
+  encode: (value) => value,
+}).pipe(Schema.minLength(1));
+
+/**
+ * A member set read with its ends trimmed ahead of the membership test, the
+ * node declared beside it because what the emitter shows for a
+ * transformation is the text it decodes from.
+ */
+function trimmedEnum<const Member extends string>(
+  members: readonly Member[],
+): Schema.Schema<Member, string> {
+  return verbatimJsonSchema(
+    Schema.transform(Schema.String, Schema.Literal(...members), {
+      strict: false,
+      decode: (value) => value.trim(),
+      encode: (value) => value,
+    }),
+    { type: "string", enum: members },
+  );
+}
+
+const written = effectSchema(writtenText);
+
+/** The value a schema admitted, or nothing, for a caller that only cares whether the value is admissible. */
+function admitted<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
+/** The value a `dropRefused` field admits: whatever the schema read, or nothing. */
+function droppedField<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+): Schema.Schema<Value | undefined, UnparsedWireValue> {
+  return declareReader<Value | undefined>(
+    (value) => ({ ok: true, value: admitted(schema, value) }),
+    emitJsonSchema(schema),
+  );
+}
+
+/** A text read against `map`, folding the read value or dropping it, and never refusing the field. */
+function droppedMappedText<Mapped>(
+  map: (value: string) => Mapped | undefined,
+): Schema.Schema<Mapped | undefined, UnparsedWireValue> {
+  const read = readEither(text);
+  return declareReader<Mapped | undefined>(
+    (value) => ({
+      ok: true,
+      value: Either.match(read(value), { onLeft: () => undefined, onRight: map }),
+    }),
+    emitJsonSchema(text),
+  );
+}
+
+/** An array that drops a refused entry instead of refusing the whole array. */
+function keptItems<Value, Encoded>(
+  item: Schema.Schema<Value, Encoded>,
+): Schema.Schema<readonly Value[], UnparsedWireValue> {
+  const droppedItem = droppedField(item);
+  const forgiving = Schema.Array(droppedItem);
+  const transformed = Schema.transform(forgiving, Schema.Unknown, {
+    strict: false,
+    decode: (entries) => entries.filter((entry) => entry !== undefined),
+    encode: (entries) => entries,
+  });
+  return Schema.make<readonly Value[], UnparsedWireValue>(transformed.ast);
+}
+
+const observedSessionControlSchema = tolerantRecord({
+  id: text,
+  label: text,
+  kind: Schema.optionalWith(droppedField(trimmedEnum(Object.values(SESSION_CONTROL_KIND))), {
+    exact: true,
+  }),
+});
 
 /**
  * The two details a surface acts on rather than draws. Each goes through the
@@ -120,52 +229,74 @@ const observedSessionControlSchema: Schema<ObservedSessionControl> = s.record(
  * whether the address may be opened at all; one it turns down is dropped like
  * any other unreadable field.
  */
-const changeSchema = s.dropRefused(
-  s.map(s.text(), (value) => normalizeSessionDetail({ change: value }).change),
-);
+const changeField = droppedMappedText((value) => normalizeSessionDetail({ change: value }).change);
+const linkField = droppedMappedText((value) => normalizeSessionDetail({ link: value }).link);
 
-const linkSchema = s.dropRefused(
-  s.map(s.text(), (value) => normalizeSessionDetail({ link: value }).link),
-);
-
-const observedSessionSchema: Schema<ObservedSession> = s.map(
-  s.record(
-    {
-      providerId: s.text(),
-      sessionId: s.text(),
-      title: s.text(),
-      status: s.enumOf(OBSERVED_SESSION_STATUS_NAMES, { ends: TEXT_ENDS.TRIM }),
-      workspace: s.dropRefused(s.text()),
-      branch: s.dropRefused(s.text()),
-      change: changeSchema,
-      link: linkSchema,
-      error: s.dropRefused(s.text()),
-      lastActivityAt: s.dropRefused(s.number()),
-      observedAt: s.dropRefused(s.number()),
-      canReceiveMessage: s.dropRefused(s.literal(true)),
-      controls: s.dropRefused(
-        s.array(observedSessionControlSchema, { skipRefused: true, minimum: 1 }),
-      ),
-      spawnableAgents: s.dropRefused(s.array(writtenText, { skipRefused: true, minimum: 1 })),
-      canRename: s.dropRefused(s.literal(true)),
-      canRenameWorkspace: s.dropRefused(s.literal(true)),
-      canReadConversation: s.dropRefused(s.literal(true)),
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const rawObservedSessionSchema = tolerantRecord({
+  providerId: text,
+  sessionId: text,
+  title: text,
+  status: trimmedEnum(OBSERVED_SESSION_STATUS_NAMES),
+  workspace: Schema.optionalWith(droppedField(text), { exact: true }),
+  branch: Schema.optionalWith(droppedField(text), { exact: true }),
+  change: Schema.optionalWith(changeField, { exact: true }),
+  link: Schema.optionalWith(linkField, { exact: true }),
+  error: Schema.optionalWith(droppedField(text), { exact: true }),
+  lastActivityAt: Schema.optionalWith(droppedField(Schema.Number.pipe(Schema.finite())), {
+    exact: true,
+  }),
+  observedAt: Schema.optionalWith(droppedField(Schema.Number.pipe(Schema.finite())), {
+    exact: true,
+  }),
+  canReceiveMessage: Schema.optionalWith(droppedField(Schema.Literal(true)), { exact: true }),
+  controls: Schema.optionalWith(
+    droppedField(keptItems(observedSessionControlSchema).pipe(Schema.minItems(1))),
+    { exact: true },
   ),
-  // The old name is folded into the new one here and travels no further, so
-  // nothing downstream of this read has two names for one instant.
-  ({ observedAt, ...session }) => {
-    const lastActivityAt = session.lastActivityAt ?? observedAt;
-    return lastActivityAt === undefined ? session : { ...session, lastActivityAt };
-  },
+  spawnableAgents: Schema.optionalWith(droppedField(keptItems(written).pipe(Schema.minItems(1))), {
+    exact: true,
+  }),
+  canRename: Schema.optionalWith(droppedField(Schema.Literal(true)), { exact: true }),
+  canRenameWorkspace: Schema.optionalWith(droppedField(Schema.Literal(true)), { exact: true }),
+  canReadConversation: Schema.optionalWith(droppedField(Schema.Literal(true)), { exact: true }),
+});
+
+/**
+ * A key a `dropRefused` field left holding `undefined` is dropped from the
+ * row entirely — a struct's decode still writes the key when it arrived,
+ * even holding nothing — and the old name is folded into the new one here
+ * and travels no further, so nothing downstream of this read has two names
+ * for one instant.
+ */
+const observedSessionSchema = schemaAs<ObservedSession>(
+  Schema.transform(rawObservedSessionSchema, Schema.Unknown, {
+    strict: false,
+    decode: (raw) => {
+      const { observedAt, lastActivityAt, ...rest } = raw;
+      const cleaned = Object.fromEntries(
+        Object.entries(rest).filter(([, value]) => value !== undefined),
+      );
+      const resolvedLastActivityAt = lastActivityAt ?? observedAt;
+      return resolvedLastActivityAt === undefined
+        ? cleaned
+        : { ...cleaned, lastActivityAt: resolvedLastActivityAt };
+    },
+    encode: (session) => session,
+  }),
 );
 
 /** A malformed session entry is skipped, not fatal. */
-export const observeAnswerSchema: Schema<ObserveAnswer> = s.record(
-  {
-    sessions: s.array(observedSessionSchema, { skipRefused: true }),
-    observedAt: s.dropRefused(s.number()),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+export const observeAnswerSchema = schemaAs<ObserveAnswer>(
+  omittingUndefinedKeys(
+    tolerantRecord({
+      sessions: keptItems(observedSessionSchema),
+      observedAt: Schema.optionalWith(droppedField(Schema.Number.pipe(Schema.finite())), {
+        exact: true,
+      }),
+    }),
+  ),
 );
+
+export function observeAnswerFromWire(value: UnparsedWireValue): ObserveAnswer | undefined {
+  return admitted(observeAnswerSchema, value);
+}

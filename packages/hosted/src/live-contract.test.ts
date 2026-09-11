@@ -7,13 +7,14 @@ import {
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
-  liveSessionCreatedSchema,
+  liveSessionCreatedFromWire,
   SESSION_CREATE_BOUNDS,
-  sessionAttachedFrameSchema,
-  sessionAttachFrameSchema,
-  sessionCreatedFrameSchema,
-  sessionCreateFrameSchema,
-  sessionOpeningFrameSchema,
+  sessionAttachedFrameFromWire,
+  sessionAttachFrameFromWire,
+  sessionCreatedFrameFromWire,
+  sessionCreateFrameFromWire,
+  sessionCreateFrameRead,
+  sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
   webSocketOrigin,
 } from "./live-contract.js";
@@ -47,16 +48,16 @@ function createFrame(overrides: { [field: string]: UnparsedWireValue } = {}) {
 
 test("a session.create frame round-trips with its offer and seed as written", () => {
   const frame = createFrame();
-  assert.deepEqual(sessionCreateFrameSchema.parse(frame), frame);
+  assert.deepEqual(sessionCreateFrameFromWire(frame), frame);
 });
 
 test("a session.create frame may open with no history at all", () => {
-  const parsed = sessionCreateFrameSchema.parse(createFrame({ input: [] }));
+  const parsed = sessionCreateFrameFromWire(createFrame({ input: [] }));
   assert.deepEqual(parsed?.input, []);
 });
 
 test("a voice outside the Live built-in set is refused at the voice field", () => {
-  const read = sessionCreateFrameSchema.read(createFrame({ voice: "hal" }));
+  const read = sessionCreateFrameRead(createFrame({ voice: "hal" }));
   assert.equal(read.ok, false);
   if (!read.ok) {
     assert.equal(read.refusal, SCHEMA_REFUSAL.MALFORMED);
@@ -66,8 +67,8 @@ test("a voice outside the Live built-in set is refused at the voice field", () =
 
 test("a seed past the Live input bound is too large, one item under it is not", () => {
   const atBound = Array.from({ length: LIVE_INPUT_BOUNDS.MESSAGES }, () => user);
-  assert.equal(sessionCreateFrameSchema.read(createFrame({ input: atBound })).ok, true);
-  const over = sessionCreateFrameSchema.read(createFrame({ input: [...atBound, user] }));
+  assert.equal(sessionCreateFrameRead(createFrame({ input: atBound })).ok, true);
+  const over = sessionCreateFrameRead(createFrame({ input: [...atBound, user] }));
   assert.equal(over.ok, false);
   if (!over.ok) {
     assert.equal(over.refusal, SCHEMA_REFUSAL.TOO_LARGE);
@@ -80,14 +81,14 @@ test("an item's text past its character bound refuses the frame at that item", (
     ...user,
     content: [{ type: "input_text", text: "x".repeat(SESSION_CREATE_BOUNDS.ITEM_CHARS + 1) }],
   };
-  const read = sessionCreateFrameSchema.read(createFrame({ input: [developer, long] }));
+  const read = sessionCreateFrameRead(createFrame({ input: [developer, long] }));
   assert.equal(read.ok, false);
   if (!read.ok) assert.deepEqual(read.path, ["input", 1]);
   const atBound = {
     ...long,
     content: [{ type: "input_text", text: "x".repeat(SESSION_CREATE_BOUNDS.ITEM_CHARS) }],
   };
-  assert.equal(sessionCreateFrameSchema.read(createFrame({ input: [atBound] })).ok, true);
+  assert.equal(sessionCreateFrameRead(createFrame({ input: [atBound] })).ok, true);
 });
 
 test("a seed item is a message of one text part of the type its role writes, and nothing else", () => {
@@ -105,17 +106,17 @@ test("a seed item is a message of one text part of the type its role writes, and
     [assistant, true],
   ];
   for (const [item, admitted] of cases) {
-    assert.equal(sessionCreateFrameSchema.read(createFrame({ input: [item] })).ok, admitted);
+    assert.equal(sessionCreateFrameRead(createFrame({ input: [item] })).ok, admitted);
   }
 });
 
 test("a frame of the other type, or with a field beside the four, is not a session.create", () => {
   assert.equal(
-    sessionCreateFrameSchema.read(createFrame({ type: VOICE_SERVICE_FRAME.SESSION_CREATED })).ok,
+    sessionCreateFrameRead(createFrame({ type: VOICE_SERVICE_FRAME.SESSION_CREATED })).ok,
     false,
   );
-  assert.equal(sessionCreateFrameSchema.read(createFrame({ model: "gpt-live-1" })).ok, false);
-  assert.equal(sessionCreateFrameSchema.read(createFrame({ sdp: "   " })).ok, false);
+  assert.equal(sessionCreateFrameRead(createFrame({ model: "gpt-live-1" })).ok, false);
+  assert.equal(sessionCreateFrameRead(createFrame({ sdp: "   " })).ok, false);
 });
 
 test("a session.created frame round-trips, with or without a quota, ignoring what a newer service adds", () => {
@@ -124,56 +125,53 @@ test("a session.created frame round-trips, with or without a quota, ignoring wha
     sessionId: "live_123",
     sdpAnswer: SDP,
   };
-  assert.deepEqual(sessionCreatedFrameSchema.parse({ ...created, later: true }), created);
+  assert.deepEqual(sessionCreatedFrameFromWire({ ...created, later: true }), created);
   const quota = { used: 2, limit: 30, resetsAt: 1_800_000_000_000 };
-  assert.deepEqual(sessionCreatedFrameSchema.parse({ ...created, quota })?.quota, quota);
-  const misquoted = sessionCreatedFrameSchema.parse({ ...created, quota: { used: -1 } });
+  assert.deepEqual(sessionCreatedFrameFromWire({ ...created, quota })?.quota, quota);
+  const misquoted = sessionCreatedFrameFromWire({ ...created, quota: { used: -1 } });
   assert.ok(misquoted);
   assert.equal("quota" in misquoted, false);
 });
 
 test("the created session read on its own is the id and the answer, both required", () => {
   assert.deepEqual(
-    liveSessionCreatedSchema.parse({ sessionId: "live_123", sdpAnswer: SDP, quota: {} }),
+    liveSessionCreatedFromWire({ sessionId: "live_123", sdpAnswer: SDP, quota: {} }),
     {
       sessionId: "live_123",
       sdpAnswer: SDP,
     },
   );
-  assert.equal(liveSessionCreatedSchema.parse({ sessionId: "live_123" }), undefined);
-  assert.equal(liveSessionCreatedSchema.parse({ sdpAnswer: SDP }), undefined);
+  assert.equal(liveSessionCreatedFromWire({ sessionId: "live_123" }), undefined);
+  assert.equal(liveSessionCreatedFromWire({ sdpAnswer: SDP }), undefined);
 });
 
 test("a session.attach frame is the type and one session id, and nothing else", () => {
   const attach = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: "live_123" };
-  assert.deepEqual(sessionAttachFrameSchema.parse(attach), attach);
-  assert.equal(sessionAttachFrameSchema.parse({ ...attach, sdp: SDP }), undefined);
-  assert.equal(
-    sessionAttachFrameSchema.parse({ type: VOICE_SERVICE_FRAME.SESSION_ATTACH }),
-    undefined,
-  );
-  assert.equal(sessionAttachFrameSchema.parse({ ...attach, sessionId: "" }), undefined);
-  assert.equal(sessionAttachFrameSchema.parse(createFrame()), undefined);
+  assert.deepEqual(sessionAttachFrameFromWire(attach), attach);
+  assert.equal(sessionAttachFrameFromWire({ ...attach, sdp: SDP }), undefined);
+  assert.equal(sessionAttachFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_ATTACH }), undefined);
+  assert.equal(sessionAttachFrameFromWire({ ...attach, sessionId: "" }), undefined);
+  assert.equal(sessionAttachFrameFromWire(createFrame()), undefined);
 });
 
 test("an opening frame is either a create or an attach, told apart by type", () => {
   const attach = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: "live_123" };
   assert.equal(
-    sessionOpeningFrameSchema.parse(createFrame())?.type,
+    sessionOpeningFrameFromWire(createFrame())?.type,
     VOICE_SERVICE_FRAME.SESSION_CREATE,
   );
-  assert.equal(sessionOpeningFrameSchema.parse(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
+  assert.equal(sessionOpeningFrameFromWire(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
   assert.equal(
-    sessionOpeningFrameSchema.parse({ type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "x" }),
+    sessionOpeningFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "x" }),
     undefined,
   );
 });
 
 test("a session.attached frame answers the id it stands on, ignoring what a newer service adds", () => {
   const attached = { type: VOICE_SERVICE_FRAME.SESSION_ATTACHED, sessionId: "live_123" };
-  assert.deepEqual(sessionAttachedFrameSchema.parse({ ...attached, later: true }), attached);
+  assert.deepEqual(sessionAttachedFrameFromWire({ ...attached, later: true }), attached);
   assert.equal(
-    sessionAttachedFrameSchema.parse({ type: VOICE_SERVICE_FRAME.SESSION_ATTACHED }),
+    sessionAttachedFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_ATTACHED }),
     undefined,
   );
 });

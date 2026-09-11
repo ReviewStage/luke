@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { hostedProjectsAnswerSchema } from "@sidecar/hosted";
+import { hostedProjectsAnswerFromWire } from "@sidecar/hosted";
 import { test } from "vitest";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -171,7 +171,7 @@ test("a projects answer skips malformed entries rather than failing", () => {
       },
     ],
   };
-  const answer = hostedProjectsAnswerSchema.parse(JSON.parse(JSON.stringify(raw)));
+  const answer = hostedProjectsAnswerFromWire(JSON.parse(JSON.stringify(raw)));
   assert.ok(answer);
   assert.equal(answer.projects.length, 3);
   assert.equal(answer.projects[0]?.providerProjectId, "proj-1");
@@ -220,7 +220,7 @@ test("a provider that offered a project carries its agent table on the answer", 
     ),
   );
 
-  const answer = hostedProjectsAnswerSchema.parse(body);
+  const answer = hostedProjectsAnswerFromWire(body);
   assert.ok(answer);
   assert.equal(answer.agentModels.length, 3);
   const codex = answer.agentModels.find((entry) => entry.agent === "codex");

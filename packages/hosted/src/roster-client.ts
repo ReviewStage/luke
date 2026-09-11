@@ -14,7 +14,7 @@ import {
 import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
 import { type AccountCall, accountBearer, createAccountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
-import { type ObserveAnswer, type ObservedSession, observeAnswerSchema } from "./observe-wire.js";
+import { type ObserveAnswer, type ObservedSession, observeAnswerFromWire } from "./observe-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
 export interface HostedRosterClientOptions extends AccountToken {
@@ -46,7 +46,7 @@ export class HostedRosterClient {
   observe(): Promise<ObserveAnswer | undefined> {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.OBSERVE },
-      (payload) => observeAnswerSchema.parse(payload),
+      (payload) => observeAnswerFromWire(payload),
     );
   }
 }

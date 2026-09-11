@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import {
   HOSTED_API_ERROR,
   hostedErrorSchema,
-  sessionAttachedFrameSchema,
-  sessionCreatedFrameSchema,
+  sessionAttachedFrameFromWire,
+  sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
@@ -142,7 +142,7 @@ async function reattach(context: Stand, sessionId: string) {
   const desktop = opened.reader;
   await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
   const attach = await context.openAi.nextAttach();
-  const attached = sessionAttachedFrameSchema.parse(record(await desktop.next()));
+  const attached = sessionAttachedFrameFromWire(record(await desktop.next()));
   assert.ok(attached);
   return { desktop, upstream: readSocket(attach.socket), attach, attached };
 }
@@ -154,7 +154,7 @@ async function openSession(context: Stand) {
   const desktop = opened.reader;
   await send(desktop.socket, createFrame());
   const attach = await context.openAi.nextAttach();
-  const created = sessionCreatedFrameSchema.parse(record(await desktop.next()));
+  const created = sessionCreatedFrameFromWire(record(await desktop.next()));
   assert.ok(created);
   return { desktop, upstream: readSocket(attach.socket), attach, created };
 }
@@ -471,7 +471,7 @@ test("the introduction is created without an account, greeted exactly once after
   );
   const attach = await context.openAi.nextAttach();
   const upstream = readSocket(attach.socket);
-  const created = sessionCreatedFrameSchema.parse(record(await desktop.next()));
+  const created = sessionCreatedFrameFromWire(record(await desktop.next()));
   assert.ok(created);
   assert.equal(created.quota, undefined);
   assert.equal(context.accounts.resolved.length, 0);

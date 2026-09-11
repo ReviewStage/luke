@@ -13,7 +13,7 @@ import {
   type SessionCreatedFrame,
   type SessionCreateFrame,
   type SessionOpeningFrame,
-  sessionOpeningFrameSchema,
+  sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import {
@@ -468,7 +468,7 @@ export class VoiceService {
       const timer = setTimeout(() => done(undefined), timeoutMs);
       const onMessage = (data: RawData, isBinary: boolean): void => {
         const payload = decodeLivePayload(frameText(data, isBinary));
-        done(payload === undefined ? undefined : sessionOpeningFrameSchema.parse(payload));
+        done(payload === undefined ? undefined : sessionOpeningFrameFromWire(payload));
       };
       const onClose = (): void => done(undefined);
       desktop.once("message", onMessage);
