@@ -74,7 +74,7 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
   const { runMode } = config;
   const links: LateRef<HostServiceLinks> = lateRef("the host service's links");
 
-  const host = composeHost({
+  const seams: HostSeams = {
     stateRoot: config.stateRoot,
     runMode,
     appVersion: config.appVersion,
@@ -91,11 +91,14 @@ export function createHostService(dependencies: HostServiceDependencies): HostSe
     now: Date.now,
     createId: () => randomUUID(),
     report: config.report,
-    machinePresence,
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, in `before-quit`.
     onShutdownRequested: () => config.quit(),
-  });
+  };
+  if (machinePresence) {
+    seams.machinePresence = machinePresence;
+  }
+  const host = composeHost(seams);
 
   let state: HostDrain = HOST_DRAIN.NOTHING_OWED;
   /** The standup, so a drain never overtakes it; it cannot be cancelled once it is under way. */
