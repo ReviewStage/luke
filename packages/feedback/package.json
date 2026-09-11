@@ -12,11 +12,14 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@sidecar/wire": "workspace:*"
+    "@effect/platform": "catalog:",
+    "@sidecar/wire": "workspace:*",
+    "effect": "catalog:"
   }
 }
