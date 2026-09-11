@@ -40,6 +40,7 @@
   "devDependencies": {
     "@effect-atom/atom": "catalog:",
     "@effect-atom/atom-react": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/actions": "workspace:*",

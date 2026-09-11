@@ -3,12 +3,12 @@ import { Layer } from "effect";
 import { storeWorkerLayer } from "./worker-host.js";
 
 /**
- * The dedicated database worker, and the store's runtime edge: the one place
- * the store's effects are run. Everything synchronous about SQLite happens
- * on this thread and nowhere else; the main thread only ever sends a request
- * and awaits its answer. The launch stands until the parent tells the
- * runner to end, and a failure to stand up at all ends the thread with a
- * non-zero code, which the parent's client reads as the worker gone.
+ * The store's own worker-thread launch, spawned directly by
+ * `store-client.test.ts` so the client is exercised against a real worker
+ * thread rather than the in-process transport. Production's own runtime
+ * edge is `apps/desktop/src/main/store-worker.ts`, which runs the same
+ * `storeWorkerLayer`; this file is not reached from there and carries no
+ * production export.
  */
 NodeRuntime.runMain(
   NodeWorkerRunner.launch(storeWorkerLayer.pipe(Layer.provide(NodeWorkerRunner.layer))),
