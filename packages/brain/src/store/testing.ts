@@ -1,3 +1,9 @@
+import path from "node:path";
+import type { PlatformError } from "@effect/platform/Error";
+import { NodeFileSystem } from "@effect/platform-node";
+import type { SqlClient } from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
+import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
@@ -5,6 +11,7 @@ import {
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { Effect } from "effect";
 import { type BrainPersistedState, freshBrainState } from "../envelope.js";
 import type { BrainJournalEntry } from "../journal.js";
 import {
@@ -12,8 +19,8 @@ import {
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
 } from "../requests.js";
-import { createConversation } from "./conversations-table.js";
-import { StoreDatabase } from "./database.js";
+import { createConversation, createConversationEffect } from "./conversations-table.js";
+import { AGENT_DATABASE_FILE, StoreDatabase } from "./database.js";
 
 /** Synthetic fixtures for the store's own tests: no real title, branch, or transcript anywhere. */
 
@@ -28,6 +35,34 @@ export function openTestDatabase(location = ":memory:"): StoreDatabase {
     now: NOW,
   });
   return database;
+}
+
+/**
+ * A table module's effect over a database on disk that lives and dies with
+ * the test's scope, with the main conversation standing: what a table test
+ * in this directory opens with, since a module over the client takes no
+ * handle of its own.
+ */
+export function overStore<A, E>(
+  effect: Effect.Effect<A, E, SqlClient>,
+): Effect.Effect<A, E | SqlError | PlatformError> {
+  return Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped();
+    const database = StoreDatabase.open(path.join(directory, AGENT_DATABASE_FILE));
+    yield* Effect.addFinalizer(() => Effect.sync(() => database.close()));
+    return yield* Effect.provide(
+      Effect.zipRight(
+        createConversationEffect({
+          agentId: DEFAULT_AGENT_ID,
+          sessionKey: MAIN_SESSION_KEY,
+          name: MAIN_CONVERSATION_NAME,
+          now: NOW,
+        }),
+        effect,
+      ),
+      database.sql,
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer));
 }
 
 export function request(

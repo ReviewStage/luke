@@ -1,5 +1,12 @@
+import * as Client from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
+import * as SqlSchema from "@effect/sql/SqlSchema";
 import { type ConversationLineHit, tokenize } from "@sidecar/memory";
-import type { ConversationAppendOutcome, SessionKey } from "@sidecar/runtime/vocabulary";
+import {
+  type ConversationAppendOutcome,
+  type SessionKey,
+  sessionKey as sessionKeyOf,
+} from "@sidecar/runtime/vocabulary";
 import {
   type ConversationEntry,
   conversationEntryIdentity,
@@ -9,31 +16,57 @@ import {
   storedConversationMaximumAgeMs,
 } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { standingGeneration } from "./brain-envelope.js";
-import { conversationCutoff } from "./conversations-table.js";
-import { nullable, type StoreDatabase } from "./database.js";
+import { Effect, Option, Schema } from "effect";
+import { conversationCutoffEffect } from "./conversations-table.js";
+import type { StoreDatabase } from "./database.js";
+import { changedRows, columnsDecoded } from "./rows.js";
 
 /**
  * The conversation's history as the panel draws it, kept apart from the
  * brain's generation: a line names the generation that stood when it was
  * written, for attribution alone, and answers to the thread's own retention
  * and to the Clear rather than to the generation's expiry.
+ *
+ * A row's columns are decoded through a schema; a row's stored payload is
+ * not, and stays what it has always been — the entry as the session package
+ * reads it back, dropping the row alone where this build cannot vouch for it.
  */
+
+/** The two things a line needs of the standing lifetime's own row: which generation stands, and its Clear marker. */
+const StandingLineageRow = Schema.Struct({
+  session_id: Schema.String,
+  reset_cleared_at: Schema.NullOr(Schema.Number),
+});
+
+const standingLineage = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: StandingLineageRow,
+  execute: (key) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT session_id, reset_cleared_at FROM conversation_sessions
+            WHERE session_key = ${key}`,
+    ),
+});
 
 /**
  * The Clear cutoff before which no history line may stand: the later of the
  * standing generation's marker and the conversation's own durable cutoff,
  * which outlives the generation.
  */
-export function conversationClearedAt(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
-): number | undefined {
-  const durable = conversationCutoff(database, sessionKey);
-  const marker = standingGeneration(database, sessionKey)?.resetClearedAt;
-  if (durable === undefined) return marker;
-  return marker === undefined ? durable : Math.max(durable, marker);
-}
+export const conversationClearedAtEffect = (
+  key: SessionKey,
+): Effect.Effect<number | undefined, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const durable = yield* conversationCutoffEffect(key);
+    const standing = yield* columnsDecoded(standingLineage(key));
+    const marker = Option.flatMapNullable(standing, (row) => row.reset_cleared_at).pipe(
+      Option.getOrUndefined,
+    );
+    if (durable === undefined) return marker;
+    return marker === undefined ? durable : Math.max(durable, marker);
+  });
 
 /**
  * Appends lines to the conversation, idempotently. A line the thread
@@ -44,157 +77,193 @@ export function conversationClearedAt(
  * the appends, against the clock given, so the table never holds more than
  * the thread may show.
  */
-export function appendConversation(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+export const appendConversationEffect = (
+  key: SessionKey,
   entries: readonly ConversationEntry[],
   now: number,
-): ConversationAppendOutcome<ConversationEntry> {
-  return database.transaction(() => {
-    const standing = standingGeneration(database, sessionKey);
-    const clearedAt = conversationClearedAt(database, sessionKey);
-    let changed = false;
-    for (const entry of entries) {
-      if (!conversationEntryAdmitted(entry, now, clearedAt)) continue;
-      if (appendOne(database, sessionKey, standing?.sessionId, entry)) changed = true;
+): Effect.Effect<ConversationAppendOutcome<ConversationEntry>, SqlError, Client.SqlClient> =>
+  Effect.flatMap(Client.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        const standing = yield* columnsDecoded(standingLineage(key));
+        const clearedAt = yield* conversationClearedAtEffect(key);
+        const sessionId = Option.map(standing, (row) => row.session_id).pipe(Option.getOrUndefined);
+        let changed = false;
+        for (const entry of entries) {
+          if (!conversationEntryAdmitted(entry, now, clearedAt)) continue;
+          if (yield* appendOne(key, sessionId, entry)) changed = true;
+        }
+        // Nothing is removed here: stored lines answer to Delete conversation
+        // and conversation maintenance, and the bound is the projection's alone.
+        return { changed, entries: yield* listRetained(key, now, clearedAt) };
+      }),
+    ),
+  );
+
+const HeldLineRow = Schema.Struct({
+  sequence: Schema.Number,
+  request_id: Schema.NullOr(Schema.String),
+});
+
+const heldLine = SqlSchema.findOne({
+  Request: Schema.Struct({ sessionKey: Schema.String, eventKey: Schema.String }),
+  Result: HeldLineRow,
+  execute: ({ sessionKey, eventKey }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT sequence, request_id FROM conversation_events
+            WHERE session_key = ${sessionKey} AND event_key = ${eventKey}`,
+    ),
+});
+
+const publishedLine = SqlSchema.findOne({
+  Request: Schema.Struct({
+    sessionKey: Schema.String,
+    requestId: Schema.String,
+    kind: Schema.String,
+  }),
+  Result: Schema.Struct({ published: Schema.Number }),
+  execute: ({ sessionKey, requestId, kind }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT 1 AS published FROM conversation_events
+            WHERE session_key = ${sessionKey} AND request_id = ${requestId} AND kind = ${kind}`,
+    ),
+});
+
+const appendOne = (
+  key: SessionKey,
+  sessionId: string | undefined,
+  entry: ConversationEntry & { recordedAt: number },
+): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    const eventKey = conversationEventKey(entry);
+    const held = yield* columnsDecoded(heldLine({ sessionKey: key, eventKey }));
+    if (Option.isSome(held)) {
+      if (held.value.request_id !== null || entry.requestId === undefined) return false;
+      // The once-published index refuses the update when the run's line of
+      // this kind already stands elsewhere; OR IGNORE turns the refusal into
+      // no change, which is the whole of how the two are told apart.
+      const changes = yield* changedRows(
+        sql`UPDATE OR IGNORE conversation_events
+            SET request_id = ${entry.requestId}, payload = ${conversationPayload(entry)}
+            WHERE session_key = ${key} AND sequence = ${held.value.sequence}`.raw,
+      );
+      return changes > 0;
     }
-    // Nothing is removed here: stored lines answer to Delete conversation and
-    // conversation maintenance, and the bound is the projection's alone.
-    return { changed, entries: listRetained(database, sessionKey, now, clearedAt) };
+    // Asked before the sequence is taken, so a publication the index would
+    // refuse burns no number and the sequence stays dense.
+    if (entry.requestId !== undefined) {
+      const stands = yield* columnsDecoded(
+        publishedLine({ sessionKey: key, requestId: entry.requestId, kind: entry.kind }),
+      );
+      if (Option.isSome(stands)) return false;
+    }
+    yield* insertLine(key, sessionId, entry);
+    return true;
   });
-}
 
-function appendOne(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+const insertLine = (
+  key: SessionKey,
   sessionId: string | undefined,
   entry: ConversationEntry & { recordedAt: number },
-): boolean {
-  const eventKey = conversationEventKey(entry);
-  // SAFETY: the two columns selected are the ones the row type names, typed by the schema.
-  const held = database
-    .prepare(
-      "SELECT sequence, request_id FROM conversation_events WHERE session_key = ? AND event_key = ?",
-    )
-    .get(sessionKey, eventKey) as { sequence: number; request_id: string | null } | undefined;
-  if (held) {
-    if (held.request_id !== null || entry.requestId === undefined) return false;
-    // The once-published index refuses the update when the run's line of this
-    // kind already stands elsewhere; OR IGNORE turns the refusal into no change.
-    const { changes } = database
-      .prepare(
-        `UPDATE OR IGNORE conversation_events SET request_id = ?, payload = ?
-         WHERE session_key = ? AND sequence = ?`,
-      )
-      .run(entry.requestId, conversationPayload(entry), sessionKey, held.sequence);
-    return changes > 0;
-  }
-  // Asked before the sequence is taken, so a publication the index would
-  // refuse burns no number and the sequence stays dense.
-  if (
-    entry.requestId !== undefined &&
-    published(database, sessionKey, entry.requestId, entry.kind)
-  ) {
-    return false;
-  }
-  insertLine(database, sessionKey, sessionId, entry);
-  return true;
-}
+): Effect.Effect<void, SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* Client.SqlClient;
+    const sequence = yield* nextConversationSequence(key);
+    yield* sql`INSERT INTO conversation_events
+                 (session_key, sequence, session_id, event_key, kind, words, recorded_at, request_id,
+                  provider_id, provider_session_id, payload)
+               VALUES (${key}, ${sequence}, ${sessionId ?? null}, ${conversationEventKey(entry)},
+                       ${entry.kind}, ${entry.words}, ${entry.recordedAt},
+                       ${entry.requestId ?? null}, ${entry.identity?.providerId ?? null},
+                       ${entry.identity?.providerSessionId ?? null},
+                       ${conversationPayload(entry)})`;
+  });
 
-function insertLine(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
-  sessionId: string | undefined,
-  entry: ConversationEntry & { recordedAt: number },
-): void {
-  const sequence = nextConversationSequence(database, sessionKey);
-  database
-    .prepare(
-      `INSERT INTO conversation_events
-         (session_key, sequence, session_id, event_key, kind, words, recorded_at, request_id,
-          provider_id, provider_session_id, payload)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      sessionKey,
-      sequence,
-      nullable(sessionId),
-      conversationEventKey(entry),
-      entry.kind,
-      entry.words,
-      entry.recordedAt,
-      nullable(entry.requestId),
-      nullable(entry.identity?.providerId),
-      nullable(entry.identity?.providerSessionId),
-      conversationPayload(entry),
-    );
-}
+const takenConversationSequence = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: Schema.Struct({ sequence: Schema.Number }),
+  execute: (key) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`UPDATE conversations
+            SET next_conversation_sequence = next_conversation_sequence + 1
+            WHERE session_key = ${key}
+            RETURNING next_conversation_sequence - 1 AS sequence`,
+    ),
+});
 
 /** The conversation's next sequence, taken from its counter so a number is never handed out twice. */
-function nextConversationSequence(database: StoreDatabase, sessionKey: SessionKey): number {
-  // SAFETY: RETURNING yields the one integer expression named `sequence`, or no row.
-  const row = database
-    .prepare(
-      `UPDATE conversations SET next_conversation_sequence = next_conversation_sequence + 1
-       WHERE session_key = ? RETURNING next_conversation_sequence - 1 AS sequence`,
-    )
-    .get(sessionKey) as { sequence: number } | undefined;
-  if (!row) throw new Error(`no conversation stands at ${sessionKey}`);
-  return row.sequence;
-}
-
-/** Whether the run's line of this kind already stands, read through the once-published index. */
-function published(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
-  requestId: string,
-  kind: string,
-): boolean {
-  return (
-    database
-      .prepare(
-        "SELECT 1 FROM conversation_events WHERE session_key = ? AND request_id = ? AND kind = ?",
-      )
-      .get(sessionKey, requestId, kind) !== undefined
+const nextConversationSequence = (
+  key: SessionKey,
+): Effect.Effect<number, SqlError, Client.SqlClient> =>
+  Effect.flatMap(columnsDecoded(takenConversationSequence(key)), (row) =>
+    Option.match(row, {
+      onNone: () => Effect.die(new Error(`no conversation stands at ${key}`)),
+      onSome: ({ sequence }) => Effect.succeed(sequence),
+    }),
   );
-}
 
 /** The thread as the panel draws it: retained lines in the order they happened, oldest first. */
-export function listConversation(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+export const listConversationEffect = (
+  key: SessionKey,
   now: number,
-): readonly ConversationEntry[] {
-  return listRetained(database, sessionKey, now, conversationClearedAt(database, sessionKey));
-}
+): Effect.Effect<readonly ConversationEntry[], SqlError, Client.SqlClient> =>
+  Effect.flatMap(conversationClearedAtEffect(key), (clearedAt) =>
+    listRetained(key, now, clearedAt),
+  );
 
-function listRetained(
-  database: StoreDatabase,
-  sessionKey: SessionKey,
+const PayloadRow = Schema.Struct({ payload: Schema.String });
+
+const retainedLines = SqlSchema.findAll({
+  Request: Schema.Struct({
+    sessionKey: Schema.String,
+    now: Schema.Number,
+    since: Schema.Number,
+    after: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: PayloadRow,
+  execute: ({ sessionKey, now, since, after, limit }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT payload FROM conversation_events
+            WHERE session_key = ${sessionKey} AND recorded_at <= ${now}
+              AND recorded_at >= ${since} AND recorded_at > ${after}
+            ORDER BY recorded_at DESC, sequence DESC LIMIT ${limit}`,
+    ),
+});
+
+const listRetained = (
+  key: SessionKey,
   now: number,
   clearedAt: number | undefined,
-): readonly ConversationEntry[] {
-  // SAFETY: the query selects the one text column the row type names.
-  const rows = database
-    .prepare(
-      `SELECT payload FROM conversation_events
-       WHERE session_key = ? AND recorded_at <= ? AND recorded_at >= ? AND recorded_at > ?
-       ORDER BY recorded_at DESC, sequence DESC LIMIT ?`,
-    )
-    .all(
-      sessionKey,
-      now,
-      now - storedConversationMaximumAgeMs,
-      clearedAt ?? -1,
-      maximumStoredConversationEntries,
-    ) as { payload: string }[];
-  const entries: ConversationEntry[] = [];
-  for (const row of rows.reverse()) {
-    const entry = conversationEntryFromPayload(row.payload);
-    if (entry) entries.push(entry);
-  }
-  return entries;
-}
+): Effect.Effect<readonly ConversationEntry[], SqlError, Client.SqlClient> =>
+  Effect.map(
+    columnsDecoded(
+      retainedLines({
+        sessionKey: key,
+        now,
+        since: now - storedConversationMaximumAgeMs,
+        after: clearedAt ?? -1,
+        limit: maximumStoredConversationEntries,
+      }),
+    ),
+    (rows) => {
+      const entries: ConversationEntry[] = [];
+      for (const row of [...rows].reverse()) {
+        const entry = conversationEntryFromPayload(row.payload);
+        if (entry) entries.push(entry);
+      }
+      return entries;
+    },
+  );
 
 export type ConversationSearchHit = ConversationLineHit;
 
@@ -202,6 +271,36 @@ export type ConversationSearchHit = ConversationLineHit;
 const CONVERSATION_SEARCH_PAGE_MULTIPLIER = 4;
 /** The most prefiltered rows one search reads before it answers what it has. */
 export const CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS = 2_000;
+
+const SearchRow = Schema.Struct({ session_key: Schema.String, payload: Schema.String });
+
+const searchPage = SqlSchema.findAll({
+  Request: Schema.Struct({
+    sessionKeys: Schema.Array(Schema.String),
+    tokens: Schema.Array(Schema.String),
+    now: Schema.Number,
+    since: Schema.Number,
+    asked: Schema.Number,
+    scanned: Schema.Number,
+  }),
+  Result: SearchRow,
+  execute: ({ sessionKeys, tokens, now, since, asked, scanned }) =>
+    Effect.flatMap(
+      Client.SqlClient,
+      (sql) =>
+        sql`SELECT session_key, payload FROM conversation_events h
+            WHERE session_key IN ${sql.in(sessionKeys)}
+              AND recorded_at <= ${now} AND recorded_at >= ${since}
+              AND recorded_at > COALESCE(
+                (SELECT conversation_cleared_at FROM conversations c
+                   WHERE c.session_key = h.session_key), -1)
+              AND recorded_at > COALESCE(
+                (SELECT reset_cleared_at FROM conversation_sessions s
+                   WHERE s.session_key = h.session_key), -1)
+              AND ${sql.and(tokens.map((token) => sql`instr(lower(words), ${token}) > 0`))}
+            ORDER BY recorded_at DESC, sequence DESC LIMIT ${asked} OFFSET ${scanned}`,
+    ),
+});
 
 /**
  * The retained lines of the conversations named that carry every token of
@@ -220,60 +319,46 @@ export const CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS = 2_000;
  * the conversation row and the standing generation's marker both — so a
  * Clear hides its lines here as it does everywhere.
  */
-export function searchConversation(
-  database: StoreDatabase,
+export const searchConversationEffect = (
   sessionKeys: readonly SessionKey[],
   query: string,
   limit: number,
   now: number,
-): readonly ConversationSearchHit[] {
-  const tokens = [...tokenize(query)];
-  if (tokens.length === 0 || sessionKeys.length === 0 || limit <= 0) return [];
-  const keyMarks = sessionKeys.map(() => "?").join(", ");
-  const tokenMarks = tokens.map(() => "instr(lower(words), ?) > 0").join(" AND ");
-  const page = database.prepare(
-    `SELECT session_key, payload FROM conversation_events h
-       WHERE session_key IN (${keyMarks})
-         AND recorded_at <= ? AND recorded_at >= ?
-         AND recorded_at > COALESCE(
-           (SELECT conversation_cleared_at FROM conversations c WHERE c.session_key = h.session_key), -1)
-         AND recorded_at > COALESCE(
-           (SELECT reset_cleared_at FROM conversation_sessions s WHERE s.session_key = h.session_key), -1)
-         AND ${tokenMarks}
-       ORDER BY recorded_at DESC, sequence DESC LIMIT ? OFFSET ?`,
-  );
-  const pageSize = Math.min(
-    limit * CONVERSATION_SEARCH_PAGE_MULTIPLIER,
-    CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS,
-  );
-  const hits: ConversationSearchHit[] = [];
-  let scanned = 0;
-  while (hits.length < limit && scanned < CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS) {
-    const asked = Math.min(pageSize, CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS - scanned);
-    // SAFETY: the query selects the two columns the row type names.
-    const rows = page.all(
-      ...sessionKeys,
-      now,
-      now - storedConversationMaximumAgeMs,
-      ...tokens,
-      asked,
-      scanned,
-    ) as { session_key: string; payload: string }[];
-    scanned += rows.length;
-    for (const row of rows) {
-      if (hits.length >= limit) break;
-      const entry = conversationEntryFromPayload(row.payload);
-      if (!entry) continue;
-      const held = tokenize(entry.words);
-      if (!tokens.every((token) => held.has(token))) continue;
-      // SAFETY: the column holds one of the session keys the IN clause was given.
-      const sessionKey = row.session_key as SessionKey;
-      hits.push({ sessionKey, entry });
+): Effect.Effect<readonly ConversationSearchHit[], SqlError, Client.SqlClient> =>
+  Effect.gen(function* () {
+    const tokens = [...tokenize(query)];
+    if (tokens.length === 0 || sessionKeys.length === 0 || limit <= 0) return [];
+    const pageSize = Math.min(
+      limit * CONVERSATION_SEARCH_PAGE_MULTIPLIER,
+      CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS,
+    );
+    const hits: ConversationSearchHit[] = [];
+    let scanned = 0;
+    while (hits.length < limit && scanned < CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS) {
+      const asked = Math.min(pageSize, CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS - scanned);
+      const rows = yield* columnsDecoded(
+        searchPage({
+          sessionKeys,
+          tokens,
+          now,
+          since: now - storedConversationMaximumAgeMs,
+          asked,
+          scanned,
+        }),
+      );
+      scanned += rows.length;
+      for (const row of rows) {
+        if (hits.length >= limit) break;
+        const entry = conversationEntryFromPayload(row.payload);
+        if (!entry) continue;
+        const held = tokenize(entry.words);
+        if (!tokens.every((token) => held.has(token))) continue;
+        hits.push({ sessionKey: sessionKeyOf(row.session_key), entry });
+      }
+      if (rows.length < asked) break;
     }
-    if (rows.length < asked) break;
-  }
-  return hits;
-}
+    return hits;
+  });
 
 /** Whether a canonical line may stand now: recorded no later than now and after any Clear. */
 function conversationEntryAdmitted(
@@ -312,4 +397,49 @@ function conversationEntryFromPayload(payload: string): ConversationEntry | unde
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The synchronous doors onto the effects above, for the callers that still
+ * hold a handle rather than a client: the store's own tests today, and
+ * whatever the operations table has not moved yet.
+ *
+ * @deprecated Each goes with the caller that holds it; P5-11 runs every
+ * remaining one on the worker's own runtime edge.
+ */
+export function conversationClearedAt(
+  database: StoreDatabase,
+  key: SessionKey,
+): number | undefined {
+  return database.run(conversationClearedAtEffect(key));
+}
+
+/** @deprecated The synchronous door onto {@link appendConversationEffect}; see {@link conversationClearedAt}. */
+export function appendConversation(
+  database: StoreDatabase,
+  key: SessionKey,
+  entries: readonly ConversationEntry[],
+  now: number,
+): ConversationAppendOutcome<ConversationEntry> {
+  return database.run(appendConversationEffect(key, entries, now));
+}
+
+/** @deprecated The synchronous door onto {@link listConversationEffect}; see {@link conversationClearedAt}. */
+export function listConversation(
+  database: StoreDatabase,
+  key: SessionKey,
+  now: number,
+): readonly ConversationEntry[] {
+  return database.run(listConversationEffect(key, now));
+}
+
+/** @deprecated The synchronous door onto {@link searchConversationEffect}; see {@link conversationClearedAt}. */
+export function searchConversation(
+  database: StoreDatabase,
+  sessionKeys: readonly SessionKey[],
+  query: string,
+  limit: number,
+  now: number,
+): readonly ConversationSearchHit[] {
+  return database.run(searchConversationEffect(sessionKeys, query, limit, now));
 }
