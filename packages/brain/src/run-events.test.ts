@@ -19,8 +19,8 @@ import {
   valueFromJsonText,
 } from "@sidecar/wire";
 import { type ToolSet, tool, type UIMessage } from "ai";
+import { Schema } from "effect";
 import { test } from "vitest";
-import { z } from "zod";
 import {
   ABC,
   acceptedRunId,
@@ -138,14 +138,18 @@ const messageAbc = (callId: string) =>
 /** The tools the turns below call, as the storage reader is registered with them. */
 const STORED_TOOLS: ToolSet = {
   [BRAIN_TOOL.READ_TRANSCRIPT]: tool({
-    inputSchema: z.object({ provider_id: z.string(), provider_session_id: z.string() }),
+    inputSchema: Schema.standardSchemaV1(
+      Schema.Struct({ provider_id: Schema.String, provider_session_id: Schema.String }),
+    ),
   }),
   [ACTION_TOOL.SEND_SESSION_MESSAGE]: tool({
-    inputSchema: z.object({
-      provider_id: z.string(),
-      provider_session_id: z.string(),
-      text: z.string(),
-    }),
+    inputSchema: Schema.standardSchemaV1(
+      Schema.Struct({
+        provider_id: Schema.String,
+        provider_session_id: Schema.String,
+        text: Schema.String,
+      }),
+    ),
   }),
 };
 

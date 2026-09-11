@@ -36,7 +36,6 @@
     "@types/node": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "zod": "4.5.4"
+    "vitest": "catalog:"
   }
 }
