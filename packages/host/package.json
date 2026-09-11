@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./effect": "./src/effect/index.js",
     "./node-capabilities": "./src/node-capabilities.js",
     "./testing": "./src/testing/index.js"
   },
@@ -32,9 +33,11 @@
     "@sidecar/surface": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
+    "effect": "catalog:",
     "ws": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "8.18.1",
     "typescript": "catalog:",

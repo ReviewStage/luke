@@ -10,6 +10,18 @@ process on the other side of a socket is too. A seam that would be easier to
 read directly — `app.getPath`, `process.cwd`, `Date.now` at a call site — is
 the one thing that would make this package the desktop's again.
 
+Each of those seams is a `Context.Tag` behind `@sidecar/host/effect`, and the
+kernel is a `Layer` over them: the state root, the run mode, this build's
+identity, the environment as a `ConfigProvider` a development override is read
+out of by the variable's own name, the cipher, the store worker, the id source,
+and the reporter, whose `Logger` writes where a reported line goes so an
+`Effect.log*` and a `report(line)` land in one sink. A composition states the
+seams it reaches and cannot build without them. `hostSeamLayers` stands every
+tag up from the one `HostSeams` object the desktop builds today and
+`createHostKernel` is the adaptor beside it, both named shims the migration's
+last host PR deletes; the clock seam stays the injected reading for as long as
+a test drives a `FakeClock`.
+
 ## It draws nothing, and imports no Electron
 
 What a window must learn leaves as a host event; what only the machine a
@@ -50,7 +62,11 @@ method tables into one and refuses a method two of them claim, so which
 concern answers a method is checked at construction rather than left to the
 fold's order. `client.bootstrap` is the one method no composer owns: it reads
 six of them, and giving it to any would hand that composer references to the
-other five.
+other five. The service the merge composes is itself read late: on the
+kernel's own layer it is a `Deferred` set once — a second write answers `false`
+and the first service stands, so which service a concern holds cannot depend on
+the order the merge folded it in — and a reader that has migrated awaits it
+rather than holding a getter that throws.
 
 The concerns depend on each other in both directions in six places — the
 account's capability gate starts the loops whose owners read that gate, the
