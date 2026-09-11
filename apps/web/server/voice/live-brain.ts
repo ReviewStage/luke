@@ -137,7 +137,10 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
    * One look at where the ask stands: the events its turn has produced so
    * far, those past the ones already told emitted under the ask's id.
    * Answers whether the turn has ended. An ask the record no longer holds
-   * ends as failed, since nothing of it can be told again.
+   * ends as failed, since nothing of it can be told again, and so does a
+   * turn whose journal the store cannot read: its sentences are in that
+   * journal, so telling the turn's end without them would be a reply the
+   * voice says nothing of, and reading again finds the same rows.
    */
   async function look(askId: string, told: { seq: number }): Promise<boolean> {
     const standing = await askStanding(reads, options.userId, askId);
@@ -153,7 +156,12 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
       CATALOG_TOOL_SET,
       turn.id,
     );
-    const events = projectTurnEvents(turn, journal.ok ? journal.value[0]?.message : undefined);
+    if (!journal.ok) {
+      options.report("A spoken ask's journal could not be read; its turn is told as failed");
+      emit({ kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: askId, end: LIVE_BRAIN_RUN_END.FAILED });
+      return true;
+    }
+    const events = projectTurnEvents(turn, journal.value[0]?.message);
     for (const event of events.slice(told.seq)) {
       emit(runEventOf(event, askId));
       told.seq = event.seq;

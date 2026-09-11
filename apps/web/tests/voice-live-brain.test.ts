@@ -7,6 +7,7 @@ import {
   LIVE_BRAIN_SUBMISSION,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
+import { SCHEMA_REFUSAL } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
@@ -27,6 +28,7 @@ import {
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
+import type { MessageListRead } from "../server/hosted/store/message-reads";
 import {
   HOSTED_ASK_REFUSAL_NOTE,
   type HostedLiveBrain,
@@ -130,6 +132,7 @@ interface Stand {
 function stand(
   target: ConversationTarget,
   bounds: NonNullable<HostedLiveBrainOptions["bounds"]> = QUICK,
+  store: HostedLiveBrainOptions["store"] = database.store,
 ): Stand {
   const eve = fakeEve();
   const events: LiveBrainRunEvent[] = [];
@@ -137,7 +140,7 @@ function stand(
   const brain = hostedLiveBrain({
     userId: target.userId,
     asks: { run: database.run, asks, eve, now: () => NOW },
-    store: database.store,
+    store,
     rosterView: () => "roster: one session",
     report: (message) => reports.push(message),
     bounds,
@@ -329,6 +332,37 @@ test("an ask whose turn never starts is told as failed at the follow bound, once
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
   if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
   await until(() => f.events.length === 1, "the follow bound");
+  await sleep(QUICK.POLL_MS * 6);
+  assert.deepEqual(f.events, [
+    { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
+  ]);
+  assert.equal(f.reports.length, 1);
+  f.brain.stop();
+});
+
+test("a journal the store cannot read ends the ask as failed, once, and is reported, never told as a completed end with no sentences", async () => {
+  const target = await account();
+  const unreadable: MessageListRead = {
+    ok: false,
+    refusal: SCHEMA_REFUSAL.MALFORMED,
+    seq: 0,
+    path: [],
+  };
+  const f = stand(target, QUICK, {
+    turns: database.store.turns,
+    messages: { ...database.store.messages, byClientId: async () => unreadable },
+  });
+  const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
+  assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+  if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+  await play(spokenTurn(EVE_TURN), {
+    sessionId: await sessionOf(target, accepted.runId),
+    target,
+    turn: BRAIN_HOST_TURN.SPOKEN,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  });
+  await until(() => f.events.length >= 1, "the unreadable journal's end");
   await sleep(QUICK.POLL_MS * 6);
   assert.deepEqual(f.events, [
     { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
