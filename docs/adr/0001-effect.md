@@ -458,15 +458,21 @@ route caller — a distinct change from removing Drizzle.
 `HostedStoreTestDatabase.db` in `apps/web/tests/support/hosted-store-database.ts`
 is on the allowlist for the same reason `HostedStoreRun` is, one layer up: the
 harness's PGlite is migrated through `runWebMigrations` rather than Drizzle's
-own migrator as of P10-14c, but the test files P10-14c, P10-14c2, and P10-14c3
-have not yet moved onto the `sql` client beside it still read the same
-connection through a Drizzle handle, so the harness stands both up rather
-than choosing between them. The last remaining-drizzle slice removes the
-field, the handle, and the harness's `drizzle-orm` imports once every test
-file reaches `sql` directly; P10-14c2's own inventory
-(`tests/support/store-rows.ts`) found the original P10-14a count of files
-still short by three, and eight of the roughly two dozen files still stand
-after P10-14c3, so that slice is not yet numbered here.
+own migrator as of P10-14c, but the test files P10-14c, P10-14c2, P10-14c3,
+and P10-14c4 have not yet moved onto the `sql` client beside it still read
+the same connection through a Drizzle handle, so the harness stands both up
+rather than choosing between them. The last remaining-drizzle slice removes
+the field, the handle, and the harness's `drizzle-orm` imports once every
+test file reaches `sql` directly, save two `BrainHostSeams`/`HostedStoreContext`
+wiring sites P10-14c3/c4 found (`hosted-brain-host-ownership.test.ts`,
+`hosted-brain-host-prompt.test.ts`, `voice-live-exchange.test.ts`) that
+construct a production seams object under test and so still name the field
+by design — those three stay until `BrainHostSeams.db` itself is deleted, a
+distinct P10-15 change. P10-14c2's own inventory (`tests/support/store-rows.ts`)
+found the original P10-14a count of files still short by three, and two of
+the roughly two dozen files (the largest, `storage-schema.test.ts` and
+`hosted-resource-reads.test.ts`) still stand after P10-14c4, so that slice is
+not yet numbered here.
 
 `createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
 for the same reason `HostedStoreRun` is: `RateBrake.check` is an
@@ -698,7 +704,7 @@ design decision stated as such:
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face (`settled`) over the store's Rpc client | P5-11 | P7-08 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-15 |
-| `HostedStoreTestDatabase.db`, the store test harness's Drizzle handle beside its `sql` client | P10-14c | the last remaining-drizzle slice, unnumbered |
+| `HostedStoreTestDatabase.db`, the store test harness's Drizzle handle beside its `sql` client | P10-14c | the last remaining-drizzle slice, unnumbered (`BrainHostSeams`/`HostedStoreContext` wiring in three test files stays until P10-15) |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
 | `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P7-08 |
 | `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P7-08 |

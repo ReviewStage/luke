@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { type ToolSet, tool } from "ai";
-import { asc, eq } from "drizzle-orm";
+import { Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -10,12 +10,7 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import { CONVERSATION_KIND, conversations, events, messages } from "../server/db/storage-schema";
-import {
-  VOICE_SEGMENT_ROLE,
-  voiceSessions,
-  voiceTranscriptSegments,
-} from "../server/db/voice-schema";
+import { VOICE_SEGMENT_ROLE } from "../server/db/voice-schema";
 import {
   type CommentaryAppend,
   type ConversationTarget,
@@ -34,6 +29,15 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { appended, delegated, heard, liveEventId, said } from "./support/live-events";
+import {
+  insertConversation,
+  insertMessage,
+  readEventsByConversation,
+  readMessagesByConversationTyped,
+  readVoiceSessionByLiveSessionId,
+  readVoiceTranscriptSegmentsBySession,
+  setVoiceSessionDeviceId,
+} from "./support/store-rows";
 
 /**
  * The voice writer over the real migrations on PGlite, fed a synthetic Live
@@ -73,41 +77,33 @@ function writer(): VoiceWriter {
 /** A user with a main conversation and a registered live session, the shape every stream lands on. */
 async function target(): Promise<VoiceTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
+  const conversationId = await insertConversation(database.run, { userId });
   liveSessions += 1;
   const liveSessionId = `sess_fixture_${liveSessions}`;
   await record.register({ userId, sessionId: liveSessionId });
-  await database.db
-    .update(voiceSessions)
-    .set({ deviceId: DEVICE_ID })
-    .where(eq(voiceSessions.liveSessionId, liveSessionId));
-  return { userId, liveSessionId, conversation: { userId, conversationId: row.id } };
+  await setVoiceSessionDeviceId(database.run, liveSessionId, DEVICE_ID);
+  return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
+const SessionIdRowSchema = Schema.Struct({ id: Schema.String });
+
 async function sessionRowId(liveSessionId: string): Promise<string> {
-  const [row] = await database.db
-    .select({ id: voiceSessions.id })
-    .from(voiceSessions)
-    .where(eq(voiceSessions.liveSessionId, liveSessionId));
+  const [row] = await readVoiceSessionByLiveSessionId(database.run, liveSessionId);
   assert.ok(row);
-  return row.id;
+  return Schema.decodeUnknownSync(SessionIdRowSchema)(row).id;
 }
 
 async function segments(liveSessionId: string) {
-  return database.db
-    .select({
-      seq: voiceTranscriptSegments.seq,
-      role: voiceTranscriptSegments.role,
-      text: voiceTranscriptSegments.text,
-      startMs: voiceTranscriptSegments.startMs,
-      endMs: voiceTranscriptSegments.endMs,
-    })
-    .from(voiceTranscriptSegments)
-    .where(eq(voiceTranscriptSegments.voiceSessionId, await sessionRowId(liveSessionId)))
-    .orderBy(asc(voiceTranscriptSegments.seq));
+  const rows = await readVoiceTranscriptSegmentsBySession(
+    database.run,
+    await sessionRowId(liveSessionId),
+  );
+  return rows.map((row) => ({
+    seq: row.seq,
+    role: row.role,
+    text: row.text,
+    startMs: row.start_ms,
+    endMs: row.end_ms,
+  }));
 }
 
 /** The briefing message a `speech.spoken` hangs on: an announce written by the store writer's own path, on offer and claimed by the fixture device. */
@@ -136,20 +132,15 @@ async function announced(conversation: ConversationTarget): Promise<string> {
     firstKeptMessageId: "00000000-0000-4000-8000-000000000000",
   });
   assert.ok(written.ok);
-  const [row] = await database.db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(eq(messages.conversationId, conversation.conversationId));
+  const rows = await readMessagesByConversationTyped(database.run, conversation.conversationId);
+  const row = rows[rows.length - 1];
   assert.ok(row);
   return row.id;
 }
 
 async function speechEvents(conversation: ConversationTarget) {
-  return database.db
-    .select({ kind: events.kind, messageId: events.messageId, payload: events.payload })
-    .from(events)
-    .where(eq(events.conversationId, conversation.conversationId))
-    .orderBy(asc(events.seq));
+  const rows = await readEventsByConversation(database.run, conversation.conversationId);
+  return rows.map((row) => ({ kind: row.kind, messageId: row.message_id, payload: row.payload }));
 }
 
 test("transcript deltas become segments with their timings and roles, in the order they arrived, overlap included", async () => {
@@ -199,10 +190,9 @@ test("segments after a gap land on the same open row, from a fresh writer, with 
   await record.register({ userId: live.userId, sessionId: live.liveSessionId });
   assert.deepEqual(await attached.consume(live, heard("after the gap", 900_000, 901_000)), WRITTEN);
 
-  const rows = await database.db
-    .select({ closedAt: voiceSessions.closedAt, usage: voiceSessions.usage })
-    .from(voiceSessions)
-    .where(eq(voiceSessions.liveSessionId, live.liveSessionId));
+  const rows = (await readVoiceSessionByLiveSessionId(database.run, live.liveSessionId)).map(
+    (row) => ({ closedAt: row.closed_at, usage: row.usage }),
+  );
   assert.deepEqual(rows, [{ closedAt: null, usage: { seconds: 12, confirmed: false } }]);
   assert.deepEqual(
     (await segments(live.liveSessionId)).map((segment) => [segment.seq, segment.startMs]),
@@ -307,23 +297,19 @@ test("speech.spoken is written once, on the first output delta at or after the a
 test("one delta past the ends of two acknowledged appends marks both briefings", async () => {
   const live = await target();
   const first = await briefing(live.conversation);
-  const [row] = await database.db
-    .insert(messages)
-    .values({
-      userId: live.userId,
-      conversationId: live.conversation.conversationId,
-      seq: 99,
-      clientId: "second-briefing",
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [{ type: "text", text: "A second briefing.", state: "done" }],
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
-    })
-    .returning({ id: messages.id });
-  assert.ok(row);
-  await claim(live.conversation, row.id);
+  const secondBriefingId = await insertMessage(database.run, {
+    userId: live.userId,
+    conversationId: live.conversation.conversationId,
+    seq: 99,
+    clientId: "second-briefing",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "text", text: "A second briefing.", state: "done" }],
+    metadata: { author: MESSAGE_AUTHOR.BRAIN },
+  });
+  await claim(live.conversation, secondBriefingId);
   const voice = writer();
   voice.noteAppend(live, { clientEventId: "append-a", messageId: first });
-  voice.noteAppend(live, { clientEventId: "append-b", messageId: row.id });
+  voice.noteAppend(live, { clientEventId: "append-b", messageId: secondBriefingId });
   await voice.consume(live, appended("append-a", 0, 1000));
   await voice.consume(live, appended("append-b", 1000, 2000));
   assert.deepEqual(await voice.consume(live, said("Both said.", 2000, 3000)), WRITTEN);
@@ -331,10 +317,10 @@ test("one delta past the ends of two acknowledged appends marks both briefings",
     (await speechEvents(live.conversation))
       .filter((event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN)
       .map((event) => event.messageId);
-  assert.deepEqual(await spokenOf(), [first, row.id]);
+  assert.deepEqual(await spokenOf(), [first, secondBriefingId]);
   // Neither is marked a second time.
   await voice.consume(live, said("And more.", 3000, 4000));
-  assert.deepEqual(await spokenOf(), [first, row.id]);
+  assert.deepEqual(await spokenOf(), [first, secondBriefingId]);
 });
 
 test("a briefing this session's device did not claim is not marked spoken by its voice: unclaimed, another device's, or a session with no device", async () => {
@@ -351,10 +337,11 @@ test("a briefing this session's device did not claim is not marked spoken by its
 
   const other = await target();
   const theirs = await briefing(other.conversation);
-  await database.db
-    .update(voiceSessions)
-    .set({ deviceId: "7d2f3f25-ab1c-4d3e-9f4a-1b2c3d4e5f61" })
-    .where(eq(voiceSessions.liveSessionId, other.liveSessionId));
+  await setVoiceSessionDeviceId(
+    database.run,
+    other.liveSessionId,
+    "7d2f3f25-ab1c-4d3e-9f4a-1b2c3d4e5f61",
+  );
   const otherVoice = writer();
   otherVoice.noteAppend(other, { clientEventId: "append-o", messageId: theirs });
   await otherVoice.consume(other, appended("append-o", 0, 1000));
@@ -365,10 +352,7 @@ test("a briefing this session's device did not claim is not marked spoken by its
 
   const deviceless = await target();
   const claimed = await briefing(deviceless.conversation);
-  await database.db
-    .update(voiceSessions)
-    .set({ deviceId: null })
-    .where(eq(voiceSessions.liveSessionId, deviceless.liveSessionId));
+  await setVoiceSessionDeviceId(database.run, deviceless.liveSessionId, null);
   const noDevice = writer();
   noDevice.noteAppend(deviceless, { clientEventId: "append-n", messageId: claimed });
   await noDevice.consume(deviceless, appended("append-n", 0, 1000));
@@ -405,17 +389,14 @@ test("an append whose message is gone is refused at the speech, not the segment"
 });
 
 async function spokenAsks(conversation: ConversationTarget) {
-  return database.db
-    .select({
-      clientId: messages.clientId,
-      role: messages.role,
-      parts: messages.parts,
-      metadata: messages.metadata,
-      finishedAt: messages.finishedAt,
-    })
-    .from(messages)
-    .where(eq(messages.conversationId, conversation.conversationId))
-    .orderBy(asc(messages.seq));
+  const rows = await readMessagesByConversationTyped(database.run, conversation.conversationId);
+  return rows.map((row) => ({
+    clientId: row.clientId,
+    role: row.role,
+    parts: row.parts,
+    metadata: row.metadata,
+    finishedAt: row.finishedAt,
+  }));
 }
 
 test("a delegation cuts the developer's words before it into a spoken ask naming its span, and the next cuts from there", async () => {

@@ -7,13 +7,10 @@ import {
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { asc, eq } from "drizzle-orm";
+import { Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
-import { devices } from "../server/db/devices-schema";
-import { CONVERSATION_KIND, conversations, events, messages } from "../server/db/storage-schema";
-import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -44,6 +41,15 @@ import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, sessionStarted } from "./support/live-events";
+import {
+  insertConversation,
+  insertDevice,
+  readEventsByMessage,
+  readMessagesByConversationTyped,
+  readVoiceSessionByLiveSessionId,
+  readVoiceTranscriptSegmentsBySession,
+  setVoiceSessionDeviceId,
+} from "./support/store-rows";
 
 /**
  * The hosted live exchange composed whole over the real store on PGlite: a
@@ -116,17 +122,13 @@ function fakeEve(): FakeEve {
 
 async function account(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const [row] = await database.db
-    .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(row);
-  return { userId, conversationId: row.id };
+  const conversationId = await insertConversation(database.run, { userId });
+  return { userId, conversationId };
 }
 
 async function device(userId: string): Promise<string> {
   const id = randomUUID();
-  await database.db.insert(devices).values({
+  await insertDevice(database.run, {
     id,
     userId,
     installationId: `install-${id}`,
@@ -153,10 +155,7 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
   const liveSessionId = `sess_${randomUUID()}`;
   await sessionRecord.register({ userId: target.userId, sessionId: liveSessionId });
   if (deviceId !== undefined) {
-    await database.db
-      .update(voiceSessions)
-      .set({ deviceId })
-      .where(eq(voiceSessions.liveSessionId, liveSessionId));
+    await setVoiceSessionDeviceId(database.run, liveSessionId, deviceId);
   }
   const socket = new FakeLiveSocket();
   const source: LiveSessionSource = {
@@ -235,11 +234,7 @@ function socketSent(f: { socket: FakeLiveSocket }): string {
 }
 
 async function speechEventsOf(messageId: string) {
-  const rows = await database.db
-    .select({ kind: events.kind })
-    .from(events)
-    .where(eq(events.messageId, messageId))
-    .orderBy(asc(events.seq));
+  const rows = await readEventsByMessage(database.run, messageId);
   return rows.map((row) => row.kind);
 }
 
@@ -270,10 +265,9 @@ test("a spoken ask runs a turn through the ask door and is spoken from the servi
     const turn = await database.store.turns.named(target.userId, [
       hostTurnId(recorded, FIRST_EVE_TURN),
     ]);
-    const rows = await database.db
-      .select({ clientId: messages.clientId, role: messages.role })
-      .from(messages)
-      .where(eq(messages.conversationId, target.conversationId));
+    const rows = (await readMessagesByConversationTyped(database.run, target.conversationId)).map(
+      (row) => ({ clientId: row.clientId, role: row.role }),
+    );
     return `ask session ${ask}; turn rows ${turn.length} (${turn[0]?.status}); messages ${JSON.stringify(rows)}; commentary ${JSON.stringify(f.commentary().map((e) => e.content))}; reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`;
   };
   for (let attempt = 0; attempt < 400 && f.commentary().length < 2; attempt += 1) await sleep(5);
@@ -285,25 +279,18 @@ test("a spoken ask runs a turn through the ask door and is spoken from the servi
       ["dl_1", "Another is waiting on you."],
     ],
   );
-  const rows = await database.db
-    .select({ clientId: messages.clientId, role: messages.role })
-    .from(messages)
-    .where(eq(messages.conversationId, target.conversationId))
-    .orderBy(asc(messages.seq));
+  const rows = await readMessagesByConversationTyped(database.run, target.conversationId);
   // One user row stands for one spoken ask: the developer's words as the session transcribed
   // them, under the delegation's id. The question as eve received it is on the ask's record,
   // never a second line.
   const userRows = rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => row.clientId);
   assert.deepEqual(userRows, ["dl_1"]);
-  const [session] = await database.db
-    .select({ id: voiceSessions.id })
-    .from(voiceSessions)
-    .where(eq(voiceSessions.liveSessionId, f.liveSessionId));
+  const [session] = await readVoiceSessionByLiveSessionId(database.run, f.liveSessionId);
   assert.ok(session);
-  const segments = await database.db
-    .select({ text: voiceTranscriptSegments.text })
-    .from(voiceTranscriptSegments)
-    .where(eq(voiceTranscriptSegments.voiceSessionId, session.id));
+  const segments = await readVoiceTranscriptSegmentsBySession(
+    database.run,
+    Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(session).id,
+  );
   assert.deepEqual(
     segments.map((segment) => segment.text),
     ["What needs me?"],

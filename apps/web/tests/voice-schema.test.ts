@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
-import { eq, getTableName, type SQL, sql } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
 import { afterAll, test } from "vitest";
-import { user } from "../server/db/auth-schema";
-import { devices } from "../server/db/devices-schema";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceSessionUsage,
-  voiceSessions,
-  voiceTranscriptSegments,
 } from "../server/db/voice-schema";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  assertRefusedWithCode,
+  deleteDevice,
+  deleteUser,
+  deleteVoiceSession,
+  insertDevice,
+  insertVoiceSession,
+  insertVoiceTranscriptSegment,
+  POSTGRES_ERROR,
+  readVoiceSessionByIdTyped,
+  readVoiceSessionsByUserTyped,
+  readVoiceTranscriptSegmentsBySession,
+} from "./support/store-rows";
 
 /**
  * The voice tables have no reader yet, so what these tests hold to is the
@@ -26,67 +33,49 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const UNIQUE_VIOLATION = "23505";
-
-/** Drizzle wraps the driver's error, so the Postgres code stands on the cause rather than the top. */
-async function assertUniqueViolation(insert: Promise<unknown>): Promise<void> {
-  await assert.rejects(insert, (error) => {
-    assert.ok(error instanceof Error);
-    const { cause } = error;
-    assert.ok(cause instanceof Error && "code" in cause);
-    assert.equal(cause.code, UNIQUE_VIOLATION);
-    return true;
-  });
-}
-
 let liveSessions = 0;
 
-async function insertSession(
-  userId: string,
-  row: Partial<typeof voiceSessions.$inferInsert> = {},
-): Promise<string> {
-  liveSessions += 1;
-  const [inserted] = await database.db
-    .insert(voiceSessions)
-    .values({
-      userId,
-      liveSessionId: `sess_${liveSessions}`,
-      delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-      ...row,
-    })
-    .returning({ id: voiceSessions.id });
-  assert.ok(inserted);
-  return inserted.id;
+interface SessionOverrides {
+  readonly liveSessionId?: string;
+  readonly deviceId?: string | null;
+  readonly closedAt?: Date | null;
+  readonly closeReason?: string | null;
+  readonly usage?: VoiceSessionUsage | null;
 }
 
-async function insertSegment(
-  voiceSessionId: string,
-  row: Partial<typeof voiceTranscriptSegments.$inferInsert> = {},
-): Promise<void> {
-  await database.db.insert(voiceTranscriptSegments).values({
-    voiceSessionId,
-    seq: 1,
-    role: VOICE_SEGMENT_ROLE.USER,
-    text: "what is the fixture session waiting on",
-    startMs: 1200,
-    endMs: 4800,
-    ...row,
+async function insertSession(userId: string, row: SessionOverrides = {}): Promise<string> {
+  liveSessions += 1;
+  return insertVoiceSession(database.run, {
+    userId,
+    liveSessionId: row.liveSessionId ?? `sess_${liveSessions}`,
+    delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+    deviceId: row.deviceId,
+    closedAt: row.closedAt,
+    closeReason: row.closeReason,
+    usage: row.usage,
   });
 }
 
-async function countRows(table: PgTable, where: SQL): Promise<number> {
-  const [row] = await database.db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(table)
-    .where(where);
-  return row?.count ?? 0;
+interface SegmentOverrides {
+  readonly seq?: number;
+  readonly role?: string;
+  readonly startMs?: number;
+  readonly endMs?: number;
+}
+
+async function insertSegment(voiceSessionId: string, row: SegmentOverrides = {}): Promise<void> {
+  await insertVoiceTranscriptSegment(database.run, {
+    voiceSessionId,
+    seq: row.seq ?? 1,
+    role: row.role ?? VOICE_SEGMENT_ROLE.USER,
+    text: "what is the fixture session waiting on",
+    startMs: row.startMs ?? 1200,
+    endMs: row.endMs ?? 4800,
+  });
 }
 
 async function segmentCount(voiceSessionId: string): Promise<number> {
-  return countRows(
-    voiceTranscriptSegments,
-    eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId),
-  );
+  return (await readVoiceTranscriptSegmentsBySession(database.run, voiceSessionId)).length;
 }
 
 /** One account's rows: two sessions, each with two segments. */
@@ -110,15 +99,15 @@ test("a session and its segments cascade with the account, and no other account'
   const gone = await populateAccount(userId);
   const kept = await populateAccount(other);
 
-  await database.db.delete(user).where(eq(user.id, userId));
+  await deleteUser(database.run, userId);
 
   assert.equal(
-    await countRows(voiceSessions, eq(voiceSessions.userId, userId)),
+    (await readVoiceSessionsByUserTyped(database.run, userId)).length,
     0,
-    `${getTableName(voiceSessions)} still holds rows for the deleted user`,
+    "voice_sessions still holds rows for the deleted user",
   );
   for (const id of gone) assert.equal(await segmentCount(id), 0);
-  assert.equal(await countRows(voiceSessions, eq(voiceSessions.userId, other)), 2);
+  assert.equal((await readVoiceSessionsByUserTyped(database.run, other)).length, 2);
   for (const id of kept) assert.equal(await segmentCount(id), 2);
 });
 
@@ -127,7 +116,7 @@ test("deleting a session takes its segments and leaves its neighbour's", async (
   const [gone, kept] = await populateAccount(userId);
   assert.ok(gone !== undefined && kept !== undefined);
 
-  await database.db.delete(voiceSessions).where(eq(voiceSessions.id, gone));
+  await deleteVoiceSession(database.run, gone);
 
   assert.equal(await segmentCount(gone), 0);
   assert.equal(await segmentCount(kept), 2);
@@ -138,15 +127,23 @@ test("one live session is one row, for its owner and for anyone else", async () 
   const other = await database.createUser();
   await insertSession(userId, { liveSessionId: "sess_shared" });
 
-  await assertUniqueViolation(insertSession(userId, { liveSessionId: "sess_shared" }));
-  await assertUniqueViolation(insertSession(other, { liveSessionId: "sess_shared" }));
+  await assertRefusedWithCode(
+    insertSession(userId, { liveSessionId: "sess_shared" }),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
+  );
+  await assertRefusedWithCode(
+    insertSession(other, { liveSessionId: "sess_shared" }),
+    POSTGRES_ERROR.UNIQUE_VIOLATION,
+  );
   await insertSession(userId, { liveSessionId: "sess_other" });
 
-  const owners = await database.db
-    .select({ userId: voiceSessions.userId })
-    .from(voiceSessions)
-    .where(eq(voiceSessions.liveSessionId, "sess_shared"));
-  assert.deepEqual(owners, [{ userId }]);
+  const owners = (await readVoiceSessionsByUserTyped(database.run, userId)).filter(
+    (row) => row.liveSessionId === "sess_shared",
+  );
+  assert.deepEqual(
+    owners.map((row) => row.userId),
+    [userId],
+  );
 });
 
 test("a segment's position is taken once within its session and free in another", async () => {
@@ -154,7 +151,7 @@ test("a segment's position is taken once within its session and free in another"
   const [first, second] = await populateAccount(userId);
   assert.ok(first !== undefined && second !== undefined);
 
-  await assertUniqueViolation(insertSegment(first, { seq: 2 }));
+  await assertRefusedWithCode(insertSegment(first, { seq: 2 }), POSTGRES_ERROR.UNIQUE_VIOLATION);
   await insertSegment(first, { seq: 3 });
   await insertSegment(second, { seq: 3 });
 
@@ -164,14 +161,17 @@ test("a segment's position is taken once within its session and free in another"
 
 test("a device's departure leaves the session's record standing with the device named", async () => {
   const userId = await database.createUser();
-  await database.db
-    .insert(devices)
-    .values({ id: "device-1", userId, installationId: `install-${userId}`, platform: "macos" });
+  await insertDevice(database.run, {
+    id: "device-1",
+    userId,
+    installationId: `install-${userId}`,
+    platform: "macos",
+  });
   const id = await insertSession(userId, { deviceId: "device-1" });
 
-  await database.db.delete(devices).where(eq(devices.id, "device-1"));
+  await deleteDevice(database.run, "device-1");
 
-  const [row] = await database.db.select().from(voiceSessions).where(eq(voiceSessions.id, id));
+  const row = await readVoiceSessionByIdTyped(database.run, id);
   assert.ok(row);
   assert.equal(row.deviceId, "device-1");
 });
@@ -179,7 +179,7 @@ test("a device's departure leaves the session's record standing with the device 
 test("a new session is open with no close, no reason, and no usage; a closed one keeps all three", async () => {
   const userId = await database.createUser();
   const opened = await insertSession(userId);
-  const [open] = await database.db.select().from(voiceSessions).where(eq(voiceSessions.id, opened));
+  const open = await readVoiceSessionByIdTyped(database.run, opened);
   assert.ok(open);
   assert.ok(open.startedAt instanceof Date);
   assert.equal(open.closedAt, null);
@@ -201,16 +201,13 @@ test("a new session is open with no close, no reason, and no usage; a closed one
     usage: estimated,
   });
 
-  const rows = await database.db
-    .select({
-      id: voiceSessions.id,
-      closedAt: voiceSessions.closedAt,
-      closeReason: voiceSessions.closeReason,
-      usage: voiceSessions.usage,
-    })
-    .from(voiceSessions)
-    .where(eq(voiceSessions.userId, userId));
-  const byId = new Map(rows.map((row) => [row.id, row]));
+  const rows = await readVoiceSessionsByUserTyped(database.run, userId);
+  const byId = new Map(
+    rows.map((row) => [
+      row.id,
+      { id: row.id, closedAt: row.closedAt, closeReason: row.closeReason, usage: row.usage },
+    ]),
+  );
   assert.deepEqual(byId.get(cleanly), {
     id: cleanly,
     closedAt,
