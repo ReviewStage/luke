@@ -179,7 +179,9 @@ at run time, a break no build sees and production reports only as
 `apps/web/scripts/bundle-functions.ts` bundles them into a few functions under
 `apps/web/dist-functions/` as the last step of the web build, with every
 workspace package inlined and only the web app's own declared runtime
-dependencies left external. Vercel's builder detects, traces, and uploads each
+dependencies inlined whole beside them, with three guarded optional requires
+left outside and named (`INLINE_EXCEPTION` in `apps/web/server/function-bundles.ts`).
+Vercel's builder detects, traces, and uploads each
 function separately and in series, at several seconds apiece, so the routes
 share one function per duration bound (`apps/web/server/function-durations.ts`)
 behind a generated dispatcher that restores each request's own path; the two
@@ -188,10 +190,16 @@ functions of their own. The committed stubs under `apps/web/api/` are what
 Vercel discovers, since it registers functions from the uploaded tree before
 the build runs; each re-exports its function's bundle, the `/api/` rewrites of
 `apps/web/vercel.json` land each route on its function, and `pnpm --filter
-@luke/web functions:stubs` regenerates both after a route is added.
-Vercel's builder is handed JavaScript and only traces those externals, which is
-why server code names packages by bare specifier like everything else and why
-`apps/web/package.json` declares each one it names. Handed TypeScript instead,
+@luke/web functions:stubs` regenerates both after a route is added. The build's
+last step also writes the Build Output tree (`apps/web/server/build-output.ts`):
+`.vercel/output` with the site and one `.func` per function, which static-build
+adopts as the deployment when present, so the deploy shape is the build's own
+on every preset. Reachability into a package is read from the bundles' inputs,
+not their externals, because an inlined import leaves no external behind.
+Server code still names packages by bare specifier like everything else, and
+`apps/web/package.json` declares each one it names: the bundle step refuses an
+external that no declared package or named exception accounts for.
+Handed TypeScript instead,
 the builder runs its own compiler over every function's whole import graph
 separately, under options that are not this repository's, and that pass was
 most of a deploy's build time.

@@ -1,6 +1,12 @@
-import { rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { build } from "esbuild";
+import {
+  BUILD_OUTPUT_DIRECTORY,
+  emitBuildOutput,
+  functionPublicPath,
+  HAND_WRITTEN_FUNCTIONS,
+} from "../server/build-output.js";
 import {
   expectedExternals,
   externalsByBundle,
@@ -35,6 +41,8 @@ import { bundlePath, FUNCTION_BUNDLE_DIRECTORY, stubDrift } from "../server/func
  * here instead.
  */
 const WEB = join(import.meta.dirname, "..");
+/** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
+const SITE_DIRECTORY = "dist";
 
 const drift = await stubDrift({ web: WEB });
 if (drift.length > 0) {
@@ -50,10 +58,12 @@ const plan = await functionBundlePlan(WEB);
 await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
 const result = await build({ ...plan.options, write: true });
 
+/** esbuild's own helper module, recorded in the metafile as an external import of every bundle it shimmed a `require` in; not a dependency. */
+const ESBUILD_RUNTIME = "<runtime>";
 const undeclared = new Set<string>();
 for (const input of Object.values(result.metafile.inputs)) {
   for (const imported of input.imports) {
-    if (!imported.external) continue;
+    if (!imported.external || imported.path === ESBUILD_RUNTIME) continue;
     if (!plan.externalPackages.has(packageNameOf(imported.path))) undeclared.add(imported.path);
   }
 }
@@ -95,3 +105,28 @@ for (const [file, output] of Object.entries(result.metafile.outputs)) {
     `bundled ${relative(WEB, file)} (${output.bytes} bytes${maxDuration === undefined ? "" : `, ${maxDuration}s`})`,
   );
 }
+
+const emitted = await emitBuildOutput({
+  outputDirectory: join(WEB, BUILD_OUTPUT_DIRECTORY),
+  staticDirectory: join(WEB, SITE_DIRECTORY),
+  functions: [
+    ...(await Promise.all(
+      plan.functions.map(async (definition) => ({
+        path: functionPublicPath(definition),
+        contents: await readFile(join(WEB, bundlePath(definition))),
+        maxDuration: definition.maxDuration,
+      })),
+    )),
+    ...(await Promise.all(
+      HAND_WRITTEN_FUNCTIONS.map(async (fn) => ({
+        path: fn.path,
+        contents: await readFile(join(WEB, fn.source)),
+        maxDuration: undefined,
+      })),
+    )),
+  ],
+});
+// biome-ignore lint/suspicious/noConsole: a build script's output is its log — the tree it left for Vercel.
+console.log(
+  `emitted ${BUILD_OUTPUT_DIRECTORY} with ${emitted.length} functions: ${emitted.join(", ")}`,
+);
