@@ -155,7 +155,7 @@ const HOSTED_GOLDENS = [
   ["brain-contract-hostedBrainCountTokensAnswerSchema", hostedBrainCountTokensAnswer],
   ["brain-contract-hostedBrainRespondRequestSchema", hostedBrainRespondRequest],
   ["brain-contract-hostedBrainCountTokensRequestSchema", hostedBrainCountTokensRequest],
-  ["reads-wire-changesRequestSchema", changesRequest],
+  ["reads-wire-changesRequestSchemaEffect", changesRequest],
 ] as const satisfies readonly (readonly [string, Schema.Schema.All])[];
 
 test.for(HOSTED_GOLDENS)(

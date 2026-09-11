@@ -12,11 +12,11 @@ import {
 import {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
+  effectSchema,
   isRecord,
   isWireString,
   RATING_EVENT_PAYLOAD,
   type RatingEventPayload,
-  RECORD_EXTRA_KEYS,
   SCHEMA_REFUSAL,
   type Schema,
   type SchemaRead,
@@ -27,6 +27,14 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
+import {
+  declareReader,
+  emitJsonSchema,
+  readEither,
+  toSchemaRead,
+  wireRefusal,
+} from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -40,6 +48,15 @@ import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.
  * shape is declared here so the service can read it and a test can pin it,
  * and a device never composes one. The Swift mirror reads these answers
  * against the fixtures under `packages/hosted/fixtures/reads/`.
+ *
+ * Every declaration below is composed directly as an Effect `Schema`, under
+ * its own `<name>Effect` export; the plain `<name>` export beside it is the
+ * same declaration read through `fromEffect` (the pattern P1-04 established
+ * in `packages/wire/src/ui-message-metadata.ts`), which is what still
+ * answers the facade's `read`/`parse` for `conversation-client.ts`'s,
+ * `changes-client.ts`'s, and `apps/web`'s callers. The facade twin is the
+ * strangler shim P12-08 deletes, once every caller declares against the
+ * `Effect` export directly.
  */
 
 /**
@@ -68,8 +85,65 @@ export const READ_CURSOR_BOUNDS = {
   MAX_ENCODED_LENGTH: 32_768,
 } as const;
 
+/**
+ * The Effect schema a declaration was composed from, adapted to the facade
+ * still-held callers use: `read` through `readEither`, `jsonSchema` through
+ * the emitter walking the same schema.
+ */
+function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
+  const read = readEither(core);
+  return s.reader({
+    read: (value) => toSchemaRead(read(value)),
+    jsonSchema: () => emitJsonSchema(core),
+  });
+}
+
+/** The value an Effect declaration admitted, or nothing, for a caller that never has to tell one refusal from another. */
+function admitted<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
+/**
+ * A record that ignores a key a newer service added, which is what an answer
+ * does. Each record states its own rule, because Effect hands a struct's
+ * parse options down to the structs inside it.
+ */
+const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** An integer at or above its minimum, the way `s.wholeNumber({ minimum })` reads one. */
+function wholeNumber(minimum: number) {
+  return EffectSchema.Int.pipe(EffectSchema.greaterThanOrEqualTo(minimum));
+}
+
+/**
+ * A text settled with its ends trimmed and refused when nothing but
+ * whitespace stands, the way `s.text()` reads one; `allowEmpty` skips that
+ * refusal, the way `s.text({ allowEmpty: true })` does.
+ */
+function trimmedText(options: { readonly max?: number; readonly allowEmpty?: boolean } = {}) {
+  const trimmed = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+    strict: true,
+    decode: (value) => value.trim(),
+    encode: (value) => value,
+  });
+  const settled =
+    options.allowEmpty === true
+      ? trimmed
+      : trimmed.pipe(
+          EffectSchema.filter((value) => value.trim().length > 0, {
+            schemaId: EffectSchema.MinLengthSchemaId,
+            jsonSchema: { minLength: 1 },
+          }),
+        );
+  return options.max === undefined ? settled : settled.pipe(EffectSchema.maxLength(options.max));
+}
+
 /** A tool's name or a call's id as the row spells it: read as written, refused only when empty. */
-const writtenIdentifier: Schema<string> = s.text({ max: 256 });
+const writtenIdentifierEffect = trimmedText({ max: 256 });
 
 function refuse(refusal: (typeof SCHEMA_REFUSAL)[keyof typeof SCHEMA_REFUSAL]): SchemaRead<never> {
   return { ok: false, refusal, path: [] };
@@ -98,9 +172,10 @@ function base64UrlDecode(text: string): string | undefined {
  * mint the shape of; the encoder reads the record under the same schema
  * first, so a cursor that could not be read back is never handed out.
  */
-function encodedCursorSchema<Value>(record: Schema<Value>): Schema<Value> {
-  return s.reader<Value>({
-    read: (value) => {
+function encodedCursorSchemaEffect<Value, Encoded>(record: EffectSchema.Schema<Value, Encoded>) {
+  const read = readEither(record);
+  return declareReader<Value>(
+    (value) => {
       if (!isWireString(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
       if (value.length > READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH) {
         return refuse(SCHEMA_REFUSAL.TOO_LARGE);
@@ -114,18 +189,21 @@ function encodedCursorSchema<Value>(record: Schema<Value>): Schema<Value> {
       } catch {
         return refuse(SCHEMA_REFUSAL.MALFORMED);
       }
-      return record.read(parsed);
+      return toSchemaRead(read(parsed));
     },
-    jsonSchema: () => ({ type: "string", maxLength: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH }),
-  });
+    { type: "string", maxLength: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH },
+  );
 }
 
-function encodeCursor<Value>(record: Schema<Value>, value: UnparsedWireValue): string {
-  const read = record.read(value);
-  if (!read.ok) {
-    throw new TypeError(`a cursor was minted outside its own shape: ${read.refusal}`);
+function encodeCursor<Value, Encoded>(
+  record: EffectSchema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): string {
+  const read = readEither(record)(value);
+  if (Either.isLeft(read)) {
+    throw new TypeError(`a cursor was minted outside its own shape: ${read.left.refusal}`);
   }
-  return base64UrlEncode(JSON.stringify(read.value));
+  return base64UrlEncode(JSON.stringify(read.right));
 }
 
 /** Where a device's read of one conversation's numbered rows stands: the last sequence it took, zero for none. */
@@ -145,9 +223,9 @@ export interface SequenceReadCursor {
   readonly positions: readonly SequencePosition[];
 }
 
-const sequencePositionSchema: Schema<SequencePosition> = s.record({
-  conversationId: wireUuidSchema,
-  seq: s.wholeNumber({ minimum: 0 }),
+const sequencePositionSchemaEffect = EffectSchema.Struct({
+  conversationId: effectSchema(wireUuidSchema),
+  seq: wholeNumber(0),
 });
 
 function compareCodePoints(a: string, b: string): number {
@@ -166,21 +244,27 @@ function positionsCanonical(cursor: SequenceReadCursor): boolean {
   );
 }
 
-const sequenceReadCursorRecord: Schema<SequenceReadCursor> = s.refine(
-  s.record({
-    positions: s.array(sequencePositionSchema, { max: READ_CURSOR_BOUNDS.MAX_CONVERSATIONS }),
-  }),
-  positionsCanonical,
-);
+const sequenceReadCursorRecordEffect = EffectSchema.Struct({
+  positions: EffectSchema.Array(sequencePositionSchemaEffect).pipe(
+    EffectSchema.maxItems(READ_CURSOR_BOUNDS.MAX_CONVERSATIONS),
+  ),
+}).pipe(EffectSchema.filter(positionsCanonical));
 
 /** Reads a sequence cursor a device handed back, or refuses one this build did not mint the shape of. */
-export const sequenceReadCursorSchema: Schema<SequenceReadCursor> =
-  encodedCursorSchema(sequenceReadCursorRecord);
+export const sequenceReadCursorSchemaEffect = encodedCursorSchemaEffect(
+  sequenceReadCursorRecordEffect,
+);
+
+export const sequenceReadCursorSchema: Schema<SequenceReadCursor> = fromEffect(
+  sequenceReadCursorSchemaEffect,
+);
 
 /** The cursor as an answer carries it: the encoded string, admitted only where it reads back as one this build mints. */
-const encodedSequenceReadCursorSchema: Schema<string> = s.refine(
-  s.text({ max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH, allowEmpty: true }),
-  (encoded) => sequenceReadCursorSchema.parse(encoded) !== undefined,
+const encodedSequenceReadCursorSchemaEffect = trimmedText({
+  max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH,
+  allowEmpty: true,
+}).pipe(
+  EffectSchema.filter((encoded) => admitted(sequenceReadCursorSchemaEffect, encoded) !== undefined),
 );
 
 /** Mints the one string that stands for these positions, whatever order they arrived in. */
@@ -188,7 +272,7 @@ export function encodeSequenceReadCursor(positions: Iterable<SequencePosition>):
   const sorted = [...positions].sort((a, b) =>
     compareCodePoints(a.conversationId, b.conversationId),
   );
-  return encodeCursor(sequenceReadCursorRecord, {
+  return encodeCursor(sequenceReadCursorRecordEffect, {
     positions: sorted.map(({ conversationId, seq }) => ({ conversationId, seq })),
   });
 }
@@ -209,33 +293,38 @@ export interface TurnReadCursor {
 const STORE_INSTANT_TEXT =
   /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?[+-]\d{2}(?::?\d{2})?$/u;
 
-const turnReadCursorRecord: Schema<TurnReadCursor> = s.record({
-  changedAt: s.refine(s.text({ max: 40 }), (instant) => STORE_INSTANT_TEXT.test(instant)),
-  id: wireUuidSchema,
+const turnReadCursorRecordEffect = EffectSchema.Struct({
+  changedAt: trimmedText({ max: 40 }).pipe(
+    EffectSchema.filter((instant) => STORE_INSTANT_TEXT.test(instant)),
+  ),
+  id: effectSchema(wireUuidSchema),
 });
 
-export const turnReadCursorSchema: Schema<TurnReadCursor> =
-  encodedCursorSchema(turnReadCursorRecord);
+export const turnReadCursorSchemaEffect = encodedCursorSchemaEffect(turnReadCursorRecordEffect);
 
-const encodedTurnReadCursorSchema: Schema<string> = s.refine(
-  s.text({ max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH }),
-  (encoded) => turnReadCursorSchema.parse(encoded) !== undefined,
+export const turnReadCursorSchema: Schema<TurnReadCursor> = fromEffect(turnReadCursorSchemaEffect);
+
+const encodedTurnReadCursorSchemaEffect = trimmedText({
+  max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH,
+}).pipe(
+  EffectSchema.filter((encoded) => admitted(turnReadCursorSchemaEffect, encoded) !== undefined),
 );
 
 export function encodeTurnReadCursor(cursor: TurnReadCursor): string {
-  return encodeCursor(turnReadCursorRecord, { changedAt: cursor.changedAt, id: cursor.id });
+  return encodeCursor(turnReadCursorRecordEffect, { changedAt: cursor.changedAt, id: cursor.id });
 }
 
 /** The page bound a read may ask for: at least one row, at most the page's own maximum. */
-export const readLimitSchema: Schema<number> = s.wholeNumber({
-  minimum: 1,
-  maximum: READ_PAGE_BOUNDS.MAX_LIMIT,
-});
-
-const sessionIdentitySchema: Schema<SessionIdentity> = s.record(
-  { providerId: s.text(), providerSessionId: s.text() },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+export const readLimitSchemaEffect = wholeNumber(1).pipe(
+  EffectSchema.lessThanOrEqualTo(READ_PAGE_BOUNDS.MAX_LIMIT),
 );
+
+export const readLimitSchema: Schema<number> = fromEffect(readLimitSchemaEffect);
+
+const sessionIdentitySchemaEffect = tolerantRecord({
+  providerId: trimmedText(),
+  providerSessionId: trimmedText(),
+});
 
 /**
  * One conversation the view is selected from, as the messages answer lists
@@ -261,35 +350,26 @@ export type ConversationReadConversation =
       readonly session: SessionIdentity;
     };
 
-const conversationReadConversationSchema: Schema<ConversationReadConversation> = s.union([
-  s.record(
-    {
-      id: wireUuidSchema,
-      kind: s.literal(CONVERSATION_VIEW_SOURCE.MAIN),
-      openedAt: countedNumber,
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-  s.record(
-    {
-      id: wireUuidSchema,
-      kind: s.literal(CONVERSATION_VIEW_SOURCE.OBSERVED),
-      session: sessionIdentitySchema,
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-]);
+const conversationReadConversationSchemaEffect = EffectSchema.Union(
+  tolerantRecord({
+    id: effectSchema(wireUuidSchema),
+    kind: EffectSchema.Literal(CONVERSATION_VIEW_SOURCE.MAIN),
+    openedAt: effectSchema(countedNumber),
+  }),
+  tolerantRecord({
+    id: effectSchema(wireUuidSchema),
+    kind: EffectSchema.Literal(CONVERSATION_VIEW_SOURCE.OBSERVED),
+    session: sessionIdentitySchemaEffect,
+  }),
+).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-const conversationViewSourceSchema: Schema<ConversationViewSource> = s.union([
-  s.record(
-    { kind: s.literal(CONVERSATION_VIEW_SOURCE.MAIN) },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-  s.record(
-    { kind: s.literal(CONVERSATION_VIEW_SOURCE.OBSERVED), session: sessionIdentitySchema },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-]);
+const conversationViewSourceSchemaEffect = EffectSchema.Union(
+  tolerantRecord({ kind: EffectSchema.Literal(CONVERSATION_VIEW_SOURCE.MAIN) }),
+  tolerantRecord({
+    kind: EffectSchema.Literal(CONVERSATION_VIEW_SOURCE.OBSERVED),
+    session: sessionIdentitySchemaEffect,
+  }),
+).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 const TURN_ORIGIN_NAMES = Object.values(TURN_ORIGIN);
 const TURN_STATUS_NAMES = Object.values(TURN_STATUS);
@@ -298,47 +378,38 @@ const CONVERSATION_EVENT_KIND_NAMES = Object.values(CONVERSATION_EVENT_KIND);
 const ACTION_OUTCOME_NAMES = Object.values(CONVERSATION_VIEW_ACTION_OUTCOME);
 
 /** The columns of a turn row a view reads, instants as epoch milliseconds. */
-const conversationViewTurnSchema: Schema<ConversationViewTurn> = s.record(
-  {
-    id: wireUuidSchema,
-    origin: s.enumOf(TURN_ORIGIN_NAMES),
-    status: s.enumOf(TURN_STATUS_NAMES),
-    queuedAt: countedNumber,
-    startedAt: countedNumber.optional(),
-    settledAt: countedNumber.optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const conversationViewTurnSchemaEffect = tolerantRecord({
+  id: effectSchema(wireUuidSchema),
+  origin: EffectSchema.Literal(...TURN_ORIGIN_NAMES),
+  status: EffectSchema.Literal(...TURN_STATUS_NAMES),
+  queuedAt: effectSchema(countedNumber),
+  startedAt: EffectSchema.optionalWith(effectSchema(countedNumber), { exact: true }),
+  settledAt: EffectSchema.optionalWith(effectSchema(countedNumber), { exact: true }),
+});
 
-const TOOL_PART_IDENTITY_FIELDS = {
-  toolCallId: writtenIdentifier,
-  toolName: writtenIdentifier,
-  state: s.enumOf(TOOL_PART_STATE_NAMES),
+const TOOL_PART_IDENTITY_FIELDS_EFFECT = {
+  toolCallId: writtenIdentifierEffect,
+  toolName: writtenIdentifierEffect,
+  state: EffectSchema.Literal(...TOOL_PART_STATE_NAMES),
 } as const;
 
 /** A tool call as the view decided it, the one fact of its kind the part alone cannot say beside it. */
-const conversationViewToolPartSchema: Schema<ConversationViewToolPart> = s.union([
-  s.record(
-    {
-      ...TOOL_PART_IDENTITY_FIELDS,
-      kind: s.literal(CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE),
-      unspoken: s.boolean(),
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-  s.record(
-    {
-      ...TOOL_PART_IDENTITY_FIELDS,
-      kind: s.literal(CONVERSATION_VIEW_TOOL_KIND.ACTION),
-      outcome: s.enumOf(ACTION_OUTCOME_NAMES),
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-  s.record(
-    { ...TOOL_PART_IDENTITY_FIELDS, kind: s.literal(CONVERSATION_VIEW_TOOL_KIND.DETAIL) },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-]);
+const conversationViewToolPartSchemaEffect = EffectSchema.Union(
+  tolerantRecord({
+    ...TOOL_PART_IDENTITY_FIELDS_EFFECT,
+    kind: EffectSchema.Literal(CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE),
+    unspoken: EffectSchema.Boolean,
+  }),
+  tolerantRecord({
+    ...TOOL_PART_IDENTITY_FIELDS_EFFECT,
+    kind: EffectSchema.Literal(CONVERSATION_VIEW_TOOL_KIND.ACTION),
+    outcome: EffectSchema.Literal(...ACTION_OUTCOME_NAMES),
+  }),
+  tolerantRecord({
+    ...TOOL_PART_IDENTITY_FIELDS_EFFECT,
+    kind: EffectSchema.Literal(CONVERSATION_VIEW_TOOL_KIND.DETAIL),
+  }),
+).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
  * A stored message as the wire carries it: the row's `UIMessage` exactly as
@@ -348,16 +419,16 @@ const conversationViewToolPartSchema: Schema<ConversationViewToolPart> = s.union
  * wire admits a record here and nothing narrower, so no second statement of
  * the message's shape can drift from the one the SDK makes.
  */
-const storedMessageRecordSchema: Schema<WireRecord> = s.reader<WireRecord>({
-  read: (value) => (isRecord(value) ? { ok: true, value } : refuse(SCHEMA_REFUSAL.MALFORMED)),
-  jsonSchema: () => ({ type: "object", properties: {}, required: [], additionalProperties: false }),
-});
+const storedMessageRecordSchemaEffect = declareReader<WireRecord>(
+  (value) => (isRecord(value) ? { ok: true, value } : refuse(SCHEMA_REFUSAL.MALFORMED)),
+  { type: "object", properties: {}, required: [], additionalProperties: false },
+);
 
 /** Any JSON an event's payload holds, carried as it was written. */
-const wireValueSchema: Schema<WireValue> = s.reader<WireValue>({
-  read: (value) => (value === undefined ? refuse(SCHEMA_REFUSAL.MALFORMED) : { ok: true, value }),
-  jsonSchema: () => ({ type: "object", properties: {}, required: [], additionalProperties: false }),
-});
+const wireValueSchemaEffect = declareReader<WireValue>(
+  (value) => (value === undefined ? refuse(SCHEMA_REFUSAL.MALFORMED) : { ok: true, value }),
+  { type: "object", properties: {}, required: [], additionalProperties: false },
+);
 
 /**
  * One message of a turn group: the stored row, its place in its
@@ -377,16 +448,13 @@ export interface ConversationReadMessage {
   readonly rating?: RatingEventPayload;
 }
 
-const conversationReadMessageSchema: Schema<ConversationReadMessage> = s.record(
-  {
-    message: storedMessageRecordSchema,
-    seq: s.wholeNumber({ minimum: 1 }),
-    createdAt: countedNumber,
-    tools: s.array(conversationViewToolPartSchema),
-    rating: RATING_EVENT_PAYLOAD.optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const conversationReadMessageSchemaEffect = tolerantRecord({
+  message: storedMessageRecordSchemaEffect,
+  seq: wholeNumber(1),
+  createdAt: effectSchema(countedNumber),
+  tools: EffectSchema.Array(conversationViewToolPartSchemaEffect),
+  rating: EffectSchema.optionalWith(effectSchema(RATING_EVENT_PAYLOAD), { exact: true }),
+});
 
 /**
  * The messages one turn wrote that the view selected, in sequence, under
@@ -407,16 +475,13 @@ export interface ConversationReadTurnGroup {
   readonly messages: readonly ConversationReadMessage[];
 }
 
-const conversationReadTurnGroupSchema: Schema<ConversationReadTurnGroup> = s.record(
-  {
-    turnId: wireUuidSchema,
-    conversationId: wireUuidSchema,
-    source: conversationViewSourceSchema,
-    turn: conversationViewTurnSchema.optional(),
-    messages: s.array(conversationReadMessageSchema, { minimum: 1 }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const conversationReadTurnGroupSchemaEffect = tolerantRecord({
+  turnId: effectSchema(wireUuidSchema),
+  conversationId: effectSchema(wireUuidSchema),
+  source: conversationViewSourceSchemaEffect,
+  turn: EffectSchema.optionalWith(conversationViewTurnSchemaEffect, { exact: true }),
+  messages: EffectSchema.Array(conversationReadMessageSchemaEffect).pipe(EffectSchema.minItems(1)),
+});
 
 /**
  * The messages endpoint's answer: the view's standing conversations, the
@@ -437,16 +502,19 @@ export interface ConversationMessagesAnswer {
 const MAX_MESSAGE_GROUPS =
   READ_PAGE_BOUNDS.MAX_LIMIT + READ_CURSOR_BOUNDS.MAX_CONVERSATIONS * READ_PAGE_BOUNDS.PREVIEW_ROWS;
 
-export const conversationMessagesAnswerSchema: Schema<ConversationMessagesAnswer> = s.record(
-  {
-    conversations: s.array(conversationReadConversationSchema, {
-      max: READ_CURSOR_BOUNDS.MAX_CONVERSATIONS,
-    }),
-    groups: s.array(conversationReadTurnGroupSchema, { max: MAX_MESSAGE_GROUPS }),
-    next: encodedSequenceReadCursorSchema,
-    hasMore: s.boolean(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+export const conversationMessagesAnswerSchemaEffect = tolerantRecord({
+  conversations: EffectSchema.Array(conversationReadConversationSchemaEffect).pipe(
+    EffectSchema.maxItems(READ_CURSOR_BOUNDS.MAX_CONVERSATIONS),
+  ),
+  groups: EffectSchema.Array(conversationReadTurnGroupSchemaEffect).pipe(
+    EffectSchema.maxItems(MAX_MESSAGE_GROUPS),
+  ),
+  next: encodedSequenceReadCursorSchemaEffect,
+  hasMore: EffectSchema.Boolean,
+});
+
+export const conversationMessagesAnswerSchema: Schema<ConversationMessagesAnswer> = fromEffect(
+  conversationMessagesAnswerSchemaEffect,
 );
 
 /** One event row about a message, in its conversation's own event sequence. */
@@ -462,19 +530,16 @@ export interface ConversationReadEvent {
   readonly createdAt: number;
 }
 
-const conversationReadEventSchema: Schema<ConversationReadEvent> = s.record(
-  {
-    id: wireUuidSchema,
-    conversationId: wireUuidSchema,
-    seq: s.wholeNumber({ minimum: 1 }),
-    messageId: wireUuidSchema,
-    kind: s.enumOf(CONVERSATION_EVENT_KIND_NAMES),
-    deviceId: s.text().optional(),
-    payload: wireValueSchema.optional(),
-    createdAt: countedNumber,
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const conversationReadEventSchemaEffect = tolerantRecord({
+  id: effectSchema(wireUuidSchema),
+  conversationId: effectSchema(wireUuidSchema),
+  seq: wholeNumber(1),
+  messageId: effectSchema(wireUuidSchema),
+  kind: EffectSchema.Literal(...CONVERSATION_EVENT_KIND_NAMES),
+  deviceId: EffectSchema.optionalWith(trimmedText(), { exact: true }),
+  payload: EffectSchema.optionalWith(wireValueSchemaEffect, { exact: true }),
+  createdAt: effectSchema(countedNumber),
+});
 
 export interface ConversationEventsAnswer {
   readonly events: readonly ConversationReadEvent[];
@@ -482,13 +547,16 @@ export interface ConversationEventsAnswer {
   readonly hasMore: boolean;
 }
 
-export const conversationEventsAnswerSchema: Schema<ConversationEventsAnswer> = s.record(
-  {
-    events: s.array(conversationReadEventSchema, { max: READ_PAGE_BOUNDS.MAX_LIMIT }),
-    next: encodedSequenceReadCursorSchema,
-    hasMore: s.boolean(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+export const conversationEventsAnswerSchemaEffect = tolerantRecord({
+  events: EffectSchema.Array(conversationReadEventSchemaEffect).pipe(
+    EffectSchema.maxItems(READ_PAGE_BOUNDS.MAX_LIMIT),
+  ),
+  next: encodedSequenceReadCursorSchemaEffect,
+  hasMore: EffectSchema.Boolean,
+});
+
+export const conversationEventsAnswerSchema: Schema<ConversationEventsAnswer> = fromEffect(
+  conversationEventsAnswerSchemaEffect,
 );
 
 /**
@@ -506,22 +574,19 @@ export interface BrainTurnRecord extends ConversationViewTurn {
   readonly cursor: string;
 }
 
-const brainTurnRecordSchema: Schema<BrainTurnRecord> = s.record(
-  {
-    id: wireUuidSchema,
-    conversationId: wireUuidSchema,
-    origin: s.enumOf(TURN_ORIGIN_NAMES),
-    status: s.enumOf(TURN_STATUS_NAMES),
-    model: s.text().optional(),
-    queuedAt: countedNumber,
-    startedAt: countedNumber.optional(),
-    settledAt: countedNumber.optional(),
-    failure: s.text().optional(),
-    cancelRequestedAt: countedNumber.optional(),
-    cursor: encodedTurnReadCursorSchema,
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const brainTurnRecordSchemaEffect = tolerantRecord({
+  id: effectSchema(wireUuidSchema),
+  conversationId: effectSchema(wireUuidSchema),
+  origin: EffectSchema.Literal(...TURN_ORIGIN_NAMES),
+  status: EffectSchema.Literal(...TURN_STATUS_NAMES),
+  model: EffectSchema.optionalWith(trimmedText(), { exact: true }),
+  queuedAt: effectSchema(countedNumber),
+  startedAt: EffectSchema.optionalWith(effectSchema(countedNumber), { exact: true }),
+  settledAt: EffectSchema.optionalWith(effectSchema(countedNumber), { exact: true }),
+  failure: EffectSchema.optionalWith(trimmedText(), { exact: true }),
+  cancelRequestedAt: EffectSchema.optionalWith(effectSchema(countedNumber), { exact: true }),
+  cursor: encodedTurnReadCursorSchemaEffect,
+});
 
 /** The turns endpoint's answer; `next` is absent only when nothing has ever been taken and nothing stood to take. */
 export interface BrainTurnsAnswer {
@@ -530,32 +595,43 @@ export interface BrainTurnsAnswer {
   readonly hasMore: boolean;
 }
 
-export const brainTurnsAnswerSchema: Schema<BrainTurnsAnswer> = s.record(
-  {
-    turns: s.array(brainTurnRecordSchema, { max: READ_PAGE_BOUNDS.MAX_LIMIT }),
-    next: encodedTurnReadCursorSchema.optional(),
-    hasMore: s.boolean(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+export const brainTurnsAnswerSchemaEffect = tolerantRecord({
+  turns: EffectSchema.Array(brainTurnRecordSchemaEffect).pipe(
+    EffectSchema.maxItems(READ_PAGE_BOUNDS.MAX_LIMIT),
+  ),
+  next: EffectSchema.optionalWith(encodedTurnReadCursorSchemaEffect, { exact: true }),
+  hasMore: EffectSchema.Boolean,
+});
+
+export const brainTurnsAnswerSchema: Schema<BrainTurnsAnswer> = fromEffect(
+  brainTurnsAnswerSchemaEffect,
 );
+
+const unreadableRowSchemaEffect = tolerantRecord({
+  conversationId: effectSchema(wireUuidSchema),
+  seq: wholeNumber(1),
+});
 
 /**
  * The one refusal a messages read answers with a body a device acts on: a
  * page holding a row this build cannot read is refused whole, naming the
  * row, and a device must surface it rather than draw the page as empty.
  */
-export const unreadableRowRefusalSchema: Schema<UnreadableRow> = s.map(
-  s.record(
-    {
-      error: s.literal(HOSTED_API_ERROR.UNREADABLE_ROW),
-      unreadableRow: s.record(
-        { conversationId: wireUuidSchema, seq: s.wholeNumber({ minimum: 1 }) },
-        { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-      ),
-    },
-    { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-  ),
-  (refusal) => refusal.unreadableRow,
+export const unreadableRowRefusalSchemaEffect = EffectSchema.transform(
+  tolerantRecord({
+    error: EffectSchema.Literal(HOSTED_API_ERROR.UNREADABLE_ROW),
+    unreadableRow: unreadableRowSchemaEffect,
+  }),
+  unreadableRowSchemaEffect,
+  {
+    strict: false,
+    decode: (refusal) => refusal.unreadableRow,
+    encode: (row) => ({ error: HOSTED_API_ERROR.UNREADABLE_ROW, unreadableRow: row }),
+  },
+);
+
+export const unreadableRowRefusalSchema: Schema<UnreadableRow> = fromEffect(
+  unreadableRowRefusalSchemaEffect,
 );
 
 /**
@@ -572,16 +648,18 @@ export interface ChangesRequest {
   readonly quietUntil?: number | null;
 }
 
-const presenceInstantSchema: Schema<number | null> = s.union([
-  s.wholeNumber({ minimum: 0 }),
-  s.literal(null),
-]);
+const presenceInstantSchemaEffect = EffectSchema.Union(
+  wholeNumber(0),
+  EffectSchema.Literal(null),
+).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-export const changesRequestSchema: Schema<ChangesRequest> = s.record({
-  deviceId: wireUuidSchema,
-  activeUntil: presenceInstantSchema.optional(),
-  quietUntil: presenceInstantSchema.optional(),
+export const changesRequestSchemaEffect = EffectSchema.Struct({
+  deviceId: effectSchema(wireUuidSchema),
+  activeUntil: EffectSchema.optionalWith(presenceInstantSchemaEffect, { exact: true }),
+  quietUntil: EffectSchema.optionalWith(presenceInstantSchemaEffect, { exact: true }),
 });
+
+export const changesRequestSchema: Schema<ChangesRequest> = fromEffect(changesRequestSchemaEffect);
 
 /**
  * Where every resource's read stands now: the cursor a device reading each
@@ -601,13 +679,12 @@ export interface ChangesAnswer {
   readonly rosterObservedAt?: number;
 }
 
-export const changesAnswerSchema: Schema<ChangesAnswer> = s.record(
-  {
-    seen: s.boolean(),
-    messages: encodedSequenceReadCursorSchema,
-    events: encodedSequenceReadCursorSchema,
-    turns: encodedTurnReadCursorSchema.optional(),
-    rosterObservedAt: countedNumber.optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+export const changesAnswerSchemaEffect = tolerantRecord({
+  seen: EffectSchema.Boolean,
+  messages: encodedSequenceReadCursorSchemaEffect,
+  events: encodedSequenceReadCursorSchemaEffect,
+  turns: EffectSchema.optionalWith(encodedTurnReadCursorSchemaEffect, { exact: true }),
+  rosterObservedAt: EffectSchema.optionalWith(effectSchema(countedNumber), { exact: true }),
+});
+
+export const changesAnswerSchema: Schema<ChangesAnswer> = fromEffect(changesAnswerSchemaEffect);

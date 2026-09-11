@@ -56,25 +56,6 @@ const MODULE_SCHEMAS = {
     deviceForgetRequestSchema: deviceWire.deviceForgetRequestSchema,
     deviceForgetAnswerSchema: deviceWire.deviceForgetAnswerSchema,
   } satisfies RecordedJsonSchemas<typeof deviceWire>,
-  "rating-wire": {
-    hostedMessageRatingRequestSchema: ratingWire.hostedMessageRatingRequestSchema,
-    hostedMessageRatingAnswerSchema: ratingWire.hostedMessageRatingAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof ratingWire>,
-  "reads-wire": {
-    sequenceReadCursorSchema: readsWire.sequenceReadCursorSchema,
-    turnReadCursorSchema: readsWire.turnReadCursorSchema,
-    readLimitSchema: readsWire.readLimitSchema,
-    conversationMessagesAnswerSchema: readsWire.conversationMessagesAnswerSchema,
-    conversationEventsAnswerSchema: readsWire.conversationEventsAnswerSchema,
-    brainTurnsAnswerSchema: readsWire.brainTurnsAnswerSchema,
-    changesRequestSchema: readsWire.changesRequestSchema,
-    changesAnswerSchema: readsWire.changesAnswerSchema,
-    unreadableRowRefusalSchema: readsWire.unreadableRowRefusalSchema,
-  } satisfies RecordedJsonSchemas<typeof readsWire>,
-  "turn-events-wire": {
-    turnEventCursorSchema: turnEventsWire.turnEventCursorSchema,
-    turnEventSchema: turnEventsWire.turnEventSchema,
-  } satisfies RecordedJsonSchemas<typeof turnEventsWire>,
 } as const;
 
 /**
@@ -125,6 +106,25 @@ const EFFECT_MODULE_SCHEMAS = {
     vaultKeysListAnswerSchemaEffect: vaultWire.vaultKeysListAnswerSchemaEffect,
     vaultKeyDeleteAnswerSchemaEffect: vaultWire.vaultKeyDeleteAnswerSchemaEffect,
   } satisfies RecordedEffectJsonSchemas<typeof vaultWire>,
+  "rating-wire": {
+    hostedMessageRatingRequestSchemaEffect: ratingWire.hostedMessageRatingRequestSchemaEffect,
+    hostedMessageRatingAnswerSchemaEffect: ratingWire.hostedMessageRatingAnswerSchemaEffect,
+  } satisfies RecordedEffectJsonSchemas<typeof ratingWire>,
+  "reads-wire": {
+    sequenceReadCursorSchemaEffect: readsWire.sequenceReadCursorSchemaEffect,
+    turnReadCursorSchemaEffect: readsWire.turnReadCursorSchemaEffect,
+    readLimitSchemaEffect: readsWire.readLimitSchemaEffect,
+    conversationMessagesAnswerSchemaEffect: readsWire.conversationMessagesAnswerSchemaEffect,
+    conversationEventsAnswerSchemaEffect: readsWire.conversationEventsAnswerSchemaEffect,
+    brainTurnsAnswerSchemaEffect: readsWire.brainTurnsAnswerSchemaEffect,
+    changesRequestSchemaEffect: readsWire.changesRequestSchemaEffect,
+    changesAnswerSchemaEffect: readsWire.changesAnswerSchemaEffect,
+    unreadableRowRefusalSchemaEffect: readsWire.unreadableRowRefusalSchemaEffect,
+  } satisfies RecordedEffectJsonSchemas<typeof readsWire>,
+  "turn-events-wire": {
+    turnEventCursorSchemaEffect: turnEventsWire.turnEventCursorSchemaEffect,
+    turnEventSchemaEffect: turnEventsWire.turnEventSchemaEffect,
+  } satisfies RecordedEffectJsonSchemas<typeof turnEventsWire>,
 } as const;
 
 /**
