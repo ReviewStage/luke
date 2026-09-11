@@ -5,6 +5,9 @@ import { type IDisposable, toDisposable } from "./lifecycle.js";
  * unsubscribe. A listener therefore reaches nothing of the emitter, so an
  * owner can only end its own subscription and never the round, the emitter, or
  * anyone else's.
+ *
+ * @deprecated Use a `Stream`, bridged by `streamFromEvent` in
+ * `./effect/event.js` while both stand. P12-06 deletes this.
  */
 export type Event<T> = (listener: (value: T) => void) => IDisposable;
 
@@ -23,6 +26,9 @@ const INERT: IDisposable = { dispose: () => {} };
  * The one side that may fire. A composition keeps the emitter and publishes
  * only its `event`, which is what makes a subscriber unable to speak in the
  * emitter's name.
+ *
+ * @deprecated Use a `PubSub` or a `Stream`, bridged by `eventFromStream` in
+ * `./effect/event.js` while both stand. P12-06 deletes this.
  */
 export class Emitter<T> implements IDisposable {
   readonly #subscriptions = new Set<Subscription<T>>();
