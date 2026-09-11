@@ -1,7 +1,6 @@
-import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
+import { type HttpApp, type HttpClient, HttpRouter, HttpServerRequest } from "@effect/platform";
 import { Effect, Redacted } from "effect";
 import {
-  type CloudFetch,
   HOSTED_SERVICE_PATH,
   type ObservedSession,
   realtimeClientSecretRequest,
@@ -56,7 +55,6 @@ import {
 export interface VoiceMintSeams extends MintSeams, Omit<RemoteObserveSeams, "encryptionSecret"> {
   resolveUserId: (authorization: string | undefined) => Promise<string | undefined>;
   spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: CloudFetch | undefined;
 }
 
 /**
@@ -147,7 +145,9 @@ function roster(
 }
 
 /** The group, which is the two signed-in mints and the refusal anywhere else. */
-export function voiceMintApp(seams: VoiceMintSeams): HttpApp.Default<never, HostedEnvironment> {
+export function voiceMintApp(
+  seams: VoiceMintSeams,
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.VOICE_MINT, Effect.merge(voiceMint(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, Effect.merge(remoteVoiceMint(seams))),

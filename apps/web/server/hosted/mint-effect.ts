@@ -1,6 +1,6 @@
-import { HttpServerRequest, type HttpServerResponse } from "@effect/platform";
+import { type HttpClient, HttpServerRequest, type HttpServerResponse } from "@effect/platform";
 import { Effect, Redacted } from "effect";
-import type { CloudFetch, RealtimeConnection } from "../core.js";
+import type { RealtimeConnection } from "../core.js";
 import { HostedEnvironment } from "./environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import {
@@ -29,7 +29,6 @@ import {
 
 /** What a mint needs of the deployment beyond the environment's own key. */
 export interface MintSeams {
-  fetch?: CloudFetch | undefined;
   now?: (() => number) | undefined;
   timeoutMs?: number | undefined;
 }
@@ -76,13 +75,11 @@ export function mintPreferences(
 /** The upstream mint, with the refusal it answers with in the hosted vocabulary. */
 export function mintedConnection(
   options: RealtimeConnectionMintOptions,
-): Effect.Effect<RealtimeConnection, MintAnswer> {
-  return Effect.flatMap(
-    Effect.promise(() => mintRealtimeConnection(options)),
-    (answer) =>
-      "failure" in answer
-        ? Effect.fail(hostedUpstreamErrorResponse(answer.failure.upstreamStatus))
-        : Effect.succeed(answer.connection),
+): Effect.Effect<RealtimeConnection, MintAnswer, HttpClient.HttpClient> {
+  return Effect.flatMap(mintRealtimeConnection(options), (answer) =>
+    "failure" in answer
+      ? Effect.fail(hostedUpstreamErrorResponse(answer.failure.upstreamStatus))
+      : Effect.succeed(answer.connection),
   );
 }
 
@@ -98,7 +95,6 @@ export function mintOptions(
     model,
     preferences: read,
     clientSecretRequest,
-    fetch: seams.fetch,
     now: seams.now,
     timeoutMs: seams.timeoutMs,
   };

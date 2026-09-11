@@ -1,4 +1,10 @@
-import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
+import {
+  type HttpApp,
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "@effect/platform";
 import { Effect, Redacted } from "effect";
 import {
   BRAIN_DEFAULTS,
@@ -12,7 +18,6 @@ import {
   brainOutputReplayable,
   brainResponsesOutput,
   brainResponsesRequest,
-  type CloudFetch,
   embeddingsVectors,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -45,7 +50,7 @@ import {
   hostedUpstreamErrorResponse,
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
-import { postOpenAi } from "./hosted/openai.js";
+import { postOpenAiEffect } from "./hosted/openai.js";
 import type { HostedSpend } from "./hosted/quota.js";
 
 /**
@@ -82,7 +87,6 @@ export const HOSTED_BRAIN_DEFAULTS = {
 export interface BrainSeams {
   resolveUserId: (authorization: string | undefined) => Promise<string | undefined>;
   spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: CloudFetch | undefined;
   timeoutMs?: number | undefined;
 }
 
@@ -178,7 +182,7 @@ function account(
 interface BrainOperation<Admitted> {
   read: (payload: UnparsedWireValue) => HostedBrainRequestRead<Admitted>;
   path: string;
-  body: (request: Admitted, model: string) => Parameters<typeof postOpenAi>[1];
+  body: (request: Admitted, model: string) => Parameters<typeof postOpenAiEffect>[1];
   /** The response body for the desktop, or nothing when the upstream's answer is not one this contract hands down. */
   answer: (payload: UnparsedWireValue) => object | undefined;
 }
@@ -193,7 +197,11 @@ interface BrainOperation<Admitted> {
 function brainOperation<Admitted>(
   seams: BrainSeams,
   operation: BrainOperation<Admitted>,
-): Effect.Effect<Answer, Answer, HttpServerRequest.HttpServerRequest | HostedEnvironment> {
+): Effect.Effect<
+  Answer,
+  Answer,
+  HttpServerRequest.HttpServerRequest | HostedEnvironment | HttpClient.HttpClient
+> {
   return Effect.gen(function* () {
     const { userId, apiKey, model } = yield* account(seams, HTTP_METHOD.POST);
     const payload = yield* refusing(readJsonBodyEffect(maximumHostedBrainRequestBytes));
@@ -222,25 +230,22 @@ function brainOperation<Admitted>(
 
 /**
  * The upstream's answer as the wire value the operation reads, or the refusal
- * to hand down. The call is dropped with the turn: the signal the effect is
- * run with is the upstream request's, so an interrupted turn spends no more
- * of the upstream than it already had.
+ * to hand down. The request is carried by the ambient `HttpClient`, whose
+ * interruption is the fiber's own: a turn cancelled mid-call drops the
+ * request with it, so an interrupted turn spends no more of the upstream than
+ * it already had.
  */
 function upstream(
   seams: BrainSeams,
   apiKey: string,
   path: string,
-  body: Parameters<typeof postOpenAi>[1],
-): Effect.Effect<UnparsedWireValue | undefined, Answer> {
+  body: Parameters<typeof postOpenAiEffect>[1],
+): Effect.Effect<UnparsedWireValue | undefined, Answer, HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    const response = yield* Effect.promise((signal) =>
-      postOpenAi(path, body, {
-        apiKey,
-        fetch: seams.fetch,
-        timeoutMs: seams.timeoutMs ?? HOSTED_BRAIN_DEFAULTS.UPSTREAM_TIMEOUT_MS,
-        signal,
-      }),
-    );
+    const response = yield* postOpenAiEffect(path, body, {
+      apiKey,
+      timeoutMs: seams.timeoutMs ?? HOSTED_BRAIN_DEFAULTS.UPSTREAM_TIMEOUT_MS,
+    });
     if (response?.status === HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS) {
       // The provider itself is rate limiting: the desktop cools down for the
       // bounded wait the header names, as a keyed desktop would, and never
@@ -333,7 +338,9 @@ function embed(seams: BrainSeams) {
 }
 
 /** The group, which is the contract's four paths and the refusal anywhere else. */
-export function brainApp(seams: BrainSeams): HttpApp.Default<never, HostedEnvironment> {
+export function brainApp(
+  seams: BrainSeams,
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, Effect.merge(capabilities(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, Effect.merge(respond(seams))),

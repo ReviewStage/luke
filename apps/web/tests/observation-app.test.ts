@@ -50,6 +50,7 @@ const EXCHANGES: readonly Exchange[] = [
       const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
       return handleConversationRead({
         ...hostedVaultSeams,
+        encryptionSecret: undefined,
         request: new Request(`${ORIGIN}/api/sessions/messages`),
         execute: executeConversationRead,
       });
@@ -63,6 +64,7 @@ const EXCHANGES: readonly Exchange[] = [
       const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
       return handleProjects({
         ...hostedVaultSeams,
+        encryptionSecret: undefined,
         request: new Request(`${ORIGIN}/api/projects`),
       });
     },
@@ -73,7 +75,11 @@ const EXCHANGES: readonly Exchange[] = [
     handle: async () => {
       const { handleObserve } = await import("../server/hosted/observe.js");
       const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      return handleObserve({ ...hostedVaultSeams, request: new Request(`${ORIGIN}/api/observe`) });
+      return handleObserve({
+        ...hostedVaultSeams,
+        encryptionSecret: undefined,
+        request: new Request(`${ORIGIN}/api/observe`),
+      });
     },
   },
   {

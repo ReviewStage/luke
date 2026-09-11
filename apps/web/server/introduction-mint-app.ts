@@ -1,4 +1,4 @@
-import { type HttpApp, HttpRouter } from "@effect/platform";
+import { type HttpApp, type HttpClient, HttpRouter } from "@effect/platform";
 import { Effect } from "effect";
 import { HOSTED_SERVICE_PATH } from "./core.js";
 import { HostedEnvironment } from "./hosted/environment.js";
@@ -67,7 +67,7 @@ function introductionMint(seams: IntroductionMintSeams) {
 /** The group, which is the introduction's own mint and the refusal anywhere else. */
 export function introductionMintApp(
   seams: IntroductionMintSeams,
-): HttpApp.Default<never, HostedEnvironment> {
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.INTRODUCTION_MINT, Effect.merge(introductionMint(seams))),
     Effect.catchTag("RouteNotFound", () =>

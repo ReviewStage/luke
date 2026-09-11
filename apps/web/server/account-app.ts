@@ -1,6 +1,6 @@
-import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
+import { type HttpApp, type HttpClient, HttpRouter, HttpServerRequest } from "@effect/platform";
 import { accountPreferencesFromWire, RETIRED_ACCOUNT_PREFERENCE_FIELD } from "@sidecar/settings";
-import { type CloudFetch, isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Redacted } from "effect";
 import {
   type AccountPreferencesRow,
@@ -16,7 +16,7 @@ import {
   hostedMethod,
   hostedRefusalResponse,
 } from "./hosted/http-effect.js";
-import { forgetPosthogPerson } from "./hosted/posthog.js";
+import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 
 /**
  * The account group: the signed-in desktop's own delete and preferences
@@ -46,8 +46,6 @@ export interface AccountAppSeams {
   deleteUser: (userId: string) => Promise<void>;
   readPreferences: (userId: string) => Promise<AccountPreferencesRow | undefined>;
   writePreferences: (userId: string, preferences: HostedAccountPreferences) => Promise<Date>;
-  /** The analytics processor's own transport, overridden only in tests; the deployment's own `fetch` otherwise. */
-  fetch?: CloudFetch | undefined;
 }
 
 /** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
@@ -68,29 +66,25 @@ function resolvedUserId(
  * erase and nothing to erase it with, so the erasure is simply skipped.
  */
 function forgetAnalytics(
-  seams: AccountAppSeams,
   userId: string,
-): Effect.Effect<void, never, HostedEnvironment> {
+): Effect.Effect<void, never, HostedEnvironment | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
     if (!environment.posthogPersonalApiKey || !environment.posthogProjectId) return;
     const personalApiKey = Redacted.value(environment.posthogPersonalApiKey);
     const projectId = environment.posthogProjectId;
     const host = environment.posthogApiHost;
-    yield* Effect.promise(async () => {
-      try {
-        await forgetPosthogPerson(userId, {
-          personalApiKey,
-          projectId,
-          ...(host ? { host } : undefined),
-          ...(seams.fetch ? { fetch: seams.fetch } : undefined),
-        });
-      } catch (error) {
-        process.stderr.write(
-          `Analytics erasure did not complete: ${error instanceof Error ? error.message : "unknown error"}\n`,
-        );
-      }
-    });
+    yield* forgetPosthogPersonEffect(userId, {
+      personalApiKey,
+      projectId,
+      ...(host ? { host } : undefined),
+    }).pipe(
+      Effect.catchAll((error) =>
+        Effect.sync(() =>
+          process.stderr.write(`Analytics erasure did not complete: ${error.message}\n`),
+        ),
+      ),
+    );
   });
 }
 
@@ -104,11 +98,11 @@ function forgetAnalytics(
  */
 function accountDeleteEndpoint(
   seams: AccountAppSeams,
-): HttpApp.Default<HostedRefusal, HostedEnvironment> {
+): HttpApp.Default<HostedRefusal, HostedEnvironment | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     yield* hostedMethod(HTTP_METHOD.POST);
     const userId = yield* resolvedUserId(seams);
-    yield* forgetAnalytics(seams, userId);
+    yield* forgetAnalytics(userId);
     yield* Effect.promise(() => seams.deleteUser(userId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
   });
@@ -183,7 +177,9 @@ function accountPreferencesEndpoint(seams: AccountAppSeams): HttpApp.Default<Hos
  * vocabulary's own refusal for a method the matched path does not answer or a
  * path the group declares no route for.
  */
-export function accountApp(seams: AccountAppSeams): HttpApp.Default<never, HostedEnvironment> {
+export function accountApp(
+  seams: AccountAppSeams,
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(ACCOUNT_PATH.DELETE, accountDeleteEndpoint(seams)),
     HttpRouter.all(ACCOUNT_PATH.PREFERENCES, accountPreferencesEndpoint(seams)),

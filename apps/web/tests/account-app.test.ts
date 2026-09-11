@@ -3,6 +3,7 @@ import path from "node:path";
 import { HttpApp } from "@effect/platform";
 import { PROVIDER_ID } from "@sidecar/session";
 import type { CloudFetch, WireBoundaryInput } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect, Redacted } from "effect";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
@@ -50,6 +51,10 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectId: "posthog-project-1",
   posthogApiHost: undefined,
   providerKeyEncryptionSecret: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  apnsCredentials: undefined,
 };
 
 interface Backing {
@@ -116,14 +121,16 @@ function groupSeams(state: Backing): AccountAppSeams {
     deleteUser: deleteUser(state),
     readPreferences: readPreferences(state),
     writePreferences: writePreferences(state),
-    fetch: forgetAnalyticsFetch(state),
   };
 }
 
 /** The group's answer, with the deployment's environment handed in directly rather than read from `process.env`. */
 function groupAnswer(state: Backing, request: Request): Promise<Response> {
   const handler = HttpApp.toWebHandler(
-    accountApp(groupSeams(state)).pipe(Effect.provideService(HostedEnvironment, ENVIRONMENT)),
+    accountApp(groupSeams(state)).pipe(
+      Effect.provideService(HostedEnvironment, ENVIRONMENT),
+      Effect.provide(layerFromCloudFetch(forgetAnalyticsFetch(state))),
+    ),
   );
   return handler(request);
 }

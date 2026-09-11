@@ -5,7 +5,9 @@
  * off, the same kill switch the feedback endpoint uses.
  */
 
-import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { HTTP_METHOD } from "@sidecar/wire";
+import { Effect } from "effect";
 import type {
   BrainEmbeddingsRequest,
   BrainInputTokensRequest,
@@ -13,7 +15,7 @@ import type {
   realtimeClientSecretRequest,
   remoteRealtimeClientSecretRequest,
 } from "../core.js";
-import { callAnswered, createAccountCall, fixedBearer } from "../core.js";
+import { accountCall, callAnswered, fixedBearer } from "../core.js";
 // Type-only, so the value-level import the introduction handler takes from
 // this module never becomes a runtime cycle.
 import type { introductionClientSecretRequest } from "./introduction-mint.js";
@@ -41,33 +43,27 @@ export type OpenAiPostBody =
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;
-  fetch?: CloudFetch | undefined;
   timeoutMs?: number | undefined;
-  /** The caller's own cancellation, when the runtime carries one; the upstream call is dropped with it. */
-  signal?: AbortSignal | undefined;
 }
 
 /**
  * Posts one build-fixed document to OpenAI, resolving to nothing on a network
  * fault so a caller answers 502 without ever holding an error that could name
- * the key.
+ * the key. The caller's own cancellation is the run's interruption: a turn
+ * dropped mid-call drops the request with it, over the ambient `HttpClient`.
  */
-export async function postOpenAi(
+export function postOpenAiEffect(
   path: string,
   body: OpenAiPostBody,
   options: OpenAiUpstreamOptions,
-): Promise<Response | undefined> {
-  const call = createAccountCall({
+): Effect.Effect<Response | undefined, never, HttpClient.HttpClient> {
+  const call = accountCall({
     baseUrl: HOSTED_OPENAI_DEFAULTS.BASE_URL,
     credential: fixedBearer(options.apiKey),
-    fetch: options.fetch,
     requestTimeoutMs: options.timeoutMs ?? HOSTED_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
   });
-  const answer = await call.send({
-    method: HTTP_METHOD.POST,
-    path,
-    body: JSON.stringify(body),
-    signal: options.signal,
-  });
-  return callAnswered(answer) ? answer.response : undefined;
+  return Effect.map(
+    call.send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(body) }),
+    (answer) => (callAnswered(answer) ? answer.response : undefined),
+  );
 }

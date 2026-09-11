@@ -1,27 +1,23 @@
 import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import { auth } from "./auth.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "./core.js";
 import { getDatabase } from "./db/index.js";
 import { devices, observationPass, providerKey, user } from "./db/schema.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
-import { ApnsSender, apnsCredentialsFromEnvironment } from "./hosted/apns.js";
+import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
 import { CATALOG_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { handleConversationRead } from "./hosted/conversation-read.js";
 import { deviceSeams } from "./hosted/device-store.js";
-import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "./hosted/encryption.js";
+import { payloadKeyRing } from "./hosted/encryption.js";
+import { HostedEnvironment } from "./hosted/environment.js";
 import { type EventsOptions, handleEvents } from "./hosted/events.js";
 import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
 import { observeAndSnapshot } from "./hosted/observation-pass.js";
-import {
-  handleObservationTick,
-  OBSERVATION_ENVIRONMENT,
-  type ObservationTickOptions,
-} from "./hosted/observation-tick.js";
+import { handleObservationTick, type ObservationTickOptions } from "./hosted/observation-tick.js";
 import { handleObserve } from "./hosted/observe.js";
-import { POSTHOG_ENVIRONMENT } from "./hosted/posthog.js";
 import { handleProjects } from "./hosted/projects.js";
 import { pushSpeech, type SpeechPushOutcome } from "./hosted/speech-push.js";
 import {
@@ -30,7 +26,7 @@ import {
   storeWriter,
   sweepSpeech,
 } from "./hosted/store/index.js";
-import { hostedVaultSeams } from "./hosted/vault-route.js";
+import { hostedEncryptionSecret, hostedVaultSeams } from "./hosted/vault-route.js";
 import { runWeb } from "./runtime.js";
 
 /**
@@ -99,22 +95,31 @@ function promisePassthrough(handle: (request: Request) => Promise<Response>): Ht
 }
 
 /** Reads one observed session's conversation for the caller who opened its screen. */
-function sessionsMessagesHandler(request: Request): Promise<Response> {
+async function sessionsMessagesHandler(request: Request): Promise<Response> {
   return handleConversationRead({
     ...hostedVaultSeams,
+    encryptionSecret: await hostedEncryptionSecret(),
     request,
     execute: executeConversationRead,
   });
 }
 
 /** Lists where the signed-in user's keys can create a workspace. */
-function projectsHandler(request: Request): Promise<Response> {
-  return handleProjects({ ...hostedVaultSeams, request });
+async function projectsHandler(request: Request): Promise<Response> {
+  return handleProjects({
+    ...hostedVaultSeams,
+    encryptionSecret: await hostedEncryptionSecret(),
+    request,
+  });
 }
 
 /** Observes the signed-in user's cloud sessions on demand. */
-function observeHandler(request: Request): Promise<Response> {
-  return handleObserve({ ...hostedVaultSeams, request });
+async function observeHandler(request: Request): Promise<Response> {
+  return handleObserve({
+    ...hostedVaultSeams,
+    encryptionSecret: await hostedEncryptionSecret(),
+    request,
+  });
 }
 
 /**
@@ -123,10 +128,14 @@ function observeHandler(request: Request): Promise<Response> {
  * seams — the project token the desktop never holds, and the same
  * in-process token resolution every other hosted endpoint trusts.
  */
-function eventsHandler(request: Request): Promise<Response> {
+async function eventsHandler(request: Request): Promise<Response> {
+  const environment = await runWeb(HostedEnvironment);
   const options: EventsOptions = {
     request,
-    projectApiKey: process.env[POSTHOG_ENVIRONMENT.PROJECT_API_KEY],
+    projectApiKey:
+      environment.posthogProjectApiKey === undefined
+        ? undefined
+        : Redacted.value(environment.posthogProjectApiKey),
     resolveUserId: (incoming) => hostedUserId(incoming, (input) => auth.api.oauth2UserInfo(input)),
     // Read from the service's own user row rather than from the request, so
     // the desktop still sends nothing that names anybody.
@@ -139,8 +148,7 @@ function eventsHandler(request: Request): Promise<Response> {
       return rows[0];
     },
   };
-  const host = process.env[POSTHOG_ENVIRONMENT.HOST];
-  if (host) options.host = host;
+  if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
   return handleEvents(options);
 }
 
@@ -157,16 +165,21 @@ function eventsHandler(request: Request): Promise<Response> {
  */
 async function observationTickHandler(request: Request): Promise<Response> {
   const database = getDatabase();
-  const encryptionSecret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET]?.trim() || undefined;
+  const environment = await runWeb(HostedEnvironment);
+  const encryptionSecret = environment.providerKeyEncryptionSecret
+    ? Redacted.value(environment.providerKeyEncryptionSecret)
+    : undefined;
   const store = encryptionSecret
     ? hostedStore({ db: database, keys: payloadKeyRing(encryptionSecret), run: runWeb })
     : undefined;
-  const apnsCredentials = apnsCredentialsFromEnvironment(process.env);
-  const sender = apnsCredentials ? new ApnsSender({ credentials: apnsCredentials }) : undefined;
+  const sender = environment.apnsCredentials
+    ? new ApnsSender({ credentials: environment.apnsCredentials })
+    : undefined;
 
   const options: ObservationTickOptions = {
     request,
-    cronSecret: process.env[OBSERVATION_ENVIRONMENT.CRON_SECRET],
+    cronSecret:
+      environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret),
     encryptionSecret,
     listAccounts: async (limit, seenAfter) => {
       const rows = await database
