@@ -1017,3 +1017,31 @@ workers, and the staged C3, D3, G4 and E5 briefs, now carry both shapes: under t
 This is also an argument about timing rather than scope: **a `vercel.json` conflict per route-adding
 PR is the running cost of the services block not having landed**, which is a reason to land it as
 soon as the preset allows and not a reason to widen it.
+
+
+## 2026-09-11 — Seal and scope `prompts`; leave `tool_sets` shared (orchestrator, refining the escalation)
+
+Sharpening the recommendation already with Dean, because B+ applied to both tables would be wrong
+and the asymmetry is the whole point.
+
+- **`prompts.text` is the developer's content.** It embeds `USER.md`, `MEMORY.md` and `IDENTITY.md`
+  whole. Hence the seal under the user's own payload key ring, hence keying `(user_id, hash)`, hence
+  the cascade that `hash`-only cannot give. The acceptance — "two turns under the same prompt share
+  one row" — was always about **one account's** two turns; the cross-account case was never the
+  point and becomes unreachable by construction. A test asserting it would be asserting the hazard.
+- **`tool_sets.schemas` is the build's content.** The schemas are what this build offers, identical
+  for every account, carrying nothing of anyone's. **Cross-account dedupe there is real and worth
+  keeping** — one row genuinely serves every user under the same catalog — and sealing it would
+  encrypt the build's own constants while losing that sharing for nothing.
+
+**So: `prompts` sealed and keyed `(user_id, hash)`; `tool_sets` unchanged, `hash` primary key,
+shared.** C4 states the asymmetry and its reason in the PR body, because a reviewer meeting one
+sealed table beside an unsealed neighbour will otherwise read it as an oversight.
+
+**Migration number verified for C4: `0021`.** Highest on main is `0020_e6b_devices_timestamptz.sql`
+and **no open PR in this rework carries a `drizzle/0*.sql`**, so the namespace is clear.
+
+**And the one test that proves the session-scope ruling rather than assuming it:** C4's eve eval
+asserts a real eve run carries `prompt_hash` **through durable state** from `session.started` to the
+turn row. The amendment to LUKE-128's acceptance rests on eve's documented lifecycle scope; that
+test is what makes it a fact about this build.
