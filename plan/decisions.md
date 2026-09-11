@@ -3041,3 +3041,54 @@ it is what his ruling makes true, and it should be read that way rather than red
 **Remaining work, LUKE-182:** correct the `CLAUDE.md` sentence, and say in the addendum and the guide
 that the Mac gate is the release rehearsal and `verify.sh` by hand. **A policy nobody wrote down is not
 a policy.**
+
+
+## 2026-09-11 — The Services sitting: the flip worked, the PR did not, and the premise is now in question
+
+**Sequence.** #1018 made green and CLEAN on `56417f07` (all six required contexts — the ruleset changed
+with #1165 and no longer includes a macOS job — plus fresh Bugbot and Security verdicts, zero threads
+ever). Dean set the preset to **Services** and **redeployed the existing preview** rather than pushing a
+commit, so the bot verdicts were not reset inside the window.
+
+**What worked.** Services mode was genuinely active and **both services built**:
+
+- `web`: `db:migrate`, `auth:seed`, the full Vite build, four pages prerendered, and **eight
+  `dist-functions` bundles with their duration bounds** — so #1140's grouping survives the services shape
+- `eve`: nitro, then `[BUILD] built output at …/apps/web/agent/.vercel/output`, `Build Completed [2m]`
+
+**And eve SERVES.** Dean's probe of the preview, signed in to Vercel:
+`/eve/v1/health` → `{"ok":true,"status":"ready","workflowId":"workflow//eve//workflowEntry"}`.
+
+**What did not work, and would have merged green.** `/api/brain/capabilities` → **404.** Line 8 of the
+build log: *"WARNING! The `api/` directory will not be built because services are configured."* **In
+services mode Vercel's zero-config `api/` pass does not exist** — one builder per service
+(`get-services-builders.ts` 160, 196–216) — so the eight bundles are built and **nothing routes to
+them.** #1018 was green on every required check, both bots, zero threads, CLEAN, **and would have served
+a production site whose every API route 404s.** Worse than a failed build, because it succeeds.
+
+**The only thing that caught it was a probe neither the orchestrator nor the worker can run.** The
+preview is behind Deployment Protection; Dean ran it signed in. **That is the strongest available
+argument for LUKE-164**, which he declined this morning on a weaker one.
+
+**Reverted.** Dean flipped back to **Vite**. One production deploy failed inside the window — `cc40d425`,
+another workstream's merge, exactly the cost stated in advance. **The revert is confirmed by a real
+deploy rather than assumed:** `3f5dae42` (#1170) deployed production successfully at 21:24:05Z, probed
+cache-busted at 21:25Z — page 200, `/api/brain/capabilities` 401, `/api/observation/tick` 401,
+`/api/devices` 405, `/api/brain/ask` 405, **`/eve/v1/health` 404** (eve is not deployed under Vite, as it
+should not be). Production is on main's head.
+
+**Two corrections to my own framing, both mine.**
+
+**The sitting's cost was not "one transient failed deploy per merge in the window".** That was true and
+incomplete. **The real cost was that #1018 was not ready to merge at all** — the window existed for a PR
+that would have served a site with no API. **The flip was not the risk; the unverified PR was.** The order
+is: **prove the PR serves, then open a window.**
+
+**And the premise was never verified.** Everything today was verified except whether **one project with
+two services** is the right shape at all. The alternative — **two Vercel projects**, web and eve, each
+with its own preset and build — **dissolves this entire failure class**: no preset-versus-key coupling,
+no `api_dir_ignored`, no Build Output writer, no owning our own dependency tracing. Two signals that it
+may be the intended shape: `LUKE_EVE_ORIGIN` already reads from the environment **with the request origin
+as its default**, and Vercel's own CLI calls the feature **`experimentalServicesV2`**. **Under
+investigation from eve's and Vercel's documentation; the Build Output writer is halted until it is
+answered, because it is work that exists only to make one project hold two services.**
