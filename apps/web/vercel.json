@@ -1,23 +1,25 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
   "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json",
   "functions": {
-    "api/brain/v2/respond.ts": {
+    "api/brain/v2/respond.js": {
       "maxDuration": 120
     },
-    "api/brain/v2/count-tokens.ts": {
+    "api/brain/v2/count-tokens.js": {
       "maxDuration": 120
     },
-    "api/brain/v2/embed.ts": {
+    "api/brain/v2/embed.js": {
       "maxDuration": 60
     },
-    "api/observation/tick.ts": {
+    "api/observation/tick.js": {
       "maxDuration": 60
     },
-    "api/voice/sessions.ts": {
+    "api/voice/sessions.js": {
       "maxDuration": 800
     },
-    "api/voice/introduction.ts": {
+    "api/voice/introduction.js": {
       "maxDuration": 800
     }
   },
@@ -30,11 +32,11 @@
   "routes": [
     {
       "src": "/api/auth/(.*)",
-      "dest": "/api/auth/[...all].ts"
+      "dest": "/api/auth/[...all].js"
     },
     {
       "src": "/api/conversation/messages/([^/]+)/rating",
-      "dest": "/api/conversation/messages/rating.ts?id=$1"
+      "dest": "/api/conversation/messages/rating.js?id=$1"
     },
     {
       "src": "/about",

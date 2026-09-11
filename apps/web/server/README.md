@@ -30,7 +30,7 @@ The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GITHUB_CLIENT_SECRET`.
 
 `vercel.json` uses a legacy `routes` entry for `/api/auth/(.*)` because Vercel's
-zero-config `api/` detection treats `[...all].ts` as a single dynamic segment and
+zero-config `api/` detection treats `[...all].js` as a single dynamic segment and
 adds a hard 404 for deeper API paths. A `rewrites` entry runs after that detected
 filesystem routing phase, so it cannot reach the Better Auth handler; keep this
 rule in `routes`, ahead of the detected routes.
@@ -66,8 +66,14 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests
 `user:email`, because Luke requires an email address for its account snapshot.
 
-`api/feedback.mjs` deliberately remains plain ESM so Vercel's builder has nothing
-to transpile.
+Every function Vercel deploys is plain ESM. The route sources live under
+`server/routes/`, mirroring the `api/` tree, and `scripts/bundle-functions.ts`
+bundles them into `api/**/*.js` (gitignored) as the last step of `pnpm build`,
+with the workspace packages inlined and this app's declared runtime dependencies
+left external. Handed TypeScript, the builder compiled every function's whole
+import graph separately, and those thirty-odd passes were most of a deploy's
+build time. `api/feedback.mjs` is the one hand-written function and stays plain
+ESM for the same reason.
 
 ## Signing in on a Preview deployment
 

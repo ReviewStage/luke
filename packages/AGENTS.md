@@ -71,9 +71,7 @@ dispatch.
 ## The graph is acyclic, and stays that way
 
 Every package declares exactly the packages its own sources reach by bare
-specifier — not one reached only through `apps/web/server/core.ts`'s relative
-doors, which pull a package into the compiler's graph without asking the
-resolver for it — and the graph has no cycles, checked by
+specifier, and the graph has no cycles, checked by
 `pnpm --recursive run typecheck` from a clean `node_modules`, which resolves
 workspace links strictly.
 
@@ -110,24 +108,18 @@ at run time, a break no build sees and production reports only as
 `FUNCTION_INVOCATION_FAILED`. `repository-checks.sh` enforces it across every
 `packages/*/src`.
 
-## The server reaches packages through doors, not by name
+## The server's functions are bundled, and reach packages by name
 
-`apps/web/server/core.ts` imports each package it reaches by relative path, for
-the same reason: Vercel compiles the relative graph but leaves `package.json`
-alone. Two halves follow from that, and only both together make a function
-load.
-
-Every package in the *transitive* closure needs a door, not only the ones the
-server names. The closure crosses package boundaries by bare specifier at
-almost every hop, and a package reached only through another package's imports
-is one whose sources compilation never visits. Packages the server names get
-`export *`; packages reached only through another get a bare side-effect
-import, which pulls the file into the compile graph without widening the
-export namespace, where `export *` can silently drop a name two doors both
-export. Where two doors genuinely both have to carry a name — `ACTION_KIND`, which
-the action table names in full and the session package names its advertised subset
-of — the door that carries the whole of it re-exports the name explicitly,
-which takes precedence over both stars.
+`apps/web/server/routes/` holds the function sources, and
+`apps/web/scripts/bundle-functions.ts` bundles each into a plain ESM file under
+`apps/web/api/` as the last step of the web build, with every workspace package
+inlined and only the web app's own declared runtime dependencies left external.
+Vercel's builder is handed JavaScript and only traces those externals, which is
+why server code names packages by bare specifier like everything else and why
+`apps/web/package.json` declares each one it names. Handed TypeScript instead,
+the builder runs its own compiler over every function's whole import graph
+separately, under options that are not this repository's, and that pass was
+most of a deploy's build time.
 
 Every package's `exports` names `./src/index.js`, never `./src/index.ts`. It is
 the same rule as the one above, one level up: post-compile the `.js` target is
@@ -136,9 +128,10 @@ substitute the `.ts` back. A `.ts` target resolves to a file that compilation
 has replaced. `exports` is what a runtime resolver follows, so it names the
 compiled shape; `types` is what the compiler reads directly and stays `.ts`.
 
-Neither half is reported by anything local. Typecheck, `check.sh`, CI, and
-local dev all pass with a door missing or an `exports` target stale; the
-failure is a `FUNCTION_INVOCATION_FAILED` on a deployed route.
+A dependency a bundled package reaches that the web app never declared would
+resolve nowhere at run time, so the bundle step refuses any import that
+resolved external and is not one of those declared dependencies or a Node
+builtin.
 
 ## A barrel is an all-or-nothing door
 

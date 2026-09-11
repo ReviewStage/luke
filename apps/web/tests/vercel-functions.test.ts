@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { vercelFunctionFile } from "./vercel-function-file.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
@@ -15,14 +16,10 @@ const vercel: { functions: Record<string, { maxDuration?: number }> } = JSON.par
   readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
 );
 
-function functionFile(path: string): string {
-  return `${path.replace(/^\//, "")}.ts`;
-}
-
 test("both voice functions carry the 800 second maximum duration", () => {
   for (const path of Object.values(VOICE_SERVICE_PATH)) {
     assert.equal(
-      vercel.functions[functionFile(path)]?.maxDuration,
+      vercel.functions[vercelFunctionFile(path)]?.maxDuration,
       VOICE_FUNCTION_MAX_DURATION_SECONDS,
     );
   }

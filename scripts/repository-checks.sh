@@ -325,47 +325,30 @@ if [[ -n "$snaps_outside_history" ]]; then
     exit 1
 fi
 
-# Every package the web functions reach must have its own door in
-# server/core.ts. The Vercel builder compiles the TypeScript its *relative*
-# import graph reaches, but a bare `@sidecar/…` specifier it cannot follow: the
-# package's `exports` names `./src/index.js`, a file that exists only after
-# compilation, so the builder skips the package and ships functions whose
-# runtime import has nothing to resolve to. Nothing local reports the absence —
-# every toolchain in this repository substitutes the `.ts` back — so the first
-# report is FUNCTION_INVOCATION_FAILED on every deployed route, which is how
-# adding one `export * from "@sidecar/actions"` inside an already-doored package
-# took down sign-in. The closure is computed here from the doors' own bare
-# imports so the door list cannot fall behind the graph it exists to cover.
-core_doors_file="$SIDECAR_REPO_ROOT/apps/web/server/core.ts"
-doored_packages=$(grep -oE '"\.\./\.\./\.\./packages/[a-z-]+/src/index\.js"' "$core_doors_file" |
-    sed -E 's#.*/packages/([a-z-]+)/.*#\1#' | sort -u)
-reached_packages=$doored_packages
-frontier=$doored_packages
-while [[ -n "$frontier" ]]; do
-    next_frontier=""
-    for package_name in $frontier; do
-        imported=$(grep -rhoE --include='*.ts' --exclude='*.test.ts' \
-            '(from|import) "@sidecar/[a-z-]+"' \
-            "$SIDECAR_REPO_ROOT/packages/$package_name/src" 2>/dev/null |
-            sed -E 's#.*"@sidecar/([a-z-]+)"#\1#' | sort -u || true)
-        for imported_name in $imported; do
-            if ! grep -qx "$imported_name" <<<"$reached_packages"; then
-                reached_packages=$(printf '%s\n%s' "$reached_packages" "$imported_name")
-                next_frontier="$next_frontier $imported_name"
-            fi
-        done
-    done
-    frontier=$next_frontier
-done
-undoored_packages=""
-while IFS= read -r reached_name; do
-    if ! grep -qx "$reached_name" <<<"$doored_packages"; then
-        undoored_packages+="$reached_name"$'\n'
+# The web functions are bundled from server/routes/ into api/ with every
+# workspace package inlined, so a bare `@sidecar/…` specifier is resolved by
+# esbuild at build time from apps/web's own node_modules. pnpm links there only
+# what apps/web/package.json declares, so a specifier the web app's sources name
+# without declaring resolves in a developer's hoisted tree, typechecks, and
+# fails the deploy's bundle step, or, for the Vite client, ships a bundle that
+# happened to resolve through another package's link. Declare what is named.
+web_manifest="$SIDECAR_REPO_ROOT/apps/web/package.json"
+declared_web_packages=$(grep -oE '"@sidecar/[a-z-]+": "workspace:\*"' "$web_manifest" |
+    sed -E 's#"@sidecar/([a-z-]+)".*#\1#' | sort -u)
+named_web_packages=$(grep -rhoE --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
+    '(from|import) "@sidecar/[a-z-]+(/[a-z-]+)?"' \
+    "$SIDECAR_REPO_ROOT/apps/web/server" "$SIDECAR_REPO_ROOT/apps/web/src" "$SIDECAR_REPO_ROOT/apps/web/scripts" |
+    sed -E 's#.*"@sidecar/([a-z-]+).*"#\1#' | sort -u)
+undeclared_web_packages=""
+while IFS= read -r named_name; do
+    [[ -z "$named_name" ]] && continue
+    if ! grep -qx "$named_name" <<<"$declared_web_packages"; then
+        undeclared_web_packages+="$named_name"$'\n'
     fi
-done <<<"$(sort -u <<<"$reached_packages")"
-if [[ -n "$undoored_packages" ]]; then
-    printf 'error: apps/web/server/core.ts is missing a door for packages its import graph reaches (the Vercel builder cannot follow bare @sidecar specifiers, so deployed functions crash at module load):\n%s\n' \
-        "$undoored_packages" >&2
+done <<<"$named_web_packages"
+if [[ -n "$undeclared_web_packages" ]]; then
+    printf 'error: apps/web names workspace packages its package.json does not declare (the function bundle resolves bare @sidecar specifiers from apps/web/node_modules, which pnpm links from the declared dependencies alone):\n%s\n' \
+        "$undeclared_web_packages" >&2
     exit 1
 fi
 

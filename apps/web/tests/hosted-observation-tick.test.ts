@@ -10,6 +10,7 @@ import {
   OBSERVATION_TICK_PATH,
   type ObservationTickOptions,
 } from "../server/hosted/observation-tick";
+import { vercelFunctionFile } from "./vercel-function-file";
 
 const CRON_SECRET = "cron-secret-1";
 const ENCRYPTION_SECRET = "a".repeat(64);
@@ -195,7 +196,7 @@ test("the budget leaves headroom under the function cap, and the cron entry name
   };
   assert.deepEqual(vercel.crons, [{ path: OBSERVATION_TICK_PATH, schedule: "* * * * *" }]);
   assert.equal(
-    vercel.functions[`${OBSERVATION_TICK_PATH.slice(1)}.ts`]?.maxDuration,
+    vercel.functions[vercelFunctionFile(OBSERVATION_TICK_PATH)]?.maxDuration,
     OBSERVATION_TICK.MAX_DURATION_SECONDS,
   );
 });
