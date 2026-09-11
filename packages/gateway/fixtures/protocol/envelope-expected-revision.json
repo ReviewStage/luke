@@ -1,0 +1,37 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-with-expected-revision",
+    "method": "run.submit",
+    "params": {
+      "case": "run.submit",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-run-submit",
+    "expectedRevision": {
+      "sessionKey": "agent:main:main",
+      "sessionRevision": "generation-1",
+      "configurationRevision": 7
+    }
+  },
+  "response": {
+    "id": "request-with-expected-revision",
+    "ok": true,
+    "result": {
+      "answered": "run.submit"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

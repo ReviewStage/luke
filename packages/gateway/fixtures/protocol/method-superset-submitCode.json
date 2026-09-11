@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-superset-submitCode",
+    "method": "superset.submitCode",
+    "params": {
+      "case": "superset.submitCode",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-superset-submitCode"
+  },
+  "response": {
+    "id": "request-superset-submitCode",
+    "ok": true,
+    "result": {
+      "answered": "superset.submitCode"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

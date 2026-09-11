@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-session-executeControl",
+    "method": "session.executeControl",
+    "params": {
+      "case": "session.executeControl",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-session-executeControl"
+  },
+  "response": {
+    "id": "request-session-executeControl",
+    "ok": true,
+    "result": {
+      "answered": "session.executeControl"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

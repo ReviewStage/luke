@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-account-cancelSignIn",
+    "method": "account.cancelSignIn",
+    "params": {
+      "case": "account.cancelSignIn",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-account-cancelSignIn"
+  },
+  "response": {
+    "id": "request-account-cancelSignIn",
+    "ok": true,
+    "result": {
+      "answered": "account.cancelSignIn"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

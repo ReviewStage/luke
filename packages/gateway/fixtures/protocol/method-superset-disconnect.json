@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-superset-disconnect",
+    "method": "superset.disconnect",
+    "params": {
+      "case": "superset.disconnect",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-superset-disconnect"
+  },
+  "response": {
+    "id": "request-superset-disconnect",
+    "ok": true,
+    "result": {
+      "answered": "superset.disconnect"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

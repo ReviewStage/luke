@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-run-cancel",
+    "method": "run.cancel",
+    "params": {
+      "case": "run.cancel",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-run-cancel"
+  },
+  "response": {
+    "id": "request-run-cancel",
+    "ok": true,
+    "result": {
+      "answered": "run.cancel"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

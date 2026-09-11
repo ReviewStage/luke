@@ -1,0 +1,31 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-run-list",
+    "method": "run.list",
+    "params": {
+      "case": "run.list",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    }
+  },
+  "response": {
+    "id": "request-run-list",
+    "ok": true,
+    "result": {
+      "answered": "run.list"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

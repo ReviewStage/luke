@@ -1,0 +1,31 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-reconnect-past-window",
+    "method": "gateway.reconnect",
+    "params": {
+      "lastSequence": 1
+    }
+  },
+  "response": {
+    "id": "request-reconnect-past-window",
+    "ok": true,
+    "result": {
+      "kind": "snapshot",
+      "sequence": 5,
+      "snapshot": {
+        "kind": "snapshot",
+        "rows": [
+          {
+            "id": "row-1",
+            "state": "idle"
+          }
+        ]
+      }
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 5
+    }
+  }
+}

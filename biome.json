@@ -13,6 +13,7 @@
       "!!**/.agents",
       "!apps/ios",
       "apps/ios/*.test.mjs",
+      "!packages/gateway/fixtures",
       "!packages/session/fixtures"
     ]
   },

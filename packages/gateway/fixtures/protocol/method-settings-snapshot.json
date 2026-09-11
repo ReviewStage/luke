@@ -1,0 +1,31 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-settings-snapshot",
+    "method": "settings.snapshot",
+    "params": {
+      "case": "settings.snapshot",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    }
+  },
+  "response": {
+    "id": "request-settings-snapshot",
+    "ok": true,
+    "result": {
+      "answered": "settings.snapshot"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

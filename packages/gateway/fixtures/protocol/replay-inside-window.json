@@ -1,0 +1,53 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-reconnect-inside-window",
+    "method": "gateway.reconnect",
+    "params": {
+      "lastSequence": 2
+    }
+  },
+  "response": {
+    "id": "request-reconnect-inside-window",
+    "ok": true,
+    "result": {
+      "kind": "replay",
+      "events": [
+        {
+          "eventId": "event-3",
+          "sequence": 3,
+          "kind": "sessions.changed",
+          "at": 1700000003000,
+          "payload": {
+            "sessions": []
+          }
+        },
+        {
+          "eventId": "event-4",
+          "sequence": 4,
+          "kind": "conversation.changed",
+          "at": 1700000004000,
+          "sessionKey": "agent:main:main",
+          "payload": {
+            "lines": 1
+          }
+        },
+        {
+          "eventId": "event-5",
+          "sequence": 5,
+          "kind": "runs.changed",
+          "at": 1700000005000,
+          "sessionKey": "agent:main:main",
+          "runId": "run-1",
+          "payload": {
+            "runs": 1
+          }
+        }
+      ]
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 5
+    }
+  }
+}

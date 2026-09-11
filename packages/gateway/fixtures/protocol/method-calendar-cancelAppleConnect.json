@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-calendar-cancelAppleConnect",
+    "method": "calendar.cancelAppleConnect",
+    "params": {
+      "case": "calendar.cancelAppleConnect",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-calendar-cancelAppleConnect"
+  },
+  "response": {
+    "id": "request-calendar-cancelAppleConnect",
+    "ok": true,
+    "result": {
+      "answered": "calendar.cancelAppleConnect"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

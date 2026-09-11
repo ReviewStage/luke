@@ -1,0 +1,33 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-session-sendMessage",
+    "method": "session.sendMessage",
+    "params": {
+      "case": "session.sendMessage",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-session-sendMessage"
+  },
+  "response": {
+    "id": "request-session-sendMessage",
+    "ok": false,
+    "error": {
+      "code": "refused",
+      "message": "<message>"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

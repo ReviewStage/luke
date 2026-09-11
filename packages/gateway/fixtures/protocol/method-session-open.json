@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-session-open",
+    "method": "session.open",
+    "params": {
+      "case": "session.open",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-session-open"
+  },
+  "response": {
+    "id": "request-session-open",
+    "ok": true,
+    "result": {
+      "answered": "session.open"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

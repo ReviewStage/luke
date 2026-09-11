@@ -1,0 +1,31 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-calendar-appleAccessStatus",
+    "method": "calendar.appleAccessStatus",
+    "params": {
+      "case": "calendar.appleAccessStatus",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    }
+  },
+  "response": {
+    "id": "request-calendar-appleAccessStatus",
+    "ok": true,
+    "result": {
+      "answered": "calendar.appleAccessStatus"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

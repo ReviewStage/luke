@@ -1,0 +1,22 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-voice-createLiveSession",
+    "method": "voice.createLiveSession",
+    "params": {
+      "sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
+    },
+    "idempotencyKey": "key-voice-createLiveSession"
+  },
+  "response": {
+    "id": "request-voice-createLiveSession",
+    "ok": true,
+    "result": {
+      "answered": "voice.createLiveSession"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}
