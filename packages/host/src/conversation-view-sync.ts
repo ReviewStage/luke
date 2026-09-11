@@ -121,6 +121,13 @@ export class ConversationViewSync {
   /** The latest speech event on each message, by the message's id; a rating is not one. */
   readonly #speech = new Map<string, HeldSpeechEvent>();
   #cursors: ConversationReadCursors = {};
+  /**
+   * Where the view's window starts on this device: the latest instant a main
+   * opened, as the pages or a confirmed Clear said. It only ever moves
+   * forward, so a page read before a Clear and landing after it cannot fold
+   * the stamped main back in.
+   */
+  #windowStart = 0;
   #settled = false;
   #unreadable: UnreadableRow | undefined;
   #revision = 0;
@@ -143,8 +150,6 @@ export class ConversationViewSync {
   applyMessages(page: ReadMessagesPage): void {
     const standing = new Set(page.conversations.map((conversation) => conversation.id));
     let moved = this.#dropOutside(standing);
-    const openedAt = mainOpenedAt(page.conversations);
-    if (openedAt !== undefined && this.#dropObservedBefore(openedAt)) moved = true;
     for (const group of page.groups) {
       const held = this.#groups.get(group.turnId) ?? {
         conversationId: group.conversationId,
@@ -165,6 +170,8 @@ export class ConversationViewSync {
       }
       this.#groups.set(group.turnId, held);
     }
+    // After the merge, so a page's own rows from before the window are held to it too.
+    if (this.#openWindow(mainOpenedAt(page.conversations))) moved = true;
     this.#cursors = { ...this.#cursors, messages: page.next };
     if (this.#unreadable !== undefined) {
       this.#unreadable = undefined;
@@ -217,20 +224,14 @@ export class ConversationViewSync {
 
   /**
    * Takes a Clear the service confirmed to this picture from the answer
-   * alone: every group of the main — the one standing was the one stamped,
-   * whatever its id — and every observed group from before the new main
-   * opened, exactly what the next read would no longer list. The read still
-   * follows to move the cursors; the screen does not wait on it landing.
+   * alone: the window now starts where the new main opened, so the stamped
+   * main's groups and every observed group from before that instant go,
+   * exactly what the next read would no longer list, and a page a pass read
+   * before the Clear cannot bring them back. The read still follows to move
+   * the cursors; the screen does not wait on it landing.
    */
   applyClear(openedAt: number): void {
-    let moved = false;
-    for (const [turnId, group] of this.#groups) {
-      if (group.source.kind !== CONVERSATION_VIEW_SOURCE.MAIN) continue;
-      this.#groups.delete(turnId);
-      moved = true;
-    }
-    if (this.#dropObservedBefore(openedAt)) moved = true;
-    if (moved) this.#revision += 1;
+    if (this.#openWindow(openedAt)) this.#revision += 1;
   }
 
   /** The service named a row it could not read back; the thread stands as last read and says so. */
@@ -253,6 +254,7 @@ export class ConversationViewSync {
     this.#turns.clear();
     this.#speech.clear();
     this.#cursors = {};
+    this.#windowStart = 0;
     this.#settled = false;
     this.#unreadable = undefined;
     this.#revision += 1;
@@ -313,18 +315,22 @@ export class ConversationViewSync {
   }
 
   /**
-   * The view's window starts where the current main opened. An observed
-   * conversation's crossing rows from before that instant belonged to the
-   * main a Clear stamped, and the service no longer sends them; a device that
-   * drew them before the Clear lets them go here, even though the
-   * conversation they came from still stands and keeps its own context.
+   * Moves the window's start forward to where a main opened, never back, and
+   * lets go of every group whose latest message predates it: the stamped
+   * main's own rows, and an observed conversation's crossing rows from before
+   * the current main, which belonged to the main a Clear stamped and which
+   * the service no longer sends. A device that drew them before the Clear
+   * drops them here, whether the instant arrived on a page or on the Clear's
+   * own answer, and a page from before the Clear that lands after it is held
+   * to the same start; the observed conversation itself still stands and
+   * keeps its own context.
    */
-  #dropObservedBefore(openedAt: number): boolean {
+  #openWindow(openedAt: number | undefined): boolean {
+    if (openedAt !== undefined && openedAt > this.#windowStart) this.#windowStart = openedAt;
     let dropped = false;
     for (const [turnId, group] of this.#groups) {
-      if (group.source.kind !== CONVERSATION_VIEW_SOURCE.OBSERVED) continue;
       const latest = Math.max(...[...group.messages.values()].map((message) => message.createdAt));
-      if (latest >= openedAt) continue;
+      if (latest >= this.#windowStart) continue;
       this.#groups.delete(turnId);
       dropped = true;
     }

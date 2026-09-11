@@ -423,4 +423,18 @@ test("a Clear the service confirmed empties the picture from the answer alone: m
   const cleared = sync.revision;
   sync.applyClear(NOW + 10_000);
   assert.equal(sync.revision, cleared);
+  // A page a pass read before the Clear, landing after it, lists the stamped
+  // main as it stood; the window does not move back for it, and its rows drop on arrival.
+  sync.applyMessages(
+    page(
+      [mainGroup(turnId(2), [ask(2, 2, "stale", NOW + 1)]), observedGroup(turnId(13), NOW + 2)],
+      "c2",
+      [MAIN, OBSERVED],
+    ),
+  );
+  assert.deepEqual(
+    sync.snapshot().groups.map((group) => group.turnId),
+    [turnId(12)],
+  );
+  assert.equal(sync.cursors().messages, "c2");
 });

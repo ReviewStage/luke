@@ -282,12 +282,24 @@ test("a Clear answers only after a poll that began after it has published, even 
   await clearing;
 });
 
-test("a Clear the service took empties the picture even when the read after it does not land", async () => {
+test("a Clear the service took empties the picture even when the read after it does not land, and a pass that read before it cannot bring the thread back", async () => {
   const { composer, client, views } = harness();
   await composer.loop.refresh();
   assert.equal(views().at(-1)?.groups.length, 1);
+  // A pass read the pre-Clear page and is held there; it lands after the Clear.
+  let release: () => void = () => undefined;
+  client.messagesGate = new Promise<void>((resolve) => {
+    release = () => resolve();
+  });
+  client.messagesAnswer = ok(messagesAnswer("hello", "messages-later"));
+  const held = composer.loop.refresh();
+  const clearing = clear(composer);
+  // Every read after the Clear fails.
   client.messagesAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
-  assert.equal(await clear(composer), true);
+  client.messagesGate = Promise.resolve();
+  release();
+  await held;
+  assert.equal(await clearing, true);
   assert.deepEqual(composer.snapshot().groups, []);
   assert.deepEqual(views().at(-1)?.groups, []);
 });
