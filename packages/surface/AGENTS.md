@@ -16,3 +16,11 @@ set. What this package generates is only the wording and the ranking —
 `URGENCY_LABEL`, `urgencyLabel`, `URGENCY_PRIORITY`, `compareSessionsByUrgency`
 — so the marketing mock cannot advertise a different sentence or a different
 top row than the product draws.
+
+`geometry.ts`'s `PANEL_FORM_FACTOR` is this package's one wire-facing vocabulary:
+`PanelFormFactorSchema` is declared beside the `as const` object as a
+`Schema.Literal` over its values, and `isPanelFormFactor` is that schema's own
+`Schema.is`, following `@sidecar/session`'s vocabulary-schema shape. The
+generated files above name no guard and stay untouched by this: they hold
+drawing tables the render layer indexes by a known key, never a value read
+from persisted or renderer-supplied data.

@@ -1,4 +1,5 @@
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { Schema } from "effect";
 import {
   BUBBLE_LIFT,
   PANEL_MAX_HEIGHT,
@@ -52,11 +53,13 @@ export type PanelFormFactor = (typeof PANEL_FORM_FACTOR)[keyof typeof PANEL_FORM
 
 export const PANEL_FORM_FACTOR_LIST: readonly PanelFormFactor[] = Object.values(PANEL_FORM_FACTOR);
 
+export const PanelFormFactorSchema = Schema.Literal(...Object.values(PANEL_FORM_FACTOR));
+
+const readsPanelFormFactor = Schema.is(PanelFormFactorSchema);
+
 /** Guards a form factor arriving from persisted or renderer-supplied data. */
 export function isPanelFormFactor(value: UnparsedWireValue): value is PanelFormFactor {
-  if (!isWireString(value)) return false;
-  // SAFETY: value is a string; list membership is the form-factor vocabulary contract check.
-  return PANEL_FORM_FACTOR_LIST.includes(value as PanelFormFactor);
+  return readsPanelFormFactor(value);
 }
 
 export const DEFAULT_PANEL_FORM_FACTOR: PanelFormFactor = PANEL_FORM_FACTOR.BUBBLE;
