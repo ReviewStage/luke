@@ -18,7 +18,8 @@
       "!packages/gateway/fixtures",
       "!packages/hosted/fixtures",
       "!packages/live/fixtures",
-      "!packages/session/fixtures"
+      "!packages/session/fixtures",
+      "!tools/trace-export/fixtures"
     ]
   },
   "formatter": {

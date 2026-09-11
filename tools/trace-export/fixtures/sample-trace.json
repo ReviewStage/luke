@@ -1,0 +1,84 @@
+{
+  "trace_id": "sample-trace",
+  "timestamp": "2026-01-01T00:00:00.000Z",
+  "name": "sample-trace",
+  "total_tokens": {
+    "input": 128,
+    "output": 0
+  },
+  "total_cost": 0,
+  "session_seconds": 6,
+  "events": [
+    {
+      "type": "generation",
+      "name": "session",
+      "model": "gpt-live-1-preview",
+      "provider": "openai",
+      "metrics": {
+        "latency": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "cost": 0
+      },
+      "available_tools": [],
+      "messages": [
+        {
+          "role": "user",
+          "content": "Is the sample workspace ready?"
+        }
+      ]
+    },
+    {
+      "type": "generation",
+      "name": "dlg_sample",
+      "model": "gpt-live-1-preview",
+      "provider": "openai",
+      "metrics": {
+        "latency": 2,
+        "tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "cost": 0
+      },
+      "available_tools": [],
+      "messages": [
+        {
+          "role": "user",
+          "content": "Is the sample workspace ready?"
+        },
+        {
+          "role": "assistant",
+          "content": "The sample workspace is ready."
+        }
+      ]
+    },
+    {
+      "type": "generation",
+      "name": "brain-turn",
+      "model": "gpt-5.6-terra",
+      "provider": "openai",
+      "metrics": {
+        "latency": 0.042,
+        "tokens": {
+          "input": 128,
+          "output": 0
+        },
+        "cost": 0
+      },
+      "available_tools": [],
+      "messages": [
+        {
+          "role": "user",
+          "content": "trigger: ask\ninput items: message\ntranscript bytes: 256"
+        },
+        {
+          "role": "assistant",
+          "content": "The sample workspace is ready."
+        }
+      ]
+    }
+  ]
+}

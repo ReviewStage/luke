@@ -8,9 +8,10 @@
  * for runs locally too.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { unboxTraceFromLines } from "./unbox-export.js";
+import { NodeFileSystem, NodeRuntime } from "@effect/platform-node";
+import { Effect } from "effect";
+import { unboxExportEffect } from "./run.js";
 
 const [source, destination] = process.argv.slice(2);
 if (!source) {
@@ -25,13 +26,11 @@ if (!source) {
 // of where the developer actually stood.
 const invocationDirectory = process.env.INIT_CWD ?? process.cwd();
 const sourcePath = path.resolve(invocationDirectory, source);
-const lines = (await readFile(sourcePath, "utf8")).split("\n");
-const trace = unboxTraceFromLines(lines, { name: path.basename(sourcePath, ".jsonl") });
-const document = `${JSON.stringify(trace, undefined, 2)}\n`;
-if (destination) {
-  const destinationPath = path.resolve(invocationDirectory, destination);
-  await writeFile(destinationPath, document);
-  process.stderr.write(`Wrote ${destinationPath}\n`);
-} else {
-  process.stdout.write(document);
-}
+
+NodeRuntime.runMain(
+  unboxExportEffect(
+    sourcePath,
+    destination ? { path: path.resolve(invocationDirectory, destination) } : { stdout: true },
+    { name: path.basename(sourcePath, ".jsonl") },
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
