@@ -404,6 +404,62 @@ async function populate(userId: string) {
   return { main, observed, turns: { typed, roster, later, idle }, messages: { look }, expected };
 }
 
+/** The provider slot a reasoning part keeps its opaque replay item under, as the brain writes it. */
+const REPLAY_SLOT = {
+  openai: { itemId: "rs_fixture_0f3a1c22", reasoningEncryptedContent: "Zml4dHVyZS1vcGFxdWU=" },
+};
+
+test("a message's replay slot never leaves the service, and the stored row keeps it", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(userId);
+  const typed = await insertTurn(userId, main);
+  await insertMessage(userId, main, 1, { turnId: typed });
+  const reply = await insertMessage(userId, main, 2, {
+    turnId: typed,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    parts: [
+      { type: "step-start" },
+      {
+        type: "reasoning",
+        text: "Read the tail first.",
+        state: "done",
+        providerMetadata: REPLAY_SLOT,
+      },
+      {
+        type: "text",
+        text: "It is waiting.",
+        state: "done",
+        providerMetadata: { openai: { itemId: "msg_1" } },
+      },
+    ],
+  });
+
+  const response = await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)));
+  assert.equal(response.status, 200);
+  // SAFETY: the response body is the route's own JSON, walked as the bytes a device would parse.
+  const body = (await response.json()) as {
+    groups: { messages: { message: { id: string; parts: Record<string, unknown>[] } }[] }[];
+  };
+  const parts = body.groups.flatMap((group) => group.messages.flatMap((row) => row.message.parts));
+  assert.equal(parts.length, 4);
+  assert.deepEqual(
+    parts.map((part) => "providerMetadata" in part),
+    [false, false, false, false],
+  );
+  assert.deepEqual(
+    parts.filter((part) => part.type === "reasoning"),
+    [{ type: "reasoning", text: "Read the tail first.", state: "done" }],
+  );
+
+  const [stored] = await database.db.select().from(messages).where(eq(messages.id, reply));
+  assert.ok(stored);
+  // SAFETY: the parts column is jsonb, read back as the JSON the test wrote.
+  const storedParts = stored.parts as Record<string, unknown>[];
+  assert.deepEqual(storedParts[1]?.providerMetadata, REPLAY_SLOT);
+  assert.deepEqual(storedParts[2]?.providerMetadata, { openai: { itemId: "msg_1" } });
+});
+
 test("the gate order is method, bearer, and query, and every refusal is one shape", async () => {
   const userId = await database.createUser();
   for (const [path, handle] of [

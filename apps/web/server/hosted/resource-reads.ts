@@ -1,6 +1,7 @@
 import {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
+  type ClientUIMessage,
   CONVERSATION_VIEW_SOURCE,
   type ConversationEventsAnswer,
   type ConversationMessagesAnswer,
@@ -13,13 +14,13 @@ import {
   type ConversationViewSource,
   type ConversationViewStoredMessage,
   type ConversationViewTurn,
+  clientUIMessage,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
   READ_PAGE_BOUNDS,
   readLimitSchema,
   type Schema,
   type SequenceReadCursor,
-  type StoredUIMessage,
   selectConversationView,
   sequenceReadCursorSchema,
   type TurnReadCursor,
@@ -321,9 +322,14 @@ function viewEvent(event: StoredEventRecord): ConversationViewEvent {
   return { messageId: event.messageId, kind: event.kind, seq: event.seq };
 }
 
-/** The wire's message with the stored row in place of the record the wire admits; the JSON is the same. */
+/**
+ * The wire's message with the stored row, in the one shape a route may hand a
+ * device, in place of the record the wire admits; the JSON is the same. The
+ * shape is minted by the strip alone, so a stored row cannot reach this
+ * answer with its replay slot still on it.
+ */
 type ServerReadMessage = Omit<ConversationReadMessage, "message"> & {
-  readonly message: StoredUIMessage;
+  readonly message: ClientUIMessage;
 };
 
 type ServerTurnGroup = Omit<ConversationReadTurnGroup, "messages"> & {
@@ -413,7 +419,7 @@ export async function handleConversationMessages(options: ResourceReadOptions): 
         source: viewSource(conversation),
         ...(group.turn ? { turn: group.turn } : undefined),
         messages: group.messages.map((message) => ({
-          message: message.message,
+          message: clientUIMessage(message.message),
           seq: message.seq,
           createdAt: message.createdAt,
           tools: message.tools,
