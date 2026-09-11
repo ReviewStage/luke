@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 import { isActionResult } from "./action-result.js";
 
 test("the action result guard accepts exactly the canonical status shapes", () => {
