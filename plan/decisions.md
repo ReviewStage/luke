@@ -2963,3 +2963,46 @@ and wakes nothing**, which means:
 **The trade is in the PR body.** A one-time transitional read of `roster_diff` would lose nothing, at
 the price of keeping a read of a table about to be dropped and a second cleanup to remove it. **Not
 taken, and the reason is recorded rather than the choice alone.**
+
+
+## 2026-09-11 — The missing row: found, and it was never the opener's
+
+**`tests/hosted-resource-reads.test.ts:953`:**
+
+    await database.db.delete(messages).where(eq(messages.seq, 5));
+
+**No `conversation_id`. No `user_id`.** On CI's **one shared Postgres** that deletes **message `seq` 5
+of every conversation in the database at that instant** — including the opener fixture's
+*"Fixture briefing 5."*, whose `speech.expired` event then goes by cascade or loses its join.
+
+**Locally each file has its own database, so no neighbour exists.** On CI it depends on
+`hosted-resource-reads` racing the opener suite. **Off by exactly one, the same row both times, never
+on demand, and untouched by every elimination — because every elimination was about the opener's own
+code and the offending statement is in a different file.**
+
+**Fourth instance of the cross-file hazard**, after C4's roster sweep scoping this morning.
+
+**What it cost.** Two CI failures on #1079, one on #1145, **two merge-queue evictions**, eight
+eliminations, three dead hypotheses of mine, a test-only instrumentation PR (#1147) — and the
+instrumentation is what found it, at **stage one**, on its first recurrence. The strengthened
+assertion did exactly what it was strengthened for: *the row is absent from the table itself, before
+any read.*
+
+**Production is clean, and this was checked rather than assumed:** the only production delete over
+these tables is soft-delete's purge by `deleted_at`, and every `sweepSpeech` / `pushSpeech` call in
+the suites passes `userIds`.
+
+**Two fixes, and the second is the one that matters.**
+
+**Now, one line:** scope that delete to the test's own conversation. C3 found it and takes it, rather
+than routing a one-line test-scoping fix through the file's owner while it is still evicting PRs.
+
+**Durably — LUKE-177: give each `test:store` file its own database on CI.** Scoping every statement is
+**discipline**, and discipline has now failed four times. A per-file database makes the class
+**unrepresentable**: a neighbour's unscoped delete cannot reach rows it cannot see. It also makes CI
+match the local shape, where PGlite already gives each file its own.
+
+**The general lesson, which is the day's own in a new place:** eight eliminations, all sound, all
+looking **inward**. The defect was in a file nobody had reason to open. **When every explanation about
+your own code is dead, the next question is not "what else could my code do" but "who else is in this
+database".**
