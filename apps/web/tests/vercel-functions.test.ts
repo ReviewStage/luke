@@ -5,7 +5,15 @@ import { fileURLToPath } from "node:url";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { build } from "esbuild";
 import { test } from "vitest";
-import { bundlesReaching, functionBundlePlan } from "../server/function-bundles";
+import {
+  bundlesReaching,
+  expectedExternals,
+  externalsByBundle,
+  externalsDrift,
+  FORBIDDEN_FUNCTION_EXTERNALS,
+  functionBundlePlan,
+  importChain,
+} from "../server/function-bundles";
 import { DISPATCH_QUERY } from "../server/function-dispatch";
 import {
   FUNCTION_GROUP,
@@ -136,11 +144,78 @@ test("every dispatched route has one rewrite onto its function, carrying the rou
  * shared module gained a value import reaching it, every function on
  * production failed at load while every check stayed green. The bundles are
  * built here as the build script builds them, unwritten, and the set of them
- * reaching eve is asserted to be exactly none.
+ * reaching any forbidden package is asserted to be exactly none.
  */
-test("no function bundle imports the eve package", { timeout: 60_000 }, async () => {
+test("no function bundle imports a forbidden package", { timeout: 60_000 }, async () => {
   const plan = await functionBundlePlan(WEB);
   const result = await build({ ...plan.options, write: false });
   assert.equal(Object.keys(result.metafile.outputs).length, plan.functions.length);
-  assert.deepEqual(bundlesReaching(result.metafile, "eve"), []);
+  for (const forbidden of Object.values(FORBIDDEN_FUNCTION_EXTERNALS)) {
+    assert.deepEqual(bundlesReaching(result.metafile, forbidden), []);
+  }
+});
+
+/**
+ * The whole map, not one package: every bundle's external set is the one the
+ * record holds. The outage deploy moved three externals on one edge and the
+ * eve check names one of them; this is the assertion that would have named
+ * all three, and it fails as data, naming the bundle and what it gained or
+ * lost, so a legitimate widening is a one-line edit to the record and a
+ * review moment rather than a silent change to what a function loads.
+ */
+test("every function bundle loads exactly the externals the record expects", {
+  timeout: 60_000,
+}, async () => {
+  const plan = await functionBundlePlan(WEB);
+  const result = await build({ ...plan.options, write: false });
+  const actual = externalsByBundle(result.metafile, WEB);
+  assert.deepEqual(Object.keys(actual).sort(), plan.functions.map((f) => `${f.file}.js`).sort());
+  assert.deepEqual(externalsDrift(await expectedExternals(WEB), actual), []);
+});
+
+/**
+ * The guard falsified on purpose: a route bundled with one value import into
+ * `agent/`, whose hooks value-import `defineState` from `eve/context` and are
+ * safe today only because no function bundle reaches them. Both checks must
+ * fail on that bundle, and the drift must carry the import chain to the
+ * module that brought eve in, or the guard is a belief rather than a check.
+ */
+test("a route that reaches agent/ fails both guards, naming the bundle and the import chain", {
+  timeout: 60_000,
+}, async () => {
+  const plan = await functionBundlePlan(WEB);
+  const probe = "devices-reaching-agent";
+  const { entryPoints: _entryPoints, outdir: _outdir, ...options } = plan.options;
+  const result = await build({
+    ...options,
+    write: false,
+    outfile: join(WEB, FUNCTION_BUNDLE_DIRECTORY, `${probe}.js`),
+    stdin: {
+      contents: 'import "./devices.ts";\nimport "../../agent/hooks/store.ts";\n',
+      resolveDir: join(WEB, "server", "routes"),
+      sourcefile: `${probe}.ts`,
+      loader: "ts",
+    },
+  });
+  const [outputPath, ...rest] = Object.keys(result.metafile.outputs);
+  assert.ok(outputPath);
+  assert.deepEqual(rest, []);
+
+  assert.deepEqual(bundlesReaching(result.metafile, FORBIDDEN_FUNCTION_EXTERNALS.EVE), [
+    outputPath,
+  ]);
+
+  const owner = plan.functions.find((definition) => definition.routes.includes("devices"));
+  assert.ok(owner);
+  const bundle = `${owner.file}.js`;
+  const probeExternals = externalsByBundle(result.metafile, WEB)[`${probe}.js`] ?? [];
+  // The record as it would stand had the route been recorded before the edge: everything the probe loads but eve.
+  const recorded = probeExternals.filter((specifier) => specifier !== "eve/context");
+  assert.deepEqual(externalsDrift({ [bundle]: recorded }, { [bundle]: probeExternals }), [
+    { bundle, added: ["eve/context"], removed: [] },
+  ]);
+
+  const chain = importChain(result.metafile, outputPath, "eve/context");
+  assert.equal(chain.at(-1), posix.join("agent", "hooks", "store.ts"));
+  assert.equal(chain.length >= 2, true);
 });
