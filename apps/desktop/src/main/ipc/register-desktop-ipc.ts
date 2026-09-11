@@ -102,13 +102,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...brainActRows({ operator: operator.operator }),
-    [ACT_KIND.SUPERSET_BEGIN_SIGN_IN]: () => operator.host.beginSupersetSignIn(),
-    [ACT_KIND.SUPERSET_SUBMIT_CODE]: ({ code }) => operator.host.submitSupersetSignInCode(code),
-    [ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION]: ({ slug }) =>
-      operator.host.chooseSupersetOrganization(slug),
-    [ACT_KIND.SUPERSET_REOPEN_SIGN_IN]: () => operator.host.reopenSupersetSignIn(),
-    [ACT_KIND.SUPERSET_CANCEL_SIGN_IN]: () => operator.host.cancelSupersetSignIn(),
-    [ACT_KIND.SUPERSET_DISCONNECT]: () => operator.host.disconnectSuperset(),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

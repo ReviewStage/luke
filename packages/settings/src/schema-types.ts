@@ -125,8 +125,6 @@ export interface SettingsVisibility {
   voiceControlsDrawn: boolean;
   /** Whether the Account section — and so the Provider section — stands. */
   accountDrawn: boolean;
-  /** Superset is drawn while installed; its agent row needs a connection too. */
-  superset: { installed: boolean; connected: boolean; agents: readonly string[] };
   /**
    * The providers the workspace rows may name: the ones currently offering
    * projects, plus a stored default that is not — a choice the row cannot show

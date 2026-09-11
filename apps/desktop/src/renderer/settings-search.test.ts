@@ -28,7 +28,6 @@ function searchInput(overrides: Partial<SettingsSearchInput> = {}): SettingsSear
     settings: settings(),
     voiceControlsDrawn: true,
     accountDrawn: true,
-    superset: { installed: false, connected: false, agents: [] },
     workspaceProviders: [],
     ...overrides,
   };
@@ -49,10 +48,8 @@ function everythingDrawn(): SettingsSearchInput {
       linearSignInAvailable: true,
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
     }),
-    superset: { installed: true, connected: true, agents: ["codex"] },
     workspaceProviders: [
       { id: CREDENTIAL_PROVIDER_ID.CONDUCTOR, name: "Conductor", offersProjects: true },
-      { id: "superset", name: "Superset", offersProjects: true },
     ],
   });
 }
@@ -97,7 +94,6 @@ test("a row a page is not drawing is not offered", () => {
   );
   assert.ok(!bare.includes("Quiet during meetings"), "no quiet row without a calendar account");
   assert.ok(!bare.includes("Linear"), "no Linear row without its OAuth client");
-  assert.ok(!bare.includes("Superset"), "no Superset row while it is not installed");
   assert.ok(!bare.includes("New Conductor agents run"), "no agent row while disconnected");
   assert.ok(
     !bare.includes("Conductor default project"),
@@ -109,12 +105,8 @@ test("a row a page is not drawing is not offered", () => {
     "Captions",
     "Quiet during meetings",
     "Linear",
-    "Superset",
     "New Conductor agents run",
-    // Two providers offer projects, so each Default project row is its own
-    // result, named for its provider and landing on its own row.
     "Conductor default project",
-    "Superset default project",
   ]) {
     assert.ok(wide.includes(label), `${label} is offered once its row is drawn`);
   }

@@ -3,13 +3,11 @@ import { ExternalIcon } from "@sidecar/panel";
 /**
  * One sentence whose link is its destination: the lead, then the linked words
  * that open the page, a full stop, and the trail if there is one. Every
- * place the panel says where to fetch a credential — the settings editor, the
- * key slot, the Superset code slot — draws this one shape, so the wording
- * cannot drift apart.
+ * place the panel says where to fetch a credential — the settings editor and
+ * the key slot — draws this one shape, so the wording cannot drift apart.
  *
  * A button, not an anchor: the renderer has no browser to navigate, and the
- * main process owns every address — a key page is opened by provider id, and
- * the Superset page is the one its waiting flow built.
+ * main process owns every address — a key page is opened by provider id.
  */
 /** Where to go, and what else has to be true of the page when it gets there. */
 export interface Destination {

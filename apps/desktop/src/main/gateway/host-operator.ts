@@ -22,7 +22,6 @@ import {
 } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { LiveDiagnostics } from "@sidecar/live";
-import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import {
   type ConversationEntry,
   type ConversationViewSnapshot,
@@ -72,8 +71,6 @@ export interface HostBootstrap {
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
   calendarOnboardingOwed: boolean;
-  supersetInstalled: boolean;
-  supersetConnected: boolean;
   sessionReplay: { permitted: boolean; accountId?: string };
   voiceAvailable: boolean;
   agentTraceEnabled: boolean;
@@ -134,13 +131,6 @@ export interface HostOperator {
   cancelLinearSignIn(): Promise<void>;
   reopenLinearSignIn(): Promise<void>;
   disconnectLinear(reporter: string): Promise<SettingsUpdateResult>;
-  supersetStatus(): Promise<{ installed: boolean; connected: boolean }>;
-  beginSupersetSignIn(): Promise<SupersetSignInSnapshot | undefined>;
-  submitSupersetSignInCode(code: string): Promise<SupersetSignInSnapshot | undefined>;
-  chooseSupersetOrganization(slug: string): Promise<SupersetSignInSnapshot | undefined>;
-  reopenSupersetSignIn(): Promise<void>;
-  cancelSupersetSignIn(): Promise<void>;
-  disconnectSuperset(): Promise<ActionResult>;
   sessionRoster(): Promise<{ sessions: readonly Session[]; settled: boolean }>;
   openSession(identity: SessionIdentity): Promise<ActionResult>;
   openSessionApplication(
@@ -193,7 +183,6 @@ export interface HostOperator {
   ): () => void;
   onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
   onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
-  onSupersetSignInChanged(listener: (state: SupersetSignInSnapshot) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
@@ -265,11 +254,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ? answer
       : { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
   };
-
-  const supersetResult = async (
-    result: Promise<GatewayCallResult>,
-  ): Promise<SupersetSignInSnapshot | undefined> =>
-    answered<SupersetSignInSnapshot>(record(await result)?.state);
 
   const fire = async (result: Promise<GatewayCallResult>): Promise<void> => {
     await result;
@@ -361,21 +345,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     reopenLinearSignIn: () => fire(client.call(GATEWAY_METHOD.TRACKER_REOPEN_SIGN_IN)),
     disconnectLinear: (reporter) =>
       settingsResult(client.call(GATEWAY_METHOD.TRACKER_DISCONNECT, wireReporter(reporter))),
-    supersetStatus: async () => {
-      const answer = record(await client.call(GATEWAY_METHOD.SUPERSET_STATUS));
-      return {
-        installed: answer?.installed === true,
-        connected: answer?.connected === true,
-      };
-    },
-    beginSupersetSignIn: () => supersetResult(client.call(GATEWAY_METHOD.SUPERSET_BEGIN_SIGN_IN)),
-    submitSupersetSignInCode: (code) =>
-      supersetResult(client.call(GATEWAY_METHOD.SUPERSET_SUBMIT_CODE, { code })),
-    chooseSupersetOrganization: (slug) =>
-      supersetResult(client.call(GATEWAY_METHOD.SUPERSET_CHOOSE_ORGANIZATION, { slug })),
-    reopenSupersetSignIn: () => fire(client.call(GATEWAY_METHOD.SUPERSET_REOPEN_SIGN_IN)),
-    cancelSupersetSignIn: () => fire(client.call(GATEWAY_METHOD.SUPERSET_CANCEL_SIGN_IN)),
-    disconnectSuperset: () => actionResult(client.call(GATEWAY_METHOD.SUPERSET_DISCONNECT)),
     sessionRoster: async () => {
       const answer = record(await client.call(GATEWAY_METHOD.SESSION_ROSTER));
       return {
@@ -531,12 +500,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           isRecord(payload) && Array.isArray(payload.groups) && isWireBoolean(payload.settled)
             ? answered<ConversationViewSnapshot>(payload)
             : undefined,
-        listener,
-      ),
-    onSupersetSignInChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED,
-        (payload) => (isRecord(payload) ? answered<SupersetSignInSnapshot>(payload) : undefined),
         listener,
       ),
     onCalendarOnboardingChanged: (listener) =>

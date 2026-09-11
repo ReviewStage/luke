@@ -11,7 +11,6 @@ import type {
   CalendarControl,
   LinearControl,
   MicrophoneControl,
-  SupersetControl,
   WorkspaceProviderOption,
 } from "./controls";
 import { useSettingsWrites } from "./writes";
@@ -32,7 +31,6 @@ export function settingsRowsInput(input: {
   settings: AppSettingsView;
   account: AccountSnapshot;
   microphone: MicrophoneControl;
-  superset: SupersetControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
 }): SettingsRowsInput {
   return {
@@ -42,11 +40,6 @@ export function settingsRowsInput(input: {
       status: input.microphone.status,
     }).ready,
     accountDrawn: input.account.status === ACCOUNT_STATUS.SIGNED_IN,
-    superset: {
-      installed: input.superset.installed,
-      connected: input.superset.connected,
-      agents: input.superset.agents,
-    },
     workspaceProviders: input.workspaceProviders.map((option) => ({
       id: option.id,
       name: option.name,
@@ -64,7 +57,6 @@ export function useConnectionInput(input: {
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   linear: LinearControl;
-  superset: SupersetControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
   panelOpen: boolean;
 }): ConnectionInput | undefined {
@@ -76,7 +68,6 @@ export function useConnectionInput(input: {
     visibility: {
       settings: view.settings,
       accountDrawn: input.account.status === ACCOUNT_STATUS.SIGNED_IN,
-      supersetInstalled: input.superset.installed,
       workspaceProjects: input.workspaceProviders
         .filter((option) => option.projects.length > 0)
         .map((option) => ({ id: option.id, name: option.name })),
@@ -86,7 +77,6 @@ export function useConnectionInput(input: {
     calendar: input.calendar,
     appleCalendar: input.appleCalendar,
     linear: input.linear,
-    superset: input.superset,
     workspaceProviders: input.workspaceProviders,
     writes,
     panelOpen: input.panelOpen,

@@ -22,7 +22,6 @@ export const APP_SETTING_ID = {
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",
   WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
-  SUPERSET_AGENT: "superset_agent",
   VOICE_SOURCE: "voice_source",
   TALK_HOTKEY: "talk_hotkey",
   STOP_HOTKEY: "stop_hotkey",

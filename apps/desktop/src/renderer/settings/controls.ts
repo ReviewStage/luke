@@ -151,16 +151,3 @@ export interface LinearControl {
   onSignIn: () => void;
   onDisconnect: () => Promise<ActionResult>;
 }
-
-export interface SupersetControl {
-  installed: boolean;
-  connected: boolean;
-  held: boolean;
-  connecting: boolean;
-  onConnect: () => void;
-  /** Runs the CLI's own documented sign-out, withdrawing the stored login. */
-  onDisconnect: () => Promise<ActionResult>;
-  agents: readonly string[];
-  defaultAgent?: string;
-  onDefaultAgentChange: (agent: string | undefined) => Promise<ActionResult>;
-}

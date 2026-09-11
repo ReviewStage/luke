@@ -37,7 +37,6 @@ function fixtureHost(stateRoot: string) {
     runMode: runModeFor({ capture: false, fixture: true }),
     appVersion: "0.0.0-test",
     packaged: false,
-    homeDirectory: stateRoot,
     environment: {},
     cipher: CIPHER,
     createWorker: () => {
@@ -90,7 +89,6 @@ test("the kernel's service is a named failure before the merge composed it", () 
     runMode: runModeFor({ capture: false, fixture: true }),
     appVersion: "0.0.0-test",
     packaged: false,
-    homeDirectory: "/nowhere",
     environment: {},
     cipher: CIPHER,
     createWorker: () => {

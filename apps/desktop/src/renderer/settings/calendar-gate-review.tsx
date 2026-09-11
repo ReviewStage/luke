@@ -29,7 +29,6 @@ export function CalendarGateReview({
     calendar: settings.calendar,
     appleCalendar: settings.appleCalendar,
     linear: settings.linear,
-    superset: settings.superset,
     workspaceProviders: settings.workspaceProviders,
     panelOpen: settings.panelOpen,
   });

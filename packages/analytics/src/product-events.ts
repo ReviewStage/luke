@@ -44,7 +44,6 @@ export const PRODUCT_EVENT = {
   TRACKER_DISCONNECT: "tracker:disconnect",
   CALENDAR_CONNECT: "calendar:connect",
   CALENDAR_DISCONNECT: "calendar:disconnect",
-  SUPERSET_ACTION: "superset:action",
   SESSION_OBSERVE: "session:observe",
   SESSION_ACTION_SEND: "session:action_send",
   SESSION_DIAGNOSTIC: "session:diagnostic",
@@ -116,7 +115,6 @@ export const PRODUCT_EVENT_PROPERTY = {
   DIAGNOSTIC_KIND: "diagnostic_kind",
   ISSUE_ACTION: "issue_action",
   ACCOUNT_ACTION: "account_action",
-  SUPERSET_ACTION: "superset_action",
   UPDATE_ACTION: "update_action",
   PANEL_TAB: "panel_tab",
   PANEL_SOURCE: "panel_source",
@@ -200,16 +198,6 @@ export type ProductAccountAction =
   (typeof PRODUCT_ACCOUNT_ACTION)[keyof typeof PRODUCT_ACCOUNT_ACTION];
 
 export const ProductAccountActionSchema = Schema.Literal(...Object.values(PRODUCT_ACCOUNT_ACTION));
-
-/** How far a Superset connection got, never the code or the organization. */
-export const PRODUCT_SUPERSET_ACTION = {
-  SIGN_IN_START: "sign_in_start",
-  SIGN_IN_COMPLETE: "sign_in_complete",
-  SIGN_IN_CANCEL: "sign_in_cancel",
-  DISCONNECT: "disconnect",
-} as const;
-
-type ProductSupersetAction = (typeof PRODUCT_SUPERSET_ACTION)[keyof typeof PRODUCT_SUPERSET_ACTION];
 
 /**
  * The things the Updates section's buttons ever do. It repeats the guide's
@@ -440,7 +428,6 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: ProductIssueAction;
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: ProductAccountAction;
-  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACTION]: ProductSupersetAction;
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: ProductUpdateAction;
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: ProductPanelTab;
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: ProductPanelSource;
@@ -479,7 +466,6 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
   [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: Object.values(PRODUCT_ISSUE_ACTION),
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: Object.values(PRODUCT_ACCOUNT_ACTION),
-  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACTION]: Object.values(PRODUCT_SUPERSET_ACTION),
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: Object.values(PRODUCT_UPDATE_ACTION),
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: Object.values(PRODUCT_PANEL_TAB),
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: Object.values(PRODUCT_PANEL_SOURCE),
@@ -512,7 +498,6 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.TRACKER_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.TRACKER_ID],
   [PRODUCT_EVENT.CALENDAR_CONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
   [PRODUCT_EVENT.CALENDAR_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
-  [PRODUCT_EVENT.SUPERSET_ACTION]: [PRODUCT_EVENT_PROPERTY.SUPERSET_ACTION],
   [PRODUCT_EVENT.PANEL_OPEN]: [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE],
   [PRODUCT_EVENT.PANEL_TAB_CHANGE]: [PRODUCT_EVENT_PROPERTY.PANEL_TAB],
   [PRODUCT_EVENT.SETTINGS_VIEW_OPEN]: [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW],

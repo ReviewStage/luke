@@ -71,7 +71,6 @@ function fixtureConfig(
     runMode: runModeFor({ capture: false, fixture: true }),
     appVersion: "0.0.0-test",
     packaged: false,
-    homeDirectory: stateRoot,
     environment: {},
     platform: "darwin",
     resourceDirectory: stateRoot,

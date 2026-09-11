@@ -81,7 +81,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     runMode,
     appVersion: app.getVersion(),
     packaged: app.isPackaged,
-    homeDirectory: app.getPath("home"),
     environment,
     platform: process.platform,
     resourceDirectory: dependencies.resourceDirectory,

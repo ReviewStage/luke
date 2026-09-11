@@ -99,7 +99,6 @@ const GUIDE_FACT_LABELS: readonly string[] = [
   "Linear",
   "Apple Calendar",
   "Google Calendar",
-  "Superset",
   "Conductor",
   "Credential storage",
   "Updates",

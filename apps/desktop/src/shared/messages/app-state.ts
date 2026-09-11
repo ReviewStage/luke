@@ -3,7 +3,6 @@ import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import type { SupersetSignInSnapshot } from "@sidecar/providers/superset/sign-in-stage";
 import type { ConversationViewSnapshot, ObservedWorkspaceProject } from "@sidecar/session";
 import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
@@ -112,12 +111,6 @@ interface AppVoiceSlice {
   liveSession?: { sessionId?: string; phase: LiveSessionPhase };
 }
 
-interface AppSupersetSlice {
-  installed: boolean;
-  connected: boolean;
-  signIn?: SupersetSignInSnapshot;
-}
-
 /**
  * The Conversation as the host's reads of the service compose it: the turn
  * groups of stored `UIMessage` rows the panel draws, whether a read has
@@ -156,7 +149,6 @@ export interface AppState {
   account: AccountSnapshot;
   sessions: AppSessionsSlice;
   calendars: readonly ObservedAccountCalendars[];
-  superset: AppSupersetSlice;
   update: UpdateSnapshot;
   audio: AppAudioSlice;
   hotkeys: AppHotkeysSlice;

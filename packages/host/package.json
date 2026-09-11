@@ -28,7 +28,6 @@
     "@sidecar/hosted": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/memory": "workspace:*",
-    "@sidecar/providers": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",

@@ -193,8 +193,6 @@ test("an outcome is one of the three answers and nothing else", () => {
 });
 
 test("an answer's guard is the kind's own, so a shape another kind would take is refused", () => {
-  assert.equal(ACT[ACT_KIND.SUPERSET_DISCONNECT].result({ status: "accepted" }), true);
-  assert.equal(ACT[ACT_KIND.SUPERSET_DISCONNECT].result({ status: "rejected" }), false);
   assert.equal(
     ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result({ sessionId: "sess_1", sdpAnswer: "v=0\r\n" }),
     true,

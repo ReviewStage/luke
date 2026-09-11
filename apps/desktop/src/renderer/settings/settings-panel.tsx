@@ -40,7 +40,6 @@ import type {
   LinearControl,
   MicrophoneControl,
   ShortcutControl,
-  SupersetControl,
   UpdateControl,
   WorkspaceProviderOption,
 } from "./controls";
@@ -100,8 +99,6 @@ export interface SettingsPanelProps {
   appleCalendar: AppleCalendarControl;
   /** Everything the Linear block can do. */
   linear: LinearControl;
-  /** Superset is observed locally; its CLI login only gates actions. */
-  superset: SupersetControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
   /**
@@ -136,7 +133,6 @@ export function SettingsPanel({
   calendar,
   appleCalendar,
   linear,
-  superset,
   onQuit,
   shortcuts,
   searchOpen,
@@ -164,7 +160,7 @@ export function SettingsPanel({
   // by the search corpus alike, so a result never leads to a page without
   // its row.
   const panelView: SettingsRowsInput | undefined = settings
-    ? settingsRowsInput({ settings, account, microphone, superset, workspaceProviders })
+    ? settingsRowsInput({ settings, account, microphone, workspaceProviders })
     : undefined;
   // Everything the connection rows are judged from and acted through,
   // assembled once for every page that draws one.
@@ -176,7 +172,6 @@ export function SettingsPanel({
     calendar,
     appleCalendar,
     linear,
-    superset,
     workspaceProviders,
     panelOpen,
   });

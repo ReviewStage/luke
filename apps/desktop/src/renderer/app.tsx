@@ -8,7 +8,6 @@ import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { WingFace as LukeFace } from "@sidecar/panel";
-import type { ObservedWorkspaceProject } from "@sidecar/session";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
 import type { AppSettingsView, ObservedAccountCalendars } from "@sidecar/settings/wire";
@@ -27,8 +26,7 @@ import {
   RUN_PROFILE,
   sessionReplayBootstrap,
 } from "#shared/messages/app-state";
-import type { DisplayDiagnostic, SupersetSignInSnapshot } from "#shared/messages/session";
-import { SUPERSET_SIGN_IN_STAGE, SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
+import type { DisplayDiagnostic } from "#shared/messages/session";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
 import { useAppActionCarrier } from "./app-action-carrier";
@@ -61,7 +59,6 @@ import {
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
-import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
@@ -105,17 +102,10 @@ function surfaceHeightStyle(
 const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 /**
- * What each list-shaped slice reads as before the first snapshot lands. Held
- * as constants so a render before it redraws nothing that was already drawn.
+ * What the calendars slice reads as before the first snapshot lands. Held as
+ * a constant so a render before it redraws nothing that was already drawn.
  */
-const EMPTY_WORKSPACE_PROJECTS: readonly ObservedWorkspaceProject[] = [];
 const EMPTY_CALENDARS: readonly ObservedAccountCalendars[] = [];
-
-/** No Superset sign-in under way, which is every moment but a wait's own. */
-const IDLE_SUPERSET_SIGN_IN: SupersetSignInSnapshot = {
-  stage: SUPERSET_SIGN_IN_STAGE.IDLE,
-  organizations: [],
-};
 
 /**
  * True from the render that leaves the panel for a compact shape until the
@@ -150,14 +140,11 @@ export function App(): React.JSX.Element {
   const state = useAppState();
   const account = state?.account;
   const sessionsSettled = state?.sessions.settled === true;
-  const workspaceProjects = state?.sessions.workspaceProjects ?? EMPTY_WORKSPACE_PROJECTS;
   const calendars = state?.calendars ?? EMPTY_CALENDARS;
   const announcementsHeld = state?.announcements.held === true;
   const calendarOnboardingOwed = state?.onboarding.calendarOwed === true;
   const outputAudio = state?.audio.outputAudio;
   const display = state?.window.display;
-  const supersetSignIn = state?.superset.signIn ?? IDLE_SUPERSET_SIGN_IN;
-  const supersetConnected = state?.superset.connected === true;
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
@@ -228,7 +215,6 @@ export function App(): React.JSX.Element {
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
-  const supersetSignInHeld = useRef(false);
 
   /**
    * Recording follows the account: a sign-out ends it rather than leaving it
@@ -347,10 +333,7 @@ export function App(): React.JSX.Element {
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     composerHeld: () =>
-      credentialHeld.current ||
-      feedbackHeld.current ||
-      consentConnectHeld.current ||
-      supersetSignInHeld.current,
+      credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
     onNotPanel: () => {
       sessions.closeOptions();
       // The settings search closes with the shape it was opened on, taking
@@ -424,17 +407,9 @@ export function App(): React.JSX.Element {
     surface: panelEntrySurface,
     credentialHeld,
     consentConnectHeld,
-    supersetSignInHeld,
     standDownPage,
     expand,
     calendars,
-    superset: {
-      installed: state?.superset.installed === true,
-      connected: supersetConnected,
-      signIn: supersetSignIn,
-      defaultAgent: settings?.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent,
-    },
-    workspaceProjects,
   });
   const slotOccupant = connections.slotOccupant;
 
@@ -979,8 +954,7 @@ export function App(): React.JSX.Element {
           panelHeight,
           connections.signInWait !== undefined
             ? signInSlotHeight
-            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT ||
-                slotOccupant.current === PANEL_STAND_DOWN.SUPERSET
+            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT
               ? connectHeight
               : slotHeight,
           feedbackHeight,
@@ -1069,7 +1043,6 @@ export function App(): React.JSX.Element {
               calendar: connections.calendar,
               appleCalendar: connections.appleCalendar,
               linear: connections.linear,
-              superset: connections.supersetControl,
               onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
               shortcuts,
               searchOpen: settingsSearchOpen,
@@ -1108,18 +1081,6 @@ export function App(): React.JSX.Element {
             onOpenSystemSettings={() => tell(ACT_KIND.CALENDAR_OPEN_SETTINGS)}
             measure={connectElement}
           />
-          {supersetSignInHeld.current ? (
-            <SupersetSignInSlot
-              state={supersetSignIn}
-              drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.SUPERSET}
-              onSubmit={(code) => tell(ACT_KIND.SUPERSET_SUBMIT_CODE, { code })}
-              onReopen={() => tell(ACT_KIND.SUPERSET_REOPEN_SIGN_IN)}
-              onCancel={connections.cancelSupersetSignIn}
-              onRetry={connections.beginSupersetSignIn}
-              onChooseOrganization={(slug) => tell(ACT_KIND.SUPERSET_CHOOSE_ORGANIZATION, { slug })}
-              measure={connectElement}
-            />
-          ) : null}
         </>
       ) : null}
       {connections.credentialEntry === undefined && connections.consentEntry === undefined ? (

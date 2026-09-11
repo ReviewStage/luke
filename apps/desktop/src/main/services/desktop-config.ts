@@ -29,7 +29,6 @@ export interface DesktopConfig {
   readonly runMode: RunMode;
   readonly appVersion: string;
   readonly packaged: boolean;
-  readonly homeDirectory: string;
   readonly environment: NodeJS.ProcessEnv;
   readonly platform: NodeJS.Platform;
   /** Where this build's own files sit: the preload, the renderer, the icons, the store worker. */

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-} from "@sidecar/session";
+import { CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { settingsView } from "@sidecar/settings/testing";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { test } from "vitest";
@@ -62,7 +59,6 @@ test("every connection this build can offer stands when its condition is true", 
   for (const id of [
     CREDENTIAL_PROVIDER_ID.OPENAI,
     CREDENTIAL_PROVIDER_ID.LINEAR,
-    SUPERSET_WORKSPACE_PROVIDER_ID,
     CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
     "apple-calendar",
     "google-calendar",
@@ -131,7 +127,6 @@ test("a query reads the connections in the order the page draws them", () => {
   assert.deepEqual(offered, [
     ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id),
     CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-    SUPERSET_WORKSPACE_PROVIDER_ID,
     CREDENTIAL_PROVIDER_ID.LINEAR,
     "apple-calendar",
     "google-calendar",

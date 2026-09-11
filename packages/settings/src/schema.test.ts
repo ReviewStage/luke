@@ -295,8 +295,7 @@ test("a setting says for itself whether its row is drawn", () => {
 });
 
 test("a field whose entries stand under conditions of their own answers per id", () => {
-  // The Conductor rows need a connected Conductor the build has a model table
-  // for; the Superset row needs a connected Superset offering agents.
+  // The Conductor rows need a connected Conductor the build has a model table for.
   const conductor = settingsVisibility({
     settings: {
       credentialSources: {
@@ -306,16 +305,10 @@ test("a field whose entries stand under conditions of their own answers per id",
     },
   });
   assert.equal(settingIdVisible(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, conductor), true);
-  assert.equal(settingIdVisible(APP_SETTING_ID.SUPERSET_AGENT, conductor), false);
-
-  const superset = settingsVisibility({
-    superset: { installed: true, connected: true, agents: ["codex"] },
-  });
-  assert.equal(settingIdVisible(APP_SETTING_ID.SUPERSET_AGENT, superset), true);
-  assert.equal(settingIdVisible(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, superset), false);
+  assert.equal(settingIdVisible(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, settingsVisibility()), false);
 
   // An id no field claims is drawn nowhere rather than everywhere.
-  assert.equal(settingIdVisible(APP_SETTING_ID.CALENDAR_SELECTED, superset), false);
+  assert.equal(settingIdVisible(APP_SETTING_ID.CALENDAR_SELECTED, conductor), false);
 });
 
 test("a page's section draws its own members, in the order they claim", () => {

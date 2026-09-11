@@ -25,7 +25,6 @@ import { APP_SETTING_SCHEMA, type SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView, CalendarAccount } from "@sidecar/settings/wire";
 import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/messages/session";
 import type { CredentialEntryControl } from "../credential-entry";
 import { entryForProvider } from "../credential-entry";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
@@ -34,12 +33,11 @@ import type {
   AppleCalendarControl,
   CalendarControl,
   LinearControl,
-  SupersetControl,
   WorkspaceProviderOption,
 } from "./controls";
 import { CredentialField } from "./credential-field";
 import { HELD_TITLE } from "./notes";
-import { SupersetAgentRow, WorkspaceAgentRow, WorkspaceProjectRow } from "./workspace-rows";
+import { WorkspaceAgentRow, WorkspaceProjectRow } from "./workspace-rows";
 import type { SettingsWrites } from "./writes";
 
 /**
@@ -140,8 +138,6 @@ export interface ConnectionVisibility {
   settings: SettingsRowsInput["settings"];
   /** Whether the Account section — and so the Voice page's Provider — stands. */
   accountDrawn: boolean;
-  /** Whether Superset is installed on this Mac at all. */
-  supersetInstalled: boolean;
   /** The providers currently offering projects, each drawing a row of its own. */
   workspaceProjects: readonly { id: string; name: string }[];
 }
@@ -156,7 +152,6 @@ export interface ConnectionInput {
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   linear: LinearControl;
-  superset: SupersetControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
   writes: SettingsWrites;
   /** True while the surface these rows are drawn on is the shape on screen. */
@@ -527,80 +522,6 @@ export const CONNECTION_SCHEMA: readonly ConnectionSpec[] = [
       );
     },
     haystack: ["local", "workspaces create this Mac no key integration"],
-  },
-  // Last because the list reads alphabetically. Superset is the other agent
-  // surface connected through its own CLI's login rather than a key, so it
-  // stands as its own block the way the Codex row does.
-  {
-    id: SUPERSET_WORKSPACE_PROVIDER_ID,
-    layout: CONNECTION_LAYOUT.BLOCK,
-    page: SETTINGS_VIEW.CONNECTIONS,
-    section: CONNECTION_SECTION.PROVIDERS,
-    order: 900,
-    offered: (visibility) => visibility.supersetInstalled,
-    name: () => "Superset",
-    mark: <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />,
-    status: (input) => ({ connected: input.superset.connected }),
-    actions: (input) => {
-      const control = input.superset;
-      if (!control.connected) {
-        return [
-          {
-            control: CONNECTION_CONTROL.WORD,
-            word: control.connecting ? "Connecting…" : "Connect",
-            label: "Connect Superset",
-            ...(control.held ? { title: HELD_TITLE } : undefined),
-            disabled: control.held || control.connecting,
-            run: control.onConnect,
-          },
-        ];
-      }
-      return [
-        {
-          control: CONNECTION_CONTROL.TRASH,
-          label: "Disconnect Superset",
-          /* The ellipsis is the promise that it asks first. */
-          title: "Disconnect…",
-          confirm: {
-            // Disconnecting asks first, exactly like deleting a key: the
-            // sign-out clears the CLI's stored login, so a disconnect taken on
-            // the first press would cost a whole new sign-in to undo.
-            question: "Disconnect Superset?",
-            verb: "Disconnect",
-            running: "Disconnecting…",
-            act: control.onDisconnect,
-          },
-        },
-        {
-          // The pencil is the credential rows' word for editing a connection
-          // that already stands. Here the connection is the CLI's own login, so
-          // editing it is signing in again — the same action the Connect button
-          // runs, which is how the CLI switches organizations.
-          control: CONNECTION_CONTROL.EDIT,
-          label: "Sign in to Superset again",
-          title: control.held ? HELD_TITLE : "Sign in again",
-          disabled: control.held || control.connecting,
-          run: control.onConnect,
-        },
-      ];
-    },
-    children: (input) => {
-      const workspaceProvider = workspaceOption(input, SUPERSET_WORKSPACE_PROVIDER_ID);
-      if (!input.superset.connected) return null;
-      return (
-        <>
-          {input.superset.agents.length > 0 ? <SupersetAgentRow control={input.superset} /> : null}
-          {workspaceProvider ? (
-            <WorkspaceProjectRow
-              provider={workspaceProvider}
-              settings={input.settings}
-              writes={input.writes}
-            />
-          ) : null}
-        </>
-      );
-    },
-    haystack: ["workspaces sign in connect integration"],
   },
   // The issue tracker: connected by signing in with Linear, never by a pasted
   // credential, and drawn at all only in a build that carries the OAuth client
