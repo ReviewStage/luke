@@ -73,6 +73,7 @@ export {
   type WorkspaceIoOperation,
   writeWorkspaceFileEffect,
 } from "../workspace.effect.js";
+export { Builtins, BuiltinsLive, resolveConfigurationEffect } from "./registry.js";
 export {
   scheduleOnce,
   scheduleRepeat,

@@ -1,3 +1,4 @@
+import { Data, Either } from "effect";
 import type { ReasoningEffort, ToolSchema } from "./execution.js";
 import { type AgentId, DEFAULT_AGENT_ID } from "./identifiers.js";
 import type { ToolPolicyLayers } from "./tool-policy.js";
@@ -267,6 +268,11 @@ export const CONFIGURATION_REFUSAL = {
 export type ConfigurationRefusal =
   (typeof CONFIGURATION_REFUSAL)[keyof typeof CONFIGURATION_REFUSAL];
 
+/** Why a configuration failed to resolve, as the door every publish meets. */
+export class ConfigurationRefused extends Data.TaggedError("ConfigurationRefused")<{
+  readonly code: ConfigurationRefusal;
+}> {}
+
 /** A snapshot a run holds: the configuration as resolved, frozen, stamped with the revision it was published at. */
 export interface ResolvedConfiguration {
   readonly revision: number;
@@ -294,17 +300,16 @@ export type ConfigurationOutcome =
       readonly refusal: ConfigurationRefusal;
     };
 
-function refused(refusal: ConfigurationRefusal): ConfigurationOutcome {
-  return { outcome: CONFIGURATION_OUTCOME.REFUSED, refusal };
-}
-
 /**
  * Checks the names a configuration gives against the built-ins and its own
  * numbers; answers the configuration frozen, or the one reason it cannot
- * stand. Only a name that arrived over the wire can be one the built-ins do
- * not hold: every name a build spells is checked by the derived id unions.
+ * stand, as an `Either`. Only a name that arrived over the wire can be one
+ * the built-ins do not hold: every name a build spells is checked by the
+ * derived id unions.
  */
-export function resolveConfiguration(names: AgentConfiguration): ConfigurationOutcome {
+export function resolveConfigurationEither(
+  names: AgentConfiguration,
+): Either.Either<AgentConfiguration, ConfigurationRefused> {
   // Read through the declared shape rather than the const literal, which is
   // what lets a name no built-in holds be looked up at all.
   const table: Builtins = BUILTINS;
@@ -315,24 +320,41 @@ export function resolveConfiguration(names: AgentConfiguration): ConfigurationOu
     !adapter ||
     (names.memoryProviderId !== undefined && !table.memoryProviders[names.memoryProviderId])
   ) {
-    return refused(CONFIGURATION_REFUSAL.UNKNOWN_ID);
+    return Either.left(new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.UNKNOWN_ID }));
   }
   if (adapter.credentialKind !== names.credential.kind) {
-    return refused(CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH);
+    return Either.left(
+      new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH }),
+    );
   }
   if (
     names.maximumOutputTokens !== undefined &&
     !(Number.isSafeInteger(names.maximumOutputTokens) && names.maximumOutputTokens > 0)
   ) {
-    return refused(CONFIGURATION_REFUSAL.INVALID_OUTPUT_TOKENS);
+    return Either.left(
+      new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.INVALID_OUTPUT_TOKENS }),
+    );
   }
   if (names.workspaceDirectory.trim().length === 0) {
-    return refused(CONFIGURATION_REFUSAL.EMPTY_WORKSPACE);
+    return Either.left(new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.EMPTY_WORKSPACE }));
   }
-  return {
-    outcome: CONFIGURATION_OUTCOME.RESOLVED,
-    configuration: deepFreeze(structuredClone(names)),
-  };
+  return Either.right(deepFreeze(structuredClone(names)));
+}
+
+/**
+ * The outcome shape `resolveConfiguration` answered before the door turned
+ * into an `Either`, kept as an adaptor over `resolveConfigurationEither` for
+ * `ConfigurationStore` and any caller still holding it.
+ *
+ * @deprecated Read `resolveConfigurationEither` instead; P7-08's host
+ * composer is what deletes this adaptor once it consumes the `Either` door
+ * directly.
+ */
+export function resolveConfiguration(names: AgentConfiguration): ConfigurationOutcome {
+  return Either.match(resolveConfigurationEither(names), {
+    onLeft: (refusal) => ({ outcome: CONFIGURATION_OUTCOME.REFUSED, refusal: refusal.code }),
+    onRight: (configuration) => ({ outcome: CONFIGURATION_OUTCOME.RESOLVED, configuration }),
+  });
 }
 
 /**
@@ -346,11 +368,11 @@ export class ConfigurationStore {
   #snapshot: ResolvedConfiguration;
 
   constructor(initial: AgentConfiguration) {
-    const resolved = resolveConfiguration(initial);
-    if (resolved.outcome === CONFIGURATION_OUTCOME.REFUSED) {
-      throw new Error(`initial configuration refused: ${resolved.refusal}`);
+    const resolved = resolveConfigurationEither(initial);
+    if (Either.isLeft(resolved)) {
+      throw new Error(`initial configuration refused: ${resolved.left.code}`);
     }
-    this.#snapshot = Object.freeze({ revision: 1, configuration: resolved.configuration });
+    this.#snapshot = Object.freeze({ revision: 1, configuration: resolved.right });
   }
 
   snapshot(): ResolvedConfiguration {
@@ -362,14 +384,17 @@ export class ConfigurationStore {
    * replaced; the caller reads `snapshot()` for what now stands.
    */
   publish(next: AgentConfiguration): ConfigurationOutcome {
-    const resolved = resolveConfiguration(next);
-    if (resolved.outcome === CONFIGURATION_OUTCOME.RESOLVED) {
+    const resolved = resolveConfigurationEither(next);
+    if (Either.isRight(resolved)) {
       this.#snapshot = Object.freeze({
         revision: this.#snapshot.revision + 1,
-        configuration: resolved.configuration,
+        configuration: resolved.right,
       });
     }
-    return resolved;
+    return Either.match(resolved, {
+      onLeft: (refusal) => ({ outcome: CONFIGURATION_OUTCOME.REFUSED, refusal: refusal.code }),
+      onRight: (configuration) => ({ outcome: CONFIGURATION_OUTCOME.RESOLVED, configuration }),
+    });
   }
 }
 
