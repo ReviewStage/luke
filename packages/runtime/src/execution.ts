@@ -299,7 +299,7 @@ export type ModelCapabilitiesAnswer =
  */
 export interface ModelAdapter {
   /** The model the adapter knows it runs on before any call; a hosted adapter learns it from capabilities. */
-  readonly model?: string;
+  readonly model?: string | undefined;
   capabilities(): Promise<ModelCapabilitiesAnswer>;
   respond(items: readonly WireRecord[], options: ModelRequestOptions): Promise<ModelResponse>;
   countInputTokens(

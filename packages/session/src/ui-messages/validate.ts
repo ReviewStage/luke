@@ -143,7 +143,7 @@ export async function readStoredUIMessages(
     // SAFETY: the SDK types this option for a message whose tool set is known statically, and a
     // concrete `tool()` is not assignable to its `Tool<unknown, unknown>` (vercel/ai#9147); the
     // validation itself reads each registered tool's schemas by name, which is what a `ToolSet` is.
-    tools: tools as ValidationOptions["tools"],
+    tools: tools as NonNullable<ValidationOptions["tools"]>,
   });
   if (!validated.success) return refuse(SCHEMA_REFUSAL.MALFORMED, []);
   const stored: StoredUIMessage[] = [];

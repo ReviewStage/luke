@@ -11,13 +11,23 @@ import type { SettingsVisibility } from "./schema-types.js";
 import type { AppSettingsView } from "./wire.js";
 
 /**
+ * What a case may move, including back to a field's stored default of nothing:
+ * the view resolves `voice`, `voiceSource`, and `formFactor` to a value, and a
+ * case that moves one to the absence the schema declares says so with
+ * `undefined`.
+ */
+type SettingsViewOverrides = {
+  [Field in keyof AppSettingsView]?: AppSettingsView[Field] | undefined;
+};
+
+/**
  * A settings snapshot with every member at a stated value, so a test is told
  * apart from the next only by what it moves.
  */
-export function settingsView(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
+export function settingsView(overrides: SettingsViewOverrides = {}): AppSettingsView {
   // Object.assign rather than a spread: spreading a Partial marks every key it
   // could carry optional, and the result stops being an AppSettingsView.
-  return Object.assign<AppSettingsView, Partial<AppSettingsView>>(
+  return Object.assign<AppSettingsView, SettingsViewOverrides>(
     {
       ...APP_SETTING_DEFAULTS,
       credentialSources: {

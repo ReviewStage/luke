@@ -24,5 +24,5 @@ export interface AccountToken {
    * with no identity to name omits it, and then the comparison does not
    * exist.
    */
-  readAccountKey?: () => Promise<string | undefined>;
+  readAccountKey?: (() => Promise<string | undefined>) | undefined;
 }

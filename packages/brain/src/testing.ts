@@ -202,10 +202,9 @@ export interface FakeActionPerformerOptions {
   readonly sessions?: readonly Session[];
   readonly guide?: AppGuideSnapshot;
   /** What carrying an admitted action answers; accepted by default. */
-  readonly carry?: (
-    action: ValidatedAction,
-    execution: BrainActionExecution,
-  ) => Promise<ActionOutputEnvelope>;
+  readonly carry?:
+    | ((action: ValidatedAction, execution: BrainActionExecution) => Promise<ActionOutputEnvelope>)
+    | undefined;
 }
 
 export interface FakeActionPerformer {

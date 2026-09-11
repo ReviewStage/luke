@@ -189,7 +189,7 @@ export interface AppSettingSchemaEntry<
    * formatter, a merge, or an alphabetizing lint rule can silently change.
    */
   readonly order: number;
-  readonly resetScope?: SettingsResetScope;
+  readonly resetScope?: SettingsResetScope | undefined;
   readonly sideEffect: SettingSideEffectId;
   readonly rows: SettingRows;
   /** The guide ids this one field speaks under. */
@@ -199,16 +199,16 @@ export interface AppSettingSchemaEntry<
     settings: AppSettingGuideSettings,
   ) => AppGuideSetting | readonly AppGuideSetting[] | undefined;
   /** Whether its row is drawn right now. Absent means always drawn. */
-  readonly visible?: (view: SettingsVisibility) => boolean;
+  readonly visible?: ((view: SettingsVisibility) => boolean) | undefined;
   /**
    * Whether one of its guide ids is drawn right now, for the one field whose
    * entries stand under conditions of their own. Never declared beside
    * `visible`: a row cannot answer to two records of the same fact.
    */
   readonly visibleById?: Readonly<Partial<Record<Id, (view: SettingsVisibility) => boolean>>>;
-  readonly control?: SettingControl<Value>;
+  readonly control?: SettingControl<Value> | undefined;
   /** The value a spoken change's word means, for an adjustable setting. */
-  readonly spokenValue?: (value: string) => Value | undefined;
+  readonly spokenValue?: ((value: string) => Value | undefined) | undefined;
   /**
    * How a change to it is counted. The id is derived: a change rides one
    * stored write, and `ids[0]` is the id that write is counted under.

@@ -555,7 +555,7 @@ test("a line tied to a run is recorded once per kind, and its run survives stora
   const [, firstReply, secondReply] = thread;
   assert.ok(firstReply && secondReply);
   assert.equal(conversationEntryKey(firstReply), conversationEntryKey(secondReply));
-  const untied = { ...firstReply, requestId: undefined };
+  const { requestId: _untiedRequest, ...untied } = firstReply;
   assert.equal(enrichedConversationEntry(untied, firstReply), firstReply);
   assert.equal(enrichedConversationEntry(firstReply, untied), firstReply);
   assert.equal(
