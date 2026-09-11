@@ -2329,3 +2329,70 @@ would be in services mode and the branch carries the key), the PR enqueues withi
 other lanes hold. **Its price, stated rather than discovered: any other workstream's merge inside that
 window costs one transient failed deploy**, resolved the moment the PR lands. Cheapest when that lane
 is idle.
+
+
+## 2026-09-11 — Migration ids: the real invariant, replacing "C4's 0022 goes first"
+
+**Ruled.** I had ordered C4's `0022` (#1045) ahead of C2b's `0023` (#1129), with a twenty-minute
+fallback. That rule was a proxy for the actual constraint and it does not generalise: **renumbering
+upward is not a fix by itself.** If C2b took `0024` and merged first, C4's `0022` would then sit at
+or below the highest applied id and the Effect migrator would **silently skip it in production**
+(`@effect/sql` 0.52.1, `dist/esm/Migrator.js` 86–101), with every check green. The hazard is not the
+numbers two PRs hold; it is **the number the second one to merge holds at the moment it merges.**
+
+**The invariant, which every migration PR from here obeys:**
+
+1. **Immediately before enqueueing**, read the highest applied `migration_id` against main's own
+   state, not your branch's — C4 reads it on the PR's Neon preview branch, which is the practice this
+   rule generalises — and confirm your id is **strictly above** it.
+2. **Re-confirm after any rebase.**
+3. **If another migration merges while you are in the queue, dequeue, renumber above it, and go
+   again.** A queue position is not a reservation.
+4. **Say the number and the reading in the PR body**, so a reviewer can check the claim rather than
+   trust it.
+
+The ordering between #1045 and #1129 is therefore **released**: whichever is ready first goes, and
+the other applies the rule. Neither waits on the other, and neither may enqueue on a stale reading.
+
+**This is a rule because the test does not exist yet.** LUKE-163 is filed to build the test that
+would enforce it — but it needs `openPglite` moved onto `runWebMigrations` first, because the two
+dialects do not share a bookkeeping table (PGlite still migrates through Drizzle into
+`drizzle.__drizzle_migrations`, which stores a hash and no id, while CI Postgres uses the Effect
+migrator's `effect_sql_migrations` with `(migration_id, name)`). **C4 declined the sweep-in and was
+right to**: the assertion is five lines only after that move, and it cited the two tables rather than
+pleading scope. Until LUKE-163 lands, the invariant above is carried by hand and named in every
+migration PR's body.
+
+
+## 2026-09-11 — The Vercel preset should be in the repository, not the dashboard
+
+**Direction accepted, sequenced deliberately.** C2a found that `vercel.json`'s schema
+(`openapi.vercel.sh/vercel.json`) accepts **`services`** among the top-level `framework` slugs, and
+that a top-level `framework` **overrides the project's Framework Preset per deployment**. If that
+holds, `"framework": "services"` in the file **ends this entire incident class**: preset-without-key
+becomes unrepresentable, because one file carries both, and key-without-preset likewise. No future
+`vercel.json` change would depend on a dashboard state nobody can see in a diff.
+
+**Two reasons it is not proven and does not go into #1018.** The services documentation says a
+top-level `framework` "should be moved into the relevant service", so it may be **refused or ignored
+in services mode** despite the schema accepting it; and C2a's own guard test deliberately refuses a
+top-level `framework` key today. **Adding an untested element to an already-careful sitting is how a
+careful sequence becomes an incident**, which is the lesson of the morning rather than a general
+caution.
+
+**The sequence:** #1018 lands under the flipped preset as planned → a one-line follow-up adds
+`framework: services` and narrows the guard → Dean reads that preview's build log → if it shows the
+services build, he sets the dashboard back to Vite and one redeploy proves the file alone is enough.
+
+**Detection, separately (LUKE-164).** The preview is the oracle and always was: under
+key-present/preset-off the preview builds single-app, so `GET <preview>/eve/v1/health` answers 404
+instead of eve's health, and under preset-on/key-missing the deploy fails outright. A CI job reading
+the PR's preview URL from the GitHub deployment record and asserting **`/eve/v1/health` is not 404**
+and **`/api/brain/capabilities` is 401** would have failed #1018 red on every one of the day's five
+previews. Its one cost is the Protection Bypass for Automation secret, already asked of Dean for
+another reason. **Rejected: a CI step reading the project's framework from Vercel's REST API** — it
+needs a token in CI and couples us to that API's shape, to detect a state the file-level fix makes
+impossible. **Deferred: a `vercel-build` script in `apps/web/package.json`** as a mitigation; it would
+put the build command in two places, and C2a's own later reading showed the fallback already runs
+`build`, so what it would recover is only the `db:migrate && auth:seed` prefix — worth doing only if
+the repo-controlled preset does not hold.
