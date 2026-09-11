@@ -21,6 +21,7 @@ import {
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
+  isRecord,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -29,6 +30,8 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
   type WireRecord,
 } from "@sidecar/wire";
 import { eq, sql } from "drizzle-orm";
@@ -435,13 +438,13 @@ test("a message's replay slot never leaves the service, and the stored row keeps
     ],
   });
 
-  const response = await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)));
-  assert.equal(response.status, 200);
-  // SAFETY: the response body is the route's own JSON, walked as the bytes a device would parse.
-  const body = (await response.json()) as {
-    groups: { messages: { message: { id: string; parts: Record<string, unknown>[] } }[] }[];
-  };
-  const parts = body.groups.flatMap((group) => group.messages.flatMap((row) => row.message.parts));
+  const answer = await answered(
+    await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES))),
+    conversationMessagesAnswerSchema,
+  );
+  const parts = answer.groups.flatMap((group) =>
+    group.messages.flatMap((row) => wireParts(row.message.parts)),
+  );
   assert.equal(parts.length, 4);
   assert.deepEqual(
     parts.map((part) => "providerMetadata" in part),
@@ -455,10 +458,19 @@ test("a message's replay slot never leaves the service, and the stored row keeps
   const [stored] = await database.db.select().from(messages).where(eq(messages.id, reply));
   assert.ok(stored);
   // SAFETY: the parts column is jsonb, read back as the JSON the test wrote.
-  const storedParts = stored.parts as Record<string, unknown>[];
+  const storedParts = wireParts(unparsedWire(stored.parts as WireBoundaryInput));
   assert.deepEqual(storedParts[1]?.providerMetadata, REPLAY_SLOT);
   assert.deepEqual(storedParts[2]?.providerMetadata, { openai: { itemId: "msg_1" } });
 });
+
+/** A message's parts as JSON records, the way a device parses them; anything else fails the test. */
+function wireParts(parts: UnparsedWireValue): WireRecord[] {
+  assert.ok(Array.isArray(parts));
+  return parts.map((part) => {
+    assert.ok(isRecord(part));
+    return part;
+  });
+}
 
 test("the gate order is method, bearer, and query, and every refusal is one shape", async () => {
   const userId = await database.createUser();
