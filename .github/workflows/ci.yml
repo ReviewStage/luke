@@ -39,17 +39,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
-    env:
-      DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
-      LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
+      # The portable check runs the store tests on PGlite, so the Postgres
+      # address is scoped to the steps below: set on the job, vitest would
+      # reach the service before db:migrate has given it a schema.
       - run: ./scripts/check.sh
       - run: pnpm --filter @luke/web db:migrate
+        env:
+          DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
       - run: pnpm --filter @luke/web test:store
+        env:
+          LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
       # The eve end-to-end eval writes through the real writer, so it runs where a Postgres stands.
       - run: pnpm --filter @luke/web test:agent
         env:
           DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
+          LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
           PROVIDER_KEY_ENCRYPTION_SECRET: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
