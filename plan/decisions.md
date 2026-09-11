@@ -3006,3 +3006,38 @@ match the local shape, where PGlite already gives each file its own.
 looking **inward**. The defect was in a file nobody had reason to open. **When every explanation about
 your own code is dead, the next question is not "what else could my code do" but "who else is in this
 database".**
+
+
+## 2026-09-11 — Chosen, not discovered: the release rehearsal is the only Mac gate
+
+**Dean ruled.** #1165 deleted the `macOS app and evidence` job from `ci.yml` — the `macos-15` runner,
+the Xcode setup, the native-helpers cache, `./scripts/evidence.sh`, and the evidence artifact with its
+PR-description link. `ci.yml` now has **three jobs, all `ubuntu-24.04`**. Offered the choice of bringing
+it back as run-but-not-required, **Dean chose to accept the release rehearsal (`release.yml`, `macos-15`,
+on a tag push) as the only Mac gate.**
+
+**Recorded as a decision rather than a gap, which is the point of writing it down.** The consequences
+are not incidental and each is now chosen:
+
+- **On pull requests and on main, nothing builds the Mac app, its native helpers, or any Swift.** A
+  change that breaks the Electron package, a native helper, or LukeKit **lands green.**
+- **No CI evidence is produced.** So `CLAUDE.md`'s *"CI links generated evidence from the pull request
+  description"* **is now false** and must be corrected — `ci.yml`'s own comment already says the real
+  gate is `verify.sh` **at the developer's hand.**
+- **The first place a Mac build failure surfaces is the release rehearsal**, which is the most expensive
+  and most blocking moment to find one. Accepted deliberately.
+- **It compounds LUKE-162**, which Dean also ruled *not now*: LukeKit's `@MainActor` suites were already
+  uncompiled and `DeviceRegistrarTests` does not compile on main. The uncovered surface is now every Mac
+  and iOS build artefact.
+
+**The consequence that changes another ticket's weight: LUKE-159 is now the ONLY Mac gate before a
+release.** Every worker in this rework ran on Linux with no Mac and said so in its PR body; the
+completion invariant for a UI change (`./scripts/verify.sh`) has been unmeetable by any worker
+throughout, and CI's evidence artefact was the only thing partially compensating. **It is gone.** So
+LUKE-159 stops being "eventually, before the first release" and becomes **the single thing standing
+between this rework's UI work and a broken Mac app.** That is not an argument against Dean's ruling —
+it is what his ruling makes true, and it should be read that way rather than rediscovered.
+
+**Remaining work, LUKE-182:** correct the `CLAUDE.md` sentence, and say in the addendum and the guide
+that the Mac gate is the release rehearsal and `verify.sh` by hand. **A policy nobody wrote down is not
+a policy.**
