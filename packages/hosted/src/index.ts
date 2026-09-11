@@ -208,6 +208,7 @@ export {
   snapshotRoster,
 } from "./roster-client.js";
 export {
+  brainTurnEventsPath,
   conversationMessageRatingPath,
   HOSTED_SERVICE_PATH,
   VOICE_SERVICE_PATH,
@@ -222,6 +223,21 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
+export {
+  decodeTurnEventFrame,
+  encodeTurnEventFrame,
+  TURN_END,
+  TURN_EVENT_KIND,
+  TURN_EVENT_STREAM,
+  TURN_SLOW_STEP,
+  type TurnEnd,
+  type TurnEvent,
+  type TurnEventBody,
+  type TurnEventKind,
+  type TurnSlowStep,
+  turnEventCursorSchema,
+  turnEventSchema,
+} from "./turn-events-wire.js";
 export { HostedVaultClient } from "./vault-client.js";
 export {
   VAULT_KEY_MAX_LENGTH,

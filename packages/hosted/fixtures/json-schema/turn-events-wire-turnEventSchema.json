@@ -1,0 +1,129 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "slow_step"
+          ]
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "transcript_read",
+            "provider_write"
+          ]
+        }
+      },
+      "required": [
+        "turnId",
+        "seq",
+        "kind",
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "actions_settled"
+          ]
+        }
+      },
+      "required": [
+        "turnId",
+        "seq",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "reply_sentence"
+          ]
+        },
+        "sentence": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "turnId",
+        "seq",
+        "kind",
+        "sentence"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ended"
+          ]
+        },
+        "end": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "cancelled",
+            "failed"
+          ]
+        }
+      },
+      "required": [
+        "turnId",
+        "seq",
+        "kind",
+        "end"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

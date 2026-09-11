@@ -18,6 +18,7 @@ import * as projectsWire from "./projects-wire.js";
 import * as ratingWire from "./rating-wire.js";
 import * as readsWire from "./reads-wire.js";
 import * as serviceWire from "./service-wire.js";
+import * as turnEventsWire from "./turn-events-wire.js";
 import * as vaultWire from "./vault-wire.js";
 
 /**
@@ -99,6 +100,10 @@ const MODULE_SCHEMAS = {
     hostedErrorSchema: serviceWire.hostedErrorSchema,
     wireUuidSchema: serviceWire.wireUuidSchema,
   } satisfies RecordedJsonSchemas<typeof serviceWire>,
+  "turn-events-wire": {
+    turnEventCursorSchema: turnEventsWire.turnEventCursorSchema,
+    turnEventSchema: turnEventsWire.turnEventSchema,
+  } satisfies RecordedJsonSchemas<typeof turnEventsWire>,
   "vault-wire": {
     vaultKeyStoreAnswerSchema: vaultWire.vaultKeyStoreAnswerSchema,
     vaultKeysListAnswerSchema: vaultWire.vaultKeysListAnswerSchema,

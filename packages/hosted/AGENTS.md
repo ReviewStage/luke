@@ -117,3 +117,23 @@ alone, which cuts the provider's replay slot (`providerMetadata.openai`, the
 opaque reasoning item and its id) from every part, so a device receives the
 reasoning's summary text and never the item, whichever route carries the
 message. The stored row keeps the slot for the model's own replay.
+
+## A turn's events are a projection, streamed
+
+`turn-events-wire.ts` declares what a client that just asked a turn hears of
+it while it runs, over `GET /api/brain/turns/{id}/events`
+(`brainTurnEventsPath`) as Server-Sent Events: the four run seams the live
+session service consumes — a slow step began, every action settled, one
+sentence of the reply, the turn ended — and nothing wider, no tool part, no
+reasoning, no message. The kinds and the slow-step kinds are the brain's own
+run-stream words spelled here, because this package cannot reach the brain; a
+test in the web app holds the two sets equal. Each event is numbered from one
+inside its turn and the number is the frame's `id`, so a client that lost its
+connection attaches again with the last number it took as `after` and hears
+the rest exactly once; the end is the last event of every turn and the stream
+closes after it, while a stream that closes without an end is one whose
+attachment lapsed at the function's own bound. `encodeTurnEventFrame` and
+`decodeTurnEventFrame` are the framing, so the service and a client read one
+frame the same way and a heartbeat frame decodes to nothing. The service
+stores no event of this kind: the stream is a projection over the turn row
+and the turn's journal, and the wire declares only what travels.
