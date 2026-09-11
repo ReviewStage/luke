@@ -374,6 +374,7 @@ design decision stated as such:
 | `migrateStoreSchemaSync` door over `migrateStoreSchema` | P5-09 | P5-11 |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-14 |
 | `Layer.succeed(oldObject)` / `createHostKernel(options)` | P7-01 | P12-05 |
+| `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P5-14 |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
 The two permanent entries are not unfinished work. A `GATEWAY_ERROR` code and

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it, test } from "@effect/vitest";
 import {
   ACTION_OUTPUT_STATUS,
   ACTION_TOOL,
@@ -19,8 +20,8 @@ import {
   valueFromJsonText,
 } from "@sidecar/wire";
 import { type ToolSet, tool, type UIMessage } from "ai";
-import { Schema } from "effect";
-import { test } from "vitest";
+import { Effect, Schema } from "effect";
+import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {
   ABC,
   acceptedRunId,
@@ -475,53 +476,64 @@ test("an ask cancelled while it waits behind another turn ends alone, at sequenc
   await h.agent.stop();
 });
 
-test("an observation turn tells its start, its words, its calls, its answer, and its end, and none of the relay's moments", async () => {
-  const h = harness();
-  const events = listen(h);
-  await h.agent.wake([edge(ABC)]);
-  h.client.answers.push(answered([readAbc]), answered([message("")]));
-  await h.clock.advance(NOW + 3_000);
-  assert.equal(h.wholeReads.length, 1);
-  assert.deepEqual(kinds(events), [
-    BRAIN_RUN_EVENT.TURN_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
-    BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
-    BRAIN_RUN_EVENT.STEP_STARTED,
-    BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-    BRAIN_RUN_EVENT.TURN_ENDED,
-  ]);
-  assert.deepEqual(relayed(events), []);
-  const turnId = events[0]?.turnId ?? "";
-  assertOneTurn(events, turnId);
-  // The turn is not a recorded run's, so its id is its own and no record ends it.
-  assert.equal(h.agent.requests().length, 0);
-  const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
-  assert.equal(started?.origin, BRAIN_TURN_ORIGIN.OBSERVATION);
-  assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.WAKE);
-  const [observation, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
-  assert.equal(observation?.message.role, MESSAGE_ROLE.USER);
-  assert.deepEqual(observation?.message.metadata, {
-    author: MESSAGE_AUTHOR.BRAIN,
-    source: OBSERVATION_SOURCE.HOOK,
-  });
-  assert.equal(answer?.message.role, MESSAGE_ROLE.ASSISTANT);
-  // An answer that said nothing adds no text part: the call is the whole of
-  // its step, and the silent second inference leaves its boundary alone.
-  assert.deepEqual(
-    answer?.message.parts.map((part) => part.type),
-    [UI_PART_TYPE.STEP_START, toolPartType(BRAIN_TOOL.READ_TRANSCRIPT), UI_PART_TYPE.STEP_START],
-  );
-  const messages = [observation?.message, answer?.message];
-  assert.deepEqual(await readStoredUIMessages(stored(messages), STORED_TOOLS), {
-    ok: true,
-    value: messages,
-  });
-  const [turnEnded] = ofKind(events, BRAIN_RUN_EVENT.TURN_ENDED);
-  assert.equal(turnEnded?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  await h.agent.stop();
-});
+it.effect(
+  "an observation turn tells its start, its words, its calls, its answer, and its end, and none of the relay's moments",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      h.client.answers.push(answered([readAbc]), answered([message("")]));
+      yield* advanceHarness(NOW + 3_000);
+      assert.equal(h.wholeReads.length, 1);
+      assert.deepEqual(kinds(events), [
+        BRAIN_RUN_EVENT.TURN_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+        BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+        BRAIN_RUN_EVENT.STEP_STARTED,
+        BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        BRAIN_RUN_EVENT.TURN_ENDED,
+      ]);
+      assert.deepEqual(relayed(events), []);
+      const turnId = events[0]?.turnId ?? "";
+      assertOneTurn(events, turnId);
+      // The turn is not a recorded run's, so its id is its own and no record ends it.
+      assert.equal(h.agent.requests().length, 0);
+      const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);
+      assert.equal(started?.origin, BRAIN_TURN_ORIGIN.OBSERVATION);
+      assert.equal(started?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+      const [observation, answer] = ofKind(events, BRAIN_RUN_EVENT.MESSAGE_COMPLETED);
+      assert.equal(observation?.message.role, MESSAGE_ROLE.USER);
+      assert.deepEqual(observation?.message.metadata, {
+        author: MESSAGE_AUTHOR.BRAIN,
+        source: OBSERVATION_SOURCE.HOOK,
+      });
+      assert.equal(answer?.message.role, MESSAGE_ROLE.ASSISTANT);
+      // An answer that said nothing adds no text part: the call is the whole of
+      // its step, and the silent second inference leaves its boundary alone.
+      assert.deepEqual(
+        answer?.message.parts.map((part) => part.type),
+        [
+          UI_PART_TYPE.STEP_START,
+          toolPartType(BRAIN_TOOL.READ_TRANSCRIPT),
+          UI_PART_TYPE.STEP_START,
+        ],
+      );
+      const messages = [observation?.message, answer?.message];
+      assert.deepEqual(
+        yield* Effect.promise(() => readStoredUIMessages(stored(messages), STORED_TOOLS)),
+        {
+          ok: true,
+          value: messages,
+        },
+      );
+      const [turnEnded] = ofKind(events, BRAIN_RUN_EVENT.TURN_ENDED);
+      assert.equal(turnEnded?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
 
 test("a child's task turn is told as a child's, with the task as its words and its record's end in its sequence", async () => {
   const h = harness();
