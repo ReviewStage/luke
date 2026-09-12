@@ -18,6 +18,7 @@ import {
   isAppGuideSnapshot,
 } from "@sidecar/guide";
 import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
+import { cadenceHome } from "@sidecar/runtime/effect";
 import {
   CONVERSATION_KIND,
   conversationKindOf,
@@ -41,7 +42,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, type Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
@@ -83,10 +84,11 @@ export interface BrainDependencies {
 
 export const composeBrain = (
   dependencies: BrainDependencies,
-): Effect.Effect<BrainComposer, never, HostKernelTag> =>
+): Effect.Effect<BrainComposer, never, HostKernelTag | Scope.Scope> =>
   Effect.gen(function* () {
     const { account, observation, announcements } = dependencies;
     const kernel = yield* HostKernelTag;
+    const home = yield* cadenceHome;
     // The runtime the store's asks and every run of the tool loop are fibers
     // of: the host's own, so a turn and the host that cancels it stand on one
     // runtime rather than on a second one built where the work lives.
@@ -330,7 +332,7 @@ export const composeBrain = (
         });
         await wiring.store().load();
         await store.restore();
-        stopConversationMaintenance = startConversationMaintenance({ store, brain: wiring });
+        stopConversationMaintenance = startConversationMaintenance({ store, brain: wiring, home });
       },
       stop: async () => {
         stopConversationMaintenance?.();

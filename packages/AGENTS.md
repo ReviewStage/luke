@@ -272,7 +272,12 @@ beside the hand-rolled base while both are still in use — the `Scope`,
 `toSchemaRead` — kept off the main barrel so a caller that only wants the
 wire vocabulary never resolves `@effect/platform`. `@sidecar/runtime/effect` is
 that door one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and
-repeated work into a `Scope`, which is what cancels it, `timersFromRuntime`
+repeated work into a `Scope`, which is what cancels it, `cadenceHome` with
+`openCadenceScope`, `forkIntoCadence`, and `closeCadenceScope` are where a
+cadence armed at an edge outside any effect — an account gate opening, a
+supervisor enabling a loop — takes its scope and its runtime from, so its
+fibers are a child of the scope its owner was built in rather than an orphan
+on the ambient default runtime, `timersFromRuntime`
 answers the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so
 a caller still injected with those closures reads the clock the rest of the
 process reads, `makePendingInputQueue` with `admitInput` and
@@ -292,8 +297,9 @@ apart from one a layer denied, while `decodeConversationRecord` and
 as effects that fail with a typed refusal rather than answering `undefined`.
 The vocabulary door names none of them, so a package that opens only it
 resolves no `effect`, while the barrel now does: `ObservationLoop` keeps its
-cadence on a `Schedule` forked into a `Scope` of its own rather than on an
-interval, so a caller that opens the barrel resolves `effect` behind it.
+cadence on a `Schedule` forked into a `Scope` forked from the home it was
+handed rather than on an interval, so a caller that opens the barrel resolves
+`effect` behind it.
 `@sidecar/providers` needs no such door any more: what remains of it is the
 Conductor cloud adapter, whose pass rides `HttpClient` and takes the `Scope`
 it needs from whoever runs it, so the package names `@effect/platform` and no

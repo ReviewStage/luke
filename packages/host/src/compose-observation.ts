@@ -15,6 +15,7 @@ import {
   HostedSessionMessagesClient,
 } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
+import { cadenceHome } from "@sidecar/runtime/effect";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
@@ -34,7 +35,7 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, type Scope } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -107,10 +108,11 @@ export interface ObservationDependencies {
  */
 export const composeObservation = (
   dependencies: ObservationDependencies,
-): Effect.Effect<ObservationComposer, never, HostKernelTag> =>
+): Effect.Effect<ObservationComposer, never, HostKernelTag | Scope.Scope> =>
   Effect.gen(function* () {
     const { settings, account, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
+    const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
     const late = yield* lateService<ObservationLinks>();
@@ -314,6 +316,7 @@ export const composeObservation = (
 
     const loop = new ObservationLoop({
       gate: observationGate,
+      home,
       intervalMs: SESSION_REFRESH_INTERVAL_MS,
       // The projects are drawn before the roster, so the broadcast the roster's
       // commit fires already reads the list the same pass listed.

@@ -10,7 +10,7 @@ import {
   GATEWAY_SHUTDOWN_DEFAULTS,
   GatewayClient,
   NODE_CAPABILITY_STATUS,
-  shutdownGateway,
+  shutdownGatewayEffect,
 } from "@sidecar/gateway";
 import {
   bearerAuthentication,
@@ -265,27 +265,29 @@ it.live(
                 { idempotencyKey: "sub-q" },
               );
               assert.ok(submitted.ok);
-              const report = await shutdownGateway(
-                {
-                  closeAdmissions,
-                  cancelActive: async () => {
-                    const cancelled: string[] = [];
-                    for (const held of f.live.values()) {
-                      if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
-                      cancelled.push(held.runId);
-                      await f.agent.cancelAsk(held.runId);
-                    }
-                    return cancelled;
+              const report = await Effect.runPromise(
+                shutdownGatewayEffect(
+                  {
+                    closeAdmissions,
+                    cancelActive: async () => {
+                      const cancelled: string[] = [];
+                      for (const held of f.live.values()) {
+                        if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
+                        cancelled.push(held.runId);
+                        await f.agent.cancelAsk(held.runId);
+                      }
+                      return cancelled;
+                    },
+                    awaitSettled: async () => undefined,
+                    persistUnresolved: async () =>
+                      [...f.persisted.values()].filter(
+                        (held) =>
+                          held.status === BRAIN_REQUEST_STATUS.QUEUED ||
+                          held.status === BRAIN_REQUEST_STATUS.RUNNING,
+                      ).length,
                   },
-                  awaitSettled: async () => undefined,
-                  persistUnresolved: async () =>
-                    [...f.persisted.values()].filter(
-                      (held) =>
-                        held.status === BRAIN_REQUEST_STATUS.QUEUED ||
-                        held.status === BRAIN_REQUEST_STATUS.RUNNING,
-                    ).length,
-                },
-                { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
+                  { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
+                ),
               );
               assert.deepEqual(report.cancelled, ["run-1"]);
               assert.equal(report.settled, true);
@@ -311,14 +313,16 @@ it.live(
 );
 
 test("a shutdown whose cancellation hangs still ends at the deadline with what did not settle counted", async () => {
-  const report = await shutdownGateway(
-    {
-      closeAdmissions: () => undefined,
-      cancelActive: () => new Promise(() => undefined),
-      awaitSettled: async () => undefined,
-      persistUnresolved: async () => 2,
-    },
-    { deadlineMs: 20 },
+  const report = await Effect.runPromise(
+    shutdownGatewayEffect(
+      {
+        closeAdmissions: () => undefined,
+        cancelActive: () => new Promise(() => undefined),
+        awaitSettled: async () => undefined,
+        persistUnresolved: async () => 2,
+      },
+      { deadlineMs: 20 },
+    ),
   );
   assert.equal(report.settled, false);
   assert.deepEqual(report.cancelled, []);

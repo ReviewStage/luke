@@ -5,11 +5,20 @@
  * generation, the gate, and the coalescing are the loop's own and stay as they
  * were: a caller reads `isCurrent` synchronously from inside its own pass.
  *
- * `start` and `stop` are the adaptor over that scope while the composers that
- * arm these loops are still written in promises; P7-10 deletes them once every
- * one of those composers is a `Layer` and the scope is the host's own.
+ * The scope each `start` makes is a child of the home the loop was handed, so
+ * a loop the host arms is forked on the host's own runtime and ends when the
+ * host's scope closes, whatever became of the `stop` that should have ended
+ * it. `start` and `stop` themselves stay: what arms these loops is the
+ * account gate opening and closing, not the composer's own lifetime, so a
+ * sign-out disarms them while the host still stands.
  */
-import { Duration, Effect, Exit, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, Schedule, type Scope } from "effect";
+import {
+  type CadenceHome,
+  closeCadenceScope,
+  forkIntoCadence,
+  openCadenceScope,
+} from "./effect/cadence.js";
 import { scheduleRepeat } from "./effect/timers.js";
 
 export interface ObservationLoopOptions {
@@ -24,13 +33,13 @@ export interface ObservationLoopOptions {
    * quiet for the rest of the run.
    */
   report?: (message: string) => void;
-  /** The runtime the cadence is forked on, for a caller (a test today) that holds its own. */
-  runtime?: Runtime.Runtime<never>;
+  /** Where the cadence's fibers live: the host's runtime and the scope each `start` forks its own from. */
+  home?: CadenceHome;
 }
 
 export class ObservationLoop {
   readonly #options: ObservationLoopOptions;
-  readonly #runtime: Runtime.Runtime<never>;
+  readonly #home: CadenceHome | undefined;
   readonly #report: (message: string) => void;
   #generation = 0;
   #running = false;
@@ -43,7 +52,7 @@ export class ObservationLoop {
 
   constructor(options: ObservationLoopOptions) {
     this.#options = options;
-    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
+    this.#home = options.home;
     this.#report = options.report ?? ((message) => void process.stderr.write(`${message}\n`));
   }
 
@@ -67,15 +76,12 @@ export class ObservationLoop {
 
   start(): void {
     if (this.#scope || !this.#options.gate()) return;
-    const runSync = Runtime.runSync(this.#runtime);
-    const scope = runSync(Scope.make());
+    const scope = openCadenceScope(this.#home);
     this.#scope = scope;
-    runSync(
-      Effect.provideService(
-        scheduleRepeat(Schedule.spaced(Duration.millis(this.#options.intervalMs)), this.#pass),
-        Scope.Scope,
-        scope,
-      ),
+    forkIntoCadence(
+      this.#home,
+      scope,
+      scheduleRepeat(Schedule.spaced(Duration.millis(this.#options.intervalMs)), this.#pass),
     );
   }
 
@@ -90,7 +96,7 @@ export class ObservationLoop {
     this.#queued = false;
     const scope = this.#scope;
     this.#scope = undefined;
-    if (scope) Runtime.runFork(this.#runtime)(Scope.close(scope, Exit.void));
+    if (scope) closeCadenceScope(this.#home, scope);
   }
 
   async refresh(): Promise<void> {

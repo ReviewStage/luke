@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Effect, TestClock } from "effect";
+import { Effect, Exit, Scope, TestClock } from "effect";
 import { test } from "vitest";
+import { cadenceHome } from "./effect/cadence.js";
 import { ObservationLoop, ObservationSupervisor } from "./observation-loop.js";
 
 function deferred() {
@@ -128,9 +129,9 @@ test("a pass that outlives its stop does not run the after-run hook", async () =
 });
 
 describe("the cadence", () => {
-  it.effect("runs a pass at every spaced instant until the loop stops", () =>
+  it.scoped("runs a pass at every spaced instant until the loop stops", () =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       const clock = yield* Effect.clock;
       const passes: number[] = [];
       const loop = new ObservationLoop({
@@ -139,7 +140,7 @@ describe("the cadence", () => {
         run: async () => {
           passes.push(clock.unsafeCurrentTimeMillis());
         },
-        runtime,
+        home,
       });
 
       loop.start();
@@ -155,9 +156,9 @@ describe("the cadence", () => {
     }),
   );
 
-  it.effect("keeps its cadence over a pass that failed and reports it", () =>
+  it.scoped("keeps its cadence over a pass that failed and reports it", () =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       const reports: string[] = [];
       const passes: number[] = [];
       const loop = new ObservationLoop({
@@ -168,7 +169,7 @@ describe("the cadence", () => {
           if (passes.length === 2) throw new Error("provider unreachable");
         },
         report: (message) => reports.push(message),
-        runtime,
+        home,
       });
 
       loop.start();
@@ -178,6 +179,30 @@ describe("the cadence", () => {
       assert.equal(reports.length, 1);
       assert.deepEqual(passes, [0, 1, 2]);
       loop.stop();
+    }),
+  );
+
+  it.effect("ends when the home's scope closes, whatever became of the stop that should have", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const home = yield* Effect.provideService(cadenceHome, Scope.Scope, scope);
+      const passes: number[] = [];
+      const loop = new ObservationLoop({
+        gate: () => true,
+        intervalMs: 30_000,
+        run: async () => {
+          passes.push(passes.length);
+        },
+        home,
+      });
+
+      loop.start();
+      yield* TestClock.adjust("30 seconds");
+      assert.deepEqual(passes, [0, 1]);
+
+      yield* Scope.close(scope, Exit.void);
+      yield* TestClock.adjust("5 minutes");
+      assert.deepEqual(passes, [0, 1]);
     }),
   );
 });
