@@ -3309,3 +3309,54 @@ with no compiler between it and `product-events.ts`, so *"a transcription that d
 refused batch, never as a value that traveled."* **Dean confirms the hand-syncing is deliberate for
 now, which makes the refused batch the only check that exists.** The option of trimming unknown names
 is withdrawn and should stay withdrawn.
+
+
+## 2026-09-12 ~01:00Z — the Services preset sitting ABORTED for tonight; the treadmill is the finding
+
+**Decided by me, not escalated** — deferring a sitting changes no schema, contract or trust rule.
+Dean was asked three times and was mid-relay each time; five workers were merge-frozen waiting on an
+answer, and the cost of continued waiting exceeded the cost of deciding.
+
+**What was attempted.** Flip the Vercel preset to Services, redeploy #1018's preview, read two log
+facts and eight caller-path probes, enqueue #1018 within the minute so main's first production deploy
+under the new preset carries the matching `vercel.json`.
+
+**Why it did not happen.** The flip needs the merge queue empty for roughly twenty minutes, because
+between the flip and #1018's merge **any web-triggering merge deploys production under the Services
+preset with main's non-services config** — a combination never built.
+
+**My freeze held perfectly and was not enough.** All five workers reported `mergeQueueEntry` and
+`autoMergeRequest` null; several stopped watchers they had already armed; one had dequeued its own PR
+twice after a watcher re-enqueued it in the seconds before the stop took. **Not one press came from
+this lane.** The merges that broke it came from Charles's Effect lane: **#1212 (route table) and
+#1208 (`packages/AGENTS.md`), twenty-five minutes apart, each dirtying #1018.**
+
+### The finding, which outlives tonight
+
+**#1018 can only land on a queue quiet across every lane, not just ours.** More discipline on our side
+does not fix it. That sentence belongs in the runbook (#1210) rather than in my head, and whoever
+runs the sitting needs it before they start.
+
+**Seven rebases tonight**, each a bootstrap, a full check, a CI round and a fresh review pair, each
+invalidated by the next merge. **I stopped the eighth** rather than buy a lottery ticket on a quiet
+window that had not occurred once. The rebase is now the *last* thing before the flip, not the first.
+
+### Three of my own instructions were too narrow, in sequence
+
+1. *"hold anything touching `apps/web`"* — wrong: the ignore command is a **path filter** over
+   `:/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json` that never reads
+   content, so **a prose edit to `packages/host/AGENTS.md` builds and deploys the web app.**
+2. *"do not add avoidable build traffic"* — correct but a different constraint with a different
+   lifetime; previews compete with production for capacity, which is why publication stalled 24
+   minutes earlier tonight.
+3. **I sent the hold to four workers and not to the fifth**, launched forty minutes earlier. Its PR
+   merged during the window. **My error, not its** — it was never told.
+
+**The rule: a hold with exceptions is a hold I will get wrong at 1am.** The blanket form — *nobody
+enqueues anything, ask if unsure* — was the one that held.
+
+### Not harmed
+
+Every one of tonight's four production deploys landed while the preset was still Vite, so the hazard
+never fired; all eight caller paths answered correctly through each. The rollback anchor was re-read
+at every move and ended at record `6404254998`, sha `faf4e3e9`, Production, success, 00:55:57Z.
