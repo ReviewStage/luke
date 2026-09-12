@@ -3407,3 +3407,47 @@ not a failure"* with this log as the example.
 the contested files. **Not every merge is a treadmill turn; the ones that matter are the ones touching
 `vercel.json`, the route table, or `packages/AGENTS.md`.** Worth knowing before freezing everything
 next time.
+
+
+## 2026-09-12 ~07:25Z — SCHEMA RULING: stored instants become `timestamptz`; the first Mac `verify.sh`
+
+**The first `verify.sh` pass on a real Mac (LUKE-159), driven through Conductor's local-Mac command
+tool from this orchestrator session, found a schema defect in ten minutes that no cloud worker or CI
+run could ever see.**
+
+`hosted-account-store.test.ts › a written snapshot reads back whole` failed by **exactly 25,200,000 ms
+= 7 h**, the Mac's UTC offset. **Re-run with `TZ=UTC`, it passed** — same code, same machine, same
+database. Root cause, read from the production schema: **ten tables store `updated_at` as
+`timestamp without time zone`** (`account`, `account_preference`, `account_workspace_preference`,
+`devices`, `oauth_client`, `oauth_consent`, `provider_key`, `session`, `user`, `verification`); only
+`provider_cursors` is `timestamptz`, and `workspace_file` uses epoch `bigint`. A JavaScript `Date`
+written into a zone-less column loses its zone and is reinterpreted in the host's on read. **Production
+is correct only because the service runs UTC — by deployment, not by construction.**
+
+**Dean's ruling: "What is the most standard best practice way to store timestamp in this scenario? We
+should go with that."** For PostgreSQL that is **`timestamp with time zone`** — an absolute instant,
+normalised to UTC, round-tripping a `Date` losslessly on any host; PostgreSQL's own guidance lists the
+zone-less type under "don't do this". **Every zone-less timestamp column is in scope, not only
+`updated_at`. One convention wins.** Filed as LUKE-198; migration under the slot protocol, with the
+better-auth tables checked against the Kysely adapter first and the `AT TIME ZONE 'UTC'` conversion
+verified against a known row before it runs. Staffed as the next slot frees.
+
+### The rest of the Mac run, judged
+
+- **Fourteen stale `packages/*` directories** (only `node_modules`, zero tracked or untracked files)
+  crashed `api-callers.ts` with ENOENT. Removed on the Mac after inspection; the tolerance fix is a
+  worker's PR. **CI clones fresh and can never see a stale directory** — recorded in `_addendum.md`.
+- **Two `store-client.test.ts` timeouts at 5 s** under the whole suite; **alone they pass in 1.0 s and
+  0.7 s.** A load artefact, same family as LUKE-187 — whose `onTaskUpdate` timeout **also reproduced
+  on the Mac**, so it is the whole-suite-on-one-machine shape, not the sandbox. Both files are in the
+  SQLite store LUKE-143 deletes.
+- **Lint fails on Dean's own untracked `.claude/settings.json`** — a per-user file Biome scans. Not a
+  repository defect; a question of whether Biome should ignore `.claude/`.
+- **A stale `grep …/apps/web/api`** in `repository-checks.sh`, non-fatal; the directory left with #1199.
+- **`evidence.sh` has never run on this rework.** A worker (W-159) now holds the Mac pass to
+  completion: evidence captured and inspected, the notch answer, and a real-versus-machine judgment
+  per failure.
+
+**The general lesson: a machine's local defects — its zone, its stale directories, its load — are
+invisible to every fresh-clone UTC runner by construction, and the only instrument that sees them is
+a run on that machine.** LUKE-159 was offered for cancellation an hour before it found this.
