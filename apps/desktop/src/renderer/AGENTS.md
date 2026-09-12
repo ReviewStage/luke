@@ -168,15 +168,19 @@ it: `ACT_KIND.INTRODUCTION_CREATE_SESSION` carries the offer, whose title seed
 (bounded to `INTRODUCTION_SEED_BOUNDS`) the takeover fills with nothing, to the
 accountless session the main process holds, and
 `ACT_KIND.INTRODUCTION_END_SESSION` is the hang-up.
-The order is the Live guide's greeting before the caller speaks: the
-microphone is asked for first, at the developer's press, and the session
-opens only once it is granted; the greeting is the voice service's, the
-takeover sends nothing but the microphone switch and the hang-up, and it ends
-when Luke's output has gone quiet by the ledger's settle and the remote
-track's level (`introduction-quiet.ts`), never by a missing event, or at the
-greeting's own ceiling when an answered greeting never goes quiet. Every beat
-a session stands in leaves on some clock of the takeover's own: none waits
-on the model alone. The panel
+The greeting is scripted: the microphone is asked for first, at the
+developer's press, for the talk key's sake and not the greeting's, and the
+session opens once the dialog is answered either way, with no capture
+device on its offer (`byPress: false`, the peer's own silence on the line)
+and never unmuted, so the takeover sends nothing but the hang-up and the
+talk key is not routed to it. The introduction draws no session rows and
+lands in the capsule. The greeting is the voice service's, and it ends when
+Luke's output has gone quiet by the ledger's settle and the remote track's
+level (`introduction-quiet.ts`), never by a missing event, or at the
+greeting's own ceiling when the model has not stopped, or when the session
+ends on the service's side after something was said. Every beat a session
+stands in leaves on some clock of the takeover's own: none waits on the
+model alone. The panel
 window's `connect-src` names no OpenAI host: nothing in this bundle fetches
 one any more.
 

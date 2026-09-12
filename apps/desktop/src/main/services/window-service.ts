@@ -305,16 +305,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const hotkeys = new HotkeyRegistrar({
     registersGlobalKeys: runMode.registersGlobalKeys,
-    // The introduction's practice beat is the one time the talk key is claimed
-    // with no account credential behind it; otherwise a voice stands only when
-    // the host says one does.
-    hasCredentials: (rank) =>
-      operator.voiceAvailable() || (rank === HOTKEY_RANK.TALK && introductionPlaying()),
+    // A voice stands only when the host says one does: the introduction's
+    // greeting is scripted and never unmutes, so it claims no key.
+    hasCredentials: () => operator.voiceAvailable(),
     host: {
-      // While the introduction plays, its own call runs in the panel window
-      // it took: the takeover holds the microphone and the beats, so the key
-      // has to reach the surface that answers it.
-      voiceHost: () => (introductionPlaying() ? panels.primaryPanel() : voiceWindow.current()),
+      voiceHost: () => voiceWindow.current(),
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
         const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;

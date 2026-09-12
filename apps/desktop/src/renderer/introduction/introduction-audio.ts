@@ -86,11 +86,6 @@ export class IntroductionAudio {
     window.setTimeout(() => this.bell(1_318.5, 0.05, 1.1), 120);
   }
 
-  /** The staged "needs you" flip: one small high bell. */
-  ding(): void {
-    this.bell(1_174.66, 0.07, 0.8);
-  }
-
   dispose(): void {
     const context = this.#context;
     this.#context = undefined;

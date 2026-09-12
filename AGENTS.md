@@ -1132,11 +1132,16 @@ Canonical commands:
 - The spoken introduction is the one moment Luke runs before the account gate,
   and it is bounded on every side. It plays on the first interactive launch,
   before any account exists, at most once to the end: a completion on file
-  never replays, and it never runs in a fixture or evidence run. It is the
-  GPT Live guide's greeting before the caller speaks, so its order is fixed
-  by that: the takeover asks for the microphone first, through the system's
-  real dialog raised by the developer's own press on the dark stage, and only
-  a granted microphone opens a session at all. Its voice is one GPT Live
+  never replays, and it never runs in a fixture or evidence run. It is a
+  scripted greeting, not a conversation: Luke says his piece and hands over.
+  The takeover asks for the microphone first, through the system's real
+  dialog raised by the developer's own press on the dark stage, for the talk
+  key's sake once they sign in and not for the greeting, which hears nobody;
+  the answer, granted or refused, changes nothing of what follows, and the
+  greeting is spoken either way. It draws no session row at any point: a
+  desk Luke cannot observe yet is not pictured, and fixture rows never stand
+  in for one, so Luke flies to the capsule and greets from it, captioned
+  under the housing the way a briefing is. Its voice is one GPT Live
   session created through the accountless introduction endpoint of Luke's own
   voice service (`VOICE_SERVICE_PATH.INTRODUCTION`), which holds the project
   key and the session's trusted sideband itself, keeps nothing about the
@@ -1146,12 +1151,15 @@ Canonical commands:
   awaited under a bounded wait and a refusal written down by its kind alone,
   and then the one `session.commentary.append` that cues the model to begin;
   the takeover is a peer of that session and nothing
-  more, the same `LiveCall` the conversation runs on, permitted only the
-  microphone switch and the hang-up and shown only captions, and the
-  connection the session was created over is what the main process holds
-  for the introduction's duration, because the service reads its close as
-  the hang-up. No credential reaches the desktop at any point, no backend
-  listens, and no carrier is wired behind it, so nothing said, heard, or
+  more, the same `LiveCall` the conversation runs on, opened with no capture
+  device — the peer's own synthesized silence stands on the sending line, as
+  it does for a session opened for a briefing — never unmuted, permitted only
+  the hang-up, and shown only captions; the talk key is not routed to it and
+  claims nothing while it plays. The connection the session was created over
+  is what the main process holds for the introduction's duration, because
+  the service reads its close as the hang-up. No credential reaches the
+  desktop at any point, nothing of the developer's voice reaches the session,
+  no backend listens, and no carrier is wired behind it, so nothing said or
   shown during the introduction can become an action. No observed value
   travels on it today: the desktop fills the offer's seed with nothing, since
   no session is detected before an account exists. The wire still admits a
@@ -1159,21 +1167,23 @@ Canonical commands:
   most eight titles each cut to eighty characters (`INTRODUCTION_SEED_BOUNDS`,
   mirrored by the service's own admission) — so filling it again is a product
   decision, not an implementation detail.
-  The microphone is unmuted the moment the session starts, since the greeting
-  is meant to be answered, and the talk key routed to the takeover for the
-  introduction's duration is the same unmute; the introduction ends when
-  Luke's output has gone quiet after the greeting — read from the transcript
-  ledger's settle and the remote track's level, never from a missing event —
-  or the greeting has run to its own ceiling (45 seconds) without going
-  quiet, because a greeting answered and answered back never does, and a
-  bounded listening window for a word back has passed: the takeover
-  hangs up, the panel leaves the display it took and stands up as the ordinary
-  signed-out panel with its own gate, and observation, announcements, and
-  every other capability still release only through the ordinary account gate
-  when the sign-in itself lands. A developer who refuses the microphone, and
-  an introduction that cannot speak, stand down to the ordinary signed-out
-  launch and write nothing. Widening what the introduction reads, sends, or
-  can do is a product decision, not an implementation detail.
+  The greeting instruction tells the model the microphone is off and to stop
+  once its piece is said, and the takeover does not rely on it: the
+  introduction ends when Luke's output has gone quiet — read from the
+  transcript ledger's settle and the remote track's level, never from a
+  missing event — or at the greeting's own ceiling (45 seconds) whatever the
+  model is still saying, or when the session ends on the service's side
+  after something was said; every beat a session stands in leaves on a clock
+  of the takeover's own, never on the model alone choosing to stop. Then the
+  takeover hangs up, the panel leaves the display it took and stands up as
+  the ordinary signed-out panel with its own gate, and observation,
+  announcements, and every other capability still release only through the
+  ordinary account gate when the sign-in itself lands. An introduction that
+  cannot speak stands down to the ordinary signed-out launch and writes
+  nothing; a greeting heard to its quiet, its ceiling, or its session's end
+  is written down as given and never replays. Widening what the introduction
+  reads, sends, or can do is a product decision, not an implementation
+  detail.
 
 ### The surface and its fixtures
 
