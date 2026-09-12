@@ -338,6 +338,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const source = this.#options.source();
     if (!source) return undefined;
     const roster = this.#options.roster?.() ?? [];
+    this.#dropPendingRoster();
     const opened = await source.create({ sdpOffer, input: this.#seedInput(roster) });
     if (!opened) return undefined;
     this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
@@ -359,6 +360,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   async adoptSession(opened: AdoptableSession): Promise<boolean> {
     if (this.#standing) await this.endSession();
+    this.#dropPendingRoster();
     this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
     const sideband = await this.#attach(opened);
     if (!sideband) return false;
@@ -378,6 +380,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#trace(LIVE_TRACE_DECISION.STARTED);
     this.#drain();
     this.#speakLate(session);
+    this.#tellRoster();
     this.#considerIdle(session);
   }
 
@@ -491,12 +494,17 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   async stop(): Promise<void> {
     this.#stopRunEvents();
     this.#queue.clear();
+    this.#dropPendingRoster();
+    await this.endSession();
+  }
+
+  /** Everything waiting to be told about the desk, discarded: a fresher roster has superseded it, or nothing will read it again. */
+  #dropPendingRoster(): void {
     if (this.#rosterTimer !== undefined) {
       this.#options.cancel(this.#rosterTimer);
       this.#rosterTimer = undefined;
     }
     this.#rosterPending = undefined;
-    await this.endSession();
   }
 
   /**
@@ -540,9 +548,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #tellRoster(): void {
     const sessions = this.#rosterPending;
     if (sessions === undefined) return;
-    this.#rosterPending = undefined;
+    // A change that settled between a session's creation and its start has
+    // nowhere to go yet and is kept rather than dropped: the start tells it,
+    // so the session the developer is about to speak into does not answer
+    // from the snapshot its offer was composed with.
     const session = this.#speakable();
     if (!session) return;
+    this.#rosterPending = undefined;
     const text = rosterUpdateText(session.rosterTold, sessions, this.#options.now());
     if (text === undefined) return;
     session.rosterTold = sessions;

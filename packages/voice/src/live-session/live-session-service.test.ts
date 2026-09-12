@@ -1388,6 +1388,32 @@ test("a roster that comes back reading the same appends nothing", async () => {
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
 });
 
+test("a desk that moves between a session's creation and its start is told at the start, not dropped", async () => {
+  const f = fixture();
+  f.roster.push(rosterSession("a"));
+  const created = await f.service.createSession("offer");
+  assert.ok(created);
+  const sideband = f.sidebands[0];
+  assert.ok(sideband);
+  f.service.updateRoster([rosterSession("a"), rosterSession("b")]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+  sideband.started(created.sessionId);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
+});
+
+test("a change the seed's own read has already superseded is discarded, never told back as news", async () => {
+  const f = fixture();
+  f.service.updateRoster([rosterSession("a")]);
+  f.roster.push(rosterSession("a"), rosterSession("b"));
+  const sideband = await f.open();
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+});
+
 test("a desk that moves while no session stands opens none and sends nothing", async () => {
   const f = fixture();
   f.service.updateRoster([rosterSession("a")]);

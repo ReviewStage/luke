@@ -127,24 +127,36 @@ function sessionLine(session: RosterSeedSession, now: number): string {
 }
 
 /**
- * What a session holding for the developer, and then one still working, are
- * worth hearing about first: the cap cuts from the end, so the sessions that
- * could need the developer survive a desk with more agents on it than the
+ * What is worth hearing about first: the cap cuts from the end, so the order
+ * decides which sessions survive a desk with more agents on it than the
  * summary carries. Within a rank the provider's own newest write leads.
  */
 const STATUS_RANK = {
-  [SESSION_STATUS.WAITING]: 0,
-  [SESSION_STATUS.WORKING]: 1,
-  [SESSION_STATUS.ERROR]: 2,
-  [SESSION_STATUS.COMPLETE]: 3,
-  [SESSION_STATUS.UNKNOWN]: 4,
+  [SESSION_STATUS.WAITING]: 1,
+  [SESSION_STATUS.WORKING]: 2,
+  [SESSION_STATUS.ERROR]: 3,
+  [SESSION_STATUS.COMPLETE]: 4,
+  [SESSION_STATUS.UNKNOWN]: 5,
 } as const satisfies Record<SessionStatus, number>;
+
+/**
+ * A wait its provider reported as holding for the developer leads every other
+ * row, ahead of a wait that is merely idle after a turn. It is the line the
+ * cap must never cut: a hold is the whole answer to "anything need me?", and
+ * an old one is still holding, so recency must not put it behind a newer wait
+ * that asks for nothing.
+ */
+const HOLDING_RANK = 0;
+
+function rank(session: RosterSeedSession): number {
+  return session.status === SESSION_STATUS.WAITING && session.holdingForDeveloper === true
+    ? HOLDING_RANK
+    : STATUS_RANK[session.status];
+}
 
 function ordered(sessions: readonly RosterSeedSession[]): readonly RosterSeedSession[] {
   return [...sessions].sort(
-    (left, right) =>
-      STATUS_RANK[left.status] - STATUS_RANK[right.status] ||
-      right.lastActivityAt - left.lastActivityAt,
+    (left, right) => rank(left) - rank(right) || right.lastActivityAt - left.lastActivityAt,
   );
 }
 

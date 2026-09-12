@@ -62,25 +62,50 @@ test("an empty desk seeds nothing at all", () => {
   assert.equal(rosterSeedItem([], NOW), undefined);
 });
 
-test("a session holding for the developer leads, then working, then the rest, newest write first inside each", () => {
-  const waiting = session({
-    id: "waiting",
+test("a hold leads, then a plain wait, then working, then the rest, newest write first inside each", () => {
+  const holding = session({
+    id: "holding",
     status: SESSION_STATUS.WAITING,
     holdingForDeveloper: true,
     lastActivityAt: NOW - 30 * MINUTE,
+  });
+  const waiting = session({
+    id: "waiting",
+    status: SESSION_STATUS.WAITING,
+    lastActivityAt: NOW - MINUTE,
   });
   const workingOld = session({ id: "working-old", lastActivityAt: NOW - 10 * MINUTE });
   const workingNew = session({ id: "working-new", lastActivityAt: NOW - 2 * MINUTE });
   const complete = session({ id: "complete", status: SESSION_STATUS.COMPLETE });
   const failed = session({ id: "failed", status: SESSION_STATUS.ERROR });
-  const text = rosterSeedText([complete, workingOld, failed, workingNew, waiting], NOW);
+  const text = rosterSeedText([complete, workingOld, failed, workingNew, waiting, holding], NOW);
   assert.deepEqual(lines(text).slice(1, -1), [
+    lineOf(holding),
     lineOf(waiting),
     lineOf(workingNew),
     lineOf(workingOld),
     lineOf(failed),
     lineOf(complete),
   ]);
+});
+
+test("the cap never cuts a hold, however old it is beside the waits around it", () => {
+  const holding = session({
+    id: "holding",
+    status: SESSION_STATUS.WAITING,
+    holdingForDeveloper: true,
+    lastActivityAt: NOW - 10 * 60 * MINUTE,
+  });
+  const newerWaits = Array.from({ length: ROSTER_SEED_BOUNDS.SESSIONS + 4 }, (_, index) =>
+    session({
+      id: `wait-${index}`,
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: NOW - index * MINUTE,
+    }),
+  );
+  const body = lines(rosterSeedText([...newerWaits, holding], NOW)).slice(1, -1);
+  assert.equal(body.length, ROSTER_SEED_BOUNDS.SESSIONS);
+  assert.equal(body[0], lineOf(holding));
 });
 
 test("the desk is capped, and the whole summary stays inside one append's bound", () => {
