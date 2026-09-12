@@ -5,7 +5,8 @@ import { spawn } from "node:child_process";
 // typecheck and the tests have vouched for. Each check's output is held and
 // printed whole when it ends, so two failing checks never interleave.
 // CI runs the tests in its own sharded jobs beside this one, so it asks for
-// everything but them with `--without test`; the local check still runs all.
+// everything but them with `--without test`; the local check runs the same
+// shards in turn through `pnpm test`.
 const CONCURRENT_CHECKS = ["lint", "knip", "typecheck", "test"];
 const WITHOUT_FLAG = "--without";
 const withoutIndex = process.argv.indexOf(WITHOUT_FLAG);
