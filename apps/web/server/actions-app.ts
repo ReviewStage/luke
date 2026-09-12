@@ -5,8 +5,10 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "@effect/platform";
-import { Effect } from "effect";
+import type { SqlClient } from "@effect/sql";
+import { Effect, Redacted } from "effect";
 import {
+  type HostedActionEffect,
   handleAgentAction,
   handleControlAction,
   handleMessageAction,
@@ -14,8 +16,9 @@ import {
   handleRenameWorkspaceAction,
   handleWorkspaceAction,
 } from "./hosted/action-session.js";
+import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
-import { type HostedVaultRoute, hostedVaultRoute } from "./hosted/vault-route.js";
+import { type HostedVaultRoute, hostedVaultSeams } from "./hosted/vault-route.js";
 
 /**
  * The actions surface as one route group: the six endpoints through which the
@@ -23,9 +26,11 @@ import { type HostedVaultRoute, hostedVaultRoute } from "./hosted/vault-route.js
  * or create one, on the developer's behalf (root AGENTS.md "Acts on a
  * session"). Each endpoint is already the whole of admission, the roster
  * read, and dispatch, so the group only carries the request across the
- * `HttpApi` boundary and back, the way `server/auth-app.ts` carries Better
- * Auth's; nothing about the admission gauntlet, the roster, or the refusal
- * vocabulary in `server/hosted/action-session.ts` changes here.
+ * `HttpApi` boundary and back; nothing about the admission gauntlet, the
+ * roster, or the refusal vocabulary in `server/hosted/action-session.ts`
+ * changes here. The handlers are effects, so the group hands each of them
+ * the deployment's seams on its own fiber rather than through a `Route`
+ * whose promise a runtime would have to be read to settle.
  */
 
 const ACTIONS_ROUTE_PATH = {
@@ -45,7 +50,10 @@ const ACTIONS_ROUTE_PATH = {
 const BODYLESS_METHOD = { HEAD: "HEAD" } as const satisfies Record<string, HttpMethod.HttpMethod>;
 
 /** One action endpoint's handler, the shape every `handle*Action` export already has. */
-export type HostedActionHandler = (route: HostedVaultRoute) => Promise<Response>;
+export type HostedActionHandler = (route: HostedVaultRoute) => HostedActionEffect<Response>;
+
+/** What this group answers against: the connection its handlers read on, and the deployment's own environment. */
+type ActionsServices = HostedEnvironment | SqlClient.SqlClient;
 
 export interface ActionsGroupHandlers {
   message: HostedActionHandler;
@@ -71,18 +79,33 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
 }
 
 /**
- * Carries the handler's own `Response` back unchanged, the way
- * `server/auth-app.ts`'s passthrough does: the request handed to the handler
- * is the very `Request` this edge was invoked with, and nothing is read out
- * of the answer to mirror onto the `HttpServerResponse` beside it, aside from
- * the HEAD exception above.
+ * The provider key vault's own secret, as the handler's seams take it: read
+ * from the deployment's environment on the group's own fiber, so nothing
+ * below runs a runtime to get at it. Its absence is the vault's kill switch,
+ * and the handler answers the 503 for it, the same as when
+ * `hostedVaultRoute` read it.
  */
-function actionPassthrough(handle: HostedActionHandler): HttpApp.Default {
-  const route = hostedVaultRoute(handle);
+const actionEncryptionSecret: Effect.Effect<string | undefined, never, HostedEnvironment> =
+  Effect.map(HostedEnvironment, (environment) =>
+    environment.providerKeyEncryptionSecret === undefined
+      ? undefined
+      : Redacted.value(environment.providerKeyEncryptionSecret),
+  );
+
+/**
+ * Carries the handler's own `Response` back unchanged: the request handed to
+ * the handler is the very `Request` this edge was invoked with, and nothing
+ * is read out of the answer to mirror onto the `HttpServerResponse` beside
+ * it, aside from the HEAD exception above. The handler is an effect, so it
+ * runs on this group's fiber and reads the connection the edge already
+ * opened; a failed statement is a defect here, as a rejected promise was.
+ */
+function actionPassthrough(handle: HostedActionHandler): HttpApp.Default<never, ActionsServices> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const answer = yield* Effect.promise(() => route.fetch(request));
+    const encryptionSecret = yield* actionEncryptionSecret;
+    const answer = yield* Effect.orDie(handle({ ...hostedVaultSeams, encryptionSecret, request }));
     return incoming.method === BODYLESS_METHOD.HEAD
       ? bodylessAnswer(answer)
       : HttpServerResponse.raw(answer);
@@ -94,7 +117,9 @@ function actionPassthrough(handle: HostedActionHandler): HttpApp.Default {
  * the hosted vocabulary's own `not-found`, since nothing routes another path
  * to one of these functions.
  */
-export function buildActionsApp(handlers: ActionsGroupHandlers): HttpApp.Default {
+export function buildActionsApp(
+  handlers: ActionsGroupHandlers,
+): HttpApp.Default<never, ActionsServices> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(ACTIONS_ROUTE_PATH.MESSAGE, actionPassthrough(handlers.message)),
     HttpRouter.all(ACTIONS_ROUTE_PATH.CONTROL, actionPassthrough(handlers.control)),
@@ -112,7 +137,7 @@ export function buildActionsApp(handlers: ActionsGroupHandlers): HttpApp.Default
 }
 
 /** The deployment's own group, wired to the real endpoints every route file answered with before. */
-export function actionsApp(): HttpApp.Default {
+export function actionsApp(): HttpApp.Default<never, ActionsServices> {
   return buildActionsApp({
     message: handleMessageAction,
     control: handleControlAction,

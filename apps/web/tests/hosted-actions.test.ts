@@ -49,9 +49,9 @@ function messageOptions(overrides: Partial<SessionActionOptions> = {}): SessionA
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readKey: async () => ({ ciphertext: encryptProviderKey("key-1", SECRET) }),
-    roster: async () => EMPTY_ROSTER,
+    roster: () => Effect.succeed(EMPTY_ROSTER),
     unsupportedReason: () => undefined,
-    execute: async () => ({ result: "accepted" }),
+    execute: () => Effect.succeed({ result: "accepted" }),
     ...overrides,
   };
 }
@@ -71,14 +71,14 @@ function workspaceOptions(overrides: Partial<SessionActionOptions> = {}): Sessio
 // --- Unsupported providers answer before the key requirement ---
 
 test("an unsupported provider gets 'unsupported' even with no key stored", async () => {
-  const response = await handleSessionAction(
-    messageOptions({
-      unsupportedReason: () => "Not available.",
-      readKey: async () => undefined,
-      execute: async () => {
-        throw new Error("execute must not run for an unsupported provider");
-      },
-    }),
+  const response = await runWithoutDatabase(
+    handleSessionAction(
+      messageOptions({
+        unsupportedReason: () => "Not available.",
+        readKey: async () => undefined,
+        execute: () => Effect.die(new Error("execute must not run for an unsupported provider")),
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -88,14 +88,14 @@ test("an unsupported provider gets 'unsupported' even with no key stored", async
 });
 
 test("an unsupported workspace provider gets 'unsupported' even with no key stored", async () => {
-  const response = await handleSessionAction(
-    workspaceOptions({
-      unsupportedReason: () => "Not available.",
-      readKey: async () => undefined,
-      execute: async () => {
-        throw new Error("execute must not run for an unsupported provider");
-      },
-    }),
+  const response = await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        unsupportedReason: () => "Not available.",
+        readKey: async () => undefined,
+        execute: () => Effect.die(new Error("execute must not run for an unsupported provider")),
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -107,7 +107,9 @@ test("an unsupported workspace provider gets 'unsupported' even with no key stor
 // --- Supported provider with no key is still a rejection ---
 
 test("a supported provider with no key stored gets 'rejected'", async () => {
-  const response = await handleSessionAction(messageOptions({ readKey: async () => undefined }));
+  const response = await runWithoutDatabase(
+    handleSessionAction(messageOptions({ readKey: async () => undefined })),
+  );
 
   assert.equal(response.status, 200);
   const body = await response.json();
@@ -117,30 +119,30 @@ test("a supported provider with no key stored gets 'rejected'", async () => {
 // --- The one bound the route still keeps: a session id becomes a URL segment ---
 
 test("a session id that could not be a URL segment is an invalid request", async () => {
-  const response = await handleSessionAction(
-    messageOptions({
-      request: actionRequest("/api/actions/message", {
-        providerId: "conductor",
-        providerSessionId: "sessions/../session-1",
-        text: "hello",
+  const response = await runWithoutDatabase(
+    handleSessionAction(
+      messageOptions({
+        request: actionRequest("/api/actions/message", {
+          providerId: "conductor",
+          providerSessionId: "sessions/../session-1",
+          text: "hello",
+        }),
+        execute: () => Effect.die(new Error("execute must not run for an unbounded session id")),
       }),
-      execute: async () => {
-        throw new Error("execute must not run for an unbounded session id");
-      },
-    }),
+    ),
   );
 
   assert.equal(response.status, 400);
 });
 
 test("an action aimed at no session at all is an invalid request", async () => {
-  const response = await handleSessionAction(
-    messageOptions({
-      request: actionRequest("/api/actions/message", { providerId: "conductor", text: "hello" }),
-      execute: async () => {
-        throw new Error("execute must not run without a session");
-      },
-    }),
+  const response = await runWithoutDatabase(
+    handleSessionAction(
+      messageOptions({
+        request: actionRequest("/api/actions/message", { providerId: "conductor", text: "hello" }),
+        execute: () => Effect.die(new Error("execute must not run without a session")),
+      }),
+    ),
   );
 
   assert.equal(response.status, 400);
@@ -150,13 +152,16 @@ test("an action aimed at no session at all is an invalid request", async () => {
 
 test("the ask arrives at the executor as admission's own field names", async () => {
   let received: WireRecord | undefined;
-  await handleSessionAction(
-    messageOptions({
-      execute: async (options) => {
-        received = options.fields;
-        return { result: "accepted" };
-      },
-    }),
+  await runWithoutDatabase(
+    handleSessionAction(
+      messageOptions({
+        execute: (options) =>
+          Effect.sync(() => {
+            received = options.fields;
+            return { result: "accepted" };
+          }),
+      }),
+    ),
   );
 
   assert.deepEqual(received, {
@@ -168,13 +173,16 @@ test("the ask arrives at the executor as admission's own field names", async () 
 
 test("a creation names a project rather than a session, and carries none", async () => {
   let received: WireRecord | undefined;
-  await handleSessionAction(
-    workspaceOptions({
-      execute: async (options) => {
-        received = options.fields;
-        return { result: "accepted" };
-      },
-    }),
+  await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        execute: (options) =>
+          Effect.sync(() => {
+            received = options.fields;
+            return { result: "accepted" };
+          }),
+      }),
+    ),
   );
 
   assert.deepEqual(received, {
@@ -186,22 +194,25 @@ test("a creation names a project rather than a session, and carries none", async
 
 test("an agent addition carries the model and effort beside the agent, renamed and unparsed", async () => {
   let received: WireRecord | undefined;
-  await handleSessionAction(
-    messageOptions({
-      request: actionRequest("/api/actions/agent", {
-        providerId: "conductor",
-        providerSessionId: "session-1",
-        agent: "claude",
-        model: "fable-5",
-        effort: "high",
-        task: "add tests",
+  await runWithoutDatabase(
+    handleSessionAction(
+      messageOptions({
+        request: actionRequest("/api/actions/agent", {
+          providerId: "conductor",
+          providerSessionId: "session-1",
+          agent: "claude",
+          model: "fable-5",
+          effort: "high",
+          task: "add tests",
+        }),
+        kind: ACTION_KIND.ADD_AGENT,
+        execute: (options) =>
+          Effect.sync(() => {
+            received = options.fields;
+            return { result: "accepted" };
+          }),
       }),
-      kind: ACTION_KIND.ADD_AGENT,
-      execute: async (options) => {
-        received = options.fields;
-        return { result: "accepted" };
-      },
-    }),
+    ),
   );
 
   assert.deepEqual(received, {
@@ -217,14 +228,17 @@ test("an agent addition carries the model and effort beside the agent, renamed a
 // --- The execute result travels to the wire unchanged ---
 
 test("a rejected execute result carries its reason and session id to the wire", async () => {
-  const response = await handleSessionAction(
-    workspaceOptions({
-      execute: async () => ({
-        result: "rejected",
-        providerSessionId: "session-9",
-        reason: "Workspace was created, but the opening task could not be delivered.",
+  const response = await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        execute: () =>
+          Effect.succeed({
+            result: "rejected",
+            providerSessionId: "session-9",
+            reason: "Workspace was created, but the opening task could not be delivered.",
+          }),
       }),
-    }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -234,10 +248,12 @@ test("a rejected execute result carries its reason and session id to the wire", 
 });
 
 test("an accepted execute result carries the created session id to the wire", async () => {
-  const response = await handleSessionAction(
-    workspaceOptions({
-      execute: async () => ({ result: "accepted", providerSessionId: "session-9" }),
-    }),
+  const response = await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        execute: () => Effect.succeed({ result: "accepted", providerSessionId: "session-9" }),
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -272,17 +288,21 @@ test("the capability map matches each desktop adapter's implemented writes", () 
 test("the roster an action stands on is read once the key is, and reaches the executor", async () => {
   const asked: string[] = [];
   let received: ActionRoster | undefined;
-  await handleSessionAction(
-    messageOptions({
-      roster: async (userId, providerId, secret) => {
-        asked.push(userId, providerId, secret);
-        return EMPTY_ROSTER;
-      },
-      execute: async (options) => {
-        received = options.roster;
-        return { result: "accepted" };
-      },
-    }),
+  await runWithoutDatabase(
+    handleSessionAction(
+      messageOptions({
+        roster: (userId, providerId, secret) =>
+          Effect.sync(() => {
+            asked.push(userId, providerId, secret);
+            return EMPTY_ROSTER;
+          }),
+        execute: (options) =>
+          Effect.sync(() => {
+            received = options.roster;
+            return { result: "accepted" };
+          }),
+      }),
+    ),
   );
 
   assert.deepEqual(asked, ["user-1", "conductor", SECRET]);

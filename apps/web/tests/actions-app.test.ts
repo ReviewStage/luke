@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { Effect } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { ActionsGroupHandlers, HostedActionHandler } from "../server/actions-app.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
@@ -42,10 +43,11 @@ function stubbedHandler(answer: () => Response): StubbedHandler {
   const requests: Request[] = [];
   return {
     requests,
-    handle: async (route) => {
-      requests.push(route.request);
-      return answer();
-    },
+    handle: (route) =>
+      Effect.sync(() => {
+        requests.push(route.request);
+        return answer();
+      }),
   };
 }
 
@@ -93,9 +95,8 @@ function handlersWith(
   named: keyof ActionsGroupHandlers,
   stub: HostedActionHandler,
 ): ActionsGroupHandlers {
-  const untouched: HostedActionHandler = async () => {
-    throw new Error("only the exchange's own endpoint should be reached");
-  };
+  const untouched: HostedActionHandler = () =>
+    Effect.die(new Error("only the exchange's own endpoint should be reached"));
   return {
     message: untouched,
     control: untouched,
