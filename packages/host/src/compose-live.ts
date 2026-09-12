@@ -1,5 +1,6 @@
 import { PRODUCT_EVENT, productSignInAge } from "@sidecar/analytics";
 import type { BrainDelivery } from "@sidecar/brain";
+import { ACCOUNT_STATUS } from "@sidecar/credentials";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   carried,
@@ -25,7 +26,12 @@ import type { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
 import { LiveSessionService } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Either, Queue, type Scope } from "effect";
-import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
+import {
+  arrivalBeatOwed,
+  countsFirstAnnouncement,
+  firstNameOf,
+  launchGreetingOwed,
+} from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
@@ -191,14 +197,37 @@ export const composeLive = (
         service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
         return;
       }
-      if (!arrivalBeatOwed(calendars.onboarding())) return;
-      // The beat's own decision waits on the pass, so the pass is yielded
-      // here rather than run: a link that cannot wait for it offers this
-      // whole effect to the queue above instead.
-      yield* observation.loop.refresh;
-      if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
-      service.speakBeat(yield* arrivalBeat);
+      if (arrivalBeatOwed(calendars.onboarding())) {
+        // The beat's own decision waits on the pass, so the pass is yielded
+        // here rather than run: a link that cannot wait for it offers this
+        // whole effect to the queue above instead.
+        yield* observation.loop.refresh;
+        if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
+        service.speakBeat(yield* arrivalBeat);
+        return;
+      }
+      if (!launchGreetingOwed(calendars.onboarding(), launchGreetingRequested)) return;
+      launchGreetingRequested = true;
+      service.speakBeat(launchGreeting());
     });
+
+    /**
+     * The launch greeting's one observed value is the signed-in account's
+     * first name, read from the snapshot the host already holds and never
+     * from a session; the flag keeps it to one ask per run whatever later
+     * re-asks the beats.
+     */
+    let launchGreetingRequested = false;
+    function launchGreeting() {
+      const snapshot = account.snapshot();
+      const name = snapshot.status === ACCOUNT_STATUS.SIGNED_IN ? snapshot.name : undefined;
+      const firstName = firstNameOf(name);
+      return {
+        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+        decidedAt: now(),
+        ...(firstName === undefined ? undefined : { firstName }),
+      } as const;
+    }
 
     const methods: GatewayMethodTable = {
       // The peer's offer becomes the one session, seeded and attached before

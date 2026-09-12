@@ -7,7 +7,12 @@ import { it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { type Context, Effect } from "effect";
 import { test } from "vitest";
-import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
+import {
+  arrivalBeatOwed,
+  countsFirstAnnouncement,
+  firstNameOf,
+  launchGreetingOwed,
+} from "./arrival-flow.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { introductionOwed } from "./introduction-flow.js";
 import {
@@ -145,6 +150,27 @@ it.effect("an update merges over the record on disk, not over an older read", ()
     }),
   ),
 );
+
+test("the launch greeting is owed once per run, only on an install the arrival beat has spoken to", () => {
+  assert.equal(
+    launchGreetingOwed({ arrivalSignedInAt: SIGNED_IN_AT, arrivalSpokenAt: LATER }, false),
+    true,
+  );
+  assert.equal(
+    launchGreetingOwed({ arrivalSignedInAt: SIGNED_IN_AT, arrivalSpokenAt: LATER }, true),
+    false,
+  );
+  assert.equal(launchGreetingOwed({ arrivalSignedInAt: SIGNED_IN_AT }, false), false);
+  assert.equal(launchGreetingOwed(undefined, false), false);
+});
+
+test("the greeting's first name is the display name's first word, or nothing", () => {
+  assert.equal(firstNameOf("Ada Lovelace"), "Ada");
+  assert.equal(firstNameOf("  Ada  "), "Ada");
+  assert.equal(firstNameOf("Ada"), "Ada");
+  assert.equal(firstNameOf("   "), undefined);
+  assert.equal(firstNameOf(undefined), undefined);
+});
 
 test("the arrival beat is owed from an observed sign-in until its reply begins", () => {
   assert.equal(arrivalBeatOwed({ arrivalSignedInAt: SIGNED_IN_AT }), true);

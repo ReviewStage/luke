@@ -218,6 +218,7 @@ export const hostAssemblyLayer: Layer.Layer<
       settings.forgetVaultKeys();
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
+      live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.LAUNCH);
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });

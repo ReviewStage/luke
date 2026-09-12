@@ -30,8 +30,10 @@ import {
   rosterSeed,
   rosterSeedItem,
   rosterUpdate,
+  type SpeechOpening,
   seedItemTokens,
   speechAppends,
+  speechOpening,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   type TranscriptSpeaker,
@@ -1531,6 +1533,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #speakProactive(session: StandingSession, request: ProactiveRequest<Delivery>): void {
+    const opening = speechOpening(request.turn);
+    if (opening) {
+      this.#speakOpening(session, request, opening);
+      return;
+    }
     const chunks = speechAppends(request.turn);
     chunks.forEach((chunk, index) => {
       const last = index === chunks.length - 1;
@@ -1554,6 +1561,38 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         }),
       );
     });
+  }
+
+  /**
+   * The conversations guide's greeting before the caller speaks: the
+   * instruction appended and acknowledged first, then the one commentary that
+   * has the model begin, and no cue at all for an instruction the session
+   * refused or never acknowledged, so a greeting that did not land is not
+   * begun on the strength of the cue alone.
+   */
+  #speakOpening(
+    session: StandingSession,
+    request: ProactiveRequest<Delivery>,
+    opening: SpeechOpening,
+  ): void {
+    session.channel.enqueue(
+      Effect.gen(this, function* () {
+        const instructed = yield* session.channel.send(
+          instructionsAppend(this.#input(null, opening.instruction)),
+        );
+        if (!instructed) {
+          this.#queue.release(request);
+          return;
+        }
+        const cued = yield* session.channel.send(commentaryAppend(this.#input(null, opening.cue)), {
+          onSpoken: () => {
+            this.#queue.spoken(request);
+            this.#options.onProactiveSpoken?.(request.kind);
+          },
+        });
+        if (!cued) this.#queue.release(request);
+      }),
+    );
   }
 
   #wantSession(): void {

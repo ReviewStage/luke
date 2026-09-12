@@ -33,3 +33,22 @@ export function arrivalBeatOwed(state: OnboardingState | undefined): boolean {
 export function countsFirstAnnouncement(state: OnboardingState | undefined): boolean {
   return state?.arrivalSignedInAt !== undefined && state.arrivalFirstAnnouncementAt === undefined;
 }
+
+/**
+ * Whether the launch greeting is owed: once per run, and only on an install
+ * the arrival beat has already spoken to, since the launch that hears the
+ * arrival has been greeted by it. A relaunch owes it again, because the
+ * greeting is about this launch and nothing on disk remembers one.
+ */
+export function launchGreetingOwed(
+  state: OnboardingState | undefined,
+  requestedThisRun: boolean,
+): boolean {
+  return !requestedThisRun && state?.arrivalSpokenAt !== undefined;
+}
+
+/** The first name of the account's reported display name: its first word, or nothing for a blank one. */
+export function firstNameOf(name: string | undefined): string | undefined {
+  const first = name?.trim().split(/\s+/u)[0];
+  return first ? first : undefined;
+}
