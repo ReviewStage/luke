@@ -9,6 +9,7 @@
     "apps/desktop/src/renderer/voice/index.tsx",
     "apps/desktop/src/renderer/voice/live-call.ts",
     "apps/desktop/src/renderer/voice/use-voice-session.ts",
+    "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
     "apps/web/server/runtime.ts",
     "tools/trace-export/src/cli.ts"

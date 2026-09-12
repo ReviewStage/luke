@@ -130,6 +130,11 @@ are the process's own edges, one runtime each:
   and writing the document are both `FileSystem` effects, so the command runs
   them through `NodeRuntime.runMain` over the `NodeFileSystem` layer rather
   than awaiting `node:fs/promises` calls of its own.
+- `apps/web/scripts/preview-probe.ts`, the deployed-shape probe, on the same
+  terms: probing a deployment over `FetchHttpClient` and appending the step
+  summary are effects of one command's life, run through
+  `NodeRuntime.runMain` over the fetch client and `NodeContext`, so the run
+  is the edge and nothing of it outlives the process.
 - the two renderer roots, `apps/desktop/src/renderer/index.tsx` and
   `apps/desktop/src/renderer/voice/index.tsx`, one browser `ManagedRuntime`
   each — two roots because the panel is the one surface that records, and the

@@ -131,7 +131,7 @@ export interface CallerReport extends ResolvedCallers {
 }
 
 /** What stands in for an interpolated id when a built path is matched; `encodeURIComponent` leaves it as it is. */
-const PROBE_SEGMENT = "probe";
+export const PROBE_SEGMENT = "probe";
 /** Marks an interpolation inside a scanned literal; no source path carries a NUL. */
 const HOLE = "\u0000";
 const HOLE_DISPLAY = "{…}";

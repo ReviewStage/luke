@@ -169,8 +169,15 @@ handshake.
 Plus `GET /eve/v1/health` answering a JSON body, which proves the eve service
 is served and was the one fact the first sitting got right.
 
+`apps/web/scripts/preview-probe.ts --url <address>` sends these probes to a
+deployment, over the whole list the callers check derives rather than these
+eight alone, and judges each answer by whose it is; it is also the read of
+production after a merge.
+
 A 401, 405, or 426 each mean the handler is there and refusing the caller.
-**A 404 anywhere is the failure**, and it is the failure the first sitting
+**A 404 of Vercel's own anywhere is the failure** (the platform marks its
+answers with an `x-vercel-error` header; better-auth's 404 on an unknown
+sub-route carries none and is the handler answering), and it is the failure the first sitting
 found: the services build was green, eve answered, and every `/api/` route was
 404 because Vercel builds no `api/` in services mode. `/api/feedback.mjs` is a
 second data point on the same function, not a gate code, because no client
