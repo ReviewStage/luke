@@ -248,7 +248,10 @@ the refusal as the `Refusal` the action journal records and rethrowing a roster
 read's own failure. Its callers reach it across the `ToolExecutor` seam and
 the web's action endpoint, neither of which answers an effect yet — a turn is
 a fiber from P12-02 on, but the tool call it dispatches still crosses a
-promise — so it goes in P12-04 with that seam.
+promise. P12-04 turned out to be the CloudFetch/HttpClient family alone; this
+door waits on the `ToolExecutor` seam in `@sidecar/runtime/vocabulary`
+answering an effect, a change to the tool-dispatch shape rather than a
+transport, so it is re-pointed at P12-15 instead.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is the fifth: every caller of the brain's model transport still holds a
@@ -915,7 +918,10 @@ because reverse order and closing once are exactly what it guarantees: the
 abort signal every wait of the generation settles on, and the context the
 runtime opened behind it, are its two finalizers, and both run synchronously,
 so the close is a `runSync` rather than a stop or a replacement waiting on a
-dispose. `state-store.ts` keeps its own compare-and-set against the envelope
+dispose. That synchronous shape is exactly what the storage rule requires, so
+this row is re-pointed at P12-15 with no expectation it becomes an
+`Effect.runPromise*` shim at all — deleting it would mean giving the fence
+back the latency it exists to avoid. `state-store.ts` keeps its own compare-and-set against the envelope
 it last observed standing, because it is ported from OpenClaw `b7528507` and
 imports nothing from `effect`; its Effect surface stays in
 `state-store.effect.ts`. What P12-02 took out of this file is the open: the
@@ -1035,7 +1041,7 @@ design decision stated as such:
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
 | `cloudFetchFromHttpClient` | P1-07 | P12-04b |
 | `timersFromRuntime` | P2-01 | P12-03 |
-| `admit()` Promise door over `admitEffect()` | P4-01 | P12-04 |
+| `admit()` Promise door over `admitEffect()` | P4-01 | P12-15 — blocked on the `ToolExecutor` seam answering an effect; P12-04 turned out to be the CloudFetch/HttpClient family alone |
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
@@ -1066,7 +1072,7 @@ design decision stated as such:
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
 | `HostedStoreRun`, the edge runner the hosted store's still-promise-shaped callers are handed, and `BrainHostSeams.run` beside it | P10-11a | P10-16 — P10-15 took `HostedStore` itself off it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
-| `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-04 |
+| `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | with `LoopbackConsent`'s `signIn` door, once `AccountSessionManager` answers effects |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
