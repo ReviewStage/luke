@@ -127,7 +127,7 @@ const TYPED_ASK: UserMessageMetadata = {
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
-const writer = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
+const writer = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
 
 /** Messages as they cross into the reader: their JSON shape, which is what a row holds. */
 function asWire(stored: readonly UIMessage[]): UnparsedWireValue {
@@ -253,7 +253,7 @@ async function feed(
   stream: readonly BrainRunEvent[],
 ): Promise<readonly StoreWriteResult[]> {
   const results: StoreWriteResult[] = [];
-  for (const event of stream) results.push(await writer.consume(target, event));
+  for (const event of stream) results.push(await database.run(writer.consume(target, event)));
   return results;
 }
 
@@ -337,14 +337,14 @@ test("a writer refuses to be composed over a catalog whose declared output schem
       outputSchema: z.object({ lines: z.array(z.string()) }),
     }),
   };
-  await assert.rejects(storeWriter({ run: database.run, tools: narrow }));
+  await assert.rejects(database.run(storeWriter({ tools: narrow })));
   const undeclared: ToolSet = {
     read_transcript: tool({
       description: "Reads the tail of an observed session's transcript.",
       inputSchema: z.object({ providerId: z.string(), providerSessionId: z.string() }),
     }),
   };
-  await storeWriter({ run: database.run, tools: undeclared });
+  await database.run(storeWriter({ tools: undeclared }));
 });
 
 test("a developer turn leaves its ask, its journal closed as the answer told, and a settled turn", async () => {
@@ -575,8 +575,8 @@ test("every event delivered twice, and the whole stream replayed, writes one row
   const first: StoreWriteResult[] = [];
   const second: StoreWriteResult[] = [];
   for (const event of turn) {
-    first.push(await writer.consume(target, event));
-    second.push(await writer.consume(target, event));
+    first.push(await database.run(writer.consume(target, event)));
+    second.push(await database.run(writer.consume(target, event)));
   }
   assert.equal(
     first.every((result) => result.ok && result.effect === STORE_WRITE_EFFECT.WRITTEN),
@@ -626,13 +626,15 @@ test("a refused call settles as an error part carrying the refusal's own reason 
       errorText: "The session is not in the roster.",
     },
   ]);
-  const again = await writer.consume(
-    target,
-    stream.toolFailed(
-      "call_r",
-      "read_transcript",
-      "The session is not in the roster.",
-      ACTION_OUTPUT_STATUS.REFUSED,
+  const again = await database.run(
+    writer.consume(
+      target,
+      stream.toolFailed(
+        "call_r",
+        "read_transcript",
+        "The session is not in the roster.",
+        ACTION_OUTPUT_STATUS.REFUSED,
+      ),
     ),
   );
   assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
@@ -712,12 +714,13 @@ test("a turn that ends with a call unanswered settles the call as an answer whos
   const turn = await storedTurn(stream.turnId);
   assert.deepEqual([turn?.status, turn?.failure], [TURN_STATUS.CANCELLED, null]);
 
-  const late = await writer.consume(
-    target,
-    stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT),
+  const late = await database.run(
+    writer.consume(target, stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT)),
   );
   assert.deepEqual(late, { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED });
-  const again = await writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED));
+  const again = await database.run(
+    writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)),
+  );
   assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
 });
 
@@ -748,22 +751,28 @@ test("a turn that failed records its failure word, and one that timed out withou
 test("a queued turn keeps the origin it was queued under through running to settled, and is queued once", async () => {
   const target = await conversation();
   const stream = new Stream();
-  const queued = await writer.enqueueTurn(target, {
-    turnId: stream.turnId,
-    origin: TURN_ORIGIN.SPOKEN,
-    model: "gpt-fixture",
-  });
+  const queued = await database.run(
+    writer.enqueueTurn(target, {
+      turnId: stream.turnId,
+      origin: TURN_ORIGIN.SPOKEN,
+      model: "gpt-fixture",
+    }),
+  );
   assert.deepEqual(queued, { ok: true, turnId: stream.turnId, effect: STORE_WRITE_EFFECT.WRITTEN });
-  const twice = await writer.enqueueTurn(target, {
-    turnId: stream.turnId,
-    origin: TURN_ORIGIN.TYPED,
-  });
+  const twice = await database.run(
+    writer.enqueueTurn(target, {
+      turnId: stream.turnId,
+      origin: TURN_ORIGIN.TYPED,
+    }),
+  );
   assert.deepEqual(twice, { ok: true, turnId: stream.turnId, effect: STORE_WRITE_EFFECT.REPEATED });
   assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.QUEUED);
 
-  const started = await writer.consume(
-    target,
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK, NOW + 500),
+  const started = await database.run(
+    writer.consume(
+      target,
+      stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK, NOW + 500),
+    ),
   );
   assert.deepEqual(started, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
   const running = await storedTurn(stream.turnId);
@@ -771,10 +780,12 @@ test("a queued turn keeps the origin it was queued under through running to sett
     [running?.origin, running?.status, running?.queuedAt?.getTime(), running?.startedAt?.getTime()],
     [TURN_ORIGIN.SPOKEN, TURN_STATUS.RUNNING, NOW, NOW + 500],
   );
-  await writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED));
+  await database.run(writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)));
   assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.SETTLED);
 
-  const minted = await writer.enqueueTurn(target, { origin: TURN_ORIGIN.ROSTER_DIFF });
+  const minted = await database.run(
+    writer.enqueueTurn(target, { origin: TURN_ORIGIN.ROSTER_DIFF }),
+  );
   assert.equal(minted.ok, true);
   if (!minted.ok) return;
   assert.equal((await storedTurn(minted.turnId))?.origin, TURN_ORIGIN.ROSTER_DIFF);
@@ -783,7 +794,9 @@ test("a queued turn keeps the origin it was queued under through running to sett
 test("a sequence already taken under the counter is the retry signal: the write lands on the next free position and the counter is re-aligned", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK));
+  await database.run(
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+  );
   const before = await counters(target);
   assert.ok(before);
   await insertMessage(database.run, {
@@ -795,7 +808,9 @@ test("a sequence already taken under the counter is the retry signal: the write 
     parts: [{ type: "text", text: "taken" }],
   });
   const askId = randomUUID();
-  const result = await writer.consume(target, stream.words(askId, "hello", TYPED_ASK));
+  const result = await database.run(
+    writer.consume(target, stream.words(askId, "hello", TYPED_ASK)),
+  );
   assert.deepEqual(result, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
   const rows = await storedMessages(target);
   assert.deepEqual(
@@ -811,9 +826,13 @@ test("a sequence already taken under the counter is the retry signal: the write 
 test("a message the reader would refuse is refused at the write, with the reader's own word and path, and leaves no row", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK));
+  await database.run(
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+  );
 
-  const unregistered = await writer.consume(target, stream.toolCall("call_x", "list_sessions", {}));
+  const unregistered = await database.run(
+    writer.consume(target, stream.toolCall("call_x", "list_sessions", {})),
+  );
   assert.deepEqual(unregistered, {
     ok: false,
     refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
@@ -821,26 +840,27 @@ test("a message the reader would refuse is refused at the write, with the reader
     path: [0, "parts", 0, "type"],
   });
 
-  const wrongInput = await writer.consume(
-    target,
-    stream.toolCall("call_y", "read_transcript", { providerId: 7 }),
+  const wrongInput = await database.run(
+    writer.consume(target, stream.toolCall("call_y", "read_transcript", { providerId: 7 })),
   );
   assert.equal(wrongInput.ok, false);
   if (wrongInput.ok) return;
   assert.equal(wrongInput.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
   assert.equal("reason" in wrongInput && wrongInput.reason, SCHEMA_REFUSAL.MALFORMED);
 
-  const decorated = await writer.consume(
-    target,
-    stream.event({
-      kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-      message: {
-        id: randomUUID(),
-        role: MESSAGE_ROLE.USER,
-        metadata: { ...TYPED_ASK, mood: "cheerful" },
-        parts: [{ type: "text", text: "hello" }],
-      },
-    }),
+  const decorated = await database.run(
+    writer.consume(
+      target,
+      stream.event({
+        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        message: {
+          id: randomUUID(),
+          role: MESSAGE_ROLE.USER,
+          metadata: { ...TYPED_ASK, mood: "cheerful" },
+          parts: [{ type: "text", text: "hello" }],
+        },
+      }),
+    ),
   );
   assert.equal(decorated.ok, false);
   if (decorated.ok) return;
@@ -858,39 +878,43 @@ test("a write for a conversation, turn, or call that is not there is refused by 
   const target = await conversation();
   const elsewhere = { userId: target.userId, conversationId: randomUUID() };
   const stream = new Stream();
-  const noConversation = await writer.consume(
-    elsewhere,
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+  const noConversation = await database.run(
+    writer.consume(elsewhere, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
   );
   assert.deepEqual(noConversation, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
 
   const other = await conversation();
   const otherUser = { userId: other.userId, conversationId: target.conversationId };
-  const wrongUser = await writer.consume(
-    otherUser,
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+  const wrongUser = await database.run(
+    writer.consume(otherUser, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
   );
   assert.deepEqual(wrongUser, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
 
-  const noTurn = await writer.consume(
-    target,
-    stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
+  const noTurn = await database.run(
+    writer.consume(target, stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT)),
   );
   assert.deepEqual(noTurn, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
-  const noTurnAnswer = await writer.consume(
-    target,
-    stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT),
+  const noTurnAnswer = await database.run(
+    writer.consume(target, stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT)),
   );
   assert.deepEqual(noTurnAnswer, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
-  const noTurnWords = await writer.consume(target, stream.words(randomUUID(), "hi", TYPED_ASK));
+  const noTurnWords = await database.run(
+    writer.consume(target, stream.words(randomUUID(), "hi", TYPED_ASK)),
+  );
   assert.deepEqual(noTurnWords, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
-  const noTurnEnd = await writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED));
+  const noTurnEnd = await database.run(
+    writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)),
+  );
   assert.deepEqual(noTurnEnd, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
 
-  await writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK));
-  const noCall = await writer.consume(
-    target,
-    stream.toolAnswered("call_never_told", "read_transcript", TRANSCRIPT_OUTPUT),
+  await database.run(
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+  );
+  const noCall = await database.run(
+    writer.consume(
+      target,
+      stream.toolAnswered("call_never_told", "read_transcript", TRANSCRIPT_OUTPUT),
+    ),
   );
   assert.deepEqual(noCall, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CALL });
   assert.deepEqual(await storedMessages(target), []);
@@ -900,12 +924,11 @@ test("a cleared conversation is written by nothing, like one that never was", as
   const target = await conversation();
   await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
   const stream = new Stream();
-  const started = await writer.consume(
-    target,
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+  const started = await database.run(
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
   );
   assert.deepEqual(started, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
-  const queued = await writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED });
+  const queued = await database.run(writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED }));
   assert.deepEqual(queued, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
 });
 
@@ -934,13 +957,17 @@ test("a closed journal takes its own projection again as a repeat and a differen
   const stream = new Stream();
   const replyId = randomUUID();
   await feed(target, developerTurn(stream, randomUUID(), replyId));
-  const same = await writer.consume(target, stream.answered(randomUUID(), REPLY_PARTS));
+  const same = await database.run(
+    writer.consume(target, stream.answered(randomUUID(), REPLY_PARTS)),
+  );
   assert.deepEqual(same, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
-  const different = await writer.consume(
-    target,
-    stream.answered(randomUUID(), [
-      { type: UI_PART_TYPE.TEXT, text: "Second thoughts.", state: UI_PART_STATE.DONE },
-    ]),
+  const different = await database.run(
+    writer.consume(
+      target,
+      stream.answered(randomUUID(), [
+        { type: UI_PART_TYPE.TEXT, text: "Second thoughts.", state: UI_PART_STATE.DONE },
+      ]),
+    ),
   );
   assert.deepEqual(different, { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED });
   const [, reply] = await storedMessages(target);
@@ -1009,19 +1036,23 @@ test("a step joins the journal as one boundary before its parts, a step told twi
 test("a reasoning item naming no id is not journaled, since nothing could tell its repeat from a second item", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK));
-  const unnamed = await writer.consume(
-    target,
-    stream.event({
-      kind: BRAIN_RUN_EVENT.REASONING_COMPLETED,
-      summary: "Thinking.",
-      item: { type: "reasoning" },
-    }),
+  await database.run(
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+  );
+  const unnamed = await database.run(
+    writer.consume(
+      target,
+      stream.event({
+        kind: BRAIN_RUN_EVENT.REASONING_COMPLETED,
+        summary: "Thinking.",
+        item: { type: "reasoning" },
+      }),
+    ),
   );
   assert.deepEqual(unnamed, { ok: true, effect: STORE_WRITE_EFFECT.IGNORED });
-  const named = await writer.consume(target, stream.reasoning("rs_9", "Thinking."));
+  const named = await database.run(writer.consume(target, stream.reasoning("rs_9", "Thinking.")));
   assert.deepEqual(named, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
-  const again = await writer.consume(target, stream.reasoning("rs_9", "Thinking."));
+  const again = await database.run(writer.consume(target, stream.reasoning("rs_9", "Thinking.")));
   assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
   const [journal] = await storedMessages(target);
   assert.deepEqual(journal?.parts, [
@@ -1032,7 +1063,9 @@ test("a reasoning item naming no id is not journaled, since nothing could tell i
 test("the relay's own events and the stream's compaction event write nothing", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK));
+  await database.run(
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+  );
   const results = await feed(target, [
     stream.event({
       kind: BRAIN_RUN_EVENT.SLOW_STEP,
@@ -1076,11 +1109,11 @@ test("a compaction is written once by its owner as an assistant row naming what 
     firstKeptMessageId: ask.clientId,
     tokensBefore: 4_200,
   };
-  assert.deepEqual(await writer.recordCompaction(target, compaction), {
+  assert.deepEqual(await database.run(writer.recordCompaction(target, compaction)), {
     ok: true,
     effect: STORE_WRITE_EFFECT.WRITTEN,
   });
-  assert.deepEqual(await writer.recordCompaction(target, compaction), {
+  assert.deepEqual(await database.run(writer.recordCompaction(target, compaction)), {
     ok: true,
     effect: STORE_WRITE_EFFECT.REPEATED,
   });
@@ -1101,18 +1134,22 @@ test("a compaction is written once by its owner as an assistant row naming what 
     { type: UI_PART_TYPE.TEXT, text: compaction.text, state: UI_PART_STATE.DONE },
   ]);
 
-  const unknownTurn = await writer.recordCompaction(target, {
-    ...compaction,
-    clientId: "compaction-2",
-    turnId: randomUUID(),
-  });
+  const unknownTurn = await database.run(
+    writer.recordCompaction(target, {
+      ...compaction,
+      clientId: "compaction-2",
+      turnId: randomUUID(),
+    }),
+  );
   assert.deepEqual(unknownTurn, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
 
-  const uncounted = await writer.recordCompaction(target, {
-    clientId: "compaction-3",
-    text: "Earlier still.",
-    firstKeptMessageId: ask.clientId,
-  });
+  const uncounted = await database.run(
+    writer.recordCompaction(target, {
+      clientId: "compaction-3",
+      text: "Earlier still.",
+      firstKeptMessageId: ask.clientId,
+    }),
+  );
   assert.deepEqual(uncounted, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
   const [, , , uncountedRow] = await storedMessages(target);
   assert.deepEqual(uncountedRow?.metadata, {
@@ -1120,11 +1157,13 @@ test("a compaction is written once by its owner as an assistant row naming what 
     compaction: { first_kept_message_id: ask.clientId },
   });
 
-  const wordless = await writer.recordCompaction(target, {
-    clientId: "compaction-4",
-    text: "   ",
-    firstKeptMessageId: ask.clientId,
-  });
+  const wordless = await database.run(
+    writer.recordCompaction(target, {
+      clientId: "compaction-4",
+      text: "   ",
+      firstKeptMessageId: ask.clientId,
+    }),
+  );
   assert.equal(wordless.ok, false);
   if (wordless.ok) return;
   assert.equal(wordless.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
@@ -1136,18 +1175,22 @@ test("events about a message are numbered by the conversation's own event sequen
   await feed(target, developerTurn(stream, randomUUID(), randomUUID()));
   const [, reply] = await storedMessages(target);
   assert.ok(reply);
-  const offered = await writer.recordEvent(target, {
-    messageId: reply.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-    unless: [],
-  });
-  const claimed = await writer.recordEvent(target, {
-    messageId: reply.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-    deviceId: "device-1",
-    payload: { at: NOW },
-    unless: [],
-  });
+  const offered = await database.run(
+    writer.recordEvent(target, {
+      messageId: reply.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      unless: [],
+    }),
+  );
+  const claimed = await database.run(
+    writer.recordEvent(target, {
+      messageId: reply.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+      deviceId: "device-1",
+      payload: { at: NOW },
+      unless: [],
+    }),
+  );
   assert.equal(offered.ok && offered.seq, 1);
   assert.equal(claimed.ok && claimed.seq, 2);
   const stored = (await readEventsByConversation(database.run, target.conversationId))
@@ -1169,91 +1212,111 @@ test("events about a message are numbered by the conversation's own event sequen
   ]);
   assert.deepEqual(await counters(target), { message: 3, event: 3 });
 
-  const noMessage = await writer.recordEvent(target, {
-    messageId: randomUUID(),
-    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-    unless: [],
-  });
+  const noMessage = await database.run(
+    writer.recordEvent(target, {
+      messageId: randomUUID(),
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      unless: [],
+    }),
+  );
   assert.deepEqual(noMessage, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE });
 
   const other = await conversation();
-  const elsewhere = await writer.recordEvent(other, {
-    messageId: reply.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-    unless: [],
-  });
+  const elsewhere = await database.run(
+    writer.recordEvent(other, {
+      messageId: reply.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      unless: [],
+    }),
+  );
   assert.deepEqual(elsewhere, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE });
 
-  const secondClaim = await writer.recordEvent(target, {
-    messageId: reply.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-    deviceId: "device-2",
-    unless: [],
-  });
+  const secondClaim = await database.run(
+    writer.recordEvent(target, {
+      messageId: reply.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+      deviceId: "device-2",
+      unless: [],
+    }),
+  );
   assert.deepEqual(secondClaim, { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED });
 
   // A write naming kinds that exclude it is refused while one of them stands, and lands otherwise.
-  const superseded = await writer.recordEvent(target, {
-    messageId: reply.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
-    unless: [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
-  });
+  const superseded = await database.run(
+    writer.recordEvent(target, {
+      messageId: reply.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
+      unless: [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
+    }),
+  );
   assert.deepEqual(superseded, { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED });
-  const claimedAgain = await writer.recordEvent(target, {
-    messageId: reply.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-    deviceId: "device-2",
-    unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
-  });
+  const claimedAgain = await database.run(
+    writer.recordEvent(target, {
+      messageId: reply.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+      deviceId: "device-2",
+      unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
+    }),
+  );
   assert.deepEqual(claimedAgain, { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED });
-  const spoken = await writer.recordEvent(target, {
-    messageId: reply.id,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
-    deviceId: "device-1",
-    unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
-  });
+  const spoken = await database.run(
+    writer.recordEvent(target, {
+      messageId: reply.id,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+      deviceId: "device-1",
+      unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
+    }),
+  );
   assert.equal(spoken.ok && spoken.seq, 3);
   assert.deepEqual(await counters(target), { message: 3, event: 4 });
 });
 
 test("a queued turn the opener has handed to eve is removed; one eve has started, one a message names, and one that never stood are left as they are", async () => {
   const target = await conversation();
-  const queued = await writer.enqueueTurn(target, { origin: TURN_ORIGIN.HOLD_RELEASE });
+  const queued = await database.run(
+    writer.enqueueTurn(target, { origin: TURN_ORIGIN.HOLD_RELEASE }),
+  );
   assert.equal(queued.ok, true);
   if (!queued.ok) return;
-  assert.deepEqual(await writer.dequeueTurn(target, queued.turnId), {
+  assert.deepEqual(await database.run(writer.dequeueTurn(target, queued.turnId)), {
     ok: true,
     effect: STORE_WRITE_EFFECT.WRITTEN,
   });
   assert.equal(await storedTurn(queued.turnId), undefined);
-  assert.deepEqual(await writer.dequeueTurn(target, queued.turnId), {
+  assert.deepEqual(await database.run(writer.dequeueTurn(target, queued.turnId)), {
     ok: false,
     refusal: STORE_WRITE_REFUSAL.NO_TURN,
   });
 
   const stream = new Stream();
-  await writer.enqueueTurn(target, { turnId: stream.turnId, origin: TURN_ORIGIN.HOLD_RELEASE });
-  await writer.consume(
-    target,
-    stream.started(BRAIN_TURN_ORIGIN.HOLD_RELEASE, BRAIN_TURN_TRIGGER.HOLD_RELEASED),
+  await database.run(
+    writer.enqueueTurn(target, { turnId: stream.turnId, origin: TURN_ORIGIN.HOLD_RELEASE }),
   );
-  assert.deepEqual(await writer.dequeueTurn(target, stream.turnId), {
+  await database.run(
+    writer.consume(
+      target,
+      stream.started(BRAIN_TURN_ORIGIN.HOLD_RELEASE, BRAIN_TURN_TRIGGER.HOLD_RELEASED),
+    ),
+  );
+  assert.deepEqual(await database.run(writer.dequeueTurn(target, stream.turnId)), {
     ok: true,
     effect: STORE_WRITE_EFFECT.IGNORED,
   });
   assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.RUNNING);
 
-  const named = await writer.enqueueTurn(target, { origin: TURN_ORIGIN.SPOKEN });
+  const named = await database.run(writer.enqueueTurn(target, { origin: TURN_ORIGIN.SPOKEN }));
   assert.equal(named.ok, true);
   if (!named.ok) return;
-  const message = await writer.recordUserMessage(target, {
-    clientId: `ask-${named.turnId}`,
-    turnId: named.turnId,
-    text: "a fixture ask",
-    metadata: TYPED_ASK,
-  });
+  const message = await database.run(
+    writer.recordUserMessage(target, {
+      clientId: `ask-${named.turnId}`,
+      turnId: named.turnId,
+      text: "a fixture ask",
+      metadata: TYPED_ASK,
+    }),
+  );
   assert.equal(message.ok, true);
-  assert.deepEqual(await writer.dequeueTurn(target, named.turnId), {
+  assert.deepEqual(await database.run(writer.dequeueTurn(target, named.turnId)), {
     ok: true,
     effect: STORE_WRITE_EFFECT.IGNORED,
   });

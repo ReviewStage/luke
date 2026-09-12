@@ -80,7 +80,7 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const writer = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
+const writer = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
 
 const TRANSCRIPT = { lines: ["user: fixture ask", "assistant: fixture reply"] };
 const UNKNOWN_SEND = unknownActionOutput("the node closed before it answered");
@@ -162,7 +162,7 @@ class Journey {
 
   async drain(): Promise<void> {
     for (const event of this.told.splice(0)) {
-      const written = await writer.consume(this.target, event);
+      const written = await database.run(writer.consume(this.target, event));
       assert.ok(
         written.ok,
         `${event.kind} at ${event.sequence}: ${written.ok ? "" : written.refusal}`,

@@ -1,10 +1,12 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import {
   CONVERSATION_EVENT_KIND,
   type HostedMessageRatingRequest,
   MESSAGE_ROLE,
   unparsedWire,
 } from "../../core.js";
-import type { HostedStoreRun } from "./database.js";
 import { messageAuthorship } from "./message-reads.js";
 import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
 
@@ -25,10 +27,9 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * exists to be signal. Only an assistant row that is not a compaction is
  * Luke's words, whichever of Luke's parts wrote it.
  *
- * `messageAuthorship` is the one read here on `@effect/sql`; the event it
- * clears the way for is still written through the store writer's own
- * Drizzle transaction, so this function reaches it through the same `run`
- * seam every other converted read answers its promise through.
+ * The read and the write are both effects over the ambient client, so the
+ * whole rating — the authorship check and the event it clears the way for —
+ * composes into the one request the caller is already running.
  */
 
 export const RATING_REFUSAL = {
@@ -45,41 +46,46 @@ export type RatingWriteResult =
   | { readonly ok: false; readonly refusal: RatingRefusal };
 
 export interface RatingStore {
-  readonly run: HostedStoreRun;
   readonly writer: StoreWriter;
 }
 
-export async function rateMessage(
-  { run, writer }: RatingStore,
+export function rateMessage(
+  { writer }: RatingStore,
   userId: string,
   messageId: string,
   rating: HostedMessageRatingRequest,
-): Promise<RatingWriteResult> {
-  const authorship = await run(messageAuthorship(userId, messageId));
-  if (authorship === undefined) return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
-  if (authorship.role !== MESSAGE_ROLE.ASSISTANT || authorship.compaction) {
-    return { ok: false, refusal: RATING_REFUSAL.NOT_LUKES };
-  }
-  const { deviceId, ...payload } = rating;
-  const written = await writer.recordEvent(
-    { userId, conversationId: authorship.conversationId },
-    {
-      messageId,
-      kind: CONVERSATION_EVENT_KIND.RATING,
-      deviceId,
-      payload: unparsedWire(payload),
-    },
-  );
-  if (written.ok) return { ok: true, id: written.id, seq: written.seq };
-  switch (written.refusal) {
-    case STORE_WRITE_REFUSAL.NO_CONVERSATION:
-    case STORE_WRITE_REFUSAL.NO_MESSAGE:
-      return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
-    case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
-      throw new Error("a rating was refused as a claim, which only a speech.claimed event can be");
-    case STORE_WRITE_REFUSAL.SUPERSEDED:
-      throw new Error(
-        "a rating was refused as superseded, and a rating names nothing that excludes it",
-      );
-  }
+): Effect.Effect<RatingWriteResult, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const authorship = yield* messageAuthorship(userId, messageId);
+    if (authorship === undefined) return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
+    if (authorship.role !== MESSAGE_ROLE.ASSISTANT || authorship.compaction) {
+      return { ok: false, refusal: RATING_REFUSAL.NOT_LUKES };
+    }
+    const { deviceId, ...payload } = rating;
+    const written = yield* writer.recordEvent(
+      { userId, conversationId: authorship.conversationId },
+      {
+        messageId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        deviceId,
+        payload: unparsedWire(payload),
+      },
+    );
+    if (written.ok) return { ok: true, id: written.id, seq: written.seq };
+    switch (written.refusal) {
+      case STORE_WRITE_REFUSAL.NO_CONVERSATION:
+      case STORE_WRITE_REFUSAL.NO_MESSAGE:
+        return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
+      case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
+        return yield* Effect.die(
+          new Error("a rating was refused as a claim, which only a speech.claimed event can be"),
+        );
+      case STORE_WRITE_REFUSAL.SUPERSEDED:
+        return yield* Effect.die(
+          new Error(
+            "a rating was refused as superseded, and a rating names nothing that excludes it",
+          ),
+        );
+    }
+  });
 }

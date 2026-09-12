@@ -10,6 +10,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "../core.js";
+import { runWeb } from "../runtime.js";
 import {
   type ActionExecutionAnswer,
   type ActionRoster,
@@ -262,16 +263,17 @@ export async function handleSessionAction(options: SessionActionOptions): Promis
  */
 function routeRoster(route: HostedVaultRoute): SessionActionOptions["roster"] {
   return (userId, providerId, secret) =>
-    rosterForAction({
-      userId,
-      providerId,
-      secret,
-      run: route.run,
-      store: route.store(secret),
-      readVaultKeys: route.readVaultKeys,
-      seams: {},
-      now: Date.now(),
-    });
+    runWeb(
+      rosterForAction({
+        userId,
+        providerId,
+        secret,
+        store: route.store(secret),
+        readVaultKeys: route.readVaultKeys,
+        seams: {},
+        now: Date.now(),
+      }),
+    );
 }
 
 /** The six actions, each as the one thing its route names. */

@@ -1,3 +1,5 @@
+import type { SqlClient } from "@effect/sql";
+import { Effect } from "effect";
 import {
   type BrainRoster,
   normalizeSession,
@@ -11,7 +13,6 @@ import {
 import type { ObservationStore } from "../observation-pass.js";
 import { storedRoster } from "../observation-pass.js";
 import type { ObservedRoster } from "../observed-roster.js";
-import type { HostedStoreRun } from "../store/database.js";
 import type { VaultKeyRow } from "../vault-route.js";
 
 /**
@@ -65,15 +66,15 @@ export function hostedRosterFrom(
 }
 
 /** The stored snapshot as the brain reads it, only where it was observed under the keys standing now; nothing where no pass has written one. */
-export async function readHostedRoster(
-  run: HostedStoreRun,
+export function readHostedRoster(
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
   secret: string,
-): Promise<HostedRoster> {
-  const stored = await storedRoster(run, store, userId, rows, secret);
-  return hostedRosterFrom(stored?.roster, stored?.observedAt);
+): Effect.Effect<HostedRoster, never, SqlClient.SqlClient> {
+  return Effect.map(storedRoster(store, userId, rows, secret), (stored) =>
+    hostedRosterFrom(stored?.roster, stored?.observedAt),
+  );
 }
 
 /** The roster as the brain's turns take it: rendered, with the identities every tool argument is validated against. */

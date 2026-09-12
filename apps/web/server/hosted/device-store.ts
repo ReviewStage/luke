@@ -2,7 +2,6 @@ import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import type { DeviceSeams } from "./devices.js";
-import type { HostedStoreRun } from "./store/database.js";
 
 /**
  * The device seams over `@effect/sql`. A push token is unique across rows
@@ -192,30 +191,26 @@ export function forgetDevice(
   return Effect.map(deleteDeviceRow({ userId, deviceId }), (rows) => rows.length > 0);
 }
 
-export function deviceSeams(run: HostedStoreRun): DeviceSeams {
+export function deviceSeams(): DeviceSeams {
   return {
     registerDevice: (userId, registration, mintId, now) =>
-      run(
-        registerDevice({
-          id: mintId(),
-          userId,
-          installationId: registration.installationId,
-          platform: registration.platform,
-          now,
-          push: registration.push,
-        }),
-      ),
+      registerDevice({
+        id: mintId(),
+        userId,
+        installationId: registration.installationId,
+        platform: registration.platform,
+        now,
+        push: registration.push,
+      }),
     touchDevice: (userId, heartbeat, now) =>
-      run(
-        touchDevice({
-          userId,
-          deviceId: heartbeat.deviceId,
-          now,
-          activeUntil: heartbeat.activeUntil,
-          quietUntil: heartbeat.quietUntil,
-          push: heartbeat.push,
-        }),
-      ),
-    forgetDevice: (userId, deviceId) => run(forgetDevice(userId, deviceId)),
+      touchDevice({
+        userId,
+        deviceId: heartbeat.deviceId,
+        now,
+        activeUntil: heartbeat.activeUntil,
+        quietUntil: heartbeat.quietUntil,
+        push: heartbeat.push,
+      }),
+    forgetDevice: (userId, deviceId) => forgetDevice(userId, deviceId),
   };
 }

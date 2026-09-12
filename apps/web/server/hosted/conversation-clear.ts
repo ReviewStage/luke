@@ -1,7 +1,9 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import type { ConversationClearAnswer } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import { createRateBrake } from "./rate-brake.js";
-import type { HostedStoreRun } from "./store/database.js";
+import { makeRateBrake } from "./rate-brake.js";
 import type { HostedStore } from "./store/index.js";
 
 /**
@@ -23,7 +25,7 @@ const CLEAR_RATE_LIMIT = {
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const clearRateLimited = createRateBrake({
+const clearBrake = makeRateBrake({
   windowMs: CLEAR_RATE_LIMIT.WINDOW_MS,
   maxRequestsPerWindow: CLEAR_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
   maxTrackedUsers: CLEAR_RATE_LIMIT.MAX_TRACKED_USERS,
@@ -34,36 +36,36 @@ const CLEAR_METHOD = "POST";
 export interface ConversationClearOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The runner the Clear's one transaction is answered through. */
-  run: HostedStoreRun;
   store: Pick<HostedStore, "main">;
   now?: () => number;
 }
 
-export async function handleConversationClear(
+export function handleConversationClear(
   options: ConversationClearOptions,
-): Promise<Response> {
-  const { request, resolveUserId, run, store } = options;
-  const now = options.now ?? Date.now;
-  if (request.method !== CLEAR_METHOD) {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-  if (await clearRateLimited(userId)) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  }
-  const openedAt = now();
-  const outcome = await run(store.main.clear(userId, new Date(openedAt)));
-  const answer: ConversationClearAnswer = {
-    opened: outcome.opened,
-    openedAt,
-    cleared: outcome.cleared.length,
-  };
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const { request, resolveUserId, store } = options;
+    const now = options.now ?? Date.now;
+    if (request.method !== CLEAR_METHOD) {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
+    }
+    const userId = yield* Effect.promise(() => resolveUserId(request));
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+    if (!(yield* clearBrake.check(userId))) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    }
+    const openedAt = now();
+    const outcome = yield* store.main.clear(userId, new Date(openedAt));
+    const answer: ConversationClearAnswer = {
+      opened: outcome.opened,
+      openedAt,
+      cleared: outcome.cleared.length,
+    };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  });
 }

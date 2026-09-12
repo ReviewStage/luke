@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
+import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
 
 /**
@@ -9,11 +11,14 @@ import { host } from "../host.js";
  */
 export default defineDynamic({
   events: {
-    "session.started": async (_event, ctx) => {
-      const admitted = await host.admitStarting(ctx.session.auth, ctx.session.id);
-      if (!admitted.ok) return null;
-      const seed = await host.seed(admitted);
-      return seed === undefined ? null : defineInstructions({ content: seed, role: "user" });
-    },
+    "session.started": (_event, ctx) =>
+      runWeb(
+        Effect.gen(function* () {
+          const admitted = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
+          if (!admitted.ok) return null;
+          const seed = yield* host.seed(admitted);
+          return seed === undefined ? null : defineInstructions({ content: seed, role: "user" });
+        }),
+      ),
   },
 });

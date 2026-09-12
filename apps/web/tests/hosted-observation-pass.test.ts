@@ -66,20 +66,21 @@ test("only cloud providers with a stored key are observed", () => {
 
 test("a whole pass stores the roster with its projects, dated by the pass", async () => {
   const store = memoryObservationStore();
-  const outcome = await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: { fetch: api().fetch, now: () => TEST_TIME },
-    now: TEST_TIME,
-  });
+  const outcome = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
 
   assert.equal(outcome.complete, true);
   assert.equal(outcome.changed, false);
   assert.equal(outcome.observedAt, TEST_TIME);
-  const stored = await storedRoster(runWithoutDatabase, store, "user-1", KEY_ROWS, SECRET);
+  const stored = await runWithoutDatabase(storedRoster(store, "user-1", KEY_ROWS, SECRET));
   assert.ok(stored?.roster);
   assert.equal(stored.observedAt, TEST_TIME);
   const [provider] = stored.roster.providers;
@@ -96,15 +97,16 @@ test("a whole pass stores the roster with its projects, dated by the pass", asyn
 test("a changed roster moves the snapshot and says so; an unchanged one moves only the snapshot and says nothing changed", async () => {
   const store = memoryObservationStore();
   const pass = (status: string, now: number) =>
-    observeAndSnapshot({
-      userId: "user-1",
-      rows: KEY_ROWS,
-      secret: SECRET,
-      run: runWithoutDatabase,
-      store,
-      seams: { fetch: api(status).fetch, now: () => now },
-      now,
-    });
+    runWithoutDatabase(
+      observeAndSnapshot({
+        userId: "user-1",
+        rows: KEY_ROWS,
+        secret: SECRET,
+        store,
+        seams: { fetch: api(status).fetch, now: () => now },
+        now,
+      }),
+    );
 
   await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME);
   const same = await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME + 60_000);
@@ -127,35 +129,37 @@ test("a changed roster moves the snapshot and says so; an unchanged one moves on
 test("a pass the provider rate limits past its backoff leaves the previous snapshot standing and is recorded as failed", async () => {
   const store = memoryObservationStore();
   const healthy = api();
-  await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: { fetch: healthy.fetch, now: () => TEST_TIME },
-    now: TEST_TIME,
-  });
+  await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { fetch: healthy.fetch, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
 
   const limited = api(TEST_CONDUCTOR_STATUS.ERROR);
-  const outcome = await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: {
-      fetch: async (url, init) => {
-        const { pathname } = new URL(url);
-        if (pathname.endsWith("/status")) {
-          return new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS });
-        }
-        return limited.fetch(url, init);
+  const outcome = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: {
+        fetch: async (url, init) => {
+          const { pathname } = new URL(url);
+          if (pathname.endsWith("/status")) {
+            return new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS });
+          }
+          return limited.fetch(url, init);
+        },
+        now: () => TEST_TIME + 60_000,
       },
-      now: () => TEST_TIME + 60_000,
-    },
-    now: TEST_TIME + 60_000,
-  });
+      now: TEST_TIME + 60_000,
+    }),
+  );
 
   assert.equal(outcome.complete, false);
   assert.equal(outcome.failure, CLOUD_OBSERVE_FAILURE.RATE_LIMITED);
@@ -175,15 +179,16 @@ test("a refused key, an unreachable provider, and an unreadable key each fail th
     rows: VaultKeyRow[],
     fetch: (url: string, init: RequestInit) => Promise<Response>,
   ) =>
-    observeAndSnapshot({
-      userId: "user-1",
-      rows,
-      secret: SECRET,
-      run: runWithoutDatabase,
-      store,
-      seams: { fetch },
-      now: TEST_TIME,
-    });
+    runWithoutDatabase(
+      observeAndSnapshot({
+        userId: "user-1",
+        rows,
+        secret: SECRET,
+        store,
+        seams: { fetch },
+        now: TEST_TIME,
+      }),
+    );
 
   assert.equal(
     (await attempt(KEY_ROWS, async () => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED })))
@@ -223,20 +228,21 @@ test("the attempt is on record as unfinished before the provider is asked, and t
     });
   const hanging = new Promise<Response>(() => undefined);
   let asked = false;
-  const outcome = observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: {
-      fetch: () => {
-        asked = true;
-        return hanging;
+  const outcome = runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: {
+        fetch: () => {
+          asked = true;
+          return hanging;
+        },
       },
-    },
-    now: TEST_TIME,
-  });
+      now: TEST_TIME,
+    }),
+  );
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(asked, true);
   assert.deepEqual(recorded, [
@@ -246,15 +252,16 @@ test("the attempt is on record as unfinished before the provider is asked, and t
   void outcome;
 
   const finished = memoryObservationStore();
-  await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store: finished,
-    seams: { fetch: api().fetch, now: () => TEST_TIME },
-    now: TEST_TIME,
-  });
+  await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store: finished,
+      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
   assert.deepEqual(finished.passes.get("user-1"), {
     attemptedAt: TEST_TIME,
     observedAt: TEST_TIME,
@@ -264,21 +271,22 @@ test("the attempt is on record as unfinished before the provider is asked, and t
 test("two passes racing over one user record one transition once, and the later one adopts the roster that landed", async () => {
   const store = memoryObservationStore();
   const pass = (status: string, now: number, gate?: Promise<void>) =>
-    observeAndSnapshot({
-      userId: "user-1",
-      rows: KEY_ROWS,
-      secret: SECRET,
-      run: runWithoutDatabase,
-      store,
-      seams: {
-        fetch: async (url, init) => {
-          await gate;
-          return api(status).fetch(url, init);
+    runWithoutDatabase(
+      observeAndSnapshot({
+        userId: "user-1",
+        rows: KEY_ROWS,
+        secret: SECRET,
+        store,
+        seams: {
+          fetch: async (url, init) => {
+            await gate;
+            return api(status).fetch(url, init);
+          },
+          now: () => now,
         },
-        now: () => now,
-      },
-      now,
-    });
+        now,
+      }),
+    );
   await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME);
 
   let release: () => void = () => undefined;
@@ -310,21 +318,22 @@ test("when the earlier-started pass wins, the later one closes its own unfinishe
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const outcome = observeAndSnapshot({
-      userId: "user-1",
-      rows: KEY_ROWS,
-      secret: SECRET,
-      run: runWithoutDatabase,
-      store,
-      seams: {
-        fetch: async (url, init) => {
-          await gate;
-          return api(status).fetch(url, init);
+    const outcome = runWithoutDatabase(
+      observeAndSnapshot({
+        userId: "user-1",
+        rows: KEY_ROWS,
+        secret: SECRET,
+        store,
+        seams: {
+          fetch: async (url, init) => {
+            await gate;
+            return api(status).fetch(url, init);
+          },
+          now: () => now,
         },
-        now: () => now,
-      },
-      now,
-    });
+        now,
+      }),
+    );
     return { outcome, release };
   };
   const earlier = gated(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME + 1_000);
@@ -350,78 +359,81 @@ test("when the earlier-started pass wins, the later one closes its own unfinishe
 
 test("a snapshot observed under a key since replaced is another key's roster: not served, and replaced; the same key saved again keeps it", async () => {
   const store = memoryObservationStore();
-  const first = await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: { fetch: api().fetch, now: () => TEST_TIME },
-    now: TEST_TIME,
-  });
+  const first = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
   assert.equal(first.roster?.providers[0]?.keyFingerprint, keyFingerprint(TEST_API_KEY, SECRET));
-  assert.ok((await storedRoster(runWithoutDatabase, store, "user-1", KEY_ROWS, SECRET))?.roster);
+  assert.ok((await runWithoutDatabase(storedRoster(store, "user-1", KEY_ROWS, SECRET)))?.roster);
 
   // The Mac re-saves the same key on every launch, under a fresh nonce.
   const resaved: VaultKeyRow[] = [
     { providerId: "conductor", ciphertext: encryptProviderKey(TEST_API_KEY, SECRET) },
   ];
   assert.notEqual(resaved[0]?.ciphertext, KEY_ROWS[0]?.ciphertext);
-  assert.ok((await storedRoster(runWithoutDatabase, store, "user-1", resaved, SECRET))?.roster);
+  assert.ok((await runWithoutDatabase(storedRoster(store, "user-1", resaved, SECRET)))?.roster);
 
   const replaced: VaultKeyRow[] = [
     { providerId: "conductor", ciphertext: encryptProviderKey("another-key", SECRET) },
   ];
-  assert.deepEqual(await storedRoster(runWithoutDatabase, store, "user-1", replaced, SECRET), {
+  assert.deepEqual(await runWithoutDatabase(storedRoster(store, "user-1", replaced, SECRET)), {
     observedAt: TEST_TIME,
   });
   assert.equal(
-    (await storedRoster(runWithoutDatabase, store, "user-1", [], SECRET))?.roster,
+    (await runWithoutDatabase(storedRoster(store, "user-1", [], SECRET)))?.roster,
     undefined,
   );
   const unreadable: VaultKeyRow[] = [{ providerId: "conductor", ciphertext: "not-a-ciphertext" }];
   assert.equal(
-    (await storedRoster(runWithoutDatabase, store, "user-1", unreadable, SECRET))?.roster,
+    (await runWithoutDatabase(storedRoster(store, "user-1", unreadable, SECRET)))?.roster,
     undefined,
   );
 
-  const second = await observeAndSnapshot({
-    userId: "user-1",
-    rows: replaced,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: { fetch: api(TEST_CONDUCTOR_STATUS.ERROR).fetch, now: () => TEST_TIME + 1_000 },
-    now: TEST_TIME + 1_000,
-  });
+  const second = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: replaced,
+      secret: SECRET,
+      store,
+      seams: { fetch: api(TEST_CONDUCTOR_STATUS.ERROR).fetch, now: () => TEST_TIME + 1_000 },
+      now: TEST_TIME + 1_000,
+    }),
+  );
   assert.equal(second.complete, true);
   assert.equal(second.changed, false);
-  assert.ok((await storedRoster(runWithoutDatabase, store, "user-1", replaced, SECRET))?.roster);
+  assert.ok((await runWithoutDatabase(storedRoster(store, "user-1", replaced, SECRET)))?.roster);
 });
 
 test("a snapshot this build cannot open or read is replaced by the next whole pass", async () => {
   for (const body of [UNOPENABLE_BODY, "not json", JSON.stringify({ version: 99 })]) {
     const store = memoryObservationStore();
     store.snapshots.set("user-1", { body, observedAt: TEST_TIME - 60_000 });
-    assert.deepEqual(await storedRoster(runWithoutDatabase, store, "user-1", KEY_ROWS, SECRET), {
+    assert.deepEqual(await runWithoutDatabase(storedRoster(store, "user-1", KEY_ROWS, SECRET)), {
       observedAt: TEST_TIME - 60_000,
     });
 
-    const outcome = await observeAndSnapshot({
-      userId: "user-1",
-      rows: KEY_ROWS,
-      secret: SECRET,
-      run: runWithoutDatabase,
-      store,
-      seams: { fetch: api().fetch, now: () => TEST_TIME },
-      now: TEST_TIME,
-    });
+    const outcome = await runWithoutDatabase(
+      observeAndSnapshot({
+        userId: "user-1",
+        rows: KEY_ROWS,
+        secret: SECRET,
+        store,
+        seams: { fetch: api().fetch, now: () => TEST_TIME },
+        now: TEST_TIME,
+      }),
+    );
 
     assert.equal(outcome.complete, true, body);
     assert.equal(outcome.changed, false, body);
     assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME, body);
     assert.equal(
-      (await storedRoster(runWithoutDatabase, store, "user-1", KEY_ROWS, SECRET))?.roster?.providers
+      (await runWithoutDatabase(storedRoster(store, "user-1", KEY_ROWS, SECRET)))?.roster?.providers
         .length,
       1,
       body,
@@ -435,15 +447,16 @@ test("a store that cannot take the snapshot is a failed pass, never an unrecorde
     Effect.sync(() => {
       throw new Error("disk full");
     });
-  const outcome = await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: { fetch: api().fetch, now: () => TEST_TIME },
-    now: TEST_TIME,
-  });
+  const outcome = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
 
   assert.equal(outcome.complete, false);
   assert.equal(outcome.failure, CLOUD_OBSERVE_FAILURE.PASS_FAILED);

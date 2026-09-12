@@ -58,6 +58,7 @@
   ],
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
+    "apps/web/server/hosted/fiber-runner.ts",
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-account.ts",
     "packages/host/src/compose-live.ts",

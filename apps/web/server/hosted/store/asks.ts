@@ -3,14 +3,13 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import { ASK_ORIGIN, type AskOrigin } from "../../core.js";
 import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
-import type { HostedStoreRun } from "./database.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
  * The ask record: one row per ask from its accept to its turn, written and
- * read as effects over the store's one SQL client and answered to a caller
- * through the runner it composed. An ask is recorded once per conversation
- * and client id, by the unique index rather than by a read first, so two
+ * read as effects over the store's one SQL client and answered to its caller
+ * as effects too. An ask is recorded once per conversation and client id, by
+ * the unique index rather than by a read first, so two
  * arrivals of one client id leave one row and both callers read it. What
  * eve accepted is written onto the row as it is learned: the session at
  * dispatch, the delivery a follow-up was named, and the turn once
@@ -60,11 +59,11 @@ type AskDispatchRefusal = (typeof ASK_DISPATCH_REFUSAL)[keyof typeof ASK_DISPATC
 /** The ask record as the routes and the voice function read and write it. */
 export interface AskRecord {
   /** Records the ask once per conversation and client id; answers the row standing, this call's or an earlier one's. */
-  record(ask: AskWrite): Promise<AskRow>;
+  record(ask: AskWrite): AskEffect<AskRow>;
   /** The ask the id names, where the account holds it. */
-  named(userId: string, id: string): Promise<AskRow | undefined>;
+  named(userId: string, id: string): AskEffect<AskRow | undefined>;
   /** The newest eve session any of the conversation's asks was handed to, by eve's own sortable ids, ahead of the conversation row recording it. */
-  latestSession(userId: string, conversationId: string): Promise<string | undefined>;
+  latestSession(userId: string, conversationId: string): AskEffect<string | undefined>;
   /**
    * Runs the dispatch under the conversation's lock unless a session is already written, handing it
    * the conversation's newest session as read under that lock, and writes what eve answered; answers
@@ -75,9 +74,9 @@ export interface AskRecord {
     target: ConversationTarget,
     id: string,
     dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
-  ): Promise<AskRow | AskDispatchRefusal>;
+  ): AskEffect<AskRow | AskDispatchRefusal>;
   /** Stamps a Stop on an ask whose turn has not started, for the start to honour. */
-  cancelRequested(id: string, at: Date): Promise<void>;
+  cancelRequested(id: string, at: Date): AskEffect<void>;
 }
 
 /** The binding the relay makes when eve's `turn.started` names the deliveries a turn carries. */
@@ -87,16 +86,19 @@ export interface AskDeliveryBinding {
     target: ConversationTarget,
     deliveryIds: readonly string[],
     turnId: string,
-  ): Promise<readonly AskRow[]>;
+  ): AskEffect<readonly AskRow[]>;
   /**
    * The conversation's asks bound to the turn that carry a Stop: the ask that opened the session is
    * bound at its dispatch with no delivery, and a follow-up's stamp may land after its binding, so the
    * start reads every ask of the turn rather than only the rows it just bound.
    */
-  stoppedOn(target: ConversationTarget, turnId: string): Promise<readonly AskRow[]>;
+  stoppedOn(target: ConversationTarget, turnId: string): AskEffect<readonly AskRow[]>;
 }
 
 type AskFailure = SqlError | ParseResult.ParseError;
+
+/** What every method of the record answers: an effect over the ambient client. */
+type AskEffect<A> = Effect.Effect<A, AskFailure, SqlClient.SqlClient>;
 
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
@@ -419,29 +421,25 @@ function recordAsk(ask: AskWrite): Effect.Effect<AskRow, AskFailure, SqlClient.S
   });
 }
 
-/** The record over the runner the caller composed: the same runner the store and the writers stand on. */
-export function askRecord(run: HostedStoreRun): AskRecord & AskDeliveryBinding {
+/** The record over the ambient client: every method an effect its caller composes into its own request. */
+export function askRecord(): AskRecord & AskDeliveryBinding {
   return {
-    record: (ask) => run(recordAsk(ask)),
+    record: (ask) => recordAsk(ask),
     named: (userId, id) =>
-      run(
-        Effect.map(findAskById({ userId, id }), (found) =>
-          Option.getOrUndefined(Option.map(found, askRow)),
-        ),
+      Effect.map(findAskById({ userId, id }), (found) =>
+        Option.getOrUndefined(Option.map(found, askRow)),
       ),
-    latestSession: (userId, conversationId) => run(latestSessionOf({ userId, conversationId })),
-    dispatchOnce: (target, id, dispatch) => run(dispatchAskOnce(target, id, dispatch)),
-    cancelRequested: (id, at) => run(markCancelRequested({ id, at })),
+    latestSession: (userId, conversationId) => latestSessionOf({ userId, conversationId }),
+    dispatchOnce: (target, id, dispatch) => dispatchAskOnce(target, id, dispatch),
+    cancelRequested: (id, at) => markCancelRequested({ id, at }),
     bindDeliveries: (target, deliveryIds, turnId) =>
       deliveryIds.length === 0
-        ? Promise.resolve([])
-        : run(
-            Effect.map(
-              bindDeliveredAsks({ ...target, deliveryIds: [...deliveryIds], turnId }),
-              (rows) => rows.map(askRow),
-            ),
+        ? Effect.succeed([])
+        : Effect.map(
+            bindDeliveredAsks({ ...target, deliveryIds: [...deliveryIds], turnId }),
+            (rows) => rows.map(askRow),
           ),
     stoppedOn: (target, turnId) =>
-      run(Effect.map(findStoppedOn({ ...target, turnId }), (rows) => rows.map(askRow))),
+      Effect.map(findStoppedOn({ ...target, turnId }), (rows) => rows.map(askRow)),
   };
 }

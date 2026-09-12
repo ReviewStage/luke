@@ -26,7 +26,6 @@ function projectsOptions(
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readVaultKeys: async (): Promise<VaultKeyRow[]> => [],
-    run: runWithoutDatabase,
     store: () => memoryObservationStore(),
     ...overrides,
   };
@@ -70,54 +69,67 @@ test("projects are listed from the stored snapshot, seeded once, and a project c
       fetch: conductor.fetch,
     });
 
-  assert.deepEqual(projectIds(await (await handleProjects(options())).json()), ["proj-1"]);
+  assert.deepEqual(projectIds(await (await runWithoutDatabase(handleProjects(options()))).json()), [
+    "proj-1",
+  ]);
   assert.equal(store.snapshots.has("user-1"), true);
   const readsAfterSeeding = conductor.state.reads;
 
   conductor.state.connected = true;
-  assert.deepEqual(projectIds(await (await handleProjects(options())).json()), ["proj-1"]);
+  assert.deepEqual(projectIds(await (await runWithoutDatabase(handleProjects(options()))).json()), [
+    "proj-1",
+  ]);
   assert.equal(conductor.state.reads, readsAfterSeeding);
 
   // The schedule's next pass is what brings the new project to the phone,
   // and to admission at the same moment.
-  await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: { fetch: conductor.fetch },
-    now: Date.now(),
-  });
-  assert.deepEqual(projectIds(await (await handleProjects(options())).json()), [
+  await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { fetch: conductor.fetch },
+      now: Date.now(),
+    }),
+  );
+  assert.deepEqual(projectIds(await (await runWithoutDatabase(handleProjects(options()))).json()), [
     "proj-1",
     "proj-2",
   ]);
 });
 
 test("the projects gate order is method, token, secret", async () => {
-  const wrongMethod = await handleProjects(
-    projectsOptions({
-      request: new Request("https://luke.test/api/projects", { method: "POST" }),
-    }),
+  const wrongMethod = await runWithoutDatabase(
+    handleProjects(
+      projectsOptions({
+        request: new Request("https://luke.test/api/projects", { method: "POST" }),
+      }),
+    ),
   );
   assert.equal(wrongMethod.status, 405);
 
-  const anonymous = await handleProjects(projectsOptions({ resolveUserId: async () => undefined }));
+  const anonymous = await runWithoutDatabase(
+    handleProjects(projectsOptions({ resolveUserId: async () => undefined })),
+  );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 
-  const noSecret = await handleProjects(projectsOptions({ encryptionSecret: undefined }));
+  const noSecret = await runWithoutDatabase(
+    handleProjects(projectsOptions({ encryptionSecret: undefined })),
+  );
   assert.equal(noSecret.status, 503);
 });
 
 test("with no vault keys stored the response is 200 with an empty projects array", async () => {
-  const response = await handleProjects(
-    projectsOptions({
-      fetch: async () => {
-        throw new Error("no provider may be observed without a key");
-      },
-    }),
+  const response = await runWithoutDatabase(
+    handleProjects(
+      projectsOptions({
+        fetch: async () => {
+          throw new Error("no provider may be observed without a key");
+        },
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -127,13 +139,17 @@ test("with no vault keys stored the response is 200 with an empty projects array
 
 test("a provider that fails its pass does not fail the whole answer", async () => {
   const ciphertext = encryptProviderKey("key", SECRET);
-  const response = await handleProjects(
-    projectsOptions({
-      readVaultKeys: async (): Promise<VaultKeyRow[]> => [{ providerId: "conductor", ciphertext }],
-      fetch: async () => {
-        throw new Error("connection refused");
-      },
-    }),
+  const response = await runWithoutDatabase(
+    handleProjects(
+      projectsOptions({
+        readVaultKeys: async (): Promise<VaultKeyRow[]> => [
+          { providerId: "conductor", ciphertext },
+        ],
+        fetch: async () => {
+          throw new Error("connection refused");
+        },
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -189,24 +205,28 @@ test("a projects answer skips malformed entries rather than failing", () => {
 
 test("a provider that offered a project carries its agent table on the answer", async () => {
   const ciphertext = encryptProviderKey("conductor-key", SECRET);
-  const response = await handleProjects(
-    projectsOptions({
-      readVaultKeys: async (): Promise<VaultKeyRow[]> => [{ providerId: "conductor", ciphertext }],
-      fetch: async (url) => {
-        if (url.endsWith("/me")) {
-          return new Response(JSON.stringify({ userId: "u1" }), { status: 200 });
-        }
-        if (url.includes("/v0/projects")) {
-          return new Response(
-            JSON.stringify({
-              data: [{ id: "proj-1", gitRemote: "https://github.com/owner/repo", name: "Repo" }],
-            }),
-            { status: 200 },
-          );
-        }
-        return new Response(JSON.stringify({ data: [] }), { status: 200 });
-      },
-    }),
+  const response = await runWithoutDatabase(
+    handleProjects(
+      projectsOptions({
+        readVaultKeys: async (): Promise<VaultKeyRow[]> => [
+          { providerId: "conductor", ciphertext },
+        ],
+        fetch: async (url) => {
+          if (url.endsWith("/me")) {
+            return new Response(JSON.stringify({ userId: "u1" }), { status: 200 });
+          }
+          if (url.includes("/v0/projects")) {
+            return new Response(
+              JSON.stringify({
+                data: [{ id: "proj-1", gitRemote: "https://github.com/owner/repo", name: "Repo" }],
+              }),
+              { status: 200 },
+            );
+          }
+          return new Response(JSON.stringify({ data: [] }), { status: 200 });
+        },
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);

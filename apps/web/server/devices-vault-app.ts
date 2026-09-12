@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
+import type { SqlClient } from "@effect/sql";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, type Schema as EffectSchema, Either, Redacted } from "effect";
 import {
@@ -101,7 +102,7 @@ function decodeBody<Value, Encoded>(
  * documented shape is one 400 whatever was wrong with it, so a refused
  * request tells a caller nothing about which field the service reads.
  */
-function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default {
+function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default<never, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const method = request.method;
@@ -127,7 +128,7 @@ function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default {
         platform: body.platform,
         push: pushAddress(body),
       };
-      const { deviceId } = yield* Effect.promise(() =>
+      const { deviceId } = yield* Effect.orDie(
         seams.registerDevice(userId, registration, mintId, new Date(now())),
       );
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deviceId });
@@ -135,14 +136,14 @@ function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default {
 
     if (method === DEVICE_METHOD.HEARTBEAT) {
       const body = yield* decodeBody(deviceHeartbeatRequestSchema, payload);
-      const seen = yield* Effect.promise(() =>
+      const seen = yield* Effect.orDie(
         seams.touchDevice(userId, heartbeatFrom(body), new Date(now())),
       );
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { seen });
     }
 
     const body = yield* decodeBody(deviceForgetRequestSchema, payload);
-    const deleted = yield* Effect.promise(() => seams.forgetDevice(userId, body.deviceId));
+    const deleted = yield* Effect.orDie(seams.forgetDevice(userId, body.deviceId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted });
   }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
 }
@@ -168,7 +169,9 @@ function parseProviderKey(value: UnparsedWireValue): string | undefined {
 }
 
 /** Stores, replaces, or deletes the provider API key for the signed-in user. */
-function vaultKeyEffect(seams: DevicesVaultSeams): HttpApp.Default<never, HostedEnvironment> {
+function vaultKeyEffect(
+  seams: DevicesVaultSeams,
+): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "POST" && request.method !== "DELETE") {
@@ -197,7 +200,9 @@ function vaultKeyEffect(seams: DevicesVaultSeams): HttpApp.Default<never, Hosted
 }
 
 /** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
-function vaultKeysEffect(seams: DevicesVaultSeams): HttpApp.Default<never, HostedEnvironment> {
+function vaultKeysEffect(
+  seams: DevicesVaultSeams,
+): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "GET") return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
@@ -226,7 +231,7 @@ function vaultKeysEffect(seams: DevicesVaultSeams): HttpApp.Default<never, Hoste
  */
 export function devicesVaultApp(
   seams: DevicesVaultSeams,
-): HttpApp.Default<never, HostedEnvironment> {
+): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(DEVICES_PATH, devicesEffect(seams)),
     HttpRouter.all(VAULT_KEY_PATH, vaultKeyEffect(seams)),

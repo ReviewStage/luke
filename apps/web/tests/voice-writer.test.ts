@@ -61,9 +61,9 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const store = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
+const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
 const record = voiceSessionRecord(database.run, () => NOW);
-const speech = { run: database.run, writer: store };
+const speech = { writer: store };
 /** The installation the fixture sessions belong to, which is the device a briefing must be claimed by before its speech is marked. */
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 
@@ -71,7 +71,7 @@ let liveSessions = 0;
 const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 
 function writer(): VoiceWriter {
-  return voiceWriter({ run: database.run, store });
+  return voiceWriter({ store });
 }
 
 /** A user with a main conversation and a registered live session, the shape every stream lands on. */
@@ -114,23 +114,28 @@ async function briefing(conversation: ConversationTarget): Promise<string> {
 }
 
 async function claim(conversation: ConversationTarget, messageId: string): Promise<void> {
-  assert.equal((await offerSpeech(speech, conversation.userId, messageId, NOW)).ok, true);
   assert.equal(
-    (await claimSpeech(speech, conversation.userId, messageId, DEVICE_ID, NOW)).ok,
+    (await database.run(offerSpeech(speech, conversation.userId, messageId, NOW))).ok,
+    true,
+  );
+  assert.equal(
+    (await database.run(claimSpeech(speech, conversation.userId, messageId, DEVICE_ID, NOW))).ok,
     true,
   );
 }
 
 /** An assistant message of the brain's, as the relay leaves one, offered to nobody yet. */
 async function announced(conversation: ConversationTarget): Promise<string> {
-  const enqueued = await store.enqueueTurn(conversation, { origin: "roster_diff" });
+  const enqueued = await database.run(store.enqueueTurn(conversation, { origin: "roster_diff" }));
   assert.ok(enqueued.ok);
-  const written = await store.recordCompaction(conversation, {
-    clientId: `briefing-${enqueued.turnId}`,
-    turnId: enqueued.turnId,
-    text: "Earlier briefings folded.",
-    firstKeptMessageId: "00000000-0000-4000-8000-000000000000",
-  });
+  const written = await database.run(
+    store.recordCompaction(conversation, {
+      clientId: `briefing-${enqueued.turnId}`,
+      turnId: enqueued.turnId,
+      text: "Earlier briefings folded.",
+      firstKeptMessageId: "00000000-0000-4000-8000-000000000000",
+    }),
+  );
   assert.ok(written.ok);
   const rows = await readMessagesByConversationTyped(database.run, conversation.conversationId);
   const row = rows[rows.length - 1];
@@ -147,10 +152,10 @@ test("transcript deltas become segments with their timings and roles, in the ord
   const live = await target();
   const voice = writer();
   const results: VoiceWriteResult[] = [
-    await voice.consume(live, heard("what is", 1200, 1800)),
-    await voice.consume(live, heard(" the fixture waiting on", 1700, 3400)),
-    await voice.consume(live, said("It is waiting", 3500, 4300)),
-    await voice.consume(live, said(" on a permission prompt.", 4200, 5600)),
+    await database.run(voice.consume(live, heard("what is", 1200, 1800))),
+    await database.run(voice.consume(live, heard(" the fixture waiting on", 1700, 3400))),
+    await database.run(voice.consume(live, said("It is waiting", 3500, 4300))),
+    await database.run(voice.consume(live, said(" on a permission prompt.", 4200, 5600))),
   ];
   assert.deepEqual(results, [WRITTEN, WRITTEN, WRITTEN, WRITTEN]);
   assert.deepEqual(await segments(live.liveSessionId), [
@@ -183,12 +188,15 @@ test("transcript deltas become segments with their timings and roles, in the ord
 test("segments after a gap land on the same open row, from a fresh writer, with closed_at still null", async () => {
   const live = await target();
   const first = writer();
-  await first.consume(live, heard("before the gap", 1000, 2000));
+  await database.run(first.consume(live, heard("before the gap", 1000, 2000)));
   await record.noteUsage({ sessionId: live.liveSessionId, seconds: 12 });
 
   const attached = writer();
   await record.register({ userId: live.userId, sessionId: live.liveSessionId });
-  assert.deepEqual(await attached.consume(live, heard("after the gap", 900_000, 901_000)), WRITTEN);
+  assert.deepEqual(
+    await database.run(attached.consume(live, heard("after the gap", 900_000, 901_000))),
+    WRITTEN,
+  );
 
   const rows = (await readVoiceSessionByLiveSessionId(database.run, live.liveSessionId)).map(
     (row) => ({ closedAt: row.closed_at, usage: row.usage }),
@@ -207,17 +215,20 @@ test("a session no row stands for is refused, and another account's row is not t
   const live = await target();
   const voice = writer();
   assert.deepEqual(
-    await voice.consume({ ...live, liveSessionId: "sess_unknown" }, heard("x", 0, 1)),
+    await database.run(voice.consume({ ...live, liveSessionId: "sess_unknown" }, heard("x", 0, 1))),
     {
       ok: false,
       refusal: VOICE_WRITE_REFUSAL.NO_SESSION,
     },
   );
   const other = await database.createUser();
-  assert.deepEqual(await voice.consume({ ...live, userId: other }, heard("x", 0, 1)), {
-    ok: false,
-    refusal: VOICE_WRITE_REFUSAL.NO_SESSION,
-  });
+  assert.deepEqual(
+    await database.run(voice.consume({ ...live, userId: other }, heard("x", 0, 1))),
+    {
+      ok: false,
+      refusal: VOICE_WRITE_REFUSAL.NO_SESSION,
+    },
+  );
   assert.deepEqual(await segments(live.liveSessionId), []);
 });
 
@@ -236,7 +247,7 @@ test("events the writer does not keep are ignored, and nothing is written for th
     },
   ];
   for (const event of ignored) {
-    assert.deepEqual(await voice.consume(live, event), {
+    assert.deepEqual(await database.run(voice.consume(live, event)), {
       ok: true,
       effect: STORE_WRITE_EFFECT.IGNORED,
     });
@@ -253,13 +264,13 @@ test("speech.spoken is written once, on the first output delta at or after the a
   voice.noteAppend(live, append);
 
   // Before the ack places the append, a delta says nothing about it.
-  await voice.consume(live, said("Earlier words.", 100, 900));
-  assert.deepEqual(await voice.consume(live, appended("append-1", 1000, 4000)), {
+  await database.run(voice.consume(live, said("Earlier words.", 100, 900)));
+  assert.deepEqual(await database.run(voice.consume(live, appended("append-1", 1000, 4000))), {
     ok: true,
     effect: STORE_WRITE_EFFECT.WRITTEN,
   });
   // A delta that begins before the appended commentary ends is not its speech.
-  await voice.consume(live, said("The fixture", 3800, 4100));
+  await database.run(voice.consume(live, said("The fixture", 3800, 4100)));
   assert.equal(
     (await speechEvents(live.conversation)).some(
       (event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
@@ -267,8 +278,8 @@ test("speech.spoken is written once, on the first output delta at or after the a
     false,
   );
   // The first delta beginning at or after the end is.
-  await voice.consume(live, said(" session is waiting", 4000, 5200));
-  await voice.consume(live, said(" on a permission prompt.", 5200, 6400));
+  await database.run(voice.consume(live, said(" session is waiting", 4000, 5200)));
+  await database.run(voice.consume(live, said(" on a permission prompt.", 5200, 6400)));
 
   const spoken = await speechEvents(live.conversation);
   const voiceSessionId = await sessionRowId(live.liveSessionId);
@@ -288,10 +299,13 @@ test("speech.spoken is written once, on the first output delta at or after the a
   // Every delta was still a segment, whatever it said about the append.
   assert.equal((await segments(live.liveSessionId)).length, 4);
   // An ack for an append this writer was never told of is ignored rather than marked.
-  assert.deepEqual(await voice.consume(live, appended("append-unknown", 7000, 8000)), {
-    ok: true,
-    effect: STORE_WRITE_EFFECT.IGNORED,
-  });
+  assert.deepEqual(
+    await database.run(voice.consume(live, appended("append-unknown", 7000, 8000))),
+    {
+      ok: true,
+      effect: STORE_WRITE_EFFECT.IGNORED,
+    },
+  );
 });
 
 test("one delta past the ends of two acknowledged appends marks both briefings", async () => {
@@ -310,27 +324,30 @@ test("one delta past the ends of two acknowledged appends marks both briefings",
   const voice = writer();
   voice.noteAppend(live, { clientEventId: "append-a", messageId: first });
   voice.noteAppend(live, { clientEventId: "append-b", messageId: secondBriefingId });
-  await voice.consume(live, appended("append-a", 0, 1000));
-  await voice.consume(live, appended("append-b", 1000, 2000));
-  assert.deepEqual(await voice.consume(live, said("Both said.", 2000, 3000)), WRITTEN);
+  await database.run(voice.consume(live, appended("append-a", 0, 1000)));
+  await database.run(voice.consume(live, appended("append-b", 1000, 2000)));
+  assert.deepEqual(
+    await database.run(voice.consume(live, said("Both said.", 2000, 3000))),
+    WRITTEN,
+  );
   const spokenOf = async () =>
     (await speechEvents(live.conversation))
       .filter((event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN)
       .map((event) => event.messageId);
   assert.deepEqual(await spokenOf(), [first, secondBriefingId]);
   // Neither is marked a second time.
-  await voice.consume(live, said("And more.", 3000, 4000));
+  await database.run(voice.consume(live, said("And more.", 3000, 4000)));
   assert.deepEqual(await spokenOf(), [first, secondBriefingId]);
 });
 
 test("a briefing this session's device did not claim is not marked spoken by its voice: unclaimed, another device's, or a session with no device", async () => {
   const live = await target();
   const unclaimed = await announced(live.conversation);
-  assert.equal((await offerSpeech(speech, live.userId, unclaimed, NOW)).ok, true);
+  assert.equal((await database.run(offerSpeech(speech, live.userId, unclaimed, NOW))).ok, true);
   const voice = writer();
   voice.noteAppend(live, { clientEventId: "append-u", messageId: unclaimed });
-  await voice.consume(live, appended("append-u", 0, 1000));
-  assert.deepEqual(await voice.consume(live, said("Said anyway.", 1000, 2000)), {
+  await database.run(voice.consume(live, appended("append-u", 0, 1000)));
+  assert.deepEqual(await database.run(voice.consume(live, said("Said anyway.", 1000, 2000))), {
     ok: false,
     refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
   });
@@ -344,8 +361,8 @@ test("a briefing this session's device did not claim is not marked spoken by its
   );
   const otherVoice = writer();
   otherVoice.noteAppend(other, { clientEventId: "append-o", messageId: theirs });
-  await otherVoice.consume(other, appended("append-o", 0, 1000));
-  assert.deepEqual(await otherVoice.consume(other, said("Not mine.", 1000, 2000)), {
+  await database.run(otherVoice.consume(other, appended("append-o", 0, 1000)));
+  assert.deepEqual(await database.run(otherVoice.consume(other, said("Not mine.", 1000, 2000))), {
     ok: false,
     refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
   });
@@ -355,11 +372,14 @@ test("a briefing this session's device did not claim is not marked spoken by its
   await setVoiceSessionDeviceId(database.run, deviceless.liveSessionId, null);
   const noDevice = writer();
   noDevice.noteAppend(deviceless, { clientEventId: "append-n", messageId: claimed });
-  await noDevice.consume(deviceless, appended("append-n", 0, 1000));
-  assert.deepEqual(await noDevice.consume(deviceless, said("Nobody's.", 1000, 2000)), {
-    ok: false,
-    refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
-  });
+  await database.run(noDevice.consume(deviceless, appended("append-n", 0, 1000)));
+  assert.deepEqual(
+    await database.run(noDevice.consume(deviceless, said("Nobody's.", 1000, 2000))),
+    {
+      ok: false,
+      refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
+    },
+  );
 
   for (const conversation of [live.conversation, other.conversation, deviceless.conversation]) {
     assert.equal(
@@ -380,8 +400,8 @@ test("an append whose message is gone is refused at the speech, not the segment"
     clientEventId: "append-2",
     messageId: "00000000-0000-4000-8000-000000000404",
   });
-  await voice.consume(live, appended("append-2", 0, 500));
-  assert.deepEqual(await voice.consume(live, said("Words.", 600, 900)), {
+  await database.run(voice.consume(live, appended("append-2", 0, 500)));
+  assert.deepEqual(await database.run(voice.consume(live, said("Words.", 600, 900))), {
     ok: false,
     refusal: VOICE_WRITE_REFUSAL.NO_MESSAGE,
   });
@@ -403,15 +423,17 @@ test("a delegation cuts the developer's words before it into a spoken ask naming
   const live = await target();
   const voice = writer();
   const voiceSessionId = await sessionRowId(live.liveSessionId);
-  await voice.consume(live, heard("What is the fixture", 1200, 2600));
-  await voice.consume(live, heard(" waiting on?", 2500, 4800));
-  await voice.consume(live, said("It is waiting on a permission prompt.", 5000, 7000));
-  assert.deepEqual(await voice.consume(live, delegated("dl_1", 4900)), {
+  await database.run(voice.consume(live, heard("What is the fixture", 1200, 2600)));
+  await database.run(voice.consume(live, heard(" waiting on?", 2500, 4800)));
+  await database.run(
+    voice.consume(live, said("It is waiting on a permission prompt.", 5000, 7000)),
+  );
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_1", 4900))), {
     ok: true,
     effect: STORE_WRITE_EFFECT.WRITTEN,
   });
-  await voice.consume(live, heard("Tell it to go ahead.", 8000, 9400));
-  assert.deepEqual(await voice.consume(live, delegated("dl_2", 9500)), {
+  await database.run(voice.consume(live, heard("Tell it to go ahead.", 8000, 9400)));
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_2", 9500))), {
     ok: true,
     effect: STORE_WRITE_EFFECT.WRITTEN,
   });
@@ -453,16 +475,16 @@ test("a delegation cuts the developer's words before it into a spoken ask naming
 test("a delegation is one ask however many times it is told, and one with no words before it writes nothing", async () => {
   const live = await target();
   const voice = writer();
-  assert.deepEqual(await voice.consume(live, delegated("dl_empty", 500)), {
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_empty", 500))), {
     ok: true,
     effect: STORE_WRITE_EFFECT.IGNORED,
   });
-  await voice.consume(live, heard("Stop the fixture.", 600, 1800));
-  assert.deepEqual(await voice.consume(live, delegated("dl_3", 2000)), {
+  await database.run(voice.consume(live, heard("Stop the fixture.", 600, 1800)));
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_3", 2000))), {
     ok: true,
     effect: STORE_WRITE_EFFECT.WRITTEN,
   });
-  assert.deepEqual(await voice.consume(live, delegated("dl_3", 2000)), {
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_3", 2000))), {
     ok: true,
     effect: STORE_WRITE_EFFECT.REPEATED,
   });

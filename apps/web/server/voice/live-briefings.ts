@@ -2,6 +2,7 @@ import type { BriefingDelivery } from "@sidecar/voice/live-session";
 import type { ToolSet } from "ai";
 import { Deferred, Duration, Effect, FiberId, Schedule } from "effect";
 import { briefingWordsOf } from "../hosted/briefing-words.js";
+import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import {
   claimSpeech,
@@ -57,6 +58,8 @@ export interface HostedBriefingsOptions {
   /** The speech module's store: the runner and the writer the claim is written through. */
   readonly speech: SpeechStore;
   /** The account's open offers, as the store lists them. */
+  /** The promise face the look's own reads are run to, since the voice service drives them from socket callbacks. */
+  readonly run: FiberStoreRunner;
   readonly offers: Pick<HostedStore["speech"], "open">;
   /** The tool registry the announcement's row is read back under. */
   readonly tools: ToolSet;
@@ -82,17 +85,13 @@ export function hostedBriefings(options: HostedBriefingsOptions): HostedBriefing
   let stopped: Deferred.Deferred<void> | undefined;
 
   async function claimAndDeliver(offer: SpeechOffer, deviceId: string): Promise<void> {
-    const words = await briefingWordsOf(options.speech.run, options.tools, offer);
+    const words = await options.run(briefingWordsOf(options.tools, offer));
     if (words === undefined) {
       options.report("A briefing on offer has no words this build can read; left for the sweep");
       return;
     }
-    const claimed = await claimSpeech(
-      options.speech,
-      options.userId,
-      offer.messageId,
-      deviceId,
-      options.now(),
+    const claimed = await options.run(
+      claimSpeech(options.speech, options.userId, offer.messageId, deviceId, options.now()),
     );
     if (!claimed.ok) return;
     options.deliver({ briefing: words, decidedAt: options.now(), claim: claimed.claim });
@@ -100,13 +99,13 @@ export function hostedBriefings(options: HostedBriefingsOptions): HostedBriefing
 
   /** Every open offer of the account is read, so rows claimed or held elsewhere cannot fill a page ahead of a newer offer. */
   async function look(): Promise<void> {
-    const offers = await options.speech.run(options.offers.open(options.userId));
+    const offers = await options.run(options.offers.open(options.userId));
     const open = offers
       .filter((offer) => offer.state === SPEECH_STATE.OFFERED)
       .slice(0, bounds.OFFERS_PER_LOOK);
     if (open.length === 0) return;
     const now = options.now();
-    const quiet = await options.speech.run(quietUntilByAccount(now, [options.userId]));
+    const quiet = await options.run(quietUntilByAccount(now, [options.userId]));
     if (quiet.has(options.userId)) return;
     const deviceId = await options.deviceId();
     if (deviceId === undefined) {
@@ -134,7 +133,7 @@ export function hostedBriefings(options: HostedBriefingsOptions): HostedBriefing
         ),
         Schedule.spaced(Duration.millis(bounds.POLL_MS)),
       ).pipe(Effect.raceFirst(Deferred.await(ending)));
-      void options.speech.run(looking).catch((error: Error) => {
+      void options.run(looking).catch((error: Error) => {
         options.report(`The briefing look ended: ${error.message}`);
       });
     },

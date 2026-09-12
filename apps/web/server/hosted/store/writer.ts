@@ -49,7 +49,7 @@ import {
   unparsedWire,
   WireValueSchema,
 } from "../../core.js";
-import { EpochMillisColumnSchema, type HostedStoreRun, nullable } from "./database.js";
+import { EpochMillisColumnSchema, nullable } from "./database.js";
 
 /**
  * The store writer: the one path by which a `messages`, `turns`, or `events`
@@ -90,9 +90,9 @@ import { EpochMillisColumnSchema, type HostedStoreRun, nullable } from "./databa
  *
  * Every statement is an `Effect` over the ambient `SqlClient`, the
  * transaction is that client's own, and each row a statement answers is
- * decoded by a `Schema` rather than trusted; the `StoreWriter` methods stay
- * promises, run through the runner the edge that composed the writer handed
- * it.
+ * decoded by a `Schema` rather than trusted; the `StoreWriter` methods are
+ * effects too, so the edge that owns the connection is the one that runs
+ * them and a caller composes a write into the request it is already on.
  */
 
 /** The one output any tool's schema must admit: the envelope of a call whose effect is unknown. */
@@ -101,17 +101,18 @@ const UNKNOWN_OUTCOME_PROBE = unknownActionOutput(
 );
 
 /** The tools whose declared output schema would refuse the unknown outcome's envelope. */
-async function toolsRefusingUnknownOutcome(tools: ToolSet): Promise<readonly string[]> {
-  const refusing: string[] = [];
-  for (const [name, declared] of Object.entries(tools)) {
-    if (declared.outputSchema === undefined) continue;
-    const validate = asSchema(declared.outputSchema).validate;
-    if (validate === undefined) continue;
-    const result = await validate(UNKNOWN_OUTCOME_PROBE);
-    if (!result.success) refusing.push(name);
-  }
-  return refusing;
-}
+const toolsRefusingUnknownOutcome = (tools: ToolSet): Effect.Effect<readonly string[]> =>
+  Effect.promise(async () => {
+    const refusing: string[] = [];
+    for (const [name, declared] of Object.entries(tools)) {
+      if (declared.outputSchema === undefined) continue;
+      const validate = asSchema(declared.outputSchema).validate;
+      if (validate === undefined) continue;
+      const result = await validate(UNKNOWN_OUTCOME_PROBE);
+      if (!result.success) refusing.push(name);
+    }
+    return refusing;
+  });
 
 export interface ConversationTarget {
   readonly userId: string;
@@ -119,8 +120,6 @@ export interface ConversationTarget {
 }
 
 interface StoreWriterOptions {
-  /** The runner of the edge that composed the writer, which is what answers every statement below. */
-  readonly run: HostedStoreRun;
   /** The catalog's `tool()` declarations by name: what a stored tool part may name, and what its input is held to. */
   readonly tools: ToolSet;
   readonly now?: () => Date;
@@ -296,42 +295,44 @@ type EventWriteResult =
       | typeof STORE_WRITE_REFUSAL.SUPERSEDED
     >;
 
+/**
+ * The one path by which a conversation's rows are written, each method an
+ * effect over the ambient client: a caller composes one into the request it
+ * is already running rather than awaiting it out of band.
+ */
 export interface StoreWriter {
   /** Consumes one event of the run stream for the conversation it names. */
-  consume(target: ConversationTarget, event: BrainRunEvent): Promise<StoreWriteResult>;
+  consume(target: ConversationTarget, event: BrainRunEvent): Write<StoreWriteResult>;
   /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
-  enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Promise<TurnEnqueueResult>;
+  enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Write<TurnEnqueueResult>;
   /** Removes a queued turn the opener has handed to eve; a row eve has started, or one a message names, is left standing. */
-  dequeueTurn(target: ConversationTarget, turnId: string): Promise<StoreWriteResult>;
+  dequeueTurn(target: ConversationTarget, turnId: string): Write<StoreWriteResult>;
   /** Stamps the instant a Stop was asked on a turn the conversation holds, once. */
-  requestTurnCancel(
-    target: ConversationTarget,
-    cancel: TurnCancelRequest,
-  ): Promise<TurnCancelResult>;
+  requestTurnCancel(target: ConversationTarget, cancel: TurnCancelRequest): Write<TurnCancelResult>;
   /** Writes the assistant message a compaction stands as; the stream's own compaction event carries too little to write it. */
   recordCompaction(
     target: ConversationTarget,
     compaction: CompactionWrite,
-  ): Promise<StoreWriteResult>;
+  ): Write<StoreWriteResult>;
   /** Appends one event about a message, numbered by the conversation's event sequence. */
   recordEvent(
     target: ConversationTarget,
     event: EventWrite | SpeechEventWrite,
-  ): Promise<EventWriteResult>;
+  ): Write<EventWriteResult>;
   /** Writes the developer's own words as a finished user message, once per client id. */
   recordUserMessage(
     target: ConversationTarget,
     message: UserMessageWrite,
-  ): Promise<UserMessageWriteResult>;
+  ): Write<UserMessageWriteResult>;
   /**
    * Ties to the turn every user row whose client id is an ask's the turn ran,
    * where the row stands with no turn yet: the other half of `turnOfAsk`, for
    * a row written before the ask learned its turn. Under the conversation's
    * lock, so a row being written meanwhile is seen once it lands, never missed.
    */
-  attachAskLines(target: ConversationTarget, turnId: string): Promise<AskLinesAttached>;
+  attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
   /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
-  spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Promise<SpokenAskEndResult>;
+  spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Write<SpokenAskEndResult>;
 }
 
 /**
@@ -1565,17 +1566,16 @@ function recordEvent(
   });
 }
 
-export async function storeWriter({
-  run,
+/**
+ * Composes the writer over one catalog, which is where the catalog is held to
+ * the unknown outcome's envelope: a tool whose declared output schema refuses
+ * it would leave a dispatched call's row unreadable, so the writer refuses to
+ * exist over such a catalog rather than writing one.
+ */
+export function storeWriter({
   tools,
   now = () => new Date(),
-}: StoreWriterOptions): Promise<StoreWriter> {
-  const refusing = await toolsRefusingUnknownOutcome(tools);
-  if (refusing.length > 0) {
-    throw new Error(
-      `the output schema of ${refusing.join(", ")} does not admit the unknown outcome's envelope`,
-    );
-  }
+}: StoreWriterOptions): Effect.Effect<StoreWriter> {
   /**
    * Runs one write under the conversation's row lock, or answers that no such
    * conversation stands for this account: none by that id, or one Clear
@@ -1584,23 +1584,19 @@ export async function storeWriter({
   function underConversation<Result>(
     target: ConversationTarget,
     write: (context: WriterContext) => Write<Result>,
-  ): Promise<Result | typeof NO_CONVERSATION> {
-    return run(
-      Effect.flatMap(SqlClient.SqlClient, (sql) =>
-        sql.withTransaction(
-          Effect.flatMap(
-            lockConversation(target),
-            (locked): Write<Result | typeof NO_CONVERSATION> =>
-              Option.isNone(locked)
-                ? Effect.succeed(NO_CONVERSATION)
-                : write({ tools, now, target }),
-          ),
+  ): Write<Result | typeof NO_CONVERSATION> {
+    return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      sql.withTransaction(
+        Effect.flatMap(
+          lockConversation(target),
+          (locked): Write<Result | typeof NO_CONVERSATION> =>
+            Option.isNone(locked) ? Effect.succeed(NO_CONVERSATION) : write({ tools, now, target }),
         ),
       ),
     );
   }
 
-  return {
+  const writer: StoreWriter = {
     consume: (target, event) => underConversation(target, (context) => consume(context, event)),
     enqueueTurn: (target, enqueue) =>
       underConversation(target, (context) => enqueueTurn(context, enqueue)),
@@ -1619,4 +1615,14 @@ export async function storeWriter({
     spokenAskEnd: (target, end) =>
       underConversation(target, (context) => spokenAskEnd(context, end)),
   };
+
+  return Effect.flatMap(toolsRefusingUnknownOutcome(tools), (refusing) =>
+    refusing.length === 0
+      ? Effect.succeed(writer)
+      : Effect.die(
+          new Error(
+            `the output schema of ${refusing.join(", ")} does not admit the unknown outcome's envelope`,
+          ),
+        ),
+  );
 }

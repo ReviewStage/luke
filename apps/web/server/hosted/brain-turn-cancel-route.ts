@@ -1,5 +1,5 @@
+import { Effect } from "effect";
 import type { Route } from "../route.js";
-import { runWeb } from "../runtime.js";
 import { handleBrainTurnCancel } from "./brain-ask.js";
 import { brainAskRoute } from "./brain-ask-route.js";
 import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
@@ -13,12 +13,13 @@ import { type StoreWriter, storeWriter } from "./store/writer.js";
  */
 
 /** The writer, composed on first use since its composition probes every declared schema; the Stop is its one caller here. */
-let composedWriter: Promise<StoreWriter> | undefined;
+let composedWriter: StoreWriter | undefined;
 const writer: Pick<StoreWriter, "requestTurnCancel"> = {
-  requestTurnCancel: async (target, cancel) => {
-    composedWriter ??= storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET });
-    return (await composedWriter).requestTurnCancel(target, cancel);
-  },
+  requestTurnCancel: (target, cancel) =>
+    Effect.gen(function* () {
+      composedWriter ??= yield* storeWriter({ tools: CATALOG_TOOL_SET });
+      return yield* composedWriter.requestTurnCancel(target, cancel);
+    }),
 };
 
 /** `POST /api/brain/turns/{id}/cancel`, the path's id rewritten into the query. */

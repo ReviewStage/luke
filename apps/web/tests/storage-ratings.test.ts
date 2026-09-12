@@ -34,8 +34,7 @@ const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 const OTHER_DEVICE_ID = "7d2f3f25-ab1c-4d3e-9f4a-1b2c3d4e5f61";
 
 const store: RatingStore = {
-  run: database.run,
-  writer: await storeWriter({ run: database.run, tools: {}, now: () => NOW }),
+  writer: await database.run(storeWriter({ tools: {}, now: () => NOW })),
 };
 
 /** A main with the developer's ask, an observation note of the brain's, and Luke's reply. */
@@ -75,11 +74,13 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
   const userId = await database.createUser();
   const { main, reply } = await populate(userId);
 
-  const written = await rateMessage(store, userId, reply, {
-    rating: MESSAGE_RATING.DOWN,
-    note: "It answered a different question.",
-    deviceId: DEVICE_ID,
-  });
+  const written = await database.run(
+    rateMessage(store, userId, reply, {
+      rating: MESSAGE_RATING.DOWN,
+      note: "It answered a different question.",
+      deviceId: DEVICE_ID,
+    }),
+  );
   assert.equal(written.ok, true);
   if (!written.ok) return;
 
@@ -117,15 +118,19 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
 test("a later rating is a second event and the one the latest read answers; the first still stands", async () => {
   const userId = await database.createUser();
   const { main, reply } = await populate(userId);
-  const first = await rateMessage(store, userId, reply, {
-    rating: MESSAGE_RATING.DOWN,
-    deviceId: DEVICE_ID,
-  });
-  const second = await rateMessage(store, userId, reply, {
-    rating: MESSAGE_RATING.UP,
-    note: "On reflection it was right.",
-    deviceId: OTHER_DEVICE_ID,
-  });
+  const first = await database.run(
+    rateMessage(store, userId, reply, {
+      rating: MESSAGE_RATING.DOWN,
+      deviceId: DEVICE_ID,
+    }),
+  );
+  const second = await database.run(
+    rateMessage(store, userId, reply, {
+      rating: MESSAGE_RATING.UP,
+      note: "On reflection it was right.",
+      deviceId: OTHER_DEVICE_ID,
+    }),
+  );
   assert.equal(first.ok && second.ok, true);
   if (!first.ok || !second.ok) return;
   assert.equal(second.seq, first.seq + 1);
@@ -155,12 +160,12 @@ test("a message the account does not own is not found, whether another account's
   const { reply } = await populate(other);
   const rating = { rating: MESSAGE_RATING.UP, deviceId: DEVICE_ID } as const;
 
-  assert.deepEqual(await rateMessage(store, userId, reply, rating), {
+  assert.deepEqual(await database.run(rateMessage(store, userId, reply, rating)), {
     ok: false,
     refusal: RATING_REFUSAL.NOT_FOUND,
   });
   assert.deepEqual(
-    await rateMessage(store, userId, "00000000-0000-4000-8000-000000000000", rating),
+    await database.run(rateMessage(store, userId, "00000000-0000-4000-8000-000000000000", rating)),
     { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
   );
   assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
@@ -192,16 +197,16 @@ test("a message the account owns but Luke did not write is not rateable: the dev
       compaction: { first_kept_message_id: ask, tokens_before: 1200 },
     },
   });
-  assert.deepEqual(await rateMessage(store, userId, compaction, rating), {
+  assert.deepEqual(await database.run(rateMessage(store, userId, compaction, rating)), {
     ok: false,
     refusal: RATING_REFUSAL.NOT_LUKES,
   });
 
-  assert.deepEqual(await rateMessage(store, userId, ask, rating), {
+  assert.deepEqual(await database.run(rateMessage(store, userId, ask, rating)), {
     ok: false,
     refusal: RATING_REFUSAL.NOT_LUKES,
   });
-  assert.deepEqual(await rateMessage(store, userId, note, rating), {
+  assert.deepEqual(await database.run(rateMessage(store, userId, note, rating)), {
     ok: false,
     refusal: RATING_REFUSAL.NOT_LUKES,
   });
@@ -211,15 +216,19 @@ test("a message the account owns but Luke did not write is not rateable: the dev
 test("a message in a cleared conversation is not found, and its earlier rating is no longer read", async () => {
   const userId = await database.createUser();
   const { reply } = await populate(userId);
-  const before = await rateMessage(store, userId, reply, {
-    rating: MESSAGE_RATING.UP,
-    deviceId: DEVICE_ID,
-  });
+  const before = await database.run(
+    rateMessage(store, userId, reply, {
+      rating: MESSAGE_RATING.UP,
+      deviceId: DEVICE_ID,
+    }),
+  );
   assert.equal(before.ok, true);
   await database.run(database.store.main.clear(userId, NOW));
 
   assert.deepEqual(
-    await rateMessage(store, userId, reply, { rating: MESSAGE_RATING.DOWN, deviceId: DEVICE_ID }),
+    await database.run(
+      rateMessage(store, userId, reply, { rating: MESSAGE_RATING.DOWN, deviceId: DEVICE_ID }),
+    ),
     { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
   );
   assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
@@ -228,10 +237,12 @@ test("a message in a cleared conversation is not found, and its earlier rating i
 test("a latest rating whose payload this build cannot read answers nothing rather than an older verdict", async () => {
   const userId = await database.createUser();
   const { main, reply } = await populate(userId);
-  const first = await rateMessage(store, userId, reply, {
-    rating: MESSAGE_RATING.UP,
-    deviceId: DEVICE_ID,
-  });
+  const first = await database.run(
+    rateMessage(store, userId, reply, {
+      rating: MESSAGE_RATING.UP,
+      deviceId: DEVICE_ID,
+    }),
+  );
   assert.equal(first.ok, true);
   await insertEvent(database.run, {
     userId,

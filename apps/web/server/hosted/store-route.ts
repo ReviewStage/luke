@@ -1,8 +1,9 @@
+import type { SqlClient } from "@effect/sql";
+import type { Effect } from "effect";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
 import { payloadKeyRing } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
-import type { HostedStoreRun } from "./store/database.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
 import { hostedEncryptionSecret, resolveHostedUserId } from "./vault-route.js";
 
@@ -17,8 +18,6 @@ import { hostedEncryptionSecret, resolveHostedUserId } from "./vault-route.js";
 export interface HostedStoreRoute {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The runner this deployment's edge answers the store's effects through. */
-  run: HostedStoreRun;
   store: HostedStore;
 }
 
@@ -32,14 +31,21 @@ async function deploymentStore(): Promise<HostedStore | undefined> {
   return composed;
 }
 
-export function hostedStoreRoute(handler: (route: HostedStoreRoute) => Promise<Response>): Route {
+/**
+ * The one place a store route runs an effect: the handler is built over the
+ * ambient client and `runWeb` answers it on the web's own runtime, so every
+ * read and write of one request lands on one connection.
+ */
+export function hostedStoreRoute(
+  handler: (route: HostedStoreRoute) => Effect.Effect<Response, unknown, SqlClient.SqlClient>,
+): Route {
   return {
     fetch: async (request) => {
       const store = await deploymentStore();
       if (!store) {
         return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
       }
-      return handler({ request, resolveUserId: resolveHostedUserId, run: runWeb, store });
+      return runWeb(handler({ request, resolveUserId: resolveHostedUserId, store }));
     },
   };
 }

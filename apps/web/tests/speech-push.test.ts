@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -81,12 +81,12 @@ const SESSION = { providerId: "conductor", providerSessionId: "s-push-fixture" }
 let clock = NOW;
 /** The sweep's store and the push pass's in one. */
 const store: SpeechSweepStore = {
-  run: database.run,
-  writer: await storeWriter({
-    run: database.run,
-    tools: CATALOG_TOOL_SET,
-    now: () => new Date(clock),
-  }),
+  writer: await database.run(
+    storeWriter({
+      tools: CATALOG_TOOL_SET,
+      now: () => new Date(clock),
+    }),
+  ),
 };
 
 const openOffers = (query: OpenSpeechOffersQuery) => database.run(openSpeechOffers(query));
@@ -151,7 +151,7 @@ async function announced(userId: string, parts: MessageParts): Promise<Announced
 
 async function offered(userId: string, briefing = BRIEFING): Promise<Announced> {
   const row = await announced(userId, [announcePart({ briefing })]);
-  const offer = await offerSpeech(store, userId, row.messageId, clock);
+  const offer = await database.run(offerSpeech(store, userId, row.messageId, clock));
   assert.equal(offer.ok, true);
   return row;
 }
@@ -213,10 +213,11 @@ function fakeSender(answer: ApnsDelivery = APNS_DELIVERY.DELIVERED) {
       sent.push(notification);
       return answer;
     },
-    forgetDevice: async (userId, deviceId) => {
-      forgotten.push({ userId, deviceId });
-      return deviceSeams(database.run).forgetDevice(userId, deviceId);
-    },
+    forgetDevice: (userId, deviceId) =>
+      Effect.flatMap(
+        Effect.sync(() => forgotten.push({ userId, deviceId })),
+        () => deviceSeams().forgetDevice(userId, deviceId),
+      ),
   };
   return { seams, sent, forgotten };
 }
@@ -331,7 +332,7 @@ test("Mac inactive: the briefing is pushed once to the most recently seen device
   const row = await offered(userId);
   const { seams, sent } = fakeSender();
 
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })), {
     ...NOTHING,
     pushed: 1,
   });
@@ -356,13 +357,19 @@ test("Mac inactive: the briefing is pushed once to the most recently seen device
   assert.deepEqual(await openOffers({ userId }), []);
 
   clock = NOW + 60_000;
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
   assert.equal(sent.length, 1);
   // The settled state is what refuses a second push, at the store and not only in the pass.
-  assert.deepEqual(await markSpeechPushed(store, userId, row.messageId, clock, phone), {
-    ok: false,
-    refusal: SPEECH_REFUSAL.SETTLED,
-  });
+  assert.deepEqual(
+    await database.run(markSpeechPushed(store, userId, row.messageId, clock, phone)),
+    {
+      ok: false,
+      refusal: SPEECH_REFUSAL.SETTLED,
+    },
+  );
 });
 
 test("Mac active and claimed: never pushed; Mac active and unclaimed: waited on inside the grace and pushed past it; a device gone idle ends the wait", async () => {
@@ -374,23 +381,26 @@ test("Mac active and claimed: never pushed; Mac active and unclaimed: waited on 
   });
   await device(userId, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
   const claimed = await offered(userId);
-  assert.equal((await claimSpeech(store, userId, claimed.messageId, mac, clock)).ok, true);
+  assert.equal(
+    (await database.run(claimSpeech(store, userId, claimed.messageId, mac, clock))).ok,
+    true,
+  );
   const unclaimed = await offered(userId);
   const { seams, sent } = fakeSender();
 
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })), {
     ...NOTHING,
     waiting: 1,
   });
   clock = NOW + SPEECH_PUSH.GRACE_MS - 1;
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })), {
     ...NOTHING,
     waiting: 1,
   });
   assert.deepEqual(sent, []);
 
   clock = NOW + SPEECH_PUSH.GRACE_MS;
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })), {
     ...NOTHING,
     pushed: 1,
   });
@@ -404,17 +414,20 @@ test("Mac active and claimed: never pushed; Mac active and unclaimed: waited on 
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED],
   );
   clock = NOW + SPEECH_OFFER.TTL_MS - 1;
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
   assert.equal(sent.length, 1);
 
   // A fresh offer while the Mac is active waits; the Mac reporting idle is what ends the wait.
   const fresh = await offered(userId);
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })), {
     ...NOTHING,
     waiting: 1,
   });
   await report(mac, { activeUntil: null });
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })), {
     ...NOTHING,
     pushed: 1,
   });
@@ -434,8 +447,11 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
   const { seams, sent } = fakeSender();
 
   // Before the sweep marks it, the push reads the devices' quiet itself.
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
-  assert.deepEqual(await sweepSpeech(store, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
+  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
     held: 1,
     released: 0,
     expired: 0,
@@ -443,8 +459,11 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
   });
   // Past the offer's own instant, the hold still stands over both the push and the expiry.
   clock = NOW + SPEECH_OFFER.TTL_MS + 60_000;
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
-  assert.deepEqual(await sweepSpeech(store, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
+  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
     held: 0,
     released: 0,
     expired: 0,
@@ -460,10 +479,13 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
   const other = await database.createUser();
   await device(other, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
   const unheld = await offered(other);
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId, other], limit: 1 }), {
-    ...NOTHING,
-    pushed: 1,
-  });
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId, other], limit: 1 })),
+    {
+      ...NOTHING,
+      pushed: 1,
+    },
+  );
   assert.deepEqual(
     (await speechEvents(unheld.messageId)).map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
@@ -473,14 +495,20 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
 
   await report(mac, { quietUntil: null });
   // Between the quiet lifting and the sweep's release, the held offer is still not pushed.
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
-  assert.deepEqual(await sweepSpeech(store, { now: clock, userIds: [userId] }), {
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
+  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
     held: 0,
     released: 1,
     expired: 0,
     turns: 1,
   });
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId] }), NOTHING);
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
   assert.deepEqual(sent, []);
   const [, , ended] = (await readEventsByMessage(database.run, row.messageId)).map((event) => ({
     kind: event.kind,
@@ -505,11 +533,14 @@ test("an account with no token-holding device leaves the offer standing for the 
     // SAFETY: a stored text part in the SDK's own shape, with no announce call beside it.
     { type: "text", text: "A reply with no briefing on offer." } as unknown as MessageParts[number],
   ]);
-  assert.equal((await offerSpeech(store, unreadable, wordless.messageId, clock)).ok, true);
+  assert.equal(
+    (await database.run(offerSpeech(store, unreadable, wordless.messageId, clock))).ok,
+    true,
+  );
   const accounts = [unaddressed, nobody, unreadable];
   const { seams, sent } = fakeSender();
 
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: accounts }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: accounts })), {
     ...NOTHING,
     unaddressed: 2,
     unreadable: 1,
@@ -523,9 +554,12 @@ test("an account with no token-holding device leaves the offer standing for the 
   // A token arriving at the offer's own instant is too late: a due offer is the sweep's, never pushed stale.
   clock = NOW + SPEECH_OFFER.TTL_MS;
   await device(unaddressed, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: accounts }), NOTHING);
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: accounts })),
+    NOTHING,
+  );
   assert.deepEqual(sent, []);
-  assert.deepEqual(await sweepSpeech(store, { now: clock, userIds: accounts }), {
+  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: accounts })), {
     held: 0,
     released: 0,
     expired: 3,
@@ -541,10 +575,13 @@ test("a send Apple refuses or the network drops leaves that offer settled and co
   clock = NOW + 1_000;
   const spared = await offered(refused);
   const failing = fakeSender(APNS_DELIVERY.FAILED);
-  assert.deepEqual(await pushSpeech(failing.seams, { now: clock, userIds: [refused] }), {
-    ...NOTHING,
-    undelivered: 1,
-  });
+  assert.deepEqual(
+    await database.run(pushSpeech(failing.seams, { now: clock, userIds: [refused] })),
+    {
+      ...NOTHING,
+      undelivered: 1,
+    },
+  );
   assert.equal(failing.sent.length, 1);
   assert.deepEqual(failing.forgotten, []);
   assert.deepEqual(
@@ -557,10 +594,13 @@ test("a send Apple refuses or the network drops leaves that offer settled and co
   );
   // The next tick, with Apple answering, delivers the one left standing and the settled one is not sent again.
   const recovered = fakeSender();
-  assert.deepEqual(await pushSpeech(recovered.seams, { now: clock, userIds: [refused] }), {
-    ...NOTHING,
-    pushed: 1,
-  });
+  assert.deepEqual(
+    await database.run(pushSpeech(recovered.seams, { now: clock, userIds: [refused] })),
+    {
+      ...NOTHING,
+      pushed: 1,
+    },
+  );
   assert.equal(recovered.sent.length, 1);
   assert.deepEqual(await openOffers({ userId: refused }), []);
 
@@ -573,11 +613,14 @@ test("a send Apple refuses or the network drops leaves that offer settled and co
   clock = NOW + 1_000;
   const second = await offered(gone);
   const rejecting = fakeSender(APNS_DELIVERY.TOKEN_GONE);
-  assert.deepEqual(await pushSpeech(rejecting.seams, { now: clock, userIds: [gone] }), {
-    ...NOTHING,
-    undelivered: 1,
-    unaddressed: 1,
-  });
+  assert.deepEqual(
+    await database.run(pushSpeech(rejecting.seams, { now: clock, userIds: [gone] })),
+    {
+      ...NOTHING,
+      undelivered: 1,
+      unaddressed: 1,
+    },
+  );
   assert.deepEqual(rejecting.forgotten, [{ userId: gone, deviceId: stale }]);
   assert.deepEqual(await deviceIds(gone), []);
   assert.deepEqual(
@@ -610,10 +653,13 @@ test("a pass spends its budget and leaves the rest standing unsettled for the ne
     },
   };
 
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId], clock: () => wall }), {
-    ...NOTHING,
-    pushed: 1,
-  });
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId], clock: () => wall })),
+    {
+      ...NOTHING,
+      pushed: 1,
+    },
+  );
   assert.equal(slow.sent.length, 1);
   assert.deepEqual(
     (await speechEvents(first.messageId)).map((event) => event.kind),
@@ -623,10 +669,13 @@ test("a pass spends its budget and leaves the rest standing unsettled for the ne
     (await openOffers({ userId })).map((open) => open.messageId),
     [second.messageId],
   );
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [userId], clock: () => wall }), {
-    ...NOTHING,
-    pushed: 1,
-  });
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId], clock: () => wall })),
+    {
+      ...NOTHING,
+      pushed: 1,
+    },
+  );
   assert.deepEqual(await openOffers({ userId }), []);
 });
 
@@ -640,7 +689,7 @@ test("a pass reads only the accounts it is told", async () => {
   const other = await offered(theirs);
   const { seams, sent } = fakeSender();
 
-  assert.deepEqual(await pushSpeech(seams, { now: clock, userIds: [mine] }), {
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [mine] })), {
     ...NOTHING,
     pushed: 1,
   });

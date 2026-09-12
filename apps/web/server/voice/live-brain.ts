@@ -24,6 +24,7 @@ import {
   askStanding,
 } from "../hosted/brain-ask.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
+import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
 
@@ -110,7 +111,9 @@ export interface HostedLiveBrainOptions {
    * ask resolves the standing main at its own instant.
    */
   readonly conversationId?: string;
-  /** The ask door's seams: the runner, the ask record, eve under the deployment principal for this account, and the clock. */
+  /** The promise face the follow's own reads are run to, since the voice service drives them from socket callbacks. */
+  readonly run: FiberStoreRunner;
+  /** The ask door's seams: the ask record, eve under the deployment principal for this account, and the clock. */
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, over the same runner. */
   readonly store: Pick<HostedStore, "turns" | "messages">;
@@ -129,11 +132,7 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
   const followed = new Set<string>();
   const stopped = Deferred.unsafeMake<void>(FiberId.none);
-  const reads: AskStandingReads = {
-    store: options.store,
-    run: options.asks.run,
-    asks: options.asks.asks,
-  };
+  const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
 
   function emit(event: LiveBrainRunEvent): void {
     for (const listener of [...listeners]) listener(event);
@@ -149,14 +148,14 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
    * voice says nothing of, and reading again finds the same rows.
    */
   async function look(askId: string, told: { seq: number }): Promise<boolean> {
-    const standing = await askStanding(reads, options.userId, askId);
+    const standing = await options.run(askStanding(reads, options.userId, askId));
     if (standing === undefined) {
       emit({ kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: askId, end: LIVE_BRAIN_RUN_END.FAILED });
       return true;
     }
     const { turn } = standing;
     if (turn === undefined) return false;
-    const journal = await options.asks.run(
+    const journal = await options.run(
       options.store.messages.byClientId(
         options.userId,
         turn.conversationId,
@@ -201,7 +200,7 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
     );
     void (async () => {
       try {
-        const done = await options.asks.run(following);
+        const done = await options.run(following);
         if (done === undefined || done) return;
         options.report("A spoken ask's turn did not end inside the follow bound");
       } catch (error) {
@@ -222,9 +221,11 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
         clientId: ask.submissionId,
       };
       const pinned = options.conversationId;
-      const outcome = await acceptAsk(
-        options.asks,
-        pinned === undefined ? input : { ...input, conversationId: pinned },
+      const outcome = await options.run(
+        acceptAsk(
+          options.asks,
+          pinned === undefined ? input : { ...input, conversationId: pinned },
+        ),
       );
       if (!outcome.ok) {
         return {

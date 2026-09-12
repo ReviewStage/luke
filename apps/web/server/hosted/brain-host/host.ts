@@ -1,4 +1,7 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import type { LanguageModel } from "ai";
+import { Effect, type ParseResult } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -13,8 +16,9 @@ import {
 } from "../../core.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
-import { askRecord } from "../store/asks.js";
-import { type ConversationTarget, promptHashOf } from "../store/index.js";
+import { type FiberStoreRunner, fiberStoreRunner, type Promised } from "../fiber-runner.js";
+import { type AskDeliveryBinding, askRecord } from "../store/asks.js";
+import { type ConversationTarget, promptHashOf, type StoreWriter } from "../store/index.js";
 import { offerBriefing } from "./announce.js";
 import { turnKindOf } from "./auth.js";
 import {
@@ -112,21 +116,27 @@ export function eveTurnIdOf(event: UnparsedWireValue): string | undefined {
   return isWireString(event.data.turnId) ? event.data.turnId : undefined;
 }
 
+/** What a host function answers: an effect over the ambient client, which eve's own authored files run at the web's edge. */
+type HostEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+
 export interface BrainHost {
   /** Whether the session stands for a conversation of the caller's and is the one it runs in; every other function takes what this admitted. */
-  admit(auth: SessionAuth, sessionId: string): Promise<ConversationAdmission>;
+  admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The same admission for a session claiming the conversation as it starts, before its record stands. */
-  admitStarting(auth: SessionAuth, sessionId: string): Promise<ConversationAdmission>;
+  admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The kind of turn the current request opened, or nothing for a request that named none. */
   turnKindOf(auth: SessionAuth): HostedTurnKind | undefined;
   /** The turn eve just started, keyed as the store keys it; nothing for a request that named no kind. */
   turnOf(auth: SessionAuth, sessionId: string, eveTurnId: string): HostedTurn | undefined;
   /** The prompt a session runs under, composed from the workspace rows under the hosted policy, with the hash its turns are recorded under; the text itself is stored nowhere. */
-  prompt(admitted: AdmittedConversation, trigger: BrainTurnTrigger): Promise<HostedSessionPrompt>;
+  prompt(
+    admitted: AdmittedConversation,
+    trigger: BrainTurnTrigger,
+  ): HostEffect<HostedSessionPrompt>;
   /** The standing context one turn opens with: roster, projects, facts, and the recent exchange, as data. */
-  standingContext(admitted: AdmittedConversation): Promise<string>;
+  standingContext(admitted: AdmittedConversation): HostEffect<string>;
   /** The conversation so far, for a session opened over a conversation with words already said; nothing otherwise. */
-  seed(admitted: AdmittedConversation): Promise<string | undefined>;
+  seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /** The tools one turn is offered, as declarations; the eve project binds each to `runTool`. */
   toolDeclarations(turn: HostedTurn): readonly HostedToolDeclaration[];
   /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it. */
@@ -135,11 +145,11 @@ export interface BrainHost {
     binding: HostedToolBinding,
     input: UnparsedWireValue,
     context: EveToolContext,
-  ): Promise<WireRecord>;
+  ): HostEffect<WireRecord>;
   /** The model one inference runs on, the meter spent for the account first; nothing when the deployment holds no key. */
   model(admitted: AdmittedConversation): LanguageModel | undefined;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
-  sessionStarted(admitted: AdmittedConversation, sessionId: string): Promise<boolean>;
+  sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -147,49 +157,69 @@ export interface BrainHost {
     session: SessionContext["session"],
     state: RelayStateStore,
     prompt: SessionPromptRecord,
-  ): Promise<void>;
+  ): HostEffect<void>;
 }
 
 export function brainHost(seams: BrainHostSeams): BrainHost {
-  const relay = new StreamRelay({
-    writer: {
-      consume: async (target, event) => (await seams.writer()).consume(target, event),
-      enqueueTurn: async (target, enqueue) => (await seams.writer()).enqueueTurn(target, enqueue),
-      attachAskLines: async (target, turnId) =>
-        (await seams.writer()).attachAskLines(target, turnId),
-    },
-    asks: askRecord(seams.run),
-    // A Stop an ask took while it waited is carried the moment its turn starts, by the deployment
-    // acting for the account, since the hook that sees the start holds no bearer of the account's;
-    // a deployment with no secret or no origin for eve reports the Stop it could not carry.
-    stopTurn: async (target, sessionId, eveTurnId, turnId) => {
-      const secret = seams.deploymentSecret();
-      const origin = seams.eveOrigin();
-      if (secret === undefined || origin === undefined) {
-        console.warn(`The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`);
-        return;
-      }
-      const eve = eveSessions({
-        origin,
-        caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
-      });
-      await carryStop(
-        { eve, writer: await seams.writer(), now: seams.now, report: (m) => console.warn(m) },
-        target,
-        sessionId,
-        eveTurnId,
-        turnId,
-      );
-    },
-    offer: async (target, turnId) =>
-      offerBriefing(
-        { run: seams.run, writer: await seams.writer(), now: seams.now },
-        target,
-        turnId,
-      ),
-    now: seams.now,
-    report: (message) => console.warn(message),
-  });
+  /**
+   * The relay over the promise face of the fiber its event arrived on: it is
+   * eve's own stream handler and holds no state of its own, so one stands per
+   * event rather than one per host.
+   */
+  const relayOver = (run: FiberStoreRunner, writer: StoreWriter) =>
+    new StreamRelay({
+      writer: {
+        consume: (target, event) => run(writer.consume(target, event)),
+        enqueueTurn: (target, enqueue) => run(writer.enqueueTurn(target, enqueue)),
+        attachAskLines: (target, turnId) => run(writer.attachAskLines(target, turnId)),
+      },
+      asks: promisedAsks(run),
+      // A Stop an ask took while it waited is carried the moment its turn starts, by the deployment
+      // acting for the account, since the hook that sees the start holds no bearer of the account's;
+      // a deployment with no secret or no origin for eve reports the Stop it could not carry.
+      stopTurn: async (target, sessionId, eveTurnId, turnId) => {
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        if (secret === undefined || origin === undefined) {
+          console.warn(
+            `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+          );
+          return;
+        }
+        const eve = eveSessions({
+          origin,
+          caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
+        });
+        await carryStop(
+          {
+            eve,
+            writer: {
+              requestTurnCancel: (cancelTarget, cancel) =>
+                run(writer.requestTurnCancel(cancelTarget, cancel)),
+            },
+            now: seams.now,
+            report: (message) => console.warn(message),
+          },
+          target,
+          sessionId,
+          eveTurnId,
+          turnId,
+        );
+      },
+      offer: (target, turnId) => run(offerBriefing({ writer, now: seams.now }, target, turnId)),
+      now: seams.now,
+      report: (message) => console.warn(message),
+    });
+
+  /** The ask record as the relay takes it: the two bindings, each run to the promise its seam answers. */
+  const promisedAsks = (run: FiberStoreRunner): Promised<AskDeliveryBinding> => {
+    const asks = askRecord();
+    return {
+      bindDeliveries: (target, deliveryIds, turnId) =>
+        run(asks.bindDeliveries(target, deliveryIds, turnId)),
+      stoppedOn: (target, turnId) => run(asks.stoppedOn(target, turnId)),
+    };
+  };
 
   /**
    * The roster each account's tools last read, and the cloud plugins built
@@ -225,33 +255,28 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     held.byProvider.set(providerId, plugin);
     return plugin;
   };
-  const rosterOf = async (userId: string) => {
-    const rows = await seams.vaultRows(userId);
-    // The vault as it stands, by its sealed rows: a rotated or removed key
-    // changes it, and the plugins bound to the old key go with it.
-    vaults.set(
-      userId,
-      rows
-        .map((row) => `${row.providerId}:${row.ciphertext}`)
-        .sort()
-        .join("\n"),
-    );
-    const roster = await readHostedRoster(
-      seams.run,
-      seams.store(),
-      userId,
-      rows,
-      seams.vaultSecret(),
-    );
-    rosters.set(userId, roster);
-    return roster;
-  };
+  const rosterOf = (userId: string): HostEffect<HostedRoster> =>
+    Effect.gen(function* () {
+      const rows = yield* Effect.promise(() => seams.vaultRows(userId));
+      // The vault as it stands, by its sealed rows: a rotated or removed key
+      // changes it, and the plugins bound to the old key go with it.
+      vaults.set(
+        userId,
+        rows
+          .map((row) => `${row.providerId}:${row.ciphertext}`)
+          .sort()
+          .join("\n"),
+      );
+      const roster = yield* readHostedRoster(seams.store(), userId, rows, seams.vaultSecret());
+      rosters.set(userId, roster);
+      return roster;
+    });
 
   return {
     admit: (auth, sessionId) =>
-      seams.run(admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT })),
+      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
     admitStarting: (auth, sessionId) =>
-      seams.run(admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING })),
+      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING }),
 
     turnKindOf(auth) {
       const kind = turnKindOf(auth.current);
@@ -268,95 +293,98 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       };
     },
 
-    async prompt(admitted, trigger) {
-      const store = seams.store();
-      await seedHostedWorkspace(seams.run, store, admitted.target.userId, seams.now());
-      const modelId = seams.openAi()?.modelId;
-      const built = await hostedPrompt(seams.run, store, admitted.target.userId, {
-        policy: hostedTurnPolicy(trigger),
-        ...(modelId !== undefined ? { model: modelId } : undefined),
-      });
-      return { text: built.text, hash: promptHashOf(built.text) };
-    },
+    prompt: (admitted, trigger) =>
+      Effect.gen(function* () {
+        const store = seams.store();
+        yield* seedHostedWorkspace(store, admitted.target.userId, seams.now());
+        const modelId = seams.openAi()?.modelId;
+        const built = yield* hostedPrompt(store, admitted.target.userId, {
+          policy: hostedTurnPolicy(trigger),
+          ...(modelId !== undefined ? { model: modelId } : undefined),
+        });
+        return { text: built.text, hash: promptHashOf(built.text) };
+      }),
 
-    async standingContext(admitted) {
-      const { userId } = admitted.target;
-      const now = seams.now();
-      const [roster, defaults, facts, recent] = await Promise.all([
-        rosterOf(userId),
-        seams.run(readWorkspaceDefaults(userId)),
-        seams.run(seams.store().facts.list(userId)),
-        readRecentMessages(
-          seams.run,
+    standingContext: (admitted) =>
+      Effect.gen(function* () {
+        const { userId } = admitted.target;
+        const now = seams.now();
+        const roster = yield* rosterOf(userId);
+        const defaults = yield* readWorkspaceDefaults(userId);
+        const facts = yield* seams.store().facts.list(userId);
+        const recent = yield* readRecentMessages(
           admitted.target,
           CATALOG_TOOL_SET,
           BRAIN_HOST.RECENT_MESSAGES,
-        ),
-      ]);
-      return hostedStandingContext({
-        roster,
-        rosterText: brainRosterOf(roster, now).text,
-        defaults,
-        facts,
-        recent,
-        now,
-      });
-    },
+        );
+        return hostedStandingContext({
+          roster,
+          rosterText: brainRosterOf(roster, now).text,
+          defaults,
+          facts,
+          recent,
+          now,
+        });
+      }),
 
-    async seed(admitted) {
-      const recent = await readRecentMessages(
-        seams.run,
-        admitted.target,
-        CATALOG_TOOL_SET,
-        BRAIN_HOST.SEED_MESSAGES,
-      );
-      return rotationSeedText(recent, seams.now());
-    },
+    seed: (admitted) =>
+      Effect.map(
+        readRecentMessages(admitted.target, CATALOG_TOOL_SET, BRAIN_HOST.SEED_MESSAGES),
+        (recent) => rotationSeedText(recent, seams.now()),
+      ),
 
     toolDeclarations: (turn) => hostedToolDeclarations(turn.trigger),
 
-    async runTool(name, binding, input, context) {
-      // Admitted again as the call runs, not only as the tools were resolved:
-      // a conversation that rotated to a newer session mid-turn refuses the
-      // old session's calls here, so no effect lands without a turn record.
-      const standing = await seams.run(
-        admitConversation(context.session.auth, {
+    runTool: (name, binding, input, context) =>
+      Effect.gen(function* () {
+        // Admitted again as the call runs, not only as the tools were resolved:
+        // a conversation that rotated to a newer session mid-turn refuses the
+        // old session's calls here, so no effect lands without a turn record.
+        const standing = yield* admitConversation(context.session.auth, {
           id: context.session.id,
           standing: SESSION_STANDING.CURRENT,
-        }),
-      );
-      if (!standing.ok) return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.refusal };
-      const { userId } = binding.target;
-      const roster = () => rosterOf(userId);
-      const transcripts = hostedTranscriptReads({
-        run: seams.run,
-        userId,
-        roster,
-        pluginFor: pluginFor(userId),
-        now: seams.now,
-      });
-      const carrier = hostedActionCarrier({
-        roster,
-        defaults: () => seams.run(readWorkspaceDefaults(userId)),
-        facts: hostedFactsWriter(seams.run, seams.store(), userId, seams.now),
-        apiKey: (providerId) => seams.providerKey(userId, providerId),
-        execute: seams.executeAction,
-      });
-      return runHostedTool(
-        name,
-        input,
-        context,
-        {
-          conversation: binding.target,
+        });
+        if (!standing.ok) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.refusal };
+        }
+        const run = yield* fiberStoreRunner;
+        const { userId } = binding.target;
+        const roster = () => run(rosterOf(userId));
+        const transcripts = hostedTranscriptReads({
+          run,
+          userId,
           roster,
-          carrier,
-          transcripts,
-          workspace: hostedWorkspaceAccess(seams.run, seams.store(), userId, seams.now),
+          pluginFor: pluginFor(userId),
           now: seams.now,
-        },
-        { trigger: binding.turn.trigger, turnId: binding.turn.turnId, runId: binding.turn.turnId },
-      );
-    },
+        });
+        const carrier = hostedActionCarrier({
+          roster,
+          defaults: () => run(readWorkspaceDefaults(userId)),
+          facts: hostedFactsWriter(run, seams.store(), userId, seams.now),
+          apiKey: (providerId) => seams.providerKey(userId, providerId),
+          execute: seams.executeAction,
+        });
+        return yield* Effect.promise(() =>
+          runHostedTool(
+            name,
+            input,
+            context,
+            {
+              conversation: binding.target,
+              roster,
+              carrier,
+              transcripts,
+              workspace: hostedWorkspaceAccess(run, seams.store(), userId, seams.now),
+              now: seams.now,
+            },
+            {
+              trigger: binding.turn.trigger,
+              turnId: binding.turn.turnId,
+              runId: binding.turn.turnId,
+            },
+          ),
+        );
+      }),
 
     model(admitted) {
       const access = seams.openAi();
@@ -367,37 +395,40 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     },
 
     sessionStarted: (admitted, sessionId) =>
-      seams.run(claimRuntimeSession(admitted.target, sessionId, new Date(seams.now()))),
+      claimRuntimeSession(admitted.target, sessionId, new Date(seams.now())),
 
-    async relay(event, admitted, session, state, prompt) {
-      const model = seams.scriptedModel()
-        ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
-        : seams.openAi()?.modelId;
-      const turn = turnKindOf(session.auth.current);
-      // The tool set is recorded as each turn starts, from the same declarations
-      // the tools resolver hands eve for the same kind of turn, so the hash
-      // names what the model is offered and not a list kept beside it, and
-      // the row it names stands whatever happened to the table since.
-      const toolSetHash =
-        event.type === "turn.started" && turn !== undefined
-          ? await seams.run(
-              seams
+    relay: (event, admitted, session, state, prompt) =>
+      Effect.gen(function* () {
+        const model = seams.scriptedModel()
+          ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
+          : seams.openAi()?.modelId;
+        const turn = turnKindOf(session.auth.current);
+        // The tool set is recorded as each turn starts, from the same declarations
+        // the tools resolver hands eve for the same kind of turn, so the hash
+        // names what the model is offered and not a list kept beside it, and
+        // the row it names stands whatever happened to the table since.
+        const toolSetHash =
+          event.type === "turn.started" && turn !== undefined
+            ? yield* seams
                 .store()
                 .toolSets.record(
                   hostedToolDeclarations(BRAIN_HOST_TURN_KIND[turn].trigger),
                   new Date(seams.now()),
-                ),
-            )
-          : undefined;
-      return relay.handle(event, {
-        sessionId: session.id,
-        target: admitted.target,
-        turn,
-        ...(model !== undefined ? { model } : undefined),
-        ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
-        ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
-        state,
-      });
-    },
+                )
+            : undefined;
+        const run = yield* fiberStoreRunner;
+        const writer = yield* seams.writer();
+        yield* Effect.promise(() =>
+          relayOver(run, writer).handle(event, {
+            sessionId: session.id,
+            target: admitted.target,
+            turn,
+            ...(model !== undefined ? { model } : undefined),
+            ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
+            ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
+            state,
+          }),
+        );
+      }),
   };
 }

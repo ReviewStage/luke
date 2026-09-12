@@ -1,3 +1,6 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import {
   BOOTSTRAP_BOUNDS,
   BOOTSTRAP_FILE_ORDER,
@@ -20,7 +23,7 @@ import {
   WORKSPACE_FILE_REFUSAL,
   type WorkspaceFile,
 } from "../../core.js";
-import type { HostedStoreRun } from "../store/database.js";
+import type { FiberStoreRunner } from "../fiber-runner.js";
 import type { HostedStore } from "../store/index.js";
 import { BRAIN_HOST } from "./bounds.js";
 
@@ -37,6 +40,9 @@ import { BRAIN_HOST } from "./bounds.js";
 /** The slice of the store the workspace reaches. */
 export type WorkspaceStore = Pick<HostedStore, "workspace">;
 
+/** What a read or write of the rows answers: an effect over the ambient client. */
+type WorkspaceEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+
 const DAILY_NOTES_PREFIX = `${DAILY_NOTES_DIRECTORY}/`;
 
 /** The runtime the prompt's runtime line names: eve is the loop here, not the desktop's tool loop. */
@@ -50,26 +56,32 @@ function hostedWorkspacePath(name: string): string | undefined {
 }
 
 /** Writes every missing bootstrap file for the user; an existing row, edited or not, is left as it is. */
-export async function seedHostedWorkspace(
-  run: HostedStoreRun,
+export function seedHostedWorkspace(
   store: WorkspaceStore,
   userId: string,
   now: number,
-): Promise<readonly WorkspaceFile[]> {
-  const seeded: WorkspaceFile[] = [];
-  for (const name of Object.values(WORKSPACE_FILE)) {
-    if (await run(store.workspace.seed(userId, name, BRAIN_WORKSPACE_SEEDS[name], now))) {
-      seeded.push(name);
+): WorkspaceEffect<readonly WorkspaceFile[]> {
+  return Effect.gen(function* () {
+    const seeded: WorkspaceFile[] = [];
+    for (const name of Object.values(WORKSPACE_FILE)) {
+      if (yield* store.workspace.seed(userId, name, BRAIN_WORKSPACE_SEEDS[name], now)) {
+        seeded.push(name);
+      }
     }
-  }
-  return seeded;
+    return seeded;
+  });
 }
 
 const NO_SKILLS = "not loaded: this agent lists no skills";
 
-/** The workspace tools' reach: the rows, bounded like the files, with no skills to load. */
+/**
+ * The workspace tools' reach: the rows, bounded like the files, with no
+ * skills to load. `BrainWorkspaceAccess` is the brain's own promise-shaped
+ * contract, so the runner the tool call already runs on is handed in here
+ * rather than composed away.
+ */
 export function hostedWorkspaceAccess(
-  run: HostedStoreRun,
+  run: FiberStoreRunner,
   store: WorkspaceStore,
   userId: string,
   now: () => number,
@@ -109,33 +121,34 @@ export interface HostedPromptInput {
  * skills and runs in no directory, so those sections are absent rather than
  * invented.
  */
-export async function hostedPrompt(
-  run: HostedStoreRun,
+export function hostedPrompt(
   store: WorkspaceStore,
   userId: string,
   input: HostedPromptInput,
-): Promise<BuiltPrompt> {
-  const files = await Promise.all(
-    BOOTSTRAP_FILE_ORDER.map(async (name) => ({
-      name,
-      path: `${BRAIN_HOST.WORKSPACE_NAME}/${name}`,
-      content: (await run(store.workspace.read(userId, name)))?.content,
-    })),
-  );
-  return buildSystemPrompt({
-    profile: PROMPT_PROFILE.FULL,
-    identity: BRAIN_IDENTITY_LINE,
-    persona: BRAIN_PERSONA,
-    tools: input.policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
-    toolNotes: brainToolNotes(),
-    runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
-    skills: [],
-    workspaceDirectory: BRAIN_HOST.WORKSPACE_NAME,
-    bootstrapFiles: boundBootstrapFiles(files),
-    runtime: {
-      agentId: DEFAULT_AGENT_ID,
-      runtimeId: BRAIN_HOST_RUNTIME_ID,
-      ...(input.model ? { model: input.model } : undefined),
-    },
+): WorkspaceEffect<BuiltPrompt> {
+  return Effect.gen(function* () {
+    const files = yield* Effect.forEach(BOOTSTRAP_FILE_ORDER, (name) =>
+      Effect.map(store.workspace.read(userId, name), (row) => ({
+        name,
+        path: `${BRAIN_HOST.WORKSPACE_NAME}/${name}`,
+        content: row?.content,
+      })),
+    );
+    return buildSystemPrompt({
+      profile: PROMPT_PROFILE.FULL,
+      identity: BRAIN_IDENTITY_LINE,
+      persona: BRAIN_PERSONA,
+      tools: input.policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
+      toolNotes: brainToolNotes(),
+      runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
+      skills: [],
+      workspaceDirectory: BRAIN_HOST.WORKSPACE_NAME,
+      bootstrapFiles: boundBootstrapFiles(files),
+      runtime: {
+        agentId: DEFAULT_AGENT_ID,
+        runtimeId: BRAIN_HOST_RUNTIME_ID,
+        ...(input.model ? { model: input.model } : undefined),
+      },
+    });
   });
 }

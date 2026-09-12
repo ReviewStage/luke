@@ -1,3 +1,6 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import type { Effect, ParseResult } from "effect";
 import type { DeviceHeartbeatRequest, DevicePlatform, PushEnvironment } from "../core.js";
 
 /**
@@ -42,6 +45,9 @@ export interface DeviceHeartbeat {
   push: DevicePushAddress | null | undefined;
 }
 
+/** What a device write answers: an effect over the ambient client, composed into the request that made it. */
+type DeviceEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+
 export interface DeviceSeams {
   /**
    * Upserts the installation's row under the account, moving it from any
@@ -53,11 +59,11 @@ export interface DeviceSeams {
     registration: DeviceRegistration,
     mintId: () => string,
     now: Date,
-  ) => Promise<{ deviceId: string }>;
+  ) => DeviceEffect<{ deviceId: string }>;
   /** Moves the row's last-seen instant and applies the heartbeat's changes; answers whether the account holds the row. */
-  touchDevice: (userId: string, heartbeat: DeviceHeartbeat, now: Date) => Promise<boolean>;
+  touchDevice: (userId: string, heartbeat: DeviceHeartbeat, now: Date) => DeviceEffect<boolean>;
   /** Deletes the row only where this account holds it; answers whether a row went. */
-  forgetDevice: (userId: string, deviceId: string) => Promise<boolean>;
+  forgetDevice: (userId: string, deviceId: string) => DeviceEffect<boolean>;
 }
 
 /** A push address off a registration or heartbeat body, or none if the fields did not pair. */

@@ -10,7 +10,6 @@ import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../encryption.js";
 import { OBSERVATION_ENVIRONMENT } from "../observation-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../openai.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
-import type { HostedStoreRun } from "../store/database.js";
 import { type HostedStore, hostedStore, storeWriter } from "../store/index.js";
 import { readApiKeyFor } from "../vault-keys.js";
 import type { VaultKeyRow } from "../vault-route.js";
@@ -39,11 +38,9 @@ interface OpenAiAccess {
 }
 
 export interface BrainHostSeams {
-  /** The runner this deployment's edge answers every effect the host builds through: the store's reads, the conversation's own statements, and the writers beside them. */
-  readonly run: HostedStoreRun;
   readonly store: () => HostedStore;
-  /** The writer over the catalog's tool set, composed once; its composition probes every declared schema. */
-  readonly writer: () => Promise<StoreWriter>;
+  /** The writer over the catalog's tool set, composed once per instance; its composition probes every declared schema. */
+  readonly writer: () => Effect.Effect<StoreWriter>;
   readonly userInfo: UserInfoEndpoint;
   /** Who a session or a conversation belongs to, for the door. */
   readonly ownership: SessionOwnership;
@@ -103,6 +100,24 @@ function once<Value>(build: () => Value): () => Value {
   };
 }
 
+/**
+ * The same memoization for a value only an effect can build: the writer's
+ * composition probes every declared output schema, so a warm instance pays
+ * that walk once rather than once per request.
+ */
+function onceComposed<Value>(build: Effect.Effect<Value>): () => Effect.Effect<Value> {
+  let built: { value: Value } | undefined;
+  return () =>
+    Effect.suspend(() =>
+      built === undefined
+        ? Effect.map(build, (value) => {
+            built = { value };
+            return value;
+          })
+        : Effect.succeed(built.value),
+    );
+}
+
 function vaultSecret(): string {
   const secret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET];
   if (!secret)
@@ -112,11 +127,10 @@ function vaultSecret(): string {
 
 export function productionBrainHostSeams(): BrainHostSeams {
   const store = once(() => hostedStore({ keys: payloadKeyRing(vaultSecret()) }));
-  const writer = once(() => storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET }));
+  const writer = onceComposed(storeWriter({ tools: CATALOG_TOOL_SET }));
   const vaultRows = (userId: string): Promise<readonly VaultKeyRow[]> =>
     runWeb(findVaultRows(userId));
   return {
-    run: runWeb,
     store,
     writer,
     ownership: {

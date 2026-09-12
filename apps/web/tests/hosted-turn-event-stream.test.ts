@@ -45,7 +45,6 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   handleTurnEventStream,
   projectTurnEvents,
@@ -55,6 +54,7 @@ import {
 } from "../server/hosted/turn-event-stream";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { promisedAsks, promisedWriter } from "./support/promised-store";
 import { insertConversation } from "./support/store-rows";
 
 /**
@@ -71,17 +71,18 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await storeWriter({
-  run: database.run,
-  tools: CATALOG_TOOL_SET,
-  now: () => new Date(NOW),
-});
+const writer = await database.run(
+  storeWriter({
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  }),
+);
 const relay = new StreamRelay({
-  writer,
-  asks: askRecord(database.run),
+  writer: promisedWriter(database.run, writer),
+  asks: promisedAsks(database.run),
   stopTurn: async () => undefined,
   offer: (target, turnId) =>
-    offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
+    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
   now: () => NOW,
   report: () => undefined,
 });
@@ -195,7 +196,6 @@ function options(
   return {
     request: req,
     resolveUserId: async () => userId,
-    run: database.run,
     store: database.store,
     bounds,
   };
@@ -237,8 +237,10 @@ test("a client attached mid-turn hears the slow step at once, then the settled m
   const turnId = hostTurnId(standing.sessionId, EVE_TURN);
   await play(events.slice(0, untilRequested(events)), standing);
 
-  const response = await handleTurnEventStream(
-    options(target.userId, request(turnId), { POLL_MS: QUICK.POLL_MS, HEARTBEAT_MS: 60_000 }),
+  const response = await database.run(
+    handleTurnEventStream(
+      options(target.userId, request(turnId), { POLL_MS: QUICK.POLL_MS, HEARTBEAT_MS: 60_000 }),
+    ),
   );
   const reading = readStream(response);
   await play(events.slice(untilRequested(events)), standing);
@@ -275,7 +277,7 @@ test("a client attached mid-turn hears the slow step at once, then the settled m
 
   // A fresh client attached after the end hears the same numbered events and closes.
   const afterwards = await readStream(
-    await handleTurnEventStream(options(target.userId, request(turnId))),
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
   );
   assert.deepEqual(afterwards.events, heard.events);
   assert.equal(afterwards.heartbeats, 0);
@@ -289,17 +291,17 @@ test("a client that attaches again with its cursor hears only what it had not, a
   await play(events, standing);
 
   const whole = await readStream(
-    await handleTurnEventStream(options(target.userId, request(turnId))),
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
   );
   assert.equal(whole.events.length, 5);
 
   const rest = await readStream(
-    await handleTurnEventStream(options(target.userId, request(turnId, 2))),
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 2)))),
   );
   assert.deepEqual(rest.events, whole.events.slice(2));
 
   const done = await readStream(
-    await handleTurnEventStream(options(target.userId, request(turnId, 5))),
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 5)))),
   );
   assert.deepEqual(done.events, []);
 });
@@ -312,14 +314,14 @@ test("an attachment lapses without an end while the turn runs, heartbeats meanwh
   await play(events.slice(0, untilRequested(events)), standing);
 
   const lapsed = await readStream(
-    await handleTurnEventStream(options(target.userId, request(turnId))),
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
   );
   assert.deepEqual(kinds(lapsed.events), [TURN_EVENT_KIND.SLOW_STEP]);
   assert.ok(lapsed.heartbeats >= 1);
 
   await play(events.slice(untilRequested(events)), standing);
   const resumed = await readStream(
-    await handleTurnEventStream(options(target.userId, request(turnId, 1))),
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 1)))),
   );
   assert.deepEqual(kinds(resumed.events), [
     TURN_EVENT_KIND.ACTIONS_SETTLED,
@@ -341,17 +343,19 @@ test("a client that disconnects stops the polling", async () => {
   await play(events.slice(0, untilRequested(events)), standing);
 
   let polls = 0;
-  const response = await handleTurnEventStream({
-    ...options(target.userId, request(turnId), {
-      POLL_MS: 5,
-      HEARTBEAT_MS: 60_000,
-      ATTACHMENT_MS: 60_000,
+  const response = await database.run(
+    handleTurnEventStream({
+      ...options(target.userId, request(turnId), {
+        POLL_MS: 5,
+        HEARTBEAT_MS: 60_000,
+        ATTACHMENT_MS: 60_000,
+      }),
+      sleep: async (ms) => {
+        polls += 1;
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      },
     }),
-    sleep: async (ms) => {
-      polls += 1;
-      await new Promise((resolve) => setTimeout(resolve, ms));
-    },
-  });
+  );
   assert.ok(response.body);
   const reader = response.body.getReader();
   await reader.read();
@@ -380,7 +384,7 @@ test("a cancelled turn and a failed one end without a settled mark or a sentence
     await relay.handle(stamped(ending), standing);
 
     const heard = await readStream(
-      await handleTurnEventStream(options(target.userId, request(turnId))),
+      await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
     );
     assert.deepEqual(heard.events, [
       { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
@@ -398,7 +402,7 @@ test("the door: the method, the id, the bearer, and ownership are refused before
   const other = await database.createUser();
 
   const refused = async (opts: TurnEventStreamOptions, status: number, error: string) => {
-    const response = await handleTurnEventStream(opts);
+    const response = await database.run(handleTurnEventStream(opts));
     assert.equal(response.status, status);
     assert.deepEqual(await response.json(), { error });
   };

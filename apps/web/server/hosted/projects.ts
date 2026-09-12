@@ -1,3 +1,6 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import {
   ACTION_KIND,
   type CloudAgentProviderId,
@@ -17,8 +20,7 @@ import {
   storedRoster,
 } from "./observation-pass.js";
 import type { ObservedRoster } from "./observed-roster.js";
-import { createRateBrake } from "./rate-brake.js";
-import type { HostedStoreRun } from "./store/database.js";
+import { makeRateBrake } from "./rate-brake.js";
 import type { HostedVaultRoute } from "./vault-route.js";
 
 const PROJECTS_RATE_LIMIT = {
@@ -27,7 +29,7 @@ const PROJECTS_RATE_LIMIT = {
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const projectsRateLimited = createRateBrake({
+const projectsBrake = makeRateBrake({
   windowMs: PROJECTS_RATE_LIMIT.WINDOW_MS,
   maxRequestsPerWindow: PROJECTS_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
   maxTrackedUsers: PROJECTS_RATE_LIMIT.MAX_TRACKED_USERS,
@@ -39,7 +41,6 @@ export interface ProjectsOptions
     "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
   > {
   /** The store the snapshot is read from and, on a live pass, written to. */
-  run: HostedStoreRun;
   store: (secret: string) => ObservationStore;
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
@@ -56,53 +57,58 @@ export interface ProjectsOptions
  * listed; a provider whose keys stand but that documents no creation offers
  * nowhere to create.
  */
-export async function handleProjects(options: ProjectsOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
+export function handleProjects(
+  options: ProjectsOptions,
+): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
 
-  if (request.method !== "GET") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const secret = (encryptionSecret ?? "").trim();
-  if (!secret) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-
-  const rows = await readVaultKeys(userId);
-  const creating = keyedCloudProviderIds(rows).filter(
-    (providerId) => actionUnsupportedReason(ACTION_KIND.CREATE_WORKSPACE, providerId) === undefined,
-  );
-  if (creating.length === 0)
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(undefined, creating));
-
-  const store = options.store(secret);
-  let roster = (await storedRoster(options.run, store, userId, rows, secret))?.roster;
-  if (!roster) {
-    const now = (options.now ?? Date.now)();
-    if (await projectsRateLimited(userId)) {
-      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    if (request.method !== "GET") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
     }
-    roster = (
-      await observeAndSnapshot({
+
+    const userId = yield* Effect.promise(() => resolveUserId(request));
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+
+    const secret = (encryptionSecret ?? "").trim();
+    if (!secret) {
+      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    }
+
+    const rows = yield* Effect.promise(() => readVaultKeys(userId));
+    const creating = keyedCloudProviderIds(rows).filter(
+      (providerId) =>
+        actionUnsupportedReason(ACTION_KIND.CREATE_WORKSPACE, providerId) === undefined,
+    );
+    if (creating.length === 0)
+      return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(undefined, creating));
+
+    const store = options.store(secret);
+    let roster = (yield* storedRoster(store, userId, rows, secret))?.roster;
+    if (!roster) {
+      const now = (options.now ?? Date.now)();
+      if (!(yield* projectsBrake.check(userId))) {
+        return errorResponse(
+          HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
+          HOSTED_API_ERROR.QUOTA_EXHAUSTED,
+        );
+      }
+      roster = (yield* observeAndSnapshot({
         userId,
         rows,
         secret,
-        run: options.run,
         store,
         seams: options,
         now,
-      })
-    ).roster;
-  }
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(roster, creating));
+      })).roster;
+    }
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(roster, creating));
+  });
 }
 
 /** The snapshot's projects for the creation-capable providers, each with the build's agent table beside it. */

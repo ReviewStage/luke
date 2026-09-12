@@ -27,7 +27,6 @@ import {
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -41,6 +40,7 @@ import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, sessionStarted } from "./support/live-events";
+import { promisedAsks, promisedWriter } from "./support/promised-store";
 import {
   insertConversation,
   insertDevice,
@@ -78,18 +78,19 @@ const ACKNOWLEDGMENT_OF: ReadonlyMap<LiveClientEvent["type"], LiveServerEventTyp
   [LIVE_CLIENT_EVENT.COMMENTARY_APPEND, LIVE_SERVER_EVENT.COMMENTARY_APPENDED],
 ]);
 
-const writer = await storeWriter({
-  run: database.run,
-  tools: CATALOG_TOOL_SET,
-  now: () => new Date(NOW),
-});
-const asks = askRecord(database.run);
+const writer = await database.run(
+  storeWriter({
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  }),
+);
+const asks = promisedAsks(database.run);
 const relay = new StreamRelay({
-  writer,
+  writer: promisedWriter(database.run, writer),
   asks,
   stopTurn: async () => undefined,
   offer: (target, turnId) =>
-    offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
+    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
   now: () => NOW,
   report: () => undefined,
 });

@@ -42,7 +42,6 @@ function observeOptions(
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readVaultKeys: async (_userId: string): Promise<VaultKeyRow[]> => [],
-    run: runWithoutDatabase,
     store: () => store,
     ...overrides,
   };
@@ -69,21 +68,29 @@ function conductorApi(status: string = TEST_CONDUCTOR_STATUS.WORKING) {
 // --- Gate checks ---
 
 test("the observe gate order is method, secret, token", async () => {
-  const wrongMethod = await handleObserve(
-    observeOptions({
-      request: new Request("https://luke.test/api/observe", { method: "POST" }),
-    }),
+  const wrongMethod = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        request: new Request("https://luke.test/api/observe", { method: "POST" }),
+      }),
+    ),
   );
   assert.equal(wrongMethod.status, 405);
 
-  const noSecret = await handleObserve(observeOptions({ encryptionSecret: undefined }));
+  const noSecret = await runWithoutDatabase(
+    handleObserve(observeOptions({ encryptionSecret: undefined })),
+  );
   assert.equal(noSecret.status, 503);
   assert.equal((await noSecret.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const blankSecret = await handleObserve(observeOptions({ encryptionSecret: "  " }));
+  const blankSecret = await runWithoutDatabase(
+    handleObserve(observeOptions({ encryptionSecret: "  " })),
+  );
   assert.equal(blankSecret.status, 503);
 
-  const anonymous = await handleObserve(observeOptions({ resolveUserId: async () => undefined }));
+  const anonymous = await runWithoutDatabase(
+    handleObserve(observeOptions({ resolveUserId: async () => undefined })),
+  );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 });
@@ -96,7 +103,7 @@ test("with no vault keys stored the response is 200 with an empty sessions array
     body: encodeObservedRoster({ version: 1, providers: [] }),
     observedAt: TEST_TIME,
   });
-  const response = await handleObserve(observeOptions({ store: () => store }));
+  const response = await runWithoutDatabase(handleObserve(observeOptions({ store: () => store })));
 
   assert.equal(response.status, 200);
   const body = await response.json();
@@ -108,13 +115,15 @@ test("with no vault keys stored the response is 200 with an empty sessions array
 test("a user with a snapshot is answered from it, dated, and the provider is not asked", async () => {
   const api = conductorApi();
   const store = memoryObservationStore();
-  const seeded = await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: api.fetch,
-      now: () => TEST_TIME,
-    }),
+  const seeded = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: api.fetch,
+        now: () => TEST_TIME,
+      }),
+    ),
   );
   assert.equal(seeded.status, 200);
   const seededBody = await seeded.json();
@@ -124,15 +133,17 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
   assert.equal(store.snapshots.has("user-1"), true);
   const readsAfterSeeding = api.requests.length;
 
-  const stored = await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: async () => {
-        throw new Error("a stored roster is not re-observed");
-      },
-      now: () => TEST_TIME + 60_000,
-    }),
+  const stored = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: async () => {
+          throw new Error("a stored roster is not re-observed");
+        },
+        now: () => TEST_TIME + 60_000,
+      }),
+    ),
   );
   assert.equal(stored.status, 200);
   const storedBody = await stored.json();
@@ -143,26 +154,30 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
 
 test("a snapshot observed under a replaced key is not served: the read runs a pass under the new key", async () => {
   const store = memoryObservationStore();
-  await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: conductorApi().fetch,
-      now: () => TEST_TIME,
-    }),
+  await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: conductorApi().fetch,
+        now: () => TEST_TIME,
+      }),
+    ),
   );
   const replaced: VaultKeyRow[] = [
     { providerId: "conductor", ciphertext: encryptProviderKey("another-key", SECRET) },
   ];
   const api = conductorApi(TEST_CONDUCTOR_STATUS.IDLE);
 
-  const response = await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => replaced,
-      store: () => store,
-      fetch: api.fetch,
-      now: () => TEST_TIME + 1_000,
-    }),
+  const response = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        readVaultKeys: async () => replaced,
+        store: () => store,
+        fetch: api.fetch,
+        now: () => TEST_TIME + 1_000,
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -176,24 +191,28 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
 test("a fresh read runs the pass again, stores it, and answers the new roster", async () => {
   const store = memoryObservationStore();
   const working = conductorApi();
-  await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: working.fetch,
-      now: () => TEST_TIME,
-    }),
+  await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: working.fetch,
+        now: () => TEST_TIME,
+      }),
+    ),
   );
 
   const idle = conductorApi(TEST_CONDUCTOR_STATUS.IDLE);
-  const response = await handleObserve(
-    observeOptions({
-      request: observeRequest({}, true),
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: idle.fetch,
-      now: () => TEST_TIME + 1_000,
-    }),
+  const response = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        request: observeRequest({}, true),
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: idle.fetch,
+        now: () => TEST_TIME + 1_000,
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -209,23 +228,27 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
 test("a pass the provider refuses answers what stood before, and stores no roster", async () => {
   const store = memoryObservationStore();
   const api = conductorApi();
-  await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: api.fetch,
-      now: () => TEST_TIME,
-    }),
+  await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: api.fetch,
+        now: () => TEST_TIME,
+      }),
+    ),
   );
 
-  const response = await handleObserve(
-    observeOptions({
-      request: observeRequest({}, true),
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: async () => new Response(null, { status: 401 }),
-      now: () => TEST_TIME + 1_000,
-    }),
+  const response = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        request: observeRequest({}, true),
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: async () => new Response(null, { status: 401 }),
+        now: () => TEST_TIME + 1_000,
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -238,12 +261,14 @@ test("a pass the provider refuses answers what stood before, and stores no roste
 
 test("a first pass the provider refuses answers an empty roster and stores none", async () => {
   const store = memoryObservationStore();
-  const response = await handleObserve(
-    observeOptions({
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      fetch: async () => new Response(null, { status: 401 }),
-    }),
+  const response = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        fetch: async () => new Response(null, { status: 401 }),
+      }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -480,14 +505,16 @@ test("an observe answer returns undefined when sessions is not an array", () => 
 test("readVaultKeys is called with the resolved user id", async () => {
   let calledWithUserId: string | undefined;
 
-  await handleObserve(
-    observeOptions({
-      resolveUserId: async () => "user-xyz",
-      readVaultKeys: async (userId) => {
-        calledWithUserId = userId;
-        return [];
-      },
-    }),
+  await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        resolveUserId: async () => "user-xyz",
+        readVaultKeys: async (userId) => {
+          calledWithUserId = userId;
+          return [];
+        },
+      }),
+    ),
   );
 
   assert.equal(calledWithUserId, "user-xyz");
@@ -514,21 +541,23 @@ test("fresh reads return 429 after too many in the same window, while stored rea
 
   // MAX_REQUESTS_PER_WINDOW is 10; the 11th should be rate-limited.
   for (let i = 0; i < 10; i++) {
-    const res = await handleObserve(fresh());
+    const res = await runWithoutDatabase(handleObserve(fresh()));
     assert.equal(res.status, 200, `request ${i + 1} should succeed`);
   }
 
-  const limited = await handleObserve(fresh());
+  const limited = await runWithoutDatabase(handleObserve(fresh()));
   assert.equal(limited.status, 429);
   assert.equal((await limited.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
 
-  const stored = await handleObserve(
-    observeOptions({
-      resolveUserId: async () => userId,
-      readVaultKeys: async () => KEY_ROWS,
-      store: () => store,
-      now,
-    }),
+  const stored = await runWithoutDatabase(
+    handleObserve(
+      observeOptions({
+        resolveUserId: async () => userId,
+        readVaultKeys: async () => KEY_ROWS,
+        store: () => store,
+        now,
+      }),
+    ),
   );
   assert.equal(stored.status, 200);
 });

@@ -62,18 +62,16 @@ export function makeRateBrake(config: RateBrakeConfig): RateBrake {
 }
 
 /**
- * The promise door the routes below still call through, keeping the older
- * brake's own polarity — `true` means the request is over the window and
- * must be refused — since every one of them still reads it as
- * `if (rateLimited(userId)) return 429`. None of them run an Effect of their
- * own yet, and this check needs no service the way the store's own promise
- * door (`HostedStoreRun`) reaches the ambient `SqlClient` — its whole state
- * is the map `makeRateBrake` closes over, so nothing here needs a runtime
- * edge to answer it.
+ * The promise door the routes that still hold a promise call through,
+ * keeping the older brake's own polarity — `true` means the request is over
+ * the window and must be refused — since each of them reads it as
+ * `if (rateLimited(userId)) return 429`. The check needs no service: its
+ * whole state is the map `makeRateBrake` closes over, so nothing here needs
+ * a runtime edge to answer it.
  *
- * @deprecated A strangler shim. Deleted once the routes that call it run
- * their own Effects under `HttpApi` (P10-05..10) and reach `RateBrake.check`
- * directly instead.
+ * @deprecated A strangler shim. P10-16 moved every route it converted onto
+ * `RateBrake.check` directly; it goes with the last promise-shaped hosted
+ * route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`).
  */
 export function createRateBrake(
   config: RateBrakeConfig,

@@ -718,24 +718,35 @@ anywhere above it waiting to be freed of one. It goes when the socket it
 wraps answers effects itself; the orchestrator's conversion above did not
 reach it, since the two share only a package.
 
-`HostedStoreRun` in `apps/web/server/hosted/store/database.ts` is on the
-allowlist as the door rather than as a runtime: it is the type of whichever
-edge's runner a caller was handed — `runWeb` in a web function, the store
-tests' own runtime over the same connection — and it builds nothing itself.
-P10-15 has moved `HostedStore`'s own public interface onto effects, so the
-store no longer holds a runner at all: `hostedStore({ keys })` answers
-`Effect<A, SqlError | ParseError, SqlClient>` from every method, and each
-caller composes that into what it already runs. What still takes this type is
-everything around the store that a route composes apart from it and that still
-hands a promise up: the store writer, the voice writer, the speech module, the
-ask record, the device seams, `BrainHostSeams.run` (which answers the brain
-host's own conversation statements as much as the store's), and the handlers
-those seams reach. P10-16 deletes this type and that field together: it is the
-PR that carries the web's route handlers and the modules they call from
-promises to effects end to end, so nothing above them awaits one here. The
-route groups of P10-05..10 have already merged and do not reach this — they
-compose the handlers rather than run their statements — so naming them as the
-deletion would be a row nothing retires.
+`fiberStoreRunner` in `apps/web/server/hosted/fiber-runner.ts` is the one
+place `apps/web` turns an effect into a promise anywhere but at `runWeb`, and
+it is on the allowlist as the fiber's own face rather than as a runtime: it
+reads `Effect.runtime` inside the effect and hands back that runtime's
+`Runtime.runPromise`, so the connection everything below it reads on is the
+request's own and a test needs no seam for it. P10-16 deleted `HostedStoreRun`
+and `BrainHostSeams.run`, the type and field this replaced: since that PR the
+hosted store, the store writer, the voice writer, the speech module, the ask
+record, the device seams, the brain host, and every route handler under
+`apps/web/server` answer `Effect<A, SqlError | ParseError, SqlClient>` end to
+end, and a handler composes its whole request into the one effect `runWeb`
+answers.
+
+What still takes a promise face are four contracts this package does not own.
+eve's tool contracts — `BrainWorkspaceAccess`, `HostedFactsWriter`,
+`HostedTranscriptReads` — are promises because a tool execution is one, so
+`brainHost`'s `runTool` reads the runner from its own fiber and builds the
+three readers over it. eve's stream handler, and the `StreamRelay` and
+`carryStop` beneath it, answer eve a promise, so `brainHost`'s `relay` builds
+them over the same runner through the `Promised` mapped type beside it. The
+turn event stream's polling body runs inside the `ReadableStream` its handler
+has already answered with, so it outlives that handler's fiber and reads the
+runner before it answers. And the voice service drives
+`hostedLiveExchange`, `hostedLiveBrain`, `hostedBriefings`,
+`hostedLiveRecord`, and `voiceSessionRecord` from socket callbacks rather than
+from a request, so those five are handed `runWeb` by the function that
+composes them rather than reading a fiber they have none of. The type goes
+when those four contracts answer effects themselves; no PR in this plan is
+that one yet.
 
 `HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
 carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
@@ -771,16 +782,17 @@ go is a schema change first — those columns to JSON text, existing rows
 rewritten, the seeder writing JSON — and only then the adapter swap.
 
 `createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
-for the same reason `HostedStoreRun` is: `RateBrake.check` is an
+for the same reason `fiberStoreRunner` is: `RateBrake.check` is an
 `Effect.Effect<boolean>` a per-user window reads through the ambient `Clock`,
-but every route that braked a request still holds a plain boolean it awaits,
-so `createRateBrake` runs that check to a promise here rather than on a fiber
-of its own. Effect's own `RateLimiter` was tried first and dropped: its only
+but a route that still holds a plain boolean it awaits cannot compose one, so
+`createRateBrake` runs that check to a promise here rather than on a fiber of
+its own. Effect's own `RateLimiter` was tried first and dropped: its only
 way to ask whether a permit is free without waiting for one is racing its
 blocking `take` against a zero-duration timeout, and that race lost to a busy
 event loop in this repository's own test suite, refusing a request nothing had
-actually rate-limited. P10-05..10 deletes the door once the routes that call it
-run their own Effects under `HttpApi` and reach `RateBrake.check` directly.
+actually rate-limited. P10-16 moved every route it converted onto
+`RateBrake.check` directly; the door goes with the last hosted route that still
+answers a promise (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`).
 
 `carryOn` in `packages/brain/src/effect/carry.ts` is the brain's one door onto
 the host's `ExecutionRuntime`, and P12-02 made it the only one for
@@ -1070,8 +1082,8 @@ design decision stated as such:
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
-| `HostedStoreRun`, the edge runner the hosted store's still-promise-shaped callers are handed, and `BrainHostSeams.run` beside it | P10-11a | P10-16 — P10-15 took `HostedStore` itself off it |
-| `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
+| `FiberStoreRunner`/`fiberStoreRunner`, the promise face the four promise-shaped contracts above `apps/web`'s effects are handed (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | once eve's tool and stream contracts, the turn event stream, and the voice service's socket-driven compositions answer effects themselves |
+| `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | with `LoopbackConsent`'s `signIn` door, once `AccountSessionManager` answers effects |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |

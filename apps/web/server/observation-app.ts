@@ -184,20 +184,14 @@ async function sessionsMessagesHandler(request: Request): Promise<Response> {
 
 /** Lists where the signed-in user's keys can create a workspace. */
 async function projectsHandler(request: Request): Promise<Response> {
-  return handleProjects({
-    ...hostedVaultSeams,
-    encryptionSecret: await hostedEncryptionSecret(),
-    request,
-  });
+  const encryptionSecret = await hostedEncryptionSecret();
+  return runWeb(handleProjects({ ...hostedVaultSeams, encryptionSecret, request }));
 }
 
 /** Observes the signed-in user's cloud sessions on demand. */
 async function observeHandler(request: Request): Promise<Response> {
-  return handleObserve({
-    ...hostedVaultSeams,
-    encryptionSecret: await hostedEncryptionSecret(),
-    request,
-  });
+  const encryptionSecret = await hostedEncryptionSecret();
+  return runWeb(handleObserve({ ...hostedVaultSeams, encryptionSecret, request }));
 }
 
 /**
@@ -263,68 +257,78 @@ async function observationTickHandler(request: Request): Promise<Response> {
         await runWeb(store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter }));
     },
     purgeCleared: async (now) => (store ? runWeb(store.retention.purgeCleared(new Date(now))) : 0),
-    sweepSpeech: async (now) => {
-      if (!store) return NOTHING_SWEPT;
-      const writer = await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET });
-      return sweepSpeech({ run: runWeb, writer }, { now });
-    },
-    pushSpeech: async (now) => {
-      if (!store || !sender) return NOTHING_PUSHED;
-      const writer = await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET });
-      return pushSpeech(
-        {
-          store: { run: runWeb, writer },
-          tools: CATALOG_TOOL_SET,
-          send: (notification) => sender.send(notification),
-          forgetDevice: deviceSeams(runWeb).forgetDevice,
-        },
-        { now },
-      );
-    },
+    sweepSpeech: (now) =>
+      store === undefined
+        ? Promise.resolve(NOTHING_SWEPT)
+        : runWeb(
+            Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+              sweepSpeech({ writer }, { now }),
+            ),
+          ),
+    pushSpeech: (now) =>
+      store === undefined || sender === undefined
+        ? Promise.resolve(NOTHING_PUSHED)
+        : runWeb(
+            Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+              pushSpeech(
+                {
+                  store: { writer },
+                  tools: CATALOG_TOOL_SET,
+                  send: (notification) => sender.send(notification),
+                  forgetDevice: deviceSeams().forgetDevice,
+                },
+                { now },
+              ),
+            ),
+          ),
     observe: async (userId) => {
       if (!store || !encryptionSecret) return { complete: false, changed: false };
       const rows = await vaultRows(userId);
-      const outcome = await observeAndSnapshot({
-        userId,
-        rows,
-        secret: encryptionSecret,
-        run: runWeb,
-        store,
-        seams: {},
-        now: Date.now(),
-      });
+      const outcome = await runWeb(
+        observeAndSnapshot({
+          userId,
+          rows,
+          secret: encryptionSecret,
+          store,
+          seams: {},
+          now: Date.now(),
+        }),
+      );
       return { complete: outcome.complete, changed: outcome.changed };
     },
     openTurns: async (userId) => {
       if (!store || !encryptionSecret || !cronSecret) return NOTHING_OPENED;
       const rows = await vaultRows(userId);
-      const roster = await readHostedRoster(runWeb, store, userId, rows, encryptionSecret);
       const readApiKey = readApiKeyFor(rows, encryptionSecret);
-      return openAccountTurns(
-        {
-          run: runWeb,
-          store,
-          writer: await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET }),
-          eve: eveSessions<ScheduledTurn>({
-            origin: eveOrigin,
-            caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
-          }),
-          roster,
-          transcripts: hostedTranscriptReads({
-            run: runWeb,
-            userId,
-            roster: async () => roster,
-            pluginFor: (providerId) =>
-              cloudSessionPluginFor(providerId, {
-                readApiKey: readApiKey(providerId),
-                reported: () => roster.observations.get(providerId) ?? [],
+      return runWeb(
+        Effect.gen(function* () {
+          const roster = yield* readHostedRoster(store, userId, rows, encryptionSecret);
+          return yield* openAccountTurns(
+            {
+              store,
+              writer: yield* storeWriter({ tools: CATALOG_TOOL_SET }),
+              eve: eveSessions<ScheduledTurn>({
+                origin: eveOrigin,
+                caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
               }),
-            now: Date.now,
-          }),
-          now: Date.now,
-          report: (message) => console.warn(message),
-        },
-        userId,
+              roster,
+              transcripts: hostedTranscriptReads({
+                run: runWeb,
+                userId,
+                roster: async () => roster,
+                pluginFor: (providerId) =>
+                  cloudSessionPluginFor(providerId, {
+                    readApiKey: readApiKey(providerId),
+                    reported: () => roster.observations.get(providerId) ?? [],
+                  }),
+                now: Date.now,
+              }),
+              now: Date.now,
+              report: (message) => console.warn(message),
+            },
+            userId,
+          );
+        }),
       );
     },
   };

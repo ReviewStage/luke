@@ -1,3 +1,6 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import type { CloudFetch, ProviderSessionObservation } from "../core.js";
 import {
   ACTION_KIND,
@@ -19,8 +22,7 @@ import {
   storedRoster,
 } from "./observation-pass.js";
 import type { ObservedRoster } from "./observed-roster.js";
-import { createRateBrake } from "./rate-brake.js";
-import type { HostedStoreRun } from "./store/database.js";
+import { makeRateBrake } from "./rate-brake.js";
 import type { HostedVaultRoute } from "./vault-route.js";
 
 const OBSERVE_RATE_LIMIT = {
@@ -29,7 +31,7 @@ const OBSERVE_RATE_LIMIT = {
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const observeRateLimited = createRateBrake({
+const observeBrake = makeRateBrake({
   windowMs: OBSERVE_RATE_LIMIT.WINDOW_MS,
   maxRequestsPerWindow: OBSERVE_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
   maxTrackedUsers: OBSERVE_RATE_LIMIT.MAX_TRACKED_USERS,
@@ -41,7 +43,6 @@ export interface ObserveOptions
     "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
   > {
   /** The store the snapshot is read from and, on a live pass, written to. */
-  run: HostedStoreRun;
   store: (secret: string) => ObservationStore;
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
@@ -57,56 +58,59 @@ export interface ObserveOptions
  * same pass the schedule runs, stored the same way. A user with no cloud key
  * has no roster to read or store and is answered empty.
  */
-export async function handleObserve(options: ObserveOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
+export function handleObserve(
+  options: ObserveOptions,
+): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
 
-  if (request.method !== "GET") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const secret = (encryptionSecret ?? "").trim();
-  if (!secret) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-
-  const rows = await readVaultKeys(userId);
-  if (keyedCloudProviderIds(rows).length === 0) {
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(undefined, undefined));
-  }
-
-  const store = options.store(secret);
-  const fresh =
-    new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
-  if (!fresh) {
-    const stored = await storedRoster(options.run, store, userId, rows, secret);
-    if (stored?.roster) {
-      return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
+    if (request.method !== "GET") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
     }
-  }
 
-  const now = (options.now ?? Date.now)();
-  if (await observeRateLimited(userId)) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  }
+    const userId = yield* Effect.promise(() => resolveUserId(request));
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
 
-  const outcome = await observeAndSnapshot({
-    userId,
-    rows,
-    secret,
-    run: options.run,
-    store,
-    seams: options,
-    now,
+    const secret = (encryptionSecret ?? "").trim();
+    if (!secret) {
+      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    }
+
+    const rows = yield* Effect.promise(() => readVaultKeys(userId));
+    if (keyedCloudProviderIds(rows).length === 0) {
+      return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(undefined, undefined));
+    }
+
+    const store = options.store(secret);
+    const fresh =
+      new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
+    if (!fresh) {
+      const stored = yield* storedRoster(store, userId, rows, secret);
+      if (stored?.roster) {
+        return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
+      }
+    }
+
+    const now = (options.now ?? Date.now)();
+    if (!(yield* observeBrake.check(userId))) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    }
+
+    const outcome = yield* observeAndSnapshot({
+      userId,
+      rows,
+      secret,
+      store,
+      seams: options,
+      now,
+    });
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(outcome.roster, outcome.observedAt));
   });
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(outcome.roster, outcome.observedAt));
 }
 
 /** The roster as the wire carries it: every provider's observations as bounded rows, dated by the snapshot. */

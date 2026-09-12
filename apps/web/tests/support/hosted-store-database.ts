@@ -8,7 +8,7 @@ import { Pool } from "pg";
 import { runWebMigrations } from "../../server/db/effect-migrator";
 import { sqlClientOverPool } from "../../server/db/sql-client";
 import { payloadKeyRing } from "../../server/hosted/encryption";
-import { type HostedStore, type HostedStoreRun, hostedStore } from "../../server/hosted/store";
+import { type HostedStore, hostedStore } from "../../server/hosted/store";
 import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-client";
 
 /**
@@ -20,12 +20,20 @@ import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-clie
  * runner applies, because it is opened empty; a Postgres is not, because
  * `db:migrate` is the one runner that records what it applied.
  */
+/**
+ * The suite's own edge: the runner a test answers the store's effects
+ * through, over the runtime this harness opened for the test database.
+ */
+export type HostedStoreTestRun = <A, E>(
+  effect: Effect.Effect<A, E, SqlClient.SqlClient>,
+) => Promise<A>;
+
 export interface HostedStoreTestDatabase {
   readonly store: HostedStore;
   /** The same client the store's effects run against, for a test that reads one itself. */
   readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
-  /** The runner the store, the writers, and the speech module are handed here, over that client. */
-  readonly run: HostedStoreRun;
+  /** The runner a test answers the store's and the writers' effects through, over that client. */
+  readonly run: HostedStoreTestRun;
   /** Inserts a user row for one test, answering the id every other row hangs from. */
   createUser(): Promise<string>;
   close(): Promise<void>;
@@ -38,7 +46,7 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
   const opened = connectionString ? await openNodePostgres(connectionString) : await openPglite();
   const keys = payloadKeyRing(TEST_PAYLOAD_SECRET);
   const runtime = ManagedRuntime.make(opened.sql);
-  const run: HostedStoreRun = (effect) => runtime.runPromise(effect);
+  const run: HostedStoreTestRun = (effect) => runtime.runPromise(effect);
   return {
     sql: opened.sql,
     run,

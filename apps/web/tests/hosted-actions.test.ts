@@ -398,32 +398,34 @@ const KEY_ROWS: VaultKeyRow[] = [
  */
 async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
   const store = memoryObservationStore();
-  const outcome = await observeAndSnapshot({
-    userId: "user-1",
-    rows: KEY_ROWS,
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    seams: { fetch: api.fetch },
-    now: NOW,
-  });
+  const outcome = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { fetch: api.fetch },
+      now: NOW,
+    }),
+  );
   assert.equal(outcome.complete, true);
-  return rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    // The key rows are read to check the snapshot was observed under them;
-    // the provider itself is never asked while a matching snapshot stands.
-    readVaultKeys: async () => KEY_ROWS,
-    seams: {
-      fetch: async () => {
-        throw new Error("no pass runs for a user with a snapshot");
+  return runWithoutDatabase(
+    rosterForAction({
+      userId: "user-1",
+      providerId: "conductor",
+      secret: SECRET,
+      store,
+      // The key rows are read to check the snapshot was observed under them;
+      // the provider itself is never asked while a matching snapshot stands.
+      readVaultKeys: async () => KEY_ROWS,
+      seams: {
+        fetch: async () => {
+          throw new Error("no pass runs for a user with a snapshot");
+        },
       },
-    },
-    now: NOW + 1,
-  });
+      now: NOW + 1,
+    }),
+  );
 }
 
 /** One action asked against the snapshot of the fake API, admitted and carried by the one executor. */
@@ -502,16 +504,17 @@ test("a message to a session the snapshot does not hold is rejected", async () =
  */
 async function seededRoster(fetch: (url: string, init: RequestInit) => Promise<Response>) {
   const store = memoryObservationStore();
-  const roster = await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    readVaultKeys: async () => KEY_ROWS,
-    seams: { fetch },
-    now: NOW,
-  });
+  const roster = await runWithoutDatabase(
+    rosterForAction({
+      userId: "user-1",
+      providerId: "conductor",
+      secret: SECRET,
+      store,
+      readVaultKeys: async () => KEY_ROWS,
+      seams: { fetch },
+      now: NOW,
+    }),
+  );
   return { roster, store };
 }
 
@@ -559,30 +562,32 @@ test("a provider that cannot be reached is named as the reason", async () => {
 test("a user with no snapshot yet is seeded by the action's own pass, once", async () => {
   const api = conductorApi("idle");
   const store = memoryObservationStore();
-  const first = await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    readVaultKeys: async () => KEY_ROWS,
-    seams: { fetch: api.fetch },
-    now: NOW,
-  });
+  const first = await runWithoutDatabase(
+    rosterForAction({
+      userId: "user-1",
+      providerId: "conductor",
+      secret: SECRET,
+      store,
+      readVaultKeys: async () => KEY_ROWS,
+      seams: { fetch: api.fetch },
+      now: NOW,
+    }),
+  );
   assert.equal(first.observations.length, 1);
   assert.equal(store.snapshots.has("user-1"), true);
   const readsAfterSeeding = api.reads.length;
 
-  const second = await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    readVaultKeys: async () => KEY_ROWS,
-    seams: { fetch: api.fetch },
-    now: NOW + 1,
-  });
+  const second = await runWithoutDatabase(
+    rosterForAction({
+      userId: "user-1",
+      providerId: "conductor",
+      secret: SECRET,
+      store,
+      readVaultKeys: async () => KEY_ROWS,
+      seams: { fetch: api.fetch },
+      now: NOW + 1,
+    }),
+  );
   assert.deepEqual(second.observations, first.observations);
   assert.equal(api.reads.length, readsAfterSeeding);
 });
@@ -590,31 +595,33 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
 test("an action under a replaced key is admitted against a fresh pass, not the old key's snapshot", async () => {
   const api = conductorApi("idle");
   const store = memoryObservationStore();
-  await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    readVaultKeys: async () => KEY_ROWS,
-    seams: { fetch: api.fetch },
-    now: NOW,
-  });
+  await runWithoutDatabase(
+    rosterForAction({
+      userId: "user-1",
+      providerId: "conductor",
+      secret: SECRET,
+      store,
+      readVaultKeys: async () => KEY_ROWS,
+      seams: { fetch: api.fetch },
+      now: NOW,
+    }),
+  );
   const readsAfterSeeding = api.reads.length;
   const replaced: VaultKeyRow[] = [
     { providerId: "conductor", ciphertext: encryptProviderKey("key-2", SECRET) },
   ];
 
-  const roster = await rosterForAction({
-    userId: "user-1",
-    providerId: "conductor",
-    secret: SECRET,
-    run: runWithoutDatabase,
-    store,
-    readVaultKeys: async () => replaced,
-    seams: { fetch: api.fetch },
-    now: NOW + 1,
-  });
+  const roster = await runWithoutDatabase(
+    rosterForAction({
+      userId: "user-1",
+      providerId: "conductor",
+      secret: SECRET,
+      store,
+      readVaultKeys: async () => replaced,
+      seams: { fetch: api.fetch },
+      now: NOW + 1,
+    }),
+  );
 
   assert.ok(api.reads.length > readsAfterSeeding);
   assert.equal(roster.observations.length, 1);

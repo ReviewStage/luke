@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
+import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
 import { sessionPrompt } from "../session-prompt.js";
 
@@ -16,19 +18,25 @@ export default defineDynamic({
   events: {
     // The prompt reads the rows and writes nothing, and it resolves on the
     // same event the hook claims the record on, so ownership alone admits it.
-    "session.started": async (_event, ctx) => {
-      const admitted = await host.admitStarting(ctx.session.auth, ctx.session.id);
-      if (!admitted.ok) return null;
-      const turn = host.turnKindOf(ctx.session.auth);
-      if (!turn) return null;
-      const prompt = await host.prompt(admitted, turn.trigger);
-      sessionPrompt.update(() => ({ hash: prompt.hash }));
-      return defineInstructions({ content: prompt.text });
-    },
-    "turn.started": async (_event, ctx) => {
-      const admitted = await host.admit(ctx.session.auth, ctx.session.id);
-      if (!admitted.ok) return null;
-      return defineInstructions({ content: await host.standingContext(admitted) });
-    },
+    "session.started": (_event, ctx) =>
+      runWeb(
+        Effect.gen(function* () {
+          const admitted = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
+          if (!admitted.ok) return null;
+          const turn = host.turnKindOf(ctx.session.auth);
+          if (!turn) return null;
+          const prompt = yield* host.prompt(admitted, turn.trigger);
+          sessionPrompt.update(() => ({ hash: prompt.hash }));
+          return defineInstructions({ content: prompt.text });
+        }),
+      ),
+    "turn.started": (_event, ctx) =>
+      runWeb(
+        Effect.gen(function* () {
+          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+          if (!admitted.ok) return null;
+          return defineInstructions({ content: yield* host.standingContext(admitted) });
+        }),
+      ),
   },
 });

@@ -26,6 +26,7 @@ import {
   userMessage,
   userMetadataOf,
 } from "../../core.js";
+import type { Promised } from "../fiber-runner.js";
 import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import type { StoreWriter } from "./announce.js";
@@ -141,9 +142,10 @@ export interface RelayStanding {
 }
 
 export interface StreamRelaySeams {
-  readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn" | "attachAskLines">;
+  /** The three writes the relay makes, as promises: the relay answers eve's handler, which takes one. */
+  readonly writer: Promised<Pick<StoreWriter, "consume" | "enqueueTurn" | "attachAskLines">>;
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
-  readonly asks: AskDeliveryBinding;
+  readonly asks: Promised<AskDeliveryBinding>;
   /** Carries the Stop an ask took while it waited, the moment eve's start names the turn it ran in: eve's cancel scoped to that turn, and the row's stamp. */
   readonly stopTurn: (
     target: ConversationTarget,

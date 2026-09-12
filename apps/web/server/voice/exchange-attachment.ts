@@ -1,6 +1,6 @@
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { standingMain } from "../hosted/brain-host/main.js";
-import type { HostedStoreRun } from "../hosted/store/database.js";
+import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import type { HostedStoreContext } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
 import {
@@ -24,7 +24,7 @@ import { upstreamSideband } from "./live-sideband.js";
 export interface ExchangeAttachmentDeps {
   readonly context: HostedStoreContext;
   /** The runner the attachment's own reads and the exchange beneath it are answered through. */
-  readonly run: HostedStoreRun;
+  readonly run: FiberStoreRunner;
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string) => EveSessions;
