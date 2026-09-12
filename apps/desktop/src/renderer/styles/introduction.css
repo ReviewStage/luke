@@ -12,9 +12,8 @@
   position: fixed;
   inset: 0;
   overflow: clip;
-  /* The panel surface's flares turn the panel's corner — the same 0.489 the
-     panel presentation derives. */
-  --notch-concave-radius: calc(var(--panel-radius) * 0.489);
+  /* The flares are the presentation's own, from base.css: the takeover lands
+     in the capsule and stays there, so it must not force the panel's. */
   /* The face's stage size, named because the signature reveal's letters and
      centring shift all scale from it — the fractions arrive from the
      component, cut from the same generated table the face is drawn from. */
