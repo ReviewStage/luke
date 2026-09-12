@@ -170,24 +170,55 @@ answers, so the bridge is where the effect is run until every one of them takes
 a client instead. It is the migration's own scaffolding rather than a second
 runtime for the product to live on, and it goes in P12-04b with the seam.
 
-`timerSeamFromRuntime` answers the `now`/`schedule`/`cancel` seam a caller
-still injected with those closures reads from an Effect runtime's own
+`timerSeamFromRuntime` answered the `now`/`schedule`/`cancel` seam a caller
+still injected with those closures read from an Effect runtime's own
 `Clock`, exactly as the deleted `timersFromRuntime` did, but as a
 package-local function rather than a shared runtime export, since P12-03
 found no caller left that could take a shared one instead of a seam of its
-own: `packages/runtime/src/effect/timer-seam.ts` answers `children.effect.ts`'s
-and `queue.effect.ts`'s own delegation and reply-queue services, over the
-runtime their `Effect.acquireRelease` was handed, never one either builds;
-`packages/host/src/effect/timer-seam.ts` answers `compose-live.ts`'s idle,
-settle, and finalize timers the same way, over the runtime the live
-composition runs on; and `packages/brain/src/effect/harness.ts`'s own copy
-answers the brain's test harness alone, so its `BrainAgent` reads the ambient
+own. P12-03b deleted the two non-brain copies
+(`packages/runtime/src/effect/timer-seam.ts`,
+`packages/host/src/effect/timer-seam.ts`) outright rather than keeping them
+as named, shared functions: `children.effect.ts` and `queue.effect.ts` each
+now build the bridge inline, over the runtime their `Effect.acquireRelease`
+was handed, never one either builds, and so does `compose-live.ts` for
+`LiveSessionService`'s idle, settle, and finalize timers, over the runtime
+the live composition runs on; none of the three names or imports the others'
+copy, since a caller that still needs the bridge keeps its own beside the
+code that uses it rather than sharing a module three packages once did.
+`packages/brain/src/effect/harness.ts`'s own copy stays for now, answering
+the brain's test harness alone, so its `BrainAgent` reads the ambient
 `TestClock` an `it.effect` test already stands on rather than a `FakeClock` of
-its own. Each is `runOnHandedRuntime` on the same terms the others there are:
+its own; it is still `runOnHandedRuntime` on the same terms the others were:
 it starts the work on the runtime it was handed rather than building a
 second one, so this is that runtime's own edge for as long as the seam it
-answers still takes closures instead of an effect. They go once every caller
-each answers reads and schedules against `Clock` and `Scope` directly instead.
+answers still takes closures instead of an effect. It goes once `BrainAgent`
+answers `Clock` and `Scope` directly instead.
+The `ScheduledTimer` type alias itself — the opaque handle a
+`schedule`/`cancel` pair traffics in — still names a real constraint two
+things forced back into a dedicated declaration file rather than an inline
+`unknown`/`object`: `anti-slop/no-unknown-parameters` resolves a type alias
+only when it is declared in the same file as the parameter that names it, so
+a file that both declares the handle's shape and uses it as a `schedule`'s
+return or a `cancel`'s parameter trips the rule the moment the alias is
+local; and a Node fallback (`globalThis.setTimeout`) answers `NodeJS.Timeout`,
+which TypeScript refuses to assign into an object type stated as an optional
+phantom property (`{ readonly opaque?: never }`) even though it assigns
+cleanly into a bare `object`. Both constraints are satisfied the same way
+`scheduled-timer.ts` always was: one file per package that only declares the
+alias and touches no function signature of its own, imported by every
+sibling that needs the shape rather than redeclaring it — `packages/runtime/src/scheduled-timer.ts`
+(kept, since `children.ts`/`queue.ts` are OpenClaw ports whose constructor
+option this is, and `packages/host/src/brain/wiring-children.ts` imports the
+same one from `@sidecar/runtime` to build a `ChildRunService`) and
+`packages/voice/src/scheduled-timer.ts` (restored under the name
+`TimerHandle`, imported by `append-channel.ts` and `notice-strip.ts` and
+re-exported through `@sidecar/voice/live-session` for `compose-live.ts` and
+the hosted voice service's own tests). What P12-03b actually deletes is the
+three-package *duplication* — `timerSeamFromRuntime` as a shared, exported
+bridge function reused across packages — and the name `ScheduledTimer`
+itself outside `packages/runtime` (voice's is `TimerHandle`); it does not
+delete the one-file-per-package declaration shape, which the lint rule and
+`NodeJS.Timeout`'s own assignability both require.
 
 `ObservationLoop`'s `start` and `stop` are gone, and so is the arm-and-check
 pair every cadence the account gate owns wore beside them. P7-13b made that
@@ -985,8 +1016,6 @@ design decision stated as such:
 | `LinearIssueTracker#post` | P4-03 | P12-04b |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04b |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | P7-13c — the calendars composer's methods answer effects since P7-13 |
-| `timerSeamFromRuntime` (`packages/runtime/src/effect/timer-seam.ts`) | P12-03 | once `children.effect.ts`/`queue.effect.ts` answer `Clock`/`Scope` directly |
-| `timerSeamFromRuntime` (`packages/host/src/effect/timer-seam.ts`) | P12-03 | once `compose-live.ts` answers `Clock`/`Scope` directly |
 | `timerSeamFromRuntime` (`packages/brain/src/effect/harness.ts`) | P12-03 | once `BrainAgent` answers `Clock`/`Scope` directly |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |

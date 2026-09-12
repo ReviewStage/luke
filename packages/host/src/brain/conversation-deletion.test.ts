@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { it } from "@effect/vitest";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -33,10 +34,10 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Runtime } from "effect";
-import { type TestContext, test } from "vitest";
+import { Effect, Runtime } from "effect";
+import type { TestContext } from "vitest";
 import { ConversationThread } from "../conversation-thread.js";
-import { drainMicrotasks, operatorOverBrain } from "../testing/index.js";
+import { operatorOverBrain } from "../testing/index.js";
 import { CONVERSATION_DELETE_OUTCOME, deleteConversationFlow } from "./conversation-deletion.js";
 import { followBrainRequests } from "./publication.js";
 
@@ -306,39 +307,55 @@ async function composed(t: TestContext) {
   };
 }
 
+/** Polls a condition on Effect's own fiber scheduler rather than a fixed wall-clock wait. */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
+
 /**
  * Seeds a finished, compacted exchange whose words stand in the checkpoint,
  * the transcript, and the thread. The thread's two lines are written the way
  * the live record writes them — both speakers' settled utterances, tied to
  * the run — since the brain's publication writes no line of its own.
  */
-async function seeded(c: Awaited<ReturnType<typeof composed>>) {
-  await c.open();
-  const client = heldClient();
-  const agent = c.build(client);
-  const first = await c.submit(agent, OLD_ASK);
-  assert.equal(
-    await c.record(
-      { kind: CONVERSATION_ENTRY_KIND.ASK, words: OLD_ASK, requestId: first },
-      c.tick(),
-    ),
-    true,
-  );
-  await drainMicrotasks(40);
-  client.release(
-    reply(OLD_REPLY, { type: "compaction", id: "cmp_1", encrypted_content: OLD_COMPACTION }),
-  );
-  await drainMicrotasks(40);
-  assert.equal(agent.request(first)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  assert.equal(
-    await c.record(
-      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: OLD_REPLY, requestId: first },
-      c.tick(),
-    ),
-    true,
-  );
-  assert.ok(c.thread.entries().some((entry) => entry.words === OLD_REPLY));
-  return { agent, client };
+function seeded(
+  c: Awaited<ReturnType<typeof composed>>,
+): Effect.Effect<{ agent: BrainAgent; client: ReturnType<typeof heldClient> }> {
+  return Effect.gen(function* () {
+    yield* Effect.promise(() => c.open());
+    const client = heldClient();
+    const agent = c.build(client);
+    const first = yield* Effect.promise(() => c.submit(agent, OLD_ASK));
+    assert.equal(
+      yield* Effect.promise(() =>
+        c.record({ kind: CONVERSATION_ENTRY_KIND.ASK, words: OLD_ASK, requestId: first }, c.tick()),
+      ),
+      true,
+    );
+    yield* waitFor(() => client.inputs.length > 0);
+    client.release(
+      reply(OLD_REPLY, { type: "compaction", id: "cmp_1", encrypted_content: OLD_COMPACTION }),
+    );
+    yield* waitFor(() => agent.request(first)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
+    assert.equal(agent.request(first)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+    assert.equal(
+      yield* Effect.promise(() =>
+        c.record(
+          { kind: CONVERSATION_ENTRY_KIND.REPLY, words: OLD_REPLY, requestId: first },
+          c.tick(),
+        ),
+      ),
+      true,
+    );
+    assert.ok(c.thread.entries().some((entry) => entry.words === OLD_REPLY));
+    return { agent, client };
+  });
 }
 
 /** One archive as the registry row holds it, read from the database the worker owns. */
@@ -380,186 +397,226 @@ function previousCutoffOf(root: string, archiveId: string): number | null | unde
   }
 }
 
-test("a Clear under a held model answer fences the brain and the thread before any wait, keeps the line accepted after the press, archives what stood, and the next ask sees none of the old words", async (t) => {
-  const c = await composed(t);
-  t.onTestFinished(() => c.close());
-  const { agent, client } = await seeded(c);
-  // A second ask whose answer is still out when the press lands, its own
-  // line already on the thread the way the live record writes an utterance.
-  c.tick();
-  const late = await c.submit(agent, "second ask");
-  assert.equal(
-    await c.record(
-      { kind: CONVERSATION_ENTRY_KIND.ASK, words: "second ask", requestId: late },
-      c.tick(),
-    ),
-    true,
-  );
-  await drainMicrotasks(40);
-  const pressedAt = c.tick();
-  const clearing = c.clear();
-  // The fences are synchronous: the store already stands on the successor,
-  // and the thread is already empty and relayed, before anything is awaited.
-  assert.notEqual(c.store.generationId(), undefined);
-  assert.equal(c.store.resetMarker()?.clearedAt, pressedAt);
-  assert.deepEqual(c.thread.entries(), []);
-  assert.deepEqual(c.relayed.at(-1), []);
-  // A voice line landing a beat after the press, while the deletion waits, is the conversation's next line.
-  const afterAt = c.tick();
-  assert.equal(
-    await c.record({ kind: CONVERSATION_ENTRY_KIND.ASK, words: AFTER_WORDS }, afterAt),
-    true,
-  );
-  // The late answer lands on the fenced generation: recorded nowhere.
-  client.release(reply(LATE_REPLY));
-  await drainMicrotasks(40);
-  assert.equal(await clearing, CONVERSATION_DELETE_OUTCOME.COMPLETE);
-  // The late run went with its generation: revoked, and standing in no record.
-  assert.equal(agent.request(late), undefined);
-  // The rows: the successor lifetime stands with nothing in it, the old words are gone, the later line stays.
-  const standing = c.standing();
-  assert.equal(standing?.session_id, c.store.generationId());
-  assert.equal(standing?.reset_cleared_at, pressedAt);
-  assert.deepEqual(
-    (await c.client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() })).map(
-      (entry) => entry.words,
-    ),
-    [AFTER_WORDS],
-  );
-  assert.deepEqual(
-    c.thread.entries().map((entry) => entry.words),
-    [AFTER_WORDS],
-  );
-  assert.equal(
-    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
-    pressedAt,
-  );
-  // The archive holds exactly what stood at the press, compressed on disk.
-  const [archive] = archivesOf(c.root);
-  assert.ok(archive);
-  assert.notEqual(archive.publishedAt, null);
-  // The two seeded lines and the second ask, which stood at the press; its answer never landed.
-  assert.equal(archive.conversationLines, 3);
-  // The same agent works on from the successor: its next ask carries none of the old words.
-  const next = await c.submit(agent, "what now");
-  await drainMicrotasks(40);
-  client.release(reply("fresh"));
-  await drainMicrotasks(40);
-  assert.equal(agent.request(next)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  await c.stop(agent);
-});
+it.effect(
+  "a Clear under a held model answer fences the brain and the thread before any wait, keeps the line accepted after the press, archives what stood, and the next ask sees none of the old words",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      t.onTestFinished(() => c.close());
+      const { agent, client } = yield* seeded(c);
+      // A second ask whose answer is still out when the press lands, its own
+      // line already on the thread the way the live record writes an utterance.
+      c.tick();
+      const beforeSecondAsk = client.inputs.length;
+      const late = yield* Effect.promise(() => c.submit(agent, "second ask"));
+      assert.equal(
+        yield* Effect.promise(() =>
+          c.record(
+            { kind: CONVERSATION_ENTRY_KIND.ASK, words: "second ask", requestId: late },
+            c.tick(),
+          ),
+        ),
+        true,
+      );
+      yield* waitFor(() => client.inputs.length > beforeSecondAsk);
+      const pressedAt = c.tick();
+      const clearing = c.clear();
+      // The fences are synchronous: the store already stands on the successor,
+      // and the thread is already empty and relayed, before anything is awaited.
+      assert.notEqual(c.store.generationId(), undefined);
+      assert.equal(c.store.resetMarker()?.clearedAt, pressedAt);
+      assert.deepEqual(c.thread.entries(), []);
+      assert.deepEqual(c.relayed.at(-1), []);
+      // A voice line landing a beat after the press, while the deletion waits, is the conversation's next line.
+      const afterAt = c.tick();
+      assert.equal(
+        yield* Effect.promise(() =>
+          c.record({ kind: CONVERSATION_ENTRY_KIND.ASK, words: AFTER_WORDS }, afterAt),
+        ),
+        true,
+      );
+      // The late answer lands on the fenced generation: recorded nowhere.
+      client.release(reply(LATE_REPLY));
+      yield* waitFor(() => agent.request(late) === undefined);
+      assert.equal(yield* Effect.promise(() => clearing), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      // The late run went with its generation: revoked, and standing in no record.
+      assert.equal(agent.request(late), undefined);
+      // The rows: the successor lifetime stands with nothing in it, the old words are gone, the later line stays.
+      const standing = c.standing();
+      assert.equal(standing?.session_id, c.store.generationId());
+      assert.equal(standing?.reset_cleared_at, pressedAt);
+      assert.deepEqual(
+        (yield* Effect.promise(() =>
+          c.client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() }),
+        )).map((entry) => entry.words),
+        [AFTER_WORDS],
+      );
+      assert.deepEqual(
+        c.thread.entries().map((entry) => entry.words),
+        [AFTER_WORDS],
+      );
+      assert.equal(
+        yield* Effect.promise(() =>
+          c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+        ),
+        pressedAt,
+      );
+      // The archive holds exactly what stood at the press, compressed on disk.
+      const [archive] = archivesOf(c.root);
+      assert.ok(archive);
+      assert.notEqual(archive.publishedAt, null);
+      // The two seeded lines and the second ask, which stood at the press; its answer never landed.
+      assert.equal(archive.conversationLines, 3);
+      // The same agent works on from the successor: its next ask carries none of the old words.
+      const beforeNext = client.inputs.length;
+      const next = yield* Effect.promise(() => c.submit(agent, "what now"));
+      yield* waitFor(() => client.inputs.length > beforeNext);
+      client.release(reply("fresh"));
+      yield* waitFor(() => agent.request(next)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.equal(agent.request(next)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      yield* Effect.promise(() => c.stop(agent));
+    }),
+);
 
-test("a Clear whose rows the store will not remove answers refused, yet the old words reach no context, no window, and no later launch of the brain", async (t) => {
-  const c = await composed(t);
-  t.onTestFinished(() => c.close());
-  const { agent, client } = await seeded(c);
-  c.refuseErase(true);
-  const pressedAt = c.tick();
-  assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
-  // The thread is fenced in memory and by the durable cutoff the marker raised.
-  assert.deepEqual(c.thread.entries(), []);
-  assert.equal(
-    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
-    pressedAt,
-  );
-  assert.deepEqual(
-    await c.client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() }),
-    [],
-  );
-  // The old checkpoint is gone from the database: the marker's successor
-  // stands, empty. The transcript and lines are the refused erasure's, and
-  // stay on disk behind the fences until a deletion takes them.
-  assert.equal(c.standing()?.reset_cleared_at, pressedAt);
-  // The same agent's next ask, and a rebuilt agent's — a credential change
-  // landing now — both see none of the old words.
-  await c.submit(agent, "again");
-  await drainMicrotasks(40);
-  client.release(reply("ok"));
-  await drainMicrotasks(40);
-  await c.stop(agent);
-  const rebuiltClient = heldClient();
-  const rebuilt = c.build(rebuiltClient);
-  await c.submit(rebuilt, "after a rebuild");
-  await drainMicrotasks(40);
-  rebuiltClient.release(reply("ok"));
-  await drainMicrotasks(40);
-  await c.stop(rebuilt);
-});
+it.effect(
+  "a Clear whose rows the store will not remove answers refused, yet the old words reach no context, no window, and no later launch of the brain",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      t.onTestFinished(() => c.close());
+      const { agent, client } = yield* seeded(c);
+      c.refuseErase(true);
+      const pressedAt = c.tick();
+      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.REFUSED);
+      // The thread is fenced in memory and by the durable cutoff the marker raised.
+      assert.deepEqual(c.thread.entries(), []);
+      assert.equal(
+        yield* Effect.promise(() =>
+          c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+        ),
+        pressedAt,
+      );
+      assert.deepEqual(
+        yield* Effect.promise(() =>
+          c.client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() }),
+        ),
+        [],
+      );
+      // The old checkpoint is gone from the database: the marker's successor
+      // stands, empty. The transcript and lines are the refused erasure's, and
+      // stay on disk behind the fences until a deletion takes them.
+      assert.equal(c.standing()?.reset_cleared_at, pressedAt);
+      // The same agent's next ask, and a rebuilt agent's — a credential change
+      // landing now — both see none of the old words.
+      const beforeAgain = client.inputs.length;
+      const again = yield* Effect.promise(() => c.submit(agent, "again"));
+      yield* waitFor(() => client.inputs.length > beforeAgain);
+      client.release(reply("ok"));
+      yield* waitFor(() => agent.request(again)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
+      yield* Effect.promise(() => c.stop(agent));
+      const rebuiltClient = heldClient();
+      const rebuilt = c.build(rebuiltClient);
+      const afterRebuild = yield* Effect.promise(() => c.submit(rebuilt, "after a rebuild"));
+      yield* waitFor(() => rebuiltClient.inputs.length > 0);
+      rebuiltClient.release(reply("ok"));
+      yield* waitFor(
+        () => rebuilt.request(afterRebuild)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED,
+      );
+      yield* Effect.promise(() => c.stop(rebuilt));
+    }),
+);
 
-test("a Clear whose marker the disk refuses answers refused without touching the rows, and still fences every context; the next landed write replaces what the disk kept", async (t) => {
-  const c = await composed(t);
-  t.onTestFinished(() => c.close());
-  const { agent, client } = await seeded(c);
-  c.repo.refuse = true;
-  const pressedAt = c.tick();
-  assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
-  assert.deepEqual(archivesOf(c.root), []);
-  // In memory the old generation stands nowhere: the store holds the marker
-  // successor, the thread is fenced, and the agent's next ask sees no old word.
-  assert.equal(c.store.resetMarker()?.clearedAt, pressedAt);
-  assert.deepEqual(c.thread.entries(), []);
-  c.repo.refuse = false;
-  const next = await c.submit(agent, "again");
-  await drainMicrotasks(40);
-  client.release(reply("ok"));
-  await drainMicrotasks(40);
-  assert.equal(agent.request(next)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  // The acceptance's write replaced the old generation on disk with the marker successor.
-  assert.equal(c.standing()?.reset_cleared_at, pressedAt);
-  await c.stop(agent);
-});
+it.effect(
+  "a Clear whose marker the disk refuses answers refused without touching the rows, and still fences every context; the next landed write replaces what the disk kept",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      t.onTestFinished(() => c.close());
+      const { agent, client } = yield* seeded(c);
+      c.repo.refuse = true;
+      const pressedAt = c.tick();
+      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.REFUSED);
+      assert.deepEqual(archivesOf(c.root), []);
+      // In memory the old generation stands nowhere: the store holds the marker
+      // successor, the thread is fenced, and the agent's next ask sees no old word.
+      assert.equal(c.store.resetMarker()?.clearedAt, pressedAt);
+      assert.deepEqual(c.thread.entries(), []);
+      c.repo.refuse = false;
+      const beforeAgain = client.inputs.length;
+      const next = yield* Effect.promise(() => c.submit(agent, "again"));
+      yield* waitFor(() => client.inputs.length > beforeAgain);
+      client.release(reply("ok"));
+      yield* waitFor(() => agent.request(next)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.equal(agent.request(next)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      // The acceptance's write replaced the old generation on disk with the marker successor.
+      assert.equal(c.standing()?.reset_cleared_at, pressedAt);
+      yield* Effect.promise(() => c.stop(agent));
+    }),
+);
 
-test("a credential rebuild landing while the deletion waits on the disk builds over the successor, never the old checkpoint, and a second Clear during the first is harmless", async (t) => {
-  const c = await composed(t);
-  t.onTestFinished(() => c.close());
-  const { agent, client } = await seeded(c);
-  await c.stop(agent);
-  const release = c.holdErase();
-  c.tick();
-  const clearing = c.clear();
-  // The rebuild: a new agent over the same store, while the rows are still on disk.
-  const rebuiltClient = heldClient();
-  const rebuilt = c.build(rebuiltClient);
-  await rebuilt.ready();
-  await c.submit(rebuilt, "during the wait");
-  await drainMicrotasks(40);
-  rebuiltClient.release(reply("ok"));
-  await drainMicrotasks(40);
-  // A second press while the first still waits: another fence, no harm.
-  c.tick();
-  const second = c.clear();
-  release();
-  assert.equal(await clearing, CONVERSATION_DELETE_OUTCOME.COMPLETE);
-  assert.equal(await second, CONVERSATION_DELETE_OUTCOME.COMPLETE);
-  assert.equal(c.standing()?.session_id, c.store.generationId());
-  assert.equal(client.inputs.length, 1);
-  await c.stop(rebuilt);
-});
+it.effect(
+  "a credential rebuild landing while the deletion waits on the disk builds over the successor, never the old checkpoint, and a second Clear during the first is harmless",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      t.onTestFinished(() => c.close());
+      const { agent, client } = yield* seeded(c);
+      yield* Effect.promise(() => c.stop(agent));
+      const release = c.holdErase();
+      c.tick();
+      const clearing = c.clear();
+      // The rebuild: a new agent over the same store, while the rows are still on disk.
+      const rebuiltClient = heldClient();
+      const rebuilt = c.build(rebuiltClient);
+      yield* Effect.promise(() => rebuilt.ready());
+      const during = yield* Effect.promise(() => c.submit(rebuilt, "during the wait"));
+      yield* waitFor(() => rebuiltClient.inputs.length > 0);
+      rebuiltClient.release(reply("ok"));
+      yield* waitFor(() => rebuilt.request(during)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
+      // A second press while the first still waits: another fence, no harm.
+      c.tick();
+      const second = c.clear();
+      release();
+      assert.equal(yield* Effect.promise(() => clearing), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.equal(yield* Effect.promise(() => second), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.equal(c.standing()?.session_id, c.store.generationId());
+      assert.equal(client.inputs.length, 1);
+      yield* Effect.promise(() => c.stop(rebuilt));
+    }),
+);
 
-test("a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the cutoff the disk held before the press, never the refused press's own fence", async (t) => {
-  const c = await composed(t);
-  t.onTestFinished(() => c.close());
-  const { agent } = await seeded(c);
-  await c.stop(agent);
-  // The first press: fenced in memory, marker refused, the lines still on disk.
-  c.repo.refuse = true;
-  c.tick();
-  assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
-  assert.equal(
-    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
-    undefined,
-  );
-  c.repo.refuse = false;
-  // The second press lands. Its archive must record the cutoff the disk
-  // held before it — none — and not the first press's in-memory fence.
-  const secondAt = c.tick();
-  assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.COMPLETE);
-  assert.equal(
-    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
-    secondAt,
-  );
-  const [archive] = archivesOf(c.root);
-  assert.ok(archive);
-  assert.equal(archive.conversationLines, 2);
-  assert.equal(previousCutoffOf(c.root, archive.archiveId), null);
-});
+it.effect(
+  "a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the cutoff the disk held before the press, never the refused press's own fence",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      t.onTestFinished(() => c.close());
+      const { agent } = yield* seeded(c);
+      yield* Effect.promise(() => c.stop(agent));
+      // The first press: fenced in memory, marker refused, the lines still on disk.
+      c.repo.refuse = true;
+      c.tick();
+      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.REFUSED);
+      assert.equal(
+        yield* Effect.promise(() =>
+          c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+        ),
+        undefined,
+      );
+      c.repo.refuse = false;
+      // The second press lands. Its archive must record the cutoff the disk
+      // held before it — none — and not the first press's in-memory fence.
+      const secondAt = c.tick();
+      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.equal(
+        yield* Effect.promise(() =>
+          c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+        ),
+        secondAt,
+      );
+      const [archive] = archivesOf(c.root);
+      assert.ok(archive);
+      assert.equal(archive.conversationLines, 2);
+      assert.equal(previousCutoffOf(c.root, archive.archiveId), null);
+    }),
+);

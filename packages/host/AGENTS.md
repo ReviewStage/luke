@@ -235,11 +235,12 @@ brain and the one record it hands `LiveSessionService` are built in
 `compose-host.ts`, where the brain composer stands, and handed in as
 `@sidecar/voice/effect`'s `LiveBrainTag`/`LiveRecordTag` layers rather than
 through `compose-live.ts`'s own constructor arguments; its idle, settle, and
-finalize timers are this package's own `timerSeamFromRuntime`
-(`effect/timer-seam.ts`) over the Effect runtime the composition runs on, in
-place of Node's own `setTimeout` — a package-local bridge rather than a
-shared runtime export, since P12-03 deleted `@sidecar/runtime/effect`'s
-`timersFromRuntime` with the `ScheduledTimer` seam it answered.
+finalize timers are `compose-live.ts`'s own inline bridge over the Effect
+runtime the composition runs on, in place of Node's own `setTimeout` — built
+where it is used rather than through a shared module, since P12-03b deleted
+`effect/timer-seam.ts` along with `@sidecar/runtime`'s own copy, finding no
+caller left that could share one instead of keeping the bridge beside the
+code that needs it.
 The live service is the one sink for
 everything Luke says unprompted: `compose-live.ts` takes every briefing from
 the brain, every run's streamed reply to speak, and the two onboarding
@@ -270,12 +271,14 @@ lowest one that holds both.
 ## The test scaffolding is behind its own door
 
 `@sidecar/host/testing` holds the brain composition and the operator a
-window's ask crosses, `testKernelLayer`, every seam
-`hostAssemblyLayer`/`hostStandingLayer` need over a fixture state root, and
-this package's own `drainMicrotasks` (`testing/drain.ts`), a package-owned
-microtask wait for the plain (non-`it.effect`) suites still on one, so
+window's ask crosses, `testKernelLayer`, and every seam
+`hostAssemblyLayer`/`hostStandingLayer` need over a fixture state root, so
 nothing that ships can reach any of them. Its clock is Effect's own — a
 `TestClock` under `it.effect`, driven with `TestClock.adjust` rather than a
-hand-advanced fake clock — and the one fixture every other test in the
+hand-advanced fake clock — and a suite that waits on something other than the
+clock polls the predicate it is actually waiting on with `Effect.yieldNow()`
+rather than pumping a fixed microtask drain; P12-03b deleted this package's
+own `drainMicrotasks` (`testing/drain.ts`) once every suite that held one
+moved to that shape. The one fixture every other test in the
 repository still shares, a temporary directory, is in
 `@sidecar/runtime/testing`.

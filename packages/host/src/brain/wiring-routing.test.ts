@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
@@ -35,10 +36,23 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Runtime } from "effect";
+import { Effect, Runtime } from "effect";
 import { type TestContext, test } from "vitest";
-import { drainMicrotasks } from "../testing/index.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
+
+/**
+ * Polls a synchronous condition by yielding to Effect's own fiber scheduler,
+ * which correctly interleaves with real pending Promises.
+ */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
 
 /**
  * The wiring as the main process composes it, with the model, the disk, and
@@ -284,61 +298,69 @@ test("each conversation's standing context is built for its own key", async (t) 
   await c.wiring.rebuild();
 });
 
-test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async (t) => {
-  const c = await composed(t);
-  await c.wiring.rebuild();
-  c.wiring.rosterLook();
-  await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
-  const abcKey = observedSessionKey(ABC);
-  const defKey = observedSessionKey(DEF);
-  assert.deepEqual(c.ensured.map((entry) => entry.sessionKey).sort(), [abcKey, defKey].sort());
-  assert.equal(conversationKindOf(abcKey), CONVERSATION_KIND.OBSERVED);
-  assert.deepEqual(observedSessionRefOf(abcKey), ABC);
-  assert.ok(c.wiring.current(abcKey));
-  assert.ok(c.wiring.current(defKey));
-  assert.equal(c.inputs.length, 2);
-  for (const input of c.inputs) {
-    const texts = itemTexts(input).join("\n");
-    const readsAbc = texts.includes(SECRET("abc"));
-    const readsDef = texts.includes(SECRET("def"));
-    // Exactly one session's transcript per conversation: never both.
-    assert.notEqual(readsAbc, readsDef);
-  }
-  assert.deepEqual(c.reads, [ABC, DEF]);
-  // Main was handed nothing to read and opened no turn of its own.
-  const notices = c.wiring.pendingNotices();
-  assert.equal(notices.length, 2);
-  // Each notice names its source session by the label the host resolved and
-  // carries the trigger as the typed vocabulary, never a transcript's words.
-  assert.deepEqual(notices.map((notice) => notice.label).sort(), [
-    "Claude Code: abc",
-    "Claude Code: def",
-  ]);
-  assert.ok(notices.every((notice) => notice.trigger === BRAIN_TURN_TRIGGER.ROSTER));
-  const main = c.wiring.current();
-  assert.ok(main);
-  const accepted = await main.submitAsk({
-    submissionId: "s-1",
-    question: "what happened?",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
-  assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  await until(() => c.inputs.length >= 3);
-  await drainMicrotasks(60);
-  assert.deepEqual(c.wiring.pendingNotices(), []);
-  // A second look at unchanged sessions opens no inference in either conversation.
-  await c.wiring.rosterLook();
-  await pause(200);
-  assert.equal(c.inputs.length, 3);
-  // A session gone from the roster has its idle conversation stood down; the other stands.
-  c.roster.splice(1, 1);
-  c.wiring.rosterLook();
-  await until(() => c.wiring.current(defKey) === undefined);
-  assert.equal(c.wiring.current(defKey), undefined);
-  assert.ok(c.wiring.current(abcKey));
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      yield* Effect.promise(() => c.wiring.rebuild());
+      c.wiring.rosterLook();
+      yield* Effect.promise(() =>
+        until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2),
+      );
+      const abcKey = observedSessionKey(ABC);
+      const defKey = observedSessionKey(DEF);
+      assert.deepEqual(c.ensured.map((entry) => entry.sessionKey).sort(), [abcKey, defKey].sort());
+      assert.equal(conversationKindOf(abcKey), CONVERSATION_KIND.OBSERVED);
+      assert.deepEqual(observedSessionRefOf(abcKey), ABC);
+      assert.ok(c.wiring.current(abcKey));
+      assert.ok(c.wiring.current(defKey));
+      assert.equal(c.inputs.length, 2);
+      for (const input of c.inputs) {
+        const texts = itemTexts(input).join("\n");
+        const readsAbc = texts.includes(SECRET("abc"));
+        const readsDef = texts.includes(SECRET("def"));
+        // Exactly one session's transcript per conversation: never both.
+        assert.notEqual(readsAbc, readsDef);
+      }
+      assert.deepEqual(c.reads, [ABC, DEF]);
+      // Main was handed nothing to read and opened no turn of its own.
+      const notices = c.wiring.pendingNotices();
+      assert.equal(notices.length, 2);
+      // Each notice names its source session by the label the host resolved and
+      // carries the trigger as the typed vocabulary, never a transcript's words.
+      assert.deepEqual(notices.map((notice) => notice.label).sort(), [
+        "Claude Code: abc",
+        "Claude Code: def",
+      ]);
+      assert.ok(notices.every((notice) => notice.trigger === BRAIN_TURN_TRIGGER.ROSTER));
+      const main = c.wiring.current();
+      assert.ok(main);
+      const accepted = yield* Effect.promise(() =>
+        main.submitAsk({
+          submissionId: "s-1",
+          question: "what happened?",
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        }),
+      );
+      assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+      yield* Effect.promise(() => until(() => c.inputs.length >= 3));
+      yield* waitFor(() => c.wiring.pendingNotices().length === 0);
+      assert.deepEqual(c.wiring.pendingNotices(), []);
+      // A second look at unchanged sessions opens no inference in either conversation.
+      c.wiring.rosterLook();
+      yield* Effect.promise(() => pause(200));
+      assert.equal(c.inputs.length, 3);
+      // A session gone from the roster has its idle conversation stood down; the other stands.
+      c.roster.splice(1, 1);
+      c.wiring.rosterLook();
+      yield* Effect.promise(() => until(() => c.wiring.current(defKey) === undefined));
+      assert.equal(c.wiring.current(defKey), undefined);
+      assert.ok(c.wiring.current(abcKey));
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
 test("a roster look opens a cloud session's conversation like a local one, reads no message, and stands it down when the session leaves", async (t) => {
   const c = await composed(t);
@@ -379,174 +401,208 @@ test("a roster look opens a cloud session's conversation like a local one, reads
   await c.wiring.rebuild();
 });
 
-test("hooks route to the session's own conversation, main is never woken by one, and a held briefing returns to its source", async (t) => {
-  const c = await composed(t);
-  await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
-      identity: ABC,
-      session: session("abc"),
-      atMs: 1_800_000_000_000,
-    },
-  ]);
-  await until(() => c.wiring.current(abcKey)?.pendingWakes() === 1);
-  const observed = c.wiring.current(abcKey);
-  assert.ok(observed);
-  assert.equal(observed.pendingWakes(), 1);
-  assert.equal(c.wiring.current()?.pendingWakes(), 0);
-  assert.equal(c.wiring.current(observedSessionKey(DEF)), undefined);
-  // A briefing decided by that conversation carries its source, and a held one is re-decided there.
-  c.wiring.releaseHeld([
-    { briefing: "abc finished", decidedAt: 1, sessionKey: abcKey },
-    { briefing: "old news", decidedAt: 1 },
-  ]);
-  const releasesSoFar = () =>
-    c.inputs
-      .map((input) => itemTexts(input).join("\n"))
-      .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
-  await until(() => releasesSoFar().length >= 2);
-  await drainMicrotasks(60);
-  const releases = releasesSoFar();
-  assert.equal(releases.length, 2);
-  // The wake rode into the source conversation's hold-release turn, and main's carried none.
-  assert.equal(observed.pendingWakes(), 0);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "hooks route to the session's own conversation, main is never woken by one, and a held briefing returns to its source",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      yield* Effect.promise(() => c.wiring.rebuild());
+      const abcKey = observedSessionKey(ABC);
+      c.wiring.wake([
+        {
+          kind: BRAIN_WAKE_KIND.HOOK,
+          hookEvent: "Stop",
+          identity: ABC,
+          session: session("abc"),
+          atMs: 1_800_000_000_000,
+        },
+      ]);
+      yield* Effect.promise(() => until(() => c.wiring.current(abcKey)?.pendingWakes() === 1));
+      const observed = c.wiring.current(abcKey);
+      assert.ok(observed);
+      assert.equal(observed.pendingWakes(), 1);
+      assert.equal(c.wiring.current()?.pendingWakes(), 0);
+      assert.equal(c.wiring.current(observedSessionKey(DEF)), undefined);
+      // A briefing decided by that conversation carries its source, and a held one is re-decided there.
+      c.wiring.releaseHeld([
+        { briefing: "abc finished", decidedAt: 1, sessionKey: abcKey },
+        { briefing: "old news", decidedAt: 1 },
+      ]);
+      const releasesSoFar = () =>
+        c.inputs
+          .map((input) => itemTexts(input).join("\n"))
+          .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
+      yield* Effect.promise(() => until(() => releasesSoFar().length >= 2));
+      yield* waitFor(() => observed.pendingWakes() === 0);
+      const releases = releasesSoFar();
+      assert.equal(releases.length, 2);
+      // The wake rode into the source conversation's hold-release turn, and main's carried none.
+      assert.equal(observed.pendingWakes(), 0);
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main", async (t) => {
-  const c = await composed(t);
-  await c.wiring.rebuild();
-  const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
-  c.wiring.releaseHeld([
-    { briefing: "a session that has stood down", decidedAt: 1, sessionKey: goneKey },
-  ]);
-  const releases = () =>
-    c.inputs
-      .map((input) => itemTexts(input).join("\n"))
-      .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
-  await until(() => releases().length >= 1);
-  // The release's turn ends and leaves its notice before anything is judged.
-  await until(() => !(c.wiring.current(goneKey)?.busy() ?? true));
-  await until(() => c.wiring.pendingNotices().length >= 1);
-  await drainMicrotasks(60);
-  // The source conversation is opened again for the briefing it decided:
-  // it, not main, re-decides it, and the briefing is neither dropped nor
-  // sent to another session's conversation.
-  assert.ok(c.wiring.current(goneKey));
-  assert.ok(c.ensured.some((entry) => entry.sessionKey === goneKey));
-  assert.equal(releases().length, 1);
-  // Main read nothing of it: the one notice is the source's own turn.
-  assert.equal(c.wiring.pendingNotices().length, 1);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      yield* Effect.promise(() => c.wiring.rebuild());
+      const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
+      c.wiring.releaseHeld([
+        { briefing: "a session that has stood down", decidedAt: 1, sessionKey: goneKey },
+      ]);
+      const releases = () =>
+        c.inputs
+          .map((input) => itemTexts(input).join("\n"))
+          .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
+      yield* Effect.promise(() => until(() => releases().length >= 1));
+      // The release's turn ends and leaves its notice before anything is judged.
+      yield* Effect.promise(() => until(() => !(c.wiring.current(goneKey)?.busy() ?? true)));
+      yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length >= 1));
+      yield* waitFor(
+        () =>
+          c.wiring.current(goneKey) !== undefined &&
+          c.ensured.some((entry) => entry.sessionKey === goneKey),
+      );
+      // The source conversation is opened again for the briefing it decided:
+      // it, not main, re-decides it, and the briefing is neither dropped nor
+      // sent to another session's conversation.
+      assert.ok(c.wiring.current(goneKey));
+      assert.ok(c.ensured.some((entry) => entry.sessionKey === goneKey));
+      assert.equal(releases().length, 1);
+      // Main read nothing of it: the one notice is the source's own turn.
+      assert.equal(c.wiring.pendingNotices().length, 1);
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends", async (t) => {
-  const gate: Gate = { holds: (texts) => texts.includes(SECRET("abc")), release: () => undefined };
-  const c = await composed(t, gate);
-  await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.rosterLook();
-  await until(() => c.inputs.some((input) => itemTexts(input).join("\n").includes(SECRET("abc"))));
-  // The analysis is out at the model, an unrecorded observation turn.
-  assert.ok(c.wiring.current(abcKey)?.busy());
-  // The session disappears from the roster and the look runs again.
-  c.roster.splice(
-    c.roster.findIndex((held) => held.providerSessionId === "abc"),
-    1,
-  );
-  c.wiring.rosterLook();
-  await drainMicrotasks(60);
-  await pause(20);
-  // Still standing: an analysis in flight is never cut mid-thought.
-  assert.ok(c.wiring.current(abcKey));
-  gate.release();
-  await until(() => !(c.wiring.current(abcKey)?.busy() ?? false));
-  await until(() => c.wiring.pendingNotices().some((notice) => notice.label.includes("abc")));
-  // The next look, with the analysis over and nothing owed, stands it down.
-  c.wiring.rosterLook();
-  await until(() => c.wiring.current(abcKey) === undefined);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends",
+  (t) =>
+    Effect.gen(function* () {
+      const gate: Gate = {
+        holds: (texts) => texts.includes(SECRET("abc")),
+        release: () => undefined,
+      };
+      const c = yield* Effect.promise(() => composed(t, gate));
+      yield* Effect.promise(() => c.wiring.rebuild());
+      const abcKey = observedSessionKey(ABC);
+      c.wiring.rosterLook();
+      yield* Effect.promise(() =>
+        until(() => c.inputs.some((input) => itemTexts(input).join("\n").includes(SECRET("abc")))),
+      );
+      // The analysis is out at the model, an unrecorded observation turn.
+      assert.ok(c.wiring.current(abcKey)?.busy());
+      // The session disappears from the roster and the look runs again.
+      c.roster.splice(
+        c.roster.findIndex((held) => held.providerSessionId === "abc"),
+        1,
+      );
+      c.wiring.rosterLook();
+      // Nothing should stand it down while the analysis is still in flight:
+      // give any wrongful teardown a full round to occur before asserting
+      // its absence.
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      yield* Effect.promise(() => pause(20));
+      // Still standing: an analysis in flight is never cut mid-thought.
+      assert.ok(c.wiring.current(abcKey));
+      gate.release();
+      yield* Effect.promise(() => until(() => !(c.wiring.current(abcKey)?.busy() ?? false)));
+      yield* Effect.promise(() =>
+        until(() => c.wiring.pendingNotices().some((notice) => notice.label.includes("abc"))),
+      );
+      // The next look, with the analysis over and nothing owed, stands it down.
+      c.wiring.rosterLook();
+      yield* Effect.promise(() => until(() => c.wiring.current(abcKey) === undefined));
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope", async (t) => {
-  const c = await composed(t);
-  await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.rosterLook();
-  await until(() => c.wiring.pendingNotices().length === 2);
-  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
-  assert.equal(c.repositories.get(abcKey), 1);
-  // abc leaves the roster: the look stands its conversation down, and a hook
-  // for it lands in the same tick, while the close is still draining.
-  c.roster.splice(
-    c.roster.findIndex((held) => held.providerSessionId === "abc"),
-    1,
-  );
-  c.wiring.rosterLook();
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
-      identity: ABC,
-      session: session("abc"),
-      atMs: 2,
-    },
-  ]);
-  await until(() => c.wiring.pendingNotices().length === 3);
-  await drainMicrotasks(60);
-  // One conversation stands for abc, on the second store built for it; the
-  // first was let go of before the second was opened.
-  assert.ok(c.wiring.current(abcKey));
-  assert.equal(c.repositories.get(abcKey), 2);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      yield* Effect.promise(() => c.wiring.rebuild());
+      const abcKey = observedSessionKey(ABC);
+      c.wiring.rosterLook();
+      yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 2));
+      yield* Effect.promise(() => until(() => !(c.wiring.current(abcKey)?.busy() ?? true)));
+      assert.equal(c.repositories.get(abcKey), 1);
+      // abc leaves the roster: the look stands its conversation down, and a hook
+      // for it lands in the same tick, while the close is still draining.
+      c.roster.splice(
+        c.roster.findIndex((held) => held.providerSessionId === "abc"),
+        1,
+      );
+      c.wiring.rosterLook();
+      c.wiring.wake([
+        {
+          kind: BRAIN_WAKE_KIND.HOOK,
+          hookEvent: "Stop",
+          identity: ABC,
+          session: session("abc"),
+          atMs: 2,
+        },
+      ]);
+      yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 3));
+      yield* waitFor(() => c.repositories.get(abcKey) === 2);
+      // One conversation stands for abc, on the second store built for it; the
+      // first was let go of before the second was opened.
+      assert.ok(c.wiring.current(abcKey));
+      assert.equal(c.repositories.get(abcKey), 2);
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store", async (t) => {
-  const c = await composed(t);
-  await c.wiring.rebuild();
-  const abcKey = observedSessionKey(ABC);
-  c.wiring.rosterLook();
-  await until(() => c.wiring.pendingNotices().length === 2);
-  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
-  assert.equal(c.repositories.get(abcKey), 1);
-  const writesBefore = c.writes.get(abcKey) ?? 0;
-  const buildsBefore = c.builds();
-  // The close has begun and is awaiting its drain when the rebuild lands in
-  // the same tick: the interleave is fixed by construction, not by timing.
-  const closing = c.wiring.closeConversation(abcKey);
-  await c.wiring.rebuild();
-  await closing;
-  assert.equal(c.wiring.current(abcKey), undefined);
-  // The rebuild built main's brain and def's, and nothing onto the host the
-  // close was about to discard, where no retire could ever reach it; the
-  // first envelope took no write after its conversation stood down.
-  await drainMicrotasks(60);
-  assert.equal(c.builds() - buildsBefore, 2);
-  assert.equal(c.writes.get(abcKey) ?? 0, writesBefore);
-  // Reopened for a hook, the session's conversation stands on a second store
-  // built after the first was let go, and it is the only one.
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
-      identity: ABC,
-      session: session("abc"),
-      atMs: 2,
-    },
-  ]);
-  await until(() => c.wiring.pendingNotices().length === 3);
-  assert.ok(c.wiring.current(abcKey));
-  assert.equal(c.repositories.get(abcKey), 2);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store",
+  (t) =>
+    Effect.gen(function* () {
+      const c = yield* Effect.promise(() => composed(t));
+      yield* Effect.promise(() => c.wiring.rebuild());
+      const abcKey = observedSessionKey(ABC);
+      c.wiring.rosterLook();
+      yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 2));
+      yield* Effect.promise(() => until(() => !(c.wiring.current(abcKey)?.busy() ?? true)));
+      assert.equal(c.repositories.get(abcKey), 1);
+      const writesBefore = c.writes.get(abcKey) ?? 0;
+      const buildsBefore = c.builds();
+      // The close has begun and is awaiting its drain when the rebuild lands in
+      // the same tick: the interleave is fixed by construction, not by timing.
+      const closing = c.wiring.closeConversation(abcKey);
+      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* Effect.promise(() => closing);
+      assert.equal(c.wiring.current(abcKey), undefined);
+      // The rebuild built main's brain and def's, and nothing onto the host the
+      // close was about to discard, where no retire could ever reach it; the
+      // first envelope took no write after its conversation stood down.
+      yield* waitFor(() => c.builds() - buildsBefore === 2);
+      assert.equal(c.builds() - buildsBefore, 2);
+      assert.equal(c.writes.get(abcKey) ?? 0, writesBefore);
+      // Reopened for a hook, the session's conversation stands on a second store
+      // built after the first was let go, and it is the only one.
+      c.wiring.wake([
+        {
+          kind: BRAIN_WAKE_KIND.HOOK,
+          hookEvent: "Stop",
+          identity: ABC,
+          session: session("abc"),
+          atMs: 2,
+        },
+      ]);
+      yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 3));
+      assert.ok(c.wiring.current(abcKey));
+      assert.equal(c.repositories.get(abcKey), 2);
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
 test("a conversation reopened while it stands down waits for the close and stands on its own new store", async (t) => {
   const c = await composed(t);

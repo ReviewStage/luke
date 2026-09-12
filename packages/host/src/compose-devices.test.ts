@@ -17,7 +17,6 @@ import {
   deviceStateFrom,
 } from "./compose-devices.js";
 import { DEVICE_POLL_INTERVAL_MS, type DevicePresenceReport } from "./device-presence.js";
-import { drainMicrotasks } from "./testing/index.js";
 
 const INSTALLATION_ID = "0F8FAD5B-D9CB-469F-A165-70867728950E";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -79,19 +78,40 @@ function cadence(
   });
 }
 
+/** Gives the fiber scheduler turns until `condition` holds, or fails the test if it never does. */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
+
+/** Gives the fiber scheduler turns without asserting anything, for a beat expected to change nothing. */
+function settle(rounds = 20): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+  });
+}
+
+/** The arming's own beat let run: it is a fiber the gate forked, not the arming's own await. */
+const firstBeat = waitFor;
+
 /**
  * The clock moved to the cadence's next beat, and the calls that beat awaits
  * let run: advancing the test clock resumes the fiber, and the beat's own
- * awaits settle on the immediate queue rather than on it.
+ * awaits settle as the fiber scheduler is given turns to run them.
  */
-/** The arming's own beat let run: it is a fiber the gate forked, not the arming's own await. */
-const firstBeat = (): Effect.Effect<void> => Effect.promise(() => drainMicrotasks(20));
-
-const nextBeat = (): Effect.Effect<void> =>
-  Effect.gen(function* () {
+function nextBeat(condition: () => boolean): Effect.Effect<void> {
+  return Effect.gen(function* () {
     yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
-    yield* Effect.promise(() => drainMicrotasks(20));
+    yield* waitFor(condition);
   });
+}
 
 function storedState(directory: string): DeviceState | undefined {
   const parsed: UnparsedWireValue = JSON.parse(
@@ -109,7 +129,7 @@ it.scoped(
       const subject = yield* cadence(directory, client);
 
       yield* subject.start;
-      yield* firstBeat();
+      yield* firstBeat(() => calls.length === 2);
 
       assert.deepEqual(calls, [
         {
@@ -126,10 +146,10 @@ it.scoped(
       assert.equal(subject.standing, true);
 
       yield* subject.start;
-      yield* firstBeat();
+      yield* firstBeat(() => calls.length === 2);
       assert.equal(calls.length, 2);
 
-      yield* nextBeat();
+      yield* nextBeat(() => calls.length === 3);
       assert.deepEqual(
         calls.map((call) => call.kind),
         ["register", "poll", "poll"],
@@ -146,7 +166,7 @@ it.scoped(
       const first = fakeClient({});
       const subject = yield* cadence(directory, first.client);
       yield* subject.start;
-      yield* firstBeat();
+      yield* firstBeat(() => first.calls.length === 2);
       yield* subject.stop({ forget: { accessToken: "leaving" } });
 
       assert.deepEqual(first.calls.at(-1), {
@@ -157,7 +177,8 @@ it.scoped(
       assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
       assert.equal(subject.standing, false);
       const settled = first.calls.length;
-      yield* nextBeat();
+      yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
+      yield* settle();
       assert.equal(first.calls.length, settled, "a stopped cadence keeps no beat");
 
       const relaunched = fakeClient({ register: () => ({ deviceId: OTHER_DEVICE_ID }) });
@@ -165,7 +186,7 @@ it.scoped(
         throw new Error("a stored installation id is never minted again");
       });
       yield* next.start;
-      yield* firstBeat();
+      yield* firstBeat(() => relaunched.calls.length === 2);
       assert.deepEqual(relaunched.calls[0]?.body, {
         platform: DEVICE_PLATFORM.MACOS,
         installationId: INSTALLATION_ID.toLowerCase(),
@@ -181,11 +202,12 @@ it.scoped("a stop without a departing account ends the cadence and forgets nothi
     const { client, calls } = fakeClient({});
     const subject = yield* cadence(directory, client);
     yield* subject.start;
-    yield* firstBeat();
+    yield* firstBeat(() => calls.length === 2);
 
     yield* subject.stop({ forget: false });
 
-    yield* nextBeat();
+    yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
+    yield* settle();
     assert.deepEqual(
       calls.map((call) => call.kind),
       ["register", "poll"],
@@ -218,12 +240,12 @@ it.scoped(
         () => reports.shift() ?? PRESENT,
       );
       yield* subject.start;
-      yield* firstBeat();
+      yield* firstBeat(() => calls.length === 2);
 
-      yield* nextBeat();
+      yield* nextBeat(() => calls.length === 3);
       assert.deepEqual(calls.at(-1), { kind: "poll", body: { deviceId: DEVICE_ID, ...PRESENT } });
 
-      yield* nextBeat();
+      yield* nextBeat(() => calls.length === 6);
       assert.deepEqual(
         calls.map((call) => call.kind),
         ["register", "poll", "poll", "poll", "register", "poll"],
@@ -249,12 +271,12 @@ it.scoped(
       const subject = yield* cadence(directory, client);
 
       yield* subject.start;
-      yield* firstBeat();
+      yield* firstBeat(() => calls.length === 1);
       assert.equal(subject.deviceId(), undefined);
       assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
 
       answer = { deviceId: DEVICE_ID };
-      yield* nextBeat();
+      yield* nextBeat(() => calls.length === 3);
       assert.deepEqual(
         calls.map((call) => call.kind),
         ["register", "register", "poll"],
@@ -276,11 +298,12 @@ it.scoped(
       };
       const racing = yield* cadence(directory, slow);
       yield* racing.start;
-      yield* firstBeat();
-      yield* nextBeat();
+      yield* firstBeat(() => polls === 1);
+      yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
+      yield* waitFor(() => polls === 2);
       yield* racing.stop({ forget: false });
       release?.();
-      yield* Effect.promise(() => drainMicrotasks(20));
+      yield* settle();
       assert.equal(
         calls.filter((call) => call.kind === "register").length,
         2,
@@ -306,15 +329,16 @@ it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t
       reported,
     );
     yield* subject.start;
-    yield* firstBeat();
+    yield* firstBeat(() => calls.length === 2);
     assert.equal(reported.length, 0);
 
     failing = true;
-    yield* nextBeat();
+    yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
+    yield* waitFor(() => reported.length === 1);
     assert.equal(reported.length, 1);
 
     failing = false;
-    yield* nextBeat();
+    yield* nextBeat(() => calls.length === 3);
     assert.deepEqual(
       calls.map((call) => call.kind),
       ["register", "poll", "poll"],
@@ -346,15 +370,15 @@ it.scoped(
       };
       const subject = yield* cadence(directory, gated);
       yield* subject.start;
-      yield* firstBeat();
+      yield* firstBeat(() => calls.length === 1);
       yield* subject.stop({ forget: { accessToken: "leaving" } });
 
       yield* subject.start;
-      yield* firstBeat();
+      yield* settle();
       assert.equal(calls.length, 1, "the next registration waits for the one on the wire");
 
       release?.();
-      yield* firstBeat();
+      yield* firstBeat(() => calls.length === 3);
       assert.deepEqual(
         calls.map((call) => call.kind),
         ["register", "register", "poll"],

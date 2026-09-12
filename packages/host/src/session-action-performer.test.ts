@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -26,11 +27,29 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import { createSessionActionPerformer } from "./session-action-performer.js";
 import type { SettingsStore } from "./settings-store.js";
-import { drainMicrotasks } from "./testing/index.js";
+
+/** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
+
+/** Ticks Effect's scheduler for a fixed span, for a wait with no crisp boolean to check (a negative assertion that nothing landed). */
+function settleMicrotasks(rounds = 100): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let tick = 0; tick < rounds; tick += 1) yield* Effect.yieldNow();
+  });
+}
 
 /*
  * Every write the brain asks for is carried to the service, which admits it
@@ -207,154 +226,172 @@ function recordingOpens() {
   };
 }
 
-test("a create whose turn ends while the stored defaults are read never reaches the service", async () => {
-  const settings = heldSettings();
-  const { performer, recorded } = fixture({ settingsStore: settings.store });
-  let revoked = false;
-  const pending = performer.perform(CREATE, { isRevoked: () => revoked });
-  await drainMicrotasks(10);
-  assert.equal(settings.reads(), 1);
-  assert.deepEqual(recorded.carried, []);
-  revoked = true;
-  settings.release();
-  const result = await pending;
-  assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(result.reason, ACTION_REFUSAL.TURN_OVER);
-  assert.deepEqual(recorded.carried, []);
-});
+it.effect(
+  "a create whose turn ends while the stored defaults are read never reaches the service",
+  () =>
+    Effect.gen(function* () {
+      const settings = heldSettings();
+      const { performer, recorded } = fixture({ settingsStore: settings.store });
+      let revoked = false;
+      const pending = performer.perform(CREATE, { isRevoked: () => revoked });
+      yield* waitFor(() => settings.reads() === 1);
+      assert.equal(settings.reads(), 1);
+      assert.deepEqual(recorded.carried, []);
+      revoked = true;
+      settings.release();
+      const result = yield* Effect.promise(() => pending);
+      assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(result.reason, ACTION_REFUSAL.TURN_OVER);
+      assert.deepEqual(recorded.carried, []);
+    }),
+);
 
-test("a spawn whose turn ends while the stored defaults are read never reaches the service", async () => {
-  const settings = heldSettings();
-  const { performer, recorded } = fixture({ settingsStore: settings.store });
-  let revoked = false;
-  const pending = performer.perform(SPAWN, { isRevoked: () => revoked });
-  await drainMicrotasks(10);
-  assert.equal(settings.reads(), 1);
-  revoked = true;
-  settings.release();
-  const result = await pending;
-  assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(result.reason, ACTION_REFUSAL.TURN_OVER);
-  assert.deepEqual(recorded.carried, []);
-});
+it.effect(
+  "a spawn whose turn ends while the stored defaults are read never reaches the service",
+  () =>
+    Effect.gen(function* () {
+      const settings = heldSettings();
+      const { performer, recorded } = fixture({ settingsStore: settings.store });
+      let revoked = false;
+      const pending = performer.perform(SPAWN, { isRevoked: () => revoked });
+      yield* waitFor(() => settings.reads() === 1);
+      assert.equal(settings.reads(), 1);
+      revoked = true;
+      settings.release();
+      const result = yield* Effect.promise(() => pending);
+      assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(result.reason, ACTION_REFUSAL.TURN_OVER);
+      assert.deepEqual(recorded.carried, []);
+    }),
+);
 
-test("a create whose turn is cancelled while the stored defaults are read settles at once, and the late read lands nothing", async () => {
-  const settings = heldSettings();
-  const { performer, recorded } = fixture({ settingsStore: settings.store });
-  const controller = new AbortController();
-  const pending = performer.perform(CREATE, {
-    isRevoked: () => controller.signal.aborted,
-    signal: controller.signal,
-  });
-  await drainMicrotasks(10);
-  assert.equal(settings.reads(), 1);
-  controller.abort();
-  // Settles without the read being released.
-  const result = await pending;
-  assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
-  settings.release();
-  await drainMicrotasks(10);
-  assert.deepEqual(recorded.carried, []);
-  // A call with no signal waits the read out, as before.
-  const direct = performer.perform(CREATE, { isRevoked: () => false });
-  await drainMicrotasks(10);
-  settings.release();
-  assert.equal((await direct).status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.equal(recorded.carried.length, 1);
-});
+it.effect(
+  "a create whose turn is cancelled while the stored defaults are read settles at once, and the late read lands nothing",
+  () =>
+    Effect.gen(function* () {
+      const settings = heldSettings();
+      const { performer, recorded } = fixture({ settingsStore: settings.store });
+      const controller = new AbortController();
+      const pending = performer.perform(CREATE, {
+        isRevoked: () => controller.signal.aborted,
+        signal: controller.signal,
+      });
+      yield* waitFor(() => settings.reads() === 1);
+      assert.equal(settings.reads(), 1);
+      controller.abort();
+      // Settles without the read being released.
+      const result = yield* Effect.promise(() => pending);
+      assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
+      settings.release();
+      yield* settleMicrotasks();
+      assert.deepEqual(recorded.carried, []);
+      // A call with no signal waits the read out, as before.
+      const direct = performer.perform(CREATE, { isRevoked: () => false });
+      yield* waitFor(() => settings.reads() === 2);
+      settings.release();
+      assert.equal((yield* Effect.promise(() => direct)).status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(recorded.carried.length, 1);
+    }),
+);
 
-test("a create carries the project, the task, and the stored pairing, and the session the provider made rides back as the created session", async () => {
-  const settings = heldSettings({
-    [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: { agent: "claude", model: "fable-5", effort: "high" },
-  });
-  const { performer, recorded } = fixture({
-    settingsStore: settings.store,
-    creation: {
-      answer: { result: ACTION_RESULT_STATUS.ACCEPTED, providerSessionId: "session-new" },
-    },
-  });
+it.effect(
+  "a create carries the project, the task, and the stored pairing, and the session the provider made rides back as the created session",
+  () =>
+    Effect.gen(function* () {
+      const settings = heldSettings({
+        [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: { agent: "claude", model: "fable-5", effort: "high" },
+      });
+      const { performer, recorded } = fixture({
+        settingsStore: settings.store,
+        creation: {
+          answer: { result: ACTION_RESULT_STATUS.ACCEPTED, providerSessionId: "session-new" },
+        },
+      });
 
-  const creating = performer.perform(CREATE, { isRevoked: () => false });
-  await drainMicrotasks(10);
-  settings.release();
-  const result = await creating;
+      const creating = performer.perform(CREATE, { isRevoked: () => false });
+      yield* waitFor(() => settings.reads() === 1);
+      settings.release();
+      const result = yield* Effect.promise(() => creating);
 
-  assert.deepEqual(result, {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    createdSession: {
-      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-      providerSessionId: "session-new",
-    },
-  });
-  assert.deepEqual(recorded.carried, [
-    {
-      route: "workspace",
-      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-      providerSessionId: undefined,
-      ask: {
-        providerProjectId: "project-1",
-        agent: "claude",
-        model: "fable-5",
-        effort: "high",
-        name: undefined,
-        task: "add tests",
+      assert.deepEqual(result, {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        createdSession: {
+          providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+          providerSessionId: "session-new",
+        },
+      });
+      assert.deepEqual(recorded.carried, [
+        {
+          route: "workspace",
+          providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+          providerSessionId: undefined,
+          ask: {
+            providerProjectId: "project-1",
+            agent: "claude",
+            model: "fable-5",
+            effort: "high",
+            name: undefined,
+            task: "add tests",
+          },
+        },
+      ]);
+      // The created session waits to be opened by the pass that first reports
+      // it, the default is remembered, the roster is drawn again, and the
+      // creation is counted once.
+      assert.deepEqual(recorded.expected, [
+        { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, providerSessionId: "session-new" },
+      ]);
+      assert.equal(recorded.createdOpens, 1);
+      assert.deepEqual(recorded.remembered, [
+        [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "project-1", undefined],
+      ]);
+      assert.equal(recorded.refreshes, 1);
+      assert.deepEqual(recorded.events, [PRODUCT_EVENT.SESSION_ACTION_SEND]);
+    }),
+);
+
+it.effect("a spawn carries the stored model only for the very agent it pairs with", () =>
+  Effect.gen(function* () {
+    const paired = heldSettings({
+      [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: { agent: "claude", model: "fable-5" },
+    });
+    const other = heldSettings({
+      [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5", effort: "high" },
+    });
+    const withPair = fixture({ settingsStore: paired.store });
+    const withOther = fixture({ settingsStore: other.store });
+
+    const spawning = withPair.performer.perform(SPAWN, { isRevoked: () => false });
+    yield* waitFor(() => paired.reads() === 1);
+    paired.release();
+    assert.equal((yield* Effect.promise(() => spawning)).status, ACTION_RESULT_STATUS.ACCEPTED);
+    const unpaired = withOther.performer.perform(SPAWN, { isRevoked: () => false });
+    yield* waitFor(() => other.reads() === 1);
+    other.release();
+    assert.equal((yield* Effect.promise(() => unpaired)).status, ACTION_RESULT_STATUS.ACCEPTED);
+
+    assert.deepEqual(withPair.recorded.carried, [
+      {
+        route: "agent",
+        ...WORKSPACE_IDENTITY,
+        ask: {
+          agent: "claude",
+          model: "fable-5",
+          effort: undefined,
+          name: undefined,
+          task: undefined,
+        },
       },
-    },
-  ]);
-  // The created session waits to be opened by the pass that first reports
-  // it, the default is remembered, the roster is drawn again, and the
-  // creation is counted once.
-  assert.deepEqual(recorded.expected, [
-    { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, providerSessionId: "session-new" },
-  ]);
-  assert.equal(recorded.createdOpens, 1);
-  assert.deepEqual(recorded.remembered, [
-    [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "project-1", undefined],
-  ]);
-  assert.equal(recorded.refreshes, 1);
-  assert.deepEqual(recorded.events, [PRODUCT_EVENT.SESSION_ACTION_SEND]);
-});
-
-test("a spawn carries the stored model only for the very agent it pairs with", async () => {
-  const paired = heldSettings({
-    [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: { agent: "claude", model: "fable-5" },
-  });
-  const other = heldSettings({
-    [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5", effort: "high" },
-  });
-  const withPair = fixture({ settingsStore: paired.store });
-  const withOther = fixture({ settingsStore: other.store });
-
-  const spawning = withPair.performer.perform(SPAWN, { isRevoked: () => false });
-  await drainMicrotasks(10);
-  paired.release();
-  assert.equal((await spawning).status, ACTION_RESULT_STATUS.ACCEPTED);
-  const unpaired = withOther.performer.perform(SPAWN, { isRevoked: () => false });
-  await drainMicrotasks(10);
-  other.release();
-  assert.equal((await unpaired).status, ACTION_RESULT_STATUS.ACCEPTED);
-
-  assert.deepEqual(withPair.recorded.carried, [
-    {
-      route: "agent",
-      ...WORKSPACE_IDENTITY,
-      ask: {
-        agent: "claude",
-        model: "fable-5",
-        effort: undefined,
-        name: undefined,
-        task: undefined,
-      },
-    },
-  ]);
-  assert.deepEqual(withOther.recorded.carried[0]?.ask, {
-    agent: "claude",
-    model: undefined,
-    effort: undefined,
-    name: undefined,
-    task: undefined,
-  });
-});
+    ]);
+    assert.deepEqual(withOther.recorded.carried[0]?.ask, {
+      agent: "claude",
+      model: undefined,
+      effort: undefined,
+      name: undefined,
+      task: undefined,
+    });
+  }),
+);
 
 test("a message, a control, and the two renames each name the session and carry the ask to the service", async () => {
   const { performer, recorded } = fixture();

@@ -7,7 +7,8 @@
  * carrying its own codes, and the delivery backoff as a `Schedule` composed
  * from the same initial delay and cap the port's formula reads.
  */
-import { Data, Duration, Effect, Schedule, type Scope } from "effect";
+import type { Fiber } from "effect";
+import { Clock, Data, Duration, Effect, FiberId, Runtime, Schedule, type Scope } from "effect";
 import type { ChildSpawnReceipt } from "./child-records.js";
 import {
   CHILD_DEFAULTS,
@@ -18,8 +19,8 @@ import {
   type ChildSpawnOutcome,
   type ChildSpawnRefusal,
   type ChildSpawnRequest,
+  type ScheduledTimer,
 } from "./children.js";
-import { timerSeamFromRuntime } from "./effect/timer-seam.js";
 import type { SessionKey } from "./identifiers.js";
 
 export class ChildSpawnRefused extends Data.TaggedError("ChildSpawnRefused")<{
@@ -67,7 +68,50 @@ export const childDeliveryBackoffSchedule = (): Schedule.Schedule<Duration.Durat
   );
 };
 
-export type EffectChildRunServiceOptions = Omit<ChildRunServiceOptions, "schedule" | "cancel">;
+export type EffectChildRunServiceOptions = Omit<
+  ChildRunServiceOptions,
+  "now" | "schedule" | "cancel"
+>;
+
+/**
+ * The `now`/`schedule`/`cancel` triple the port's constructor still takes,
+ * answered from this runtime's own `Clock` so a service armed on this bridge
+ * reads and schedules against whichever clock that runtime carries — the
+ * real one in production, a `TestClock` in a test — without the port itself
+ * importing `effect`. Starting the fiber here is a run outside an Effect,
+ * which the "runtime only at an edge" rule allows precisely because this is
+ * that edge: it starts the work on the runtime it was handed rather than
+ * building a second one. `cancel` has no way to be awaited, so it interrupts
+ * the fiber without waiting for the interruption to finish: what it must
+ * guarantee is that the callback does not run afterwards, never that the
+ * fiber has already ended.
+ */
+const timersOnRuntime = (
+  runtime: Runtime.Runtime<never>,
+): Pick<ChildRunServiceOptions, "now" | "schedule" | "cancel"> => {
+  const sync = Runtime.runSync(runtime);
+  const fork = Runtime.runFork(runtime);
+  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+  return {
+    now: () => sync(Clock.currentTimeMillis),
+    schedule: (callback, delayMs) => {
+      const handle: ScheduledTimer = {};
+      const fiber = fork(
+        Effect.delay(Effect.sync(callback), Duration.millis(delayMs)).pipe(
+          Effect.ensuring(Effect.sync(() => armed.delete(handle))),
+        ),
+      );
+      armed.set(handle, fiber);
+      return handle;
+    },
+    cancel: (timer) => {
+      const fiber = armed.get(timer);
+      if (fiber === undefined) return;
+      armed.delete(timer);
+      fiber.unsafeInterruptAsFork(FiberId.none);
+    },
+  };
+};
 
 /**
  * The live service, armed on the runtime's own `Clock` and owned by a
@@ -80,13 +124,7 @@ export const makeChildRunService = (
 ): Effect.Effect<ChildRunService, never, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.flatMap(Effect.runtime<never>(), (runtime) => {
-      const timers = timerSeamFromRuntime(runtime);
-      const service = new ChildRunService({
-        ...options,
-        now: timers.now,
-        schedule: timers.schedule,
-        cancel: timers.cancel,
-      });
+      const service = new ChildRunService({ ...options, ...timersOnRuntime(runtime) });
       return Effect.promise(async () => {
         // A failed load can still have armed some of the record's own
         // archive or delivery timers before it rejected; `acquireRelease`

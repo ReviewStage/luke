@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   ACTION_KIND,
   ACTION_OUTPUT,
@@ -28,9 +29,8 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Effect, Either } from "effect";
 import { test } from "vitest";
-import { drainMicrotasks } from "../testing/index.js";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -110,6 +110,17 @@ const CONTROL_CALL = {
   name: ACTION_TOOL.RUN_SESSION_CONTROL,
   argumentsJson: `{${IDENTITY},"control_id":"stop"}`,
 };
+
+/** Polls a condition on Effect's own fiber scheduler rather than a fixed wall-clock wait. */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
 
 /** The one performer fake, answering every carried action with the result the test chose. */
 function performer(
@@ -352,40 +363,46 @@ test("memory actions are the main process's own, and the store's answer is the r
   assert.equal(appActions.length, 0);
 });
 
-test("two conversations remembering at once both land: each write is one whole request to the notebook", async () => {
-  let facts: readonly RememberedFact[] = [];
-  const { actions } = performer({
-    rememberedFacts: () => facts,
-    notebook: {
-      remember: async (ask) => {
-        // The worker answers one request at a time; a beat's delay here shows
-        // the performer never reads the list, computes, and writes it back.
-        await drainMicrotasks(1);
-        facts = [...facts, { id: ask.id, words: ask.words }];
-        return true;
-      },
-      forget: async () => false,
-    },
-  });
-  const [first, second] = await Promise.all([
-    performCall(
-      actions,
-      { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread one"}' },
-      LIVE,
-    ),
-    performCall(
-      actions,
-      { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread two"}' },
-      LIVE,
-    ),
-  ]);
-  assert.equal(first.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.equal(second.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.deepEqual(facts.map((fact) => fact.words).toSorted(), [
-    "from thread one",
-    "from thread two",
-  ]);
-});
+it.effect(
+  "two conversations remembering at once both land: each write is one whole request to the notebook",
+  () =>
+    Effect.gen(function* () {
+      let facts: readonly RememberedFact[] = [];
+      const { actions } = performer({
+        rememberedFacts: () => facts,
+        notebook: {
+          remember: async (ask) => {
+            // The worker answers one request at a time; a beat's delay here shows
+            // the performer never reads the list, computes, and writes it back.
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            facts = [...facts, { id: ask.id, words: ask.words }];
+            return true;
+          },
+          forget: async () => false,
+        },
+      });
+      const [first, second] = yield* Effect.promise(() =>
+        Promise.all([
+          performCall(
+            actions,
+            { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread one"}' },
+            LIVE,
+          ),
+          performCall(
+            actions,
+            { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread two"}' },
+            LIVE,
+          ),
+        ]),
+      );
+      assert.equal(first.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(second.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.deepEqual(facts.map((fact) => fact.words).toSorted(), [
+        "from thread one",
+        "from thread two",
+      ]);
+    }),
+);
 
 test("an app action is validated against the reported guide before a renderer carries it", async () => {
   const guide = {
@@ -579,48 +596,56 @@ test("a creation is admitted against the projects the same pass reported, and th
   );
 });
 
-test("a cancel during the roster refresh or the defaults read settles the action, and the late read dispatches nothing", async () => {
-  for (const held of ["refreshSessions", "workspaceDefaults"] as const) {
-    let release: (() => void) | undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const h = performer({
-      workspaceProjects: () => [LISTED_PROJECT],
-      [held]: async () => {
-        await gate;
-        return {};
-      },
-    });
-    const controller = new AbortController();
-    const execution: BrainActionExecution = {
-      conversationId: MAIN_SESSION_KEY,
-      turnId: "run-1",
-      runId: "run-1",
-      origin: RUN_ORIGIN.USER,
-      isRevoked: () => controller.signal.aborted,
-      signal: controller.signal,
-    };
-    // Only a creation reads the defaults, so each held read is exercised by the
-    // act that actually waits on it.
-    const pending = performCall(
-      h.actions,
-      held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,
-      execution,
-    );
-    let settled = false;
-    void pending.then(() => {
-      settled = true;
-    });
-    await drainMicrotasks(1);
-    assert.equal(settled, false);
-    controller.abort();
-    const outcome = await pending;
-    assert.equal(outcome.status, ACTION_OUTPUT_STATUS.REFUSED);
-    assert.deepEqual(h.performed, []);
-    release?.();
-    await drainMicrotasks(1);
-    assert.deepEqual(h.performed, [], `${held}: the late read dispatched nothing`);
-    assert.deepEqual(h.recorded, []);
-  }
-});
+it.effect(
+  "a cancel during the roster refresh or the defaults read settles the action, and the late read dispatches nothing",
+  () =>
+    Effect.gen(function* () {
+      for (const held of ["refreshSessions", "workspaceDefaults"] as const) {
+        let release: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let invoked = false;
+        let finished = false;
+        const h = performer({
+          workspaceProjects: () => [LISTED_PROJECT],
+          [held]: async () => {
+            invoked = true;
+            await gate;
+            finished = true;
+            return {};
+          },
+        });
+        const controller = new AbortController();
+        const execution: BrainActionExecution = {
+          conversationId: MAIN_SESSION_KEY,
+          turnId: "run-1",
+          runId: "run-1",
+          origin: RUN_ORIGIN.USER,
+          isRevoked: () => controller.signal.aborted,
+          signal: controller.signal,
+        };
+        // Only a creation reads the defaults, so each held read is exercised by the
+        // act that actually waits on it.
+        const pending = performCall(
+          h.actions,
+          held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,
+          execution,
+        );
+        let settled = false;
+        void pending.then(() => {
+          settled = true;
+        });
+        yield* waitFor(() => invoked);
+        assert.equal(settled, false);
+        controller.abort();
+        const outcome = yield* Effect.promise(() => pending);
+        assert.equal(outcome.status, ACTION_OUTPUT_STATUS.REFUSED);
+        assert.deepEqual(h.performed, []);
+        release?.();
+        yield* waitFor(() => finished);
+        assert.deepEqual(h.performed, [], `${held}: the late read dispatched nothing`);
+        assert.deepEqual(h.recorded, []);
+      }
+    }),
+);

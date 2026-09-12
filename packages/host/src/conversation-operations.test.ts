@@ -17,7 +17,21 @@ import {
   conversationMaintenance,
   conversationOperations,
 } from "./conversation-operations.js";
-import { drainMicrotasks } from "./testing/index.js";
+
+/**
+ * Polls `condition` across up to `rounds` batches of a hundred fiber yields
+ * each, letting Effect's own scheduler interleave with pending Promises
+ * rather than pumping `setImmediate` a fixed number of times.
+ */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
 
 const NOW = 1_800_000_000_000;
 const THREAD = threadSessionKey("t-1");
@@ -121,16 +135,16 @@ it.effect(
         Scope.Scope,
         scope,
       );
-      yield* Effect.promise(() => drainMicrotasks(20));
+      yield* waitFor(() => runs.length > 0);
       assert.deepEqual(runs, [[THREAD]]);
 
       yield* TestClock.adjust(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS));
-      yield* Effect.promise(() => drainMicrotasks(20));
+      yield* waitFor(() => runs.length > 1);
       assert.deepEqual(runs, [[THREAD], [THREAD]]);
 
       yield* Scope.close(scope, Exit.void);
       yield* TestClock.adjust(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS));
-      yield* Effect.promise(() => drainMicrotasks(20));
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
       assert.deepEqual(runs, [[THREAD], [THREAD]]);
     }),
 );

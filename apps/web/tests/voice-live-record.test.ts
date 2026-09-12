@@ -13,8 +13,9 @@ import {
   LiveSessionService,
   type LiveSessionSource,
   sidebandOverSocket,
+  type TimerHandle,
 } from "@sidecar/voice/live-session";
-import { FakeClock, FakeLiveSocket } from "@sidecar/voice/testing";
+import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
 import { Schema } from "effect";
 import { afterAll, test } from "vitest";
@@ -97,6 +98,45 @@ async function target(registered = true): Promise<VoiceTarget> {
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
 
+/**
+ * A clock this suite drives by hand, kept beside it rather than in the
+ * shared `@sidecar/voice/testing` door: nothing is due until the test
+ * advances it, and firing a due timer awaits real macrotask turns (through
+ * the same `node:timers/promises` `setTimeout` the store's own `until`
+ * polls with) so the real database write a settled timer starts has
+ * settled by the time `advance` returns.
+ */
+class ManualClock {
+  now = 1_800_000_000_000;
+  readonly delays: number[] = [];
+  readonly #timers = new Map<TimerHandle, { callback: () => void; at: number }>();
+
+  schedule = (callback: () => void, delayMs: number): TimerHandle => {
+    const handle: TimerHandle = {};
+    this.delays.push(delayMs);
+    this.#timers.set(handle, { callback, at: this.now + delayMs });
+    return handle;
+  };
+
+  cancel = (timer: TimerHandle): void => {
+    this.#timers.delete(timer);
+  };
+
+  async advance(untilMs: number): Promise<void> {
+    for (;;) {
+      const due = [...this.#timers.entries()]
+        .filter(([, timer]) => timer.at <= untilMs)
+        .sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) break;
+      this.#timers.delete(due[0]);
+      this.now = Math.max(this.now, due[1].at);
+      due[1].callback();
+      for (let turn = 0; turn < 20; turn += 1) await sleep(0);
+    }
+    this.now = Math.max(this.now, untilMs);
+  }
+}
+
 class FakeBrain implements LiveBrain {
   readonly asks: LiveBrainAsk[] = [];
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
@@ -128,7 +168,7 @@ class FakeBrain implements LiveBrain {
 
 /** The service composed as the voice service composes it: the record observing the sideband ahead of the service. */
 function stand(live: VoiceTarget) {
-  const clock = new FakeClock();
+  const clock = new ManualClock();
   const brain = new FakeBrain();
   const record = hostedLiveRecord({ writer, target: live });
   const socket = new FakeLiveSocket();

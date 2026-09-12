@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { BrainAgent } from "@sidecar/brain";
+import { Effect } from "effect";
 import { test } from "vitest";
-import { drainMicrotasks } from "../testing/index.js";
 import { BrainHost } from "./host.js";
 
 /** An agent whose stop the test releases, recording the order things happened in. */
@@ -46,34 +47,41 @@ test("retiring withdraws the agent at once and begins its stop before any await"
   });
 });
 
-test("overlapping transitions install only the latest agent, once every earlier stop has settled", async () => {
-  const log: string[] = [];
-  const brains = host(log);
-  const a = fakeAgent("a", log);
-  const b = fakeAgent("b", log);
-  const c = fakeAgent("c", log);
-  await brains.replace(() => a.agent);
-  assert.equal(brains.current(), a.agent);
+it.effect(
+  "overlapping transitions install only the latest agent, once every earlier stop has settled",
+  () =>
+    Effect.gen(function* () {
+      const log: string[] = [];
+      const brains = host(log);
+      const a = fakeAgent("a", log);
+      const b = fakeAgent("b", log);
+      const c = fakeAgent("c", log);
+      yield* Effect.promise(() => brains.replace(() => a.agent));
+      assert.equal(brains.current(), a.agent);
 
-  // Transition B retires A and waits on A's slow stop; transition C arrives
-  // meanwhile. B must install nothing, and C must not install until A has
-  // stopped.
-  const second = brains.replace(() => {
-    log.push("build b");
-    return b.agent;
-  });
-  const third = brains.replace(() => {
-    log.push("build c");
-    return c.agent;
-  });
-  assert.equal(brains.current(), undefined);
-  await drainMicrotasks(1);
-  assert.ok(!log.includes("build b") && !log.includes("build c"));
-  a.release();
-  await Promise.all([second, third]);
-  assert.equal(brains.current(), c.agent);
-  assert.equal(log.filter((entry) => entry === "stop b").length, 0);
-});
+      // Transition B retires A and waits on A's slow stop; transition C arrives
+      // meanwhile. B must install nothing, and C must not install until A has
+      // stopped.
+      const second = brains.replace(() => {
+        log.push("build b");
+        return b.agent;
+      });
+      const third = brains.replace(() => {
+        log.push("build c");
+        return c.agent;
+      });
+      assert.equal(brains.current(), undefined);
+      // A fixed, small number of fiber yields: enough for B's already-queued
+      // step to start and suspend on A's still-unreleased stop, and no more,
+      // since this is checking that neither builder has run yet.
+      for (let tick = 0; tick < 10; tick += 1) yield* Effect.yieldNow();
+      assert.ok(!log.includes("build b") && !log.includes("build c"));
+      a.release();
+      yield* Effect.promise(() => Promise.all([second, third]));
+      assert.equal(brains.current(), c.agent);
+      assert.equal(log.filter((entry) => entry === "stop b").length, 0);
+    }),
+);
 
 test("a build decided after a newer transition is stopped rather than installed, and no capability publishes empty", async () => {
   const log: string[] = [];

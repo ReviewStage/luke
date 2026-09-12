@@ -16,7 +16,7 @@ import {
 } from "@sidecar/brain/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
-import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
+import { type ChildStore, CREDENTIAL_REFERENCE_KIND, type ScheduledTimer } from "@sidecar/runtime";
 import {
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -34,10 +34,9 @@ import {
 import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Chunk, Duration, Effect, Runtime, TestClock } from "effect";
+import type { Fiber } from "effect";
+import { Chunk, Duration, Effect, FiberId, Runtime, TestClock } from "effect";
 import type { TestContext } from "vitest";
-import { timerSeamFromRuntime } from "../effect/timer-seam.js";
-import { drainMicrotasks } from "../testing/index.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -76,7 +75,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      yield* Effect.promise(() => drainMicrotasks());
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -146,8 +145,26 @@ interface Composed {
  * advances on the same clock a test drives rather than firing on its own.
  */
 function childTimersOn(runtime: Runtime.Runtime<never>) {
-  const { schedule, cancel } = timerSeamFromRuntime(runtime);
-  return { schedule, cancel };
+  const fork = Runtime.runFork(runtime);
+  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+  return {
+    schedule: (callback: () => void, delayMs: number): ScheduledTimer => {
+      const handle: ScheduledTimer = {};
+      const fiber = fork(
+        Effect.delay(Effect.sync(callback), Duration.millis(delayMs)).pipe(
+          Effect.ensuring(Effect.sync(() => armed.delete(handle))),
+        ),
+      );
+      armed.set(handle, fiber);
+      return handle;
+    },
+    cancel: (timer: ScheduledTimer) => {
+      const fiber = armed.get(timer);
+      if (fiber === undefined) return;
+      armed.delete(timer);
+      fiber.unsafeInterruptAsFork(FiberId.none);
+    },
+  };
 }
 
 async function composed(
@@ -382,7 +399,7 @@ it.effect(
       );
       assert.deepEqual(c.archived, []);
       yield* TestClock.adjust(Duration.millis(hour));
-      yield* Effect.promise(() => drainMicrotasks(180));
+      yield* waitFor(() => c.archived.length > 0);
       assert.deepEqual(c.archived, [child.childSessionKey]);
       assert.equal(c.wiring.current(child.childSessionKey), undefined);
       c.wiring.retire();
@@ -466,7 +483,7 @@ it.effect(
       yield* Effect.promise(() => c.wiring.rebuild());
       // Main first says something memorable, so its context holds a secret to fork.
       const first = yield* Effect.promise(() => ask(c, "remember this", "s-0"));
-      yield* Effect.promise(() => drainMicrotasks(180));
+      yield* waitFor(() => c.wiring.current() !== undefined);
       yield* Effect.promise(
         () => c.wiring.current()?.waitAsk(first, 1) ?? Promise.resolve(undefined),
       );

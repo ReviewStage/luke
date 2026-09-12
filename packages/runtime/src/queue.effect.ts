@@ -10,8 +10,8 @@
  * named for the ported file, wrapping its exported API and reaching inside
  * none of it.
  */
-import { Data, Duration, Effect, Schedule, type Scope } from "effect";
-import { timerSeamFromRuntime } from "./effect/timer-seam.js";
+import type { Fiber } from "effect";
+import { Data, Duration, Effect, FiberId, Runtime, Schedule, type Scope } from "effect";
 import {
   admitToQueue,
   DEFAULT_QUEUE_SETTINGS,
@@ -22,6 +22,7 @@ import {
   type QueuedInput,
   type QueueMode,
   type QueueSettings,
+  type ScheduledTimer,
 } from "./queue.js";
 
 /** Why an input the queue was offered did not enter it. */
@@ -104,6 +105,43 @@ export interface EffectPendingInputQueue {
 export type EffectPendingInputQueueOptions = Omit<PendingInputQueueOptions, "schedule" | "cancel">;
 
 /**
+ * The `schedule`/`cancel` pair the port's constructor still takes, answered
+ * from this runtime's own `Clock` so the debounce it arms reads whichever
+ * clock the runtime carries — the real one in production, a `TestClock` in a
+ * test — without the port itself importing `effect`. Starting the fiber here
+ * is a run outside an Effect, which the "runtime only at an edge" rule allows
+ * precisely because this is that edge: it starts the work on the runtime it
+ * was handed rather than building a second one. `cancel` has no way to be
+ * awaited, so it interrupts the fiber without waiting for the interruption to
+ * finish: what it must guarantee is that the callback does not run
+ * afterwards, never that the fiber has already ended.
+ */
+const scheduleOnRuntime = (
+  runtime: Runtime.Runtime<never>,
+): Pick<PendingInputQueueOptions, "schedule" | "cancel"> => {
+  const fork = Runtime.runFork(runtime);
+  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+  return {
+    schedule: (callback, delayMs) => {
+      const handle: ScheduledTimer = {};
+      const fiber = fork(
+        Effect.delay(Effect.sync(callback), Duration.millis(delayMs)).pipe(
+          Effect.ensuring(Effect.sync(() => armed.delete(handle))),
+        ),
+      );
+      armed.set(handle, fiber);
+      return handle;
+    },
+    cancel: (timer) => {
+      const fiber = armed.get(timer);
+      if (fiber === undefined) return;
+      armed.delete(timer);
+      fiber.unsafeInterruptAsFork(FiberId.none);
+    },
+  };
+};
+
+/**
  * The live queue of one conversation, armed on the runtime's own `Clock` and
  * owned by a `Scope`: closing the scope forgets what waits and disarms the
  * debounce, so no drained turn opens after the conversation that held it is
@@ -114,12 +152,7 @@ export const makePendingInputQueue = (
 ): Effect.Effect<EffectPendingInputQueue, never, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.map(Effect.runtime<never>(), (runtime) => {
-      const timers = timerSeamFromRuntime(runtime);
-      const queue = new PendingInputQueue({
-        ...options,
-        schedule: timers.schedule,
-        cancel: timers.cancel,
-      });
+      const queue = new PendingInputQueue({ ...options, ...scheduleOnRuntime(runtime) });
       return { queue, wrapped: wrap(queue) };
     }),
     ({ queue }) => Effect.sync(() => queue.clear()),

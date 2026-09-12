@@ -4,4 +4,4 @@
  * whatever it keys its own map by — so the handle is only ever handed back,
  * never read.
  */
-export type ScheduledTimer = number | object;
+export type TimerHandle = number | object;
