@@ -93,8 +93,9 @@ export async function hostedEncryptionSecret(): Promise<string | undefined> {
  * through `hostedVaultRoute` below: the group reads them directly rather than
  * rebuilding the queries they close over. `encryptionSecret` is not among
  * them: it is read fresh from `HostedEnvironment` per request, by
- * {@link hostedVaultRoute} and by the promise-shaped handlers that still
- * spread this object directly.
+ * {@link hostedVaultRoute}, by the promise-shaped handlers that still spread
+ * this object directly, and by `server/actions-app.ts`, whose handlers are
+ * effects and so read it on the group's own fiber.
  */
 export const hostedVaultSeams = {
   resolveUserId: resolveHostedUserId,

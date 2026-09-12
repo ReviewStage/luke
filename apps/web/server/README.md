@@ -340,10 +340,15 @@ on an observed cloud session, or create one, on the developer's behalf (root
 `AGENTS.md` "Acts on a session"). Each endpoint's own handler in
 `server/hosted/action-session.ts` is already the whole of admission, the
 roster read, and dispatch, so the group carries the request across the
-`HttpApi` boundary and back the way `server/auth-app.ts` carries Better
-Auth's, and the hosted vocabulary's own `not-found` answers any path outside
-the six. `fixtures/actions-route/` records one accepted and one rejected
-answer, and `tests/actions-app.test.ts` holds the group to them.
+`HttpApi` boundary and back, and the hosted vocabulary's own `not-found`
+answers any path outside the six. Each handler answers an effect over the
+ambient client rather than a promise, so the group hands it the deployment's
+seams — `hostedVaultSeams` and the vault secret read from
+`HostedEnvironment` — on its own fiber and yields the answer; nothing under
+`server/hosted/action-session.ts` reads a runtime, which is why the roster
+read and the delivery are composed there rather than run.
+`fixtures/actions-route/` records one accepted and one rejected answer, and
+`tests/actions-app.test.ts` holds the group to them.
 
 ## The observation group
 

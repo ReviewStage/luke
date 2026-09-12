@@ -1,3 +1,6 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import {
   ACTION_KIND,
   ACTION_RESULT_STATUS,
@@ -10,7 +13,6 @@ import {
   type WireRecord,
   type WireValue,
 } from "../core.js";
-import { runWeb } from "../runtime.js";
 import {
   type ActionExecutionAnswer,
   type ActionRoster,
@@ -22,6 +24,19 @@ import { decryptProviderKey, secretOrUnavailable } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { rosterForAction } from "./observation-pass.js";
 import type { HostedVaultRoute } from "./vault-route.js";
+
+/**
+ * What an action handler answers: an effect over the ambient client, which
+ * the edge that owns the connection runs. The handler holds the request from
+ * admission through the roster read to the delivery, so the roster and the
+ * execution are effects it composes rather than promises it awaits, and
+ * nothing in this file reads a runtime of its own.
+ */
+export type HostedActionEffect<Answer> = Effect.Effect<
+  Answer,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient
+>;
 
 /** Maximum length accepted for a provider session id in a URL segment. */
 const SESSION_ID_MAX_LENGTH = 200;
@@ -122,7 +137,7 @@ export interface SessionActionOptions
     userId: string,
     providerId: CloudAgentProviderId,
     secret: string,
-  ) => Promise<ActionRoster>;
+  ) => HostedActionEffect<ActionRoster>;
   /**
    * The reason this provider cannot take this action. Injected only in tests:
    * every action this build ships is supported by its one provider, so the
@@ -137,7 +152,7 @@ export interface SessionActionOptions
     fields: WireRecord;
     apiKey: string;
     roster: ActionRoster;
-  }) => Promise<ActionExecutionAnswer>;
+  }) => Effect.Effect<ActionExecutionAnswer>;
 }
 
 /**
@@ -234,27 +249,31 @@ async function apiKeyOrAnswer(
 }
 
 /** Admits and delivers one action aimed at a cloud session or project on the user's behalf. */
-export async function handleSessionAction(options: SessionActionOptions): Promise<Response> {
-  const admission = await admitActionRequest(options);
-  if (admission instanceof Response) return admission;
-  const { userId, secret, providerId, body } = admission;
-  const { kind } = options;
+export function handleSessionAction(options: SessionActionOptions): HostedActionEffect<Response> {
+  return Effect.gen(function* () {
+    const admission = yield* Effect.promise(() => admitActionRequest(options));
+    if (admission instanceof Response) return admission;
+    const { userId, secret, providerId, body } = admission;
+    const { kind } = options;
 
-  const asked = HOSTED_ACTION_FIELDS[kind](body);
-  if (asked === undefined) return invalidRequest();
-  const fields: WireRecord = { provider_id: providerId, ...asked };
+    const asked = HOSTED_ACTION_FIELDS[kind](body);
+    if (asked === undefined) return invalidRequest();
+    const fields: WireRecord = { provider_id: providerId, ...asked };
 
-  const unsupported = (options.unsupportedReason ?? ((id) => actionUnsupportedReason(kind, id)))(
-    providerId,
-  );
-  if (unsupported) return refusedAnswer(ACTION_RESULT_STATUS.UNSUPPORTED, unsupported);
+    const unsupported = (options.unsupportedReason ?? ((id) => actionUnsupportedReason(kind, id)))(
+      providerId,
+    );
+    if (unsupported) return refusedAnswer(ACTION_RESULT_STATUS.UNSUPPORTED, unsupported);
 
-  const key = await apiKeyOrAnswer(options.readKey, userId, providerId, secret);
-  if (key instanceof Response) return key;
+    const key = yield* Effect.promise(() =>
+      apiKeyOrAnswer(options.readKey, userId, providerId, secret),
+    );
+    if (key instanceof Response) return key;
 
-  const roster = await options.roster(userId, providerId, secret);
-  const execute = options.execute ?? routeExecute;
-  return actionAnswer(await execute({ kind, providerId, fields, apiKey: key.apiKey, roster }));
+    const roster = yield* options.roster(userId, providerId, secret);
+    const execute = options.execute ?? executeSessionAction;
+    return actionAnswer(yield* execute({ kind, providerId, fields, apiKey: key.apiKey, roster }));
+  });
 }
 
 /**
@@ -263,47 +282,38 @@ export async function handleSessionAction(options: SessionActionOptions): Promis
  */
 function routeRoster(route: HostedVaultRoute): SessionActionOptions["roster"] {
   return (userId, providerId, secret) =>
-    runWeb(
-      rosterForAction({
-        userId,
-        providerId,
-        secret,
-        store: route.store(secret),
-        readVaultKeys: route.readVaultKeys,
-        seams: {},
-        now: Date.now(),
-      }),
-    );
+    rosterForAction({
+      userId,
+      providerId,
+      secret,
+      store: route.store(secret),
+      readVaultKeys: route.readVaultKeys,
+      seams: {},
+      now: Date.now(),
+    });
 }
 
-/**
- * The execution a deployed route carries an admitted action through. It is an
- * effect, and this is where a deployed route runs it: on the same edge
- * runtime {@link routeRoster} reads the snapshot on, since the handler above
- * answers a `Response` and holds no fiber of its own.
- */
-const routeExecute: NonNullable<SessionActionOptions["execute"]> = (options) =>
-  runWeb(executeSessionAction(options));
-
 /** The six actions, each as the one thing its route names. */
-export const handleMessageAction = (route: HostedVaultRoute): Promise<Response> =>
+export const handleMessageAction = (route: HostedVaultRoute): HostedActionEffect<Response> =>
   handleSessionAction({ ...route, kind: ACTION_KIND.MESSAGE, roster: routeRoster(route) });
 
-export const handleControlAction = (route: HostedVaultRoute): Promise<Response> =>
+export const handleControlAction = (route: HostedVaultRoute): HostedActionEffect<Response> =>
   handleSessionAction({ ...route, kind: ACTION_KIND.CONTROL, roster: routeRoster(route) });
 
-export const handleAgentAction = (route: HostedVaultRoute): Promise<Response> =>
+export const handleAgentAction = (route: HostedVaultRoute): HostedActionEffect<Response> =>
   handleSessionAction({ ...route, kind: ACTION_KIND.ADD_AGENT, roster: routeRoster(route) });
 
-export const handleRenameSessionAction = (route: HostedVaultRoute): Promise<Response> =>
+export const handleRenameSessionAction = (route: HostedVaultRoute): HostedActionEffect<Response> =>
   handleSessionAction({ ...route, kind: ACTION_KIND.RENAME_SESSION, roster: routeRoster(route) });
 
-export const handleRenameWorkspaceAction = (route: HostedVaultRoute): Promise<Response> =>
+export const handleRenameWorkspaceAction = (
+  route: HostedVaultRoute,
+): HostedActionEffect<Response> =>
   handleSessionAction({
     ...route,
     kind: ACTION_KIND.RENAME_WORKSPACE,
     roster: routeRoster(route),
   });
 
-export const handleWorkspaceAction = (route: HostedVaultRoute): Promise<Response> =>
+export const handleWorkspaceAction = (route: HostedVaultRoute): HostedActionEffect<Response> =>
   handleSessionAction({ ...route, kind: ACTION_KIND.CREATE_WORKSPACE, roster: routeRoster(route) });
