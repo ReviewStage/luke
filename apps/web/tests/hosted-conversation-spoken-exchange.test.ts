@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { it } from "@effect/vitest";
 import {
   brainTurnsAnswerSchema,
   type ConversationMessagesAnswer,
@@ -11,7 +12,7 @@ import type { ConversationViewMessage, ConversationViewSnapshot } from "@sidecar
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, type Schema as EffectSchema, Either } from "effect";
-import { afterAll, test } from "vitest";
+import { afterAll } from "vitest";
 import {
   ConversationViewSync,
   type ReadMessagesPage,
@@ -43,9 +44,9 @@ import {
   type ResourceReadOptions,
 } from "../server/hosted/resource-reads";
 import { storeWriter } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import { standingObservedConversation } from "../server/hosted/store/observed-conversations";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks } from "./support/promised-store";
 
 /**
  * A Mac's picture of the Conversation across whole spoken exchanges, over the
@@ -287,165 +288,178 @@ class Stream {
 
 const EXCHANGE_ROLES = [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT];
 
-test("no write a spoken exchange makes empties or shrinks a Mac's picture of the Conversation, whichever of the line and the journal lands first, with another conversation's journal open", async () => {
-  const userId = await database.createUser();
-  const conversationId = await database.run(standingMain(userId, new Date(now())));
-  const target = { userId, conversationId };
-  const asks = promisedAsks(database.run);
-  const mac = new Mac(userId);
+it.effect(
+  "no write a spoken exchange makes empties or shrinks a Mac's picture of the Conversation, whichever of the line and the journal lands first, with another conversation's journal open",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await database.run(standingMain(userId, new Date(now())));
+      const target = { userId, conversationId };
+      const askEffects = askRecord();
+      const asks = {
+        record: (write: Parameters<typeof askEffects.record>[0]) =>
+          database.run(askEffects.record(write)),
+        dispatchOnce: (
+          target: Parameters<typeof askEffects.dispatchOnce>[0],
+          id: string,
+          dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
+        ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
+      };
+      const mac = new Mac(userId);
 
-  let snapshot = await mac.poll("launch");
-  assert.equal(snapshot.settled, true);
-  assert.equal(snapshot.groups.length, 0);
+      let snapshot = await mac.poll("launch");
+      assert.equal(snapshot.settled, true);
+      assert.equal(snapshot.groups.length, 0);
 
-  /** A write landed; the picture holds every group it held, and one more where the write opened one. */
-  async function holds(label: string, groups: number): Promise<ConversationViewSnapshot> {
-    snapshot = await mac.poll(label);
-    assert.equal(snapshot.settled, true, mac.log);
-    assert.equal(snapshot.groups.length, groups, mac.log);
-    return snapshot;
-  }
+      /** A write landed; the picture holds every group it held, and one more where the write opened one. */
+      async function holds(label: string, groups: number): Promise<ConversationViewSnapshot> {
+        snapshot = await mac.poll(label);
+        assert.equal(snapshot.settled, true, mac.log);
+        assert.equal(snapshot.groups.length, groups, mac.log);
+        return snapshot;
+      }
 
-  async function write(
-    conversation: { readonly userId: string; readonly conversationId: string },
-    event: BrainRunEvent,
-  ): Promise<void> {
-    const result = await database.run(writer.consume(conversation, event));
-    assert.ok(result.ok, JSON.stringify(result));
-  }
+      async function write(
+        conversation: { readonly userId: string; readonly conversationId: string },
+        event: BrainRunEvent,
+      ): Promise<void> {
+        const result = await database.run(writer.consume(conversation, event));
+        assert.ok(result.ok, JSON.stringify(result));
+      }
 
-  // Two exchanges in the usual order: the voice writer's cut lands before the turn starts.
-  for (const exchange of [1, 2]) {
-    const settled = exchange - 1;
-    tick();
-    const delegationId = `dl_${exchange}`;
-    const ask = await asks.record({
-      userId,
-      conversationId,
-      clientId: delegationId,
-      origin: ASK_ORIGIN.SPOKEN,
-      question: `fixture ask ${exchange}`,
-      createdAt: new Date(now()),
-    });
-    await holds(`${exchange}: ask recorded`, settled);
+      // Two exchanges in the usual order: the voice writer's cut lands before the turn starts.
+      for (const exchange of [1, 2]) {
+        const settled = exchange - 1;
+        tick();
+        const delegationId = `dl_${exchange}`;
+        const ask = await asks.record({
+          userId,
+          conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          question: `fixture ask ${exchange}`,
+          createdAt: new Date(now()),
+        });
+        await holds(`${exchange}: ask recorded`, settled);
 
-    tick();
-    const line = await database.run(
-      writer.recordUserMessage(target, {
-        clientId: delegationId,
-        turnOfAsk: true,
-        text: `fixture ask ${exchange}`,
-        metadata: VOICE_ASK,
-      }),
-    );
-    assert.ok(line.ok);
-    await holds(`${exchange}: line written`, settled + 1);
+        tick();
+        const line = await database.run(
+          writer.recordUserMessage(target, {
+            clientId: delegationId,
+            turnOfAsk: true,
+            text: `fixture ask ${exchange}`,
+            metadata: VOICE_ASK,
+          }),
+        );
+        assert.ok(line.ok);
+        await holds(`${exchange}: line written`, settled + 1);
 
-    tick();
-    const stream = new Stream(randomUUID());
-    await write(target, stream.started(BRAIN_TURN_ORIGIN.SPOKEN));
-    await holds(`${exchange}: turn started`, settled + 1);
-    await asks.dispatchOnce(target, ask.id, async () => ({
-      sessionId: `wrun_${exchange}`,
-      turnId: stream.turnId,
-    }));
-    assert.deepEqual(await database.run(writer.attachAskLines(target, stream.turnId)), {
-      ok: true,
-      attached: [line.id],
-    });
-    await holds(`${exchange}: line taken into the turn`, settled + 1);
+        tick();
+        const stream = new Stream(randomUUID());
+        await write(target, stream.started(BRAIN_TURN_ORIGIN.SPOKEN));
+        await holds(`${exchange}: turn started`, settled + 1);
+        await asks.dispatchOnce(target, ask.id, async () => ({
+          sessionId: `wrun_${exchange}`,
+          turnId: stream.turnId,
+        }));
+        assert.deepEqual(await database.run(writer.attachAskLines(target, stream.turnId)), {
+          ok: true,
+          attached: [line.id],
+        });
+        await holds(`${exchange}: line taken into the turn`, settled + 1);
 
-    tick();
-    await write(target, stream.step());
-    await holds(`${exchange}: journal open`, settled + 1);
-    tick();
-    await write(target, stream.answered(`fixture reply ${exchange}`));
-    await holds(`${exchange}: answered`, settled + 1);
-    tick();
-    await write(target, stream.ended());
-    const ended = await holds(`${exchange}: turn ended`, settled + 1);
-    assert.deepEqual(
-      ended.groups.at(-1)?.messages.map((message) => message.message.role),
-      EXCHANGE_ROLES,
-      mac.log,
-    );
-    await holds(`${exchange}: quiet`, settled + 1);
-  }
+        tick();
+        await write(target, stream.step());
+        await holds(`${exchange}: journal open`, settled + 1);
+        tick();
+        await write(target, stream.answered(`fixture reply ${exchange}`));
+        await holds(`${exchange}: answered`, settled + 1);
+        tick();
+        await write(target, stream.ended());
+        const ended = await holds(`${exchange}: turn ended`, settled + 1);
+        assert.deepEqual(
+          ended.groups.at(-1)?.messages.map((message) => message.message.role),
+          EXCHANGE_ROLES,
+          mac.log,
+        );
+        await holds(`${exchange}: quiet`, settled + 1);
+      }
 
-  // An observed conversation's observation turn opens its journal and leaves it open through the next exchange.
-  tick();
-  const observedId = await database.run(
-    standingObservedConversation(userId, SESSION, new Date(now())),
-  );
-  assert.ok(observedId !== undefined);
-  const observed = { userId, conversationId: observedId };
-  const observation = new Stream(randomUUID());
-  await write(observed, observation.started(BRAIN_TURN_ORIGIN.OBSERVATION));
-  await write(observed, observation.step());
-  // An observed row with neither announcement nor action is not drawn, so the picture holds as it was.
-  await holds("observation journal open", 2);
+      // An observed conversation's observation turn opens its journal and leaves it open through the next exchange.
+      tick();
+      const observedId = await database.run(
+        standingObservedConversation(userId, SESSION, new Date(now())),
+      );
+      assert.ok(observedId !== undefined);
+      const observed = { userId, conversationId: observedId };
+      const observation = new Stream(randomUUID());
+      await write(observed, observation.started(BRAIN_TURN_ORIGIN.OBSERVATION));
+      await write(observed, observation.step());
+      // An observed row with neither announcement nor action is not drawn, so the picture holds as it was.
+      await holds("observation journal open", 2);
 
-  // A third exchange in the other order: the turn opens its journal before the voice writer's cut lands.
-  tick();
-  const lateAsk = await asks.record({
-    userId,
-    conversationId,
-    clientId: "dl_3",
-    origin: ASK_ORIGIN.SPOKEN,
-    question: "fixture ask 3",
-    createdAt: new Date(now()),
-  });
-  const late = new Stream(randomUUID());
-  await write(target, late.started(BRAIN_TURN_ORIGIN.SPOKEN));
-  await asks.dispatchOnce(target, lateAsk.id, async () => ({
-    sessionId: "wrun_3",
-    turnId: late.turnId,
-  }));
-  assert.deepEqual(await database.run(writer.attachAskLines(target, late.turnId)), {
-    ok: true,
-    attached: [],
-  });
-  await write(target, late.step());
-  const previewed = await holds("3: journal open before the line", 3);
-  assert.deepEqual(
-    previewed.groups.at(-1)?.messages.map((message) => message.message.role),
-    [MESSAGE_ROLE.ASSISTANT],
-    mac.log,
-  );
+      // A third exchange in the other order: the turn opens its journal before the voice writer's cut lands.
+      tick();
+      const lateAsk = await asks.record({
+        userId,
+        conversationId,
+        clientId: "dl_3",
+        origin: ASK_ORIGIN.SPOKEN,
+        question: "fixture ask 3",
+        createdAt: new Date(now()),
+      });
+      const late = new Stream(randomUUID());
+      await write(target, late.started(BRAIN_TURN_ORIGIN.SPOKEN));
+      await asks.dispatchOnce(target, lateAsk.id, async () => ({
+        sessionId: "wrun_3",
+        turnId: late.turnId,
+      }));
+      assert.deepEqual(await database.run(writer.attachAskLines(target, late.turnId)), {
+        ok: true,
+        attached: [],
+      });
+      await write(target, late.step());
+      const previewed = await holds("3: journal open before the line", 3);
+      assert.deepEqual(
+        previewed.groups.at(-1)?.messages.map((message) => message.message.role),
+        [MESSAGE_ROLE.ASSISTANT],
+        mac.log,
+      );
 
-  tick();
-  const lateLine = await database.run(
-    writer.recordUserMessage(target, {
-      clientId: "dl_3",
-      turnOfAsk: true,
-      text: "fixture ask 3",
-      metadata: VOICE_ASK,
+      tick();
+      const lateLine = await database.run(
+        writer.recordUserMessage(target, {
+          clientId: "dl_3",
+          turnOfAsk: true,
+          text: "fixture ask 3",
+          metadata: VOICE_ASK,
+        }),
+      );
+      assert.ok(lateLine.ok);
+      // The line stands ahead of the journal the store moved behind it, and the journal stands once.
+      const reordered = await holds("3: line landed after the journal", 3);
+      assert.deepEqual(
+        reordered.groups.at(-1)?.messages.map((message) => message.message.role),
+        EXCHANGE_ROLES,
+        mac.log,
+      );
+
+      tick();
+      await write(target, late.answered("fixture reply 3"));
+      await holds("3: answered", 3);
+      tick();
+      await write(target, late.ended());
+      const done = await holds("3: turn ended", 3);
+      assert.deepEqual(
+        done.groups.map((group) => group.turn?.status),
+        ["settled", "settled", "settled"],
+        mac.log,
+      );
+      await holds("3: quiet", 3);
+
+      // A relaunch reads from nothing and holds the same rows in the same places.
+      const relaunched = new Mac(userId);
+      const fresh = await relaunched.poll("relaunch");
+      assert.deepEqual(shape(fresh), shape(snapshot));
     }),
-  );
-  assert.ok(lateLine.ok);
-  // The line stands ahead of the journal the store moved behind it, and the journal stands once.
-  const reordered = await holds("3: line landed after the journal", 3);
-  assert.deepEqual(
-    reordered.groups.at(-1)?.messages.map((message) => message.message.role),
-    EXCHANGE_ROLES,
-    mac.log,
-  );
-
-  tick();
-  await write(target, late.answered("fixture reply 3"));
-  await holds("3: answered", 3);
-  tick();
-  await write(target, late.ended());
-  const done = await holds("3: turn ended", 3);
-  assert.deepEqual(
-    done.groups.map((group) => group.turn?.status),
-    ["settled", "settled", "settled"],
-    mac.log,
-  );
-  await holds("3: quiet", 3);
-
-  // A relaunch reads from nothing and holds the same rows in the same places.
-  const relaunched = new Mac(userId);
-  const fresh = await relaunched.poll("relaunch");
-  assert.deepEqual(shape(fresh), shape(snapshot));
-});
+);

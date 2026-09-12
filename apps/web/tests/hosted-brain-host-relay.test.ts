@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { it } from "@effect/vitest";
 import { isToolUIPart } from "ai";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
-import { afterAll, test } from "vitest";
+import { afterAll } from "vitest";
 import {
   ACTION_TOOL,
   ASK_ORIGIN,
@@ -40,7 +41,6 @@ import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation,
   readEventsByConversation,
@@ -199,754 +199,876 @@ function readMessageSeqs(records: readonly { readonly seq: number }[]): number[]
   return records.map((record) => record.seq);
 }
 
-test("a typed ask lands as one turn and its messages through the writer: the words, then the answer with its parts in step order", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  await play(typedTurn("turn_0", 0), standing);
+it.effect(
+  "a typed ask lands as one turn and its messages through the writer: the words, then the answer with its parts in step order",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      await play(typedTurn("turn_0", 0), standing);
 
-  const { turnRows, messageRows } = await rows(target);
-  assert.equal(turnRows.length, 1);
-  const [turn] = turnRows;
-  assert.ok(turn);
-  assert.equal(turn.id, hostTurnId(standing.sessionId, "turn_0"));
-  assert.equal(turn.origin, TURN_ORIGIN.TYPED);
-  assert.equal(turn.status, TURN_STATUS.SETTLED);
-  assert.equal(turn.model, "scripted-model");
-  assert.equal(turn.reasoningEffort, null);
-  assert.deepEqual(turn.usage, {
-    inputTokens: 30,
-    outputTokens: 8,
-    cachedInputTokens: 4,
-    reasoningTokens: 0,
-  });
-  assert.deepEqual(turn.responseIds, []);
+      const { turnRows, messageRows } = await rows(target);
+      assert.equal(turnRows.length, 1);
+      const [turn] = turnRows;
+      assert.ok(turn);
+      assert.equal(turn.id, hostTurnId(standing.sessionId, "turn_0"));
+      assert.equal(turn.origin, TURN_ORIGIN.TYPED);
+      assert.equal(turn.status, TURN_STATUS.SETTLED);
+      assert.equal(turn.model, "scripted-model");
+      assert.equal(turn.reasoningEffort, null);
+      assert.deepEqual(turn.usage, {
+        inputTokens: 30,
+        outputTokens: 8,
+        cachedInputTokens: 4,
+        reasoningTokens: 0,
+      });
+      assert.deepEqual(turn.responseIds, []);
 
-  assert.deepEqual(
-    messageRows.map((row) => [row.role, row.turnId, row.finishedAt !== null]),
-    [
-      [MESSAGE_ROLE.USER, turn.id, true],
-      [MESSAGE_ROLE.ASSISTANT, turn.id, true],
-    ],
-  );
-  const [words, answer] = messageRows;
-  assert.ok(words && answer);
-  assert.deepEqual(words.metadata, {
-    author: MESSAGE_AUTHOR.DEVELOPER,
-    channel: MESSAGE_CHANNEL.TYPED,
-  });
-  // Each step behind its boundary, ordered as the model produced it —
-  // reasoning, then the call — although eve told the reasoning last.
-  assert.deepEqual(
-    answer.parts.map((part) => part.type),
-    [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
-  );
-  const toolPart = answer.parts.find((part) => isToolUIPart(part));
-  assert.ok(toolPart);
-  assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
-  assert.equal(toolPart.toolCallId, "call-1");
-  assert.deepEqual(standing.state.get(), { turns: {} });
-  assert.deepEqual(refusals, []);
-});
-
-test("a spoken turn's received message writes no user row: the developer's line is the transcript's under the ask's own id, and the turn ties that row to itself where it stood unattached; a typed turn's received message is its user row, so one utterance is one line either way", async () => {
-  const spoken = await conversation();
-  const typed = await conversation();
-  const spokenStanding = standingFor(spoken, BRAIN_HOST_TURN.SPOKEN);
-  // The service's ask under the delegation's id, dispatched into this eve session, and the
-  // transcript row the voice writer cut for it, written before eve's turn started.
-  const delegationId = `dl_${randomUUID()}`;
-  const record = promisedAsks(database.run);
-  const ask = await record.record({
-    userId: spoken.userId,
-    conversationId: spoken.conversationId,
-    clientId: delegationId,
-    origin: ASK_ORIGIN.SPOKEN,
-    question: "what changed?",
-    createdAt: new Date(NOW),
-  });
-  await record.dispatchOnce(spoken, ask.id, async () => ({
-    sessionId: spokenStanding.sessionId,
-    deliveryId: "delivery-1",
-  }));
-  const transcript = await database.run(
-    writer.recordUserMessage(spoken, {
-      clientId: delegationId,
-      turnOfAsk: true,
-      text: "What changed?",
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+      assert.deepEqual(
+        messageRows.map((row) => [row.role, row.turnId, row.finishedAt !== null]),
+        [
+          [MESSAGE_ROLE.USER, turn.id, true],
+          [MESSAGE_ROLE.ASSISTANT, turn.id, true],
+        ],
+      );
+      const [words, answer] = messageRows;
+      assert.ok(words && answer);
+      assert.deepEqual(words.metadata, {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.TYPED,
+      });
+      // Each step behind its boundary, ordered as the model produced it —
+      // reasoning, then the call — although eve told the reasoning last.
+      assert.deepEqual(
+        answer.parts.map((part) => part.type),
+        [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
+      );
+      const toolPart = answer.parts.find((part) => isToolUIPart(part));
+      assert.ok(toolPart);
+      assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      assert.equal(toolPart.toolCallId, "call-1");
+      assert.deepEqual(standing.state.get(), { turns: {} });
+      assert.deepEqual(refusals, []);
     }),
-  );
-  assert.ok(transcript.ok);
-  // A device that read the conversation to its end before the turn: the line stands
-  // outside any turn, and the cursor it holds is the line's own position.
-  const early = await pastCursor(spoken, 0);
-  assert.deepEqual(
-    early.map((row) => [row.id, row.turnId]),
-    [[transcript.id, undefined]],
-  );
-  const earlyCursor = early.at(-1)?.seq ?? 0;
-  await play(spokenTurn("turn_0", NOW, ["delivery-1"]), spokenStanding);
-  await play(typedTurn("turn_0", 0), standingFor(typed, BRAIN_HOST_TURN.TYPED));
+);
 
-  const spokenRows = await rows(spoken);
-  const typedRows = await rows(typed);
-  const spokenTurnId = hostTurnId(spokenStanding.sessionId, "turn_0");
-  assert.deepEqual(
-    spokenRows.messageRows.map((row) => [
-      row.role,
-      row.clientId,
-      row.turnId,
-      row.finishedAt !== null,
-    ]),
-    [
-      [MESSAGE_ROLE.USER, delegationId, spokenTurnId, true],
-      [MESSAGE_ROLE.ASSISTANT, spokenTurnId, spokenTurnId, true],
-    ],
-  );
-  // The turn took the line to a fresh place past the early reader's cursor, ahead of its
-  // own reply, so that reader's next page carries the line again, in the turn's group and
-  // first in it; a reader who never passed the old place reads the same rows in the same order.
-  const late = await pastCursor(spoken, earlyCursor);
-  assert.deepEqual(
-    late.map((row) => [row.id, row.turnId]),
-    [
-      [transcript.id, spokenTurnId],
-      [spokenRows.messageRows[1]?.id, spokenTurnId],
-    ],
-  );
-  assert.deepEqual(
-    (await pastCursor(spoken, 0)).map((row) => row.id),
-    late.map((row) => row.id),
-  );
-  assert.deepEqual(
-    readMessageSeqs(late),
-    readMessageSeqs(late).toSorted((a, b) => a - b),
-  );
-  assert.ok((late[0]?.seq ?? 0) > earlyCursor);
-  assert.deepEqual(
-    typedRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
-    [
-      [MESSAGE_ROLE.USER, true],
-      [MESSAGE_ROLE.ASSISTANT, true],
-    ],
-  );
-  assert.deepEqual(
-    [spokenRows.turnRows[0]?.status, typedRows.turnRows[0]?.status],
-    [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED],
-  );
-  // The other half: a row written after its ask learned a turn on record lands tied at its insert.
-  const laterDelegation = `dl_${randomUUID()}`;
-  const later = await record.record({
-    userId: spoken.userId,
-    conversationId: spoken.conversationId,
-    clientId: laterDelegation,
-    origin: ASK_ORIGIN.SPOKEN,
-    question: "and now?",
-    createdAt: new Date(NOW),
-  });
-  await record.dispatchOnce(spoken, later.id, async () => ({
-    sessionId: spokenStanding.sessionId,
-    deliveryId: "delivery-2",
-    turnId: spokenTurnId,
-  }));
-  const laterRow = await database.run(
-    writer.recordUserMessage(spoken, {
-      clientId: laterDelegation,
-      turnOfAsk: true,
-      text: "And now?",
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+it.effect(
+  "a spoken turn's received message writes no user row: the developer's line is the transcript's under the ask's own id, and the turn ties that row to itself where it stood unattached; a typed turn's received message is its user row, so one utterance is one line either way",
+  () =>
+    Effect.promise(async () => {
+      const spoken = await conversation();
+      const typed = await conversation();
+      const spokenStanding = standingFor(spoken, BRAIN_HOST_TURN.SPOKEN);
+      // The service's ask under the delegation's id, dispatched into this eve session, and the
+      // transcript row the voice writer cut for it, written before eve's turn started.
+      const delegationId = `dl_${randomUUID()}`;
+      const askRecordEffects = askRecord();
+      const record = {
+        record: (write: Parameters<typeof askRecordEffects.record>[0]) =>
+          database.run(askRecordEffects.record(write)),
+        dispatchOnce: (
+          target: Parameters<typeof askRecordEffects.dispatchOnce>[0],
+          id: string,
+          dispatch: Parameters<typeof askRecordEffects.dispatchOnce>[2],
+        ) => database.run(askRecordEffects.dispatchOnce(target, id, dispatch)),
+      };
+      const ask = await record.record({
+        userId: spoken.userId,
+        conversationId: spoken.conversationId,
+        clientId: delegationId,
+        origin: ASK_ORIGIN.SPOKEN,
+        question: "what changed?",
+        createdAt: new Date(NOW),
+      });
+      await record.dispatchOnce(spoken, ask.id, async () => ({
+        sessionId: spokenStanding.sessionId,
+        deliveryId: "delivery-1",
+      }));
+      const transcript = await database.run(
+        writer.recordUserMessage(spoken, {
+          clientId: delegationId,
+          turnOfAsk: true,
+          text: "What changed?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        }),
+      );
+      assert.ok(transcript.ok);
+      // A device that read the conversation to its end before the turn: the line stands
+      // outside any turn, and the cursor it holds is the line's own position.
+      const early = await pastCursor(spoken, 0);
+      assert.deepEqual(
+        early.map((row) => [row.id, row.turnId]),
+        [[transcript.id, undefined]],
+      );
+      const earlyCursor = early.at(-1)?.seq ?? 0;
+      await play(spokenTurn("turn_0", NOW, ["delivery-1"]), spokenStanding);
+      await play(typedTurn("turn_0", 0), standingFor(typed, BRAIN_HOST_TURN.TYPED));
+
+      const spokenRows = await rows(spoken);
+      const typedRows = await rows(typed);
+      const spokenTurnId = hostTurnId(spokenStanding.sessionId, "turn_0");
+      assert.deepEqual(
+        spokenRows.messageRows.map((row) => [
+          row.role,
+          row.clientId,
+          row.turnId,
+          row.finishedAt !== null,
+        ]),
+        [
+          [MESSAGE_ROLE.USER, delegationId, spokenTurnId, true],
+          [MESSAGE_ROLE.ASSISTANT, spokenTurnId, spokenTurnId, true],
+        ],
+      );
+      // The turn took the line to a fresh place past the early reader's cursor, ahead of its
+      // own reply, so that reader's next page carries the line again, in the turn's group and
+      // first in it; a reader who never passed the old place reads the same rows in the same order.
+      const late = await pastCursor(spoken, earlyCursor);
+      assert.deepEqual(
+        late.map((row) => [row.id, row.turnId]),
+        [
+          [transcript.id, spokenTurnId],
+          [spokenRows.messageRows[1]?.id, spokenTurnId],
+        ],
+      );
+      assert.deepEqual(
+        (await pastCursor(spoken, 0)).map((row) => row.id),
+        late.map((row) => row.id),
+      );
+      assert.deepEqual(
+        readMessageSeqs(late),
+        readMessageSeqs(late).toSorted((a, b) => a - b),
+      );
+      assert.ok((late[0]?.seq ?? 0) > earlyCursor);
+      assert.deepEqual(
+        typedRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
+        [
+          [MESSAGE_ROLE.USER, true],
+          [MESSAGE_ROLE.ASSISTANT, true],
+        ],
+      );
+      assert.deepEqual(
+        [spokenRows.turnRows[0]?.status, typedRows.turnRows[0]?.status],
+        [TURN_STATUS.SETTLED, TURN_STATUS.SETTLED],
+      );
+      // The other half: a row written after its ask learned a turn on record lands tied at its insert.
+      const laterDelegation = `dl_${randomUUID()}`;
+      const later = await record.record({
+        userId: spoken.userId,
+        conversationId: spoken.conversationId,
+        clientId: laterDelegation,
+        origin: ASK_ORIGIN.SPOKEN,
+        question: "and now?",
+        createdAt: new Date(NOW),
+      });
+      await record.dispatchOnce(spoken, later.id, async () => ({
+        sessionId: spokenStanding.sessionId,
+        deliveryId: "delivery-2",
+        turnId: spokenTurnId,
+      }));
+      const laterRow = await database.run(
+        writer.recordUserMessage(spoken, {
+          clientId: laterDelegation,
+          turnOfAsk: true,
+          text: "And now?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        }),
+      );
+      assert.ok(laterRow.ok);
+      const written = (
+        await readMessagesByConversationTyped(database.run, spoken.conversationId)
+      ).find((row) => row.id === laterRow.id);
+      assert.equal(written?.turnId, spokenTurnId);
+      assert.deepEqual(refusals, []);
     }),
-  );
-  assert.ok(laterRow.ok);
-  const written = (await readMessagesByConversationTyped(database.run, spoken.conversationId)).find(
-    (row) => row.id === laterRow.id,
-  );
-  assert.equal(written?.turnId, spokenTurnId);
-  assert.deepEqual(refusals, []);
-});
+);
 
-test("a spoken line that lands after the turn's first step is still placed ahead of the reply: the journal moves behind it to a fresh place, and a device that previewed the journal reads it again there", async () => {
-  const spoken = await conversation();
-  const standing = standingFor(spoken, BRAIN_HOST_TURN.SPOKEN);
-  const delegationId = `dl_${randomUUID()}`;
-  const record = promisedAsks(database.run);
-  const ask = await record.record({
-    userId: spoken.userId,
-    conversationId: spoken.conversationId,
-    clientId: delegationId,
-    origin: ASK_ORIGIN.SPOKEN,
-    question: "what changed?",
-    createdAt: new Date(NOW),
-  });
-  await record.dispatchOnce(spoken, ask.id, async () => ({
-    sessionId: standing.sessionId,
-    deliveryId: "delivery-1",
-  }));
-  const turn = spokenTurn("turn_0", NOW, ["delivery-1"]);
-  const firstStep = turn.findIndex((event) => event.type === "step.started");
-  // eve's turn starts, receives the ask, and opens its first step — the journal row — before
-  // the voice writer's cut of the transcript lands.
-  await play(turn.slice(0, firstStep + 1), standing);
-  const turnId = hostTurnId(standing.sessionId, "turn_0");
-  const previewed = await pastCursor(spoken, 0);
-  assert.deepEqual(
-    previewed.map((row) => [row.clientId, row.finishedAt === undefined]),
-    [[turnId, true]],
-  );
-  const journalSeq = previewed[0]?.seq ?? 0;
-  const transcript = await database.run(
-    writer.recordUserMessage(spoken, {
-      clientId: delegationId,
-      turnOfAsk: true,
-      text: "What changed?",
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+it.effect(
+  "a spoken line that lands after the turn's first step is still placed ahead of the reply: the journal moves behind it to a fresh place, and a device that previewed the journal reads it again there",
+  () =>
+    Effect.promise(async () => {
+      const spoken = await conversation();
+      const standing = standingFor(spoken, BRAIN_HOST_TURN.SPOKEN);
+      const delegationId = `dl_${randomUUID()}`;
+      const askRecordEffects = askRecord();
+      const record = {
+        record: (write: Parameters<typeof askRecordEffects.record>[0]) =>
+          database.run(askRecordEffects.record(write)),
+        dispatchOnce: (
+          target: Parameters<typeof askRecordEffects.dispatchOnce>[0],
+          id: string,
+          dispatch: Parameters<typeof askRecordEffects.dispatchOnce>[2],
+        ) => database.run(askRecordEffects.dispatchOnce(target, id, dispatch)),
+      };
+      const ask = await record.record({
+        userId: spoken.userId,
+        conversationId: spoken.conversationId,
+        clientId: delegationId,
+        origin: ASK_ORIGIN.SPOKEN,
+        question: "what changed?",
+        createdAt: new Date(NOW),
+      });
+      await record.dispatchOnce(spoken, ask.id, async () => ({
+        sessionId: standing.sessionId,
+        deliveryId: "delivery-1",
+      }));
+      const turn = spokenTurn("turn_0", NOW, ["delivery-1"]);
+      const firstStep = turn.findIndex((event) => event.type === "step.started");
+      // eve's turn starts, receives the ask, and opens its first step — the journal row — before
+      // the voice writer's cut of the transcript lands.
+      await play(turn.slice(0, firstStep + 1), standing);
+      const turnId = hostTurnId(standing.sessionId, "turn_0");
+      const previewed = await pastCursor(spoken, 0);
+      assert.deepEqual(
+        previewed.map((row) => [row.clientId, row.finishedAt === undefined]),
+        [[turnId, true]],
+      );
+      const journalSeq = previewed[0]?.seq ?? 0;
+      const transcript = await database.run(
+        writer.recordUserMessage(spoken, {
+          clientId: delegationId,
+          turnOfAsk: true,
+          text: "What changed?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        }),
+      );
+      assert.ok(transcript.ok);
+      await play(turn.slice(firstStep + 1), standing);
+
+      const { messageRows } = await rows(spoken);
+      assert.deepEqual(
+        messageRows.map((row) => [row.role, row.turnId, row.finishedAt !== null]),
+        [
+          [MESSAGE_ROLE.USER, turnId, true],
+          [MESSAGE_ROLE.ASSISTANT, turnId, true],
+        ],
+      );
+      // The journal's place moved past the line's, both past where the preview stood, so a
+      // device holding the journal at its old place reads it again where it now stands.
+      assert.ok((messageRows[0]?.seq ?? 0) > journalSeq);
+      assert.ok((messageRows[1]?.seq ?? 0) > (messageRows[0]?.seq ?? 0));
+      assert.deepEqual(
+        (await pastCursor(spoken, journalSeq - 1)).map((row) => row.id),
+        [transcript.id, messageRows[1]?.id],
+      );
+      assert.deepEqual(refusals, []);
     }),
-  );
-  assert.ok(transcript.ok);
-  await play(turn.slice(firstStep + 1), standing);
+);
 
-  const { messageRows } = await rows(spoken);
-  assert.deepEqual(
-    messageRows.map((row) => [row.role, row.turnId, row.finishedAt !== null]),
-    [
-      [MESSAGE_ROLE.USER, turnId, true],
-      [MESSAGE_ROLE.ASSISTANT, turnId, true],
-    ],
-  );
-  // The journal's place moved past the line's, both past where the preview stood, so a
-  // device holding the journal at its old place reads it again where it now stands.
-  assert.ok((messageRows[0]?.seq ?? 0) > journalSeq);
-  assert.ok((messageRows[1]?.seq ?? 0) > (messageRows[0]?.seq ?? 0));
-  assert.deepEqual(
-    (await pastCursor(spoken, journalSeq - 1)).map((row) => row.id),
-    [transcript.id, messageRows[1]?.id],
-  );
-  assert.deepEqual(refusals, []);
-});
+it.effect("a tool call's part stands on the journal before its result and settles after", () =>
+  Effect.promise(async () => {
+    const target = await conversation();
+    const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+    const events = typedTurn("turn_0", 0);
+    const requested = events.findIndex((event) => event.type === "actions.requested");
+    await play(events.slice(0, requested + 1), standing);
 
-test("a tool call's part stands on the journal before its result and settles after", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const events = typedTurn("turn_0", 0);
-  const requested = events.findIndex((event) => event.type === "actions.requested");
-  await play(events.slice(0, requested + 1), standing);
-
-  const before = await rows(target);
-  const journal = before.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
-  assert.ok(journal);
-  assert.equal(journal.finishedAt, null);
-  // The step was told before the call it bounds, so the journal reads the boundary first.
-  assert.deepEqual(
-    journal.parts.map((part) => part.type),
-    [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`],
-  );
-  const pending = journal.parts.find((part) => isToolUIPart(part));
-  assert.ok(pending);
-  assert.equal(pending.state, TOOL_PART_STATE.INPUT_AVAILABLE);
-
-  await play(events.slice(requested + 1), standing);
-  const after = await rows(target);
-  const finished = after.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
-  assert.ok(finished);
-  assert.equal(finished.id, journal.id);
-  assert.notEqual(finished.finishedAt, null);
-  const settled = finished.parts.find((part) => isToolUIPart(part));
-  assert.ok(settled);
-  assert.equal(settled.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
-});
-
-test("an observation turn over a roster diff lands the same way, with the roster look as its source, and its briefing is offered once however often the result is re-emitted", async () => {
-  const target = await conversation(CONVERSATION_KIND.OBSERVED);
-  const standing = standingFor(target, BRAIN_HOST_TURN.OBSERVATION);
-  const turnId = "turn_0";
-  await play(
-    [
-      stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
-      stamped({
-        type: "message.received",
-        data: { turnId, sequence: 0, message: "[observed events] ..." },
-      }),
-      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
-      stamped({
-        type: "actions.requested",
-        data: {
-          turnId,
-          sequence: 0,
-          stepIndex: 0,
-          actions: [
-            {
-              kind: "tool-call",
-              callId: "call-a",
-              toolName: BRAIN_TOOL.ANNOUNCE,
-              input: { briefing: "One agent finished." },
-            },
-          ],
-        },
-      }),
-      stamped({
-        type: "action.result",
-        data: {
-          turnId,
-          sequence: 0,
-          stepIndex: 0,
-          status: "completed",
-          result: {
-            kind: "tool-result",
-            callId: "call-a",
-            toolName: BRAIN_TOOL.ANNOUNCE,
-            output: { status: "accepted" },
-          },
-        },
-      }),
-      stamped({
-        type: "step.completed",
-        data: { turnId, sequence: 0, stepIndex: 0, finishReason: "tool-calls" },
-      }),
-      // eve re-emits the settled call under a new event id, as a replayed step would.
-      stamped({
-        type: "action.result",
-        data: {
-          turnId,
-          sequence: 0,
-          stepIndex: 0,
-          status: "completed",
-          result: {
-            kind: "tool-result",
-            callId: "call-a",
-            toolName: BRAIN_TOOL.ANNOUNCE,
-            output: { status: "accepted" },
-          },
-        },
-      }),
-      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 1, modelId: "m" } }),
-      stamped({
-        type: "message.completed",
-        data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop", message: null },
-      }),
-      stamped({
-        type: "step.completed",
-        data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop" },
-      }),
-      stamped({ type: "turn.completed", data: { turnId, sequence: 0 } }),
-    ],
-    standing,
-  );
-
-  const { turnRows, messageRows } = await rows(target);
-  assert.equal(turnRows[0]?.origin, TURN_ORIGIN.ROSTER_DIFF);
-  assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
-  assert.equal(turnRows[0]?.usage, null);
-  const [words, answer] = messageRows;
-  assert.ok(words && answer);
-  assert.deepEqual(words.metadata, {
-    author: MESSAGE_AUTHOR.BRAIN,
-    source: OBSERVATION_SOURCE.ROSTER_LOOK,
-  });
-  // The second step delivered nothing to announce, and stands as its boundary alone.
-  assert.deepEqual(
-    answer.parts.map((part) => part.type),
-    [STEP_START, `tool-${BRAIN_TOOL.ANNOUNCE}`, STEP_START],
-  );
-  const offered = (await readEventsByConversation(database.run, target.conversationId)).map(
-    (event) => ({ kind: event.kind, messageId: event.message_id, payload: event.payload }),
-  );
-  assert.deepEqual(offered, [
-    {
-      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-      messageId: answer.id,
-      payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
-    },
-  ]);
-});
-
-test("a failed turn settles its journal and names the failure; a cancelled one settles its unanswered parts", async () => {
-  const failed = await conversation();
-  const failedStanding = standingFor(failed, BRAIN_HOST_TURN.TYPED);
-  const events = typedTurn("turn_0", 0);
-  const requested = events.findIndex((event) => event.type === "actions.requested");
-  await play(events.slice(0, requested + 1), failedStanding);
-  await database.run(
-    relay.handle(
-      stamped({
-        type: "turn.failed",
-        data: { turnId: "turn_0", sequence: 0, code: "model_error", message: "upstream failed" },
-      }),
-      failedStanding,
-    ),
-  );
-  const failedRows = await rows(failed);
-  assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
-  assert.equal(failedRows.turnRows[0]?.failure, "model");
-  const failedJournal = failedRows.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
-  assert.ok(failedJournal);
-  assert.notEqual(failedJournal.finishedAt, null);
-
-  const cancelled = await conversation();
-  const cancelledStanding = standingFor(cancelled, BRAIN_HOST_TURN.TYPED);
-  await play(events.slice(0, requested + 1), cancelledStanding);
-  await database.run(
-    relay.handle(
-      stamped({ type: "turn.cancelled", data: { turnId: "turn_0", sequence: 0 } }),
-      cancelledStanding,
-    ),
-  );
-  const cancelledRows = await rows(cancelled);
-  assert.equal(cancelledRows.turnRows[0]?.status, TURN_STATUS.CANCELLED);
-  const journal = cancelledRows.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
-  assert.ok(journal);
-  const part = journal.parts.find((candidate) => isToolUIPart(candidate));
-  assert.ok(part);
-  assert.notEqual(part.state, TOOL_PART_STATE.INPUT_AVAILABLE);
-});
-
-test("events eve re-emits under new ids land on the rows the first attempt opened, and a replayed step adds no part and counts no usage twice", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const events = typedTurn("turn_0", 0);
-  const completed = events.findIndex((event) => event.type === "turn.completed");
-  const requested = events.findIndex((event) => event.type === "actions.requested");
-  await play(events.slice(0, requested + 1), standing);
-  await play(events.slice(0, completed), standing);
-  await play(events.slice(0, completed), standing);
-  const replayedJournal = (await rows(target)).messageRows.find(
-    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
-  );
-  assert.equal(replayedJournal?.parts.filter((part) => part.type === STEP_START).length, 2);
-  await play(events.slice(completed), standing);
-
-  const { turnRows, messageRows } = await rows(target);
-  assert.equal(turnRows.length, 1);
-  assert.deepEqual(turnRows[0]?.usage, {
-    inputTokens: 30,
-    outputTokens: 8,
-    cachedInputTokens: 4,
-    reasoningTokens: 0,
-  });
-  assert.equal(messageRows.length, 2);
-  const answer = messageRows[1];
-  assert.ok(answer);
-  assert.deepEqual(
-    answer.parts.map((part) => part.type),
-    [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
-  );
-});
-
-test("a reasoning item eve names no id for is journaled under the id the relay mints for its step, and the answer keeps that id", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const events = typedTurn("turn_0", 0);
-  const reasoned = events.findIndex((event) => event.type === "reasoning.completed");
-  await play(events.slice(0, reasoned + 1), standing);
-  const journal = (await rows(target)).messageRows.find(
-    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
-  );
-  assert.ok(journal);
-  const minted = reasoningItemId(standing.sessionId, "turn_0", 0, 0);
-  const journaled = journal.parts.find((part) => part.type === "reasoning");
-  assert.ok(journaled && journaled.type === "reasoning");
-  assert.equal(journaled.id, minted);
-
-  await play(events.slice(reasoned + 1), standing);
-  const answer = (await rows(target)).messageRows.find(
-    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
-  );
-  assert.ok(answer);
-  const kept = answer.parts.find((part) => part.type === "reasoning");
-  assert.ok(kept && kept.type === "reasoning");
-  assert.equal(kept.id, minted);
-});
-
-test("a step that produced nothing still stands as its boundary, told once however often eve starts it again", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const turnId = "turn_0";
-  await play(
-    [
-      stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
-      stamped({ type: "message.received", data: { turnId, sequence: 0, message: "hello" } }),
-      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
-      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
-      stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 1, modelId: "m" } }),
-      stamped({
-        type: "message.completed",
-        data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop", message: "Hi." },
-      }),
-      stamped({ type: "turn.completed", data: { turnId, sequence: 0 } }),
-    ],
-    standing,
-  );
-  const answer = (await rows(target)).messageRows.find(
-    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
-  );
-  assert.ok(answer);
-  assert.deepEqual(
-    answer.parts.map((part) => part.type),
-    [STEP_START, STEP_START, "text"],
-  );
-});
-
-test("a step eve re-runs whole after a failed attempt keeps the first attempt's reasoning under its ordinal and lands the second's beside it under the next; the stream replayed in its order adds nothing", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const turnId = "turn_0";
-  const step = (reasoning: string) => [
-    stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
-    stamped({
-      type: "reasoning.completed",
-      data: { turnId, sequence: 0, stepIndex: 0, reasoning },
-    }),
-  ];
-  const attempts = [
-    ...step("The first attempt's thought."),
-    ...step("The second attempt's thought."),
-  ];
-  const answered = [
-    stamped({
-      type: "message.completed",
-      data: { turnId, sequence: 0, stepIndex: 0, finishReason: "stop", message: "Hi." },
-    }),
-  ];
-  const minted = [0, 1].map((ordinal) => reasoningItemId(standing.sessionId, turnId, 0, ordinal));
-  const reasoningIds = async () => {
-    const journal = (await rows(target)).messageRows.find(
-      (row) => row.role === MESSAGE_ROLE.ASSISTANT,
-    );
+    const before = await rows(target);
+    const journal = before.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
     assert.ok(journal);
-    return journal.parts.flatMap((part) => (part.type === "reasoning" ? [part.id] : []));
-  };
+    assert.equal(journal.finishedAt, null);
+    // The step was told before the call it bounds, so the journal reads the boundary first.
+    assert.deepEqual(
+      journal.parts.map((part) => part.type),
+      [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`],
+    );
+    const pending = journal.parts.find((part) => isToolUIPart(part));
+    assert.ok(pending);
+    assert.equal(pending.state, TOOL_PART_STATE.INPUT_AVAILABLE);
 
-  await play(
-    [
-      stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
-      stamped({ type: "message.received", data: { turnId, sequence: 0, message: "hello" } }),
-      ...attempts,
-      ...answered,
-    ],
-    standing,
-  );
-  assert.deepEqual(await reasoningIds(), minted);
+    await play(events.slice(requested + 1), standing);
+    const after = await rows(target);
+    const finished = after.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
+    assert.ok(finished);
+    assert.equal(finished.id, journal.id);
+    assert.notEqual(finished.finishedAt, null);
+    const settled = finished.parts.find((part) => isToolUIPart(part));
+    assert.ok(settled);
+    assert.equal(settled.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+  }),
+);
 
-  await play([...attempts, ...answered], standing);
-  assert.deepEqual(await reasoningIds(), minted);
+it.effect(
+  "an observation turn over a roster diff lands the same way, with the roster look as its source, and its briefing is offered once however often the result is re-emitted",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation(CONVERSATION_KIND.OBSERVED);
+      const standing = standingFor(target, BRAIN_HOST_TURN.OBSERVATION);
+      const turnId = "turn_0";
+      await play(
+        [
+          stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
+          stamped({
+            type: "message.received",
+            data: { turnId, sequence: 0, message: "[observed events] ..." },
+          }),
+          stamped({
+            type: "step.started",
+            data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" },
+          }),
+          stamped({
+            type: "actions.requested",
+            data: {
+              turnId,
+              sequence: 0,
+              stepIndex: 0,
+              actions: [
+                {
+                  kind: "tool-call",
+                  callId: "call-a",
+                  toolName: BRAIN_TOOL.ANNOUNCE,
+                  input: { briefing: "One agent finished." },
+                },
+              ],
+            },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              turnId,
+              sequence: 0,
+              stepIndex: 0,
+              status: "completed",
+              result: {
+                kind: "tool-result",
+                callId: "call-a",
+                toolName: BRAIN_TOOL.ANNOUNCE,
+                output: { status: "accepted" },
+              },
+            },
+          }),
+          stamped({
+            type: "step.completed",
+            data: { turnId, sequence: 0, stepIndex: 0, finishReason: "tool-calls" },
+          }),
+          // eve re-emits the settled call under a new event id, as a replayed step would.
+          stamped({
+            type: "action.result",
+            data: {
+              turnId,
+              sequence: 0,
+              stepIndex: 0,
+              status: "completed",
+              result: {
+                kind: "tool-result",
+                callId: "call-a",
+                toolName: BRAIN_TOOL.ANNOUNCE,
+                output: { status: "accepted" },
+              },
+            },
+          }),
+          stamped({
+            type: "step.started",
+            data: { turnId, sequence: 0, stepIndex: 1, modelId: "m" },
+          }),
+          stamped({
+            type: "message.completed",
+            data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop", message: null },
+          }),
+          stamped({
+            type: "step.completed",
+            data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop" },
+          }),
+          stamped({ type: "turn.completed", data: { turnId, sequence: 0 } }),
+        ],
+        standing,
+      );
 
-  await play([stamped({ type: "turn.completed", data: { turnId, sequence: 0 } })], standing);
-  const answer = (await rows(target)).messageRows.find(
-    (row) => row.role === MESSAGE_ROLE.ASSISTANT,
-  );
-  assert.ok(answer);
-  assert.deepEqual(
-    answer.parts.map((part) => part.type),
-    [STEP_START, "reasoning", "reasoning", "text"],
-  );
-  assert.deepEqual(await reasoningIds(), minted);
-});
+      const { turnRows, messageRows } = await rows(target);
+      assert.equal(turnRows[0]?.origin, TURN_ORIGIN.ROSTER_DIFF);
+      assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
+      assert.equal(turnRows[0]?.usage, null);
+      const [words, answer] = messageRows;
+      assert.ok(words && answer);
+      assert.deepEqual(words.metadata, {
+        author: MESSAGE_AUTHOR.BRAIN,
+        source: OBSERVATION_SOURCE.ROSTER_LOOK,
+      });
+      // The second step delivered nothing to announce, and stands as its boundary alone.
+      assert.deepEqual(
+        answer.parts.map((part) => part.type),
+        [STEP_START, `tool-${BRAIN_TOOL.ANNOUNCE}`, STEP_START],
+      );
+      const offered = (await readEventsByConversation(database.run, target.conversationId)).map(
+        (event) => ({ kind: event.kind, messageId: event.message_id, payload: event.payload }),
+      );
+      assert.deepEqual(offered, [
+        {
+          kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+          messageId: answer.id,
+          payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
+        },
+      ]);
+    }),
+);
 
-test("a turn whose request named no kind is not recorded, and the refusal is reported rather than thrown", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, undefined);
-  const before = refusals.length;
-  await play(typedTurn("turn_0", 0), standing);
-  const { turnRows, messageRows } = await rows(target);
-  assert.equal(turnRows.length, 0);
-  assert.equal(messageRows.length, 0);
-  assert.equal(refusals.length, before + 1);
-});
+it.effect(
+  "a failed turn settles its journal and names the failure; a cancelled one settles its unanswered parts",
+  () =>
+    Effect.promise(async () => {
+      const failed = await conversation();
+      const failedStanding = standingFor(failed, BRAIN_HOST_TURN.TYPED);
+      const events = typedTurn("turn_0", 0);
+      const requested = events.findIndex((event) => event.type === "actions.requested");
+      await play(events.slice(0, requested + 1), failedStanding);
+      await database.run(
+        relay.handle(
+          stamped({
+            type: "turn.failed",
+            data: {
+              turnId: "turn_0",
+              sequence: 0,
+              code: "model_error",
+              message: "upstream failed",
+            },
+          }),
+          failedStanding,
+        ),
+      );
+      const failedRows = await rows(failed);
+      assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
+      assert.equal(failedRows.turnRows[0]?.failure, "model");
+      const failedJournal = failedRows.messageRows.find(
+        (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+      );
+      assert.ok(failedJournal);
+      assert.notEqual(failedJournal.finishedAt, null);
 
-test("a second turn of the same session is another turn row, keyed from eve's own turn id", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  await play(typedTurn("turn_0", 0), standing);
-  await play(typedTurn("turn_1", 1), standing);
-  const { turnRows } = await rows(target);
-  assert.deepEqual(
-    turnRows.map((row) => row.id).sort(),
-    [hostTurnId(standing.sessionId, "turn_0"), hostTurnId(standing.sessionId, "turn_1")].sort(),
-  );
-  assert.deepEqual(turnRows.map((row) => row.eveTurnId).sort(), ["turn_0", "turn_1"]);
-  assert.equal(
-    (await readMessagesByConversationTyped(database.run, target.conversationId)).filter(
-      (row) => row.role === MESSAGE_ROLE.USER,
-    ).length,
-    2,
-  );
-});
+      const cancelled = await conversation();
+      const cancelledStanding = standingFor(cancelled, BRAIN_HOST_TURN.TYPED);
+      await play(events.slice(0, requested + 1), cancelledStanding);
+      await database.run(
+        relay.handle(
+          stamped({ type: "turn.cancelled", data: { turnId: "turn_0", sequence: 0 } }),
+          cancelledStanding,
+        ),
+      );
+      const cancelledRows = await rows(cancelled);
+      assert.equal(cancelledRows.turnRows[0]?.status, TURN_STATUS.CANCELLED);
+      const journal = cancelledRows.messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
+      assert.ok(journal);
+      const part = journal.parts.find((candidate) => isToolUIPart(candidate));
+      assert.ok(part);
+      assert.notEqual(part.state, TOOL_PART_STATE.INPUT_AVAILABLE);
+    }),
+);
 
-test("the recent exchange reads back the newest finished messages, oldest first, and never a journal still open", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const tools = CATALOG_TOOL_SET;
-  await play(typedTurn("turn_0", 0), standing);
-  const events = typedTurn("turn_1", 1);
-  const requested = events.findIndex((event) => event.type === "actions.requested");
-  await play(events.slice(0, requested + 1), standing);
+it.effect(
+  "events eve re-emits under new ids land on the rows the first attempt opened, and a replayed step adds no part and counts no usage twice",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const events = typedTurn("turn_0", 0);
+      const completed = events.findIndex((event) => event.type === "turn.completed");
+      const requested = events.findIndex((event) => event.type === "actions.requested");
+      await play(events.slice(0, requested + 1), standing);
+      await play(events.slice(0, completed), standing);
+      await play(events.slice(0, completed), standing);
+      const replayedJournal = (await rows(target)).messageRows.find(
+        (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+      );
+      assert.equal(replayedJournal?.parts.filter((part) => part.type === STEP_START).length, 2);
+      await play(events.slice(completed), standing);
 
-  const recent = await database.run(readRecentMessages(target, tools, 10));
-  assert.deepEqual(
-    recent.map((message) => message.role),
-    [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT, MESSAGE_ROLE.USER],
-  );
-  const newest = await database.run(readRecentMessages(target, tools, 1));
-  assert.deepEqual(
-    newest.map((message) => message.role),
-    [MESSAGE_ROLE.USER],
-  );
+      const { turnRows, messageRows } = await rows(target);
+      assert.equal(turnRows.length, 1);
+      assert.deepEqual(turnRows[0]?.usage, {
+        inputTokens: 30,
+        outputTokens: 8,
+        cachedInputTokens: 4,
+        reasoningTokens: 0,
+      });
+      assert.equal(messageRows.length, 2);
+      const answer = messageRows[1];
+      assert.ok(answer);
+      assert.deepEqual(
+        answer.parts.map((part) => part.type),
+        [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
+      );
+    }),
+);
 
-  await play(events.slice(requested + 1), standing);
-  const settled = await database.run(readRecentMessages(target, tools, 10));
-  assert.equal(settled.length, 4);
-  assert.equal(settled.at(-1)?.role, MESSAGE_ROLE.ASSISTANT);
-});
+it.effect(
+  "a reasoning item eve names no id for is journaled under the id the relay mints for its step, and the answer keeps that id",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const events = typedTurn("turn_0", 0);
+      const reasoned = events.findIndex((event) => event.type === "reasoning.completed");
+      await play(events.slice(0, reasoned + 1), standing);
+      const journal = (await rows(target)).messageRows.find(
+        (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+      );
+      assert.ok(journal);
+      const minted = reasoningItemId(standing.sessionId, "turn_0", 0, 0);
+      const journaled = journal.parts.find((part) => part.type === "reasoning");
+      assert.ok(journaled && journaled.type === "reasoning");
+      assert.equal(journaled.id, minted);
 
-test("a turn whose answer the store refuses ends failed for persistence rather than sealed without its words", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const refusing = new StreamRelay({
-    asks: askRecord(),
-    stopTurn: () => Effect.void,
-    writer: {
-      consume: (to, event) =>
-        event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
-        event.message.role === MESSAGE_ROLE.ASSISTANT
-          ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
-          : writer.consume(to, event),
-      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
-    },
-    offer: () => Effect.succeed(true),
-    now: () => NOW,
-    report: (message) => refusals.push(message),
-  });
-  for (const event of typedTurn("turn_0", 0)) await database.run(refusing.handle(event, standing));
+      await play(events.slice(reasoned + 1), standing);
+      const answer = (await rows(target)).messageRows.find(
+        (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+      );
+      assert.ok(answer);
+      const kept = answer.parts.find((part) => part.type === "reasoning");
+      assert.ok(kept && kept.type === "reasoning");
+      assert.equal(kept.id, minted);
+    }),
+);
 
-  const { turnRows } = await rows(target);
-  assert.equal(turnRows[0]?.status, TURN_STATUS.FAILED);
-  assert.equal(turnRows[0]?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
-});
+it.effect(
+  "a step that produced nothing still stands as its boundary, told once however often eve starts it again",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const turnId = "turn_0";
+      await play(
+        [
+          stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
+          stamped({ type: "message.received", data: { turnId, sequence: 0, message: "hello" } }),
+          stamped({
+            type: "step.started",
+            data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" },
+          }),
+          stamped({
+            type: "step.started",
+            data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" },
+          }),
+          stamped({
+            type: "step.started",
+            data: { turnId, sequence: 0, stepIndex: 1, modelId: "m" },
+          }),
+          stamped({
+            type: "message.completed",
+            data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop", message: "Hi." },
+          }),
+          stamped({ type: "turn.completed", data: { turnId, sequence: 0 } }),
+        ],
+        standing,
+      );
+      const answer = (await rows(target)).messageRows.find(
+        (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+      );
+      assert.ok(answer);
+      assert.deepEqual(
+        answer.parts.map((part) => part.type),
+        [STEP_START, STEP_START, "text"],
+      );
+    }),
+);
 
-test("a turn start whose write throws keeps nothing in relay state, so the start eve emits again queues the row", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  let failures = 1;
-  const failing = new StreamRelay({
-    asks: askRecord(),
-    stopTurn: () => Effect.void,
-    writer: {
-      consume: (to, event) => writer.consume(to, event),
-      enqueueTurn: (to, enqueue) => {
-        if (failures > 0) {
-          failures -= 1;
-          return Effect.die(new Error("the database went away"));
-        }
-        return writer.enqueueTurn(to, enqueue);
-      },
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
-    },
-    offer: () => Effect.succeed(true),
-    now: () => NOW,
-    report: (message) => refusals.push(message),
-  });
-  const started = () => stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } });
-  await assert.rejects(() => database.run(failing.handle(started(), standing)), Error);
-  assert.deepEqual(standing.state.get(), { turns: {} });
-  assert.equal((await rows(target)).turnRows.length, 0);
+it.effect(
+  "a step eve re-runs whole after a failed attempt keeps the first attempt's reasoning under its ordinal and lands the second's beside it under the next; the stream replayed in its order adds nothing",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const turnId = "turn_0";
+      const step = (reasoning: string) => [
+        stamped({
+          type: "step.started",
+          data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" },
+        }),
+        stamped({
+          type: "reasoning.completed",
+          data: { turnId, sequence: 0, stepIndex: 0, reasoning },
+        }),
+      ];
+      const attempts = [
+        ...step("The first attempt's thought."),
+        ...step("The second attempt's thought."),
+      ];
+      const answered = [
+        stamped({
+          type: "message.completed",
+          data: { turnId, sequence: 0, stepIndex: 0, finishReason: "stop", message: "Hi." },
+        }),
+      ];
+      const minted = [0, 1].map((ordinal) =>
+        reasoningItemId(standing.sessionId, turnId, 0, ordinal),
+      );
+      const reasoningIds = async () => {
+        const journal = (await rows(target)).messageRows.find(
+          (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+        );
+        assert.ok(journal);
+        return journal.parts.flatMap((part) => (part.type === "reasoning" ? [part.id] : []));
+      };
 
-  await database.run(failing.handle(started(), standing));
-  assert.equal(Object.hasOwn(standing.state.get().turns, "turn_0"), true);
-  const { turnRows } = await rows(target);
-  assert.equal(turnRows.length, 1);
-  assert.equal(turnRows[0]?.status, TURN_STATUS.RUNNING);
-});
+      await play(
+        [
+          stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
+          stamped({ type: "message.received", data: { turnId, sequence: 0, message: "hello" } }),
+          ...attempts,
+          ...answered,
+        ],
+        standing,
+      );
+      assert.deepEqual(await reasoningIds(), minted);
 
-test("a turn whose ask the store refuses writes no answer and ends failed for persistence, so no reply settles against a missing ask", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  const refusing = new StreamRelay({
-    asks: askRecord(),
-    stopTurn: () => Effect.void,
-    writer: {
-      consume: (to, event) =>
-        event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED && event.message.role === MESSAGE_ROLE.USER
-          ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
-          : writer.consume(to, event),
-      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
-    },
-    offer: () => Effect.succeed(true),
-    now: () => NOW,
-    report: (message) => refusals.push(message),
-  });
-  for (const event of typedTurn("turn_0", 0)) await database.run(refusing.handle(event, standing));
+      await play([...attempts, ...answered], standing);
+      assert.deepEqual(await reasoningIds(), minted);
 
-  const { turnRows, messageRows } = await rows(target);
-  assert.equal(turnRows[0]?.status, TURN_STATUS.FAILED);
-  assert.equal(turnRows[0]?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
-  // The journal of what the model did stands; the answer to the missing ask does not.
-  assert.deepEqual(
-    messageRows.map((row) => [row.role, row.parts.map((part) => part.type)]),
-    [
-      [
-        MESSAGE_ROLE.ASSISTANT,
-        [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`, "reasoning", STEP_START],
-      ],
-    ],
-  );
-  assert.deepEqual(standing.state.get(), { turns: {} });
-});
+      await play([stamped({ type: "turn.completed", data: { turnId, sequence: 0 } })], standing);
+      const answer = (await rows(target)).messageRows.find(
+        (row) => row.role === MESSAGE_ROLE.ASSISTANT,
+      );
+      assert.ok(answer);
+      assert.deepEqual(
+        answer.parts.map((part) => part.type),
+        [STEP_START, "reasoning", "reasoning", "text"],
+      );
+      assert.deepEqual(await reasoningIds(), minted);
+    }),
+);
 
-test("a turn end the store refuses keeps the turn in relay state, so the boundary eve re-emits settles the row instead of finding nothing", async () => {
-  const target = await conversation();
-  const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-  let refuseEnds = 1;
-  const refusing = new StreamRelay({
-    asks: askRecord(),
-    stopTurn: () => Effect.void,
-    writer: {
-      consume: (to, event) => {
-        if (event.kind === BRAIN_RUN_EVENT.TURN_ENDED && refuseEnds > 0) {
-          refuseEnds -= 1;
-          return Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
-        }
-        return writer.consume(to, event);
-      },
-      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
-    },
-    offer: () => Effect.succeed(true),
-    now: () => NOW,
-    report: (message) => refusals.push(message),
-  });
-  const events = typedTurn("turn_0", 0);
-  for (const event of events) await database.run(refusing.handle(event, standing));
-  assert.equal(Object.hasOwn(standing.state.get().turns, "turn_0"), true);
-  const running = await rows(target);
-  assert.equal(running.turnRows[0]?.status, TURN_STATUS.RUNNING);
+it.effect(
+  "a turn whose request named no kind is not recorded, and the refusal is reported rather than thrown",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, undefined);
+      const before = refusals.length;
+      await play(typedTurn("turn_0", 0), standing);
+      const { turnRows, messageRows } = await rows(target);
+      assert.equal(turnRows.length, 0);
+      assert.equal(messageRows.length, 0);
+      assert.equal(refusals.length, before + 1);
+    }),
+);
 
-  await database.run(
-    refusing.handle(
-      stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
-      standing,
-    ),
-  );
-  assert.deepEqual(standing.state.get(), { turns: {} });
-  const settled = await rows(target);
-  assert.equal(settled.turnRows.length, 1);
-  assert.equal(settled.turnRows[0]?.status, TURN_STATUS.SETTLED);
-  assert.equal(settled.messageRows.filter((row) => row.role === MESSAGE_ROLE.ASSISTANT).length, 1);
-});
+it.effect(
+  "a second turn of the same session is another turn row, keyed from eve's own turn id",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      await play(typedTurn("turn_0", 0), standing);
+      await play(typedTurn("turn_1", 1), standing);
+      const { turnRows } = await rows(target);
+      assert.deepEqual(
+        turnRows.map((row) => row.id).sort(),
+        [hostTurnId(standing.sessionId, "turn_0"), hostTurnId(standing.sessionId, "turn_1")].sort(),
+      );
+      assert.deepEqual(turnRows.map((row) => row.eveTurnId).sort(), ["turn_0", "turn_1"]);
+      assert.equal(
+        (await readMessagesByConversationTyped(database.run, target.conversationId)).filter(
+          (row) => row.role === MESSAGE_ROLE.USER,
+        ).length,
+        2,
+      );
+    }),
+);
 
-test("a hold-release turn lands under the hold_release origin, its received message the brain's own note of a hold released", async () => {
-  const target = await conversation(CONVERSATION_KIND.OBSERVED);
-  const standing = standingFor(target, BRAIN_HOST_TURN.HOLD_RELEASE);
-  await play(typedTurn("turn_0", 0), standing);
+it.effect(
+  "the recent exchange reads back the newest finished messages, oldest first, and never a journal still open",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const tools = CATALOG_TOOL_SET;
+      await play(typedTurn("turn_0", 0), standing);
+      const events = typedTurn("turn_1", 1);
+      const requested = events.findIndex((event) => event.type === "actions.requested");
+      await play(events.slice(0, requested + 1), standing);
 
-  const { turnRows, messageRows } = await rows(target);
-  assert.equal(turnRows.length, 1);
-  assert.equal(turnRows[0]?.origin, TURN_ORIGIN.HOLD_RELEASE);
-  assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
-  const words = messageRows.find((row) => row.role === MESSAGE_ROLE.USER);
-  assert.ok(words);
-  assert.deepEqual(words.metadata, {
-    author: MESSAGE_AUTHOR.BRAIN,
-    source: OBSERVATION_SOURCE.HOLD_RELEASE,
-  });
-});
+      const recent = await database.run(readRecentMessages(target, tools, 10));
+      assert.deepEqual(
+        recent.map((message) => message.role),
+        [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT, MESSAGE_ROLE.USER],
+      );
+      const newest = await database.run(readRecentMessages(target, tools, 1));
+      assert.deepEqual(
+        newest.map((message) => message.role),
+        [MESSAGE_ROLE.USER],
+      );
+
+      await play(events.slice(requested + 1), standing);
+      const settled = await database.run(readRecentMessages(target, tools, 10));
+      assert.equal(settled.length, 4);
+      assert.equal(settled.at(-1)?.role, MESSAGE_ROLE.ASSISTANT);
+    }),
+);
+
+it.effect(
+  "a turn whose answer the store refuses ends failed for persistence rather than sealed without its words",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const refusing = new StreamRelay({
+        asks: askRecord(),
+        stopTurn: () => Effect.void,
+        writer: {
+          consume: (to, event) =>
+            event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
+            event.message.role === MESSAGE_ROLE.ASSISTANT
+              ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
+              : writer.consume(to, event),
+          enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+          attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+        },
+        offer: () => Effect.succeed(true),
+        now: () => NOW,
+        report: (message) => refusals.push(message),
+      });
+      for (const event of typedTurn("turn_0", 0))
+        await database.run(refusing.handle(event, standing));
+
+      const { turnRows } = await rows(target);
+      assert.equal(turnRows[0]?.status, TURN_STATUS.FAILED);
+      assert.equal(turnRows[0]?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+    }),
+);
+
+it.effect(
+  "a turn start whose write throws keeps nothing in relay state, so the start eve emits again queues the row",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      let failures = 1;
+      const failing = new StreamRelay({
+        asks: askRecord(),
+        stopTurn: () => Effect.void,
+        writer: {
+          consume: (to, event) => writer.consume(to, event),
+          enqueueTurn: (to, enqueue) => {
+            if (failures > 0) {
+              failures -= 1;
+              return Effect.die(new Error("the database went away"));
+            }
+            return writer.enqueueTurn(to, enqueue);
+          },
+          attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+        },
+        offer: () => Effect.succeed(true),
+        now: () => NOW,
+        report: (message) => refusals.push(message),
+      });
+      const started = () =>
+        stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } });
+      await assert.rejects(() => database.run(failing.handle(started(), standing)), Error);
+      assert.deepEqual(standing.state.get(), { turns: {} });
+      assert.equal((await rows(target)).turnRows.length, 0);
+
+      await database.run(failing.handle(started(), standing));
+      assert.equal(Object.hasOwn(standing.state.get().turns, "turn_0"), true);
+      const { turnRows } = await rows(target);
+      assert.equal(turnRows.length, 1);
+      assert.equal(turnRows[0]?.status, TURN_STATUS.RUNNING);
+    }),
+);
+
+it.effect(
+  "a turn whose ask the store refuses writes no answer and ends failed for persistence, so no reply settles against a missing ask",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const refusing = new StreamRelay({
+        asks: askRecord(),
+        stopTurn: () => Effect.void,
+        writer: {
+          consume: (to, event) =>
+            event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
+            event.message.role === MESSAGE_ROLE.USER
+              ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
+              : writer.consume(to, event),
+          enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+          attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+        },
+        offer: () => Effect.succeed(true),
+        now: () => NOW,
+        report: (message) => refusals.push(message),
+      });
+      for (const event of typedTurn("turn_0", 0))
+        await database.run(refusing.handle(event, standing));
+
+      const { turnRows, messageRows } = await rows(target);
+      assert.equal(turnRows[0]?.status, TURN_STATUS.FAILED);
+      assert.equal(turnRows[0]?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+      // The journal of what the model did stands; the answer to the missing ask does not.
+      assert.deepEqual(
+        messageRows.map((row) => [row.role, row.parts.map((part) => part.type)]),
+        [
+          [
+            MESSAGE_ROLE.ASSISTANT,
+            [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`, "reasoning", STEP_START],
+          ],
+        ],
+      );
+      assert.deepEqual(standing.state.get(), { turns: {} });
+    }),
+);
+
+it.effect(
+  "a turn end the store refuses keeps the turn in relay state, so the boundary eve re-emits settles the row instead of finding nothing",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      let refuseEnds = 1;
+      const refusing = new StreamRelay({
+        asks: askRecord(),
+        stopTurn: () => Effect.void,
+        writer: {
+          consume: (to, event) => {
+            if (event.kind === BRAIN_RUN_EVENT.TURN_ENDED && refuseEnds > 0) {
+              refuseEnds -= 1;
+              return Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
+            }
+            return writer.consume(to, event);
+          },
+          enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+          attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+        },
+        offer: () => Effect.succeed(true),
+        now: () => NOW,
+        report: (message) => refusals.push(message),
+      });
+      const events = typedTurn("turn_0", 0);
+      for (const event of events) await database.run(refusing.handle(event, standing));
+      assert.equal(Object.hasOwn(standing.state.get().turns, "turn_0"), true);
+      const running = await rows(target);
+      assert.equal(running.turnRows[0]?.status, TURN_STATUS.RUNNING);
+
+      await database.run(
+        refusing.handle(
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+          standing,
+        ),
+      );
+      assert.deepEqual(standing.state.get(), { turns: {} });
+      const settled = await rows(target);
+      assert.equal(settled.turnRows.length, 1);
+      assert.equal(settled.turnRows[0]?.status, TURN_STATUS.SETTLED);
+      assert.equal(
+        settled.messageRows.filter((row) => row.role === MESSAGE_ROLE.ASSISTANT).length,
+        1,
+      );
+    }),
+);
+
+it.effect(
+  "a hold-release turn lands under the hold_release origin, its received message the brain's own note of a hold released",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation(CONVERSATION_KIND.OBSERVED);
+      const standing = standingFor(target, BRAIN_HOST_TURN.HOLD_RELEASE);
+      await play(typedTurn("turn_0", 0), standing);
+
+      const { turnRows, messageRows } = await rows(target);
+      assert.equal(turnRows.length, 1);
+      assert.equal(turnRows[0]?.origin, TURN_ORIGIN.HOLD_RELEASE);
+      assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
+      const words = messageRows.find((row) => row.role === MESSAGE_ROLE.USER);
+      assert.ok(words);
+      assert.deepEqual(words.metadata, {
+        author: MESSAGE_AUTHOR.BRAIN,
+        source: OBSERVATION_SOURCE.HOLD_RELEASE,
+      });
+    }),
+);

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
-import { afterAll, test } from "vitest";
+import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
@@ -42,7 +43,6 @@ import {
   sessionStarted,
   thinkingAppended,
 } from "./support/live-events";
-import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation,
   insertDevice,
@@ -105,10 +105,14 @@ const writer = await database.run(
     now: () => new Date(NOW),
   }),
 );
-const asks = promisedAsks(database.run);
+const askEffects = askRecord();
+const asks = {
+  latestSession: (userId: string, conversationId: string) =>
+    database.run(askEffects.latestSession(userId, conversationId)),
+};
 const relay = new StreamRelay({
   writer,
-  asks: askRecord(),
+  asks: askEffects,
   stopTurn: () => Effect.void,
   offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
   now: () => NOW,
@@ -319,333 +323,379 @@ async function hangUp(context: Stand, session: Awaited<ReturnType<typeof openSes
   );
 }
 
-test("with no exchange offered the service only pipes: the session speaks, and nothing of Luke's reaches it, eve, or the record", async () => {
-  const context = await stand(OFFER.NONE);
-  const session = await openSession(context);
-  assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
-  await speak(session.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
+it.effect(
+  "with no exchange offered the service only pipes: the session speaks, and nothing of Luke's reaches it, eve, or the record",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.NONE);
+      const session = await openSession(context);
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      await speak(session.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
 
-  assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
-  assert.deepEqual(context.eve.opened, []);
-  assert.deepEqual(
-    await readMessagesByConversationTyped(database.run, context.target.conversationId),
-    [],
-  );
-  assert.equal(
-    context.log.some(
-      (entry) =>
-        entry.event === LOG_EVENT.EXCHANGE_ATTACHED || entry.event === LOG_EVENT.EXCHANGE_FAILED,
-    ),
-    false,
-  );
-
-  await hangUp(context, session);
-  await context.stop();
-});
-
-test("with the exchange offered it stands before the desktop is answered, seeds nothing a second time, reads the developer's words off the piped sideband, answers through eve, and appends the reply upstream while the desktop still receives every server frame", async () => {
-  const context = await stand(OFFER.EXCHANGE);
-  const session = await openSession(context);
-  assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
-  assert.deepEqual(
-    context.log.map((entry) => entry.event),
-    [LOG_EVENT.EXCHANGE_ATTACHED, LOG_EVENT.SESSION_CREATED],
-  );
-  // One creation, seeded by the desktop's frame alone: the exchange adopted the session and seeded nothing.
-  assert.equal(context.openAi.creates.length, 1);
-  const create = context.openAi.creates[0];
-  assert.ok(create && isRecord(create.body.session));
-  assert.deepEqual(create.body.session.input, SEED);
-  assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
-
-  const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
-  await speak(session.attach.socket, upstreamSessionId);
-  await until(
-    () => context.eve.opened.length === 1,
-    () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
-  );
-  assert.deepEqual(
-    context.eve.opened.map((message) => [message.conversationId, message.turn]),
-    [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
-  );
-  // The desktop was handed every server frame the session spoke, raw, as the relay always did.
-  const relayed = [record(await session.desktop.next()), record(await session.desktop.next())];
-  assert.deepEqual(
-    relayed.map((frame) => frame.type),
-    [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA],
-  );
-
-  const eveSession = await asks.latestSession(context.target.userId, context.target.conversationId);
-  assert.ok(eveSession);
-  const standing = {
-    sessionId: eveSession,
-    target: context.target,
-    turn: BRAIN_HOST_TURN.SPOKEN,
-    model: "scripted-model",
-    state: memoryRelayState(),
-  };
-  for (const event of spokenTurn(FIRST_EVE_TURN, NOW))
-    await database.run(relay.handle(event, standing));
-  // The reply reaches the session as the service's own appends, each acknowledged here as OpenAI
-  // would: the thinking note the reply streams under, then the sentences, which alone are spoken.
-  const spoken: string[] = [];
-  const kinds: string[] = [];
-  const diagnosis = async () => {
-    const rows = await readMessagesByConversationTyped(database.run, context.target.conversationId);
-    return `kinds ${JSON.stringify(kinds)}; reports ${JSON.stringify(context.reports)}; rows ${JSON.stringify(rows.map((row) => [row.role, row.clientId, row.finishedAt !== null]))}; log ${JSON.stringify(context.log.map((entry) => entry.event))}`;
-  };
-  while (spoken.length < 2) {
-    const sent = clientEvent(
-      await session.upstream.next(5_000).catch(async (error: Error) => {
-        assert.fail(`${error.message}: ${await diagnosis()}`);
-      }),
-    );
-    kinds.push(sent.type);
-    if (sent.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
-      await sendText(session.attach.socket, JSON.stringify(thinkingAppended(sent.event_id)));
-      continue;
-    }
-    assert.equal(sent.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-    if (sent.type !== LIVE_CLIENT_EVENT.COMMENTARY_APPEND) break;
-    assert.equal(sent.delegation_id, "dl_1");
-    spoken.push(sent.content);
-    await sendText(
-      session.attach.socket,
-      JSON.stringify(
-        appended(sent.event_id, 3000 + spoken.length * 1000, 4000 + spoken.length * 1000),
-      ),
-    );
-  }
-  assert.deepEqual(spoken, ["One agent finished.", "Another is waiting on you."]);
-  assert.equal(kinds.includes(LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND), false);
-
-  await hangUp(context, session);
-  // The record was drained before the session was reported ended: the developer's line stands under the delegation's id.
-  const rows = await readMessagesByConversationTyped(database.run, context.target.conversationId);
-  assert.deepEqual(
-    rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => row.clientId),
-    ["dl_1"],
-  );
-  await context.stop();
-});
-
-test("an exchange offered that cannot stand refuses the session as unavailable, with the sideband released and the refusal logged, rather than running it with no one to answer", async () => {
-  const context = await stand(OFFER.FAILING);
-  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
-  assert.ok("reader" in opened);
-  const desktop = opened.reader;
-  await send(desktop.socket, {
-    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-    sdp: SDP_OFFER,
-    voice: LIVE_VOICE.MARIN,
-    input: SEED,
-  });
-  const attach = await context.openAi.nextAttach();
-  const refusal = record(await desktop.next());
-  assert.equal(refusal.error, "unavailable");
-  const closed = await desktop.closed;
-  assert.equal(closed.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
-  const upstreamClosed = await readSocket(attach.socket).closed;
-  assert.equal(upstreamClosed.code, SOCKET_CLOSE_CODE.GOING_AWAY);
-  assert.deepEqual(
-    context.log.map((entry) => entry.event),
-    [LOG_EVENT.EXCHANGE_FAILED, LOG_EVENT.SESSION_REFUSED],
-  );
-  await context.stop();
-});
-
-test("a desktop that hangs up while the exchange is standing is answered nothing: the exchange is stopped, the session closed gracefully, the sideband released, and no session is reported created or ended", async () => {
-  const context = await stand(OFFER.GATED);
-  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
-  assert.ok("reader" in opened);
-  const desktop = opened.reader;
-  await send(desktop.socket, {
-    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-    sdp: SDP_OFFER,
-    voice: LIVE_VOICE.MARIN,
-    input: SEED,
-  });
-  const attach = await context.openAi.nextAttach();
-  const upstream = readSocket(attach.socket);
-  desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
-  await desktop.closed;
-  context.release();
-  // The exchange's own graceful close, answered as OpenAI would, so its stop settles on the final event.
-  const closing = clientEvent(await upstream.next(5_000));
-  assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
-  await sendText(
-    attach.socket,
-    JSON.stringify({
-      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
-      event_id: "closed",
-      reason: "close_requested",
-      usage: { seconds: 0 },
-    }),
-  );
-  // The exchange's own graceful close is what closes the socket, normally; the release after it finds it gone.
-  const upstreamClosed = await upstream.closed;
-  assert.equal(upstreamClosed.code, SOCKET_CLOSE_CODE.NORMAL);
-  assert.deepEqual(
-    context.log.map((entry) => entry.event),
-    [LOG_EVENT.EXCHANGE_ATTACHED],
-  );
-  await context.stop();
-});
-
-test("what the session speaks while the exchange is standing is read once both consumers listen: the desktop is handed the frames in order, and the exchange has heard the start and the words when the delegation arrives", async () => {
-  const context = await stand(OFFER.GATED);
-  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
-  assert.ok("reader" in opened);
-  const desktop = opened.reader;
-  await send(desktop.socket, {
-    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-    sdp: SDP_OFFER,
-    voice: LIVE_VOICE.MARIN,
-    input: SEED,
-  });
-  const attach = await context.openAi.nextAttach();
-  const upstream = readSocket(attach.socket);
-  const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
-  // Spoken before either consumer listens: the exchange is still standing, the relay not yet piping.
-  await sendText(attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
-  await sendText(attach.socket, JSON.stringify(heard("What needs me?", 1000, 2400)));
-  await sleep(QUIET_MS);
-  context.release();
-  const created = record(
-    await desktop.next(5_000).catch((error: Error) => {
-      assert.fail(
-        `${error.message}: log ${JSON.stringify(context.log.map((entry) => entry.event))}; reports ${JSON.stringify(context.reports)}; upstream open ${attach.socket.readyState}`,
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+      assert.deepEqual(context.eve.opened, []);
+      assert.deepEqual(
+        await readMessagesByConversationTyped(database.run, context.target.conversationId),
+        [],
       );
+      assert.equal(
+        context.log.some(
+          (entry) =>
+            entry.event === LOG_EVENT.EXCHANGE_ATTACHED ||
+            entry.event === LOG_EVENT.EXCHANGE_FAILED,
+        ),
+        false,
+      );
+
+      await hangUp(context, session);
+      await context.stop();
     }),
-  );
-  assert.equal(created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
-  const relayed: string[] = [];
-  const deadline = Date.now() + 1_500;
-  while (Date.now() < deadline) {
-    try {
-      relayed.push(String(record(await desktop.next(Math.max(1, deadline - Date.now()))).type));
-    } catch {
-      break;
-    }
-  }
-  assert.deepEqual(
-    relayed,
-    [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA],
-    `desktop frames after created: ${JSON.stringify(relayed)}; log ${JSON.stringify(context.log.map((entry) => entry.event))}; reports ${JSON.stringify(context.reports)}; upstream paused ${attach.socket.isPaused}`,
-  );
-  await sendText(attach.socket, JSON.stringify(delegated("dl_1", 2500)));
-  await until(
-    () => context.eve.opened.length === 1,
-    () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
-  );
-  assert.deepEqual(
-    context.eve.opened.map((message) => [message.conversationId, message.turn]),
-    [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
-  );
-  // The acceptance itself sends nothing: until the brain answers, the exchange
-  // puts no frame of its own on the session.
-  assert.deepEqual(await framesWithin(upstream, QUIET_MS), []);
-  await context.stop();
-});
+);
 
-test("a fresh connection re-attached to a running session offers the exchange the session as started, where the creation offered it as not yet started, since the running session speaks its start to no later listener", async () => {
-  const context = await stand(OFFER.EXCHANGE);
-  const first = await openSession(context);
-  assert.equal(first.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
-  const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
-  const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
-  assert.ok("reader" in again);
-  await send(again.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
-  const reattach = await context.openAi.nextAttach();
-  const reattached = record(await again.reader.next());
-  assert.equal(reattached.type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
-  assert.deepEqual(
-    context.offered.map((session) => [session.sessionId, session.started]),
-    [
-      [sessionId, false],
-      [sessionId, true],
-    ],
-  );
-  // Both connections hang up; each relay's close is answered so each exchange's stop settles.
-  for (const [desktop, attach, upstream] of [
-    [again.reader, reattach, readSocket(reattach.socket)] as const,
-    [first.desktop, first.attach, first.upstream] as const,
-  ]) {
-    desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
-    const closing = clientEvent(await upstream.next(5_000));
-    assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
-    await sendText(
-      attach.socket,
-      JSON.stringify({
-        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
-        event_id: `closed-${desktop.socket.url}`,
-        reason: "close_requested",
-        usage: { seconds: 1 },
-      }),
-    );
-  }
-  await until(
-    () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
-    () =>
-      `both sessions to be reported ended; log ${JSON.stringify(context.log.map((entry) => entry.event))}`,
-  );
-  await context.stop();
-});
+it.effect(
+  "with the exchange offered it stands before the desktop is answered, seeds nothing a second time, reads the developer's words off the piped sideband, answers through eve, and appends the reply upstream while the desktop still receives every server frame",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context);
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      assert.deepEqual(
+        context.log.map((entry) => entry.event),
+        [LOG_EVENT.EXCHANGE_ATTACHED, LOG_EVENT.SESSION_CREATED],
+      );
+      // One creation, seeded by the desktop's frame alone: the exchange adopted the session and seeded nothing.
+      assert.equal(context.openAi.creates.length, 1);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      assert.deepEqual(create.body.session.input, SEED);
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
 
-test("the briefing look runs for as long as the session stands: a briefing on offer is claimed as the session's device and appended into the session with no delegation, without anyone asking for a look", async () => {
-  const context = await stand(OFFER.EXCHANGE);
-  const deviceId = randomUUID();
-  await insertDevice(database.run, {
-    id: deviceId,
-    userId: context.target.userId,
-    installationId: `install-${deviceId}`,
-    platform: DEVICE_PLATFORM.IOS,
-    lastSeenAt: new Date(NOW),
-  });
-  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
-    authorization: BEARER,
-    [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
-  });
-  assert.ok("reader" in opened);
-  const desktop = opened.reader;
-  await send(desktop.socket, {
-    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-    sdp: SDP_OFFER,
-    voice: LIVE_VOICE.MARIN,
-    input: SEED,
-  });
-  const attach = await context.openAi.nextAttach();
-  const upstream = readSocket(attach.socket);
-  const created = record(await desktop.next());
-  assert.equal(created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
-  await sendText(
-    attach.socket,
-    JSON.stringify(sessionStarted(context.openAi.attaches[0]?.sessionId ?? "")),
-  );
-  // The brain announces, as an observation turn through the relay: one briefing on offer for the account.
-  const standing = {
-    sessionId: `wrun_${randomUUID()}`,
-    target: context.target,
-    turn: BRAIN_HOST_TURN.OBSERVATION,
-    model: "scripted-model",
-    state: memoryRelayState(),
-  };
-  for (const event of announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW)) {
-    await database.run(relay.handle(event, standing));
-  }
-  const [offer] = await database.run(database.store.speech.open(context.target.userId));
-  assert.ok(offer);
-  // The look polls on its own cadence; nothing here asks it to look.
-  const spoken = clientEvent(await upstream.next(10_000));
-  assert.equal(spoken.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-  if (spoken.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND) {
-    assert.equal(spoken.delegation_id, null);
-    assert.equal(spoken.content, "One agent finished.");
-  }
-  assert.deepEqual(
-    (await readEventsByMessage(database.run, offer.messageId)).map((row) => row.kind),
-    [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED],
-  );
-  await hangUp(context, { desktop, upstream, attach, created });
-  await context.stop();
-});
+      const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await speak(session.attach.socket, upstreamSessionId);
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => [message.conversationId, message.turn]),
+        [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+      );
+      // The desktop was handed every server frame the session spoke, raw, as the relay always did.
+      const relayed = [record(await session.desktop.next()), record(await session.desktop.next())];
+      assert.deepEqual(
+        relayed.map((frame) => frame.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA],
+      );
+
+      const eveSession = await asks.latestSession(
+        context.target.userId,
+        context.target.conversationId,
+      );
+      assert.ok(eveSession);
+      const standing = {
+        sessionId: eveSession,
+        target: context.target,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      for (const event of spokenTurn(FIRST_EVE_TURN, NOW))
+        await database.run(relay.handle(event, standing));
+      // The reply reaches the session as the service's own appends, each acknowledged here as OpenAI
+      // would: the thinking note the reply streams under, then the sentences, which alone are spoken.
+      const spoken: string[] = [];
+      const kinds: string[] = [];
+      const diagnosis = async () => {
+        const rows = await readMessagesByConversationTyped(
+          database.run,
+          context.target.conversationId,
+        );
+        return `kinds ${JSON.stringify(kinds)}; reports ${JSON.stringify(context.reports)}; rows ${JSON.stringify(rows.map((row) => [row.role, row.clientId, row.finishedAt !== null]))}; log ${JSON.stringify(context.log.map((entry) => entry.event))}`;
+      };
+      while (spoken.length < 2) {
+        const sent = clientEvent(
+          await session.upstream.next(5_000).catch(async (error: Error) => {
+            assert.fail(`${error.message}: ${await diagnosis()}`);
+          }),
+        );
+        kinds.push(sent.type);
+        if (sent.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
+          await sendText(session.attach.socket, JSON.stringify(thinkingAppended(sent.event_id)));
+          continue;
+        }
+        assert.equal(sent.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+        if (sent.type !== LIVE_CLIENT_EVENT.COMMENTARY_APPEND) break;
+        assert.equal(sent.delegation_id, "dl_1");
+        spoken.push(sent.content);
+        await sendText(
+          session.attach.socket,
+          JSON.stringify(
+            appended(sent.event_id, 3000 + spoken.length * 1000, 4000 + spoken.length * 1000),
+          ),
+        );
+      }
+      assert.deepEqual(spoken, ["One agent finished.", "Another is waiting on you."]);
+      assert.equal(kinds.includes(LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND), false);
+
+      await hangUp(context, session);
+      // The record was drained before the session was reported ended: the developer's line stands under the delegation's id.
+      const rows = await readMessagesByConversationTyped(
+        database.run,
+        context.target.conversationId,
+      );
+      assert.deepEqual(
+        rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => row.clientId),
+        ["dl_1"],
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "an exchange offered that cannot stand refuses the session as unavailable, with the sideband released and the refusal logged, rather than running it with no one to answer",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.FAILING);
+      const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in opened);
+      const desktop = opened.reader;
+      await send(desktop.socket, {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+        sdp: SDP_OFFER,
+        voice: LIVE_VOICE.MARIN,
+        input: SEED,
+      });
+      const attach = await context.openAi.nextAttach();
+      const refusal = record(await desktop.next());
+      assert.equal(refusal.error, "unavailable");
+      const closed = await desktop.closed;
+      assert.equal(closed.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+      const upstreamClosed = await readSocket(attach.socket).closed;
+      assert.equal(upstreamClosed.code, SOCKET_CLOSE_CODE.GOING_AWAY);
+      assert.deepEqual(
+        context.log.map((entry) => entry.event),
+        [LOG_EVENT.EXCHANGE_FAILED, LOG_EVENT.SESSION_REFUSED],
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a desktop that hangs up while the exchange is standing is answered nothing: the exchange is stopped, the session closed gracefully, the sideband released, and no session is reported created or ended",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.GATED);
+      const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in opened);
+      const desktop = opened.reader;
+      await send(desktop.socket, {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+        sdp: SDP_OFFER,
+        voice: LIVE_VOICE.MARIN,
+        input: SEED,
+      });
+      const attach = await context.openAi.nextAttach();
+      const upstream = readSocket(attach.socket);
+      desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+      await desktop.closed;
+      context.release();
+      // The exchange's own graceful close, answered as OpenAI would, so its stop settles on the final event.
+      const closing = clientEvent(await upstream.next(5_000));
+      assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+      await sendText(
+        attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+          event_id: "closed",
+          reason: "close_requested",
+          usage: { seconds: 0 },
+        }),
+      );
+      // The exchange's own graceful close is what closes the socket, normally; the release after it finds it gone.
+      const upstreamClosed = await upstream.closed;
+      assert.equal(upstreamClosed.code, SOCKET_CLOSE_CODE.NORMAL);
+      assert.deepEqual(
+        context.log.map((entry) => entry.event),
+        [LOG_EVENT.EXCHANGE_ATTACHED],
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "what the session speaks while the exchange is standing is read once both consumers listen: the desktop is handed the frames in order, and the exchange has heard the start and the words when the delegation arrives",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.GATED);
+      const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in opened);
+      const desktop = opened.reader;
+      await send(desktop.socket, {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+        sdp: SDP_OFFER,
+        voice: LIVE_VOICE.MARIN,
+        input: SEED,
+      });
+      const attach = await context.openAi.nextAttach();
+      const upstream = readSocket(attach.socket);
+      const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      // Spoken before either consumer listens: the exchange is still standing, the relay not yet piping.
+      await sendText(attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
+      await sendText(attach.socket, JSON.stringify(heard("What needs me?", 1000, 2400)));
+      await sleep(QUIET_MS);
+      context.release();
+      const created = record(
+        await desktop.next(5_000).catch((error: Error) => {
+          assert.fail(
+            `${error.message}: log ${JSON.stringify(context.log.map((entry) => entry.event))}; reports ${JSON.stringify(context.reports)}; upstream open ${attach.socket.readyState}`,
+          );
+        }),
+      );
+      assert.equal(created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const relayed: string[] = [];
+      const deadline = Date.now() + 1_500;
+      while (Date.now() < deadline) {
+        try {
+          relayed.push(String(record(await desktop.next(Math.max(1, deadline - Date.now()))).type));
+        } catch {
+          break;
+        }
+      }
+      assert.deepEqual(
+        relayed,
+        [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA],
+        `desktop frames after created: ${JSON.stringify(relayed)}; log ${JSON.stringify(context.log.map((entry) => entry.event))}; reports ${JSON.stringify(context.reports)}; upstream paused ${attach.socket.isPaused}`,
+      );
+      await sendText(attach.socket, JSON.stringify(delegated("dl_1", 2500)));
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => [message.conversationId, message.turn]),
+        [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+      );
+      // The acceptance itself sends nothing: until the brain answers, the exchange
+      // puts no frame of its own on the session.
+      assert.deepEqual(await framesWithin(upstream, QUIET_MS), []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a fresh connection re-attached to a running session offers the exchange the session as started, where the creation offered it as not yet started, since the running session speaks its start to no later listener",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const first = await openSession(context);
+      assert.equal(first.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in again);
+      await send(again.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
+      const reattach = await context.openAi.nextAttach();
+      const reattached = record(await again.reader.next());
+      assert.equal(reattached.type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
+      assert.deepEqual(
+        context.offered.map((session) => [session.sessionId, session.started]),
+        [
+          [sessionId, false],
+          [sessionId, true],
+        ],
+      );
+      // Both connections hang up; each relay's close is answered so each exchange's stop settles.
+      for (const [desktop, attach, upstream] of [
+        [again.reader, reattach, readSocket(reattach.socket)] as const,
+        [first.desktop, first.attach, first.upstream] as const,
+      ]) {
+        desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+        const closing = clientEvent(await upstream.next(5_000));
+        assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+        await sendText(
+          attach.socket,
+          JSON.stringify({
+            type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+            event_id: `closed-${desktop.socket.url}`,
+            reason: "close_requested",
+            usage: { seconds: 1 },
+          }),
+        );
+      }
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () =>
+          `both sessions to be reported ended; log ${JSON.stringify(context.log.map((entry) => entry.event))}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "the briefing look runs for as long as the session stands: a briefing on offer is claimed as the session's device and appended into the session with no delegation, without anyone asking for a look",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const deviceId = randomUUID();
+      await insertDevice(database.run, {
+        id: deviceId,
+        userId: context.target.userId,
+        installationId: `install-${deviceId}`,
+        platform: DEVICE_PLATFORM.IOS,
+        lastSeenAt: new Date(NOW),
+      });
+      const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+        [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
+      });
+      assert.ok("reader" in opened);
+      const desktop = opened.reader;
+      await send(desktop.socket, {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+        sdp: SDP_OFFER,
+        voice: LIVE_VOICE.MARIN,
+        input: SEED,
+      });
+      const attach = await context.openAi.nextAttach();
+      const upstream = readSocket(attach.socket);
+      const created = record(await desktop.next());
+      assert.equal(created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      await sendText(
+        attach.socket,
+        JSON.stringify(sessionStarted(context.openAi.attaches[0]?.sessionId ?? "")),
+      );
+      // The brain announces, as an observation turn through the relay: one briefing on offer for the account.
+      const standing = {
+        sessionId: `wrun_${randomUUID()}`,
+        target: context.target,
+        turn: BRAIN_HOST_TURN.OBSERVATION,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      for (const event of announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW)) {
+        await database.run(relay.handle(event, standing));
+      }
+      const [offer] = await database.run(database.store.speech.open(context.target.userId));
+      assert.ok(offer);
+      // The look polls on its own cadence; nothing here asks it to look.
+      const spoken = clientEvent(await upstream.next(10_000));
+      assert.equal(spoken.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      if (spoken.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND) {
+        assert.equal(spoken.delegation_id, null);
+        assert.equal(spoken.content, "One agent finished.");
+      }
+      assert.deepEqual(
+        (await readEventsByMessage(database.run, offer.messageId)).map((row) => row.kind),
+        [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED],
+      );
+      await hangUp(context, { desktop, upstream, attach, created });
+      await context.stop();
+    }),
+);
