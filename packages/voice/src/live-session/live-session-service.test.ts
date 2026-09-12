@@ -1639,6 +1639,34 @@ test("facts for words since superseded, for a row never anticipated, or with no 
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
 });
 
+test("once a row is the spoken ask, a late fragment on it anticipates nothing more and a summary read ahead for it is dropped rather than appended into the exchange", async () => {
+  const brain = new AnticipatingBrain();
+  const f = fixture(brain);
+  const sideband = await f.open();
+  sideband.input("What is abc", 1000, 1500);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  assert.equal(brain.anticipations.length, 1);
+  sideband.delegation("item_1", 1600);
+  await drainMicrotasks();
+  assert.equal(f.brain.asks.length, 1);
+  // A fragment still inside the gap joins the same row, which is already the ask.
+  sideband.input(" doing", 1500, 1900);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  assert.equal(brain.anticipations.length, 1);
+  brain.facts({ rowId: 1, text: "abc finished the tests." });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+  assert.equal(
+    f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_DROPPED).length,
+    1,
+  );
+  // The developer's next utterance is a new row and is anticipated as usual.
+  sideband.input("And def?", 5000, 5400);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  assert.equal(brain.anticipations.length, 2);
+  assert.equal(brain.anticipations[1]?.rowId, 2);
+});
+
 test("a session's end and the drain each drop what the brain read ahead", async () => {
   const brain = new AnticipatingBrain();
   const f = fixture(brain);

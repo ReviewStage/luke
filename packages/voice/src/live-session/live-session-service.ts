@@ -234,6 +234,8 @@ interface StandingSession {
   anticipated: { rowId: number; text: string } | undefined;
   /** The row whose read-ahead summary was already appended; one per utterance. */
   factsAppendedFor: number | undefined;
+  /** The rows already composed as a spoken ask: a late fragment on one anticipates nothing more, and a summary read ahead for one is not appended into the exchange it opened. */
+  readonly askedRows: Set<number>;
   stopEvents: () => void;
   stopClose: () => void;
 }
@@ -677,6 +679,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       anticipateTimer: undefined,
       anticipated: undefined,
       factsAppendedFor: undefined,
+      askedRows: new Set(),
       stopEvents: () => undefined,
       stopClose: () => undefined,
     };
@@ -767,7 +770,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         void this.#writeSettled(session, speaker);
       }, UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS),
     );
-    if (speaker === TRANSCRIPT_SPEAKER.USER) this.#armAnticipation(session);
+    if (speaker === TRANSCRIPT_SPEAKER.USER && !session.askedRows.has(utterance.rowId)) {
+      this.#armAnticipation(session);
+    }
   }
 
   /**
@@ -796,7 +801,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const brain = this.#options.brain;
     if (!brain.anticipate || session.ended) return;
     const anticipation = anticipationOf(session.ledger.askContext(session.lastDelegationOffsetMs));
-    if (!anticipation) return;
+    if (!anticipation || session.askedRows.has(anticipation.rowId)) return;
     const partialAsk = anticipation.text.trim();
     if (partialAsk.length === 0) return;
     if (
@@ -817,9 +822,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /**
    * A summary the brain read ahead for one utterance, appended as thinking
    * under no delegation and as data, once per utterance, and only while the
-   * words it was read for are still the words on that row: an append cannot
-   * be taken back, so a summary of words since superseded is dropped, and so
-   * is one with no started session to reach.
+   * words it was read for are still the words on that row and that row has
+   * not yet become a spoken ask: an append cannot be taken back, so a summary
+   * of words since superseded is dropped, one that would land inside the
+   * exchange its own ask opened is dropped, and so is one with no started
+   * session to reach.
    */
   #anticipationFacts(facts: LiveBrainAnticipationFacts): void {
     const session = this.#speakable();
@@ -831,7 +838,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       !row ||
       anticipated.rowId !== facts.rowId ||
       anticipated.text !== row.text ||
-      session.factsAppendedFor === facts.rowId
+      session.factsAppendedFor === facts.rowId ||
+      session.askedRows.has(facts.rowId)
     ) {
       this.#trace(LIVE_TRACE_DECISION.FACTS_DROPPED);
       return;
@@ -919,9 +927,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const ask = context.ask;
     if (!ask) return;
     // The ask is here: a pause still pending would anticipate what the turn
-    // is about to read for itself. A read already under way is left to
-    // finish, since that turn is what waits for it.
+    // is about to read for itself, and a late fragment on this row must not
+    // supersede the slot that turn is taking. A read already under way is
+    // left to finish, since that turn is what waits for it.
     this.#cancelAnticipation(session);
+    session.askedRows.add(ask.rowId);
     session.lastDelegationOffsetMs = Math.max(offsetMs, ask.endMs);
     this.#trace(LIVE_TRACE_DECISION.DELEGATED);
     const question = [

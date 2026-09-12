@@ -212,8 +212,10 @@ Canonical commands:
   The same small model then writes a few factual sentences about what the
   reads answered, and the live session appends them once per utterance as
   thinking under no delegation, marked as data, only while the words they
-  were read for are still the words on that row; the brain's context holds
-  the reads themselves and never the summary.
+  were read for are still the words on that row and that row has not yet
+  become a spoken ask; a row already delegated anticipates nothing more,
+  so a late fragment cannot supersede the slot its turn is taking. The
+  brain's context holds the reads themselves and never the summary.
   An observed conversation's `announce` reaches the voice directly; main
   neither approves nor rewords it. Any conversation may delegate: the brain's
   `sessions_spawn` tool records a child (`agent:main:subagent:<uuid>`, kind
