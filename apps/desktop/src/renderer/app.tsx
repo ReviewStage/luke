@@ -218,6 +218,7 @@ export function App(): React.JSX.Element {
    * only when the panel is restored, by a callback that has to stay stable.
    */
   const standDownPage = useRef<SettingsView>(SETTINGS_VIEW.ROOT);
+  const standDownTab = useRef<PanelTab>(PANEL_TAB.SETTINGS);
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
@@ -384,12 +385,13 @@ export function App(): React.JSX.Element {
    * visiting and leaving.
    */
   const restorePanel = useCallback(() => {
-    changeTab(PANEL_TAB.SETTINGS);
+    changeTab(standDownTab.current);
     // The row this shape was begun from lives on one page, and changeTab has
     // just reset the tab to its front page: without this, the answer to what
     // was just done — the check beside a provider, the thank-you where the
-    // note was written — would land on a page nobody is looking at.
-    setSettingsView(standDownPage.current);
+    // note was written — would land on a page nobody is looking at. An entry
+    // begun where the roster would be comes back to the roster instead.
+    if (standDownTab.current === PANEL_TAB.SETTINGS) setSettingsView(standDownPage.current);
     expand();
   }, [changeTab, expand, setSettingsView]);
 
@@ -414,6 +416,7 @@ export function App(): React.JSX.Element {
     credentialHeld,
     consentConnectHeld,
     standDownPage,
+    standDownTab,
     expand,
     calendars,
   });
@@ -895,7 +898,7 @@ export function App(): React.JSX.Element {
   const providerConnect = {
     connected:
       gateSettings.credentialSources[CREDENTIAL_PROVIDER_ID.CONDUCTOR] !== CREDENTIAL_SOURCE.NONE,
-    onConnect: () => connections.credentials.connect(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
+    onConnect: () => connections.connectFromRoster(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
   };
   const conductorKeyGate: ConductorKeyGateControl | undefined = conductorKeyOnboardingOwed
     ? {
