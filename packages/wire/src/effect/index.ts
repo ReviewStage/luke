@@ -12,7 +12,6 @@ export {
   readEither,
   refusalIssue,
   SchemaRefusalError,
-  toSchemaRead,
   verbatimJsonSchema,
   WireDescriptionAnnotationId,
   wireRefusal,

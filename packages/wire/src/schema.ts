@@ -1,10 +1,9 @@
-import { Schema as EffectSchema, ParseResult, type SchemaAST } from "effect";
+import { Schema as EffectSchema, Either, ParseResult, type SchemaAST } from "effect";
 import {
   declareReader,
   describeWire,
   emitJsonSchema,
   readEither,
-  toSchemaRead,
   verbatimJsonSchema,
   wireRefusal,
 } from "./effect/json-schema.js";
@@ -152,7 +151,11 @@ function schemaOver<Value>(core: Core<Value>, absentAdmitted = false): Schema<Va
   const read = readEither(admitting);
   const schema: Schema<Value> = {
     effect: EffectSchema.make(admitting.ast),
-    read: (value) => toSchemaRead(read(value)),
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
     parse(value) {
       const result = schema.read(value);
       return result.ok ? result.value : undefined;
@@ -570,10 +573,7 @@ function refineSchema<Value>(
 /** The inner schema read forgivingly: what it refuses decodes to nothing, and its node stands. */
 function droppedCore<Value>(inner: Core<Value>): Core<Value | undefined> {
   const read = readEither(inner);
-  return declareReader((value) => {
-    const result = toSchemaRead(read(value));
-    return admit(result.ok ? result.value : undefined);
-  }, emitJsonSchema(inner));
+  return declareReader((value) => admit(Either.getOrUndefined(read(value))), emitJsonSchema(inner));
 }
 
 /**

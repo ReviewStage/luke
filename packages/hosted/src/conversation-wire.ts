@@ -4,7 +4,6 @@ import {
   declareReader,
   emitJsonSchema,
   readEither,
-  toSchemaRead,
   verbatimJsonSchema,
 } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Either } from "effect";
@@ -71,7 +70,11 @@ export interface HostedConversationAnswer {
 function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
   const read = readEither(core);
   return s.reader({
-    read: (value) => toSchemaRead(read(value)),
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
     jsonSchema: () => emitJsonSchema(core),
   });
 }

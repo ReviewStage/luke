@@ -512,15 +512,3 @@ export function refusalIssue(
   const issue = new ParseResult.Type(REFUSAL_AST[refusal], actual);
   return Arr.isNonEmptyReadonlyArray(path) ? new ParseResult.Pointer(path, actual, issue) : issue;
 }
-
-/**
- * A strangler shim: the `SchemaRead` a caller of the builder still holds,
- * written from an `Either`. P12-07 deletes it with `SchemaRead` itself once
- * every caller reads the `Either`.
- */
-export function toSchemaRead<A>(read: Either.Either<A, SchemaRefusalError>): SchemaRead<A> {
-  return Either.match(read, {
-    onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-    onRight: (value) => ({ ok: true, value }),
-  });
-}

@@ -54,10 +54,9 @@ declaration, failing with the issue `refusalIssue` writes for the word and
 path the reader decided — and never Effect's `title` or `description`, which
 Effect writes on every primitive and every built-in filter. A decode failure
 becomes a `SchemaRefusalError` in the same three refusal words the builder
-answers, through `readEither`; `toSchemaRead` is the strangler shim that
-hands the `Either` to a caller still holding a `SchemaRead`, deleted with it
-in P12-07, and the facade itself is the shim P12-08 deletes once every caller
-declares directly.
+answers, through `readEither`; a caller still holding a `SchemaRead` matches
+the `Either` at its own boundary, and the facade itself is the shim P12-08
+deletes once every caller declares directly and `SchemaRead` goes with it.
 
 What a schema emits is recorded rather than described. Every tool definition
 the action catalog produces, every schema the hosted wire and the live
@@ -268,9 +267,9 @@ and `docs/adr/0001-effect.md` names which caller and which PR for each.
 `@sidecar/wire/effect` is the same door for the Effect bridges that stand
 beside the hand-rolled base while both are still in use — the `Scope`,
 `Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
-`CloudFetch`, and the JSON Schema emitter with its `readEither` and
-`toSchemaRead` — kept off the main barrel so a caller that only wants the
-wire vocabulary never resolves `@effect/platform`. `@sidecar/runtime/effect` is
+`CloudFetch`, and the JSON Schema emitter with its `readEither` — kept off
+the main barrel so a caller that only wants the wire vocabulary never
+resolves `@effect/platform`. `@sidecar/runtime/effect` is
 that door one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and
 repeated work into a `Scope`, which is what cancels it, `cadenceHome` with
 `openCadenceScope`, `forkIntoCadence`, and `closeCadenceScope` are where a

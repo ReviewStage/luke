@@ -1,6 +1,6 @@
 import { effectSchema, type Schema, s } from "@sidecar/wire";
-import { emitJsonSchema, readEither, toSchemaRead } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -31,7 +31,11 @@ export interface ConversationClearAnswer {
 function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
   const read = readEither(core);
   return s.reader({
-    read: (value) => toSchemaRead(read(value)),
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
     jsonSchema: () => emitJsonSchema(core),
   });
 }
