@@ -15,7 +15,8 @@ import {
   type ObservedRoster,
 } from "./observed-roster.js";
 import { rosterDiff, rosterDiffIsEmpty } from "./roster-diff.js";
-import type { HostedStore } from "./store/index.js";
+import type { HostedStoreRun } from "./store/database.js";
+import type { HostedStore, RosterSnapshotRecord } from "./store/index.js";
 import { readApiKeyFor } from "./vault-keys.js";
 import type { VaultKeyRow } from "./vault-route.js";
 
@@ -35,6 +36,8 @@ export type ObservationStore = Pick<HostedStore, "roster">;
 
 export interface ObservationPassInput {
   userId: string;
+  /** The runner the pass's own store reads and writes are answered through. */
+  run: HostedStoreRun;
   rows: readonly VaultKeyRow[];
   secret: string;
   store: ObservationStore;
@@ -140,16 +143,17 @@ function rosterObservedUnder(
 }
 
 export async function storedRoster(
+  run: HostedStoreRun,
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
   secret: string,
 ): Promise<StoredSnapshot | undefined> {
-  let snapshot: Awaited<ReturnType<ObservationStore["roster"]["read"]>>;
+  let snapshot: RosterSnapshotRecord | undefined;
   try {
-    snapshot = await store.roster.read(userId);
+    snapshot = await run(store.roster.read(userId));
   } catch {
-    const observedAt = await store.roster.observedAt(userId).catch(() => undefined);
+    const observedAt = await run(store.roster.observedAt(userId)).catch(() => undefined);
     return observedAt === undefined ? undefined : { observedAt };
   }
   if (!snapshot) return undefined;
@@ -162,16 +166,18 @@ export async function storedRoster(
 export async function observeAndSnapshot(
   input: ObservationPassInput,
 ): Promise<ObservationPassOutcome> {
-  const { userId, store, now } = input;
+  const { userId, run, store, now } = input;
   // The attempt is on record before the provider is asked, so a pass that
   // hangs or is cut off with the function still moves this account to the
   // back of the schedule's order and reads as unfinished until a later pass
   // answers for it.
-  await store.roster.recordPass(userId, {
-    attemptedAt: now,
-    failure: CLOUD_OBSERVE_FAILURE.UNFINISHED,
-  });
-  const previous = await storedRoster(store, userId, input.rows, input.secret);
+  await run(
+    store.roster.recordPass(userId, {
+      attemptedAt: now,
+      failure: CLOUD_OBSERVE_FAILURE.UNFINISHED,
+    }),
+  );
+  const previous = await storedRoster(run, store, userId, input.rows, input.secret);
   const standing: Pick<ObservationPassOutcome, "roster" | "observedAt"> = {};
   if (previous?.roster) {
     standing.roster = previous.roster;
@@ -186,7 +192,7 @@ export async function observeAndSnapshot(
   });
   const failed = passes.find((pass) => pass.failure !== undefined);
   if (failed?.failure) {
-    await store.roster.recordPass(userId, { attemptedAt: now, failure: failed.failure });
+    await run(store.roster.recordPass(userId, { attemptedAt: now, failure: failed.failure }));
     return { complete: false, failure: failed.failure, changed: false, ...standing };
   }
 
@@ -204,18 +210,23 @@ export async function observeAndSnapshot(
   const changed = diff !== undefined && !rosterDiffIsEmpty(diff);
   let landed: boolean;
   try {
-    landed = await store.roster.advance(
-      userId,
-      { body: encodeObservedRoster(roster), observedAt: now },
-      previous?.observedAt,
+    landed = await run(
+      store.roster.advance(
+        userId,
+        { body: encodeObservedRoster(roster), observedAt: now },
+        previous?.observedAt,
+      ),
     );
-    if (landed) await store.roster.recordPass(userId, { attemptedAt: now });
+    if (landed) await run(store.roster.recordPass(userId, { attemptedAt: now }));
   } catch {
     // A roster read whole that could not be written down is a failed pass
     // for this user; the snapshot on record, if any, is whatever stood.
-    await store.roster
-      .recordPass(userId, { attemptedAt: now, failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED })
-      .catch(() => undefined);
+    await run(
+      store.roster.recordPass(userId, {
+        attemptedAt: now,
+        failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
+      }),
+    ).catch(() => undefined);
     return {
       complete: false,
       failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
@@ -230,8 +241,8 @@ export async function observeAndSnapshot(
     // account's record says so at this pass's own instant: the record only
     // moves forward, so an older instant here changes nothing, and a newer
     // one closes the unfinished attempt it opened above.
-    await store.roster.recordPass(userId, { attemptedAt: now });
-    const superseded = await storedRoster(store, userId, input.rows, input.secret);
+    await run(store.roster.recordPass(userId, { attemptedAt: now }));
+    const superseded = await storedRoster(run, store, userId, input.rows, input.secret);
     const outcome: ObservationPassOutcome = { complete: true, changed: false };
     if (superseded?.roster) {
       outcome.roster = superseded.roster;
@@ -253,18 +264,20 @@ export async function rosterForAction(input: {
   userId: string;
   providerId: CloudAgentProviderId;
   secret: string;
+  run: HostedStoreRun;
   store: ObservationStore;
   readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
   seams: CloudObserveSeams;
   now: number;
 }): Promise<ActionRoster> {
   const rows = await input.readVaultKeys(input.userId);
-  const stored = await storedRoster(input.store, input.userId, rows, input.secret);
+  const stored = await storedRoster(input.run, input.store, input.userId, rows, input.secret);
   if (stored?.roster) return actionRosterFor(input.providerId, { roster: stored.roster });
   const outcome = await observeAndSnapshot({
     userId: input.userId,
     rows,
     secret: input.secret,
+    run: input.run,
     store: input.store,
     seams: input.seams,
     now: input.now,

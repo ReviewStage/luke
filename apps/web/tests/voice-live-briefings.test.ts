@@ -108,13 +108,15 @@ async function offered(target: ConversationTarget, briefing: string): Promise<st
     state: memoryRelayState(),
   };
   await play(announceTurn(FIRST_EVE_TURN, briefing, NOW), standing);
-  const offers = await database.store.speech.open(target.userId);
+  const offers = await database.run(database.store.speech.open(target.userId));
   const turnId = hostTurnId(standing.sessionId, FIRST_EVE_TURN);
-  const journal = await database.store.messages.byClientId(
-    target.userId,
-    target.conversationId,
-    CATALOG_TOOL_SET,
-    turnId,
+  const journal = await database.run(
+    database.store.messages.byClientId(
+      target.userId,
+      target.conversationId,
+      CATALOG_TOOL_SET,
+      turnId,
+    ),
   );
   assert.ok(journal.ok);
   const messageId = journal.value[0]?.id;

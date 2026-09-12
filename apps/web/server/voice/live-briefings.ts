@@ -100,7 +100,7 @@ export function hostedBriefings(options: HostedBriefingsOptions): HostedBriefing
 
   /** Every open offer of the account is read, so rows claimed or held elsewhere cannot fill a page ahead of a newer offer. */
   async function look(): Promise<void> {
-    const offers = await options.offers.open(options.userId);
+    const offers = await options.speech.run(options.offers.open(options.userId));
     const open = offers
       .filter((offer) => offer.state === SPEECH_STATE.OFFERED)
       .slice(0, bounds.OFFERS_PER_LOOK);

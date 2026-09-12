@@ -9,6 +9,7 @@ import { hostedUserId, oauthUserInfoFromAuthAnswer, userIdForAuthorization } fro
 import { deviceSeams } from "./device-store.js";
 import { payloadKeyRing } from "./encryption.js";
 import { HostedEnvironment } from "./environment.js";
+import type { HostedStoreRun } from "./store/database.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
 import {
   deleteVaultKey,
@@ -47,6 +48,8 @@ export interface HostedVaultRoute {
   listKeys: (userId: string) => Promise<{ providerId: string; updatedAt: Date }[]>;
   storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
   deleteKey: (userId: string, providerId: string) => Promise<boolean>;
+  /** The runner this deployment's edge answers the store's effects through. */
+  run: HostedStoreRun;
   /** The hosted store under the deployment's payload key ring, for the routes that read or write it. */
   store: (secret: string) => HostedStore;
 }
@@ -58,7 +61,7 @@ function storeFor(secret: string): HostedStore {
   if (storeUnderSecret?.secret !== secret) {
     storeUnderSecret = {
       secret,
-      store: hostedStore({ keys: payloadKeyRing(secret), run: runWeb }),
+      store: hostedStore({ keys: payloadKeyRing(secret) }),
     };
   }
   return storeUnderSecret.store;
@@ -104,6 +107,7 @@ export const hostedVaultSeams = {
   storeKey: (userId: string, providerId: string, ciphertext: string) =>
     runWeb(storeVaultKey(userId, providerId, ciphertext)),
   deleteKey: (userId: string, providerId: string) => runWeb(deleteVaultKey(userId, providerId)),
+  run: runWeb,
   store: storeFor,
 } satisfies Omit<HostedVaultRoute, "request" | "encryptionSecret">;
 

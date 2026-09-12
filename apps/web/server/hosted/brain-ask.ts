@@ -224,14 +224,14 @@ export async function askStanding(
   userId: string,
   id: string,
 ): Promise<AskStanding | undefined> {
-  const [turn] = await reads.store.turns.named(userId, [id]);
+  const [turn] = await reads.run(reads.store.turns.named(userId, [id]));
   if (turn) return { answer: turnAnswer(id, turn), ask: undefined, turn };
   const ask = await reads.asks.named(userId, id);
   if (!ask || !(await reads.run(conversationOwnedBy(userId, ask.conversationId)))) {
     return undefined;
   }
   if (ask.turnId !== undefined) {
-    const [started] = await reads.store.turns.named(userId, [ask.turnId]);
+    const [started] = await reads.run(reads.store.turns.named(userId, [ask.turnId]));
     if (started) return { answer: turnAnswer(id, started), ask, turn: started };
   }
   return { answer: queuedAnswer(ask), ask, turn: undefined };
@@ -459,7 +459,7 @@ export async function stopAsk(seams: StopSeams, userId: string, id: string): Pro
     };
     const bound = await seams.asks.named(userId, standing.ask.id);
     if (bound?.turnId === undefined) return stampedAnswer;
-    const [started] = await seams.store.turns.named(userId, [bound.turnId]);
+    const [started] = await seams.run(seams.store.turns.named(userId, [bound.turnId]));
     if (started === undefined) return stampedAnswer;
     turn = started;
   } else {

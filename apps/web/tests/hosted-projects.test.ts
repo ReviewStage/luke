@@ -6,6 +6,7 @@ import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { observeAndSnapshot } from "../server/hosted/observation-pass";
 import { handleProjects } from "../server/hosted/projects";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
+import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore } from "./support/observation-store";
 
 const SECRET = "a".repeat(64);
@@ -25,6 +26,7 @@ function projectsOptions(
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readVaultKeys: async (): Promise<VaultKeyRow[]> => [],
+    run: runWithoutDatabase,
     store: () => memoryObservationStore(),
     ...overrides,
   };
@@ -82,6 +84,7 @@ test("projects are listed from the stored snapshot, seeded once, and a project c
     userId: "user-1",
     rows: KEY_ROWS,
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     seams: { fetch: conductor.fetch },
     now: Date.now(),

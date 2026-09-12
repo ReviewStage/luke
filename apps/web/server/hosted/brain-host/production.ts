@@ -39,7 +39,7 @@ interface OpenAiAccess {
 }
 
 export interface BrainHostSeams {
-  /** The runner the store's own effects are answered through, this deployment's edge. */
+  /** The runner this deployment's edge answers every effect the host builds through: the store's reads, the conversation's own statements, and the writers beside them. */
   readonly run: HostedStoreRun;
   readonly store: () => HostedStore;
   /** The writer over the catalog's tool set, composed once; its composition probes every declared schema. */
@@ -111,7 +111,7 @@ function vaultSecret(): string {
 }
 
 export function productionBrainHostSeams(): BrainHostSeams {
-  const store = once(() => hostedStore({ keys: payloadKeyRing(vaultSecret()), run: runWeb }));
+  const store = once(() => hostedStore({ keys: payloadKeyRing(vaultSecret()) }));
   const writer = once(() => storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET }));
   const vaultRows = (userId: string): Promise<readonly VaultKeyRow[]> =>
     runWeb(findVaultRows(userId));

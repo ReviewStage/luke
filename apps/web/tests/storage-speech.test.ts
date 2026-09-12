@@ -186,7 +186,7 @@ async function viewMarksUnspoken(row: Announced): Promise<boolean> {
   const [message] = read.value;
   assert.ok(message);
   const viewEvents: ConversationViewEvent[] = (
-    await database.store.events.forMessages(row.userId, [row.messageId])
+    await database.run(database.store.events.forMessages(row.userId, [row.messageId]))
   ).map((event) => ({ messageId: event.messageId, kind: event.kind, seq: event.seq }));
   const [group] = selectConversationView({
     main: [],
@@ -226,7 +226,7 @@ test("announce puts the briefing on offer once, with its expiry, and the offer r
       payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
     },
   ]);
-  assert.deepEqual(await database.store.speech.open(row.userId), [
+  assert.deepEqual(await database.run(database.store.speech.open(row.userId)), [
     {
       userId: row.userId,
       conversationId: row.conversationId,

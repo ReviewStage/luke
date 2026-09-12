@@ -36,7 +36,7 @@ test("a first ask and a Clear racing on an account with no main both land, and o
   const userId = await database.createUser();
   const [asked, cleared] = await Promise.all([
     database.run(standingMain(userId, NOW)),
-    database.store.main.clear(userId, NOW),
+    database.run(database.store.main.clear(userId, NOW)),
   ]);
   const standing = await standingMains(userId);
   assert.deepEqual(standing, [cleared.opened]);

@@ -14,6 +14,7 @@ import { handleSessionAction, type SessionActionOptions } from "../server/hosted
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { observeAndSnapshot, rosterForAction } from "../server/hosted/observation-pass";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
+import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore } from "./support/observation-store";
 
 const SECRET = "a".repeat(64);
@@ -401,6 +402,7 @@ async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
     userId: "user-1",
     rows: KEY_ROWS,
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     seams: { fetch: api.fetch },
     now: NOW,
@@ -410,6 +412,7 @@ async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
     userId: "user-1",
     providerId: "conductor",
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     // The key rows are read to check the snapshot was observed under them;
     // the provider itself is never asked while a matching snapshot stands.
@@ -503,6 +506,7 @@ async function seededRoster(fetch: (url: string, init: RequestInit) => Promise<R
     userId: "user-1",
     providerId: "conductor",
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     readVaultKeys: async () => KEY_ROWS,
     seams: { fetch },
@@ -559,6 +563,7 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
     userId: "user-1",
     providerId: "conductor",
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     readVaultKeys: async () => KEY_ROWS,
     seams: { fetch: api.fetch },
@@ -572,6 +577,7 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
     userId: "user-1",
     providerId: "conductor",
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     readVaultKeys: async () => KEY_ROWS,
     seams: { fetch: api.fetch },
@@ -588,6 +594,7 @@ test("an action under a replaced key is admitted against a fresh pass, not the o
     userId: "user-1",
     providerId: "conductor",
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     readVaultKeys: async () => KEY_ROWS,
     seams: { fetch: api.fetch },
@@ -602,6 +609,7 @@ test("an action under a replaced key is admitted against a fresh pass, not the o
     userId: "user-1",
     providerId: "conductor",
     secret: SECRET,
+    run: runWithoutDatabase,
     store,
     readVaultKeys: async () => replaced,
     seams: { fetch: api.fetch },

@@ -385,7 +385,7 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
   );
   assert.equal(outcome.ok, true);
   assert.deepEqual(cancels, [sessionId]);
-  const [turn] = await database.store.turns.named(userId, [turnId]);
+  const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
 
   // The other order in the same run: the Stop stamps first and finds nothing bound, so it cancels

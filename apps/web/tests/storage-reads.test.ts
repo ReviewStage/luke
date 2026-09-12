@@ -133,7 +133,7 @@ async function countConversations(id: string): Promise<number> {
 }
 
 function readRecords(
-  read: Awaited<ReturnType<typeof database.store.messages.list>>,
+  read: Effect.Effect.Success<ReturnType<typeof database.store.messages.list>>,
 ): readonly StoredMessageRecord[] {
   assert.equal(read.ok, true);
   return read.ok ? read.value : [];
@@ -164,7 +164,7 @@ test("messages read back in sequence after the cursor, typed by role, with the r
     finishedAt: NOW,
   });
 
-  const all = readRecords(await database.store.messages.list(userId, main, TOOLS));
+  const all = readRecords(await database.run(database.store.messages.list(userId, main, TOOLS)));
   assert.deepEqual(
     all.map((record) => record.seq),
     [1, 2, 3, 4],
@@ -186,19 +186,21 @@ test("messages read back in sequence after the cursor, typed by role, with the r
   );
 
   const afterTwo = readRecords(
-    await database.store.messages.list(userId, main, TOOLS, { after: 2 }),
+    await database.run(database.store.messages.list(userId, main, TOOLS, { after: 2 })),
   );
   assert.deepEqual(
     afterTwo.map((record) => record.seq),
     [3, 4],
   );
-  const page = readRecords(await database.store.messages.list(userId, main, TOOLS, { limit: 2 }));
+  const page = readRecords(
+    await database.run(database.store.messages.list(userId, main, TOOLS, { limit: 2 })),
+  );
   assert.deepEqual(
     page.map((record) => record.seq),
     [1, 2],
   );
   const clamped = readRecords(
-    await database.store.messages.list(userId, main, TOOLS, { limit: 0 }),
+    await database.run(database.store.messages.list(userId, main, TOOLS, { limit: 0 })),
   );
   assert.deepEqual(
     clamped.map((record) => record.seq),
@@ -210,7 +212,7 @@ test("events read back in sequence after the cursor, and turns in the order they
   const userId = await database.createUser();
   const { main, turn, ids } = await populateMain(userId);
 
-  const all = await database.store.events.list(userId, main);
+  const all = await database.run(database.store.events.list(userId, main));
   assert.deepEqual(
     all.map((event) => [event.seq, event.messageId]),
     [
@@ -220,7 +222,9 @@ test("events read back in sequence after the cursor, and turns in the order they
     ],
   );
   assert.deepEqual(
-    (await database.store.events.list(userId, main, { after: 1 })).map((event) => event.seq),
+    (await database.run(database.store.events.list(userId, main, { after: 1 }))).map(
+      (event) => event.seq,
+    ),
     [2, 3],
   );
 
@@ -230,7 +234,7 @@ test("events read back in sequence after the cursor, and turns in the order they
     queuedAt: new Date(NOW.getTime() + 1000),
     startedAt: new Date(NOW.getTime() + 1000),
   });
-  const first = await database.store.turns.list(userId);
+  const first = await database.run(database.store.turns.list(userId));
   assert.deepEqual(
     first.map((row) => row.id),
     [turn, laterTurn],
@@ -238,7 +242,9 @@ test("events read back in sequence after the cursor, and turns in the order they
   const [earlier, later] = first;
   assert.ok(earlier && later);
   assert.deepEqual(
-    (await database.store.turns.list(userId, { after: earlier.cursor })).map((row) => row.id),
+    (await database.run(database.store.turns.list(userId, { after: earlier.cursor }))).map(
+      (row) => row.id,
+    ),
     [laterTurn],
   );
 
@@ -252,7 +258,7 @@ test("events read back in sequence after the cursor, and turns in the order they
       `;
     }),
   );
-  const changed = await database.store.turns.list(userId, { after: later.cursor });
+  const changed = await database.run(database.store.turns.list(userId, { after: later.cursor }));
   assert.deepEqual(
     changed.map((row) => [row.id, row.status, row.settledAt]),
     [[turn, TURN_STATUS.SETTLED, settledAt]],
@@ -280,10 +286,13 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
     }),
   );
   assert.ok(preciseId);
-  const [answered] = await database.store.turns.list(userId);
+  const [answered] = await database.run(database.store.turns.list(userId));
   assert.equal(answered?.id, preciseId);
   assert.equal(answered?.cursor.changedAt, "2026-09-10 12:00:00.0005+00");
-  assert.deepEqual(await database.store.turns.list(userId, { after: answered.cursor }), []);
+  assert.deepEqual(
+    await database.run(database.store.turns.list(userId, { after: answered.cursor })),
+    [],
+  );
 
   await database.run(
     Effect.gen(function* () {
@@ -295,7 +304,7 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
       `;
     }),
   );
-  const started = await database.store.turns.list(userId, { after: answered.cursor });
+  const started = await database.run(database.store.turns.list(userId, { after: answered.cursor }));
   assert.deepEqual(
     started.map((row) => [row.id, row.status]),
     [[preciseId, TURN_STATUS.SETTLED]],
@@ -303,11 +312,15 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
 
   const tied = new Date(NOW.getTime() + 60_000);
   const ids = await Promise.all([1, 2, 3].map(() => insertTurn(userId, main, { queuedAt: tied })));
-  const pageOne = await database.store.turns.list(userId, { after: started[0]?.cursor, limit: 2 });
-  const pageTwo = await database.store.turns.list(userId, {
-    after: pageOne.at(-1)?.cursor,
-    limit: 2,
-  });
+  const pageOne = await database.run(
+    database.store.turns.list(userId, { after: started[0]?.cursor, limit: 2 }),
+  );
+  const pageTwo = await database.run(
+    database.store.turns.list(userId, {
+      after: pageOne.at(-1)?.cursor,
+      limit: 2,
+    }),
+  );
   assert.deepEqual(
     [...pageOne, ...pageTwo].map((row) => row.id),
     [...ids].sort(),
@@ -320,9 +333,12 @@ test("one account's rows are never read under another's id", async () => {
   const { main } = await populateMain(userId);
   await populateMain(other);
 
-  assert.deepEqual(readRecords(await database.store.messages.list(other, main, TOOLS)), []);
-  assert.deepEqual(await database.store.events.list(other, main), []);
-  assert.equal((await database.store.turns.list(other)).length, 1);
+  assert.deepEqual(
+    readRecords(await database.run(database.store.messages.list(other, main, TOOLS))),
+    [],
+  );
+  assert.deepEqual(await database.run(database.store.events.list(other, main)), []);
+  assert.equal((await database.run(database.store.turns.list(other))).length, 1);
 });
 
 test("a cleared conversation disappears from every read on the next call, and a new main stands in its place", async () => {
@@ -344,14 +360,20 @@ test("a cleared conversation disappears from every read on the next call, and a 
   });
   await insertMessage(userId, observed, 1, { turnId: await insertTurn(userId, observed) });
 
-  const outcome = await database.store.main.clear(userId, NOW);
+  const outcome = await database.run(database.store.main.clear(userId, NOW));
   assert.deepEqual([...outcome.cleared].sort(), [main, child, grandchild].sort());
   assert.notEqual(outcome.opened, main);
 
-  assert.deepEqual(readRecords(await database.store.messages.list(userId, main, TOOLS)), []);
-  assert.deepEqual(readRecords(await database.store.messages.list(userId, child, TOOLS)), []);
-  assert.deepEqual(await database.store.events.list(userId, main), []);
-  const remaining = await database.store.turns.list(userId);
+  assert.deepEqual(
+    readRecords(await database.run(database.store.messages.list(userId, main, TOOLS))),
+    [],
+  );
+  assert.deepEqual(
+    readRecords(await database.run(database.store.messages.list(userId, child, TOOLS))),
+    [],
+  );
+  assert.deepEqual(await database.run(database.store.events.list(userId, main)), []);
+  const remaining = await database.run(database.store.turns.list(userId));
   assert.equal(
     remaining.some((row) => row.id === turn),
     false,
@@ -360,7 +382,10 @@ test("a cleared conversation disappears from every read on the next call, and a 
     remaining.map((row) => row.conversationId),
     [observed],
   );
-  assert.equal((await database.store.messages.list(userId, observed, TOOLS)).ok, true);
+  assert.equal(
+    (await database.run(database.store.messages.list(userId, observed, TOOLS))).ok,
+    true,
+  );
 
   const [opened] = await readConversationById(database.run, outcome.opened);
   assert.equal(opened?.kind, CONVERSATION_KIND.MAIN);
@@ -375,8 +400,8 @@ test("a cleared conversation disappears from every read on the next call, and a 
 test("one main stands per account: two Clears leave exactly one, and a second standing main is refused", async () => {
   const userId = await database.createUser();
   await populateMain(userId);
-  const first = await database.store.main.clear(userId, NOW);
-  const second = await database.store.main.clear(userId, new Date(NOW.getTime() + 1));
+  const first = await database.run(database.store.main.clear(userId, NOW));
+  const second = await database.run(database.store.main.clear(userId, new Date(NOW.getTime() + 1)));
   assert.deepEqual(second.cleared, [first.opened]);
   const standing = await readStandingConversations(database.run, userId, CONVERSATION_KIND.MAIN);
   assert.deepEqual(
@@ -388,7 +413,7 @@ test("one main stands per account: two Clears leave exactly one, and a second st
 
 test("a Clear on an account with no main opens one and stamps nothing", async () => {
   const userId = await database.createUser();
-  const outcome = await database.store.main.clear(userId, NOW);
+  const outcome = await database.run(database.store.main.clear(userId, NOW));
   assert.deepEqual(outcome.cleared, []);
   assert.equal(await countConversations(outcome.opened), 1);
 });
@@ -403,19 +428,18 @@ test("the purge takes a cleared conversation and everything under it once the wi
     kind: CONVERSATION_KIND.CHILD,
     parentConversationId: main,
   });
-  const cleared = await database.store.main.clear(userId, base);
+  const cleared = await database.run(database.store.main.clear(userId, base));
   const { main: recent } = await populateMain(other);
-  const { opened: standing } = await database.store.main.clear(
-    other,
-    new Date(base.getTime() + DAY_MS),
+  const { opened: standing } = await database.run(
+    database.store.main.clear(other, new Date(base.getTime() + DAY_MS)),
   );
 
   const beforeWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS - 1);
-  assert.equal(await database.store.retention.purgeCleared(beforeWindow), 0);
+  assert.equal(await database.run(database.store.retention.purgeCleared(beforeWindow)), 0);
   assert.equal(await countConversations(main), 1);
 
   const atWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS);
-  assert.equal(await database.store.retention.purgeCleared(atWindow), 2);
+  assert.equal(await database.run(database.store.retention.purgeCleared(atWindow)), 2);
   assert.equal(await countConversations(main), 0);
   assert.equal(await countConversations(child), 0);
   assert.equal((await readMessagesByConversation(database.run, main)).length, 0);
@@ -426,7 +450,9 @@ test("the purge takes a cleared conversation and everything under it once the wi
   assert.equal(await countConversations(standing), 1);
 
   assert.equal(
-    await database.store.retention.purgeCleared(new Date(atWindow.getTime() + DAY_MS)),
+    await database.run(
+      database.store.retention.purgeCleared(new Date(atWindow.getTime() + DAY_MS)),
+    ),
     1,
   );
   assert.equal(await countConversations(recent), 0);
@@ -436,7 +462,7 @@ test("the purge takes a cleared conversation and everything under it once the wi
 test("deleting the account takes cleared and standing conversations alike", async () => {
   const userId = await database.createUser();
   const { main } = await populateMain(userId);
-  const { opened } = await database.store.main.clear(userId, NOW);
+  const { opened } = await database.run(database.store.main.clear(userId, NOW));
   await deleteUser(database.run, userId);
   assert.equal(await countConversations(main), 0);
   assert.equal(await countConversations(opened), 0);
@@ -459,14 +485,16 @@ test("a row naming a tool the registry does not hold refuses the page, naming th
     ],
   });
 
-  const read = await database.store.messages.list(userId, main, TOOLS);
+  const read = await database.run(database.store.messages.list(userId, main, TOOLS));
   assert.equal(read.ok, false);
   if (read.ok) return;
   assert.equal(read.refusal, SCHEMA_REFUSAL.NOT_REGISTERED);
   assert.equal(read.seq, 4);
   assert.deepEqual(read.path, ["parts", 0, "type"]);
 
-  const before = readRecords(await database.store.messages.list(userId, main, TOOLS, { limit: 3 }));
+  const before = readRecords(
+    await database.run(database.store.messages.list(userId, main, TOOLS, { limit: 3 })),
+  );
   assert.deepEqual(
     before.map((record) => record.seq),
     [1, 2, 3],
@@ -486,7 +514,7 @@ test("a row whose parts are not a message's refuses the page as malformed", asyn
     parts: [{ type: "text" }],
     metadata: TYPED_ASK,
   });
-  const read = await database.store.messages.list(userId, main, TOOLS, { after: 3 });
+  const read = await database.run(database.store.messages.list(userId, main, TOOLS, { after: 3 }));
   assert.equal(read.ok, false);
   if (read.ok) return;
   assert.equal(read.refusal, SCHEMA_REFUSAL.MALFORMED);

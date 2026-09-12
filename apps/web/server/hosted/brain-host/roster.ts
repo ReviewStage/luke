@@ -11,6 +11,7 @@ import {
 import type { ObservationStore } from "../observation-pass.js";
 import { storedRoster } from "../observation-pass.js";
 import type { ObservedRoster } from "../observed-roster.js";
+import type { HostedStoreRun } from "../store/database.js";
 import type { VaultKeyRow } from "../vault-route.js";
 
 /**
@@ -65,12 +66,13 @@ export function hostedRosterFrom(
 
 /** The stored snapshot as the brain reads it, only where it was observed under the keys standing now; nothing where no pass has written one. */
 export async function readHostedRoster(
+  run: HostedStoreRun,
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
   secret: string,
 ): Promise<HostedRoster> {
-  const stored = await storedRoster(store, userId, rows, secret);
+  const stored = await storedRoster(run, store, userId, rows, secret);
   return hostedRosterFrom(stored?.roster, stored?.observedAt);
 }
 

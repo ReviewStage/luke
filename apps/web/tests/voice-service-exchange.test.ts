@@ -218,7 +218,8 @@ async function stand(offer: Offer): Promise<Stand> {
             throw new Error("the store is not reachable");
           }
         : exchangeAttachment({
-            context: { run: database.run, keys: KEYS },
+            context: { keys: KEYS },
+            run: database.run,
             writer,
             eve: () => eve,
             emit: () => undefined,
@@ -629,7 +630,7 @@ test("the briefing look runs for as long as the session stands: a briefing on of
   for (const event of announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW)) {
     await relay.handle(event, standing);
   }
-  const [offer] = await database.store.speech.open(context.target.userId);
+  const [offer] = await database.run(database.store.speech.open(context.target.userId));
   assert.ok(offer);
   // The look polls on its own cadence; nothing here asks it to look.
   const spoken = clientEvent(await upstream.next(10_000));

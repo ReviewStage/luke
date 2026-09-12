@@ -16,6 +16,7 @@ import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { handleObserve, observedSessionForResponse } from "../server/hosted/observe";
 import { encodeObservedRoster } from "../server/hosted/observed-roster";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
+import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore } from "./support/observation-store";
 
 const SECRET = "a".repeat(64);
@@ -41,6 +42,7 @@ function observeOptions(
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     readVaultKeys: async (_userId: string): Promise<VaultKeyRow[]> => [],
+    run: runWithoutDatabase,
     store: () => store,
     ...overrides,
   };

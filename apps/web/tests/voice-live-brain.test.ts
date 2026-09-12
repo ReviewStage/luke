@@ -8,6 +8,7 @@ import {
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
@@ -278,7 +279,7 @@ test("a journal the store cannot read ends the ask as failed, once, and is repor
   };
   const f = stand(target, QUICK, {
     turns: database.store.turns,
-    messages: { ...database.store.messages, byClientId: async () => unreadable },
+    messages: { ...database.store.messages, byClientId: () => Effect.succeed(unreadable) },
   });
   const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
   assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);

@@ -20,6 +20,7 @@ import {
   WORKSPACE_FILE_REFUSAL,
   type WorkspaceFile,
 } from "../../core.js";
+import type { HostedStoreRun } from "../store/database.js";
 import type { HostedStore } from "../store/index.js";
 import { BRAIN_HOST } from "./bounds.js";
 
@@ -50,13 +51,14 @@ function hostedWorkspacePath(name: string): string | undefined {
 
 /** Writes every missing bootstrap file for the user; an existing row, edited or not, is left as it is. */
 export async function seedHostedWorkspace(
+  run: HostedStoreRun,
   store: WorkspaceStore,
   userId: string,
   now: number,
 ): Promise<readonly WorkspaceFile[]> {
   const seeded: WorkspaceFile[] = [];
   for (const name of Object.values(WORKSPACE_FILE)) {
-    if (await store.workspace.seed(userId, name, BRAIN_WORKSPACE_SEEDS[name], now)) {
+    if (await run(store.workspace.seed(userId, name, BRAIN_WORKSPACE_SEEDS[name], now))) {
       seeded.push(name);
     }
   }
@@ -67,6 +69,7 @@ const NO_SKILLS = "not loaded: this agent lists no skills";
 
 /** The workspace tools' reach: the rows, bounded like the files, with no skills to load. */
 export function hostedWorkspaceAccess(
+  run: HostedStoreRun,
   store: WorkspaceStore,
   userId: string,
   now: () => number,
@@ -75,7 +78,7 @@ export function hostedWorkspaceAccess(
     read: async (name) => {
       const path = hostedWorkspacePath(name);
       if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
-      const row = await store.workspace.read(userId, path);
+      const row = await run(store.workspace.read(userId, path));
       if (!row) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND };
       return { ok: true, content: row.content.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) };
     },
@@ -85,7 +88,7 @@ export function hostedWorkspaceAccess(
       if (content.length > BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) {
         return { ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE };
       }
-      await store.workspace.write(userId, path, content, now());
+      await run(store.workspace.write(userId, path, content, now()));
       return { ok: true, chars: content.length };
     },
     loadSkill: async () => ({ ok: false, reason: NO_SKILLS }),
@@ -107,6 +110,7 @@ export interface HostedPromptInput {
  * invented.
  */
 export async function hostedPrompt(
+  run: HostedStoreRun,
   store: WorkspaceStore,
   userId: string,
   input: HostedPromptInput,
@@ -115,7 +119,7 @@ export async function hostedPrompt(
     BOOTSTRAP_FILE_ORDER.map(async (name) => ({
       name,
       path: `${BRAIN_HOST.WORKSPACE_NAME}/${name}`,
-      content: (await store.workspace.read(userId, name))?.content,
+      content: (await run(store.workspace.read(userId, name)))?.content,
     })),
   );
   return buildSystemPrompt({

@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Effect, Either } from "effect";
 import {
   type ChangesAnswer,
   type ChangesRequest,
@@ -16,6 +16,7 @@ import {
   readJsonBody,
 } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
+import type { HostedStoreRun } from "./store/database.js";
 import type { HostedStore } from "./store/index.js";
 
 /**
@@ -53,6 +54,8 @@ const MAXIMUM_CHANGES_BODY_BYTES = 4_096;
 export interface ChangeSignalOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
+  /** The runner the poll's three store reads are answered through. */
+  run: HostedStoreRun;
   store: Pick<HostedStore, "directory" | "turns" | "roster">;
   touchDevice: DeviceSeams["touchDevice"];
   now?: () => number;
@@ -65,7 +68,7 @@ function reportedInstant(value: number | null | undefined): Date | null | undefi
 }
 
 export async function handleChanges(options: ChangeSignalOptions): Promise<Response> {
-  const { request, resolveUserId, store } = options;
+  const { request, resolveUserId, run, store } = options;
   const now = options.now ?? Date.now;
 
   if (request.method !== CHANGES_METHOD) {
@@ -103,11 +106,13 @@ export async function handleChanges(options: ChangeSignalOptions): Promise<Respo
     new Date(now()),
   );
 
-  const [standing, latestTurn, rosterObservedAt] = await Promise.all([
-    store.directory.standing(userId),
-    store.turns.latest(userId),
-    store.roster.observedAt(userId),
-  ]);
+  const [standing, latestTurn, rosterObservedAt] = await run(
+    Effect.all([
+      store.directory.standing(userId),
+      store.turns.latest(userId),
+      store.roster.observedAt(userId),
+    ]),
+  );
   const answer: ChangesAnswer = {
     seen,
     messages: encodeSequenceReadCursor(

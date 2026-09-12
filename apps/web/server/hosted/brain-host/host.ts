@@ -236,7 +236,13 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         .sort()
         .join("\n"),
     );
-    const roster = await readHostedRoster(seams.store(), userId, rows, seams.vaultSecret());
+    const roster = await readHostedRoster(
+      seams.run,
+      seams.store(),
+      userId,
+      rows,
+      seams.vaultSecret(),
+    );
     rosters.set(userId, roster);
     return roster;
   };
@@ -264,9 +270,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     async prompt(admitted, trigger) {
       const store = seams.store();
-      await seedHostedWorkspace(store, admitted.target.userId, seams.now());
+      await seedHostedWorkspace(seams.run, store, admitted.target.userId, seams.now());
       const modelId = seams.openAi()?.modelId;
-      const built = await hostedPrompt(store, admitted.target.userId, {
+      const built = await hostedPrompt(seams.run, store, admitted.target.userId, {
         policy: hostedTurnPolicy(trigger),
         ...(modelId !== undefined ? { model: modelId } : undefined),
       });
@@ -279,7 +285,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       const [roster, defaults, facts, recent] = await Promise.all([
         rosterOf(userId),
         seams.run(readWorkspaceDefaults(userId)),
-        seams.store().facts.list(userId),
+        seams.run(seams.store().facts.list(userId)),
         readRecentMessages(
           seams.run,
           admitted.target,
@@ -332,7 +338,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       const carrier = hostedActionCarrier({
         roster,
         defaults: () => seams.run(readWorkspaceDefaults(userId)),
-        facts: hostedFactsWriter(seams.store(), userId, seams.now),
+        facts: hostedFactsWriter(seams.run, seams.store(), userId, seams.now),
         apiKey: (providerId) => seams.providerKey(userId, providerId),
         execute: seams.executeAction,
       });
@@ -345,7 +351,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           roster,
           carrier,
           transcripts,
-          workspace: hostedWorkspaceAccess(seams.store(), userId, seams.now),
+          workspace: hostedWorkspaceAccess(seams.run, seams.store(), userId, seams.now),
           now: seams.now,
         },
         { trigger: binding.turn.trigger, turnId: binding.turn.turnId, runId: binding.turn.turnId },
@@ -374,12 +380,14 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       // the row it names stands whatever happened to the table since.
       const toolSetHash =
         event.type === "turn.started" && turn !== undefined
-          ? await seams
-              .store()
-              .toolSets.record(
-                hostedToolDeclarations(BRAIN_HOST_TURN_KIND[turn].trigger),
-                new Date(seams.now()),
-              )
+          ? await seams.run(
+              seams
+                .store()
+                .toolSets.record(
+                  hostedToolDeclarations(BRAIN_HOST_TURN_KIND[turn].trigger),
+                  new Date(seams.now()),
+                ),
+            )
           : undefined;
       return relay.handle(event, {
         sessionId: session.id,

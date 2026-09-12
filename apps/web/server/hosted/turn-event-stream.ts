@@ -31,6 +31,7 @@ import { hostedTurnPolicy } from "./brain-host/tools.js";
 import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
+import type { HostedStoreRun } from "./store/database.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**
@@ -172,6 +173,8 @@ export function projectTurnEvents(
 export interface TurnEventStreamOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
+  /** The runner the stream's turn and journal reads are answered through. */
+  run: HostedStoreRun;
   store: Pick<HostedStore, "turns" | "messages">;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -189,17 +192,15 @@ function notFound(): Response {
 
 /** The turn's record and its journal as they stand now, or nothing where the turn is gone or its journal cannot be read. */
 async function lookAtTurn(
+  run: HostedStoreRun,
   store: TurnEventStreamOptions["store"],
   userId: string,
   turnId: string,
 ): Promise<readonly TurnEvent[] | undefined> {
-  const [turn] = await store.turns.named(userId, [turnId]);
+  const [turn] = await run(store.turns.named(userId, [turnId]));
   if (turn === undefined) return undefined;
-  const journal = await store.messages.byClientId(
-    userId,
-    turn.conversationId,
-    CATALOG_TOOL_SET,
-    turn.id,
+  const journal = await run(
+    store.messages.byClientId(userId, turn.conversationId, CATALOG_TOOL_SET, turn.id),
   );
   if (!journal.ok) return undefined;
   return projectTurnEvents(turn, journal.value[0]?.message);
@@ -214,7 +215,7 @@ function cursorOf(query: URLSearchParams): number | undefined {
 }
 
 export async function handleTurnEventStream(options: TurnEventStreamOptions): Promise<Response> {
-  const { request, resolveUserId, store } = options;
+  const { request, resolveUserId, run, store } = options;
   if (request.method !== "GET") {
     return errorResponse(
       HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
@@ -239,7 +240,7 @@ export async function handleTurnEventStream(options: TurnEventStreamOptions): Pr
   // An id that is not a uuid names no row and answers as none, the same as another account's.
   const turnId = Either.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
   if (turnId === undefined) return notFound();
-  const [turn] = await store.turns.named(userId, [turnId]);
+  const [turn] = await run(store.turns.named(userId, [turnId]));
   if (turn === undefined) return notFound();
 
   const bounds = { ...TURN_EVENT_STREAM_BOUNDS, ...options.bounds };
@@ -261,7 +262,7 @@ export async function handleTurnEventStream(options: TurnEventStreamOptions): Pr
       };
       try {
         for (;;) {
-          const events = await lookAtTurn(store, userId, turn.id);
+          const events = await lookAtTurn(run, store, userId, turn.id);
           if (events === undefined || gone()) break;
           for (const event of events.slice(told)) {
             write(encodeTurnEventFrame(event));

@@ -104,7 +104,7 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
       ],
     ],
   );
-  assert.deepEqual(await database.store.ratings.latest(userId, reply), {
+  assert.deepEqual(await database.run(database.store.ratings.latest(userId, reply)), {
     id: written.id,
     seq: written.seq,
     rating: MESSAGE_RATING.DOWN,
@@ -130,7 +130,7 @@ test("a later rating is a second event and the one the latest read answers; the 
   if (!first.ok || !second.ok) return;
   assert.equal(second.seq, first.seq + 1);
 
-  const latest = await database.store.ratings.latest(userId, reply);
+  const latest = await database.run(database.store.ratings.latest(userId, reply));
   assert.deepEqual(
     [latest?.id, latest?.rating, latest?.note, latest?.deviceId],
     [second.id, MESSAGE_RATING.UP, "On reflection it was right.", OTHER_DEVICE_ID],
@@ -138,7 +138,10 @@ test("a later rating is a second event and the one the latest read answers; the 
   const ratings = await readEventsByConversation(database.run, main);
   assert.deepEqual(ratings.map((row) => row.id).sort(), [first.id, second.id].sort());
   assert.deepEqual(
-    (await database.store.events.list(userId, main)).map((event) => [event.seq, event.kind]),
+    (await database.run(database.store.events.list(userId, main))).map((event) => [
+      event.seq,
+      event.kind,
+    ]),
     [
       [first.seq, CONVERSATION_EVENT_KIND.RATING],
       [second.seq, CONVERSATION_EVENT_KIND.RATING],
@@ -160,7 +163,7 @@ test("a message the account does not own is not found, whether another account's
     await rateMessage(store, userId, "00000000-0000-4000-8000-000000000000", rating),
     { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
   );
-  assert.equal(await database.store.ratings.latest(userId, reply), undefined);
+  assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
   const allEvents = await database.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -202,7 +205,7 @@ test("a message the account owns but Luke did not write is not rateable: the dev
     ok: false,
     refusal: RATING_REFUSAL.NOT_LUKES,
   });
-  assert.deepEqual(await database.store.events.list(userId, main), []);
+  assert.deepEqual(await database.run(database.store.events.list(userId, main)), []);
 });
 
 test("a message in a cleared conversation is not found, and its earlier rating is no longer read", async () => {
@@ -213,13 +216,13 @@ test("a message in a cleared conversation is not found, and its earlier rating i
     deviceId: DEVICE_ID,
   });
   assert.equal(before.ok, true);
-  await database.store.main.clear(userId, NOW);
+  await database.run(database.store.main.clear(userId, NOW));
 
   assert.deepEqual(
     await rateMessage(store, userId, reply, { rating: MESSAGE_RATING.DOWN, deviceId: DEVICE_ID }),
     { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
   );
-  assert.equal(await database.store.ratings.latest(userId, reply), undefined);
+  assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
 });
 
 test("a latest rating whose payload this build cannot read answers nothing rather than an older verdict", async () => {
@@ -238,5 +241,5 @@ test("a latest rating whose payload this build cannot read answers nothing rathe
     kind: CONVERSATION_EVENT_KIND.RATING,
     payload: { rating: "sideways" },
   });
-  assert.equal(await database.store.ratings.latest(userId, reply), undefined);
+  assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
 });

@@ -35,50 +35,55 @@ export function memoryObservationStore(): MemoryObservationStore {
     passes,
     advances,
     roster: {
-      read: async (userId) => {
-        const snapshot = snapshots.get(userId);
-        if (snapshot?.body === UNOPENABLE_BODY) throw new Error("the ring cannot open this body");
-        return snapshot;
-      },
-      observedAt: async (userId) => snapshots.get(userId)?.observedAt,
-      write: async (userId, snapshot) => {
-        snapshots.set(userId, snapshot);
-      },
-      advance: async (userId, snapshot, previousObservedAt) => {
-        if (snapshots.get(userId)?.observedAt !== previousObservedAt) return false;
-        snapshots.set(userId, snapshot);
-        advances.push({ userId, observedAt: snapshot.observedAt });
-        return true;
-      },
-      consumed: async (userId) => {
-        const bookmark = consumed.get(userId);
-        if (bookmark === undefined) return { state: CONSUMED_ROSTER.ABSENT };
-        if (bookmark.body === UNOPENABLE_BODY) {
-          return { state: CONSUMED_ROSTER.UNREADABLE, observedAt: bookmark.observedAt };
-        }
-        return { state: CONSUMED_ROSTER.STANDING, roster: bookmark };
-      },
+      read: (userId) =>
+        Effect.sync(() => {
+          const snapshot = snapshots.get(userId);
+          if (snapshot?.body === UNOPENABLE_BODY) throw new Error("the ring cannot open this body");
+          return snapshot;
+        }),
+      observedAt: (userId) => Effect.sync(() => snapshots.get(userId)?.observedAt),
+      write: (userId, snapshot) =>
+        Effect.sync(() => {
+          snapshots.set(userId, snapshot);
+        }),
+      advance: (userId, snapshot, previousObservedAt) =>
+        Effect.sync(() => {
+          if (snapshots.get(userId)?.observedAt !== previousObservedAt) return false;
+          snapshots.set(userId, snapshot);
+          advances.push({ userId, observedAt: snapshot.observedAt });
+          return true;
+        }),
+      consumed: (userId) =>
+        Effect.sync(() => {
+          const bookmark = consumed.get(userId);
+          if (bookmark === undefined) return { state: CONSUMED_ROSTER.ABSENT };
+          if (bookmark.body === UNOPENABLE_BODY) {
+            return { state: CONSUMED_ROSTER.UNREADABLE, observedAt: bookmark.observedAt };
+          }
+          return { state: CONSUMED_ROSTER.STANDING, roster: bookmark };
+        }),
       keepConsumed: (userId, roster, from) =>
         Effect.sync(() => {
           if (consumed.get(userId)?.observedAt !== from) return false;
           consumed.set(userId, roster);
           return true;
         }),
-      pass: async (userId) => passes.get(userId),
-      recordPass: async (userId, attempt) => {
-        const held = passes.get(userId);
-        if (held && held.attemptedAt > attempt.attemptedAt) return;
-        passes.set(userId, {
-          attemptedAt: attempt.attemptedAt,
-          ...(attempt.failure === undefined
-            ? { observedAt: attempt.attemptedAt }
-            : {
-                failure: attempt.failure,
-                ...(held?.observedAt !== undefined ? { observedAt: held.observedAt } : undefined),
-              }),
-        });
-      },
-      forgetIneligible: async () => {},
+      pass: (userId) => Effect.sync(() => passes.get(userId)),
+      recordPass: (userId, attempt) =>
+        Effect.sync(() => {
+          const held = passes.get(userId);
+          if (held && held.attemptedAt > attempt.attemptedAt) return;
+          passes.set(userId, {
+            attemptedAt: attempt.attemptedAt,
+            ...(attempt.failure === undefined
+              ? { observedAt: attempt.attemptedAt }
+              : {
+                  failure: attempt.failure,
+                  ...(held?.observedAt !== undefined ? { observedAt: held.observedAt } : undefined),
+                }),
+          });
+        }),
+      forgetIneligible: () => Effect.void,
     },
   };
 }

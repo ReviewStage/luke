@@ -195,8 +195,8 @@ export default defineEval({
       assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.equal(answer.parts.filter((part) => isTextUIPart(part)).length, 1);
 
-      const store = hostedStore({ keys: payloadKeyRing(secret), run });
-      const facts = await store.facts.list(LOCAL_DEV_PRINCIPAL);
+      const store = hostedStore({ keys: payloadKeyRing(secret) });
+      const facts = await run(store.facts.list(LOCAL_DEV_PRINCIPAL));
       assert.equal(facts.filter((fact) => fact.words === SCRIPTED_FACT).length, 1);
       const runtimeSessionId = await readConversationRuntimeSessionId(run, conversation.id);
       assert.equal(runtimeSessionId, accepted.sessionId);

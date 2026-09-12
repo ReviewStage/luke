@@ -20,6 +20,7 @@ import {
 } from "./observation-pass.js";
 import type { ObservedRoster } from "./observed-roster.js";
 import { createRateBrake } from "./rate-brake.js";
+import type { HostedStoreRun } from "./store/database.js";
 import type { HostedVaultRoute } from "./vault-route.js";
 
 const OBSERVE_RATE_LIMIT = {
@@ -40,6 +41,7 @@ export interface ObserveOptions
     "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
   > {
   /** The store the snapshot is read from and, on a live pass, written to. */
+  run: HostedStoreRun;
   store: (secret: string) => ObservationStore;
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
@@ -84,7 +86,7 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   const fresh =
     new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
   if (!fresh) {
-    const stored = await storedRoster(store, userId, rows, secret);
+    const stored = await storedRoster(options.run, store, userId, rows, secret);
     if (stored?.roster) {
       return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
     }
@@ -99,6 +101,7 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     userId,
     rows,
     secret,
+    run: options.run,
     store,
     seams: options,
     now,

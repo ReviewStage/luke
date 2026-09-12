@@ -243,7 +243,7 @@ async function observationTickHandler(request: Request): Promise<Response> {
     ? Redacted.value(environment.providerKeyEncryptionSecret)
     : undefined;
   const store = encryptionSecret
-    ? hostedStore({ keys: payloadKeyRing(encryptionSecret), run: runWeb })
+    ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
     : undefined;
   const sender = environment.apnsCredentials
     ? new ApnsSender({ credentials: environment.apnsCredentials })
@@ -259,9 +259,10 @@ async function observationTickHandler(request: Request): Promise<Response> {
     encryptionSecret,
     listAccounts: (limit, seenAfter) => runWeb(listEligibleAccounts(limit, seenAfter)),
     forgetIneligible: async (seenAfter) => {
-      await store?.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter });
+      if (store)
+        await runWeb(store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter }));
     },
-    purgeCleared: async (now) => (store ? store.retention.purgeCleared(new Date(now)) : 0),
+    purgeCleared: async (now) => (store ? runWeb(store.retention.purgeCleared(new Date(now))) : 0),
     sweepSpeech: async (now) => {
       if (!store) return NOTHING_SWEPT;
       const writer = await storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET });
@@ -287,6 +288,7 @@ async function observationTickHandler(request: Request): Promise<Response> {
         userId,
         rows,
         secret: encryptionSecret,
+        run: runWeb,
         store,
         seams: {},
         now: Date.now(),
@@ -296,7 +298,7 @@ async function observationTickHandler(request: Request): Promise<Response> {
     openTurns: async (userId) => {
       if (!store || !encryptionSecret || !cronSecret) return NOTHING_OPENED;
       const rows = await vaultRows(userId);
-      const roster = await readHostedRoster(store, userId, rows, encryptionSecret);
+      const roster = await readHostedRoster(runWeb, store, userId, rows, encryptionSecret);
       const readApiKey = readApiKeyFor(rows, encryptionSecret);
       return openAccountTurns(
         {

@@ -214,16 +214,15 @@ provider-key vault's `server/hosted/vault-key-store.ts` are on the same client;
 `server/hosted/speech-push.ts` reads the account's devices through it too,
 beside the speech module's own reads, and `server/voice/session-record.ts` is
 on it whole, its four methods each one statement over the live session row.
-`server/hosted/quota.ts` is still through Drizzle, and
-`brain-host/production.ts` still holds a `HostedStoreDatabase` accessor it
-forwards into `quota.ts` and into `hostedStore()` for `readRosterSnapshot`'s
-sake, though the rest of `brain-host/` runs no query of its own any more.
-Each converted module is handed its edge's own runner to answer the promises
-the routes hold — `runWeb` in a
-function, the store tests' runtime in a test. The writers take that runner
-directly rather than through the store's context, because a route composes
-them apart from the store; the conversation row lock every write runs under
-is the client's own transaction. What the layer does need at build
+`hostedStore()` takes the payload key ring and nothing else, and answers an
+`Effect<A, SqlError | ParseError, SqlClient>` from every method, so the caller
+composes a store read into whatever it already runs. What still holds a
+runner is everything a route composes apart from the store and that still
+hands a promise up — the writers, the speech module, the ask record, the
+device seams, the brain host's own seams — each handed its edge's own,
+`runWeb` in a function and the store tests' runtime in a test; the
+conversation row lock every write runs under is the client's own
+transaction. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 
@@ -929,8 +928,9 @@ The roster tables are read and written by the scheduled observation below and
 the routes that serve it. `server/hosted/store/` is the store the brain host
 composes against; its modules are being moved onto `@effect/sql`, and one there
 is an `Effect<A, SqlError | ParseError, SqlClient>` whose rows a `Schema`
-decodes and whose path rule is that schema too, answered to a promise-holding
-route through the `HostedStoreRun` seam the store is composed with.
+decodes and whose path rule is that schema too, which `HostedStore` answers
+as it came and a promise-holding route runs through the `HostedStoreRun` its
+own edge handed it.
 
 The notebook, the facts, and the roster keep their `sealed_*` columns: the
 payload envelope in `server/hosted/encryption.ts`, AES-256-GCM under the

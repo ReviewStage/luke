@@ -172,10 +172,8 @@ class Journey {
 
   /** The turn's rows as the reader holds them, each with the turn's model, the way the engine is handed them. */
   async rows(): Promise<ContextRow[]> {
-    const read = await database.store.messages.list(
-      this.target.userId,
-      this.target.conversationId,
-      TOOLS,
+    const read = await database.run(
+      database.store.messages.list(this.target.userId, this.target.conversationId, TOOLS),
     );
     assert.ok(read.ok);
     // SAFETY: the reader's rows serialize to the JSON the engine reads them back from.
@@ -347,7 +345,9 @@ test("a multi-step turn told by the brain, journaled by the writer, read back, a
     undefined,
   );
   await journey.drain();
-  const read = await database.store.messages.list(target.userId, target.conversationId, TOOLS);
+  const read = await database.run(
+    database.store.messages.list(target.userId, target.conversationId, TOOLS),
+  );
   assert.ok(read.ok);
   assert.deepEqual(
     read.value.map((row) => [row.message.role, row.finishedAt !== undefined]),

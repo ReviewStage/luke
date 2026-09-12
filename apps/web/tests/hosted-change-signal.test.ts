@@ -66,6 +66,7 @@ function options(userId: string, request: Request): ChangeSignalOptions {
   return {
     request,
     resolveUserId: async () => userId,
+    run: database.run,
     store: database.store,
     touchDevice: seams.touchDevice,
     now: () => NOW,
@@ -249,7 +250,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     messageId,
     kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
   });
-  await database.store.roster.write(userId, { body: "{}", observedAt: NOW - 30_000 });
+  await database.run(database.store.roster.write(userId, { body: "{}", observedAt: NOW - 30_000 }));
 
   const heads = await answered(
     await handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID }))),
@@ -281,7 +282,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   assert.equal(misnamed.messages, heads.messages);
   assert.deepEqual((await deviceRow(STRANGER_DEVICE_ID)).lastSeenAt, new Date(NOW - 3_600_000));
 
-  const { opened } = await database.store.main.clear(userId, new Date(NOW + 1000));
+  const { opened } = await database.run(database.store.main.clear(userId, new Date(NOW + 1000)));
   const cleared = await answered(
     await handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID }))),
   );

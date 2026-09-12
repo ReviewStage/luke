@@ -57,6 +57,16 @@ import {
   writeWorkspaceFile,
 } from "./workspace-files.js";
 
+/** How a store read or write fails: the driver's own refusal, or a row this build cannot decode. */
+type HostedStoreFailure = SqlError | ParseResult.ParseError;
+
+/**
+ * What every `HostedStore` method answers: an effect over the ambient client,
+ * so a caller composes it into the transaction it already holds and the edge
+ * that owns the connection is the one that runs it.
+ */
+type HostedStoreEffect<A> = Effect.Effect<A, HostedStoreFailure, SqlClient.SqlClient>;
+
 /**
  * The hosted store, over Postgres and keyed by user: the conversation rows
  * the store writer writes and the read routes answer, beside the notebook,
@@ -81,60 +91,70 @@ export interface HostedStore {
       conversationId: string,
       tools: ToolSet,
       cursor?: MessageCursor,
-    ): Promise<MessageListRead>;
+    ): HostedStoreEffect<MessageListRead>;
     /** The one message a writer's client id names — a turn's journal under the turn's id — read back under the registry; an empty page where none stands. */
     byClientId(
       userId: string,
       conversationId: string,
       tools: ToolSet,
       clientId: string,
-    ): Promise<MessageListRead>;
+    ): HostedStoreEffect<MessageListRead>;
   };
   events: {
     list(
       userId: string,
       conversationId: string,
       cursor?: SequenceCursor,
-    ): Promise<readonly StoredEventRecord[]>;
+    ): HostedStoreEffect<readonly StoredEventRecord[]>;
     /** The events about the given messages, across their standing conversations, in each conversation's sequence. */
     forMessages(
       userId: string,
       messageIds: readonly string[],
-    ): Promise<readonly StoredEventRecord[]>;
+    ): HostedStoreEffect<readonly StoredEventRecord[]>;
   };
   turns: {
     /** The account's turns in the order they last changed, so a settlement is answered again. */
-    list(userId: string, cursor?: TurnCursor): Promise<readonly StoredTurnRecord[]>;
+    list(userId: string, cursor?: TurnCursor): HostedStoreEffect<readonly StoredTurnRecord[]>;
     /** The turn rows the given ids name, over standing conversations, in the order they last changed. */
-    named(userId: string, turnIds: readonly string[]): Promise<readonly StoredTurnRecord[]>;
+    named(
+      userId: string,
+      turnIds: readonly string[],
+    ): HostedStoreEffect<readonly StoredTurnRecord[]>;
     /** The cursor of the turn that changed last, or of the last one at or before `notAfter`; nothing while no such turn stands. */
-    latest(userId: string, notAfter?: TurnCursorPosition): Promise<TurnCursorPosition | undefined>;
+    latest(
+      userId: string,
+      notAfter?: TurnCursorPosition,
+    ): HostedStoreEffect<TurnCursorPosition | undefined>;
   };
   directory: {
     /** The view's conversations: the standing main and every standing observed conversation, with their counters. */
-    standing(userId: string): Promise<readonly StandingConversation[]>;
+    standing(userId: string): HostedStoreEffect<readonly StandingConversation[]>;
     /** The observed conversation for one session, opened on its first diff and standing after; nothing where a stamped row blocks it. */
-    observed(userId: string, identity: SessionIdentity, now: number): Promise<string | undefined>;
+    observed(
+      userId: string,
+      identity: SessionIdentity,
+      now: number,
+    ): HostedStoreEffect<string | undefined>;
   };
   main: {
     /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
-    clear(userId: string, now: Date): Promise<ClearOutcome>;
+    clear(userId: string, now: Date): HostedStoreEffect<ClearOutcome>;
   };
   retention: {
     /** The cron's purge of every conversation, of any account, stamped past the retention window. */
-    purgeCleared(now: Date): Promise<number>;
+    purgeCleared(now: Date): HostedStoreEffect<number>;
   };
   ratings: {
     /** The newest rating on one of the caller's messages, or nothing; ratings are written through `rateMessage` over the store writer. */
-    latest(userId: string, messageId: string): Promise<StoredRatingRecord | undefined>;
+    latest(userId: string, messageId: string): HostedStoreEffect<StoredRatingRecord | undefined>;
   };
   facts: {
-    list(userId: string): Promise<readonly StoredFact[]>;
+    list(userId: string): HostedStoreEffect<readonly StoredFact[]>;
     replace(
       userId: string,
       facts: readonly FactWrite[],
       now: number,
-    ): Promise<readonly StoredFact[]>;
+    ): HostedStoreEffect<readonly StoredFact[]>;
   };
   /**
    * The tool set a turn was offered, written once under the hash of what the
@@ -143,20 +163,20 @@ export interface HostedStore {
    */
   toolSets: {
     /** Writes the offered declarations where no row stands for their hash; answers the hash. */
-    record(schemas: readonly OfferedToolSchema[], now: Date): Promise<string>;
+    record(schemas: readonly OfferedToolSchema[], now: Date): HostedStoreEffect<string>;
   };
   workspace: {
-    read(userId: string, path: string): Promise<WorkspaceFileRecord | undefined>;
-    write(userId: string, path: string, content: string, now: number): Promise<void>;
-    seed(userId: string, path: string, content: string, now: number): Promise<boolean>;
-    delete(userId: string, path: string): Promise<boolean>;
-    list(userId: string): Promise<readonly WorkspaceFileListing[]>;
+    read(userId: string, path: string): HostedStoreEffect<WorkspaceFileRecord | undefined>;
+    write(userId: string, path: string, content: string, now: number): HostedStoreEffect<void>;
+    seed(userId: string, path: string, content: string, now: number): HostedStoreEffect<boolean>;
+    delete(userId: string, path: string): HostedStoreEffect<boolean>;
+    list(userId: string): HostedStoreEffect<readonly WorkspaceFileListing[]>;
   };
   roster: {
-    read(userId: string): Promise<RosterSnapshotRecord | undefined>;
+    read(userId: string): HostedStoreEffect<RosterSnapshotRecord | undefined>;
     /** The standing snapshot's instant without opening its body; absent where none stands. */
-    observedAt(userId: string): Promise<number | undefined>;
-    write(userId: string, snapshot: RosterSnapshotRecord): Promise<void>;
+    observedAt(userId: string): HostedStoreEffect<number | undefined>;
+    write(userId: string, snapshot: RosterSnapshotRecord): HostedStoreEffect<void>;
     /**
      * Replaces the snapshot, in one transaction, only while the snapshot
      * standing is still the one observed at `previousObservedAt` (absent for
@@ -167,94 +187,97 @@ export interface HostedStore {
       userId: string,
       snapshot: RosterSnapshotRecord,
       previousObservedAt: number | undefined,
-    ): Promise<boolean>;
+    ): HostedStoreEffect<boolean>;
     /** The roster as of the last change the opener handed the brain: absent before its first visit, unreadable where a row stands this build cannot open, or standing. */
-    consumed(userId: string): Promise<ConsumedRosterRead>;
+    consumed(userId: string): HostedStoreEffect<ConsumedRosterRead>;
     /**
      * Moves that bookmark, only over the one observed at `from` (absent for
-     * none), answered as an Effect so the opener composes it into the one
-     * transaction that also keeps its transcript cursors.
+     * none), so the opener composes it into the one transaction that also
+     * keeps its transcript cursors.
      */
     keepConsumed(
       userId: string,
       roster: RosterSnapshotRecord,
       from: number | undefined,
-    ): Effect.Effect<boolean, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
-    pass(userId: string): Promise<ObservationPassRecord | undefined>;
-    recordPass(userId: string, attempt: { attemptedAt: number; failure?: string }): Promise<void>;
+    ): HostedStoreEffect<boolean>;
+    pass(userId: string): HostedStoreEffect<ObservationPassRecord | undefined>;
+    recordPass(
+      userId: string,
+      attempt: { attemptedAt: number; failure?: string },
+    ): HostedStoreEffect<void>;
     /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for, or of the named ones alone. */
-    forgetIneligible(eligibility: ObservationEligibility): Promise<void>;
+    forgetIneligible(eligibility: ObservationEligibility): HostedStoreEffect<void>;
   };
   speech: {
     /** The account's briefings not yet spoken, pushed, or expired, oldest offer first, each as it stands now; transitions are written through the `speech` module over the store writer. */
-    open(userId: string, limit?: number): Promise<readonly SpeechOffer[]>;
+    open(userId: string, limit?: number): HostedStoreEffect<readonly SpeechOffer[]>;
   };
 }
 
-export function hostedStore({ keys, run }: HostedStoreContext): HostedStore {
+export function hostedStore({ keys }: HostedStoreContext): HostedStore {
   const sealFor = (userId: string) => userSeal(keys, userId);
   return {
     messages: {
       list: (userId, conversationId, tools, cursor) =>
-        run(listMessages(userId, conversationId, tools, cursor)),
+        listMessages(userId, conversationId, tools, cursor),
       byClientId: (userId, conversationId, tools, clientId) =>
-        run(readMessageByClientId(userId, conversationId, tools, clientId)),
+        readMessageByClientId(userId, conversationId, tools, clientId),
     },
     events: {
-      list: (userId, conversationId, cursor) => run(listEvents(userId, conversationId, cursor)),
-      forMessages: (userId, messageIds) => run(eventsForMessages(userId, messageIds)),
+      list: (userId, conversationId, cursor) => listEvents(userId, conversationId, cursor),
+      forMessages: (userId, messageIds) => eventsForMessages(userId, messageIds),
     },
     turns: {
-      list: (userId, cursor) => run(listTurns(userId, cursor)),
-      named: (userId, turnIds) => run(turnsNamed(userId, turnIds)),
-      latest: (userId, notAfter) => run(latestTurnPosition(userId, notAfter)),
+      list: (userId, cursor) => listTurns(userId, cursor),
+      named: (userId, turnIds) => turnsNamed(userId, turnIds),
+      latest: (userId, notAfter) => latestTurnPosition(userId, notAfter),
     },
     directory: {
-      standing: (userId) => run(standingConversations(userId)),
+      standing: (userId) => standingConversations(userId),
       observed: (userId, identity, now) =>
-        run(standingObservedConversation(userId, identity, new Date(now))),
+        standingObservedConversation(userId, identity, new Date(now)),
     },
     main: {
-      clear: (userId, now) => run(clearMainConversation(userId, now)),
+      clear: (userId, now) => clearMainConversation(userId, now),
     },
     retention: {
-      purgeCleared: (now) => run(purgeClearedConversations(now)),
+      purgeCleared: (now) => purgeClearedConversations(now),
     },
     ratings: {
-      latest: (userId, messageId) => run(latestMessageRating(userId, messageId)),
+      latest: (userId, messageId) => latestMessageRating(userId, messageId),
     },
     facts: {
-      list: (userId) => run(listFacts(sealFor(userId), userId)),
-      replace: (userId, facts, now) => run(replaceFacts(sealFor(userId), userId, facts, now)),
+      list: (userId) => listFacts(sealFor(userId), userId),
+      replace: (userId, facts, now) => replaceFacts(sealFor(userId), userId, facts, now),
     },
     toolSets: {
-      record: (schemas, now) => run(recordToolSet(schemas, now)),
+      record: (schemas, now) => recordToolSet(schemas, now),
     },
     workspace: {
       read: (userId, path) =>
-        run(Effect.map(readWorkspaceFile(sealFor(userId), userId, path), Option.getOrUndefined)),
+        Effect.map(readWorkspaceFile(sealFor(userId), userId, path), Option.getOrUndefined),
       write: (userId, path, content, now) =>
-        run(writeWorkspaceFile(sealFor(userId), userId, path, content, now)),
+        writeWorkspaceFile(sealFor(userId), userId, path, content, now),
       seed: (userId, path, content, now) =>
-        run(seedWorkspaceFile(sealFor(userId), userId, path, content, now)),
-      delete: (userId, path) => run(deleteWorkspaceFile(userId, path)),
-      list: (userId) => run(listWorkspaceFiles(userId)),
+        seedWorkspaceFile(sealFor(userId), userId, path, content, now),
+      delete: (userId, path) => deleteWorkspaceFile(userId, path),
+      list: (userId) => listWorkspaceFiles(userId),
     },
     roster: {
-      read: (userId) => run(readRosterSnapshot(sealFor(userId), userId)),
-      observedAt: (userId) => run(rosterSnapshotObservedAt(userId)),
-      write: (userId, snapshot) => run(writeRosterSnapshot(sealFor(userId), userId, snapshot)),
+      read: (userId) => readRosterSnapshot(sealFor(userId), userId),
+      observedAt: (userId) => rosterSnapshotObservedAt(userId),
+      write: (userId, snapshot) => writeRosterSnapshot(sealFor(userId), userId, snapshot),
       advance: (userId, snapshot, previousObservedAt) =>
-        run(advanceRosterSnapshot(sealFor(userId), userId, snapshot, previousObservedAt)),
-      consumed: (userId) => run(readConsumedRoster(sealFor(userId), userId)),
+        advanceRosterSnapshot(sealFor(userId), userId, snapshot, previousObservedAt),
+      consumed: (userId) => readConsumedRoster(sealFor(userId), userId),
       keepConsumed: (userId, roster, from) =>
         keepConsumedRoster(sealFor(userId), userId, roster, from),
-      pass: (userId) => run(readObservationPass(userId)),
-      recordPass: (userId, attempt) => run(recordObservationPass(userId, attempt)),
-      forgetIneligible: (eligibility) => run(forgetObservationIneligible(eligibility)),
+      pass: (userId) => readObservationPass(userId),
+      recordPass: (userId, attempt) => recordObservationPass(userId, attempt),
+      forgetIneligible: (eligibility) => forgetObservationIneligible(eligibility),
     },
     speech: {
-      open: (userId, limit) => run(openSpeechOffers({ userId, limit })),
+      open: (userId, limit) => openSpeechOffers({ userId, limit }),
     },
   };
 }

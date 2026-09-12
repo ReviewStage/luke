@@ -18,6 +18,7 @@
     "apps/web/eve/evals/brain-host.eval.ts",
     "apps/web/server/hosted/rate-brake.ts",
     "apps/web/tests/support/hosted-store-database.ts",
+    "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",
     "packages/actions/src/admit.ts",
     "packages/analytics/src/sender.ts",

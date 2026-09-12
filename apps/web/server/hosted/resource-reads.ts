@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { Effect, type Schema as EffectSchema, Either } from "effect";
 import {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
@@ -38,6 +38,7 @@ import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET, CATALOG_VIEW_TOOL_KINDS } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
+import type { HostedStoreRun } from "./store/database.js";
 import {
   type HostedStore,
   MAXIMUM_READ_PAGE,
@@ -78,6 +79,8 @@ const readRateLimited = createRateBrake({
 export interface ResourceReadOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
+  /** The runner every read below is answered through. */
+  run: HostedStoreRun;
   store: Pick<HostedStore, "messages" | "events" | "turns" | "directory">;
 }
 
@@ -363,9 +366,9 @@ export async function handleConversationMessages(options: ResourceReadOptions): 
   const { userId, query } = gate;
   const page = readPage(query, sequenceReadCursorSchema);
   if (!page) return invalidRequest();
-  const { store } = options;
+  const { run, store } = options;
 
-  const standing = await store.directory.standing(userId);
+  const standing = await run(store.directory.standing(userId));
   const windowStart = viewWindowStart(standing);
   let walk: SequenceWalk<StoredMessageRecord>;
   try {
@@ -375,11 +378,13 @@ export async function handleConversationMessages(options: ResourceReadOptions): 
       (conversation) => conversation.nextMessageSeq - 1,
       async (conversation, after, limit) => {
         const since = conversation.kind === CONVERSATION_KIND.OBSERVED ? windowStart : undefined;
-        const read = await store.messages.list(userId, conversation.id, CATALOG_TOOL_SET, {
-          after,
-          limit,
-          ...(since !== undefined ? { since } : undefined),
-        });
+        const read = await run(
+          store.messages.list(userId, conversation.id, CATALOG_TOOL_SET, {
+            after,
+            limit,
+            ...(since !== undefined ? { since } : undefined),
+          }),
+        );
         if (!read.ok)
           throw new UnreadableRowError({ conversationId: conversation.id, seq: read.seq });
         return read.value;
@@ -412,10 +417,12 @@ export async function handleConversationMessages(options: ResourceReadOptions): 
       });
     }
   }
-  const [turns, events] = await Promise.all([
-    store.turns.named(userId, [...conversationOfTurn.keys()]),
-    store.events.forMessages(userId, messageIds),
-  ]);
+  const [turns, events] = await run(
+    Effect.all([
+      store.turns.named(userId, [...conversationOfTurn.keys()]),
+      store.events.forMessages(userId, messageIds),
+    ]),
+  );
   const groups = selectConversationView({
     main,
     observed,
@@ -470,15 +477,16 @@ export async function handleConversationEvents(options: ResourceReadOptions): Pr
   const { userId, query } = gate;
   const page = readPage(query, sequenceReadCursorSchema);
   if (!page) return invalidRequest();
-  const { store } = options;
+  const { run, store } = options;
 
-  const standing = await store.directory.standing(userId);
+  const standing = await run(store.directory.standing(userId));
   // An event is written once and never changed, so every event row is settled.
   const walk = await walkSequences(
     standing,
     page,
     (conversation) => conversation.nextEventSeq - 1,
-    (conversation, after, limit) => store.events.list(userId, conversation.id, { after, limit }),
+    (conversation, after, limit) =>
+      run(store.events.list(userId, conversation.id, { after, limit })),
     { seqOf: (event) => event.seq, settled: () => true },
   );
 
@@ -510,16 +518,16 @@ export async function handleBrainTurns(options: ResourceReadOptions): Promise<Re
   const { userId, query } = gate;
   const page = readPage<TurnReadCursor>(query, turnReadCursorSchema);
   if (!page) return invalidRequest();
-  const { store } = options;
+  const { run, store } = options;
 
-  const rows = await store.turns.list(userId, { after: page.after, limit: page.limit });
+  const rows = await run(store.turns.list(userId, { after: page.after, limit: page.limit }));
   // An empty page moves the cursor back to the last turn at or before it: a cursor can name a turn
   // a Clear has since taken, behind which the remaining turns all stand earlier, and echoing it
   // would leave the device asking the same empty page forever. Read after the page, and never past
   // the cursor, so a turn that landed meanwhile is answered by the next read rather than jumped.
   const last =
     rows.at(-1)?.cursor ??
-    (page.after === undefined ? undefined : await store.turns.latest(userId, page.after));
+    (page.after === undefined ? undefined : await run(store.turns.latest(userId, page.after)));
   const hasMore = rows.length === page.limit;
   const answer: BrainTurnsAnswer = {
     turns: rows.map(readTurn),
