@@ -12,6 +12,7 @@ import { wireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import { ACTION_TOOLS } from "./tools/action-tools.js";
+import { PLAN_READS_TOOL_NAME } from "./tools/prefetch-tool.js";
 import {
   BRAIN_TOOL,
   BRAIN_TOOLS,
@@ -99,7 +100,14 @@ test("announce takes the briefing alone and the hosted catalog carries every def
   assert.deepEqual(announce.parameters.required, ["briefing"]);
   assert.deepEqual(Object.keys(wireRecord(announce.parameters.properties) ?? {}), ["briefing"]);
   for (const tool of hostedBrainToolCatalog().values()) assert.equal(tool.type, "function");
-  assert.equal(hostedBrainToolCatalog().size, brainToolCatalog().length);
+  // The hosted catalog is the brain's plus the prefetch planner's one tool,
+  // which no turn is offered and the service alone selects, by kind.
+  assert.equal(hostedBrainToolCatalog().size, brainToolCatalog().length + 1);
+  assert.equal(hostedBrainToolCatalog().has(PLAN_READS_TOOL_NAME), true);
+  assert.equal(
+    brainToolCatalog().some((tool) => tool.schema.name === PLAN_READS_TOOL_NAME),
+    false,
+  );
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.LOAD_SKILL));
   assert.ok(!isBrainOnlyTool(ACTION_TOOL.SEND_SESSION_MESSAGE));

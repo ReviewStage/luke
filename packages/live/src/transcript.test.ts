@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  anticipationOf,
+  PREFETCH_DEBOUNCE_MS,
   renderAskContext,
   TRANSCRIPT_ROLE_LABEL,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   UTTERANCE_GAP_MS,
+  UTTERANCE_SETTLE_MARGIN_MS,
 } from "./transcript.js";
 
 function user(text: string, startMs: number, endMs: number) {
@@ -146,4 +149,28 @@ test("a span with no developer utterance yet has no ask", () => {
   const context = ledger.askContext(0);
   assert.equal(context.turns.length, 1);
   assert.equal(context.ask, undefined);
+});
+
+test("an anticipation stands only once the developer has said something in the span, and names the row and words the ask has so far", () => {
+  const ledger = new TranscriptLedger();
+  assert.equal(anticipationOf(ledger.askContext(0)), undefined);
+  ledger.append(assistant("Nukualofa finished.", 0, 1_000));
+  assert.equal(anticipationOf(ledger.askContext(0)), undefined);
+  ledger.append(user("What is", 2_000, 2_400));
+  const first = anticipationOf(ledger.askContext(0));
+  assert.ok(first);
+  assert.equal(first.rowId, 2);
+  assert.equal(first.text, "What is");
+  assert.equal(first.context.turns.length, 2);
+  ledger.append(user(" Nukualofa doing", 2_400, 2_900));
+  const grown = anticipationOf(ledger.askContext(0));
+  assert.ok(grown);
+  assert.equal(grown.rowId, first.rowId);
+  assert.equal(grown.text, "What is Nukualofa doing");
+  assert.equal(anticipationOf(ledger.askContext(3_000)), undefined);
+});
+
+test("the prefetch debounce is shorter than the pause that settles an utterance, so a read can begin while the developer is still speaking", () => {
+  assert.ok(PREFETCH_DEBOUNCE_MS < UTTERANCE_GAP_MS);
+  assert.ok(PREFETCH_DEBOUNCE_MS < UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
 });

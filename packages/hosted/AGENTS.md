@@ -155,6 +155,17 @@ no shared secret exist between two deployments. The legacy mint paths and
 `realtime-contract.ts` stand beside it untouched for the phone, and for the
 installed desktops that predate the live session, until each has moved.
 
+A capability the service gains is advertised by a field of its own, never
+by a new member of a list a shipped client decodes against a fixed literal
+set. `hostedBrainCapabilitiesSchema`'s `operations` is such a list: a desktop
+already installed reads it against the operation names its build knew, and a
+name it never knew fails the whole capabilities read and takes the brain with
+it. The prefetch is the first capability added this way — it stands in
+`HOSTED_BRAIN_OPERATION` for the transports that address it, is kept out of
+`HOSTED_BRAIN_LISTED_OPERATIONS`, which is what the service answers, and is
+advertised by the optional `prefetch` field, which a tolerant record lets an
+older desktop ignore.
+
 A renamed wire field keeps its old name on the wire for one iOS release. The
 desktop and the service ship together, but an installed phone reads whatever
 the service sends until its owner updates it, so the service writes both names

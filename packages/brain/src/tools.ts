@@ -23,6 +23,7 @@ import {
 import { ACTION_TOOLS, type ActionToolModule } from "./tools/action-tools.js";
 import { ANNOUNCE_TOOL } from "./tools/announce-tool.js";
 import { BRAIN_TOOL, type BrainToolName, isBrainOnlyTool, TOOL_GROUP } from "./tools/names.js";
+import { PLAN_READS_TOOL } from "./tools/prefetch-tool.js";
 import { READ_TOOLS } from "./tools/read-tools.js";
 import { SESSION_TOOLS } from "./tools/session-tools.js";
 import type { ToolContext, ToolModule } from "./tools/tool-module.js";
@@ -234,14 +235,28 @@ export function brainToolRegistry(): ReadonlyMap<string, BrainToolRegistration> 
 }
 
 /**
+ * The read prefetch's planning tool as an inference carries it. It is not in
+ * the brain's catalog: no turn's model is offered it and no policy layer
+ * names it, since the planner alone calls it, forced, before a turn opens.
+ */
+export function planReadsToolSchema(): ToolSchema {
+  return schemaOf(PLAN_READS_TOOL);
+}
+
+/**
  * Every tool a hosted request may select by name, in the Responses
- * function-tool form: the catalog's own schemas, act and brain tool alike.
- * The service selects schemas from this catalog and nothing a caller sends;
- * a desktop checks the names it means to send against the catalog the
- * service advertised; the trace viewer renders a turn's tools from it.
+ * function-tool form: the catalog's own schemas, act and brain tool alike,
+ * and the prefetch planner's beside them, so the service holds that schema
+ * too and selects it by the request's kind. The service selects schemas from
+ * this catalog and nothing a caller sends; a desktop checks the names it
+ * means to send against the catalog the service advertised; the trace viewer
+ * renders a turn's tools from it.
  */
 export function hostedBrainToolCatalog(): ReadonlyMap<string, ResponsesToolDefinition> {
-  return new Map(
-    brainToolCatalog().map((tool) => [tool.schema.name, responsesToolDefinition(tool.schema)]),
-  );
+  return new Map([
+    ...brainToolCatalog().map(
+      (tool) => [tool.schema.name, responsesToolDefinition(tool.schema)] as const,
+    ),
+    [PLAN_READS_TOOL.name, responsesToolDefinition(planReadsToolSchema())] as const,
+  ]);
 }

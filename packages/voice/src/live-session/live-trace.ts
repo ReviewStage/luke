@@ -12,6 +12,12 @@ export const LIVE_TRACE_DECISION = {
   APPENDED: "appended",
   APPEND_REFUSED: "append-refused",
   DELEGATED: "delegated",
+  /** The developer's words so far were handed to the brain to read ahead of. */
+  ANTICIPATED: "anticipated",
+  /** The summary of a read made ahead was appended to the session as data. */
+  FACTS_APPENDED: "facts-appended",
+  /** A summary arrived for words since superseded, or with no session to append to, and was dropped. */
+  FACTS_DROPPED: "facts-dropped",
   RETAINED: "retained",
   SPOKEN: "spoken",
   UNSETTLED: "unsettled",

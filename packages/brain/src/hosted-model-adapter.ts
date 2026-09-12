@@ -2,12 +2,14 @@ import {
   type AccountToken,
   brainOutputReplayable,
   HOSTED_BRAIN_CONTRACT_VERSION,
+  HOSTED_BRAIN_PREFETCH_KIND,
   HOSTED_BRAIN_REQUEST_REFUSAL,
   HOSTED_SERVICE_PATH,
   type HostedBrainCapabilities,
   type HostedBrainRequestRead,
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
+  hostedBrainPrefetchRequestFromWire,
   hostedBrainRespondRequestFromWire,
   maximumHostedBrainRequestBytes,
   serializedRequestBytes,
@@ -42,6 +44,7 @@ import {
   type PreparedOperation,
   type Quiet,
   RESPONSES_OPERATION,
+  type RespondOperation,
   ResponsesModelAdapter,
   type ResponsesOperation,
   type ResponsesTransport,
@@ -54,11 +57,14 @@ export interface HostedModelAdapterOptions extends AccountToken {
   now?: () => number;
   requestTimeoutMs?: number;
   report?: (message: string) => void;
+  /** Which operation this adapter's inferences are: a turn's unless it is built for the prefetch. */
+  respondOperation?: RespondOperation;
 }
 
 const HOSTED_PATH = {
   [RESPONSES_OPERATION.RESPOND]: HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
   [RESPONSES_OPERATION.COUNT_TOKENS]: HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS,
+  [RESPONSES_OPERATION.PREFETCH]: HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
 } as const satisfies Record<ResponsesOperation, string>;
 
 /**
@@ -72,21 +78,41 @@ const HOSTED_PATH = {
 class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
   readonly adapter = BUILTIN_MODEL_ADAPTER.HOSTED;
   readonly #client: BrainTransport;
+  readonly #respondOperation: RespondOperation;
   #capabilities: HostedBrainCapabilities | undefined;
 
   constructor(options: HostedModelAdapterOptions) {
     this.#client = hostedBrainTransport({ ...options, baseUrl: options.serviceBaseUrl });
+    this.#respondOperation = options.respondOperation ?? RESPONSES_OPERATION.RESPOND;
   }
 
-  /** The service's model, once capabilities have been read; the service's to know until then. */
+  /** The service's model for this adapter's inferences, once capabilities have been read; the service's to know until then. */
   model(): string | undefined {
-    return this.#capabilities?.model;
+    return this.#modelOf(this.#capabilities);
   }
 
+  #modelOf(capabilities: HostedBrainCapabilities | undefined): string | undefined {
+    if (!capabilities) return undefined;
+    return this.#respondOperation === RESPONSES_OPERATION.PREFETCH
+      ? capabilities.prefetch?.model
+      : capabilities.model;
+  }
+
+  /**
+   * The prefetch is advertised by its own capabilities field rather than the
+   * operations list, so a shipped desktop's fixed reading of that list keeps
+   * decoding; a service without the field offers no prefetch, and the
+   * incompatibility is answered here, where the planner reads it as no
+   * planner rather than as a failure of the brain.
+   */
   async admit(operation?: ResponsesOperation): Promise<Admission<HostedBrainCapabilities>> {
     const capabilities = this.#capabilities ?? (await this.#discover());
     if ("outcome" in capabilities) return capabilities;
-    if (operation && !capabilities.operations.includes(operation)) {
+    const offered =
+      operation === RESPONSES_OPERATION.PREFETCH
+        ? capabilities.prefetch !== undefined
+        : operation === undefined || capabilities.operations.includes(operation);
+    if (!offered) {
       return failed(
         MODEL_FAILURE.COMPATIBILITY,
         `the hosted service does not offer the ${operation} operation`,
@@ -97,7 +123,7 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
 
   capabilitiesOf(capabilities: HostedBrainCapabilities) {
     return {
-      model: capabilities.model,
+      model: this.#modelOf(capabilities) ?? capabilities.model,
       countsInputTokens: capabilities.operations.includes(RESPONSES_OPERATION.COUNT_TOKENS),
       maximumOutputTokens: capabilities.bounds.maximumOutputTokens,
       tools: capabilities.tools,
@@ -110,7 +136,9 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
     capabilities: HostedBrainCapabilities,
     items: readonly WireRecord[],
     options: ModelRequestOptions,
+    operation: RespondOperation,
   ): PreparedOperation<ModelResponse> | Normalized {
+    if (operation === RESPONSES_OPERATION.PREFETCH) return this.#prefetch(items, options);
     return prepared(
       hostedBrainRespondRequestFromWire(
         {
@@ -128,6 +156,34 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
         },
         new Set(capabilities.tools),
       ),
+      (payload) =>
+        replayable(payload, "response") ??
+        responsesModelAnswer(payload) ??
+        failed(MODEL_FAILURE.MALFORMED, "response carried no output"),
+    );
+  }
+
+  /**
+   * A prefetch inference names its kind and no tool: a forced tool choice is
+   * the plan, whose one tool the service selects itself, and no choice is the
+   * summary, which the service runs tool-free. Nothing the desktop sends can
+   * widen either.
+   */
+  #prefetch(
+    items: readonly WireRecord[],
+    options: ModelRequestOptions,
+  ): PreparedOperation<ModelResponse> | Normalized {
+    return prepared(
+      hostedBrainPrefetchRequestFromWire({
+        contract: HOSTED_BRAIN_CONTRACT_VERSION,
+        kind:
+          options.toolChoice === undefined
+            ? HOSTED_BRAIN_PREFETCH_KIND.SUMMARIZE
+            : HOSTED_BRAIN_PREFETCH_KIND.PLAN,
+        prompt: options.prompt,
+        options: { maximumOutputTokens: options.maximumOutputTokens },
+        input: items,
+      }),
       (payload) =>
         replayable(payload, "response") ??
         responsesModelAnswer(payload) ??

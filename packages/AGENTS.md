@@ -121,7 +121,14 @@ both, so a tool stays readable, testable, and movable without the agent that
 runs it, and admission cannot quietly regain a second home. The catalog and
 the effective tool policy are unchanged by this: the policy still fixes both
 the schemas a turn is offered and the gate every emitted call meets at
-dispatch.
+dispatch. One module under the directory is not in the catalog:
+`prefetch-tool.ts`'s `plan_reads` is the read prefetch planner's forced tool,
+which no turn's model is offered and no policy layer names; it executes
+nothing itself, its call is read by `planReadsFromCall` against the sessions
+offered by position, and the reads it names run through the read modules
+beside it under the turn's own policy at the take. It is registered with the
+hosted catalog so the service holds its schema and selects it by the
+request's kind.
 
 ## The graph is acyclic, and stays that way
 

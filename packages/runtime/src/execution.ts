@@ -162,6 +162,12 @@ export interface ModelRequestOptions {
    * host hashes whatever it derived the key from before the key travels.
    */
   readonly promptCacheKey?: string;
+  /**
+   * One offered tool the model must call, by name, when the inference is a
+   * classification rather than a turn: the transport that has a forced
+   * choice forces it and turns parallel calls off. Absent, the model chooses.
+   */
+  readonly toolChoice?: string;
   /** Fires when the run this inference belongs to is cancelled or times out; the request is dropped with it. */
   readonly signal?: AbortSignal;
 }

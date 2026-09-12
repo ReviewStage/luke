@@ -189,7 +189,33 @@ Canonical commands:
   conversation may also read one observed session's whole
   tail, cut from the front to 60,000 characters, through the same read tool
   a developer's ask is offered; a cloud session whose provider documents no
-  transcript read is read from roster fields alone.
+  transcript read is read from roster fields alone. Main may begin one read
+  before the developer finishes speaking: after a 400 ms pause in their
+  fragments, the live session hands the brain the words so far, and a
+  build-fixed small model (`gpt-5.6-luna`, low effort) that sees only those
+  words, both speakers' recent lines, and the roster the turn would see
+  anyway names, through one forced tool, at most one transcript read and
+  one notebook search the answer will certainly need, naming a session by
+  its position in the options shown and never by an id. The reads run
+  through the same read modules as a turn's tool calls, under the same
+  refusals, cut from the front to 20,000 characters, journaled nowhere, and
+  held in memory for 30 seconds; the next words supersede the plan, and a
+  stop, a session's close, or a generation's replacement drops it. The
+  reads are gated by the effective tool policy the spoken turn would run
+  under, resolved before the planner is asked, so a denied read is never
+  begun, never summarized, and costs no planner when nothing is offered. The
+  spoken ask's turn takes the slot once (waiting at most 1.5 seconds for
+  reads still under way), checks its own policy again over what was read,
+  and enters each as the tool call and answer the model would
+  otherwise have asked for, ahead of its first inference; a slot no turn
+  takes expires unread. A wrong plan wastes a read and acts on nothing.
+  The same small model then writes a few factual sentences about what the
+  reads answered, and the live session appends them once per utterance as
+  thinking under no delegation, marked as data, only while the words they
+  were read for are still the words on that row and that row has not yet
+  become a spoken ask; a row already delegated anticipates nothing more,
+  so a late fragment cannot supersede the slot its turn is taking. The
+  brain's context holds the reads themselves and never the summary.
   An observed conversation's `announce` reaches the voice directly; main
   neither approves nor rewords it. Any conversation may delegate: the brain's
   `sessions_spawn` tool records a child (`agent:main:subagent:<uuid>`, kind
@@ -530,7 +556,12 @@ Canonical commands:
   quit.
 - The hosted tier speaks one brain contract (`/api/brain/capabilities`,
   `/api/brain/v2/respond`, `/api/brain/v2/count-tokens`,
-  `/api/brain/v2/compact`). It lets the desktop prepare the prompt — bounded to
+  `/api/brain/v2/compact`, `/api/brain/v2/embed`, and
+  `/api/brain/v2/prefetch`, the read prefetch's two small inferences on a
+  model the service fixes, whose request names a kind and no tool, and which
+  the capabilities advertise by an optional `prefetch` field rather than in
+  the operations list, so a shipped desktop's fixed reading of that list
+  still decodes). It lets the desktop prepare the prompt — bounded to
   its own 200,000-character envelope, refused past it, never cut — and name
   the tools it offers, each a registered name the service holds a schema
   for, emitted from the same declaration that parses the request; a caller
@@ -928,7 +959,10 @@ Canonical commands:
   brain turn and request as its
   about-fields and counts (trigger, authority, input item kinds, transcript
   bytes, tool names, token and briefing character counts, model, timing)
-  and never a transcript's text; and each decision the live session service
+  and never a transcript's text; each read-ahead moment as its outcome, the
+  turn's take, how long it waited, how many characters had been said and how
+  many reads were made, never the words, the plan, or what a read answered;
+  and each decision the live session service
   took, as the decision's kind and how many requests still stood, never the
   briefing's words — appended as
   JSONL under the developer's chosen directory and
@@ -1209,7 +1243,10 @@ Canonical commands:
   calls the read tool, the tail of that session's transcript as Luke's own
   service fetched it — only at the tool's call and never on an observation
   pass — each bounded and behind a marker, on the developer's own key or
-  through Luke's own service. The second is a briefing the brain
+  through Luke's own service; the read begun ahead of a spoken ask is the
+  same read on the same terms, made at the developer's own words rather than
+  the tool's call, and its planner sees only those words, the recent lines,
+  and the roster. The second is a briefing the brain
   decided to give — its own words about what changed, under the briefing
   bound — which reaches the voice session so it can be said aloud, travelling
   as commentary appends with no delegation id over the host's own trusted
@@ -1265,8 +1302,11 @@ Canonical commands:
   What may be acted on is still the brain's alone: the summary carries no
   identity a line could name, so "that one" and "the Nukualofa session"
   resolve in the brain's own turn rather than in the voice. The voice knows
-  no guide, no transcript, and no session
-  address either; those reach only the brain. A developer's spoken words reach the
+  no guide and no session address; those reach only the brain. The voice is
+  handed no transcript; it may be handed a bounded factual summary of one,
+  written by the prefetch model from a read the brain made under the same
+  refusals, marked as data, appended once per pause in the developer's
+  speech, and never a transcript's own lines, tool output, or error text. A developer's spoken words reach the
   brain as a delegation the host composes from both speakers' transcript
   since the previous one, submitted under the host's own submission id as a
   spoken ask through the same admission every ask uses; the reply streams

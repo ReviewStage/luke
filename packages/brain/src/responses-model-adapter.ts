@@ -24,10 +24,17 @@ import { type Failure, type Normalized, payloadOf, throttled } from "./model-ada
  * body is composed, and how each answer is read.
  */
 
-/** The two Responses operations, named as the hosted contract names them; the keyed transport addresses the same two on the provider. Embedding is the embedding adapters' own. */
+/**
+ * The Responses operations, named as the hosted contract names them; the
+ * keyed transport addresses each on the provider. The prefetch is an
+ * inference like a turn's, on the small model and the prefetch path, and an
+ * adapter built for it answers every `respond` as one. Embedding is the
+ * embedding adapters' own.
+ */
 export const RESPONSES_OPERATION = {
   RESPOND: HOSTED_BRAIN_OPERATION.RESPOND,
   COUNT_TOKENS: HOSTED_BRAIN_OPERATION.COUNT_TOKENS,
+  PREFETCH: HOSTED_BRAIN_OPERATION.PREFETCH,
 } as const satisfies Partial<Record<string, HostedBrainOperation>>;
 export type ResponsesOperation = (typeof RESPONSES_OPERATION)[keyof typeof RESPONSES_OPERATION];
 
@@ -70,6 +77,7 @@ export interface ResponsesTransport<Admitted> {
     admitted: Admitted,
     items: readonly WireRecord[],
     options: ModelRequestOptions,
+    operation: RespondOperation,
   ): PreparedOperation<ModelResponse> | Normalized;
   countInputTokens(
     admitted: Admitted,
@@ -88,21 +96,30 @@ export interface ResponsesTransport<Admitted> {
   failureFor(response: Response, operation: ResponsesOperation): Failure;
 }
 
+/** The two operations an inference may be: a turn's, or the prefetch's small one. */
+export type RespondOperation =
+  | typeof RESPONSES_OPERATION.RESPOND
+  | typeof RESPONSES_OPERATION.PREFETCH;
+
 export interface ResponsesModelAdapterOptions {
   now?: () => number;
   report?: (message: string) => void;
+  /** Which operation every `respond` of this adapter is; a turn's unless the adapter was built for the prefetch. */
+  respondOperation?: RespondOperation;
 }
 
 export class ResponsesModelAdapter<Admitted> implements ModelAdapter {
   readonly #transport: ResponsesTransport<Admitted>;
   readonly #now: () => number;
   readonly #report: (message: string) => void;
+  readonly #respondOperation: RespondOperation;
   #quietUntil = 0;
 
   constructor(transport: ResponsesTransport<Admitted>, options: ResponsesModelAdapterOptions = {}) {
     this.#transport = transport;
     this.#now = options.now ?? Date.now;
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
+    this.#respondOperation = options.respondOperation ?? RESPONSES_OPERATION.RESPOND;
   }
 
   get model(): string | undefined {
@@ -127,8 +144,9 @@ export class ResponsesModelAdapter<Admitted> implements ModelAdapter {
   }
 
   respond(items: readonly WireRecord[], options: ModelRequestOptions): Promise<ModelResponse> {
-    return this.#operation(RESPONSES_OPERATION.RESPOND, options.signal, (admitted) =>
-      this.#transport.respond(admitted, items, options),
+    const operation = this.#respondOperation;
+    return this.#operation(operation, options.signal, (admitted) =>
+      this.#transport.respond(admitted, items, options, operation),
     );
   }
 

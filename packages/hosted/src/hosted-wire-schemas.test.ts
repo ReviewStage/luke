@@ -68,6 +68,7 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedBrainEmbedRequestSchema: brainContract.hostedBrainEmbedRequestSchema,
     hostedBrainEmbedAnswerSchema: brainContract.hostedBrainEmbedAnswerSchema,
     hostedBrainCountTokensAnswerSchema: brainContract.hostedBrainCountTokensAnswerSchema,
+    hostedBrainPrefetchRequestSchema: brainContract.hostedBrainPrefetchRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof brainContract>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,

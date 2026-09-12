@@ -9,6 +9,7 @@ import {
   type BrainDelivery,
   type BrainFlushMarkerStore,
   BrainGenerationClock,
+  type BrainPrefetchTraceRecord,
   type BrainRoster,
   type BrainStateRepository,
   BrainStateStore,
@@ -102,6 +103,7 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   /** The machine's parallelism, for the agent lane's width; absent means the host asks the OS. */
   parallelism?: () => number;
   traceTurn?: (record: BrainTurnTraceRecord) => void;
+  tracePrefetch?: (record: BrainPrefetchTraceRecord) => void;
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings go with it. */
   onGenerationReplaced: (sessionKey: SessionKey) => void;
@@ -119,6 +121,8 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
   /** Which credential the policy would build an adapter under, by reference; the value never enters a configuration. */
   credential: () => CredentialReference;
+  /** The small model the read prefetch runs on under the same policy as the brain's, or nothing; only main's conversation is handed it. */
+  prefetchModel?: () => ModelAdapter | undefined;
   /** The agent's identity workspace: seeded once, edited by the developer or by the agent's own tools. */
   workspaceDirectory: () => string;
   /** The roots skills are discovered under. */
@@ -541,6 +545,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // host with none leaves the agent to refuse the tools itself.
     const memory = memoryFor(sessionKey);
     const flushMarker = flushMarkerFor(sessionKey);
+    // A spoken ask reaches main, so main alone reads ahead of one.
+    const prefetchModel =
+      sessionKey === MAIN_SESSION_KEY ? dependencies.prefetchModel?.() : undefined;
     return new BrainAgent({
       conversationId: sessionKey,
       observes: observed
@@ -557,6 +564,14 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       children: children.accessFor(sessionKey),
       ...(memory ? { memory } : undefined),
       ...(flushMarker ? { flushMarker } : undefined),
+      ...(prefetchModel
+        ? {
+            prefetch: {
+              model: prefetchModel,
+              ...(dependencies.tracePrefetch ? { trace: dependencies.tracePrefetch } : undefined),
+            },
+          }
+        : undefined),
       runtime: toolLoopRuntimeOver(model, dependencies.execution),
       actions,
       roster: dependencies.roster,

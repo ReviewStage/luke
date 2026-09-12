@@ -1,0 +1,11 @@
+{
+  "status": 400,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"prompt-too-large\"}"
+}

@@ -133,6 +133,11 @@ place on the session timeline, groups them into utterances by
 `UTTERANCE_GAP_MS` per speaker with overlap allowed and late fragments
 revising the row they belong to, and answers the captions, the ask context a
 delegation is composed from, and the last instant anything was said.
+`anticipationOf` and `PREFETCH_DEBOUNCE_MS` are the one thing the ledger says
+before an utterance settles: the developer's row and words so far, for the
+live session service to hand the brain to read ahead of after a 400 ms pause
+in the fragments, shorter than the gap that ends an utterance on purpose;
+nothing here decides what is read, the vocabulary only names the moment.
 `chunks.ts` cuts a text into appends at sentence ends under the 500-token
 bound against `tokens.ts`'s one estimate. `proactive.ts` is what Luke says
 first — a briefing the brain decided, the arrival beat, the calendar beat —

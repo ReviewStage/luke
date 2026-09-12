@@ -4,13 +4,16 @@ import { HOSTED_BRAIN_DEFAULTS } from "../server/brain-app";
 import {
   ACTION_TOOL,
   BRAIN_OPENAI_DEFAULTS,
+  BRAIN_PREFETCH_MODEL,
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
   BRAIN_REASONING_SUMMARY,
   BRAIN_TOOL,
   HOSTED_BRAIN_CONTRACT_VERSION,
+  HOSTED_BRAIN_LISTED_OPERATIONS,
   HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_OPTION_BOUNDS,
+  HOSTED_BRAIN_PREFETCH_KIND,
   HOSTED_BRAIN_PROMPT_BOUNDS,
   HOSTED_SERVICE_PATH,
   hostedBrainBounds,
@@ -19,6 +22,7 @@ import {
   isRecord,
   isWireString,
   maximumHostedBrainRequestBytes,
+  PLAN_READS_TOOL_NAME,
   type UnparsedWireValue,
   type WireRecord,
 } from "../server/core";
@@ -113,7 +117,10 @@ test("capabilities name the contract, the model, the operations, the registered 
   );
   assert.ok(capabilities);
   assert.equal(capabilities.model, BRAIN_OPENAI_DEFAULTS.MODEL);
-  assert.deepEqual(capabilities.operations, Object.values(HOSTED_BRAIN_OPERATION));
+  // The prefetch is advertised by its own field, never in the list a shipped desktop decodes against a fixed set.
+  assert.deepEqual(capabilities.operations, HOSTED_BRAIN_LISTED_OPERATIONS);
+  assert.equal(capabilities.operations.includes(HOSTED_BRAIN_OPERATION.PREFETCH), false);
+  assert.deepEqual(capabilities.prefetch, { model: BRAIN_PREFETCH_MODEL });
   assert.deepEqual(capabilities.bounds, hostedBrainBounds());
   for (const tool of hostedBrainToolCatalog().values()) {
     assert.ok(capabilities.tools.includes(tool.name), tool.name);
@@ -189,6 +196,87 @@ test("a respond request runs the prepared prompt over the schemas its names sele
   assert.deepEqual(sent.input, INPUT);
   // Nothing asked for a prefix cache, so nothing is forwarded upstream.
   assert.equal("prompt_cache_key" in sent, false);
+});
+
+test("a prefetch plan runs the one registered planning tool, forced, on the prefetch model at low effort, and spends once; a summary runs tool-free", async () => {
+  const plan = {
+    type: "function_call",
+    id: "fc_1",
+    call_id: "call_1",
+    name: PLAN_READS_TOOL_NAME,
+    arguments: '{"reads":[]}',
+    status: "completed",
+  };
+  const { fetch, calls } = upstream([
+    () => Response.json({ id: "resp_1", status: "completed", output: [plan] }),
+    () => Response.json({ id: "resp_2", status: "completed", output: [message("Facts.")] }),
+  ]);
+  let spent = 0;
+  const prefetchBody = (kind: string, overrides: WireRecord = {}): WireRecord => ({
+    contract: HOSTED_BRAIN_CONTRACT_VERSION,
+    kind,
+    prompt: "Plan the reads.",
+    options: { maximumOutputTokens: 600 },
+    input: INPUT,
+    ...overrides,
+  });
+  const planned = await brainAnswer(
+    options({
+      request: request(
+        HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
+        prefetchBody(HOSTED_BRAIN_PREFETCH_KIND.PLAN),
+      ),
+      fetch,
+      spend: async () => {
+        spent += 1;
+        return OPEN_SPEND;
+      },
+    }),
+  );
+  assert.equal(planned.status, 200);
+  assert.equal(spent, 1);
+  const sent = calls[0]?.body;
+  assert.ok(sent);
+  assert.equal(calls[0]?.url, `${BRAIN_OPENAI_DEFAULTS.BASE_URL}/responses`);
+  assert.equal(sent.model, BRAIN_PREFETCH_MODEL);
+  assert.deepEqual(sent.tool_choice, { type: "function", name: PLAN_READS_TOOL_NAME });
+  assert.equal(sent.parallel_tool_calls, false);
+  assert.ok(Array.isArray(sent.tools));
+  assert.equal(sent.tools.length, 1);
+  assert.deepEqual(sent.tools[0], hostedBrainToolCatalog().get(PLAN_READS_TOOL_NAME));
+  assert.deepEqual(sent.reasoning, { effort: "low", summary: BRAIN_REASONING_SUMMARY });
+  assert.equal(sent.max_output_tokens, 600);
+  assert.equal("store" in sent, false);
+  const summarized = await brainAnswer(
+    options({
+      request: request(
+        HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
+        prefetchBody(HOSTED_BRAIN_PREFETCH_KIND.SUMMARIZE, {
+          options: { maximumOutputTokens: 350 },
+        }),
+      ),
+      fetch,
+    }),
+  );
+  assert.equal(summarized.status, 200);
+  const summary = calls[1]?.body;
+  assert.ok(summary);
+  assert.deepEqual(summary.tools, []);
+  assert.equal(summary.tool_choice, "auto");
+  assert.equal(summary.max_output_tokens, 350);
+  // A prefetch model override names the model the prefetch runs on and leaves the turn's alone.
+  const overridden = await brainAnswer(
+    options({
+      request: request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, null, { method: "GET" }),
+      prefetchModel: "gpt-small",
+    }),
+  );
+  const read = hostedBrainCapabilitiesFromWire(
+    // SAFETY: response.json returns a runtime value; the reader below validates it as wire.
+    (await overridden.json()) as UnparsedWireValue,
+  );
+  assert.deepEqual(read?.prefetch, { model: "gpt-small" });
+  assert.equal(read?.model, BRAIN_OPENAI_DEFAULTS.MODEL);
 });
 
 test("a request's prompt cache key is forwarded upstream and kept nowhere", async () => {

@@ -36,12 +36,57 @@ export const HOSTED_BRAIN_OPERATION = {
   COUNT_TOKENS: "count-tokens",
   /** Embeddings for the notebook index: texts in, one vector each out, under the model the service fixes. */
   EMBED: "embed",
+  /**
+   * The read prefetch's small inferences on the model the service fixes for
+   * it: a forced plan of the reads a spoken ask will need, or a tool-free
+   * summary of what they answered.
+   */
+  PREFETCH: "prefetch",
 } as const;
 
 export type HostedBrainOperation =
   (typeof HOSTED_BRAIN_OPERATION)[keyof typeof HOSTED_BRAIN_OPERATION];
 
 const HOSTED_BRAIN_OPERATION_NAMES = Object.values(HOSTED_BRAIN_OPERATION);
+
+/**
+ * The operations the service names in its capabilities' `operations` list.
+ * The prefetch is not among them on purpose: a shipped desktop reads that
+ * list against the literal set its own build knew, and a name it never knew
+ * would fail the whole capabilities read and take the brain with it. The
+ * prefetch is advertised by the optional `prefetch` field instead, which a
+ * desktop that does not know it ignores.
+ */
+export const HOSTED_BRAIN_LISTED_OPERATIONS: readonly HostedBrainOperation[] = [
+  HOSTED_BRAIN_OPERATION.RESPOND,
+  HOSTED_BRAIN_OPERATION.COUNT_TOKENS,
+  HOSTED_BRAIN_OPERATION.EMBED,
+];
+
+/** The two prefetch inferences, named in the request so the service picks the tools and nothing the caller sends does. */
+export const HOSTED_BRAIN_PREFETCH_KIND = {
+  /** Plan which reads the answering turn will need: the one registered planning tool, forced. */
+  PLAN: "plan",
+  /** Summarize what the reads answered, for the voice: no tools at all. */
+  SUMMARIZE: "summarize",
+} as const;
+
+export type HostedBrainPrefetchKind =
+  (typeof HOSTED_BRAIN_PREFETCH_KIND)[keyof typeof HOSTED_BRAIN_PREFETCH_KIND];
+
+const HOSTED_BRAIN_PREFETCH_KIND_NAMES = Object.values(HOSTED_BRAIN_PREFETCH_KIND);
+
+/**
+ * What one prefetch inference may carry: a prompt fixed by the build and far
+ * smaller than a turn's, the words so far and the roster or the reads as one
+ * or two input items, and a short answer. A request past any of them is
+ * refused, never cut.
+ */
+export const HOSTED_BRAIN_PREFETCH_BOUNDS = {
+  MAXIMUM_PROMPT_CHARS: 20_000,
+  MAXIMUM_INPUT_ITEMS: 2,
+  MAXIMUM_OUTPUT_TOKENS: 600,
+} as const;
 
 const REASONING_EFFORT_NAMES = Object.values(REASONING_EFFORT);
 
@@ -86,6 +131,11 @@ export interface HostedBrainBounds {
   maximumOutputTokens: number;
 }
 
+/** The prefetch as the service advertises it: the model its two inferences run on. */
+export interface HostedBrainPrefetchCapability {
+  model: string;
+}
+
 /** What the service answers about itself, so a desktop can decide before it sends anything. */
 export interface HostedBrainCapabilities {
   contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
@@ -95,6 +145,8 @@ export interface HostedBrainCapabilities {
   tools: readonly string[];
   bounds: HostedBrainBounds;
   reasoningEfforts: readonly ReasoningEffort[];
+  /** Present where the service serves the prefetch operation; a desktop that finds it absent plans no read ahead. */
+  prefetch?: HostedBrainPrefetchCapability;
 }
 
 export function hostedBrainBounds(): HostedBrainBounds {
@@ -158,6 +210,7 @@ export const hostedBrainCapabilitiesSchema = tolerantRecord({
   reasoningEfforts: Schema.Array(Schema.Literal(...REASONING_EFFORT_NAMES)).pipe(
     Schema.maxItems(REASONING_EFFORT_NAMES.length),
   ),
+  prefetch: Schema.optionalWith(tolerantRecord({ model: writtenText }), { exact: true }),
 });
 
 /**
@@ -208,6 +261,24 @@ export interface HostedBrainCountTokensRequest {
 export interface HostedBrainEmbedRequest {
   contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
   texts: readonly string[];
+}
+
+interface HostedBrainPrefetchRequestOptions {
+  maximumOutputTokens?: number;
+}
+
+/**
+ * One prefetch inference: which of the two it is, the build-fixed prompt for
+ * it, and the one or two items it reads. No tool names travel: the kind is
+ * what selects the planning tool or none, so a caller can neither widen the
+ * planner's tools nor hand the summary any.
+ */
+export interface HostedBrainPrefetchRequest {
+  contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
+  kind: HostedBrainPrefetchKind;
+  prompt: string;
+  options: HostedBrainPrefetchRequestOptions;
+  input: readonly WireRecord[];
 }
 
 /** What the service answers an embed with: the model it used, its width, and one vector per text in order. */
@@ -328,6 +399,33 @@ const input = declareReader<readonly WireRecord[]>((value) => {
     : { ok: true, value: items };
 }, INPUT_NODE);
 
+/** The prefetch's prompt: the same rule as a turn's, under the prefetch's own far smaller envelope. */
+const prefetchPrompt = Schema.String.pipe(
+  Schema.maxLength(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_PROMPT_CHARS),
+);
+
+const prefetchOptions = Schema.Struct({
+  maximumOutputTokens: Schema.optionalWith(
+    wholeNumber(1).pipe(
+      Schema.lessThanOrEqualTo(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_OUTPUT_TOKENS),
+    ),
+    { exact: true },
+  ),
+});
+
+/**
+ * The prefetch's input: the same admission a turn's input runs, then the
+ * prefetch's own count. A third item is malformed rather than too large,
+ * because the two items are two fixed things — the words so far beside the
+ * roster, or the reads — and a request carrying more is not a prefetch.
+ */
+const prefetchInput = declareReader<readonly WireRecord[]>((value) => {
+  const items = admitBrainInput(value);
+  return items === undefined || items.length > HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_INPUT_ITEMS
+    ? { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] }
+    : { ok: true, value: items };
+}, INPUT_NODE);
+
 /** The texts to embed: each non-blank and within its bound, the batch within its count. */
 const texts = Schema.Array(boundedText(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS)).pipe(
   Schema.minItems(1),
@@ -350,6 +448,14 @@ export function hostedBrainCountTokensRequestSchema(catalog: ReadonlySet<string>
 
 export const hostedBrainEmbedRequestSchema = Schema.Struct({ contract, texts });
 
+export const hostedBrainPrefetchRequestSchema = Schema.Struct({
+  contract,
+  kind: Schema.Literal(...HOSTED_BRAIN_PREFETCH_KIND_NAMES),
+  prompt: prefetchPrompt,
+  options: prefetchOptions,
+  input: prefetchInput,
+});
+
 export function hostedBrainRespondRequestFromWire(
   value: UnparsedWireValue,
   catalog: ReadonlySet<string>,
@@ -368,6 +474,12 @@ export function hostedBrainEmbedRequestFromWire(
   value: UnparsedWireValue,
 ): HostedBrainRequestRead<HostedBrainEmbedRequest> {
   return hostedBrainRequestRead(hostedBrainEmbedRequestSchema, value);
+}
+
+export function hostedBrainPrefetchRequestFromWire(
+  value: UnparsedWireValue,
+): HostedBrainRequestRead<HostedBrainPrefetchRequest> {
+  return hostedBrainRequestRead(hostedBrainPrefetchRequestSchema, value);
 }
 
 /** The vectors are one width, and the width is the one the answer names. */

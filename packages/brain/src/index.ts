@@ -48,9 +48,17 @@ export {
 export type { BrainObservationEntry } from "./observation-inbox.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
+  BRAIN_PREFETCH_MODEL,
   openAiModelAdapter,
 } from "./openai-model-adapter.js";
 export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
+export {
+  type BrainAnticipation,
+  type BrainAnticipationFacts,
+  PREFETCH_BOUNDS,
+  PREFETCH_PLANNER_PROMPT,
+  PREFETCH_SUMMARY_PROMPT,
+} from "./read-prefetch.js";
 export {
   addModelUsage,
   BRAIN_REQUEST_FAILURE,
@@ -72,12 +80,14 @@ export {
   brainInputTokensRequest,
   brainResponsesOutput,
   brainResponsesRequest,
+  functionCallItem,
   type ResponsesFunctionTool,
   type ResponsesInputItem,
   responsesInputTokens,
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
+export { RESPONSES_OPERATION, type RespondOperation } from "./responses-model-adapter.js";
 export {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -117,6 +127,11 @@ export {
   type AnnounceToolContext,
   type AnnounceToolModule,
 } from "./tools/announce-tool.js";
+export {
+  PLAN_READS_TOOL,
+  PLAN_READS_TOOL_NAME,
+  PREFETCH_READ_KIND,
+} from "./tools/prefetch-tool.js";
 export { READ_TOOLS, type ReadToolContext, type ReadToolModule } from "./tools/read-tools.js";
 export { type ToolContext, type ToolModule, toolArguments } from "./tools/tool-module.js";
 export {
@@ -131,10 +146,18 @@ export {
   brainToolRegistry,
   hostedBrainToolCatalog,
   maximumBriefingLength,
+  planReadsToolSchema,
   resolveTurnToolPolicy,
   TOOL_GROUP,
 } from "./tools.js";
-export type { BrainTurnTraceRecord } from "./trace.js";
+export {
+  BRAIN_PREFETCH_OUTCOME,
+  BRAIN_PREFETCH_TAKE,
+  type BrainPrefetchOutcome,
+  type BrainPrefetchTake,
+  type BrainPrefetchTraceRecord,
+  type BrainTurnTraceRecord,
+} from "./trace.js";
 export {
   BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,

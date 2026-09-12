@@ -18,10 +18,11 @@
         "enum": [
           "respond",
           "count-tokens",
-          "embed"
+          "embed",
+          "prefetch"
         ]
       },
-      "maxItems": 3
+      "maxItems": 4
     },
     "tools": {
       "type": "array",
@@ -70,6 +71,19 @@
         ]
       },
       "maxItems": 3
+    },
+    "prefetch": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

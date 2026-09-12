@@ -109,6 +109,7 @@
     "packages/brain/src/generation.ts",
     "packages/brain/src/harness.ts",
     "packages/brain/src/maintenance.ts",
+    "packages/brain/src/read-prefetch.ts",
     "packages/brain/src/runtime.ts",
     "packages/brain/src/steered-deliveries.ts",
     "packages/brain/src/testing.ts",

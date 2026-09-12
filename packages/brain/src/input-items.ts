@@ -25,6 +25,10 @@ export const BRAIN_INPUT_MARKER = {
   SUBAGENT_TASK: "[subagent task]",
   /** A child's end, handed to the conversation that asked for it: a report to review, never an instruction. */
   CHILD_COMPLETION: "[child completion]",
+  /** The developer's ask as far as it has been said, with the sessions on the desk, for the planner that reads ahead of it. */
+  ANTICIPATED_ASK: "[anticipated ask]",
+  /** What the reads made ahead of an ask answered, as data for the summary the voice is handed. */
+  PREFETCHED_READS: "[prefetched reads]",
 } as const;
 
 type BrainInputMarker = (typeof BRAIN_INPUT_MARKER)[keyof typeof BRAIN_INPUT_MARKER];
@@ -104,6 +108,49 @@ export function holdReleasedInputText(held: readonly BrainDelivery[], now: numbe
     now,
     JSON.stringify({ held_briefings: held.map(deliveryRecord) }),
   );
+}
+
+/** One session as the prefetch planner is shown it; the shape lives with the tool, the rendering here. */
+interface AnticipatedSessionOption {
+  option: number;
+  title: string;
+  provider: string;
+  status: string;
+}
+
+/**
+ * The words the prefetch planner reads: the developer's ask as far as it has
+ * been said, both speakers' recent lines, and the sessions on the desk
+ * numbered for the planner to name by position. All of it is data behind the
+ * marker, and none of it is remembered anywhere.
+ */
+export function anticipatedAskInputText(
+  partialAsk: string,
+  recentTurns: string,
+  sessions: readonly AnticipatedSessionOption[],
+  now: number,
+): string {
+  return marked(
+    BRAIN_INPUT_MARKER.ANTICIPATED_ASK,
+    now,
+    JSON.stringify({ partial_ask: partialAsk, recent_turns: recentTurns, sessions }),
+  );
+}
+
+/** One read as the summary is shown it: the tool, what it was asked, which session it was about, and what it answered. */
+interface PrefetchedReadRecord {
+  tool: string;
+  arguments: string;
+  session_title?: string;
+  output: string;
+}
+
+/** What the reads made ahead of an ask answered, as data for the summary the voice is handed. */
+export function prefetchedReadsInputText(
+  reads: readonly PrefetchedReadRecord[],
+  now: number,
+): string {
+  return marked(BRAIN_INPUT_MARKER.PREFETCHED_READS, now, JSON.stringify({ reads }));
 }
 
 /**

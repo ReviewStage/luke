@@ -1,0 +1,66 @@
+{
+  "type": "function",
+  "name": "plan_reads",
+  "description": "Plan the reads the answer to the developer's unfinished ask will certainly need. Name a session transcript only when the ask is about what one listed session is doing, did, or said, by its option number; name a notebook search only for prior decisions, people, dates, or preferences. Plan nothing when in doubt.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "reads": {
+        "type": "array",
+        "items": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "read_transcript"
+                  ]
+                },
+                "session": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "The option number of the session in the list you were shown."
+                }
+              },
+              "required": [
+                "kind",
+                "session"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "memory_search"
+                  ]
+                },
+                "query": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 480,
+                  "description": "What to search the notebook for."
+                }
+              },
+              "required": [
+                "kind",
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "maxItems": 2,
+        "description": "The reads the answer will certainly need: at most one session transcript and one notebook search. Empty when none is needed."
+      }
+    },
+    "required": [
+      "reads"
+    ],
+    "additionalProperties": false
+  }
+}

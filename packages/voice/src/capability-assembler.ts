@@ -1,8 +1,10 @@
 import {
+  BRAIN_PREFETCH_MODEL,
   HostedEmbeddingAdapter,
   HostedModelAdapter,
   OpenAiEmbeddingAdapter,
   openAiModelAdapter,
+  RESPONSES_OPERATION,
 } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
@@ -118,6 +120,7 @@ export interface VoiceCapabilityApplication {
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
   #brainModel: ModelAdapter | undefined;
+  #prefetchModel: ModelAdapter | undefined;
   #embeddingAdapter: EmbeddingAdapter | undefined;
   #liveSessions: LiveSessionSource | undefined;
   #unavailableLiveDiagnostics: LiveDiagnostics;
@@ -144,6 +147,17 @@ export class VoiceCapabilityAssembler {
    */
   get brainModel(): ModelAdapter | undefined {
     return this.#brainModel;
+  }
+
+  /**
+   * The small model the read prefetch plans and summarizes on, under the same
+   * source as the brain's model: the build-fixed prefetch model on the
+   * developer's key, or the hosted service's prefetch operation on the
+   * account, which the service advertises or not. Nothing when no brain may
+   * stand, and then nothing is read ahead.
+   */
+  get prefetchModel(): ModelAdapter | undefined {
+    return this.#prefetchModel;
   }
 
   /**
@@ -231,6 +245,15 @@ export class VoiceCapabilityAssembler {
       builtBrainModel && this.#options.wrapBrainModel
         ? this.#options.wrapBrainModel(builtBrainModel)
         : builtBrainModel;
+    const builtPrefetchModel = policy.useKey
+      ? openAiModelAdapter(apiKey, { model: BRAIN_PREFETCH_MODEL })
+      : policy.useHosted
+        ? new HostedModelAdapter({ ...seams, respondOperation: RESPONSES_OPERATION.PREFETCH })
+        : undefined;
+    this.#prefetchModel =
+      builtPrefetchModel && this.#options.wrapBrainModel
+        ? this.#options.wrapBrainModel(builtPrefetchModel)
+        : builtPrefetchModel;
     this.#embeddingAdapter =
       policy.useKey && apiKey
         ? new OpenAiEmbeddingAdapter({

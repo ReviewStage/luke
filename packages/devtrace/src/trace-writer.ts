@@ -2,7 +2,7 @@ import path from "node:path";
 import type { PlatformError } from "@effect/platform/Error";
 import * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
-import type { BrainTurnTraceRecord } from "@sidecar/brain";
+import type { BrainPrefetchTraceRecord, BrainTurnTraceRecord } from "@sidecar/brain";
 import {
   Cause,
   Effect,
@@ -62,6 +62,7 @@ type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord)
+  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_PREFETCH } & BrainPrefetchTraceRecord)
   | { kind: typeof TRACE_ENTRY_KIND.SPEECH; speech: SpeechTraceRecord };
 
 export interface AgentTraceWriterOptions {
@@ -153,6 +154,11 @@ export class AgentTraceWriter {
 
   recordBrainRequest(record: BrainRequestTraceRecord): void {
     this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_REQUEST, ...record });
+  }
+
+  /** The prefetch's outcome, take, waits, and sizes; the words so far, the plan, and what a read answered never reach the line. */
+  recordBrainPrefetch(record: BrainPrefetchTraceRecord): void {
+    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_PREFETCH, ...record });
   }
 
   /**

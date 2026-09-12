@@ -68,6 +68,26 @@ export type LiveBrainSubmission =
       refusal: string;
     };
 
+/**
+ * The developer's ask as far as it has been said, handed to the brain so a
+ * read the answer will need can begin before the ask ends. The row is the
+ * service's own key for the utterance, matched against what the brain hands
+ * back; nothing is promised, and the next words supersede it.
+ */
+export interface LiveBrainAnticipation {
+  rowId: number;
+  /** The developer's words so far, trimmed. */
+  partialAsk: string;
+  /** Both speakers' recent lines, role-labelled, the same span a delegation would be composed from. */
+  recentTurns: string;
+}
+
+/** A few factual sentences the brain read ahead for the anticipation named, for the session to be handed as data. */
+export interface LiveBrainAnticipationFacts {
+  rowId: number;
+  text: string;
+}
+
 export interface LiveBrain {
   /**
    * Submits a spoken ask under the spoken origin. An ask that arrives while
@@ -78,4 +98,10 @@ export interface LiveBrain {
   submitAsk(ask: LiveBrainAsk): Promise<LiveBrainSubmission>;
   /** Hears the run seams for every run the brain holds; the service reads the kinds it knows by name. */
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void;
+  /** The developer's words so far, for the brain to read ahead of; a brain without this reads nothing before the ask. */
+  anticipate?(anticipation: LiveBrainAnticipation): void;
+  /** Whatever was read ahead is forgotten: the session that was speaking is gone. */
+  dropAnticipation?(): void;
+  /** Hears the summary of each read made ahead; a brain without this hands the voice none. */
+  onAnticipationFacts?(listener: (facts: LiveBrainAnticipationFacts) => void): () => void;
 }

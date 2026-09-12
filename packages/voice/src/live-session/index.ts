@@ -5,6 +5,7 @@ export {
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
+  type LiveBrainAnticipationFacts,
   type LiveBrainAsk,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,

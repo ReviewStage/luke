@@ -31,7 +31,7 @@ const GOLDEN_ROOT = {
 } as const;
 
 const HOSTED_BRAIN_CONTRACT_VERSION = 2;
-const HOSTED_BRAIN_OPERATION = ["respond", "count-tokens", "embed"] as const;
+const HOSTED_BRAIN_OPERATION = ["respond", "count-tokens", "embed", "prefetch"] as const;
 const REASONING_EFFORT = ["low", "medium", "high"] as const;
 const HOSTED_BRAIN_PROMPT_CHARS = 200_000;
 const HOSTED_BRAIN_TOOL_BOUNDS = { MAXIMUM_TOOLS: 64, MAXIMUM_NAME_CHARS: 64 } as const;
@@ -68,6 +68,7 @@ const hostedBrainCapabilities = Schema.Struct({
   reasoningEfforts: Schema.Array(Schema.Literal(...REASONING_EFFORT)).pipe(
     Schema.maxItems(REASONING_EFFORT.length),
   ),
+  prefetch: Schema.optionalWith(Schema.Struct({ model: text() }), { exact: true }),
 });
 
 const hostedBrainEmbedRequest = Schema.Struct({

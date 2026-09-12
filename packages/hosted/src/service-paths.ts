@@ -52,6 +52,14 @@ export const HOSTED_SERVICE_PATH = {
   BRAIN_COUNT_TOKENS: "/api/brain/v2/count-tokens",
   /** Embeddings for the notebook index on Luke's key (POST), the third operation of the contract. */
   BRAIN_EMBED: "/api/brain/v2/embed",
+  /**
+   * The read prefetch's two small inferences (POST): planning which reads a
+   * spoken ask still being said will need, and summarizing what those reads
+   * answered for the voice. Advertised by the capabilities' own `prefetch`
+   * field rather than the operations list, so a shipped desktop's fixed
+   * reading of that list still decodes.
+   */
+  BRAIN_PREFETCH: "/api/brain/v2/prefetch",
   ACCOUNT_DELETE: "/api/account/delete",
   EVENTS: "/api/events",
   /**

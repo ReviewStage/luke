@@ -6,6 +6,8 @@ import {
   BRAIN_EMBEDDING_MODEL,
   BRAIN_TOOL,
   HOSTED_BRAIN_CONTRACT_VERSION,
+  HOSTED_BRAIN_PREFETCH_BOUNDS,
+  HOSTED_BRAIN_PREFETCH_KIND,
   HOSTED_BRAIN_PROMPT_BOUNDS,
   HOSTED_SERVICE_PATH,
   maximumHostedBrainRequestBytes,
@@ -57,6 +59,22 @@ const RESPONDED = {
   usage: { input_tokens: 42 },
 };
 
+const PLANNED = {
+  id: "resp_2",
+  status: "completed",
+  output: [
+    {
+      type: "function_call",
+      id: "fc_1",
+      call_id: "call_1",
+      name: "plan_reads",
+      arguments: '{"reads":[{"kind":"read_transcript","session":1}]}',
+      status: "completed",
+    },
+  ],
+  usage: { input_tokens: 40 },
+};
+
 const FRAMING_HEADER = { CONTENT_LENGTH: "content-length" } as const;
 
 /** The answer as the desktop reads it, with the framing header held to the body it frames. */
@@ -89,6 +107,17 @@ function respondBody(overrides: WireRecord = {}): WireRecord {
     contract: HOSTED_BRAIN_CONTRACT_VERSION,
     prompt: "You are Luke.",
     tools: [ACTION_TOOL.SEND_SESSION_MESSAGE, BRAIN_TOOL.READ_TRANSCRIPT],
+    options: {},
+    input: INPUT,
+    ...overrides,
+  };
+}
+
+function prefetchBody(overrides: WireRecord = {}): WireRecord {
+  return {
+    contract: HOSTED_BRAIN_CONTRACT_VERSION,
+    kind: HOSTED_BRAIN_PREFETCH_KIND.PLAN,
+    prompt: "Plan the reads.",
     options: {},
     input: INPUT,
     ...overrides,
@@ -239,6 +268,41 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
             { object: "embedding", index: 0, embedding: [1, 0] },
           ],
         }),
+      ),
+    }),
+  ],
+  [
+    "prefetch-plan",
+    answering({
+      request: posted(HOSTED_SERVICE_PATH.BRAIN_PREFETCH, prefetchBody()),
+      fetch: upstream(() => Response.json(PLANNED)),
+    }),
+  ],
+  [
+    "prefetch-summarize",
+    answering({
+      request: posted(
+        HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
+        prefetchBody({ kind: HOSTED_BRAIN_PREFETCH_KIND.SUMMARIZE }),
+      ),
+      fetch: upstream(() => Response.json(RESPONDED)),
+    }),
+  ],
+  [
+    "prefetch-prompt-too-large",
+    answering({
+      request: posted(
+        HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
+        prefetchBody({ prompt: "x".repeat(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_PROMPT_CHARS + 1) }),
+      ),
+    }),
+  ],
+  [
+    "prefetch-invalid-request",
+    answering({
+      request: posted(
+        HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
+        prefetchBody({ input: [...INPUT, ...INPUT, ...INPUT] }),
       ),
     }),
   ],

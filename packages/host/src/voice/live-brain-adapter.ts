@@ -11,6 +11,7 @@ import {
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
+  type LiveBrainAnticipationFacts,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
@@ -18,8 +19,13 @@ import {
 /** What the adapter says when no brain stands to take the ask at all. */
 const NO_BRAIN_REFUSAL = BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT];
 
-/** The two things the adapter asks of the agent, so a test can stand in for it without the whole class. */
-export type LiveBrainAgent = Pick<BrainAgent, "onRunEvent" | "submitAsk">;
+/**
+ * What the adapter asks of the agent, so a test can stand in for it without
+ * the whole class: the ask and its run seams always, and the read prefetch's
+ * three where the agent has one.
+ */
+export type LiveBrainAgent = Pick<BrainAgent, "onRunEvent" | "submitAsk"> &
+  Partial<Pick<BrainAgent, "anticipateAsk" | "dropAnticipation" | "onAnticipationFacts">>;
 
 export interface BrainAgentLiveBrainOptions {
   /** Main's brain as it stands now; nothing between credential transitions. */
@@ -74,6 +80,7 @@ function liveRunEventOf(event: BrainRunEvent): LiveBrainRunEvent | undefined {
  */
 export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): LiveBrain {
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  const factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
   const subscribed = new WeakSet<LiveBrainAgent>();
 
   function follow(agent: LiveBrainAgent): void {
@@ -84,9 +91,36 @@ export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): LiveBr
       if (!translated) return;
       for (const listener of [...listeners]) listener(translated);
     });
+    // The brain keys an anticipation by the string the service handed it,
+    // which is the service's own row number; it goes back as the number it
+    // came from, and a key that is not one names no row and is dropped.
+    agent.onAnticipationFacts?.((facts) => {
+      const rowId = Number(facts.id);
+      if (!Number.isInteger(rowId)) return;
+      for (const listener of [...factsListeners]) listener({ rowId, text: facts.text });
+    });
   }
 
   return {
+    anticipate: (anticipation) => {
+      const agent = options.agent();
+      if (!agent?.anticipateAsk) return;
+      follow(agent);
+      agent.anticipateAsk({
+        id: String(anticipation.rowId),
+        partialAsk: anticipation.partialAsk,
+        recentTurns: anticipation.recentTurns,
+      });
+    },
+    dropAnticipation: () => {
+      options.agent()?.dropAnticipation?.();
+    },
+    onAnticipationFacts: (listener) => {
+      factsListeners.add(listener);
+      return () => {
+        factsListeners.delete(listener);
+      };
+    },
     submitAsk: async (ask) => {
       const agent = options.agent();
       if (!agent) return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: NO_BRAIN_REFUSAL };

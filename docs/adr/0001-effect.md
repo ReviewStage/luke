@@ -873,6 +873,13 @@ The list above is also data. `tools/oxlint/anti-slop/effect-edges.json` is its
 machine-readable twin: the same paths under `runtimeEdges`, `runShims`, and
 `runOnHandedRuntime`, beside a fourth list, `rawAsyncPrimitives`, naming every
 file a raw timer, promise, abort controller, or `fs.watch` still lives in.
+`packages/brain/src/read-prefetch.ts` is the one row added there after the
+list was drawn: the read prefetch's slot is cancelled through the
+`AbortSignal` seams its collaborators still take — `ModelAdapter#respond`, a
+tool module's `ToolExecutionContext`, the turn's own signal — so it holds a
+controller per slot and one for the reads, on the same terms as `turn.ts` and
+`runtime.ts` beside it, and goes with them in P12-02 when those seams become
+a fiber's own interruption.
 `anti-slop/no-run-promise-outside-edges` and `anti-slop/no-raw-async-primitives`
 read it, so both rules are the linter's rather than review's, and the two
 directions are enforced in two places: a file that starts running an Effect

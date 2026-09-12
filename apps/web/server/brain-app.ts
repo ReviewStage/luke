@@ -11,6 +11,7 @@ import {
   BRAIN_EMBEDDING_MODEL,
   BRAIN_EMBEDDINGS_PATH,
   BRAIN_OPENAI_DEFAULTS,
+  BRAIN_PREFETCH_MODEL,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
   brainEmbeddingsRequest,
@@ -20,7 +21,9 @@ import {
   brainResponsesRequest,
   embeddingsVectors,
   HOSTED_BRAIN_CONTRACT_VERSION,
-  HOSTED_BRAIN_OPERATION,
+  HOSTED_BRAIN_LISTED_OPERATIONS,
+  HOSTED_BRAIN_PREFETCH_BOUNDS,
+  HOSTED_BRAIN_PREFETCH_KIND,
   HOSTED_BRAIN_REQUEST_REFUSAL,
   HOSTED_SERVICE_PATH,
   type HostedBrainCapabilities,
@@ -29,9 +32,11 @@ import {
   hostedBrainBounds,
   hostedBrainCountTokensRequestFromWire,
   hostedBrainEmbedRequestFromWire,
+  hostedBrainPrefetchRequestFromWire,
   hostedBrainRespondRequestFromWire,
   hostedBrainToolCatalog,
   maximumHostedBrainRequestBytes,
+  PLAN_READS_TOOL_NAME,
   REASONING_EFFORT,
   RETRY_AFTER_HEADER,
   type ResponsesFunctionTool,
@@ -67,8 +72,8 @@ import type { HostedSpend } from "./hosted/quota.js";
  * tool, keeps no conversation, and stores and logs none of the request, the
  * reply, or the encrypted items that travel in them.
  *
- * Each of the four paths is its own Vercel function and the group declares
- * all four, so a function answers its own path and the hosted vocabulary's
+ * Each of the five paths is served by a function that declares the group
+ * whole, so a function answers its own path and the hosted vocabulary's
  * `not-found` on any other. Every path is mounted for every method, because
  * the method a path documents is the endpoint's own refusal to answer —
  * `method-not-allowed`, which a router keyed by method would have turned into
@@ -77,6 +82,7 @@ import type { HostedSpend } from "./hosted/quota.js";
 
 export const HOSTED_BRAIN_DEFAULTS = {
   MODEL: BRAIN_OPENAI_DEFAULTS.MODEL,
+  PREFETCH_MODEL: BRAIN_PREFETCH_MODEL,
   REASONING_EFFORT: BRAIN_OPENAI_DEFAULTS.REASONING_EFFORT,
   MAXIMUM_OUTPUT_TOKENS: BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
   /** The same ceiling the keyed client keeps: a turn that reasons over a transcript, not a runaway. */
@@ -128,14 +134,28 @@ function modelOf(override: string | undefined): string {
   return override ?? HOSTED_BRAIN_DEFAULTS.MODEL;
 }
 
-function hostedBrainCapabilities(model: string | undefined): HostedBrainCapabilities {
+function prefetchModelOf(override: string | undefined): string {
+  return override ?? HOSTED_BRAIN_DEFAULTS.PREFETCH_MODEL;
+}
+
+/**
+ * The prefetch is advertised by its own field and not in the operations
+ * list, so a desktop shipped before it still decodes the list against the
+ * names it knew and keeps its brain; a desktop that knows the field plans
+ * its reads ahead, and one that does not ignores it.
+ */
+function hostedBrainCapabilities(
+  model: string | undefined,
+  prefetchModel: string | undefined,
+): HostedBrainCapabilities {
   return {
     contract: HOSTED_BRAIN_CONTRACT_VERSION,
     model: modelOf(model),
-    operations: Object.values(HOSTED_BRAIN_OPERATION),
+    operations: HOSTED_BRAIN_LISTED_OPERATIONS,
     tools: [...CATALOG.keys()],
     bounds: hostedBrainBounds(),
     reasoningEfforts: Object.values(REASONING_EFFORT),
+    prefetch: { model: prefetchModelOf(prefetchModel) },
   };
 }
 
@@ -159,7 +179,12 @@ function account(
   seams: BrainSeams,
   method: HttpMethod,
 ): Effect.Effect<
-  { userId: string; apiKey: string; model: string | undefined },
+  {
+    userId: string;
+    apiKey: string;
+    model: string | undefined;
+    prefetchModel: string | undefined;
+  },
   Answer,
   HttpServerRequest.HttpServerRequest | HostedEnvironment
 > {
@@ -174,6 +199,7 @@ function account(
       userId,
       apiKey: Redacted.value(environment.openAiKey),
       model: environment.brainModel,
+      prefetchModel: environment.prefetchModel,
     };
   });
 }
@@ -182,9 +208,15 @@ function account(
 interface BrainOperation<Admitted> {
   read: (payload: UnparsedWireValue) => HostedBrainRequestRead<Admitted>;
   path: string;
-  body: (request: Admitted, model: string) => Parameters<typeof postOpenAiEffect>[1];
+  body: (request: Admitted, models: BrainModels) => Parameters<typeof postOpenAiEffect>[1];
   /** The response body for the desktop, or nothing when the upstream's answer is not one this contract hands down. */
   answer: (payload: UnparsedWireValue) => object | undefined;
+}
+
+/** The two models the deployment fixes, each its override or the build's default. */
+interface BrainModels {
+  model: string;
+  prefetchModel: string;
 }
 
 /**
@@ -203,7 +235,7 @@ function brainOperation<Admitted>(
   HttpServerRequest.HttpServerRequest | HostedEnvironment | HttpClient.HttpClient
 > {
   return Effect.gen(function* () {
-    const { userId, apiKey, model } = yield* account(seams, HTTP_METHOD.POST);
+    const { userId, apiKey, model, prefetchModel } = yield* account(seams, HTTP_METHOD.POST);
     const payload = yield* refusing(readJsonBodyEffect(maximumHostedBrainRequestBytes));
     const read = operation.read(payload);
     if (!read.ok) return yield* refuse(REFUSAL_ERROR[read.refusal]);
@@ -220,7 +252,10 @@ function brainOperation<Admitted>(
       seams,
       apiKey,
       operation.path,
-      operation.body(read.request, modelOf(model)),
+      operation.body(read.request, {
+        model: modelOf(model),
+        prefetchModel: prefetchModelOf(prefetchModel),
+      }),
     );
     const body = answered === undefined ? undefined : operation.answer(answered);
     if (!body) return yield* Effect.fail(hostedUpstreamErrorResponse(undefined));
@@ -269,8 +304,8 @@ function upstream(
 function capabilities(
   seams: BrainSeams,
 ): Effect.Effect<Answer, Answer, HttpServerRequest.HttpServerRequest | HostedEnvironment> {
-  return Effect.map(account(seams, HTTP_METHOD.GET), ({ model }) =>
-    hostedJsonResponse(HOSTED_HTTP_STATUS.OK, hostedBrainCapabilities(model)),
+  return Effect.map(account(seams, HTTP_METHOD.GET), ({ model, prefetchModel }) =>
+    hostedJsonResponse(HOSTED_HTTP_STATUS.OK, hostedBrainCapabilities(model, prefetchModel)),
   );
 }
 
@@ -279,7 +314,7 @@ function respond(seams: BrainSeams) {
   return brainOperation(seams, {
     read: (payload) => hostedBrainRespondRequestFromWire(payload, CATALOG_NAMES),
     path: BRAIN_RESPONSES_PATH,
-    body: (request, model) =>
+    body: (request, { model }) =>
       brainResponsesRequest(request.input, {
         model,
         instructions: request.prompt,
@@ -304,7 +339,7 @@ function countTokens(seams: BrainSeams) {
   return brainOperation(seams, {
     read: (payload) => hostedBrainCountTokensRequestFromWire(payload, CATALOG_NAMES),
     path: BRAIN_RESPONSES_INPUT_TOKENS_PATH,
-    body: (request, model) =>
+    body: (request, { model }) =>
       brainInputTokensRequest(request.input, {
         model,
         instructions: request.prompt,
@@ -314,6 +349,40 @@ function countTokens(seams: BrainSeams) {
       const inputTokens = responsesInputTokens(payload);
       return inputTokens === undefined ? undefined : { inputTokens };
     },
+  });
+}
+
+/**
+ * POST: one of the read prefetch's two small inferences, on the prefetch
+ * model this deployment fixes. The request names its kind and no tool: a plan
+ * is answered by the one registered planning tool, forced, and a summary runs
+ * tool-free, so nothing a caller sends widens either. The answer is handed
+ * down as the payload came, replayable like a turn's.
+ */
+function prefetch(seams: BrainSeams) {
+  const planTool = CATALOG.get(PLAN_READS_TOOL_NAME);
+  return brainOperation(seams, {
+    read: hostedBrainPrefetchRequestFromWire,
+    path: BRAIN_RESPONSES_PATH,
+    body: (request, { prefetchModel }) => {
+      const plans = request.kind === HOSTED_BRAIN_PREFETCH_KIND.PLAN;
+      return brainResponsesRequest(request.input, {
+        model: prefetchModel,
+        instructions: request.prompt,
+        tools: plans && planTool ? [planTool] : [],
+        ...(plans && planTool ? { toolChoice: PLAN_READS_TOOL_NAME } : undefined),
+        maximumOutputTokens: Math.min(
+          request.options.maximumOutputTokens ?? HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_OUTPUT_TOKENS,
+          HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_OUTPUT_TOKENS,
+        ),
+        reasoningEffort: REASONING_EFFORT.LOW,
+      });
+    },
+    // SAFETY: brainResponsesOutput accepted the payload as a JSON record.
+    answer: (payload) =>
+      brainResponsesOutput(payload) && brainOutputReplayable(payload)
+        ? (payload as object)
+        : undefined,
   });
 }
 
@@ -337,7 +406,7 @@ function embed(seams: BrainSeams) {
   });
 }
 
-/** The group, which is the contract's four paths and the refusal anywhere else. */
+/** The group, which is the contract's five paths and the refusal anywhere else. */
 export function brainApp(
   seams: BrainSeams,
 ): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
@@ -346,6 +415,7 @@ export function brainApp(
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, Effect.merge(respond(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS, Effect.merge(countTokens(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_EMBED, Effect.merge(embed(seams))),
+    HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_PREFETCH, Effect.merge(prefetch(seams))),
     Effect.catchTag("RouteNotFound", () =>
       Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
     ),

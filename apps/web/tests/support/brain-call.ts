@@ -19,6 +19,7 @@ export interface BrainCall extends BrainSeams {
   /** Absent, or blank, means the hosted tier is off, the way the environment's own absence does. */
   apiKey?: string | undefined;
   model?: string | undefined;
+  prefetchModel?: string | undefined;
   fetch?: CloudFetch | undefined;
 }
 
@@ -34,6 +35,7 @@ export function brainAnswer(call: BrainCall): Promise<Response> {
       Effect.provideService(HostedEnvironment, {
         openAiKey: apiKey === undefined ? undefined : Redacted.make(apiKey),
         brainModel: present(call.model),
+        prefetchModel: present(call.prefetchModel),
         realtimeModel: undefined,
         posthogPersonalApiKey: undefined,
         posthogProjectId: undefined,
