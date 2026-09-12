@@ -26,7 +26,7 @@ const noHostSettingSideEffect: HostSettingSideEffect = () => Effect.void;
 /** What the host's own side effects reach in the concerns around them. */
 export interface HostSettingSideEffectDependencies {
   setVoice: (voice: StoredAppSettings["voice"]) => void;
-  applyVoiceCredential: () => Promise<void>;
+  applyVoiceCredential: Effect.Effect<void>;
   reconcileSpeech: () => void;
   emitSettings: () => Effect.Effect<void>;
 }
@@ -50,13 +50,8 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
       Effect.sync(() => {
         dependencies.setVoice(settings.voice);
       }),
-    // The credential is still a promise, so a rejection is the defect the
-    // settings write's own refusal reads it as, exactly as an awaited one was.
     [SETTING_SIDE_EFFECT.VOICE_SOURCE]: () =>
-      Effect.zipRight(
-        Effect.promise(() => dependencies.applyVoiceCredential()),
-        dependencies.emitSettings(),
-      ),
+      Effect.zipRight(dependencies.applyVoiceCredential, dependencies.emitSettings()),
     [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () =>
       Effect.sync(() => {
         dependencies.reconcileSpeech();

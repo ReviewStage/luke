@@ -52,7 +52,6 @@ import { settingsOverrides } from "./effect/settings-overrides.js";
 import { heldProductEvents } from "./held-product-events.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { apiKeyRejection, SettingsStore, type StoredAccount } from "./settings-store.js";
-import { type AwaitedSettingsStore, awaitedSettingsStore } from "./settings-store-awaited.js";
 import { vaultStepBearer } from "./vault-step-bearer.js";
 import { type VaultStepEra, vaultStepEraStands } from "./vault-step-era.js";
 import { reporterOf } from "./wire-helpers.js";
@@ -67,7 +66,7 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
  */
 interface SettingsLinks {
   refreshAccount: () => Effect.Effect<void, unknown>;
-  applyVoiceCredential: () => Promise<void>;
+  applyVoiceCredential: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;
   reconcileSpeech: () => void;
   broadcastWorkspaceProjects: Effect.Effect<void>;
@@ -76,12 +75,6 @@ interface SettingsLinks {
 
 export interface SettingsComposer extends Composer {
   readonly store: SettingsStore;
-  /**
-   * The same store as the promises its unmigrated callers still hold.
-   *
-   * @deprecated See {@link AwaitedSettingsStore}; deleted by P12-14h.
-   */
-  readonly awaitedStore: AwaitedSettingsStore;
   readonly recordProductEvent: RecordProductEvent;
   /** One count per provider per day, as the observation pass makes it. */
   recordProductEventOncePerDay: ProductEventSender["recordOncePerDay"];
@@ -138,7 +131,6 @@ export const composeSettings = (): Effect.Effect<
     const cipher = yield* SecretCipher;
     const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
-    const runtime = yield* Effect.runtime<FileSystem.FileSystem>();
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem>();
     const fileSystem = yield* FileSystem.FileSystem;
     const { runMode, report } = kernel;
@@ -178,7 +170,6 @@ export const composeSettings = (): Effect.Effect<
       overrides,
       fileSystem,
     });
-    const awaitedStore = awaitedSettingsStore(store, runtime);
 
     /**
      * One account read: a store that could not be read is an account this
@@ -675,7 +666,7 @@ export const composeSettings = (): Effect.Effect<
 
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => links().setVoice(voice),
-      applyVoiceCredential: () => links().applyVoiceCredential(),
+      applyVoiceCredential: Effect.suspend(() => links().applyVoiceCredential),
       reconcileSpeech: () => links().reconcileSpeech(),
       emitSettings,
     });
@@ -844,7 +835,7 @@ export const composeSettings = (): Effect.Effect<
                 ? Effect.void
                 : Effect.gen(function* () {
                     if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-                      yield* Effect.promise(() => links().applyVoiceCredential());
+                      yield* links().applyVoiceCredential;
                       yield* emitSettings();
                     }
                     recordProductEvent(
@@ -878,7 +869,6 @@ export const composeSettings = (): Effect.Effect<
     return {
       methods,
       store,
-      awaitedStore,
       recordProductEvent,
       recordProductEventOncePerDay: (name, key, properties) =>
         productEvents.recordOncePerDay(name, key, properties),

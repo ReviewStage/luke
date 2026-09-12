@@ -136,10 +136,6 @@ export const composeCalendars = (
     const runtime = yield* Effect.runtime<never>();
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
-    // The two readers below still take a promise for the one setting each
-    // reads, so those two seams keep the face until each reader answers
-    // effects itself.
-    const awaitedSettings = settings.awaitedStore;
     const late = yield* lateService<CalendarsLinks>();
     const links = (): CalendarsLinks => {
       const standing = late.unsafePeek();
@@ -150,7 +146,7 @@ export const composeCalendars = (
     };
 
     const googleCalendar = new GoogleCalendarReader({
-      readAccounts: () => awaitedSettings.readCalendarAccounts(),
+      readAccounts: () => Runtime.runPromise(runtime)(settingsStore.readCalendarAccounts()),
       runtime,
     });
     const googleCalendarConsent = googleCalendarSignIn({
@@ -176,7 +172,8 @@ export const composeCalendars = (
       return result.value;
     };
     const appleCalendar = new AppleCalendarReader({
-      readConnection: () => awaitedSettings.readAppleCalendarConnection(),
+      readConnection: () =>
+        Runtime.runPromise(runtime)(settingsStore.readAppleCalendarConnection()),
       runHelper: runAppleCalendarHelper,
       now,
     });
