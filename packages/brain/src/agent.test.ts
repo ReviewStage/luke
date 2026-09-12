@@ -10,7 +10,12 @@ import {
 } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
-import { checkpointFormatTag, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+import {
+  checkpointFormatTag,
+  DEFAULT_AGENT_ID,
+  MEMORY_SCOPE_KIND,
+  RUN_ORIGIN,
+} from "@sidecar/runtime/vocabulary";
 import {
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
@@ -687,6 +692,37 @@ it.effect("actions run one at a time in the order the model emitted them", () =>
     assert.deepEqual(order, ["start a", "end a", "start b", "end b", "start c", "end c"]);
     assert.equal(record?.performedActions, 3);
   }),
+);
+
+it.effect(
+  "a memory recall that never answers is ended by the turn's own deadline: the model is never asked, and the turn still settles",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness({
+        executionDeadlineMs: 60_000,
+        memory: {
+          scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID },
+          provider: {
+            recall: () => new Promise<never>(() => undefined),
+            tools: [],
+          },
+        },
+      });
+      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "remember?")));
+      yield* Effect.promise(() => settle());
+      assert.equal(h.client.inputs.length, 0, "the turn is still inside its recall");
+
+      yield* advanceHarness(NOW + 60_000);
+      yield* Effect.promise(() => settle());
+
+      const record = h.agent.request(runId);
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.TIMED_OUT);
+      assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.DEADLINE);
+      assert.equal(h.client.inputs.length, 0);
+      assert.equal(h.traces.length, 1);
+      assert.equal(h.traces[0]?.error, "execution deadline passed");
+      yield* Effect.promise(() => h.agent.stop());
+    }),
 );
 
 it.effect("a run past its execution deadline is timed out and its action refused", () =>
@@ -1382,16 +1418,14 @@ it.effect(
       const committed = h.repository.state;
       assert.ok(committed && committed.items.length > 0);
       // The runtime's own reopen refuses from here on.
-      const original = h.runtime.openContext;
+      const original = h.runtime.openContext.bind(h.runtime);
       Object.defineProperty(h.runtime, "openContext", {
         configurable: true,
-        value: async (...args: Parameters<typeof original>) => {
-          const opened = await original(...args);
-          return {
+        value: (...args: Parameters<typeof original>) =>
+          Effect.map(original(...args), (opened) => ({
             context: opened.context,
             bootstrap: { loaded: false, reason: "refused reopen", repaired: 0 },
-          };
-        },
+          })),
       });
       const failed = yield* Effect.promise(() => ask(h, "two"));
       assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
@@ -1413,27 +1447,26 @@ it.effect(
       const h = yield* effectHarness();
       let disposed = 0;
       let releaseReopen: (() => void) | undefined;
-      const original = h.runtime.openContext;
+      const original = h.runtime.openContext.bind(h.runtime);
       let opens = 0;
       Object.defineProperty(h.runtime, "openContext", {
         configurable: true,
-        value: async (...args: Parameters<typeof original>) => {
-          opens += 1;
-          const opened = await original(...args);
-          if (opens === 1) return opened;
-          Object.defineProperty(opened.context, "dispose", {
-            value: () => {
-              disposed += 1;
-            },
-          });
-          // The reopen's value is ready, but it is handed over only after the
-          // test has stopped the agent, so the claim lands before the signal and
-          // the host's continuation after it.
-          await new Promise<void>((resolve) => {
-            releaseReopen = resolve;
-          });
-          return opened;
-        },
+        value: (...args: Parameters<typeof original>) =>
+          Effect.flatMap(original(...args), (opened) => {
+            opens += 1;
+            if (opens === 1) return Effect.succeed(opened);
+            Object.defineProperty(opened.context, "dispose", {
+              value: () => {
+                disposed += 1;
+              },
+            });
+            // The reopen's value is ready, but it is handed over only after the
+            // test has stopped the agent, so the claim lands before the signal and
+            // the host's continuation after it.
+            return Effect.async<typeof opened>((resume) => {
+              releaseReopen = () => resume(Effect.succeed(opened));
+            });
+          }),
       });
       h.client.answers.push(failedAnswer("boom"));
       const accepted = yield* Effect.promise(() => submit(h, "fail"));

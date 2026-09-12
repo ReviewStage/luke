@@ -11,19 +11,18 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-  promiseAgentRuntime,
   RUN_END_REASON,
   RUNTIME_EVENT,
   type RuntimeEvent,
-  type RuntimeRun,
-  type RuntimeRunRequest,
+  type RuntimeRunEffect,
+  type RuntimeRunEnd,
   type RuntimeRunRequestEffect,
   type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Fiber } from "effect";
+import { Effect, Either, Fiber } from "effect";
 import { test } from "vitest";
 import { COMPACTION_POLICY } from "./compaction.js";
 import { ResponsesContextEngine } from "./context-engine.js";
@@ -102,8 +101,58 @@ function toolLoop(model: FakeModel, loopGuard?: { enabled: boolean }): ToolLoopA
   });
 }
 
+/** One execution as this suite still asks for it, before it becomes the loop's own effects. */
+type RuntimeRunRequest = Omit<RuntimeRunRequestEffect, "onEvent"> & {
+  onEvent: (event: RuntimeEvent) => void | Promise<void>;
+};
+
+/** A run under way, as this suite awaits one. */
+interface RuntimeRun extends Omit<RuntimeRunEffect, "done"> {
+  readonly done: Promise<RuntimeRunEnd>;
+}
+
+/**
+ * The loop's effects as the promises most of this suite reads them in. The
+ * seam itself answers effects throughout, and the tests that turn on a
+ * fiber's own interruption run them as fibers; the rest read a run's end,
+ * an open, or a fold as the one value it is, which is what this carries.
+ */
 function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
-  return promiseAgentRuntime(toolLoop(model, loopGuard));
+  const inner = toolLoop(model, loopGuard);
+  const started = (run: RuntimeRunEffect): RuntimeRun => ({
+    runId: run.runId,
+    steer: (input) => run.steer(input),
+    cancel: (reason) => run.cancel(reason),
+    done: Effect.runPromise(run.done),
+  });
+  const listener =
+    (onEvent: RuntimeRunRequest["onEvent"]): RuntimeRunRequestEffect["onEvent"] =>
+    (event) =>
+      Effect.promise(async () => {
+        await onEvent(event);
+      });
+  return {
+    descriptor: inner.descriptor,
+    capabilities: () => Effect.runPromise(inner.capabilities()),
+    compact: (context: ContextEngine, options: { prompt: string; signal: AbortSignal }) =>
+      Effect.runPromise(inner.compact(context, options)),
+    openContext: (...args: Parameters<typeof inner.openContext>) =>
+      Effect.runPromise(inner.openContext(...args)),
+    start: (request: RuntimeRunRequest) =>
+      started(inner.start({ ...request, onEvent: listener(request.onEvent) })),
+    resume: (
+      checkpoint: Parameters<typeof inner.resume>[0],
+      request: Omit<RuntimeRunRequest, "context">,
+      lostResult: Parameters<typeof inner.resume>[2],
+    ): Promise<RuntimeRun | { readonly refused: string }> =>
+      Effect.runPromise(
+        Effect.either(
+          inner.resume(checkpoint, { ...request, onEvent: listener(request.onEvent) }, lostResult),
+        ),
+      ).then((resumed) =>
+        Either.isLeft(resumed) ? { refused: resumed.left.reason } : started(resumed.right),
+      ),
+  };
 }
 
 interface Harness {
@@ -779,6 +828,30 @@ it.effect(
 
       assert.equal(held.applied(), 1);
       assert.deepEqual(kinds(events), [RUNTIME_EVENT.CANCELLED, RUNTIME_EVENT.ENDED]);
+    }),
+);
+
+it.effect(
+  "a host that interrupts the fiber the run is on ends it as a cancel: the loop stops and the end is told once",
+  () =>
+    Effect.gen(function* () {
+      const h = harness();
+      h.model.hold = true;
+      const events: RuntimeEvent[] = [];
+      const run = toolLoop(h.model).start(effectRequest(h.request(), events));
+      const carrying = yield* Effect.fork(run.done);
+      while (h.model.requests.length === 0) {
+        yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
+      }
+
+      yield* Fiber.interrupt(carrying);
+
+      assert.deepEqual(kinds(events).slice(-2), [RUNTIME_EVENT.CANCELLED, RUNTIME_EVENT.ENDED]);
+      assert.equal(
+        events.filter((event) => event.kind === RUNTIME_EVENT.ENDED).length,
+        1,
+        "the end is told once",
+      );
     }),
 );
 

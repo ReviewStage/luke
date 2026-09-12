@@ -1,6 +1,8 @@
 import type { ProviderTranscriptSinceResult, Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Option } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
+import { settledUnlessAborted } from "./effect/settled.js";
 import type { Generation } from "./generation.js";
 import { wakeInputText } from "./input-items.js";
 import { NestedMap } from "./nested-map.js";
@@ -213,17 +215,26 @@ export class WakeCapture {
       for (const event of fresh) {
         let read = reads.get(event.identity.providerId, event.identity.providerSessionId);
         if (!read) {
-          const delta = await readTranscriptDelta(event.identity, {
-            cursors: generation.captureCursors,
-            read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
-            signal: generation.abort.signal,
-            maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
-          });
-          if (!delta) {
+          // The capture is not a turn and holds no fiber of its own, so the
+          // generation's signal is raced here rather than left to interrupt one.
+          const delta = await this.#seam.carry(
+            settledUnlessAborted(
+              readTranscriptDelta(event.identity, {
+                cursors: generation.captureCursors,
+                read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
+                maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
+              }),
+              generation.abort.signal,
+            ),
+          );
+          if (Option.isNone(delta)) {
             generation.captureCursors.rollback(mark);
             return 0;
           }
-          read = { delta, cursor: generation.captureCursors.cursor(event.identity) };
+          read = {
+            delta: delta.value,
+            cursor: generation.captureCursors.cursor(event.identity),
+          };
           reads.set(event.identity.providerId, event.identity.providerSessionId, read);
         } else {
           // A second event for the same session in one batch carries no

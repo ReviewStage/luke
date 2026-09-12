@@ -6,17 +6,17 @@ import {
 } from "@sidecar/memory";
 import { markerWriteSchedule } from "@sidecar/memory/effect";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   MEMORY_CAPTURE_PHASE,
   type MemoryDefinition,
   reserveTokens,
 } from "@sidecar/runtime/vocabulary";
-import { Data, Effect, Either } from "effect";
+import { Data, Effect, Either, Fiber, Option } from "effect";
 import { assessCompaction, COMPACTION_NEED, type CompactionAssessment } from "./compaction.js";
+import { whenAborted } from "./effect/settled.js";
 import { CONTEXT_OPENING } from "./generation.js";
 import { turnCompactionOf } from "./run-events.js";
 import type { AgentSeam } from "./seam.js";
-import { claimedUnlessAborted, type Settled, settledUnlessAborted } from "./settled.js";
 import {
   BRAIN_TURN_KIND,
   type BrainTurnDescription,
@@ -85,7 +85,7 @@ export function writeFlushMarkerEffect(
 
 export interface MaintenanceOptions {
   seam: AgentSeam;
-  runtime: AgentRuntime;
+  runtime: AgentRuntimeEffect;
   prepareTurn: (turn: BrainTurnDescription) => BrainTurnPreparation | Promise<BrainTurnPreparation>;
   /** The memory provider bound to this conversation; one with a capture is asked for the pre-compaction flush. */
   memory?: MemoryDefinition;
@@ -130,43 +130,52 @@ export class Maintenance {
     this.cancel();
     const abort = new AbortController();
     this.#queued = abort;
-    void this.#seam.enqueue(() => this.#maintain(turnContext, countedTokens, abort));
+    void this.#seam.enqueue(() =>
+      this.#seam.carry(this.#maintain(turnContext, countedTokens, abort)),
+    );
   }
 
-  async #maintain(
+  #maintain(
     turnContext: TurnContext,
     countedTokens: number | undefined,
     abort: AbortController,
-  ): Promise<void> {
-    const { generation, context, events } = turnContext;
-    if (
-      abort.signal.aborted ||
-      this.#seam.stopped() ||
-      generation !== this.#seam.generation() ||
-      generation.abort.signal.aborted
-    ) {
-      return;
-    }
-    const standing = await generation.opened;
-    if (standing.kind !== CONTEXT_OPENING.LOADED || standing.context !== context) return;
-    const signal = AbortSignal.any([abort.signal, generation.abort.signal]);
-    if (signal.aborted) return;
-    // Maintenance is not a turn, but it holds the context the way one does,
-    // so the roster look waits for it the way it waits for a turn.
-    this.#options.holdTurnInFlight(true);
-    try {
-      const prepared = await this.#options.prepareTurn({ kind: BRAIN_TURN_KIND.MAINTENANCE });
-      if (signal.aborted || generation !== this.#seam.generation()) return;
-      const compacted = await this.compactIfNeeded(
-        { generation, context, signal, events },
-        prepared.prompt,
-        countedTokens,
+  ): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const { generation, context, events } = turnContext;
+      if (
+        abort.signal.aborted ||
+        this.#seam.stopped() ||
+        generation !== this.#seam.generation() ||
+        generation.abort.signal.aborted
+      ) {
+        return;
+      }
+      const standing = yield* Effect.promise(() => generation.opened);
+      if (standing.kind !== CONTEXT_OPENING.LOADED || standing.context !== context) return;
+      const signal = AbortSignal.any([abort.signal, generation.abort.signal]);
+      if (signal.aborted) return;
+      // Maintenance is not a turn, but it holds the context the way one does,
+      // so the roster look waits for it the way it waits for a turn.
+      this.#options.holdTurnInFlight(true);
+      yield* Effect.ensuring(
+        Effect.gen(this, function* () {
+          const prepared = yield* Effect.promise(
+            async () => await this.#options.prepareTurn({ kind: BRAIN_TURN_KIND.MAINTENANCE }),
+          );
+          if (signal.aborted || generation !== this.#seam.generation()) return;
+          const compacted = yield* Effect.either(
+            this.compactIfNeeded(
+              { generation, context, signal, events },
+              prepared.prompt,
+              countedTokens,
+            ),
+          );
+          if (Either.isLeft(compacted))
+            this.#seam.report(`Brain compaction did not complete: ${compacted.left.reason}`);
+        }),
+        Effect.sync(() => this.#options.holdTurnInFlight(false)),
       );
-      if (Either.isLeft(compacted))
-        this.#seam.report(`Brain compaction did not complete: ${compacted.left.reason}`);
-    } finally {
-      this.#options.holdTurnInFlight(false);
-    }
+    });
   }
 
   /**
@@ -178,40 +187,43 @@ export class Maintenance {
    * it was, and nothing is deleted or cut to make the request fit. A turn
    * revoked meanwhile answers ok, having nothing left to prepare for.
    */
-  async compactIfNeeded(
+  compactIfNeeded(
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
     prompt: string,
     countedTokens?: number,
-  ): Promise<Either.Either<void, CompactionRefused>> {
-    const { context, signal } = turnContext;
-    const capabilities = await this.#options.runtime.capabilities();
-    if (this.#revoked(turnContext)) return Either.right(undefined);
-    const assessment = assessCompaction(
-      context.checkpoint().items,
-      prompt,
-      capabilities,
-      countedTokens,
-    );
-    // The flush fires a soft margin ahead of the fold, so in maintenance it
-    // usually runs on a context not yet over the reserve; at admission it
-    // runs right before the compaction the request needs.
-    await this.#flushBeforeCompaction(turnContext, assessment);
-    if (this.#revoked(turnContext)) return Either.right(undefined);
-    if (assessment.need === COMPACTION_NEED.NONE) return Either.right(undefined);
-    const outcome = await this.#options.runtime.compact(context, { prompt, signal });
-    if (this.#revoked(turnContext)) return Either.right(undefined);
-    if (!outcome.compacted) return Either.left(new CompactionRefused({ reason: outcome.reason }));
-    turnContext.generation.compactionCount += 1;
-    if (!(await this.#seam.ledger.checkpoint(turnContext))) {
-      return Either.left(
-        new CompactionRefused({ reason: "the compacted context could not be checkpointed" }),
+  ): Effect.Effect<void, CompactionRefused> {
+    return Effect.gen(this, function* () {
+      const { context, signal } = turnContext;
+      const capabilities = yield* this.#options.runtime.capabilities();
+      if (this.#revoked(turnContext)) return;
+      const assessment = assessCompaction(
+        context.checkpoint().items,
+        prompt,
+        capabilities,
+        countedTokens,
       );
-    }
-    // The fold is told once it is on record, and to the turn whose sequence it
-    // belongs in: the turn about to run, or the settled turn that queued this
-    // maintenance, whose events it follows.
-    turnContext.events.compacted(turnCompactionOf(outcome));
-    return Either.right(undefined);
+      // The flush fires a soft margin ahead of the fold, so in maintenance it
+      // usually runs on a context not yet over the reserve; at admission it
+      // runs right before the compaction the request needs.
+      yield* this.#flushBeforeCompaction(turnContext, assessment);
+      if (this.#revoked(turnContext)) return;
+      if (assessment.need === COMPACTION_NEED.NONE) return;
+      const outcome = yield* this.#options.runtime.compact(context, { prompt, signal });
+      if (this.#revoked(turnContext)) return;
+      if (!outcome.compacted) {
+        return yield* Effect.fail(new CompactionRefused({ reason: outcome.reason }));
+      }
+      turnContext.generation.compactionCount += 1;
+      if (!(yield* Effect.promise(() => this.#seam.ledger.checkpoint(turnContext)))) {
+        return yield* Effect.fail(
+          new CompactionRefused({ reason: "the compacted context could not be checkpointed" }),
+        );
+      }
+      // The fold is told once it is on record, and to the turn whose sequence it
+      // belongs in: the turn about to run, or the settled turn that queued this
+      // maintenance, whose events it follows.
+      turnContext.events.compacted(turnCompactionOf(outcome));
+    });
   }
 
   /**
@@ -231,53 +243,55 @@ export class Maintenance {
    * written after its bounded attempts is reported and leaves the cycle
    * unflushed, never silently done.
    */
-  async #flushBeforeCompaction(
+  #flushBeforeCompaction(
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
     assessment: CompactionAssessment,
-  ): Promise<void> {
-    const { generation, context, signal } = turnContext;
-    const memory = this.#options.memory;
-    const capture = memory?.provider.capture?.bind(memory.provider);
-    if (!memory || !capture || signal.aborted) return;
-    if (!(await this.#readFlushMarker(turnContext))) return;
-    const due = shouldRunMemoryFlush({
-      contextTokens: assessment.contextTokens,
-      contextWindowTokens: assessment.contextWindowTokens,
-      reserveTokens: reserveTokens(assessment.contextWindowTokens),
-      transcriptBytes: assessment.bytes,
-      compactionCount: generation.compactionCount,
-      ...(generation.flush.lastCompactionCount !== undefined
-        ? { lastFlushCompactionCount: generation.flush.lastCompactionCount }
-        : undefined),
+  ): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const { generation, context, signal } = turnContext;
+      const memory = this.#options.memory;
+      const capture = memory?.provider.capture?.bind(memory.provider);
+      if (!memory || !capture || signal.aborted) return;
+      if (!(yield* this.#readFlushMarker(turnContext))) return;
+      const due = shouldRunMemoryFlush({
+        contextTokens: assessment.contextTokens,
+        contextWindowTokens: assessment.contextWindowTokens,
+        reserveTokens: reserveTokens(assessment.contextWindowTokens),
+        transcriptBytes: assessment.bytes,
+        compactionCount: generation.compactionCount,
+        ...(generation.flush.lastCompactionCount !== undefined
+          ? { lastFlushCompactionCount: generation.flush.lastCompactionCount }
+          : undefined),
+      });
+      if (!due) return;
+      const cycle = generation.compactionCount;
+      const captured = yield* Effect.promise(
+        async () =>
+          await capture({
+            scope: memory.scope,
+            phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
+            operation: { generationId: generation.id, compactionCount: cycle },
+            items: [...context.checkpoint().items],
+            signal,
+          }).catch((error: Error) => failedHousekeeping(error.message)),
+      );
+      if (this.#revoked(turnContext)) return;
+      if (!housekeepingCompleted(captured.outcome)) {
+        this.#seam.report(
+          `Memory flush did not complete (${captured.outcome}${captured.reason ? `: ${captured.reason}` : ""}); it runs again at the next assessment`,
+        );
+        return;
+      }
+      const marked = yield* this.#writeFlushMarker(turnContext, cycle);
+      if (Option.isNone(marked) || this.#revoked(turnContext)) return;
+      if (Either.isLeft(marked.value)) {
+        this.#seam.report(
+          `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.left.reason}); the cycle stays unflushed and runs again at the next assessment`,
+        );
+        return;
+      }
+      generation.flush.lastCompactionCount = cycle;
     });
-    if (!due) return;
-    const cycle = generation.compactionCount;
-    const settled = await settledUnlessAborted(
-      capture({
-        scope: memory.scope,
-        phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
-        operation: { generationId: generation.id, compactionCount: cycle },
-        items: [...context.checkpoint().items],
-        signal,
-      }).catch((error: Error) => failedHousekeeping(error.message)),
-      signal,
-    );
-    if (settled.aborted || this.#revoked(turnContext)) return;
-    if (!housekeepingCompleted(settled.value.outcome)) {
-      this.#seam.report(
-        `Memory flush did not complete (${settled.value.outcome}${settled.value.reason ? `: ${settled.value.reason}` : ""}); it runs again at the next assessment`,
-      );
-      return;
-    }
-    const marked = await this.#writeFlushMarker(turnContext, cycle);
-    if (marked.aborted || this.#revoked(turnContext)) return;
-    if (Either.isLeft(marked.value)) {
-      this.#seam.report(
-        `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.left.reason}); the cycle stays unflushed and runs again at the next assessment`,
-      );
-      return;
-    }
-    generation.flush.lastCompactionCount = cycle;
   }
 
   /**
@@ -287,40 +301,45 @@ export class Maintenance {
    * guess of "unflushed" repeats a housekeeping turn and a guess of
    * "flushed" loses one.
    */
-  async #readFlushMarker(
+  #readFlushMarker(
     turnContext: Pick<TurnContext, "generation" | "signal">,
-  ): Promise<boolean> {
-    const { generation, signal } = turnContext;
-    if (generation.flush.settling) {
-      // A write an earlier turn stopped waiting for may still be in flight;
-      // the gate is read only once it has landed or failed, so the store is
-      // never consulted ahead of a write already issued to it.
-      const settled = await settledUnlessAborted(generation.flush.settling, signal);
-      if (settled.aborted || this.#revoked(turnContext)) return false;
-      delete generation.flush.settling;
-    }
-    if (generation.flush.read) return true;
-    const store = this.#options.flushMarker;
-    if (!store) {
-      generation.flush.read = true;
-      return true;
-    }
-    const read = await settledUnlessAborted(
-      store.read(generation.id).then(
-        (lastCompactionCount) => Either.right({ lastCompactionCount }),
-        (error: Error) => Either.left(new FlushMarkerReadFailed({ reason: error.message })),
-      ),
-      signal,
-    );
-    if (read.aborted || this.#revoked(turnContext)) return false;
-    if (Either.isLeft(read.value)) {
-      this.#seam.report(
-        `Memory flush marker could not be read (${read.value.left.reason}); the flush waits for the next assessment`,
+  ): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      const { generation } = turnContext;
+      const settling = generation.flush.settling;
+      if (settling) {
+        // A write an earlier turn stopped waiting for may still be in flight;
+        // the gate is read only once it has landed or failed, so the store is
+        // never consulted ahead of a write already issued to it.
+        yield* settling;
+        if (this.#revoked(turnContext)) return false;
+        delete generation.flush.settling;
+      }
+      if (generation.flush.read) return true;
+      const store = this.#options.flushMarker;
+      if (!store) {
+        generation.flush.read = true;
+        return true;
+      }
+      const read = yield* Effect.either(
+        Effect.tryPromise({
+          try: () => store.read(generation.id),
+          catch: (error) =>
+            new FlushMarkerReadFailed({
+              reason: error instanceof Error ? error.message : String(error),
+            }),
+        }),
       );
-      return false;
-    }
-    generation.flush = { read: true, lastCompactionCount: read.value.right.lastCompactionCount };
-    return true;
+      if (this.#revoked(turnContext)) return false;
+      if (Either.isLeft(read)) {
+        this.#seam.report(
+          `Memory flush marker could not be read (${read.left.reason}); the flush waits for the next assessment`,
+        );
+        return false;
+      }
+      generation.flush = { read: true, lastCompactionCount: read.right };
+      return true;
+    });
   }
 
   /**
@@ -331,29 +350,35 @@ export class Maintenance {
    * before its gate is next read, and a write that lands late marks the
    * cycle as a timely one would, so the housekeeping turn is not run twice.
    */
-  async #writeFlushMarker(
+  #writeFlushMarker(
     turnContext: Pick<TurnContext, "generation" | "signal">,
     cycle: number,
-  ): Promise<Settled<Either.Either<void, FlushMarkerWriteFailed>>> {
+  ): Effect.Effect<Option.Option<Either.Either<void, FlushMarkerWriteFailed>>> {
     const store = this.#options.flushMarker;
-    if (!store) return { aborted: false, value: Either.right(undefined) };
-    const { generation, signal } = turnContext;
-    /**
-     * @deprecated Runs `writeFlushMarkerEffect` to the `Promise` this method's
-     * own callers still hold; deleted in P12-02 with the turn runner, since
-     * this write is made inside the housekeeping turn and reaches a fiber of
-     * its own exactly when that turn does.
-     */
-    const attempts = (): Promise<Either.Either<void, FlushMarkerWriteFailed>> =>
-      Effect.runPromise(Effect.either(writeFlushMarkerEffect(store, generation.id, cycle, signal)));
-    const outcome = attempts();
-    const settled = await claimedUnlessAborted(outcome, signal, (late) => {
-      if (Either.isRight(late)) generation.flush.lastCompactionCount = cycle;
+    if (!store) return Effect.succeed(Option.some(Either.right(undefined)));
+    return Effect.gen(this, function* () {
+      const { generation, signal } = turnContext;
+      // The attempt is a daemon, so the turn ending — of its own accord or
+      // by the interruption its revocation raises — leaves the write running
+      // and its own late success marking the cycle, which is the whole of
+      // what this method owes the next assessment.
+      const writing = yield* Effect.forkDaemon(
+        Effect.tap(
+          Effect.either(writeFlushMarkerEffect(store, generation.id, cycle, signal)),
+          (outcome) =>
+            Effect.sync(() => {
+              if (Either.isRight(outcome)) generation.flush.lastCompactionCount = cycle;
+            }),
+        ),
+      );
+      generation.flush.settling = Effect.asVoid(Fiber.await(writing));
+      const settled = yield* Effect.raceFirst(
+        Effect.map(Fiber.join(writing), Option.some),
+        Effect.as(whenAborted(signal), Option.none()),
+      );
+      if (Option.isSome(settled)) delete generation.flush.settling;
+      return settled;
     });
-    if (settled.aborted) {
-      generation.flush.settling = outcome.then(() => undefined);
-    }
-    return settled;
   }
 
   #revoked(context: Pick<TurnContext, "signal">): boolean {

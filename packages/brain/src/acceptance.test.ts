@@ -31,7 +31,7 @@ import {
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
   type ContextEngine,
@@ -42,14 +42,15 @@ import {
   MEMORY_SCOPE_KIND,
   type MemoryDefinition,
   type ModelAdapter,
-  promiseAgentRuntime,
   REASONING_EFFORT,
   RUN_END_REASON,
   RUN_ORIGIN,
   RUNTIME_EVENT,
   type RuntimeCheckpoint,
-  type RuntimeRun,
-  type RuntimeRunRequest,
+  RuntimeResumeRefused,
+  type RuntimeRunEffect,
+  type RuntimeRunEnd,
+  type RuntimeRunRequestEffect,
   type ToolExecutionContext,
 } from "@sidecar/runtime/vocabulary";
 import { normalizeSession, SESSION_STATUS, type SessionProvider } from "@sidecar/session";
@@ -282,7 +283,7 @@ interface Host {
 let ids = 0;
 
 function host(
-  runtimeOver: (model: ModelAdapter) => AgentRuntime,
+  runtimeOver: (model: ModelAdapter) => AgentRuntimeEffect,
   model: ModelAdapter,
   repository = fakeBrainStateRepository(),
   performer: () => Promise<ActionOutputEnvelope> = async () => acceptedActionOutput(),
@@ -558,13 +559,13 @@ class ScriptedContext implements ContextEngine {
   dispose() {}
 }
 
-class ScriptedRuntime implements AgentRuntime {
+class ScriptedRuntime implements AgentRuntimeEffect {
   readonly descriptor = { id: FAKE_FORMAT.runtime, checkpoint: FAKE_FORMAT };
-  capabilities(): Promise<undefined> {
-    return Promise.resolve(undefined);
+  capabilities(): Effect.Effect<undefined> {
+    return Effect.succeed(undefined);
   }
-  compact(): Promise<{ compacted: false; reason: string }> {
-    return Promise.resolve({ compacted: false, reason: "the scripted runtime does not compact" });
+  compact(): Effect.Effect<{ compacted: false; reason: string }> {
+    return Effect.succeed({ compacted: false, reason: "the scripted runtime does not compact" });
   }
   quietUntil(): number | undefined {
     return undefined;
@@ -572,20 +573,31 @@ class ScriptedRuntime implements AgentRuntime {
   readonly contexts: ToolExecutionContext[] = [];
   /** The tool each run calls before answering; the host's executor decides what it means. */
   constructor(private readonly script: readonly string[]) {}
-  async openContext(checkpoint: RuntimeCheckpoint | undefined): Promise<ContextOpening> {
-    const context = new ScriptedContext();
-    return { context, bootstrap: context.bootstrap(checkpoint) };
+  openContext(checkpoint: RuntimeCheckpoint | undefined): Effect.Effect<ContextOpening> {
+    return Effect.sync(() => {
+      const context = new ScriptedContext();
+      return { context, bootstrap: context.bootstrap(checkpoint) };
+    });
   }
-  async resume(checkpoint: RuntimeCheckpoint, request: Omit<RuntimeRunRequest, "context">) {
-    const opened = await this.openContext(checkpoint);
-    if (!opened.bootstrap.loaded) return { refused: opened.bootstrap.reason ?? "refused" };
-    return this.start({ ...request, context: opened.context });
+  resume(
+    checkpoint: RuntimeCheckpoint,
+    request: Omit<RuntimeRunRequestEffect, "context">,
+  ): Effect.Effect<RuntimeRunEffect, RuntimeResumeRefused> {
+    return Effect.flatMap(this.openContext(checkpoint), (opened) =>
+      opened.bootstrap.loaded
+        ? Effect.succeed(this.start({ ...request, context: opened.context }))
+        : Effect.fail(new RuntimeResumeRefused({ reason: opened.bootstrap.reason ?? "refused" })),
+    );
   }
-  start(request: RuntimeRunRequest): RuntimeRun {
-    const done = (async () => {
-      for (const input of request.input) await request.context.ingest(input);
+  start(request: RuntimeRunRequestEffect): RuntimeRunEffect {
+    const script = this.script;
+    const contexts = this.contexts;
+    const done = Effect.gen(function* () {
+      for (const input of request.input) {
+        yield* Effect.promise(async () => await request.context.ingest(input));
+      }
       let index = 0;
-      for (const name of this.script) {
+      for (const name of script) {
         const invocation = {
           callId: `scripted-${++index}`,
           name,
@@ -595,27 +607,32 @@ class ScriptedRuntime implements AgentRuntime {
             text: "scripted",
           }),
         };
-        await request.onEvent({ kind: RUNTIME_EVENT.TOOL_CALL, invocation });
+        yield* request.onEvent({ kind: RUNTIME_EVENT.TOOL_CALL, invocation });
         const context: ToolExecutionContext = {
           runId: request.runId,
           signal: request.signal,
           isRevoked: () => request.signal.aborted,
         };
-        this.contexts.push(context);
-        const result = await request.tools.execute(invocation, context);
-        await request.context.ingest({
-          kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
-          callId: invocation.callId,
-          outputJson: result.outputJson,
-        });
-        await request.onEvent({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation, result });
+        contexts.push(context);
+        const result = yield* Effect.promise(
+          async () => await request.tools.execute(invocation, context),
+        );
+        yield* Effect.promise(
+          async () =>
+            await request.context.ingest({
+              kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
+              callId: invocation.callId,
+              outputJson: result.outputJson,
+            }),
+        );
+        yield* request.onEvent({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation, result });
       }
-      const text = `scripted reply after ${this.script.length} tools`;
-      await request.onEvent({ kind: RUNTIME_EVENT.TEXT, text });
-      const end = { reason: RUN_END_REASON.COMPLETED, text } as const;
-      await request.onEvent({ kind: RUNTIME_EVENT.ENDED, end });
+      const text = `scripted reply after ${script.length} tools`;
+      yield* request.onEvent({ kind: RUNTIME_EVENT.TEXT, text });
+      const end: RuntimeRunEnd = { reason: RUN_END_REASON.COMPLETED, text };
+      yield* request.onEvent({ kind: RUNTIME_EVENT.ENDED, end });
       return end;
-    })();
+    });
     return { runId: request.runId, steer: () => false, cancel: () => undefined, done };
   }
 }
@@ -736,15 +753,13 @@ class HeldIngestEngine extends ResponsesContextEngine {
   }
 }
 
-function heldIngestRuntime(model: ModelAdapter): AgentRuntime {
-  return promiseAgentRuntime(
-    new ToolLoopAgentRuntime({
-      model,
-      itemFormat: RESPONSES_ITEM_FORMAT,
-      createContext: (format) =>
-        new HeldIngestEngine({ id: format.runtime, version: format.runtimeVersion }),
-    }),
-  );
+function heldIngestRuntime(model: ModelAdapter): AgentRuntimeEffect {
+  return new ToolLoopAgentRuntime({
+    model,
+    itemFormat: RESPONSES_ITEM_FORMAT,
+    createContext: (format) =>
+      new HeldIngestEngine({ id: format.runtime, version: format.runtimeVersion }),
+  });
 }
 
 test("an ingest held across a cancel that resolves after the successor turn began lands on the retired engine, never in the context the next turn reads or keeps", async () => {

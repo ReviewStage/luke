@@ -1,3 +1,4 @@
+import type { Carry } from "./effect/carry.js";
 import type { Generation } from "./generation.js";
 import type { BrainRequestLedger } from "./ledger.js";
 import type { ScheduledTimer } from "./scheduled-timer.js";
@@ -13,6 +14,12 @@ export type { ScheduledTimer } from "./scheduled-timer.js";
  */
 export interface AgentSeam {
   readonly now: () => number;
+  /**
+   * Carries one of this conversation's effects to the promise a caller still
+   * holds, on the runtime the host handed the agent. A turn is a fiber of
+   * that runtime from here inward.
+   */
+  readonly carry: Carry;
   readonly schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   readonly cancel: (timer: ScheduledTimer) => void;
   readonly report: (message: string) => void;

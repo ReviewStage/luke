@@ -8,7 +8,7 @@ import {
 } from "@sidecar/memory";
 import { WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   CONTEXT_INPUT_KIND,
   RUN_END_REASON,
   type RuntimeRunEnd,
@@ -17,6 +17,7 @@ import {
   type ToolSchema,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
 import { answer } from "./tool-results.js";
@@ -49,7 +50,7 @@ export const HOUSEKEEPING_REFUSAL = {
 } as const;
 
 export interface MemoryHousekeepingOptions {
-  readonly runtime: AgentRuntime;
+  readonly runtime: AgentRuntimeEffect;
   /** The conversation's context as it stands, copied; the turn's own context is opened over it and dropped. */
   readonly items: readonly WireRecord[];
   readonly prompt: HousekeepingPrompt;
@@ -61,7 +62,7 @@ export interface MemoryHousekeepingOptions {
 }
 
 interface PrivateTurnOptions {
-  readonly runtime: AgentRuntime;
+  readonly runtime: AgentRuntimeEffect;
   /** A conversation's context as it stands, copied into the private context; none for a turn over nothing. */
   readonly items?: readonly WireRecord[];
   readonly tools: ToolExecutor;
@@ -79,28 +80,36 @@ interface PrivateTurnOptions {
  * with an inert event sink, and disposed whatever happened, so nothing the
  * turn read or said outlives it or reaches a conversation.
  */
-async function runPrivateTurn(options: PrivateTurnOptions): Promise<RuntimeRunEnd> {
-  const opened = await options.runtime.openContext(undefined, UNKNOWN_ACTION_RESULT);
-  try {
-    if (options.items && options.items.length > 0) {
-      await opened.context.adopt([...options.items], { signal: options.signal });
-    }
-    const run = options.runtime.start({
-      runId: options.runId,
-      context: opened.context,
-      tools: options.tools,
-      toolSchemas: options.toolSchemas,
-      prompt: options.prompt,
-      input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: options.ask }],
-      ephemeral: () => [],
-      maximumOutputTokens: options.maximumOutputTokens,
-      signal: options.signal,
-      onEvent: () => undefined,
-    });
-    return await run.done;
-  } finally {
-    await Promise.resolve(opened.context.dispose()).catch(() => undefined);
-  }
+function runPrivateTurn(options: PrivateTurnOptions): Effect.Effect<RuntimeRunEnd> {
+  return Effect.gen(function* () {
+    const opened = yield* options.runtime.openContext(undefined, UNKNOWN_ACTION_RESULT);
+    return yield* Effect.ensuring(
+      Effect.gen(function* () {
+        const items = options.items;
+        if (items && items.length > 0) {
+          yield* Effect.promise(
+            async () => await opened.context.adopt([...items], { signal: options.signal }),
+          );
+        }
+        const run = options.runtime.start({
+          runId: options.runId,
+          context: opened.context,
+          tools: options.tools,
+          toolSchemas: options.toolSchemas,
+          prompt: options.prompt,
+          input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: options.ask }],
+          ephemeral: () => [],
+          maximumOutputTokens: options.maximumOutputTokens,
+          signal: options.signal,
+          onEvent: () => Effect.void,
+        });
+        return yield* run.done;
+      }),
+      Effect.promise(async () => {
+        await Promise.resolve(opened.context.dispose()).catch(() => undefined);
+      }),
+    );
+  });
 }
 
 function rejection(reason: string): ToolResult {
@@ -108,9 +117,9 @@ function rejection(reason: string): ToolResult {
 }
 
 /** Runs one housekeeping turn to its end and answers how it ended and how many writes it committed. */
-export async function runMemoryHousekeeping(
+export function runMemoryHousekeeping(
   options: MemoryHousekeepingOptions,
-): Promise<MemoryHousekeepingResult> {
+): Effect.Effect<MemoryHousekeepingResult> {
   const schemas = brainToolCatalog()
     .filter((tool) => HOUSEKEEPING_TOOLS.has(tool.schema.name))
     .map((tool) => tool.schema);
@@ -151,52 +160,56 @@ export async function runMemoryHousekeeping(
       return answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
     },
   };
-  try {
-    const end = await runPrivateTurn({
-      runtime: options.runtime,
-      items: options.items,
-      tools,
-      toolSchemas: schemas,
-      prompt: options.prompt.system,
-      ask: options.prompt.ask,
-      maximumOutputTokens: MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
-      signal: options.signal,
-      runId: options.runId,
-    });
-    switch (end.reason) {
-      case RUN_END_REASON.COMPLETED:
-        return {
-          outcome:
-            writes > 0
-              ? MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED
-              : MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE,
-          writes,
-        };
-      case RUN_END_REASON.CANCELLED:
-      case RUN_END_REASON.DEADLINE:
-        return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED, writes, reason: end.reason };
-      case RUN_END_REASON.THROTTLED:
-        return {
-          outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
-          writes,
-          reason: "the model is rate limited",
-        };
-      case RUN_END_REASON.PROVIDER_FAILURE:
-        return {
-          outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
-          writes,
-          reason: `${end.failure}: ${end.detail}`,
-        };
-      default:
-        return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED, writes, reason: end.detail };
-    }
-  } catch (error) {
-    return {
-      outcome: options.signal.aborted
-        ? MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED
-        : MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
-      writes,
-      reason: error instanceof Error ? error.message : String(error),
-    };
-  }
+  return Effect.catchAllDefect(
+    Effect.map(
+      runPrivateTurn({
+        runtime: options.runtime,
+        items: options.items,
+        tools,
+        toolSchemas: schemas,
+        prompt: options.prompt.system,
+        ask: options.prompt.ask,
+        maximumOutputTokens: MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
+        signal: options.signal,
+        runId: options.runId,
+      }),
+      (end): MemoryHousekeepingResult => {
+        switch (end.reason) {
+          case RUN_END_REASON.COMPLETED:
+            return {
+              outcome:
+                writes > 0
+                  ? MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED
+                  : MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE,
+              writes,
+            };
+          case RUN_END_REASON.CANCELLED:
+          case RUN_END_REASON.DEADLINE:
+            return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED, writes, reason: end.reason };
+          case RUN_END_REASON.THROTTLED:
+            return {
+              outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
+              writes,
+              reason: "the model is rate limited",
+            };
+          case RUN_END_REASON.PROVIDER_FAILURE:
+            return {
+              outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
+              writes,
+              reason: `${end.failure}: ${end.detail}`,
+            };
+          default:
+            return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED, writes, reason: end.detail };
+        }
+      },
+    ),
+    (defect) =>
+      Effect.succeed({
+        outcome: options.signal.aborted
+          ? MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED
+          : MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
+        writes,
+        reason: defect instanceof Error ? defect.message : String(defect),
+      }),
+  );
 }

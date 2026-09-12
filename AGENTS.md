@@ -284,9 +284,11 @@ Canonical commands:
   next inference, the transcript cursors, the checkpoint — and reaches a
   model only through an `AgentRuntimeEffect` over a `ModelAdapter`, a
   `ContextEngine`, and the `ToolExecutor` the host itself supplies, every
-  answer of which is an effect, so a run is a fiber and the interruption of
-  that fiber is the whole of its cancellation; the `AgentRuntime` beside it is
-  the same seam answered as promises, for a host that still holds one.
+  answer of which is an effect, so a turn is a fiber end to end and the
+  interruption of that fiber is the whole of its cancellation: the settlement
+  that follows the fiber's own exit — the rollback, the final checkpoint, the
+  briefings, the trace — runs where no interruption reaches it, so a turn cut
+  short still settles exactly once.
   Nothing in the host reads inside a provider's item. Which parts stand is a
   configuration, not a construction: `packages/runtime` names its built-in
   agent runtimes, model adapters, context engines, and memory providers in

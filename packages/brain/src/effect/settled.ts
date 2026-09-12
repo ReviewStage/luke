@@ -1,21 +1,14 @@
 /**
  * A run's cancellation, in Effect's own terms. An `AbortSignal` is what the
  * brain's callers still hold — a run revoked, a generation replaced — and a
- * fiber racing that signal is what the hand-rolled `Settled` promise was
- * written to be. Two things it guarantees are the ones the trust constraints
- * name: a cancelled or revoked run refuses the work it was waiting on, and a
- * value that must be owned by exactly one party is claimed or discarded, never
- * both and never neither.
- *
- * The Promise signatures in `../settled.ts` are a strangler shim over this
- * module: P12-02 deletes them once every caller runs a fiber of its own.
+ * turn's fiber is interrupted by it, so most of what the brain waits on
+ * settles as that interruption and needs nothing of its own. Two waits still
+ * do: one held under an uninterruptible region, which only the signal can
+ * end, and one whose value must be owned by exactly one party — the caller,
+ * when it arrives while the signal stands, or `discard`, when the signal
+ * fired first, and never both and never neither.
  */
-import { Deferred, Effect } from "effect";
-
-/** The work's value, or the word that the signal fired before it arrived. */
-export type Settled<T> = { aborted: true } | { aborted: false; value: T };
-
-const ABORTED = { aborted: true } as const;
+import { Deferred, Effect, Exit, Option } from "effect";
 
 /**
  * Completes when the signal fires, and never otherwise. The listener is
@@ -38,23 +31,28 @@ export const whenAborted = (signal: AbortSignal): Effect.Effect<void> =>
   });
 
 /**
- * Runs the work only as long as the signal stands. Once it fires the race is
- * settled as aborted at once and the work is interrupted, so a late model
- * answer or transcript reaches nothing. The work's own failure still
- * propagates when it is the one that arrived first. A signal that had already
- * fired is read before the work is started rather than raced against it, so
- * work needing no suspension cannot win a race it was never in.
+ * Runs the work only as long as the signal stands, answering nothing once it
+ * has fired. The race is settled as aborted at once and the work is
+ * interrupted, so a late model answer or transcript reaches nothing. The
+ * work's own failure still propagates when it is the one that arrived first.
+ * A signal that had already fired is read before the work is started rather
+ * than raced against it, so work needing no suspension cannot win a race it
+ * was never in.
+ *
+ * A fiber the same signal interrupts needs none of this; what does is a wait
+ * held under an uninterruptible region, where the signal is the only thing
+ * that can end it.
  */
 export const settledUnlessAborted = <A, E, R>(
   work: Effect.Effect<A, E, R>,
   signal: AbortSignal,
-): Effect.Effect<Settled<A>, E, R> =>
+): Effect.Effect<Option.Option<A>, E, R> =>
   Effect.suspend(() =>
     signal.aborted
-      ? Effect.succeed<Settled<A>>(ABORTED)
+      ? Effect.succeed(Option.none())
       : Effect.raceFirst(
-          Effect.map(work, (value): Settled<A> => ({ aborted: false, value })),
-          Effect.as(whenAborted(signal), ABORTED),
+          Effect.map(work, Option.some),
+          Effect.as(whenAborted(signal), Option.none()),
         ),
   );
 
@@ -67,9 +65,10 @@ export const settledUnlessAborted = <A, E, R>(
  * decision and handing the value on.
  *
  * The work runs as a daemon rather than a child, because it is the value's
- * only route to `discard`: a fiber interrupted by the abort it lost to would
- * leave the value owned by nobody, which is the one outcome this function
- * exists to refuse.
+ * only route to `discard`: a fiber interrupted by the abort it lost to — or
+ * by the interruption that same signal raises on the caller's own turn —
+ * would leave the value owned by nobody, which is the one outcome this
+ * function exists to refuse.
  *
  * A signal that had already fired takes the decision before the work is
  * started, so work needing no suspension is discarded rather than claimed:
@@ -80,26 +79,38 @@ export const claimedUnlessAborted = <A, E, R>(
   work: Effect.Effect<A, E, R>,
   signal: AbortSignal,
   discard: (value: A) => void,
-): Effect.Effect<Settled<A>, E, R> =>
+): Effect.Effect<Option.Option<A>, E, R> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const decision = yield* Deferred.make<Settled<A>, E>();
-      if (signal.aborted) yield* Deferred.succeed(decision, ABORTED);
+      const decision = yield* Deferred.make<Option.Option<A>, E>();
+      if (signal.aborted) yield* Deferred.succeed(decision, Option.none());
       yield* Effect.forkDaemon(
         Effect.matchCauseEffect(work, {
           onFailure: (cause) => Deferred.failCause(decision, cause),
           onSuccess: (value) =>
             Effect.uninterruptible(
-              Effect.flatMap(
-                Deferred.succeed(decision, { aborted: false, value } satisfies Settled<A>),
-                (claimed) => (claimed ? Effect.void : Effect.sync(() => discard(value))),
+              Effect.flatMap(Deferred.succeed(decision, Option.some(value)), (claimed) =>
+                claimed ? Effect.void : Effect.sync(() => discard(value)),
               ),
             ),
         }),
       );
       yield* Effect.forkScoped(
-        Effect.zipRight(whenAborted(signal), Deferred.succeed(decision, ABORTED)),
+        Effect.zipRight(whenAborted(signal), Deferred.succeed(decision, Option.none())),
       );
-      return yield* Deferred.await(decision);
+      // The waiting fiber can be interrupted by something other than this
+      // signal — the turn it runs in ending — and the value would then be
+      // owned by nobody. The interruption therefore takes the decision when
+      // nothing has, and claims the discard itself when the work had already
+      // taken it for a caller that is no longer there to receive it.
+      return yield* Effect.onInterrupt(Deferred.await(decision), () =>
+        Effect.gen(function* () {
+          if (yield* Deferred.succeed(decision, Option.none())) return;
+          const decided = yield* Deferred.poll(decision);
+          if (decided === undefined || Option.isNone(decided)) return;
+          const taken = yield* Effect.exit(decided.value);
+          if (Exit.isSuccess(taken) && Option.isSome(taken.value)) discard(taken.value.value);
+        }),
+      );
     }),
   );

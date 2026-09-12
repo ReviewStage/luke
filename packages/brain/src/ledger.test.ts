@@ -10,6 +10,7 @@ import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
+import { toolLoopRuntimeOver } from "./builtins.js";
 import { advanceHarness, effectHarness, timerSeamFromRuntime } from "./effect/harness.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
@@ -40,7 +41,6 @@ import {
   PLAIN_PREPARATION,
   performerWith,
   RECORD_CAP,
-  runtimeOver,
   seededRequests,
   session,
   settle,
@@ -307,7 +307,7 @@ it.effect(
       const successorTimers = timerSeamFromRuntime(successorRuntime);
       const successor = new BrainAgent({
         conversationId: MAIN_SESSION_KEY,
-        runtime: runtimeOver(successorModel),
+        runtime: toolLoopRuntimeOver(successorModel),
         observes: { kind: LOOK_SUBJECT.NONE },
         prepareTurn: PLAIN_PREPARATION,
         actions: fakeActionPerformer().actions,
@@ -319,6 +319,7 @@ it.effect(
         store: h.store,
         createRunId: () => `successor-${nextRunId()}`,
         report: () => {},
+        execution: successorRuntime,
         now: successorTimers.now,
         schedule: successorTimers.schedule,
         cancel: successorTimers.cancel,

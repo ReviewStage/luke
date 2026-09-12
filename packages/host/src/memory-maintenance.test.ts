@@ -9,7 +9,7 @@ import {
 } from "@sidecar/memory";
 import { recentDailyNotes } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
@@ -18,12 +18,12 @@ import {
   type MemoryCapturePhase,
   type MemoryCaptureTurn,
   RUN_END_REASON,
-  type RuntimeRunRequest,
+  type RuntimeRunRequestEffect,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Runtime } from "effect";
+import { Effect, Runtime } from "effect";
 import { type TestContext, test } from "vitest";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance.js";
 
@@ -59,11 +59,12 @@ function fakeRuntime(answer: (prompt: string, input: string) => string | undefin
   const prompts: string[] = [];
   // SAFETY: the sweep reaches only openContext and start, both present; the rest of the runtime is never called.
   const runtime = {
-    openContext: async () => ({
-      context: { dispose: () => undefined, adopt: () => undefined },
-      bootstrap: {},
-    }),
-    start: (request: RuntimeRunRequest) => {
+    openContext: () =>
+      Effect.succeed({
+        context: { dispose: () => undefined, adopt: () => undefined },
+        bootstrap: {},
+      }),
+    start: (request: RuntimeRunRequestEffect) => {
       prompts.push(request.prompt);
       const input = request.input[0];
       const text = answer(request.prompt, input && "text" in input ? input.text : "");
@@ -71,14 +72,14 @@ function fakeRuntime(answer: (prompt: string, input: string) => string | undefin
         runId: request.runId,
         steer: () => false,
         cancel: () => undefined,
-        done: Promise.resolve(
+        done: Effect.succeed(
           text === undefined
             ? { reason: RUN_END_REASON.PROVIDER_FAILURE, failure: "upstream", detail: "down" }
             : { reason: RUN_END_REASON.COMPLETED, text },
         ),
       };
     },
-  } as unknown as AgentRuntime;
+  } as unknown as AgentRuntimeEffect;
   return { runtime, prompts };
 }
 
@@ -118,6 +119,7 @@ async function harness(
     persistent: true,
     client: () => store,
     createRuntime: () => fake.runtime,
+    execution: Runtime.defaultRuntime,
     workspaceDirectory: () => workspace,
     isTemporary: (sessionKey) => sessionKey === temporary,
     now: () => NOW,

@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
 import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
-import {
-  MODEL_RESPONSE_OUTCOME,
-  type ModelAdapter,
-  promiseAgentRuntime,
-} from "@sidecar/runtime/vocabulary";
+import { MODEL_RESPONSE_OUTCOME, type ModelAdapter } from "@sidecar/runtime/vocabulary";
 import { Effect, Fiber } from "effect";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { CONTEXT_OPENING, type Generation, generationFrom } from "./generation.js";
@@ -78,14 +74,18 @@ async function openGeneration(
   store: BrainStateStore,
 ): Promise<{ generation: Generation; context: RecordingContextEngine }> {
   const state = await store.load();
-  const runtime = promiseAgentRuntime(
-    new ToolLoopAgentRuntime({
-      model: fakeModel(),
-      itemFormat: RESPONSES_ITEM_FORMAT,
-      createContext: () => new ResponsesContextEngine(RUNTIME_IDENTITY),
-    }),
+  const runtime = new ToolLoopAgentRuntime({
+    model: fakeModel(),
+    itemFormat: RESPONSES_ITEM_FORMAT,
+    createContext: () => new ResponsesContextEngine(RUNTIME_IDENTITY),
+  });
+  const generation = generationFrom(
+    state,
+    runtime,
+    UNKNOWN_ACTION_RESULT,
+    (effect) => Effect.runPromise(effect),
+    () => NOW,
   );
-  const generation = generationFrom(state, runtime, UNKNOWN_ACTION_RESULT, () => NOW);
   const opened = await generation.opened;
   assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
   if (opened.kind !== CONTEXT_OPENING.LOADED) throw new Error("unreachable");

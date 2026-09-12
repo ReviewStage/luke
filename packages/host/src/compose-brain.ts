@@ -135,6 +135,7 @@ export const composeBrain = (
       persistent: runMode.observesProviders,
       client: store.client,
       createRuntime: () => wiring.createRuntime(),
+      execution,
       workspaceDirectory: kernel.agentWorkspacePath,
       isTemporary: store.isTemporary,
       now,

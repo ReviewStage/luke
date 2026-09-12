@@ -1,6 +1,6 @@
 import type { ChildPolicyContext, EffectiveToolPolicy } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   CONTEXT_INPUT_KIND,
   type ContextInput,
   type ContextMark,
@@ -10,7 +10,7 @@ import {
   RUN_ORIGIN,
   RUNTIME_EVENT,
   type RuntimeEvent,
-  type RuntimeRun,
+  type RuntimeRunEffect,
   type RuntimeRunEnd,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
@@ -21,8 +21,9 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import type { UserMessageMetadata, WireRecord } from "@sidecar/wire";
-import { Either } from "effect";
+import { Cause, Duration, Effect, Either, Exit, Fiber, Option } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
+import { whenAborted } from "./effect/settled.js";
 import { CONTEXT_OPENING, claimOpenedContext, retireContext } from "./generation.js";
 import {
   activityNoticesInputText,
@@ -53,7 +54,6 @@ import {
 } from "./run-events.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
 import type { AgentSeam } from "./seam.js";
-import { settledUnlessAborted } from "./settled.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 import {
   type BrainChildAccess,
@@ -103,7 +103,7 @@ interface OpenedTurn {
 /** The execution under way: for an ask to steer into or interrupt, and for a steered delivery to be answered through its plan's deliveries. */
 export interface ActiveExecution {
   run: RunControl;
-  started: RuntimeRun;
+  started: RuntimeRunEffect;
   plan: TurnPlan;
   /** The asks riding inside the run, settled with its end. */
   riders: RunControl[];
@@ -139,7 +139,7 @@ export interface TurnRunnerOptions {
   seam: AgentSeam;
   /** The conversation every event of this runner's turns is stamped with. */
   conversationId: SessionKey;
-  runtime: AgentRuntime;
+  runtime: AgentRuntimeEffect;
   actions: BrainActionPerformer;
   roster: () => BrainRoster;
   standingContext: () => string;
@@ -173,7 +173,7 @@ export interface TurnRunnerOptions {
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
     prompt: string,
     countedTokens?: number,
-  ) => Promise<Either.Either<void, CompactionRefused>>;
+  ) => Effect.Effect<void, CompactionRefused>;
   /** Queues the optional compaction a settled turn leaves behind. */
   scheduleMaintenance: (turnContext: TurnContext, countedTokens: number | undefined) => void;
   /** The ask ledger's seams: what a waiting ask may do, and who hears a record change. */
@@ -245,106 +245,143 @@ export class TurnRunner {
    * asks that opened, and from no other: the overflow's summary from the
    * folded ones, then each ask's own words.
    */
-  async runAsk(inputs: readonly AskInput[]): Promise<void> {
-    const waiting = [...inputs];
-    while (waiting.length > 0) {
-      const primary = waiting.shift();
-      if (!primary || !(await this.#options.opensAsk(primary.run))) continue;
-      const run = primary.run;
-      const generation = run.generation;
-      // The start is durable before any work opens: a run the file does not
-      // show running is one a relaunch would find queued while its actions had
-      // begun, and a cancel would settle on the queued path under a dispatched
-      // effect. A start the store refuses ends the run as the persistence
-      // failure it is, with nothing called; a revocation that landed while the
-      // start was being written ends it on its own terms, likewise unopened.
-      const started = await this.#seam.ledger.commit(generation, run.runId, {
-        status: BRAIN_REQUEST_STATUS.RUNNING,
-        startedAt: this.#seam.now(),
-      });
-      this.#options.notifyRecords();
-      if (!started || this.#seam.runRevoked(run)) {
-        this.#options.forgetRun(run.runId);
-        if (this.#seam.runRevoked(run)) {
-          await this.#seam.ledger.settleRun(
-            generation,
-            run.runId,
-            run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
-            {},
-          );
-        } else {
-          await this.#seam.ledger.settleRun(
-            generation,
-            run.runId,
-            BRAIN_REQUEST_STATUS.FAILED,
-            { failure: BRAIN_REQUEST_FAILURE.PERSISTENCE },
-            run,
+  runAsk(inputs: readonly AskInput[]): Promise<void> {
+    return this.#seam.carry(this.#runAsk(inputs));
+  }
+
+  #runAsk(inputs: readonly AskInput[]): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const waiting = [...inputs];
+      while (waiting.length > 0) {
+        const primary = waiting.shift();
+        if (!primary || !(yield* awaited(() => this.#options.opensAsk(primary.run)))) continue;
+        const run = primary.run;
+        const generation = run.generation;
+        // The start is durable before any work opens: a run the file does not
+        // show running is one a relaunch would find queued while its actions had
+        // begun, and a cancel would settle on the queued path under a dispatched
+        // effect. A start the store refuses ends the run as the persistence
+        // failure it is, with nothing called; a revocation that landed while the
+        // start was being written ends it on its own terms, likewise unopened.
+        const started = yield* awaited(() =>
+          this.#seam.ledger.commit(generation, run.runId, {
+            status: BRAIN_REQUEST_STATUS.RUNNING,
+            startedAt: this.#seam.now(),
+          }),
+        );
+        this.#options.notifyRecords();
+        if (!started || this.#seam.runRevoked(run)) {
+          this.#options.forgetRun(run.runId);
+          if (this.#seam.runRevoked(run)) {
+            yield* awaited(() =>
+              this.#seam.ledger.settleRun(
+                generation,
+                run.runId,
+                run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
+                {},
+              ),
+            );
+          } else {
+            yield* awaited(() =>
+              this.#seam.ledger.settleRun(
+                generation,
+                run.runId,
+                BRAIN_REQUEST_STATUS.FAILED,
+                { failure: BRAIN_REQUEST_FAILURE.PERSISTENCE },
+                run,
+              ),
+            );
+          }
+          continue;
+        }
+        const riders: RunControl[] = [];
+        const opened: AskInput[] = [primary];
+        for (const rider of waiting.splice(0)) {
+          if (!(yield* awaited(() => this.#options.opensAsk(rider.run)))) continue;
+          riders.push(rider.run);
+          opened.push(rider);
+          yield* awaited(() =>
+            this.#seam.ledger.commit(rider.run.generation, rider.run.runId, {
+              status: BRAIN_REQUEST_STATUS.RUNNING,
+              startedAt: this.#seam.now(),
+            }),
           );
         }
-        continue;
-      }
-      const riders: RunControl[] = [];
-      const opened: AskInput[] = [primary];
-      for (const rider of waiting.splice(0)) {
-        if (!(await this.#options.opensAsk(rider.run))) continue;
-        riders.push(rider.run);
-        opened.push(rider);
-        await this.#seam.ledger.commit(rider.run.generation, rider.run.runId, {
-          status: BRAIN_REQUEST_STATUS.RUNNING,
-          startedAt: this.#seam.now(),
-        });
-      }
-      if (riders.length > 0) this.#options.notifyRecords();
-      const question = askQuestion(opened);
-      run.deadline = this.#seam.schedule(() => {
-        run.timedOut = true;
-        run.abort.abort();
-      }, this.#options.executionDeadlineMs);
-      // A child's task runs under its own trigger: the words open as the
-      // delegated task rather than the developer's ask, and the final text is
-      // the result its requester is handed rather than speech.
-      const askOrigin = generation.requests.get(run.runId)?.origin;
-      const childTask = askOrigin === BRAIN_REQUEST_ORIGIN.CHILD;
-      let result: TurnResult;
-      let events: TurnEvents | undefined;
-      try {
-        const opened = {
+        if (riders.length > 0) this.#options.notifyRecords();
+        const question = askQuestion(opened);
+        // A child's task runs under its own trigger: the words open as the
+        // delegated task rather than the developer's ask, and the final text is
+        // the result its requester is handed rather than speech.
+        const askOrigin = generation.requests.get(run.runId)?.origin;
+        const childTask = askOrigin === BRAIN_REQUEST_ORIGIN.CHILD;
+        const base = {
           generation,
           deliveries: new SteeredDeliveries(),
           events: inboxEvents(generation.inbox),
           run,
         };
-        ({ result, events } = await this.#turn(
-          childTask
-            ? {
-                ...opened,
-                trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
-                open: (_attached, now) => [subagentTaskInputText(question, now)],
-              }
-            : {
-                ...opened,
-                trigger: BRAIN_TURN_TRIGGER.ASK,
-                ...(askOrigin !== undefined ? { askOrigin } : undefined),
-                open: (attached, now) => [askInputText(question, attached, now)],
-              },
-          riders,
-        ));
-      } catch {
-        result = { outcome: TURN_OUTCOME.FAILED };
+        const { result, events } = yield* Effect.catchAllDefect(
+          this.#underDeadline(
+            run,
+            this.#turn(
+              childTask
+                ? {
+                    ...base,
+                    trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+                    open: (_attached, now) => [subagentTaskInputText(question, now)],
+                  }
+                : {
+                    ...base,
+                    trigger: BRAIN_TURN_TRIGGER.ASK,
+                    ...(askOrigin !== undefined ? { askOrigin } : undefined),
+                    open: (attached, now) => [askInputText(question, attached, now)],
+                  },
+              riders,
+            ),
+          ),
+          () =>
+            Effect.succeed<Omit<OpenedTurn, "run">>({
+              result: { outcome: TURN_OUTCOME.FAILED },
+              events: undefined,
+            }),
+        );
+        this.#options.forgetRun(run.runId);
+        const { status, end } = runOutcomeOf(run, result, this.#seam.stopped());
+        yield* awaited(() => this.#seam.ledger.settleRun(generation, run.runId, status, end, run));
+        this.#turnOfRun.delete(run.runId);
+        // The turn ends after its record does, and says what the record says:
+        // a settle the store refused downgrades the record, and the turn with it.
+        const record = generation.requests.get(run.runId);
+        if (events?.opened) {
+          events.ended(run, record?.status ?? status, record?.failure ?? end.failure);
+        }
+        return;
       }
-      if (run.deadline !== undefined) this.#seam.cancel(run.deadline);
-      this.#options.forgetRun(run.runId);
-      const { status, end } = runOutcomeOf(run, result, this.#seam.stopped());
-      await this.#seam.ledger.settleRun(generation, run.runId, status, end, run);
-      this.#turnOfRun.delete(run.runId);
-      // The turn ends after its record does, and says what the record says:
-      // a settle the store refused downgrades the record, and the turn with it.
-      const record = generation.requests.get(run.runId);
-      if (events?.opened) {
-        events.ended(run, record?.status ?? status, record?.failure ?? end.failure);
-      }
-      return;
-    }
+    });
+  }
+
+  /**
+   * The turn's execution deadline, as the fiber it now is: a sleep on the
+   * ambient clock forked into a scope the work closes, so a turn that ends of
+   * its own accord disarms it and one that outlives it has its run aborted
+   * exactly as the developer's cancel would, which is what the turn's own
+   * fiber is interrupted by.
+   */
+  #underDeadline<A>(run: RunControl, work: Effect.Effect<A>): Effect.Effect<A> {
+    return Effect.scoped(
+      Effect.gen(this, function* () {
+        yield* Effect.forkScoped(
+          Effect.zipRight(
+            Effect.sleep(Duration.millis(this.#options.executionDeadlineMs)),
+            Effect.sync(() => {
+              run.timedOut = true;
+              run.abort.abort();
+            }),
+          ),
+        );
+        return yield* work;
+      }),
+    );
   }
 
   /**
@@ -354,17 +391,21 @@ export class TurnRunner {
    * included. Each keeps its own record and its own acceptance; only the
    * execution was shared.
    */
-  async #settleRiders(
+  #settleRiders(
     riders: readonly RunControl[],
     primary: RunControl,
     result: TurnResult,
-  ): Promise<void> {
-    for (const rider of riders) {
-      this.#options.forgetRun(rider.runId);
-      const { status, end } = runOutcomeOf(primary, result, this.#seam.stopped());
-      await this.#seam.ledger.settleRun(primary.generation, rider.runId, status, end);
-      this.#turnOfRun.delete(rider.runId);
-    }
+  ): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      for (const rider of riders) {
+        this.#options.forgetRun(rider.runId);
+        const { status, end } = runOutcomeOf(primary, result, this.#seam.stopped());
+        yield* awaited(() =>
+          this.#seam.ledger.settleRun(primary.generation, rider.runId, status, end),
+        );
+        this.#turnOfRun.delete(rider.runId);
+      }
+    });
   }
 
   /**
@@ -372,346 +413,383 @@ export class TurnRunner {
    * hook, or by the model — the asks riding in it end with it, the asks that
    * waited behind it open, and an observation turn leaves its notice.
    */
-  async turn(plan: TurnPlan): Promise<TurnResult> {
-    return (await this.#turn(plan, [])).result;
+  turn(plan: TurnPlan): Promise<TurnResult> {
+    return this.#seam.carry(Effect.map(this.#turn(plan, []), (opened) => opened.result));
   }
 
   /** The turn and its teller, for the ask's settlement that tells the turn's end after the record's. */
-  async #turn(plan: TurnPlan, riders: RunControl[]): Promise<Omit<OpenedTurn, "run">> {
-    let outcome: OpenedTurn;
-    try {
-      outcome = await this.#openTurn(plan, riders);
-    } catch {
-      outcome = { result: { outcome: TURN_OUTCOME.FAILED }, run: plan.run, events: undefined };
-    }
-    const { result, run, events } = outcome;
-    // Riders ride an ask's turn alone, and an ask always brings its run.
-    if (plan.run) await this.#settleRiders(riders, plan.run, result);
-    // Asks that arrived while this turn ran open now rather than waiting out
-    // the queue's debounce: what they were waiting for has ended.
-    this.#options.flushAskQueue();
-    if (
-      run &&
-      runOriginOf(plan.trigger) !== RUN_ORIGIN.USER &&
-      REPORTED_OUTCOMES.has(result.outcome)
-    ) {
-      this.#options.notice?.({
-        trigger: plan.trigger,
-        identities: uniqueIdentities(plan.events),
-        briefings: result.outcome === TURN_OUTCOME.DONE ? result.briefings : [],
-        performedActions: run.performedActions,
-        at: this.#seam.now(),
-      });
-    }
-    // A turn with no record of its own ends here; an ask's ends once its record has.
-    if (run && !plan.run && events?.opened) {
-      const { status, end } = runOutcomeOf(run, result, this.#seam.stopped());
-      events.ended(run, status, end.failure);
-    }
-    return { result, events };
+  #turn(plan: TurnPlan, riders: RunControl[]): Effect.Effect<Omit<OpenedTurn, "run">> {
+    return Effect.gen(this, function* () {
+      const outcome = yield* Effect.catchAllDefect(this.#openTurn(plan, riders), () =>
+        Effect.succeed<OpenedTurn>({
+          result: { outcome: TURN_OUTCOME.FAILED },
+          run: plan.run,
+          events: undefined,
+        }),
+      );
+      const { result, run, events } = outcome;
+      // Riders ride an ask's turn alone, and an ask always brings its run.
+      if (plan.run) yield* this.#settleRiders(riders, plan.run, result);
+      // Asks that arrived while this turn ran open now rather than waiting out
+      // the queue's debounce: what they were waiting for has ended.
+      this.#options.flushAskQueue();
+      if (
+        run &&
+        runOriginOf(plan.trigger) !== RUN_ORIGIN.USER &&
+        REPORTED_OUTCOMES.has(result.outcome)
+      ) {
+        this.#options.notice?.({
+          trigger: plan.trigger,
+          identities: uniqueIdentities(plan.events),
+          briefings: result.outcome === TURN_OUTCOME.DONE ? result.briefings : [],
+          performedActions: run.performedActions,
+          at: this.#seam.now(),
+        });
+      }
+      // A turn with no record of its own ends here; an ask's ends once its record has.
+      if (run && !plan.run && events?.opened) {
+        const { status, end } = runOutcomeOf(run, result, this.#seam.stopped());
+        events.ended(run, status, end.failure);
+      }
+      return { result, events };
+    });
   }
 
   /** The turn itself, answering its result and the run it ran under; the door's refusals answer the plan's own. */
-  async #openTurn(plan: TurnPlan, riders: RunControl[]): Promise<OpenedTurn> {
-    await this.#seam.ready();
-    // The generation's death is checked at the door of every turn, so a
-    // memory that outlived its fortnight while the app sat idle is not read
-    // one more time on the way out.
-    this.#seam.expireIfDue();
-    const generation = plan.generation;
-    // Work queued in a generation since replaced opens nothing: its briefings
-    // and its wakes described a memory that no longer exists.
-    if (generation !== this.#seam.generation() || generation.abort.signal.aborted) {
-      return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run, events: undefined };
-    }
-    const opened = await generation.opened;
-    if (generation !== this.#seam.generation() || generation.abort.signal.aborted) {
-      return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run, events: undefined };
-    }
-    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
-      // The memory is kept as it is and nothing is read or written over it.
-      this.#seam.reportIncompatible(generation, opened.reason);
-      return { result: { outcome: TURN_OUTCOME.INCOMPATIBLE }, run: plan.run, events: undefined };
-    }
-    const context = opened.context;
-    // An observation turn runs under an unrecorded run of its own, so an action
-    // it takes is journaled, checkpointed, and revoked exactly as an ask's.
-    // Its id comes from the same minter as an ask's, never a counter: a
-    // counter starts over with every agent, and a journal row a crashed turn
-    // left under the same id would be answered as this turn's own action.
-    const run =
-      plan.run ??
-      newRunControl(`${plan.trigger}:${this.#options.createRunId()}`, generation, false);
-    // An observation turn holds the queue as an ask does, so it ends at the
-    // same deadline: a model that never answers cannot stall every turn
-    // behind it.
-    if (!plan.run) {
-      run.deadline = this.#seam.schedule(() => {
-        run.timedOut = true;
-        run.abort.abort();
-      }, this.#options.executionDeadlineMs);
-    }
-    // The turn's events are numbered by one teller for the turn's whole life,
-    // and the recorded runs riding in it are adopted so their ends join it.
-    const events = new TurnEvents({
-      conversationId: this.#options.conversationId,
-      turnId: run.runId,
-      fire: this.#options.onRunEvent,
-      createMessageId: this.#options.createRunId,
-      now: this.#seam.now,
-      registry: this.#turnOfRun,
+  #openTurn(plan: TurnPlan, riders: RunControl[]): Effect.Effect<OpenedTurn> {
+    return Effect.gen(this, function* () {
+      yield* awaited(() => this.#seam.ready());
+      // The generation's death is checked at the door of every turn, so a
+      // memory that outlived its fortnight while the app sat idle is not read
+      // one more time on the way out.
+      this.#seam.expireIfDue();
+      const generation = plan.generation;
+      // Work queued in a generation since replaced opens nothing: its briefings
+      // and its wakes described a memory that no longer exists.
+      if (generation !== this.#seam.generation() || generation.abort.signal.aborted) {
+        return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run, events: undefined };
+      }
+      const opened = yield* awaited(() => generation.opened);
+      if (generation !== this.#seam.generation() || generation.abort.signal.aborted) {
+        return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run, events: undefined };
+      }
+      if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+        // The memory is kept as it is and nothing is read or written over it.
+        this.#seam.reportIncompatible(generation, opened.reason);
+        return { result: { outcome: TURN_OUTCOME.INCOMPATIBLE }, run: plan.run, events: undefined };
+      }
+      const context = opened.context;
+      // An observation turn runs under an unrecorded run of its own, so an action
+      // it takes is journaled, checkpointed, and revoked exactly as an ask's.
+      // Its id comes from the same minter as an ask's, never a counter: a
+      // counter starts over with every agent, and a journal row a crashed turn
+      // left under the same id would be answered as this turn's own action.
+      const run =
+        plan.run ??
+        newRunControl(`${plan.trigger}:${this.#options.createRunId()}`, generation, false);
+      // The turn's events are numbered by one teller for the turn's whole life,
+      // and the recorded runs riding in it are adopted so their ends join it.
+      const events = new TurnEvents({
+        conversationId: this.#options.conversationId,
+        turnId: run.runId,
+        fire: this.#options.onRunEvent,
+        createMessageId: this.#options.createRunId,
+        now: this.#seam.now,
+        registry: this.#turnOfRun,
+      });
+      if (plan.run) events.adopt(run.runId);
+      for (const rider of riders) events.adopt(rider.runId);
+      const consumes = plan.events.flatMap((event) => (event.entryId ? [event.entryId] : []));
+      const turnContext: TurnContext = {
+        generation,
+        context,
+        run,
+        signal: AbortSignal.any([generation.abort.signal, run.abort.signal]),
+        events,
+        ...(consumes.length > 0 ? { consumes } : undefined),
+      };
+      this.#turnInFlight = true;
+      let ended = false;
+      const execution: BrainActionExecution = {
+        conversationId: this.#options.conversationId,
+        turnId: run.runId,
+        runId: run.runId,
+        origin: runOriginOf(plan.trigger),
+        isRevoked: () => ended || this.#revoked(turnContext),
+        signal: turnContext.signal,
+      };
+      // A turn that threw past its teller still answers with it, so a start
+      // that was told is followed by an end. An observation turn holds the
+      // queue as an ask does, so it ends at the same deadline: a model that
+      // never answers cannot stall every turn behind it, and an ask's turn
+      // stands under the one its own opening already armed.
+      const running = this.#runTurn(plan, turnContext, execution, riders);
+      const result = yield* Effect.ensuring(
+        Effect.catchAllDefect(plan.run ? running : this.#underDeadline(run, running), () =>
+          Effect.succeed<TurnResult>({ outcome: TURN_OUTCOME.FAILED }),
+        ),
+        Effect.sync(() => {
+          ended = true;
+          this.#turnInFlight = false;
+          // Steered words no checkpoint of the turn carried are owed still.
+          plan.deliveries.turnEnded();
+          this.#active = undefined;
+        }),
+      );
+      return { result, run, events };
     });
-    if (plan.run) events.adopt(run.runId);
-    for (const rider of riders) events.adopt(rider.runId);
-    const consumes = plan.events.flatMap((event) => (event.entryId ? [event.entryId] : []));
-    const turnContext: TurnContext = {
-      generation,
-      context,
-      run,
-      signal: AbortSignal.any([generation.abort.signal, run.abort.signal]),
-      events,
-      ...(consumes.length > 0 ? { consumes } : undefined),
-    };
-    this.#turnInFlight = true;
-    let ended = false;
-    const execution: BrainActionExecution = {
-      conversationId: this.#options.conversationId,
-      turnId: run.runId,
-      runId: run.runId,
-      origin: runOriginOf(plan.trigger),
-      isRevoked: () => ended || this.#revoked(turnContext),
-      signal: turnContext.signal,
-    };
-    // A turn that threw past its teller still answers with it, so a start
-    // that was told is followed by an end.
-    let result: TurnResult;
-    try {
-      result = await this.#runTurn(plan, turnContext, execution, riders);
-    } catch {
-      result = { outcome: TURN_OUTCOME.FAILED };
-    } finally {
-      ended = true;
-      if (!plan.run && run.deadline !== undefined) this.#seam.cancel(run.deadline);
-      this.#turnInFlight = false;
-      // Steered words no checkpoint of the turn carried are owed still.
-      plan.deliveries.turnEnded();
-      this.#active = undefined;
-    }
-    return { result, run, events };
   }
 
-  async #runTurn(
+  /**
+   * One turn, as the fiber it is. Everything between the turn's start and
+   * its end runs in a fiber of its own, and the turn's signal — the
+   * developer's cancel, the deadline, the agent stopping, the generation
+   * being replaced — interrupts it, so every wait the turn holds settles at
+   * once and a read or a model answer that lands afterwards reaches nothing.
+   * The settlement follows the fiber's own exit out here, where no
+   * interruption reaches it: the rollback, the final checkpoint, the
+   * deliveries, and the trace each run exactly once, whether the turn ended
+   * of its own accord or was cut short.
+   */
+  #runTurn(
     plan: TurnPlan,
     turnContext: TurnContext,
     execution: BrainActionExecution,
     riders: RunControl[],
-  ): Promise<TurnResult> {
-    const { generation, context, run, events } = turnContext;
-    const startedAt = this.#seam.now();
-    let contextMark: ContextMark = context.mark();
-    let cursorMark = generation.cursors.persisted();
-    const gathering: TurnGathering = {
-      toolCalls: [],
-      deliveries: [],
-      iterations: 0,
-      said: [],
-      outputText: "",
-      slowStepTold: false,
-      answerHoldsWords: false,
-      writesInFlight: new Set(),
-      settledTold: false,
-      sentencesTold: 0,
-    };
-    let preparation: BrainTurnPreparation | undefined;
-    let policy: EffectiveToolPolicy | undefined;
-    let notes: readonly BrainTurnNotice[] = [];
-    const revocation = (): TurnResult => {
-      gathering.error = run.timedOut ? "execution deadline passed" : "turn revoked";
-      return { outcome: TURN_OUTCOME.REVOKED };
-    };
-    if (this.#revoked(turnContext)) return revocation();
-    events.started(turnOriginOf(plan.trigger), plan.trigger);
-
-    // The consumed cursor moves to where each entry's capture read, in
-    // memory now and on disk with the checkpoint; a turn that fails rolls it
-    // back with the context, and the entries stand for the next one.
-    for (const entry of generation.inbox) {
-      if (entry.cursor !== undefined && turnContext.consumes?.includes(entry.id)) {
-        generation.cursors.setCursor(
-          { providerId: entry.providerId, providerSessionId: entry.providerSessionId },
-          entry.cursor,
-        );
-      }
-    }
-    const attachedDeltas = await attachTranscriptDeltas(plan.events, {
-      cursors: generation.cursors,
-      read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
-      signal: turnContext.signal,
-      maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
-      revoked: () => this.#revoked(turnContext),
-    });
-    const transcriptBytes = attachedDeltas.transcriptBytes;
-    let failure: TurnResult | undefined;
-    if (this.#revoked(turnContext)) {
-      // Nothing the reads gained opens an inference the developer or the
-      // host has already withdrawn; the cursors go back with the context.
-      failure = revocation();
-    } else {
-      // A look's event is news by the time it is here — the capture already
-      // dropped a look over a session that gained nothing and stood unchanged
-      // — so an empty delta is kept beside the session fields that moved,
-      // which for a provider answering no incremental read is all a look has.
-      const events = attachedDeltas.events;
-      // Every turn advances its rollback point: each answered effect is
-      // checkpointed and the mark moves past it, so a later failure returns
-      // the context to the last paired state and never to before an action that
-      // already happened. A turn that fails before its first effect still
-      // rolls back whole, and the deltas it read are read again.
-      const advanceMark = async () => {
-        if (await this.#seam.ledger.checkpoint(turnContext)) plan.deliveries.persisted();
-        else run.checkpointFailed = true;
-        contextMark = context.mark();
-        cursorMark = generation.cursors.persisted();
+  ): Effect.Effect<TurnResult> {
+    return Effect.gen(this, function* () {
+      const { generation, context, run, events } = turnContext;
+      const startedAt = this.#seam.now();
+      let contextMark: ContextMark = context.mark();
+      let cursorMark = generation.cursors.persisted();
+      const gathering: TurnGathering = {
+        toolCalls: [],
+        deliveries: [],
+        iterations: 0,
+        said: [],
+        outputText: "",
+        slowStepTold: false,
+        answerHoldsWords: false,
+        writesInFlight: new Set(),
+        settledTold: false,
+        sentencesTold: 0,
       };
-      try {
-        preparation = await this.#options.prepareTurn({
-          kind: BRAIN_TURN_KIND.TURN,
-          trigger: plan.trigger,
-          ...(plan.askOrigin !== undefined ? { askOrigin: plan.askOrigin } : undefined),
-        });
-        policy = this.#resolvePolicy(preparation, plan.trigger);
-        const prepared = this.#revoked(turnContext)
-          ? Either.right(undefined)
-          : await this.#options.compactIfNeeded(turnContext, preparation.prompt);
-        if (this.#revoked(turnContext)) {
-          failure = revocation();
-        } else if (Either.isLeft(prepared)) {
-          // The request would not fit and the context could not be folded:
-          // the run fails recoverably, and what stands is exactly what stood.
-          run.compactionFailed = true;
-          gathering.error = `compaction required: ${prepared.left.reason}`;
-          failure = { outcome: TURN_OUTCOME.FAILED };
-        } else {
-          // The admission's compaction, if any, is the new rollback point: a
-          // turn that then fails returns to the folded context, not before it.
-          // The cursors keep their mark from before the deltas were read, so
-          // a failed turn still reads them again.
-          contextMark = context.mark();
-          const recalled = await this.#recall(turnContext);
-          const prefetched = await this.#prefetched(plan, policy, turnContext);
-          notes = this.#options.openingNotes?.take() ?? [];
-          const notices = notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : [];
-          const words = plan.open(events, startedAt);
-          // The words the turn opens with are its first messages, told before
-          // the model reads them, each saying what it is: a recalled note, the
-          // siblings' notices, or the turn's own words by what opened them.
-          const metadata = userMetadataOf(plan.trigger, plan.askOrigin);
-          for (const text of recalled.opening) {
-            turnContext.events.words(text, HOSTED_WORDS_METADATA.RECALLED_NOTES);
-          }
-          for (const text of notices) {
-            turnContext.events.words(text, HOSTED_WORDS_METADATA.ACTIVITY_NOTICES);
-          }
-          for (const text of words) turnContext.events.words(text, metadata);
-          const end = await this.#execute(turnContext, execution, gathering, {
-            prompt: preparation.prompt,
-            policy,
-            plan,
-            riders,
-            opening: [...recalled.opening, ...notices, ...words],
-            prefetched,
-            steered: metadata,
-            recalled: recalled.standing,
-            advanceMark,
-          });
-          failure = this.#turnResultFrom(end, turnContext, gathering);
-        }
-      } catch (runtimeError) {
-        // A runtime that threw instead of ending: the turn fails like one
-        // whose model failed, and rolls back to the last paired state.
-        gathering.error = runtimeError instanceof Error ? runtimeError.name : "unknown error";
-        failure = this.#revoked(turnContext) ? revocation() : { outcome: TURN_OUTCOME.FAILED };
-      }
-    }
+      let preparation: BrainTurnPreparation | undefined;
+      let policy: EffectiveToolPolicy | undefined;
+      let notes: readonly BrainTurnNotice[] = [];
+      const revocation = (): TurnResult => {
+        gathering.error = run.timedOut ? "execution deadline passed" : "turn revoked";
+        return { outcome: TURN_OUTCOME.REVOKED };
+      };
+      if (this.#revoked(turnContext)) return revocation();
+      events.started(turnOriginOf(plan.trigger), plan.trigger);
 
-    // An unrecorded run's journal has done its work once the turn's actions have
-    // settled: their results stand in the context, and no record waits for
-    // their count. It goes before the final checkpoint so the store never
-    // accumulates the journals of every observation turn.
-    if (!run.recorded) generation.journal.dropRuns([run.runId]);
-    if (failure) {
-      await this.#restoreContext(turnContext, contextMark);
-      generation.cursors.rollback(cursorMark);
-      if (notes.length > 0) this.#options.openingNotes?.restore(notes);
-      this.#seam.report(`Brain ${plan.trigger} turn did not complete: ${gathering.error}`);
-    } else {
-      generation.cursors.retain(this.#options.roster().identities);
-      generation.captureCursors.retain(this.#options.roster().identities);
-      const written = await this.#seam.ledger.checkpoint(turnContext);
-      if (!written) run.checkpointFailed = true;
-      if (written) {
-        plan.deliveries.persisted();
-        await context.afterTurn({ signal: turnContext.signal });
-      }
-      // The answer is a message only once the checkpoint that carries it has
-      // landed, and a revoked turn says nothing. The reply itself was relayed
-      // as it formed, once every action's result was on record; a run whose
-      // earlier checkpoint failed waited for this one, and is relayed now
-      // that the whole context is written.
-      if (written && !this.#revoked(turnContext)) events.answered();
-      if (written) this.#relayReply(turnContext, gathering, { final: true });
-      // A briefing leaves only from a turn that still stands: the stop or the
-      // replacement that landed during the write — or during an earlier
-      // briefing — withdraws every one not yet handed over, and a checkpoint
-      // the store refused is one such withdrawal made visible.
-      for (const delivery of gathering.deliveries) {
-        if (this.#revoked(turnContext) || !written) {
-          gathering.error = "turn revoked before delivery";
-          break;
-        }
-        try {
-          await this.#options.deliver(delivery);
-        } catch (deliverError) {
-          this.#seam.report(
-            `Brain briefing could not be delivered: ${deliverError instanceof Error ? deliverError.name : "unknown error"}`,
+      // The consumed cursor moves to where each entry's capture read, in
+      // memory now and on disk with the checkpoint; a turn that fails rolls it
+      // back with the context, and the entries stand for the next one.
+      for (const entry of generation.inbox) {
+        if (entry.cursor !== undefined && turnContext.consumes?.includes(entry.id)) {
+          generation.cursors.setCursor(
+            { providerId: entry.providerId, providerSessionId: entry.providerSessionId },
+            entry.cursor,
           );
         }
       }
-      // Housekeeping waits for the reply to be persisted and its deliveries
-      // to settle, then decides against the window the turn's own count says.
-      if (written && !this.#revoked(turnContext)) {
-        this.#options.scheduleMaintenance(turnContext, gathering.inputTokens);
-      }
-    }
+      let transcriptBytes = 0;
+      // Everything between the turn's start and its end, in one fiber.
+      const driving = Effect.gen(this, function* () {
+        const attachedDeltas = yield* attachTranscriptDeltas(plan.events, {
+          cursors: generation.cursors,
+          read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
+          maximumChars: BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS,
+          revoked: () => this.#revoked(turnContext),
+        });
+        transcriptBytes = attachedDeltas.transcriptBytes;
+        if (this.#revoked(turnContext)) {
+          // Nothing the reads gained opens an inference the developer or the
+          // host has already withdrawn; the cursors go back with the context.
+          return revocation();
+        }
+        // A look's event is news by the time it is here — the capture already
+        // dropped a look over a session that gained nothing and stood unchanged
+        // — so an empty delta is kept beside the session fields that moved,
+        // which for a provider answering no incremental read is all a look has.
+        const attached = attachedDeltas.events;
+        // Every turn advances its rollback point: each answered effect is
+        // checkpointed and the mark moves past it, so a later failure returns
+        // the context to the last paired state and never to before an action that
+        // already happened. A turn that fails before its first effect still
+        // rolls back whole, and the deltas it read are read again.
+        const advanceMark = async () => {
+          if (await this.#seam.ledger.checkpoint(turnContext)) plan.deliveries.persisted();
+          else run.checkpointFailed = true;
+          contextMark = context.mark();
+          cursorMark = generation.cursors.persisted();
+        };
+        return yield* Effect.catchAllDefect(
+          Effect.gen(this, function* () {
+            preparation = yield* awaited(() =>
+              this.#options.prepareTurn({
+                kind: BRAIN_TURN_KIND.TURN,
+                trigger: plan.trigger,
+                ...(plan.askOrigin !== undefined ? { askOrigin: plan.askOrigin } : undefined),
+              }),
+            );
+            policy = this.#resolvePolicy(preparation, plan.trigger);
+            const prepared = this.#revoked(turnContext)
+              ? Either.right(undefined)
+              : yield* Effect.either(
+                  this.#options.compactIfNeeded(turnContext, preparation.prompt),
+                );
+            if (this.#revoked(turnContext)) return revocation();
+            if (Either.isLeft(prepared)) {
+              // The request would not fit and the context could not be folded:
+              // the run fails recoverably, and what stands is exactly what stood.
+              run.compactionFailed = true;
+              gathering.error = `compaction required: ${prepared.left.reason}`;
+              return { outcome: TURN_OUTCOME.FAILED };
+            }
+            // The admission's compaction, if any, is the new rollback point: a
+            // turn that then fails returns to the folded context, not before it.
+            // The cursors keep their mark from before the deltas were read, so
+            // a failed turn still reads them again.
+            contextMark = context.mark();
+            const recalled = yield* this.#recall(turnContext);
+            const prefetched = yield* this.#prefetched(plan, policy, turnContext);
+            notes = this.#options.openingNotes?.take() ?? [];
+            const notices = notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : [];
+            const words = plan.open(attached, startedAt);
+            // The words the turn opens with are its first messages, told before
+            // the model reads them, each saying what it is: a recalled note, the
+            // siblings' notices, or the turn's own words by what opened them.
+            const metadata = userMetadataOf(plan.trigger, plan.askOrigin);
+            for (const text of recalled.opening) {
+              turnContext.events.words(text, HOSTED_WORDS_METADATA.RECALLED_NOTES);
+            }
+            for (const text of notices) {
+              turnContext.events.words(text, HOSTED_WORDS_METADATA.ACTIVITY_NOTICES);
+            }
+            for (const text of words) turnContext.events.words(text, metadata);
+            const end = yield* this.#execute(turnContext, execution, gathering, {
+              prompt: preparation.prompt,
+              policy,
+              plan,
+              riders,
+              opening: [...recalled.opening, ...notices, ...words],
+              prefetched,
+              steered: metadata,
+              recalled: recalled.standing,
+              advanceMark,
+            });
+            return this.#turnResultFrom(end, turnContext, gathering);
+          }),
+          (defect) =>
+            // A runtime that threw instead of ending: the turn fails like one
+            // whose model failed, and rolls back to the last paired state.
+            Effect.sync(() => {
+              gathering.error = defect instanceof Error ? defect.name : "unknown error";
+              return this.#revoked(turnContext) ? revocation() : { outcome: TURN_OUTCOME.FAILED };
+            }),
+        );
+      });
 
-    const { id: runtime, model } = this.#options.runtime.descriptor;
-    this.#options.trace?.({
-      trigger: plan.trigger,
-      origin: runOriginOf(plan.trigger),
-      runtime,
-      tools: policy?.allowed.map((tool) => tool.schema.name) ?? [],
-      promptChars: preparation?.prompt.length ?? 0,
-      ...(gathering.inputTokens !== undefined ? { inputTokens: gathering.inputTokens } : undefined),
-      transcriptBytes,
-      toolCalls: gathering.toolCalls,
-      ...(gathering.outputText ? { outputText: gathering.outputText } : undefined),
-      ...(gathering.incomplete ? { incomplete: gathering.incomplete } : undefined),
-      deliveries: gathering.deliveries.map((delivery) => ({
-        briefingChars: delivery.briefing.length,
-      })),
-      ...(model ? { model } : undefined),
-      elapsedMs: this.#seam.now() - startedAt,
-      iterations: gathering.iterations,
-      ...(gathering.error ? { error: gathering.error } : undefined),
+      let failure: TurnResult | undefined;
+      // The turn's signal interrupts that fiber, so every wait it holds — a
+      // delta read, a recall, a model answer — settles at once; a run cut
+      // short that way is revoked, and a defect that escaped it ends the turn
+      // where it always did, before this settlement.
+      const running = yield* Effect.fork(driving);
+      yield* Effect.fork(
+        Effect.zipRight(whenAborted(turnContext.signal), Fiber.interrupt(running)),
+      );
+      const exit = yield* Fiber.await(running);
+      if (Exit.isSuccess(exit)) failure = exit.value;
+      else if (Cause.isInterruptedOnly(exit.cause)) failure = revocation();
+      else return yield* Effect.failCause(exit.cause);
+
+      // An unrecorded run's journal has done its work once the turn's actions have
+      // settled: their results stand in the context, and no record waits for
+      // their count. It goes before the final checkpoint so the store never
+      // accumulates the journals of every observation turn.
+      if (!run.recorded) generation.journal.dropRuns([run.runId]);
+      if (failure) {
+        yield* this.#restoreContext(turnContext, contextMark);
+        generation.cursors.rollback(cursorMark);
+        if (notes.length > 0) this.#options.openingNotes?.restore(notes);
+        this.#seam.report(`Brain ${plan.trigger} turn did not complete: ${gathering.error}`);
+      } else {
+        generation.cursors.retain(this.#options.roster().identities);
+        generation.captureCursors.retain(this.#options.roster().identities);
+        const written = yield* awaited(() => this.#seam.ledger.checkpoint(turnContext));
+        if (!written) run.checkpointFailed = true;
+        if (written) {
+          plan.deliveries.persisted();
+          yield* awaited(() => context.afterTurn({ signal: turnContext.signal }));
+        }
+        // The answer is a message only once the checkpoint that carries it has
+        // landed, and a revoked turn says nothing. The reply itself was relayed
+        // as it formed, once every action's result was on record; a run whose
+        // earlier checkpoint failed waited for this one, and is relayed now
+        // that the whole context is written.
+        if (written && !this.#revoked(turnContext)) events.answered();
+        if (written) this.#relayReply(turnContext, gathering, { final: true });
+        // A briefing leaves only from a turn that still stands: the stop or the
+        // replacement that landed during the write — or during an earlier
+        // briefing — withdraws every one not yet handed over, and a checkpoint
+        // the store refused is one such withdrawal made visible.
+        for (const delivery of gathering.deliveries) {
+          if (this.#revoked(turnContext) || !written) {
+            gathering.error = "turn revoked before delivery";
+            break;
+          }
+          yield* Effect.catchAllDefect(
+            awaited(() => this.#options.deliver(delivery)),
+            (deliverError) =>
+              Effect.sync(() => {
+                this.#seam.report(
+                  `Brain briefing could not be delivered: ${deliverError instanceof Error ? deliverError.name : "unknown error"}`,
+                );
+              }),
+          );
+        }
+        // Housekeeping waits for the reply to be persisted and its deliveries
+        // to settle, then decides against the window the turn's own count says.
+        if (written && !this.#revoked(turnContext)) {
+          this.#options.scheduleMaintenance(turnContext, gathering.inputTokens);
+        }
+      }
+
+      const { id: runtime, model } = this.#options.runtime.descriptor;
+      this.#options.trace?.({
+        trigger: plan.trigger,
+        origin: runOriginOf(plan.trigger),
+        runtime,
+        tools: policy?.allowed.map((tool) => tool.schema.name) ?? [],
+        promptChars: preparation?.prompt.length ?? 0,
+        ...(gathering.inputTokens !== undefined
+          ? { inputTokens: gathering.inputTokens }
+          : undefined),
+        transcriptBytes,
+        toolCalls: gathering.toolCalls,
+        ...(gathering.outputText ? { outputText: gathering.outputText } : undefined),
+        ...(gathering.incomplete ? { incomplete: gathering.incomplete } : undefined),
+        deliveries: gathering.deliveries.map((delivery) => ({
+          briefingChars: delivery.briefing.length,
+        })),
+        ...(model ? { model } : undefined),
+        elapsedMs: this.#seam.now() - startedAt,
+        iterations: gathering.iterations,
+        ...(gathering.error ? { error: gathering.error } : undefined),
+      });
+
+      return (
+        failure ?? {
+          outcome: TURN_OUTCOME.DONE,
+          text: gathering.outputText,
+          briefings: gathering.deliveries.map((delivery) => delivery.briefing),
+        }
+      );
     });
-
-    return (
-      failure ?? {
-        outcome: TURN_OUTCOME.DONE,
-        text: gathering.outputText,
-        briefings: gathering.deliveries.map((delivery) => delivery.briefing),
-      }
-    );
   }
 
   /**
@@ -721,33 +799,36 @@ export class TurnRunner {
    * old engine may still apply to it. A reopen the runtime refuses leaves the
    * generation standing without a context, its stored checkpoint untouched.
    */
-  async #restoreContext(turnContext: TurnContext, mark: ContextMark): Promise<void> {
-    const { generation, context } = turnContext;
-    const reopened = await claimOpenedContext(
-      this.#options.runtime.openContext(
-        { format: context.checkpointFormat, items: mark.items },
-        UNKNOWN_ACTION_RESULT,
-        { signal: generation.abort.signal },
-      ),
-      generation.abort.signal,
-      "the runtime could not reopen its own checkpoint",
-      this.#seam.now,
-    );
-    if (reopened.aborted) return;
-    const standing = await generation.opened;
-    const stillUsed = standing.kind === CONTEXT_OPENING.LOADED && standing.context === context;
-    if (generation !== this.#seam.generation() || !stillUsed) {
-      if (reopened.value.kind === CONTEXT_OPENING.LOADED) retireContext(reopened.value.context);
-      return;
-    }
-    // The engine the turn used is not re-admitted either way: it may hold
-    // what a late hook applied. A refused reopen leaves the generation
-    // standing without a context, every turn over it refused as incompatible.
-    generation.opened = Promise.resolve(reopened.value);
-    retireContext(context);
-    if (reopened.value.kind === CONTEXT_OPENING.INCOMPATIBLE) {
-      this.#seam.reportIncompatible(generation, reopened.value.reason);
-    }
+  #restoreContext(turnContext: TurnContext, mark: ContextMark): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const { generation, context } = turnContext;
+      const reopened = yield* claimOpenedContext(
+        this.#options.runtime.openContext(
+          { format: context.checkpointFormat, items: mark.items },
+          UNKNOWN_ACTION_RESULT,
+          { signal: generation.abort.signal },
+        ),
+        generation.abort.signal,
+        "the runtime could not reopen its own checkpoint",
+        this.#seam.now,
+      );
+      if (Option.isNone(reopened)) return;
+      const opened = reopened.value;
+      const standing = yield* awaited(() => generation.opened);
+      const stillUsed = standing.kind === CONTEXT_OPENING.LOADED && standing.context === context;
+      if (generation !== this.#seam.generation() || !stillUsed) {
+        if (opened.kind === CONTEXT_OPENING.LOADED) retireContext(opened.context);
+        return;
+      }
+      // The engine the turn used is not re-admitted either way: it may hold
+      // what a late hook applied. A refused reopen leaves the generation
+      // standing without a context, every turn over it refused as incompatible.
+      generation.opened = Promise.resolve(opened);
+      retireContext(context);
+      if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+        this.#seam.reportIncompatible(generation, opened.reason);
+      }
+    });
   }
 
   /**
@@ -757,44 +838,44 @@ export class TurnRunner {
    * stored nowhere; an unkeyed one — the recent daily notes, into a
    * conversation opening fresh — is the first words of this turn, remembered
    * like any other. Each rides behind a marker that says it is data. A
-   * recall that fails or is cut off recalls nothing, and the turn goes on.
+   * recall that fails or is cut off recalls nothing, and the turn goes on;
+   * the cutting off is the turn's own fiber being interrupted, so a recall
+   * still out when the run is revoked reaches nothing at all.
    */
-  async #recall(
+  #recall(
     turnContext: TurnContext,
-  ): Promise<{ opening: readonly string[]; standing: readonly string[] }> {
-    const context = turnContext.context;
-    const inherited = this.#options.inheritedContext;
-    if (context.checkpoint().items.length === 0 && inherited && inherited.length > 0) {
-      // A forked child: the requester's context is the child's opening
-      // history, adopted whole and recorded as a fork boundary, and the task
-      // then follows it as the first words of the child's own.
-      await settledUnlessAborted(
-        Promise.resolve(context.adoptFork(inherited, { signal: turnContext.signal })),
-        turnContext.signal,
+  ): Effect.Effect<{ opening: readonly string[]; standing: readonly string[] }> {
+    return Effect.gen(this, function* () {
+      const context = turnContext.context;
+      const inherited = this.#options.inheritedContext;
+      if (context.checkpoint().items.length === 0 && inherited && inherited.length > 0) {
+        // A forked child: the requester's context is the child's opening
+        // history, adopted whole and recorded as a fork boundary, and the task
+        // then follows it as the first words of the child's own.
+        yield* awaited(() => context.adoptFork(inherited, { signal: turnContext.signal }));
+      }
+      const memory = this.#options.memory;
+      if (!memory) return { opening: [], standing: [] };
+      const recalled = yield* awaited(() =>
+        memory.provider
+          .recall(memory.scope, { items: context.checkpoint().items, signal: turnContext.signal })
+          .catch((error: Error) => {
+            this.#seam.report(`Memory recall failed: ${error.message}`);
+            return { messages: [] };
+          }),
       );
-    }
-    const memory = this.#options.memory;
-    if (!memory) return { opening: [], standing: [] };
-    const settled = await settledUnlessAborted(
-      memory.provider
-        .recall(memory.scope, { items: context.checkpoint().items, signal: turnContext.signal })
-        .catch((error: Error) => {
-          this.#seam.report(`Memory recall failed: ${error.message}`);
-          return { messages: [] };
-        }),
-      turnContext.signal,
-    );
-    if (settled.aborted) return { opening: [], standing: [] };
-    const now = this.#seam.now();
-    const opening: string[] = [];
-    const standing: string[] = [];
-    for (const message of settled.value.messages) {
-      if (message.content.trim().length === 0) continue;
-      (message.id === undefined ? opening : standing).push(
-        recalledMemoryInputText(message.content, now),
-      );
-    }
-    return { opening, standing };
+      if (this.#revoked(turnContext)) return { opening: [], standing: [] };
+      const now = this.#seam.now();
+      const opening: string[] = [];
+      const standing: string[] = [];
+      for (const message of recalled.messages) {
+        if (message.content.trim().length === 0) continue;
+        (message.id === undefined ? opening : standing).push(
+          recalledMemoryInputText(message.content, now),
+        );
+      }
+      return { opening, standing };
+    });
   }
 
   /**
@@ -803,22 +884,24 @@ export class TurnRunner {
    * tools its own policy offers, and every other turn reads for itself. A
    * turn revoked while it waited on the reads enters none of them.
    */
-  async #prefetched(
+  #prefetched(
     plan: TurnPlan,
     policy: EffectiveToolPolicy,
     turnContext: TurnContext,
-  ): Promise<readonly PrefetchedRead[]> {
-    const prefetch = this.#options.prefetch;
-    if (
-      !prefetch ||
-      plan.trigger !== BRAIN_TURN_TRIGGER.ASK ||
-      plan.askOrigin !== BRAIN_REQUEST_ORIGIN.SPOKEN ||
-      this.#revoked(turnContext)
-    ) {
-      return [];
-    }
-    const taken = await prefetch.take(policy, turnContext.signal);
-    return this.#revoked(turnContext) ? [] : taken.reads;
+  ): Effect.Effect<readonly PrefetchedRead[]> {
+    return Effect.gen(this, function* () {
+      const prefetch = this.#options.prefetch;
+      if (
+        !prefetch ||
+        plan.trigger !== BRAIN_TURN_TRIGGER.ASK ||
+        plan.askOrigin !== BRAIN_REQUEST_ORIGIN.SPOKEN ||
+        this.#revoked(turnContext)
+      ) {
+        return [];
+      }
+      const taken = yield* awaited(() => prefetch.take(policy, turnContext.signal));
+      return this.#revoked(turnContext) ? [] : taken.reads;
+    });
   }
 
   /**
@@ -862,166 +945,180 @@ export class TurnRunner {
       recalled: readonly string[];
       advanceMark: () => Promise<void>;
     },
-  ): Promise<RuntimeRunEnd> {
-    const { context, run, events } = turnContext;
-    const runId = run.runId;
-    const tools = createTurnToolExecutor(
-      {
-        roster: this.#options.roster,
-        actions: this.#options.actions,
-        workspace: this.#options.workspace,
-        children: this.#options.children,
-        memory: this.#options.memory,
-        readWhole: (identity, readContext) =>
-          readWholeTranscript(identity, {
-            read: (session) => this.#options.readTranscript(session),
-            signal: readContext.signal,
-            maximumChars: BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS,
-          }),
-        checkpoint: (checkpointContext) => this.#seam.ledger.checkpoint(checkpointContext),
-        runRevoked: (checked) => this.#seam.runRevoked(checked),
-        now: this.#seam.now,
-      },
-      {
-        policy: turn.policy,
-        context: turnContext,
-        execution,
-        onBriefing: (delivery) => gathering.deliveries.push(delivery),
-      },
-    );
-    const onEvent = async (event: RuntimeEvent) => {
-      // The record hears every event first; what the run keeps of it follows.
-      events.heard(event);
-      switch (event.kind) {
-        case RUNTIME_EVENT.ANSWERED:
-          if (event.toolNames.length > 0) gathering.iterations += 1;
-          gathering.answerHoldsWords = !answerOnlyReads(turn.policy, event.toolNames);
-          return;
-        case RUNTIME_EVENT.RESPONSE:
-          run.responseIds.push(event.responseId);
-          return;
-        case RUNTIME_EVENT.TEXT:
-          gathering.said.push(event.text);
-          gathering.outputText = joinReplyMessages(gathering.said);
-          // Words of an answer that asked for nothing, or for reads alone, are
-          // the reply forming: nothing they describe is still uncertain, so
-          // they are relayed now rather than after the turn's final write.
-          // Words beside a write or an act wait for that call's result to be
-          // on record.
-          if (!gathering.answerHoldsWords && !run.checkpointFailed) {
-            this.#relayReply(turnContext, gathering, { final: false });
-          }
-          return;
-        case RUNTIME_EVENT.USAGE:
-          if (event.usage.inputTokens !== undefined) {
-            gathering.inputTokens = event.usage.inputTokens;
-          }
-          run.usage = addModelUsage(run.usage, event.usage);
-          return;
-        case RUNTIME_EVENT.STEERED:
-          turn.plan.deliveries.ingested();
-          return;
-        case RUNTIME_EVENT.TOOL_CALL: {
-          if (!toolCallOnlyReads(turn.policy, event.invocation.name)) {
-            gathering.writesInFlight.add(event.invocation.callId);
-          }
-          if (!run.recorded || gathering.slowStepTold) return;
-          const step = slowStepOf(turn.policy, event.invocation.name);
-          if (step === undefined) return;
-          gathering.slowStepTold = true;
-          events.slowStep(runId, step);
-          return;
-        }
-        case RUNTIME_EVENT.TOOL_RESULT:
-          gathering.toolCalls.push({
-            name: event.invocation.name,
-            argumentsChars: event.invocation.argumentsJson.length,
-            outcomeStatus: event.result.status ?? TOOL_RESULT_STATUS.ANSWERED,
-          });
-          // The answered tool is in the context. A recorded run keeps every
-          // answer before the model is asked again; an unrecorded turn keeps
-          // only an effect, so a turn that merely read and failed still rolls
-          // back whole and reads its deltas again, while an action that happened
-          // is never reverted.
-          if (run.recorded || journaledEffect(turn.policy, event.invocation.name)) {
-            await turn.advanceMark();
-          }
-          gathering.writesInFlight.delete(event.invocation.callId);
-          return;
-        default:
-          return;
-      }
-    };
-    // A read made ahead of the ask enters the context as the call the model
-    // would have made and its answer, paired by the id, so the first
-    // inference already holds it; the record hears both as it hears any call,
-    // and the trace marks them as read ahead. Nothing about them is
-    // journaled or checkpointed apart: they are reads, and they ride into the
-    // turn's own checkpoint with the rest of its opening.
-    const prefetchedInput: ContextInput[] = turn.prefetched.flatMap((read) => {
-      const invocation = {
-        callId: read.callId,
-        name: read.name,
-        argumentsJson: read.argumentsJson,
-      };
-      const result = {
-        outputJson: read.outputJson,
-        ...(read.status !== undefined ? { status: read.status } : undefined),
-      };
-      events.heard({ kind: RUNTIME_EVENT.TOOL_CALL, invocation });
-      events.heard({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation, result });
-      gathering.toolCalls.push({
-        name: read.name,
-        argumentsChars: read.argumentsJson.length,
-        outcomeStatus: read.status ?? TOOL_RESULT_STATUS.ANSWERED,
-        prefetched: true,
-      });
-      return [
+  ): Effect.Effect<RuntimeRunEnd> {
+    return Effect.gen(this, function* () {
+      const { context, run, events } = turnContext;
+      const runId = run.runId;
+      const tools = createTurnToolExecutor(
         {
-          kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
-          items: [functionCallItem(read.callId, read.name, read.argumentsJson)],
+          roster: this.#options.roster,
+          actions: this.#options.actions,
+          workspace: this.#options.workspace,
+          children: this.#options.children,
+          memory: this.#options.memory,
+          readWhole: (identity, readContext) =>
+            this.#seam.carry(
+              readWholeTranscript(identity, {
+                read: (session) => this.#options.readTranscript(session),
+                signal: readContext.signal,
+                maximumChars: BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS,
+              }),
+            ),
+          checkpoint: (checkpointContext) => this.#seam.ledger.checkpoint(checkpointContext),
+          runRevoked: (checked) => this.#seam.runRevoked(checked),
+          now: this.#seam.now,
         },
-        { kind: CONTEXT_INPUT_KIND.TOOL_RESULT, callId: read.callId, outputJson: read.outputJson },
-      ];
+        {
+          policy: turn.policy,
+          context: turnContext,
+          execution,
+          onBriefing: (delivery) => gathering.deliveries.push(delivery),
+        },
+      );
+      const hear = async (event: RuntimeEvent) => {
+        // The record hears every event first; what the run keeps of it follows.
+        events.heard(event);
+        switch (event.kind) {
+          case RUNTIME_EVENT.ANSWERED:
+            if (event.toolNames.length > 0) gathering.iterations += 1;
+            gathering.answerHoldsWords = !answerOnlyReads(turn.policy, event.toolNames);
+            return;
+          case RUNTIME_EVENT.RESPONSE:
+            run.responseIds.push(event.responseId);
+            return;
+          case RUNTIME_EVENT.TEXT:
+            gathering.said.push(event.text);
+            gathering.outputText = joinReplyMessages(gathering.said);
+            // Words of an answer that asked for nothing, or for reads alone, are
+            // the reply forming: nothing they describe is still uncertain, so
+            // they are relayed now rather than after the turn's final write.
+            // Words beside a write or an act wait for that call's result to be
+            // on record.
+            if (!gathering.answerHoldsWords && !run.checkpointFailed) {
+              this.#relayReply(turnContext, gathering, { final: false });
+            }
+            return;
+          case RUNTIME_EVENT.USAGE:
+            if (event.usage.inputTokens !== undefined) {
+              gathering.inputTokens = event.usage.inputTokens;
+            }
+            run.usage = addModelUsage(run.usage, event.usage);
+            return;
+          case RUNTIME_EVENT.STEERED:
+            turn.plan.deliveries.ingested();
+            return;
+          case RUNTIME_EVENT.TOOL_CALL: {
+            if (!toolCallOnlyReads(turn.policy, event.invocation.name)) {
+              gathering.writesInFlight.add(event.invocation.callId);
+            }
+            if (!run.recorded || gathering.slowStepTold) return;
+            const step = slowStepOf(turn.policy, event.invocation.name);
+            if (step === undefined) return;
+            gathering.slowStepTold = true;
+            events.slowStep(runId, step);
+            return;
+          }
+          case RUNTIME_EVENT.TOOL_RESULT:
+            gathering.toolCalls.push({
+              name: event.invocation.name,
+              argumentsChars: event.invocation.argumentsJson.length,
+              outcomeStatus: event.result.status ?? TOOL_RESULT_STATUS.ANSWERED,
+            });
+            // The answered tool is in the context. A recorded run keeps every
+            // answer before the model is asked again; an unrecorded turn keeps
+            // only an effect, so a turn that merely read and failed still rolls
+            // back whole and reads its deltas again, while an action that happened
+            // is never reverted.
+            if (run.recorded || journaledEffect(turn.policy, event.invocation.name)) {
+              await turn.advanceMark();
+            }
+            gathering.writesInFlight.delete(event.invocation.callId);
+            return;
+          default:
+            return;
+        }
+      };
+      // A read made ahead of the ask enters the context as the call the model
+      // would have made and its answer, paired by the id, so the first
+      // inference already holds it; the record hears both as it hears any call,
+      // and the trace marks them as read ahead. Nothing about them is
+      // journaled or checkpointed apart: they are reads, and they ride into the
+      // turn's own checkpoint with the rest of its opening.
+      const prefetchedInput: ContextInput[] = turn.prefetched.flatMap((read) => {
+        const invocation = {
+          callId: read.callId,
+          name: read.name,
+          argumentsJson: read.argumentsJson,
+        };
+        const result = {
+          outputJson: read.outputJson,
+          ...(read.status !== undefined ? { status: read.status } : undefined),
+        };
+        events.heard({ kind: RUNTIME_EVENT.TOOL_CALL, invocation });
+        events.heard({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation, result });
+        gathering.toolCalls.push({
+          name: read.name,
+          argumentsChars: read.argumentsJson.length,
+          outcomeStatus: read.status ?? TOOL_RESULT_STATUS.ANSWERED,
+          prefetched: true,
+        });
+        return [
+          {
+            kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
+            items: [functionCallItem(read.callId, read.name, read.argumentsJson)],
+          },
+          {
+            kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
+            callId: read.callId,
+            outputJson: read.outputJson,
+          },
+        ];
+      });
+      const started = this.#options.runtime.start({
+        runId,
+        context,
+        tools,
+        toolSchemas: brainToolSchemas(turn.policy),
+        prompt: turn.prompt,
+        input: [
+          ...turn.opening.map((text) => ({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })),
+          ...prefetchedInput,
+        ],
+        ephemeral: () => [
+          standingContextText(
+            this.#options.roster().text,
+            this.#options.standingContext(),
+            this.#seam.now(),
+          ),
+          ...turn.recalled,
+        ],
+        maximumOutputTokens: this.#options.maximumOutputTokens,
+        ...(this.#options.reasoningEffort
+          ? { reasoningEffort: this.#options.reasoningEffort }
+          : undefined),
+        ...(this.#options.promptCacheKey !== undefined
+          ? { promptCacheKey: this.#options.promptCacheKey }
+          : undefined),
+        signal: turnContext.signal,
+        onEvent: (event) =>
+          Effect.promise(async () => {
+            await hear(event);
+          }),
+      });
+      this.#active = {
+        run,
+        started: events.relaying(started, turn.steered),
+        plan: turn.plan,
+        riders: turn.riders,
+        events,
+      };
+      // Steered words the runtime never ingested are not delivered; words it
+      // did ingest wait for the turn's final checkpoint, which decides them.
+      return yield* Effect.ensuring(
+        started.done,
+        Effect.sync(() => turn.plan.deliveries.runEnded()),
+      );
     });
-    const started = this.#options.runtime.start({
-      runId,
-      context,
-      tools,
-      toolSchemas: brainToolSchemas(turn.policy),
-      prompt: turn.prompt,
-      input: [
-        ...turn.opening.map((text) => ({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })),
-        ...prefetchedInput,
-      ],
-      ephemeral: () => [
-        standingContextText(
-          this.#options.roster().text,
-          this.#options.standingContext(),
-          this.#seam.now(),
-        ),
-        ...turn.recalled,
-      ],
-      maximumOutputTokens: this.#options.maximumOutputTokens,
-      ...(this.#options.reasoningEffort
-        ? { reasoningEffort: this.#options.reasoningEffort }
-        : undefined),
-      ...(this.#options.promptCacheKey !== undefined
-        ? { promptCacheKey: this.#options.promptCacheKey }
-        : undefined),
-      signal: turnContext.signal,
-      onEvent,
-    });
-    this.#active = {
-      run,
-      started: events.relaying(started, turn.steered),
-      plan: turn.plan,
-      riders: turn.riders,
-      events,
-    };
-    // Steered words the runtime never ingested are not delivered; words it
-    // did ingest wait for the turn's final checkpoint, which decides them.
-    return started.done.finally(() => turn.plan.deliveries.runEnded());
   }
 
   /** How a run's end reads as a turn's: an observation turn keeps what it read wherever a run would fall short. */
@@ -1111,6 +1208,11 @@ export class TurnRunner {
   #revoked(context: Pick<TurnContext, "signal">): boolean {
     return turnRevoked(this.#seam.stopped(), context);
   }
+}
+
+/** A promise seam the host still hands in, awaited on the turn's own fiber, where an interruption abandons the wait. */
+function awaited<A>(work: () => PromiseLike<A> | A): Effect.Effect<A> {
+  return Effect.promise(async () => await work());
 }
 
 function uniqueIdentities(events: readonly BrainWakeEvent[]): readonly SessionIdentity[] {

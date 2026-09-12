@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
-import type { AgentRuntime, ContextOpening } from "@sidecar/runtime/vocabulary";
+import {
+  type AgentRuntimeEffect,
+  type ContextOpening,
+  RuntimeResumeRefused,
+} from "@sidecar/runtime/vocabulary";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { freshBrainState } from "./envelope.js";
@@ -19,20 +24,20 @@ function openedRuntime(order: string[]) {
       order.push("disposed");
     },
   });
-  const opening: Promise<ContextOpening> = Promise.resolve({
+  const opening: Effect.Effect<ContextOpening> = Effect.succeed({
     context,
     bootstrap: { loaded: true, repaired: 0 },
   });
-  const runtime: AgentRuntime = {
+  const runtime: AgentRuntimeEffect = {
     descriptor: { id: "held", checkpoint: context.checkpointFormat },
     quietUntil: () => undefined,
-    capabilities: () => Promise.resolve(undefined),
-    compact: () => Promise.resolve({ compacted: false, reason: "not compacted here" }),
+    capabilities: () => Effect.succeed(undefined),
+    compact: () => Effect.succeed({ compacted: false, reason: "not compacted here" }),
     openContext: () => opening,
     start: () => {
       throw new Error("not started here");
     },
-    resume: () => Promise.resolve({ refused: "not resumed here" }),
+    resume: () => Effect.fail(new RuntimeResumeRefused({ reason: "not resumed here" })),
   };
   return runtime;
 }
@@ -42,6 +47,7 @@ function generation(generationId: string, order: string[] = []): Generation {
     freshBrainState(generationId, NOW),
     openedRuntime(order),
     UNKNOWN_ACTION_RESULT,
+    (effect) => Effect.runPromise(effect),
   );
 }
 

@@ -5,7 +5,8 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { type Settled, settledUnlessAborted } from "./settled.js";
+import { Effect, Either, Option } from "effect";
+import { settledUnlessAborted } from "./effect/settled.js";
 import { rejection, sameIdentity } from "./tools/records.js";
 import { REFUSAL_REASON } from "./tools/refusals.js";
 import type { BrainTranscriptDelta, BrainWakeEvent } from "./wake-events.js";
@@ -34,7 +35,6 @@ export interface TranscriptDeltaRead {
     identity: SessionIdentity,
     cursor: string | undefined,
   ) => Promise<ProviderTranscriptSinceResult>;
-  signal: AbortSignal;
   maximumChars: number;
 }
 
@@ -46,64 +46,67 @@ export interface TranscriptDeltasAttached {
 /**
  * Reads what each event's session gained since its cursor and attaches it,
  * one read per session however many events name it. A revocation midway
- * keeps the events already attached and drops the rest unread.
+ * keeps the events already attached and drops the rest unread; a revocation
+ * while a read is out interrupts the turn's own fiber, which rolls the
+ * cursors back with the context, so the same deltas are read again.
  */
-export async function attachTranscriptDeltas(
+export function attachTranscriptDeltas(
   events: readonly BrainWakeEvent[],
   options: TranscriptDeltaRead & { revoked: () => boolean },
-): Promise<TranscriptDeltasAttached> {
-  const read: SessionIdentity[] = [];
-  let transcriptBytes = 0;
-  const attached: BrainWakeEvent[] = [];
-  for (const event of events) {
-    if (options.revoked()) break;
-    // A wake replayed from the durable inbox carries the delta its capture
-    // read; nothing is read again for it.
-    if (event.transcriptDelta) {
-      transcriptBytes += event.transcriptDelta.text.length;
-      attached.push({ ...event });
-      continue;
+): Effect.Effect<TranscriptDeltasAttached> {
+  return Effect.gen(function* () {
+    const read: SessionIdentity[] = [];
+    let transcriptBytes = 0;
+    const attached: BrainWakeEvent[] = [];
+    for (const event of events) {
+      if (options.revoked()) break;
+      // A wake replayed from the durable inbox carries the delta its capture
+      // read; nothing is read again for it.
+      if (event.transcriptDelta) {
+        transcriptBytes += event.transcriptDelta.text.length;
+        attached.push({ ...event });
+        continue;
+      }
+      if (read.some((identity) => sameIdentity(identity, event.identity))) {
+        attached.push({ ...event });
+        continue;
+      }
+      read.push({ ...event.identity });
+      const delta = yield* readTranscriptDelta(event.identity, options);
+      transcriptBytes += delta.text.length;
+      attached.push({ ...event, transcriptDelta: delta });
     }
-    if (read.some((identity) => sameIdentity(identity, event.identity))) {
-      attached.push({ ...event });
-      continue;
-    }
-    read.push({ ...event.identity });
-    const delta = await readTranscriptDelta(event.identity, options);
-    if (!delta) break;
-    transcriptBytes += delta.text.length;
-    attached.push({ ...event, transcriptDelta: delta });
-  }
-  return { events: attached, transcriptBytes };
+    return { events: attached, transcriptBytes };
+  });
 }
 
-/** Answers undefined only when the signal fired first; a failed read answers a rejected, empty delta. */
-export async function readTranscriptDelta(
+/** A failed read answers a rejected, empty delta; a revocation reaches the turn's fiber instead. */
+export function readTranscriptDelta(
   identity: SessionIdentity,
   options: TranscriptDeltaRead,
-): Promise<BrainTranscriptDelta | undefined> {
+): Effect.Effect<BrainTranscriptDelta> {
   const { cursors } = options;
-  let read: Settled<ProviderTranscriptSinceResult>;
-  try {
-    read = await settledUnlessAborted(
-      options.read(identity, cursors.cursor(identity)),
-      options.signal,
-    );
-  } catch {
-    return { text: "", truncated: false, status: ACTION_RESULT_STATUS.REJECTED };
-  }
-  if (read.aborted) return undefined;
-  const result = read.value;
-  if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-    return { text: "", truncated: false, status: result.status };
-  }
-  if (result.cursor !== undefined) cursors.setCursor(identity, result.cursor);
-  const bounded = cutFront(result.text, options.maximumChars);
-  return {
-    text: bounded.text,
-    truncated: result.truncated || bounded.cut,
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-  };
+  return Effect.map(
+    Effect.either(
+      Effect.tryPromise(async () => await options.read(identity, cursors.cursor(identity))),
+    ),
+    (read) => {
+      if (Either.isLeft(read)) {
+        return { text: "", truncated: false, status: ACTION_RESULT_STATUS.REJECTED };
+      }
+      const result = read.right;
+      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        return { text: "", truncated: false, status: result.status };
+      }
+      if (result.cursor !== undefined) cursors.setCursor(identity, result.cursor);
+      const bounded = cutFront(result.text, options.maximumChars);
+      return {
+        text: bounded.text,
+        truncated: result.truncated || bounded.cut,
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+      };
+    },
+  );
 }
 
 export interface WholeTranscriptRead {
@@ -112,25 +115,38 @@ export interface WholeTranscriptRead {
   maximumChars: number;
 }
 
-export async function readWholeTranscript(
+/**
+ * The whole tail of one session's transcript, for the read tool. The signal
+ * is raced here rather than left to the fiber, because this read is
+ * dispatched inside the batch of calls the model emitted, which the tool
+ * loop holds uninterruptible as one: a revocation reaches this wait only as
+ * the signal, and a provider that never answers would otherwise hold the
+ * batch — and the run behind it — open past the deadline that fired it.
+ */
+export function readWholeTranscript(
   identity: SessionIdentity,
   options: WholeTranscriptRead,
-): Promise<WireRecord> {
-  let read: Settled<ProviderTranscriptResult>;
-  try {
-    read = await settledUnlessAborted(options.read(identity), options.signal);
-  } catch {
-    return rejection(REFUSAL_REASON.READ_FAILED);
-  }
-  if (read.aborted) return rejection(REFUSAL_REASON.RUN_REVOKED);
-  const result = read.value;
-  if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-    return { status: result.status, reason: result.reason };
-  }
-  const bounded = cutFront(result.transcript, options.maximumChars);
-  return {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    truncated: bounded.cut,
-    transcript: bounded.text,
-  };
+): Effect.Effect<WireRecord> {
+  return Effect.map(
+    settledUnlessAborted(
+      Effect.either(Effect.tryPromise(async () => await options.read(identity))),
+      options.signal,
+    ),
+    Option.match({
+      onNone: () => rejection(REFUSAL_REASON.RUN_REVOKED),
+      onSome: (read) => {
+        if (Either.isLeft(read)) return rejection(REFUSAL_REASON.READ_FAILED);
+        const result = read.right;
+        if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+          return { status: result.status, reason: result.reason };
+        }
+        const bounded = cutFront(result.transcript, options.maximumChars);
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          truncated: bounded.cut,
+          transcript: bounded.text,
+        };
+      },
+    }),
+  );
 }

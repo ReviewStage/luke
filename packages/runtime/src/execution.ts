@@ -4,7 +4,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { Cause, Data, Effect, Either, Exit, ManagedRuntime, Runtime, Schema } from "effect";
+import { Data, type Effect, type ManagedRuntime, type Runtime, Schema } from "effect";
 import type { CompactionSource } from "./storage.js";
 
 /**
@@ -537,9 +537,6 @@ export type RuntimeEvent =
  */
 type RuntimeEventListenerEffect = (event: RuntimeEvent) => Effect.Effect<void>;
 
-/** The same listener as the Promise door still hands it in. */
-type RuntimeEventListener = (event: RuntimeEvent) => void | Promise<void>;
-
 /** One execution as a host asks for it. */
 export interface RuntimeRunRequestEffect {
   readonly runId: string;
@@ -566,11 +563,6 @@ export interface RuntimeRunRequestEffect {
   readonly onEvent: RuntimeEventListenerEffect;
 }
 
-/** One execution as the Promise door still asks for it. */
-export interface RuntimeRunRequest extends Omit<RuntimeRunRequestEffect, "onEvent"> {
-  readonly onEvent: RuntimeEventListener;
-}
-
 /**
  * A run the host holds: it may steer it with more words or cancel it, and
  * carries it to its end through `done`, which is the run itself rather than
@@ -585,11 +577,6 @@ export interface RuntimeRunEffect {
   /** Ends the run at the next safe point; a deadline is a cancel that says so. */
   cancel(reason?: { deadline: boolean }): void;
   readonly done: Effect.Effect<RuntimeRunEnd>;
-}
-
-/** A run under way, as the Promise door answers one: started already, and awaited rather than run. */
-export interface RuntimeRun extends Omit<RuntimeRunEffect, "done"> {
-  readonly done: Promise<RuntimeRunEnd>;
 }
 
 /** A context engine just opened, and what its bootstrap said about the checkpoint it was handed. */
@@ -670,115 +657,5 @@ export interface AgentRuntimeEffect {
   ): Effect.Effect<RuntimeRunEffect, RuntimeResumeRefused>;
 }
 
-/**
- * The same seam as the hosts still holding a promise read it.
- *
- * @deprecated Read `AgentRuntimeEffect` instead; P12-02 deletes this shape
- * with `promiseAgentRuntime` and the turn runner that holds it, once a turn
- * is a fiber.
- */
-export interface AgentRuntime
-  extends Omit<
-    AgentRuntimeEffect,
-    "capabilities" | "compact" | "openContext" | "start" | "resume"
-  > {
-  capabilities(): Promise<ModelCapabilities | undefined>;
-  compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction>;
-  openContext(
-    checkpoint: RuntimeCheckpoint | undefined,
-    lostResult: UnknownActionResult,
-    lifecycle?: ContextLifecycle,
-  ): Promise<ContextOpening>;
-  start(request: RuntimeRunRequest): RuntimeRun;
-  resume(
-    checkpoint: RuntimeCheckpoint,
-    request: Omit<RuntimeRunRequest, "context">,
-    lostResult: UnknownActionResult,
-  ): Promise<RuntimeRun | { readonly refused: string }>;
-}
-
 /** A runtime a run is carried on: the managed one an edge holds, or a plain one. */
 export type ExecutionRuntime = ManagedRuntime.ManagedRuntime<never, never> | Runtime.Runtime<never>;
-
-const exitsOn = (
-  execution: ExecutionRuntime,
-): (<Value>(effect: Effect.Effect<Value>) => Promise<Exit.Exit<Value>>) =>
-  ManagedRuntime.TypeId in execution
-    ? (effect) => execution.runPromiseExit(effect)
-    : Runtime.runPromiseExit(execution);
-
-const promisesOn = (
-  execution: ExecutionRuntime,
-): (<Value>(effect: Effect.Effect<Value>) => Promise<Value>) => {
-  const exits = exitsOn(execution);
-  return (effect) =>
-    exits(effect).then((exit) => {
-      if (Exit.isSuccess(exit)) return exit.value;
-      throw Cause.squash(exit.cause);
-    });
-};
-
-const listenerEffect =
-  (onEvent: RuntimeEventListener): RuntimeEventListenerEffect =>
-  (event) =>
-    Effect.promise(async () => {
-      await onEvent(event);
-    });
-
-const runOn = (
-  run: RuntimeRunEffect,
-  carry: <Value>(effect: Effect.Effect<Value>) => Promise<Value>,
-): RuntimeRun => ({
-  runId: run.runId,
-  steer: (input) => run.steer(input),
-  cancel: (reason) => run.cancel(reason),
-  done: carry(run.done),
-});
-
-/**
- * The `AgentRuntime` shape a host still holding a promise reads, over the
- * effects the runtime itself answers. Running here is a run outside a
- * runtime edge, which the rule allows precisely because this door is that
- * edge for as long as it exists: `AgentRuntime` is what declares a promise,
- * and the door goes with that declaration. A defect is squashed back to the
- * error that caused it, so a listener or an engine that threw reaches the
- * caller as the error it threw rather than as the fiber failure that carried
- * it, and a run's `done` is carried the instant `start` answers, so a host
- * that steers or cancels before it awaits reaches a run already going.
- *
- * @deprecated The strangler shim on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`; P12-02 deletes it with the turn runner that
- * holds it, once a turn is a fiber.
- */
-export function promiseAgentRuntime(
-  runtime: AgentRuntimeEffect,
-  options: { readonly execution?: ExecutionRuntime } = {},
-): AgentRuntime {
-  const carry = promisesOn(options.execution ?? Runtime.defaultRuntime);
-  return {
-    // Read on each ask, because a hosted adapter learns its model only once
-    // its capabilities have been answered.
-    get descriptor(): RuntimeIdentity {
-      return runtime.descriptor;
-    },
-    quietUntil: () => runtime.quietUntil(),
-    capabilities: () => carry(runtime.capabilities()),
-    compact: (context, compaction) => carry(runtime.compact(context, compaction)),
-    openContext: (checkpoint, lostResult, lifecycle) =>
-      carry(runtime.openContext(checkpoint, lostResult, lifecycle)),
-    start: (request) =>
-      runOn(runtime.start({ ...request, onEvent: listenerEffect(request.onEvent) }), carry),
-    resume: (checkpoint, request, lostResult) =>
-      carry(
-        Effect.either(
-          runtime.resume(
-            checkpoint,
-            { ...request, onEvent: listenerEffect(request.onEvent) },
-            lostResult,
-          ),
-        ),
-      ).then((resumed) =>
-        Either.isLeft(resumed) ? { refused: resumed.left.reason } : runOn(resumed.right, carry),
-      ),
-  };
-}

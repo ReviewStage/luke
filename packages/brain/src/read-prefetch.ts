@@ -12,11 +12,13 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
+import { Effect, Option } from "effect";
+import type { Carry } from "./effect/carry.js";
+import { settledUnlessAborted } from "./effect/settled.js";
 import { anticipatedAskInputText, prefetchedReadsInputText } from "./input-items.js";
 import type { BrainRoster } from "./performer.js";
 import { userMessageItem } from "./responses-api.js";
 import type { ScheduledTimer } from "./scheduled-timer.js";
-import { settledUnlessAborted } from "./settled.js";
 import { BRAIN_TOOL } from "./tools/names.js";
 import {
   offeredSessions,
@@ -155,6 +157,13 @@ export interface ReadPrefetchOptions {
    * policy again when it enters what was read.
    */
   policy: () => Promise<EffectiveToolPolicy>;
+  /**
+   * Carries this prefetch's own waits to the promises it holds. A prefetch
+   * runs while the developer is still speaking rather than inside a turn, so
+   * it has no fiber of its own for a supersession to interrupt and races the
+   * slot's signal instead.
+   */
+  carry: Carry;
   memory?: MemoryDefinition;
   now: () => number;
   schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
@@ -361,8 +370,13 @@ export class ReadPrefetch implements TurnReadPrefetch {
     anticipation: BrainAnticipation,
   ): Promise<readonly HeldRead[] | undefined> {
     const chars = anticipation.partialAsk.length;
-    const resolved = await settledUnlessAborted(this.#options.policy(), slot.abort.signal);
-    if (resolved.aborted) {
+    const resolved = await this.#options.carry(
+      settledUnlessAborted(
+        Effect.promise(async () => await this.#options.policy()),
+        slot.abort.signal,
+      ),
+    );
+    if (Option.isNone(resolved)) {
       this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
       return undefined;
     }
@@ -381,31 +395,36 @@ export class ReadPrefetch implements TurnReadPrefetch {
       () => slot.abort.abort(),
       PREFETCH_BOUNDS.PLAN_TIMEOUT_MS,
     );
-    const planned = await settledUnlessAborted(
-      this.#options.model.respond(
-        [
-          userMessageItem(
-            anticipatedAskInputText(
-              anticipation.partialAsk,
-              anticipation.recentTurns,
-              offered.options,
-              this.#options.now(),
+    const planned = await this.#options.carry(
+      settledUnlessAborted(
+        Effect.promise(
+          async () =>
+            await this.#options.model.respond(
+              [
+                userMessageItem(
+                  anticipatedAskInputText(
+                    anticipation.partialAsk,
+                    anticipation.recentTurns,
+                    offered.options,
+                    this.#options.now(),
+                  ),
+                ),
+              ],
+              {
+                prompt: PREFETCH_PLANNER_PROMPT,
+                tools: [this.#planTool],
+                toolChoice: PLAN_READS_TOOL_NAME,
+                maximumOutputTokens: PREFETCH_BOUNDS.PLAN_OUTPUT_TOKENS,
+                reasoningEffort: REASONING_EFFORT.LOW,
+                signal: slot.abort.signal,
+              },
             ),
-          ),
-        ],
-        {
-          prompt: PREFETCH_PLANNER_PROMPT,
-          tools: [this.#planTool],
-          toolChoice: PLAN_READS_TOOL_NAME,
-          maximumOutputTokens: PREFETCH_BOUNDS.PLAN_OUTPUT_TOKENS,
-          reasoningEffort: REASONING_EFFORT.LOW,
-          signal: slot.abort.signal,
-        },
+        ),
+        slot.abort.signal,
       ),
-      slot.abort.signal,
     );
     this.#options.cancel(deadline);
-    if (planned.aborted) {
+    if (Option.isNone(planned)) {
       this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
       return undefined;
     }
@@ -554,32 +573,39 @@ export class ReadPrefetch implements TurnReadPrefetch {
    */
   async #summarize(slot: Slot, reads: readonly HeldRead[]): Promise<void> {
     if (reads.length === 0 || this.#factsListeners.size === 0) return;
-    const summarized = await settledUnlessAborted(
-      this.#options.model.respond(
-        [
-          userMessageItem(
-            prefetchedReadsInputText(
-              reads.map((read) => ({
-                tool: read.name,
-                arguments: read.argumentsJson,
-                ...(read.about !== undefined ? { session_title: read.about } : undefined),
-                output: read.outputJson,
-              })),
-              this.#options.now(),
-            ),
+    const summarized = await this.#options
+      .carry(
+        settledUnlessAborted(
+          Effect.promise(
+            async () =>
+              await this.#options.model.respond(
+                [
+                  userMessageItem(
+                    prefetchedReadsInputText(
+                      reads.map((read) => ({
+                        tool: read.name,
+                        arguments: read.argumentsJson,
+                        ...(read.about !== undefined ? { session_title: read.about } : undefined),
+                        output: read.outputJson,
+                      })),
+                      this.#options.now(),
+                    ),
+                  ),
+                ],
+                {
+                  prompt: PREFETCH_SUMMARY_PROMPT,
+                  tools: [],
+                  maximumOutputTokens: PREFETCH_BOUNDS.SUMMARY_TOKENS,
+                  reasoningEffort: REASONING_EFFORT.LOW,
+                  signal: slot.abort.signal,
+                },
+              ),
           ),
-        ],
-        {
-          prompt: PREFETCH_SUMMARY_PROMPT,
-          tools: [],
-          maximumOutputTokens: PREFETCH_BOUNDS.SUMMARY_TOKENS,
-          reasoningEffort: REASONING_EFFORT.LOW,
-          signal: slot.abort.signal,
-        },
-      ),
-      slot.abort.signal,
-    ).catch(() => undefined);
-    if (!summarized || summarized.aborted || slot.abort.signal.aborted) return;
+          slot.abort.signal,
+        ),
+      )
+      .catch(() => undefined);
+    if (!summarized || Option.isNone(summarized) || slot.abort.signal.aborted) return;
     const answer = summarized.value;
     if (answer.outcome !== MODEL_RESPONSE_OUTCOME.ANSWERED) return;
     const summary = answer.text.trim();

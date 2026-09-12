@@ -61,7 +61,7 @@ import {
   writeWorkspaceFile,
 } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   CONVERSATION_KIND,
   childIdOf,
   conversationKindOf,
@@ -251,7 +251,7 @@ export interface BrainWiring {
    * a run outside any conversation — a housekeeping turn — or nothing when
    * no brain may stand. Its context is the caller's to open and dispose.
    */
-  createRuntime: () => AgentRuntime | undefined;
+  createRuntime: () => AgentRuntimeEffect | undefined;
 }
 
 interface OpenConversation {
@@ -572,7 +572,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
             },
           }
         : undefined),
-      runtime: toolLoopRuntimeOver(model, dependencies.execution),
+      runtime: toolLoopRuntimeOver(model),
+      execution: dependencies.execution,
       actions,
       roster: dependencies.roster,
       standingContext: () => dependencies.standingContext(sessionKey),
@@ -960,7 +961,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     createRuntime: () => {
       const model = liveModel();
       if (!model) return undefined;
-      return toolLoopRuntimeOver(model, dependencies.execution);
+      return toolLoopRuntimeOver(model);
     },
   };
 }

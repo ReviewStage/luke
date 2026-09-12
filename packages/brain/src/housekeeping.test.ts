@@ -3,15 +3,15 @@ import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME, memoryFlushPrompt } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-  promiseAgentRuntime,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { HOUSEKEEPING_REFUSAL, runMemoryHousekeeping } from "./housekeeping.js";
@@ -83,14 +83,12 @@ function adapterOf(model: FakeModel): ModelAdapter {
   };
 }
 
-function runtimeOver(model: FakeModel): AgentRuntime {
-  return promiseAgentRuntime(
-    new ToolLoopAgentRuntime({
-      model: adapterOf(model),
-      itemFormat: RESPONSES_ITEM_FORMAT,
-      createContext: () => new ResponsesContextEngine(IDENTITY),
-    }),
-  );
+function runtimeOver(model: FakeModel): AgentRuntimeEffect {
+  return new ToolLoopAgentRuntime({
+    model: adapterOf(model),
+    itemFormat: RESPONSES_ITEM_FORMAT,
+    createContext: () => new ResponsesContextEngine(IDENTITY),
+  });
 }
 
 function fakeWorkspace(files: Map<string, string>) {
@@ -136,15 +134,17 @@ test("a flush appends to today's note over a private copy of the context and rep
   const files = new Map([[NOTE, "- old\n"]]);
   const workspace = fakeWorkspace(files);
   const items = [...CONTEXT];
-  const result = await runMemoryHousekeeping({
-    runtime: runtimeOver(model),
-    items,
-    prompt: memoryFlushPrompt(DAY),
-    dateStamp: DAY,
-    workspace: workspace.access,
-    signal: new AbortController().signal,
-    runId: "flush-1",
-  });
+  const result = await Effect.runPromise(
+    runMemoryHousekeeping({
+      runtime: runtimeOver(model),
+      items,
+      prompt: memoryFlushPrompt(DAY),
+      dateStamp: DAY,
+      workspace: workspace.access,
+      signal: new AbortController().signal,
+      runId: "flush-1",
+    }),
+  );
   assert.deepEqual(result, { outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED, writes: 1 });
   assert.equal(files.get(NOTE), "- old\n- pnpm agreed\n");
   assert.deepEqual(items, CONTEXT, "the caller's copy is not mutated");
@@ -175,15 +175,17 @@ test("a housekeeping write is refused for any other file or for an overwrite, an
     ["MEMORY.md", "# MEMORY.md\n"],
   ]);
   const workspace = fakeWorkspace(files);
-  const result = await runMemoryHousekeeping({
-    runtime: runtimeOver(model),
-    items: CONTEXT,
-    prompt: memoryFlushPrompt(DAY),
-    dateStamp: DAY,
-    workspace: workspace.access,
-    signal: new AbortController().signal,
-    runId: "flush-2",
-  });
+  const result = await Effect.runPromise(
+    runMemoryHousekeeping({
+      runtime: runtimeOver(model),
+      items: CONTEXT,
+      prompt: memoryFlushPrompt(DAY),
+      dateStamp: DAY,
+      workspace: workspace.access,
+      signal: new AbortController().signal,
+      runId: "flush-2",
+    }),
+  );
   assert.deepEqual(result, { outcome: MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE, writes: 0 });
   assert.deepEqual(workspace.writes, []);
   assert.equal(files.get("MEMORY.md"), "# MEMORY.md\n");
@@ -212,15 +214,17 @@ test("an interrupted flush keeps the write it already made and is not reported c
     controller.abort();
     return written;
   };
-  const result = await runMemoryHousekeeping({
-    runtime: runtimeOver(model),
-    items: CONTEXT,
-    prompt: memoryFlushPrompt(DAY),
-    dateStamp: DAY,
-    workspace: workspace.access,
-    signal: controller.signal,
-    runId: "flush-3",
-  });
+  const result = await Effect.runPromise(
+    runMemoryHousekeeping({
+      runtime: runtimeOver(model),
+      items: CONTEXT,
+      prompt: memoryFlushPrompt(DAY),
+      dateStamp: DAY,
+      workspace: workspace.access,
+      signal: controller.signal,
+      runId: "flush-3",
+    }),
+  );
   assert.equal(result.outcome, MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED);
   assert.equal(result.writes, 1);
   assert.equal(files.get(NOTE), "- first\n", "the committed write stands");
@@ -233,14 +237,16 @@ test("a model failure is a failed flush, never a completed one", async () => {
     failure: MODEL_FAILURE.UPSTREAM,
     reason: "boom",
   });
-  const result = await runMemoryHousekeeping({
-    runtime: runtimeOver(model),
-    items: CONTEXT,
-    prompt: memoryFlushPrompt(DAY),
-    dateStamp: DAY,
-    workspace: fakeWorkspace(new Map()).access,
-    signal: new AbortController().signal,
-    runId: "flush-4",
-  });
+  const result = await Effect.runPromise(
+    runMemoryHousekeeping({
+      runtime: runtimeOver(model),
+      items: CONTEXT,
+      prompt: memoryFlushPrompt(DAY),
+      dateStamp: DAY,
+      workspace: fakeWorkspace(new Map()).access,
+      signal: new AbortController().signal,
+      runId: "flush-4",
+    }),
+  );
   assert.equal(result.outcome, MEMORY_HOUSEKEEPING_OUTCOME.FAILED);
 });

@@ -13,7 +13,7 @@ import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { notebookMemoryProvider } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   CHILD_CLEANUP,
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -31,7 +31,6 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-  promiseAgentRuntime,
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
 import {
@@ -60,7 +59,6 @@ import {
 } from "./requests.js";
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
-import type { ScheduledTimer } from "./seam.js";
 import { BrainStateStore } from "./state-store.js";
 import {
   CAPTIONS_GUIDE,
@@ -252,10 +250,6 @@ export function adapterOf(client: BrainClient): ModelAdapter {
   };
 }
 
-export function runtimeOver(model: ModelAdapter, execution?: ExecutionRuntime): AgentRuntime {
-  return promiseAgentRuntime(toolLoopOver(model), execution ? { execution } : {});
-}
-
 function toolLoopOver(model: ModelAdapter): ToolLoopAgentRuntime {
   return new ToolLoopAgentRuntime({
     model,
@@ -283,45 +277,14 @@ export class FakeClient implements BrainClient {
   }
 }
 
-class FakeClock {
-  now = NOW;
-  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
-
-  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
-    const handle: ScheduledTimer = {};
-    this.timers.set(handle, { callback, at: this.now + delayMs });
-    return handle;
-  };
-
-  cancel = (timer: ScheduledTimer): void => {
-    this.timers.delete(timer);
-  };
-
-  /** Fires every timer due by `until`, advancing the clock to each in order. */
-  async advance(untilMs: number): Promise<void> {
-    for (;;) {
-      const due = [...this.timers.entries()]
-        .filter(([, timer]) => timer.at <= untilMs)
-        .sort((a, b) => a[1].at - b[1].at)[0];
-      if (!due) break;
-      this.timers.delete(due[0]);
-      this.now = Math.max(this.now, due[1].at);
-      due[1].callback();
-      await settle();
-    }
-    this.now = Math.max(this.now, untilMs);
-  }
-}
-
 export async function settle(): Promise<void> {
   for (let index = 0; index < 20; index += 1) await new Promise((resolve) => setImmediate(resolve));
 }
 
 export interface Harness {
   agent: BrainAgent;
-  runtime: AgentRuntime;
+  runtime: AgentRuntimeEffect;
   client: FakeClient;
-  clock: FakeClock;
   repository: FakeBrainStateRepository;
   store: BrainStateStore;
   deliveries: BrainDelivery[];
@@ -359,8 +322,10 @@ export function harness(
   const client = new FakeClient();
   const { client: clientOverride, execution, ...agentOverrides } = overrides;
   const model = adapterOf(clientOverride ?? client);
-  const runtime = runtimeOver(model, execution);
-  const clock = new FakeClock();
+  const runtime = toolLoopOver(model);
+  // The store reads the same clock the agent does, so a test advancing time
+  // moves both rather than leaving the envelope stamped at the fixed start.
+  const now = agentOverrides.now ?? (() => NOW);
   const deliveries: BrainDelivery[] = [];
   const persisted: BrainPersistedState[] = [];
   const store = new BrainStateStore({
@@ -374,7 +339,7 @@ export function harness(
       },
     },
     createGenerationId: () => `gen-${nextRunId()}`,
-    now: () => clock.now,
+    now,
   });
   const traces: BrainTurnTraceRecord[] = [];
   const sinceReads: Harness["sinceReads"] = [];
@@ -426,16 +391,13 @@ export function harness(
       traces.push(record);
     },
     report: () => {},
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
+    ...(execution ? { execution } : undefined),
     ...agentOverrides,
   });
   return {
     agent,
     runtime,
     client,
-    clock,
     repository,
     store,
     deliveries,
@@ -698,13 +660,13 @@ export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
     },
   });
   return {
-    runtime: promiseAgentRuntime(held),
+    runtime: held,
     release: () => release?.(),
     disposed: () => disposed,
   };
 }
 
-export function agentOn(runtime: AgentRuntime, h: Harness) {
+export function agentOn(runtime: AgentRuntimeEffect, h: Harness) {
   return new BrainAgent({
     conversationId: MAIN_SESSION_KEY,
     runtime,
@@ -719,8 +681,5 @@ export function agentOn(runtime: AgentRuntime, h: Harness) {
     store: h.store,
     createRunId: () => `run-${nextRunId()}`,
     report: () => {},
-    now: () => h.clock.now,
-    schedule: h.clock.schedule,
-    cancel: h.clock.cancel,
   });
 }

@@ -17,7 +17,6 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
-  promiseAgentRuntime,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
@@ -143,13 +142,11 @@ function agentWith(
   launch: Launch = {},
 ) {
   const model = new FakeModel();
-  const runtime = promiseAgentRuntime(
-    new ToolLoopAgentRuntime({
-      model: adapterOf(model),
-      itemFormat: RESPONSES_ITEM_FORMAT,
-      createContext: () => new ResponsesContextEngine(IDENTITY),
-    }),
-  );
+  const runtime = new ToolLoopAgentRuntime({
+    model: adapterOf(model),
+    itemFormat: RESPONSES_ITEM_FORMAT,
+    createContext: () => new ResponsesContextEngine(IDENTITY),
+  });
   let ids = 0;
   const reports: string[] = [];
   const repository = launch.repository ?? fakeBrainStateRepository();

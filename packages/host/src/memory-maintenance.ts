@@ -1,5 +1,5 @@
 import type { BrainFlushMarkerStore } from "@sidecar/brain";
-import { runMemoryHousekeeping } from "@sidecar/brain";
+import { carryOn, runMemoryHousekeeping } from "@sidecar/brain";
 import type { StoreClient } from "@sidecar/brain/store";
 import {
   type HousekeepingPrompt,
@@ -13,7 +13,8 @@ import {
 } from "@sidecar/memory";
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
+  type ExecutionRuntime,
   MEMORY_CAPTURE_PHASE,
   type MemoryCaptureResult,
   type MemoryCaptureTurn,
@@ -33,7 +34,9 @@ export interface MemoryMaintenanceDependencies {
   persistent: boolean;
   client: () => StoreClient;
   /** A runtime for the housekeeping runs, or nothing when no brain may stand. */
-  createRuntime: () => AgentRuntime | undefined;
+  createRuntime: () => AgentRuntimeEffect | undefined;
+  /** The runtime a housekeeping turn is a fiber of, since the memory provider's capture seam is still a promise. */
+  execution: ExecutionRuntime;
   workspaceDirectory: () => string;
   isTemporary: (sessionKey: SessionKey) => boolean;
   now: () => number;
@@ -91,15 +94,17 @@ export function wireMemoryMaintenance(
         reason: "no brain stands to run it",
       };
     }
-    const result = await runMemoryHousekeeping({
-      runtime,
-      items: turn.items,
-      prompt,
-      dateStamp,
-      workspace: workspace(),
-      signal,
-      runId: dependencies.createId(),
-    });
+    const result = await carryOn(dependencies.execution)(
+      runMemoryHousekeeping({
+        runtime,
+        items: turn.items,
+        prompt,
+        dateStamp,
+        workspace: workspace(),
+        signal,
+        runId: dependencies.createId(),
+      }),
+    );
     if (result.writes > 0) dependencies.onNotebookChanged?.();
     return result;
   };
