@@ -1,4 +1,6 @@
+import type { PlatformError } from "@effect/platform/Error";
 import type { VoiceCapabilityApplication } from "@sidecar/voice";
+import { Effect } from "effect";
 
 /**
  * One voice source transition, from the seams the host owns: the brain
@@ -16,14 +18,18 @@ import type { VoiceCapabilityApplication } from "@sidecar/voice";
  */
 export interface VoiceSourceTransitionSeams {
   retire: () => void;
-  apply: () => Promise<VoiceCapabilityApplication>;
+  apply: () => Effect.Effect<VoiceCapabilityApplication, PlatformError>;
   rebuild: () => Promise<void>;
 }
 
-export async function transitionVoiceSource(seams: VoiceSourceTransitionSeams): Promise<boolean> {
-  seams.retire();
-  const applied = await seams.apply();
-  if (!applied.latest || !applied.isCurrent()) return false;
-  await seams.rebuild();
-  return true;
+export function transitionVoiceSource(
+  seams: VoiceSourceTransitionSeams,
+): Effect.Effect<boolean, PlatformError> {
+  return Effect.gen(function* () {
+    seams.retire();
+    const applied = yield* seams.apply();
+    if (!applied.latest || !applied.isCurrent()) return false;
+    yield* Effect.promise(seams.rebuild);
+    return true;
+  });
 }
