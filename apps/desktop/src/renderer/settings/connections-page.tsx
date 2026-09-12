@@ -1,4 +1,4 @@
-import { CloudIcon, FolderIcon, KeyIcon, PlugIcon } from "@sidecar/panel";
+import { FolderIcon, KeyIcon, PlugIcon } from "@sidecar/panel";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -51,36 +51,6 @@ export function CredentialsSection({ input }: { input: ConnectionInput }): React
       {storageUnavailable(input) ? (
         <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p>
       ) : null}
-    </section>
-  );
-}
-
-/**
- * The one choice spanning every key row: whether a saved key also syncs to
- * the account's vault on Luke's service. Its own section between the
- * workspace choice and the key rows it governs, because it belongs to all of
- * them and to none; the switch's whole action runs in the main process, where
- * the keys are.
- */
-export function KeySyncSection({
-  view,
-  writes,
-}: {
-  view: SettingsRowsInput;
-  writes: SettingsWrites;
-}): React.JSX.Element {
-  return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 2 })}>
-      <h2>
-        <CloudIcon />
-        Sync
-      </h2>
-      <SchemaSettingRows
-        page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
-        section={SETTING_SECTION.SYNC}
-        view={view}
-        writes={writes}
-      />
     </section>
   );
 }

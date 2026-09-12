@@ -21,6 +21,7 @@ import {
   type SecretStorage,
 } from "@sidecar/credentials/vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
+import { type CloudAgentProviderId, isCloudAgentProviderId } from "@sidecar/session";
 import {
   type AppSettings,
   type SettingsResetScope,
@@ -123,6 +124,14 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
   /**
+   * Whether Luke's service holds a key for a cloud agent provider, as its
+   * vault last listed. A cloud provider's key lives there and nowhere on this
+   * machine, so its row's source is read from this and never from the file or
+   * the environment; the local store still carries one such key only until
+   * the migration below has handed it to the vault.
+   */
+  vaultKeyHeld: (providerId: CloudAgentProviderId) => boolean;
+  /**
    * The file system `#readPersisted` and `#write` below reach the settings
    * file through, resolved once by the composer from the host's own assembly
    * rather than by a layer this class stands up for itself. It is the service
@@ -173,11 +182,12 @@ export interface PersistedSettings extends StoredAppSettings {
    */
   appleCalendar?: { calendars: readonly string[] };
   /**
-   * Which account this Mac's provider keys were last synced for — the
-   * account's opaque id, or its address where the identity carried no id. It
-   * outlives a sign-out on purpose: it is what keeps an automatic sweep from
-   * handing one person's keys to whoever signs in next, so it must remember
-   * the person after they have gone.
+   * Which account an earlier build last synced this Mac's provider keys for —
+   * its opaque id, or its address where the identity carried no id. Read
+   * only: this build writes it never and keeps no local provider key of its
+   * own, but the one migration of a key that earlier build left here asks
+   * it whose key that was, so a later sign-in on a shared Mac cannot claim
+   * someone else's.
    */
   vaultSyncAccount?: string;
 }
@@ -493,6 +503,7 @@ export class SettingsStore {
   readonly #cipher: SecretCipher;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
+  readonly #vaultKeyHeld: (providerId: CloudAgentProviderId) => boolean;
   readonly #fileSystem: FileSystem.FileSystem;
   /**
    * The settings as last read or written. The gate beside it is what makes a
@@ -672,6 +683,7 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
+    this.#vaultKeyHeld = options.vaultKeyHeld;
     this.#fileSystem = options.fileSystem;
   }
 
@@ -679,11 +691,28 @@ export class SettingsStore {
     return Effect.gen(this, function* () {
       const persisted = yield* this.#load();
       const voiceCapability = yield* this.#voiceCapability(persisted);
-      const sources = yield* Effect.forEach(CREDENTIAL_PROVIDER_LIST, (provider) =>
-        Effect.map(
-          this.#resolveApiKey(provider),
-          (resolved) => [provider.id, resolved.source] as const,
-        ),
+      const sources = yield* Effect.forEach(
+        CREDENTIAL_PROVIDER_LIST,
+        (
+          provider,
+        ): Effect.Effect<readonly [CredentialProviderId, CredentialSource], PlatformError> =>
+          // A cloud agent provider's key is the service's: its row answers for
+          // the vault, and a key this Mac still holds or reads from its shell
+          // is not one Luke observes with. Held only while an account stands
+          // in this same snapshot: the vault's list is the account's, so a
+          // sign-out reads not connected in the very emit that reports it,
+          // whatever the list last said.
+          isCloudAgentProviderId(provider.id)
+            ? Effect.succeed([
+                provider.id,
+                persisted.account !== undefined && this.#vaultKeyHeld(provider.id)
+                  ? CREDENTIAL_SOURCE.SERVICE
+                  : CREDENTIAL_SOURCE.NONE,
+              ] as const)
+            : Effect.map(
+                this.#resolveApiKey(provider),
+                (resolved) => [provider.id, resolved.source] as const,
+              ),
       );
       return {
         stored: {
@@ -865,11 +894,17 @@ export class SettingsStore {
     return Effect.map(this.#resolveApiKey(provider), (resolved) => resolved.apiKey);
   }
 
+  /** The account an earlier build last synced this Mac's keys for; see the field. Never written here. */
+  readVaultSyncAccount(): Effect.Effect<string | undefined, PlatformError> {
+    return Effect.map(this.#load(), (persisted) => persisted.vaultSyncAccount);
+  }
+
   /**
    * Main-process only: the key stored encrypted in Luke's own file, and never
-   * one resolved from the launch environment. The vault sweep is the caller —
-   * an environment key was configured for this machine's shell, not entered
-   * into Luke, so it is not Luke's to send anywhere.
+   * one resolved from the launch environment. The migration of a cloud
+   * provider's key into the vault is the caller — an environment key was
+   * configured for this machine's shell, not entered into Luke, so it is not
+   * Luke's to send anywhere.
    */
   readStoredApiKey(
     providerId: CredentialProviderId,
@@ -878,21 +913,6 @@ export class SettingsStore {
     if (!provider) return Effect.succeed(undefined);
     return Effect.map(this.#resolveApiKey(provider), (resolved) =>
       resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined,
-    );
-  }
-
-  /** Which account this Mac's provider keys were last synced for; see the field. */
-  readVaultSyncAccount(): Effect.Effect<string | undefined, PlatformError> {
-    return Effect.map(this.#load(), (persisted) => persisted.vaultSyncAccount);
-  }
-
-  setVaultSyncAccount(accountKey: string): Effect.Effect<void, PlatformError> {
-    return Effect.asVoid(
-      this.#mutate((persisted) =>
-        persisted.vaultSyncAccount === accountKey
-          ? undefined
-          : { ...persisted, vaultSyncAccount: accountKey },
-      ),
     );
   }
 

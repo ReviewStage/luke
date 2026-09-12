@@ -343,22 +343,25 @@ The Conversation it shows is read from the same stored messages the phone
 reads, under your account, and the watch only reads them: a rating you gave a
 message is shown there and cannot be given from the wrist.
 
-**Provider API keys (server-side vault).** While the "Sync provider keys"
-switch in Settings > Connections is on — it starts on — the provider API keys
-you entered into Luke on this Mac are kept synced to Luke's hosted service,
-for your other Luke devices: a key saved while signed in syncs in the same
-press, and Luke re-syncs the stored keys when he starts signed in, when you
-sign in, and when the switch turns on. Keys Luke merely reads from your
-environment are never synced, and an automatic re-sync happens only for the
-account these keys were last synced for — a different account signing in on
-this Mac syncs nothing until it saves a key or turns the switch on itself. Turning the switch off deletes every synced
-copy from our database while the keys on this Mac stay; deleting a key
-deletes its synced copy too, and signed out nothing is ever synced. We store a synced key encrypted in our own
-database using AES-256-GCM with a server-only secret. The key is never
-returned to any caller: there is no endpoint that reads it back, and no code
-path that decrypts it for any purpose other than observing your sessions or
-carrying the actions you explicitly request through that provider. Every
-synced key is deleted alongside your account if you delete that.
+**Provider API keys (server-side vault).** The Conductor key you enter into
+Luke is held by our service, not by your Mac. Saving it sends it, in the same
+press, to our vault under your signed-in account, and nothing of it is written
+to this Mac: no settings file, no Keychain entry, no cache. Its row reads
+"Held by Luke's service" from the vault's own list of which providers hold a
+key, never from anything stored here, and you have to be signed in to save
+one. Deleting it from its row deletes it from the vault. A key an earlier
+version of Luke kept encrypted on this Mac is handed to the vault once, the
+next time the account it was last synced for signs in, and deleted from the
+Mac when the vault confirms it; a key another account left here is sent
+nowhere, and a key Luke merely reads from your shell's environment is never
+sent and no longer connects anything. We store the key encrypted in our own database using
+AES-256-GCM with a server-only secret. It is never returned to any caller:
+there is no endpoint that reads it back, and no code path that decrypts it
+for any purpose other than observing your sessions or carrying the actions
+you explicitly request through that provider. Every key is deleted alongside
+your account if you delete that. Your OpenAI key, if you use your own for
+voice, is a different key with no vault: it stays encrypted on this Mac as
+described below.
 
 **Scheduled observation of your Conductor sessions.** While you hold a synced
 Conductor key and have signed in within the last 7 days, our service reads
@@ -549,10 +552,10 @@ Send.
   empty, and the introduction draws no sessions on screen, real or pretend.
   It can act on nothing.
 - Coding agent providers you connect (Conductor), using the key or
-  account access you supply. The synced-key vault holds Conductor keys only.
+  account access you supply. The vault holds Conductor keys only.
   Luke reads your sessions, and sends something back
   only when you ask it to, such as a message you wrote.
-  With a synced Conductor key, our service also reads your Conductor sessions
+  With a Conductor key in the vault, our service also reads your Conductor sessions
   about once a minute on the schedule described above, under that key.
   If you open a Conductor session's screen in the iOS app, our service also
   reads that session's conversation from Conductor — your own messages and the
@@ -598,10 +601,10 @@ your network address, as it does for the app's recordings.
 Your settings, local provider API keys, and calendar access stay on your
 Mac, and so do the conversation, working memory, workspace files, and
 remembered facts of a Luke whose judgment runs on your Mac.
-Local keys and calendar access are encrypted in the macOS Keychain. Provider
-API keys you sync to the hosted service, and the latest roster of your
+Your OpenAI key and calendar access are encrypted in the macOS Keychain. Your
+Conductor key, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
-encrypted in our own database, as described above. When Luke runs a turn for
+encrypted in our own database and nowhere on your Mac, as described above. When Luke runs a turn for
 you on our service, the workspace files and remembered facts that turn reads
 and writes are stored sealed in the same database, and the conversation it
 writes is stored there unsealed, each as described above. Your account information is held by our own
@@ -611,8 +614,8 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 - Disconnect any provider or calendar to stop it being read.
 - Delete your OpenAI key to turn voice off.
-- Delete any synced provider API key from that provider's row in Settings. Keys
-  are also deleted when you delete your account.
+- Delete your Conductor key from its row in Settings, which removes it from
+  our vault. Keys are also deleted when you delete your account.
 - Clear the Conversation tab to have the service mark your account's
   conversation deleted (removed thirty days later, and gone from every Mac on
   the account at its next read) and to remove the stored conversation and

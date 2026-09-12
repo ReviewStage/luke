@@ -218,6 +218,7 @@ const KEY_WORDS = "API key credential connect cloud agent sync synced";
    said by the Connect button standing where the check would be. */
 const CREDENTIAL_STATUS = {
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "From environment",
+  [CREDENTIAL_SOURCE.SERVICE]: "Held by Luke's service",
 } as const satisfies Partial<Record<CredentialSource, string>>;
 
 /** Whether this system has been asked for encrypted storage and refused. */
@@ -275,21 +276,26 @@ function credentialConnection(
         {providerRunsSessionsInCloud(provider.id) ? <CloudBadge /> : null}
       </>
     ),
-    status: (input) => ({
-      connected: source(input) !== CREDENTIAL_SOURCE.NONE,
-      ...(source(input) === CREDENTIAL_SOURCE.ENVIRONMENT
-        ? { words: CREDENTIAL_STATUS[CREDENTIAL_SOURCE.ENVIRONMENT] }
-        : undefined),
-    }),
+    status: (input) => {
+      const current = source(input);
+      return {
+        connected: current !== CREDENTIAL_SOURCE.NONE,
+        ...(current === CREDENTIAL_SOURCE.ENVIRONMENT || current === CREDENTIAL_SOURCE.SERVICE
+          ? { words: CREDENTIAL_STATUS[current] }
+          : undefined),
+      };
+    },
     actions: (input) => {
       const control = input.credentials;
       const entry = entryForProvider(control, provider.id);
       const editing = entry !== undefined;
-      // Deleting is only ever for a key kept here; one read from the
-      // environment is not Luke's to remove. Either can be superseded by a key
-      // typed in, so both connected states offer the same editor and only the
-      // unconnected one is asked to connect.
-      const stored = source(input) === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
+      // Deleting is only ever for a key Luke keeps, here or with his service;
+      // one read from the environment is not Luke's to remove. Either can be
+      // superseded by a key typed in, so both connected states offer the same
+      // editor and only the unconnected one is asked to connect.
+      const stored =
+        source(input) === CREDENTIAL_SOURCE.ENCRYPTED_FILE ||
+        source(input) === CREDENTIAL_SOURCE.SERVICE;
       const connected = source(input) !== CREDENTIAL_SOURCE.NONE;
       const busy = entry?.busy ?? false;
       // One credential is entered at a time, because there is one slot to enter
@@ -298,7 +304,10 @@ function credentialConnection(
       // something already pasted — and it says why rather than going quiet for
       // no visible reason.
       const held = control.entry !== undefined && !editing;
-      const blocked = busy || storageUnavailable(input) || editing || held;
+      // A refused Keychain blocks only a key kept on this Mac: a cloud
+      // provider's key goes to Luke's service and touches no local storage.
+      const keptHere = !providerRunsSessionsInCloud(provider.id);
+      const blocked = busy || (keptHere && storageUnavailable(input)) || editing || held;
       // The pencil opens the same editor from either connected state, but it
       // does not mean the same thing: one replaces the key Luke keeps, the
       // other stands in front of one it only reads.

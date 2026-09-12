@@ -389,23 +389,6 @@ export const APP_SETTING_SCHEMA = {
     adjustable: true,
     visible: calendarConnected,
   }),
-  syncProviderKeys: toggleSetting({
-    field: "syncProviderKeys",
-    id: APP_SETTING_ID.SYNC_PROVIDER_KEYS,
-    label: "Sync provider keys",
-    description:
-      "Whether provider API keys are also stored, encrypted, with Luke's own service for the account's other Luke devices. While on, the keys stored here are kept synced: a key saved while signed in syncs in the same press, and Luke re-syncs the stored keys when he starts signed in, at a sign-in, and when the switch turns on — automatically only for the account they were last synced for; another account signing in syncs nothing until it saves a key or flips the switch itself. Turning it off deletes every synced copy while the keys on this Mac stay. The service never sends a key back.",
-    default: true,
-    page: SETTINGS_PAGE.CONNECTIONS,
-    section: SETTING_SECTION.SYNC,
-    order: 140,
-    manual: `${CONNECTIONS_PAGE}, in its Sync section`,
-    sideEffect: SETTING_SIDE_EFFECT.VAULT_SYNC,
-    // Not adjustable by a spoken ask, deliberately: flipping it moves
-    // credentials to and from Luke's service, and a credential action is
-    // taken by hand alone.
-    adjustable: false,
-  }),
   showOnAllDisplays: toggleSetting({
     field: "showOnAllDisplays",
     id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
