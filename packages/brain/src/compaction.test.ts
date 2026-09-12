@@ -11,7 +11,6 @@ import {
   type ModelCapabilities,
   type ModelRequestOptions,
   type ModelResponse,
-  promiseAgentRuntime,
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
@@ -328,13 +327,11 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
     createGenerationId: () => `gen-${++ids}`,
     now: () => NOW,
   });
-  const runtime = promiseAgentRuntime(
-    new ToolLoopAgentRuntime({
-      model,
-      itemFormat: RESPONSES_ITEM_FORMAT,
-      createContext: () => new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY),
-    }),
-  );
+  const runtime = new ToolLoopAgentRuntime({
+    model,
+    itemFormat: RESPONSES_ITEM_FORMAT,
+    createContext: () => new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY),
+  });
   const reports: string[] = [];
   const agent = new BrainAgent({
     conversationId: MAIN_SESSION_KEY,

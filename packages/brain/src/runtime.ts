@@ -217,7 +217,8 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
    * loop: it follows the loop's own exit, so a batch of calls the loop was in
    * the middle of pairing is paired in full before the run answers, and it
    * runs where no interruption can reach it, so a run that was cancelled
-   * still tells its end exactly once.
+   * still tells its end exactly once — including when the interruption is the
+   * host's own, the turn this run rides in ending around it.
    */
   #run(
     request: RuntimeRunRequestEffect,
@@ -251,14 +252,23 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
         });
       }),
     );
+    // The end a cancelled run answers with, told once: an end the loop already
+    // reached stands, and anything else is the cancelled one.
+    const settled = Effect.suspend(() => (end.told ? Effect.succeed(end.told) : cancelled));
     const loop = this.#loop(request, signal, end, steered, emit, finish);
     return Effect.gen(function* () {
       const running = yield* Effect.fork(loop);
       yield* Effect.fork(Effect.zipRight(whenAborted(signal), Fiber.interrupt(running)));
-      const exit = yield* Fiber.await(running);
+      // A host that interrupts the fiber it runs this on — the turn ending
+      // around the run — is the same end as its own cancel, so the loop is
+      // stopped and the end still told before this fiber dies, rather than
+      // lost to the interruption that took the wait.
+      const exit = yield* Effect.onInterrupt(Fiber.await(running), () =>
+        Effect.asVoid(Effect.zipRight(Fiber.interrupt(running), settled)),
+      );
       if (Exit.isSuccess(exit)) return exit.value;
       if (!Cause.isInterruptedOnly(exit.cause)) return yield* Effect.failCause(exit.cause);
-      return end.told ?? (yield* cancelled);
+      return yield* settled;
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {

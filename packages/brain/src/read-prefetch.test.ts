@@ -185,6 +185,7 @@ const rig = (
     const prefetch = new ReadPrefetch(
       {
         model,
+        carry: (effect) => Effect.runPromise(effect),
         conversationId: MAIN_SESSION_KEY,
         roster: () => ({
           text: "Currently observed sessions:\n- abc\n- def",

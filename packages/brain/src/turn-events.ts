@@ -2,7 +2,7 @@ import {
   CONTEXT_INPUT_KIND,
   RUNTIME_EVENT,
   type RuntimeEvent,
-  type RuntimeRun,
+  type RuntimeRunEffect,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { UserMessageMetadata } from "@sidecar/wire";
@@ -81,7 +81,7 @@ export class TurnEvents {
   }
 
   /** The run under way, its steer telling each message the run takes as words of the turn's own kind. */
-  relaying(run: RuntimeRun, metadata: UserMessageMetadata): RuntimeRun {
+  relaying(run: RuntimeRunEffect, metadata: UserMessageMetadata): RuntimeRunEffect {
     return {
       runId: run.runId,
       done: run.done,

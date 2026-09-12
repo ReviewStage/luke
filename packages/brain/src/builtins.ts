@@ -1,10 +1,5 @@
 import { RESPONSES_ITEM_FORMAT } from "@sidecar/runtime";
-import {
-  type AgentRuntime,
-  type ExecutionRuntime,
-  type ModelAdapter,
-  promiseAgentRuntime,
-} from "@sidecar/runtime/vocabulary";
+import type { AgentRuntimeEffect, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 
@@ -19,22 +14,15 @@ import { ToolLoopAgentRuntime } from "./runtime.js";
  * `@sidecar/brain/ui-message-context` rather than here, because it reaches
  * the AI SDK at run time and the barrel must not.
  *
- * The execution is the runtime every run of this loop is a fiber on. A host
- * that composes one hands its own, so a turn's fiber and the host that
- * cancels it stand on one runtime; a caller that hands none runs on Effect's
- * default, which is what a test building a loop by hand wants.
+ * The loop runs nothing of its own: every answer it gives is an effect, and
+ * the fiber each one runs on is whichever runtime the host that composed the
+ * agent carries its turns on.
  */
-export function toolLoopRuntimeOver(
-  model: ModelAdapter,
-  execution?: ExecutionRuntime,
-): AgentRuntime {
-  return promiseAgentRuntime(
-    new ToolLoopAgentRuntime({
-      model,
-      itemFormat: RESPONSES_ITEM_FORMAT,
-      createContext: (format) =>
-        new ResponsesContextEngine({ id: format.runtime, version: format.runtimeVersion }),
-    }),
-    execution ? { execution } : {},
-  );
+export function toolLoopRuntimeOver(model: ModelAdapter): AgentRuntimeEffect {
+  return new ToolLoopAgentRuntime({
+    model,
+    itemFormat: RESPONSES_ITEM_FORMAT,
+    createContext: (format) =>
+      new ResponsesContextEngine({ id: format.runtime, version: format.runtimeVersion }),
+  });
 }

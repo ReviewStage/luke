@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   CONTEXT_INPUT_KIND,
   type ContextOpening,
+  RuntimeResumeRefused,
 } from "@sidecar/runtime/vocabulary";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { freshBrainState } from "./envelope.js";
@@ -14,6 +16,8 @@ import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
 const NOW = 1_800_000_000_000;
+
+const carry = <A>(effect: Effect.Effect<A>): Promise<A> => Effect.runPromise(effect);
 
 function heldRuntime() {
   const context = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
@@ -27,16 +31,16 @@ function heldRuntime() {
   const opening = new Promise<ContextOpening>((resolve) => {
     release = () => resolve({ context, bootstrap: { loaded: true, repaired: 0 } });
   });
-  const runtime: AgentRuntime = {
+  const runtime: AgentRuntimeEffect = {
     descriptor: { id: "held", checkpoint: context.checkpointFormat },
     quietUntil: () => undefined,
-    capabilities: () => Promise.resolve(undefined),
-    compact: () => Promise.resolve({ compacted: false, reason: "not compacted here" }),
-    openContext: () => opening,
+    capabilities: () => Effect.succeed(undefined),
+    compact: () => Effect.succeed({ compacted: false, reason: "not compacted here" }),
+    openContext: () => Effect.promise(() => opening),
     start: () => {
       throw new Error("not started here");
     },
-    resume: () => Promise.resolve({ refused: "not resumed here" }),
+    resume: () => Effect.fail(new RuntimeResumeRefused({ reason: "not resumed here" })),
   };
   return { runtime, context, release: () => release?.(), disposed: () => disposed };
 }
@@ -51,6 +55,7 @@ test("an abort and the open's resolution in the same turn leave the context disc
     freshBrainState("gen-1", NOW),
     abortFirst.runtime,
     UNKNOWN_ACTION_RESULT,
+    carry,
   );
   first.abort.abort();
   abortFirst.release();
@@ -64,6 +69,7 @@ test("an abort and the open's resolution in the same turn leave the context disc
     freshBrainState("gen-2", NOW),
     releaseFirst.runtime,
     UNKNOWN_ACTION_RESULT,
+    carry,
   );
   releaseFirst.release();
   second.abort.abort();
@@ -73,7 +79,12 @@ test("an abort and the open's resolution in the same turn leave the context disc
 
   // Released later, across turns: still discarded, still once.
   const later = heldRuntime();
-  const third = generationFrom(freshBrainState("gen-3", NOW), later.runtime, UNKNOWN_ACTION_RESULT);
+  const third = generationFrom(
+    freshBrainState("gen-3", NOW),
+    later.runtime,
+    UNKNOWN_ACTION_RESULT,
+    carry,
+  );
   third.abort.abort();
   await third.opened;
   assert.equal(later.disposed(), 0);
@@ -90,6 +101,7 @@ test("an open that resolves while the generation stands installs the context and
     freshBrainState("gen-4", NOW),
     standing.runtime,
     UNKNOWN_ACTION_RESULT,
+    carry,
   );
   standing.release();
   const opened = await generation.opened;

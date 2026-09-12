@@ -33,7 +33,6 @@ export {
 } from "./child-records.js";
 export { reserveTokens, shouldCompact } from "./compaction-policy.js";
 export {
-  type AgentRuntime,
   type AgentRuntimeEffect,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
@@ -65,7 +64,6 @@ export {
   type ModelResponse,
   type ModelTokenCount,
   type ModelUsage,
-  promiseAgentRuntime,
   REASONING_EFFORT,
   type ReasoningEffort,
   ReasoningEffortSchema,
@@ -77,10 +75,8 @@ export {
   type RuntimeEvent,
   type RuntimeIdentity,
   RuntimeResumeRefused,
-  type RuntimeRun,
   type RuntimeRunEffect,
   type RuntimeRunEnd,
-  type RuntimeRunRequest,
   type RuntimeRunRequestEffect,
   sameCheckpointFormat,
   type ToolExecutionContext,

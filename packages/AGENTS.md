@@ -22,9 +22,9 @@ succeeds with the minted action or fails with an `AdmitRefusal` carrying the
 same sentence a `Refusal` does, and reads the roster for itself inside the
 effect; `admit()` is the Promise door over it, the strangler shim that runs
 the effect for the callers still holding a Promise — the brain's tool modules,
-the hosted action endpoint, the provider contract — until P7's composers and
-the turn runner they compose call `admitEffect()` themselves, and P12-02
-deletes the door with the `Settled` Promise signatures.
+the hosted action endpoint, the provider contract — and P12-04 deletes it with
+the `ToolExecutor` seam those tool modules answer: the turn that dispatches a
+tool call is a fiber, but the call itself still crosses a promise.
 `repository-checks.sh` fences both names to the brain's tool modules alike. Everything below it re-shapes what it
 already holds through `reshapeAdmitted`, which needs an admitted value to
 answer at all — which is how a provider's write signature enforces the

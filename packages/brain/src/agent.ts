@@ -1,8 +1,9 @@
 import type { ChildEnd, ChildPolicyContext } from "@sidecar/runtime";
 import type {
-  AgentRuntime,
+  AgentRuntimeEffect,
   ChildCompletionRecord,
   ChildRunRecord,
+  ExecutionRuntime,
   MemoryDefinition,
   ModelAdapter,
   ReasoningEffort,
@@ -14,10 +15,11 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Fiber, PubSub, Stream } from "effect";
+import { Effect, Fiber, PubSub, Runtime, Stream } from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
+import { type Carry, carryOn } from "./effect/carry.js";
 import {
   type BrainPersistedState,
   type BrainStoreLease,
@@ -97,7 +99,13 @@ export interface BrainAgentOptions {
   /** The conversation this agent is: the key every run event names, which is the conversation's id in this build. */
   conversationId: SessionKey;
   /** The execution the host runs turns on; it decides how a model and its tools loop, and it alone reaches the model. */
-  runtime: AgentRuntime;
+  runtime: AgentRuntimeEffect;
+  /**
+   * The runtime every turn of this conversation is a fiber of, so a cancel, a
+   * deadline, and the generation's replacement all reach a turn's waits as
+   * that fiber's interruption. The host's own where it has one.
+   */
+  execution?: ExecutionRuntime;
   actions: BrainActionPerformer;
   roster: () => BrainRoster;
   /** Everything the host renders beside the roster: projects, facts, recent conversation, guide. */
@@ -235,6 +243,7 @@ export class BrainAgent {
   readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   readonly #cancel: (timer: ScheduledTimer) => void;
   readonly #report: (message: string) => void;
+  readonly #carry: Carry;
   readonly #generations = new GenerationHolder();
   readonly #lease: BrainStoreLease;
   readonly #ledger: BrainRequestLedger;
@@ -298,6 +307,7 @@ export class BrainAgent {
         globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
       });
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
+    this.#carry = carryOn(options.execution ?? Runtime.defaultRuntime);
     this.#lease = options.store.lease();
     this.#ledger = new BrainRequestLedger({
       store: options.store,
@@ -323,6 +333,7 @@ export class BrainAgent {
     });
     const seam: AgentSeam = {
       now: this.#now,
+      carry: this.#carry,
       schedule: this.#schedule,
       cancel: this.#cancel,
       report: this.#report,
@@ -351,11 +362,13 @@ export class BrainAgent {
             conversationId: options.conversationId,
             roster: options.roster,
             readTranscript: (identity, signal) =>
-              readWholeTranscript(identity, {
-                read: (session) => options.readTranscript(session),
-                signal,
-                maximumChars: PREFETCH_BOUNDS.TRANSCRIPT_CHARS,
-              }),
+              this.#carry(
+                readWholeTranscript(identity, {
+                  read: (session) => options.readTranscript(session),
+                  signal,
+                  maximumChars: PREFETCH_BOUNDS.TRANSCRIPT_CHARS,
+                }),
+              ),
             // The policy a spoken ask's turn would resolve, resolved the same
             // way ahead of it, so a denied read is never begun.
             policy: async () => {
@@ -371,6 +384,7 @@ export class BrainAgent {
                 options.child,
               );
             },
+            carry: this.#carry,
             ...(options.memory ? { memory: options.memory } : undefined),
             now: this.#now,
             schedule: this.#schedule,
@@ -757,7 +771,13 @@ export class BrainAgent {
   }
 
   #generationFrom(state: BrainPersistedState): Generation {
-    return generationFrom(state, this.#options.runtime, UNKNOWN_ACTION_RESULT, this.#now);
+    return generationFrom(
+      state,
+      this.#options.runtime,
+      UNKNOWN_ACTION_RESULT,
+      this.#carry,
+      this.#now,
+    );
   }
 
   async #restore(): Promise<void> {

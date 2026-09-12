@@ -1,5 +1,5 @@
 import {
-  type AgentRuntime,
+  type AgentRuntimeEffect,
   type ContextEngine,
   type ContextOpening,
   checkpointFormatFromTag,
@@ -7,13 +7,14 @@ import {
   type RuntimeCheckpoint,
 } from "@sidecar/runtime/vocabulary";
 import type { UnknownActionResult } from "@sidecar/wire";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Option, Scope } from "effect";
 import { TranscriptCursors } from "./cursors.js";
+import type { Carry } from "./effect/carry.js";
+import { claimedUnlessAborted } from "./effect/settled.js";
 import type { BrainPersistedState } from "./envelope.js";
 import { BrainJournal } from "./journal.js";
 import type { BrainObservationEntry } from "./observation-inbox.js";
 import type { BrainRequestRecord } from "./requests.js";
-import { claimedUnlessAborted, type Settled } from "./settled.js";
 import { RecordingContextEngine } from "./transcript-recorder.js";
 
 /**
@@ -56,7 +57,7 @@ export interface Generation {
   flush: {
     read: boolean;
     lastCompactionCount?: number | undefined;
-    settling?: Promise<void> | undefined;
+    settling?: Effect.Effect<void> | undefined;
   };
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
@@ -103,49 +104,56 @@ function storedCheckpoint(state: BrainPersistedState): RuntimeCheckpoint | undef
 }
 
 /**
- * Claims a context the runtime is opening, or lets it go. The open is raced
- * against the signal: a runtime whose bootstrap ignores the signal cannot
- * hold the wait open past a stop or a replacement, and a context that
- * finishes opening once the signal has fired — in the same turn or later —
- * is retired by the race itself, exactly once, so a successor never inherits
- * it. The value is claimed while the signal stands, but this continuation
- * runs later, so the signal is read once more before the context is handed
- * back: an abort that landed between the two retires it as well.
+ * Claims a context the runtime is opening, or lets it go, answering nothing
+ * where it let go. The open is raced against the signal: a runtime whose
+ * bootstrap ignores the signal cannot hold the wait open past a stop or a
+ * replacement, and a context that finishes opening once the signal has fired
+ * — in the same turn or later, or while the fiber that asked for it is being
+ * interrupted — is retired by the race itself, exactly once, so a successor
+ * never inherits it. The value is claimed while the signal stands, but this
+ * continuation runs later, so the signal is read once more before the context
+ * is handed back: an abort that landed between the two retires it as well.
  */
-export async function claimOpenedContext(
-  open: Promise<ContextOpening>,
+export function claimOpenedContext(
+  open: Effect.Effect<ContextOpening>,
   signal: AbortSignal,
   notLoadedReason: string,
   now: () => number = Date.now,
-): Promise<Settled<OpenedContext>> {
-  const claimed = await claimedUnlessAborted(open, signal, ({ context }) => retireContext(context));
-  if (claimed.aborted) return claimed;
-  const { context, bootstrap } = claimed.value;
-  if (signal.aborted) {
-    retireContext(context);
-    return { aborted: true };
-  }
-  if (bootstrap.loaded) {
-    // The engine is handed back behind the transcript recorder, so every
-    // input the runtime ingests and every fold is on record beside the
-    // checkpoint that carries it.
-    return {
-      aborted: false,
-      value: {
-        kind: CONTEXT_OPENING.LOADED,
-        context: new RecordingContextEngine(context, now),
-        repaired: bootstrap.repaired,
-      },
-    };
-  }
-  retireContext(context);
-  return { aborted: false, value: incompatibleContext(bootstrap.reason ?? notLoadedReason) };
+): Effect.Effect<Option.Option<OpenedContext>> {
+  return Effect.map(
+    claimedUnlessAborted(open, signal, ({ context }) => retireContext(context)),
+    Option.flatMap(({ context, bootstrap }) => {
+      if (signal.aborted) {
+        retireContext(context);
+        return Option.none();
+      }
+      if (bootstrap.loaded) {
+        // The engine is handed back behind the transcript recorder, so every
+        // input the runtime ingests and every fold is on record beside the
+        // checkpoint that carries it.
+        return Option.some<OpenedContext>({
+          kind: CONTEXT_OPENING.LOADED,
+          context: new RecordingContextEngine(context, now),
+          repaired: bootstrap.repaired,
+        });
+      }
+      retireContext(context);
+      return Option.some(incompatibleContext(bootstrap.reason ?? notLoadedReason));
+    }),
+  );
 }
 
+/**
+ * The generation as the agent adopts it: built in one synchronous statement,
+ * because the fence a replacement raises must stand before any disk is waited
+ * on, so the open the runtime answers as an effect is carried to the promise
+ * this object holds by the agent's own door rather than run here.
+ */
 export function generationFrom(
   state: BrainPersistedState,
-  runtime: AgentRuntime,
+  runtime: AgentRuntimeEffect,
   lostResult: UnknownActionResult,
+  carry: Carry,
   now: () => number = Date.now,
 ): Generation {
   const abort = new AbortController();
@@ -157,18 +165,16 @@ export function generationFrom(
             `checkpoint stamp ${state.checkpointFormat} is not one this build reads`,
           ),
         )
-      : claimOpenedContext(
-          runtime.openContext(checkpoint, lostResult, { signal: abort.signal }),
-          abort.signal,
-          `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`,
-          now,
-        )
-          .then((claimed) =>
-            claimed.aborted ? incompatibleContext(REPLACED_WHILE_OPENING) : claimed.value,
-          )
-          .catch((error: Error) =>
-            incompatibleContext(`the runtime could not open the context: ${error.message}`),
-          );
+      : carry(
+          claimOpenedContext(
+            runtime.openContext(checkpoint, lostResult, { signal: abort.signal }),
+            abort.signal,
+            `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`,
+            now,
+          ).pipe(Effect.map(Option.getOrElse(() => incompatibleContext(REPLACED_WHILE_OPENING)))),
+        ).catch((error: Error) =>
+          incompatibleContext(`the runtime could not open the context: ${error.message}`),
+        );
   const scope = Effect.runSync(Scope.make());
   Effect.runSync(
     Scope.addFinalizer(

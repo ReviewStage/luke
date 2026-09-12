@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Duration, Effect, Fiber, TestClock } from "effect";
+import { Deferred, Duration, Effect, Fiber, Option, TestClock } from "effect";
 import { claimedUnlessAborted, settledUnlessAborted, whenAborted } from "./settled.js";
 
 interface CountedSignal {
@@ -96,7 +96,7 @@ describe("settledUnlessAborted", () => {
       counted.abort();
       yield* TestClock.adjust(Duration.minutes(2));
 
-      assert.deepEqual(yield* Fiber.join(fiber), { aborted: true });
+      assert.deepEqual(yield* Fiber.join(fiber), Option.none());
       assert.equal(counted.listening(), 0);
     }),
   );
@@ -110,7 +110,7 @@ describe("settledUnlessAborted", () => {
 
       yield* TestClock.adjust(Duration.minutes(1));
 
-      assert.deepEqual(yield* Fiber.join(fiber), { aborted: false, value: "answer" });
+      assert.deepEqual(yield* Fiber.join(fiber), Option.some("answer"));
       assert.equal(counted.listening(), 0);
     }),
   );
@@ -122,7 +122,7 @@ describe("settledUnlessAborted", () => {
 
       const settled = yield* settledUnlessAborted(Effect.succeed("answer"), counted.signal);
 
-      assert.deepEqual(settled, { aborted: true });
+      assert.deepEqual(settled, Option.none());
       assert.equal(counted.listening(), 0);
     }),
   );
@@ -157,7 +157,7 @@ describe("claimedUnlessAborted", () => {
       counted.abort();
       yield* TestClock.adjust(Duration.minutes(1));
 
-      assert.deepEqual(settled, { aborted: false, value: "held" });
+      assert.deepEqual(settled, Option.some("held"));
       assert.deepEqual(discarded, []);
       assert.equal(counted.listening(), 0);
     }),
@@ -176,7 +176,7 @@ describe("claimedUnlessAborted", () => {
 
       counted.abort();
       const settled = yield* Fiber.join(fiber);
-      assert.deepEqual(settled, { aborted: true });
+      assert.deepEqual(settled, Option.none());
       assert.deepEqual(discarded, []);
 
       yield* TestClock.adjust(Duration.minutes(1));
@@ -198,7 +198,7 @@ describe("claimedUnlessAborted", () => {
       );
       yield* Effect.yieldNow();
 
-      assert.deepEqual(settled, { aborted: true });
+      assert.deepEqual(settled, Option.none());
       assert.deepEqual(discarded, ["held"]);
       assert.equal(counted.listening(), 0);
     }),
@@ -215,8 +215,69 @@ describe("claimedUnlessAborted", () => {
         counted.signal,
         (value) => discarded.push(value),
       );
-      assert.deepEqual(settled, { aborted: true });
+      assert.deepEqual(settled, Option.none());
 
+      yield* TestClock.adjust(Duration.minutes(1));
+      yield* Effect.yieldNow();
+
+      assert.deepEqual(discarded, ["held"]);
+      assert.equal(counted.listening(), 0);
+    }),
+  );
+
+  it.effect("carries the work's own failure when nothing was decided yet", () =>
+    Effect.gen(function* () {
+      const counted = countedSignal();
+      const failure = { reason: "refused" } as const;
+
+      const exit = yield* Effect.exit(
+        claimedUnlessAborted(Effect.fail(failure), counted.signal, () => undefined),
+      );
+
+      assert.deepEqual(exit, Effect.runSyncExit(Effect.fail(failure)));
+      assert.equal(counted.listening(), 0);
+    }),
+  );
+
+  it.effect(
+    "leaves a value owned by exactly one party when the claim and the interruption race",
+    () =>
+      Effect.gen(function* () {
+        const counted = countedSignal();
+        const discarded: string[] = [];
+        const gate = yield* Deferred.make<string>();
+        const fiber = yield* Effect.fork(
+          claimedUnlessAborted(Deferred.await(gate), counted.signal, (value) =>
+            discarded.push(value),
+          ),
+        );
+        yield* Effect.yieldNow();
+
+        // The work answers and the wait is taken away in the same moment: the
+        // claim may land first or the interruption may, and either way the
+        // value is the discard's rather than nobody's.
+        yield* Deferred.succeed(gate, "held");
+        yield* Fiber.interrupt(fiber);
+        yield* Effect.yieldNow();
+
+        assert.deepEqual(discarded, ["held"]);
+        assert.equal(counted.listening(), 0);
+      }),
+  );
+
+  it.effect("hands the value to the discard when the waiting fiber is interrupted", () =>
+    Effect.gen(function* () {
+      const counted = countedSignal();
+      const discarded: string[] = [];
+      const fiber = yield* Effect.fork(
+        claimedUnlessAborted(answeredAfter(Duration.minutes(1), "held"), counted.signal, (value) =>
+          discarded.push(value),
+        ),
+      );
+      yield* Effect.yieldNow();
+
+      yield* Fiber.interrupt(fiber);
+      counted.abort();
       yield* TestClock.adjust(Duration.minutes(1));
       yield* Effect.yieldNow();
 

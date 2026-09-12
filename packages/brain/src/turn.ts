@@ -9,7 +9,6 @@ import {
   type BrainRequestRecord,
   type BrainRunUsage,
 } from "./requests.js";
-import type { ScheduledTimer } from "./seam.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { TurnEvents } from "./turn-events.js";
@@ -85,7 +84,6 @@ export interface RunControl {
   abort: AbortController;
   cancelled: boolean;
   timedOut: boolean;
-  deadline?: ScheduledTimer;
   /** Whether a checkpoint failed inside this run, after which no further action may be dispatched. */
   checkpointFailed: boolean;
   /** Whether the context had to be compacted before the run could be sent and could not be; the context stands as it was. */
