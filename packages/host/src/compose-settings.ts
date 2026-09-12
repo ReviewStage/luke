@@ -60,7 +60,7 @@ interface SettingsLinks {
   applyVoiceCredential: () => Promise<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;
   reconcileSpeech: () => void;
-  broadcastWorkspaceProjects: () => Promise<void>;
+  broadcastWorkspaceProjects: Effect.Effect<void>;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
 }
 
@@ -69,7 +69,7 @@ export interface SettingsComposer extends Composer {
   /**
    * The same store as the promises its unmigrated callers still hold.
    *
-   * @deprecated See {@link AwaitedSettingsStore}; deleted by P12-14d..g.
+   * @deprecated See {@link AwaitedSettingsStore}; deleted by P12-14h.
    */
   readonly awaitedStore: AwaitedSettingsStore;
   readonly recordProductEvent: RecordProductEvent;
@@ -419,7 +419,7 @@ export const composeSettings = (): Effect.Effect<
           changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
           changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
         ) {
-          yield* Effect.promise(() => links().broadcastWorkspaceProjects());
+          yield* links().broadcastWorkspaceProjects;
         }
         emitSettingsSnapshot(result.settings);
       });

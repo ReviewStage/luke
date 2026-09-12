@@ -34,7 +34,7 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Option, Runtime, type Scope } from "effect";
+import { Effect, Either, Option, Runtime, type Scope } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -89,7 +89,8 @@ export interface ObservationComposer extends Composer {
   rosterSettled: () => boolean;
   offeredWorkspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
-  broadcastWorkspaceProjects: () => Promise<void>;
+  /** Told the roster or the settings moved; the settings link runs it on the runtime it captured. */
+  broadcastWorkspaceProjects: Effect.Effect<void>;
   /** The sessions an action may name: the drawn roster less the voice's own. */
   actableSessions: () => readonly Session[];
   roster: () => BrainRoster;
@@ -119,7 +120,11 @@ export const composeObservation = (
     const { settings, account, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
     const { runMode, report, now } = kernel;
-    const settingsStore = settings.awaitedStore;
+    // The runtime this composition is built on: what the poke forks onto, and
+    // what the settings store's own effects are run to a promise on for the
+    // two collaborators still promise-shaped — the session action performer's
+    // one field read, and its own remembered defaults.
+    const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<ObservationLinks>();
     const links = (): ObservationLinks => {
       const standing = late.unsafePeek();
@@ -129,7 +134,6 @@ export const composeObservation = (
       return standing.value;
     };
 
-    const runtime = yield* Effect.runtime<never>();
     const sessionRegistry = new SessionRoster();
     const rosterClient = new HostedRosterClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -180,16 +184,22 @@ export const composeObservation = (
       return runMode.observesProviders ? heldWorkspaceProjects : [];
     }
 
-    async function readWorkspaceDefaults(): Promise<WorkspaceCreationDefaults> {
-      const [defaultProviderId, defaultProjectIds] = await Promise.all([
-        settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-        settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-      ]);
-      const defaults: WorkspaceCreationDefaults = {};
-      if (defaultProviderId) defaults.defaultProviderId = defaultProviderId;
-      if (defaultProjectIds) defaults.defaultProjectIds = defaultProjectIds;
-      brainWorkspaceDefaults = defaults;
-      return defaults;
+    const readWorkspaceDefaultsEffect: Effect.Effect<WorkspaceCreationDefaults> = Effect.gen(
+      function* () {
+        const [defaultProviderId, defaultProjectIds] = yield* Effect.all([
+          Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
+          Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)),
+        ]);
+        const defaults: WorkspaceCreationDefaults = {};
+        if (defaultProviderId) defaults.defaultProviderId = defaultProviderId;
+        if (defaultProjectIds) defaults.defaultProjectIds = defaultProjectIds;
+        brainWorkspaceDefaults = defaults;
+        return defaults;
+      },
+    );
+
+    function readWorkspaceDefaults(): Promise<WorkspaceCreationDefaults> {
+      return Runtime.runPromise(runtime)(readWorkspaceDefaultsEffect);
     }
 
     function brainWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
@@ -199,37 +209,38 @@ export const composeObservation = (
       );
     }
 
-    async function pruneWorkspaceProjectDefaults(
+    const pruneWorkspaceProjectDefaultsEffect = (
       projects: readonly ObservedWorkspaceProject[],
       defaults: Readonly<Partial<Record<string, string>>> | undefined,
       isCurrent: () => boolean,
-    ): Promise<void> {
-      if (account.signedIn()) return;
-      try {
+    ): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (account.signedIn()) return;
         for (const providerId of staleWorkspaceProjectDefaults(projects, defaults)) {
           if (!isCurrent()) return;
           const expected = defaults?.[providerId];
           if (expected === undefined) continue;
-          const saved = await settingsStore.clearEntryIfUnchanged(
-            APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-            providerId,
-            expected,
+          const outcome = yield* Effect.either(
+            settings.store.clearEntryIfUnchanged(
+              APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+              providerId,
+              expected,
+            ),
           );
+          if (Either.isLeft(outcome)) return;
+          const saved = outcome.right;
           if (!saved.cleared) continue;
           if (!isCurrent()) return;
           settings.emitSettingsSnapshot(saved.settings);
         }
-      } catch {
-        return;
-      }
-    }
+      });
 
-    async function broadcastWorkspaceProjects(): Promise<void> {
+    const broadcastWorkspaceProjects: Effect.Effect<void> = Effect.gen(function* () {
       const generation = ++workspaceProjectsBroadcastGeneration;
       const offeredProjects = offeredWorkspaceProjects();
-      const defaults = (await readWorkspaceDefaults()).defaultProjectIds;
+      const defaults = (yield* readWorkspaceDefaultsEffect).defaultProjectIds;
       if (generation !== workspaceProjectsBroadcastGeneration) return;
-      await pruneWorkspaceProjectDefaults(
+      yield* pruneWorkspaceProjectDefaultsEffect(
         offeredProjects,
         defaults,
         () => generation === workspaceProjectsBroadcastGeneration,
@@ -240,19 +251,20 @@ export const composeObservation = (
       if (serialized === lastWorkspaceProjects) return;
       lastWorkspaceProjects = serialized;
       kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: carried(projects) });
-    }
+    });
 
-    async function rememberWorkspaceDefaults(
+    const rememberWorkspaceDefaultsEffect = (
       providerId: CloudAgentProviderId,
       providerProjectId: string,
       namedSelection: WorkspaceAgentSelection | undefined,
-    ): Promise<void> {
-      try {
+    ): Effect.Effect<void> =>
+      Effect.gen(function* () {
         let accountPreferencesTouched = false;
         if (
-          (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
+          (yield* settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) ===
+          undefined
         ) {
-          const saved = await settingsStore.set(
+          const saved = yield* settings.store.set(
             APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
             providerId,
           );
@@ -260,11 +272,11 @@ export const composeObservation = (
           accountPreferencesTouched = true;
         }
         if (
-          (await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[
+          (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[
             providerId
           ] === undefined
         ) {
-          const saved = await settingsStore.setEntry(
+          const saved = yield* settings.store.setEntry(
             APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
             providerId,
             workspaceProjectSelectionId({ providerProjectId }),
@@ -274,11 +286,11 @@ export const composeObservation = (
         }
         if (
           namedSelection !== undefined &&
-          (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+          (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
             providerId
           ] === undefined
         ) {
-          const saved = await settingsStore.setEntry(
+          const saved = yield* settings.store.setEntry(
             APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
             providerId,
             namedSelection,
@@ -287,9 +299,20 @@ export const composeObservation = (
           accountPreferencesTouched = true;
         }
         if (accountPreferencesTouched) settings.pushAccountPreferences();
-      } catch {
-        // The reply is the creation's; a failed remember has no line in it.
-      }
+      }).pipe(
+        // The reply is the creation's; a failed remember has no line in it,
+        // exactly as the try/catch this replaced swallowed every step's own.
+        Effect.catchAll(() => Effect.void),
+      );
+
+    function rememberWorkspaceDefaults(
+      providerId: CloudAgentProviderId,
+      providerProjectId: string,
+      namedSelection: WorkspaceAgentSelection | undefined,
+    ): Promise<void> {
+      return Runtime.runPromise(runtime)(
+        rememberWorkspaceDefaultsEffect(providerId, providerProjectId, namedSelection),
+      );
     }
 
     function openCreatedWorkspaces(sessions: readonly Session[]): void {
@@ -308,7 +331,11 @@ export const composeObservation = (
       actions: actionClient,
       refreshSessions: pokeRefresh,
       sendsNetwork: runMode.sendsNetwork,
-      settingsStore,
+      // The one field this collaborator still awaits, run to a promise on
+      // this composition's own runtime until it answers effects itself.
+      settingsStore: {
+        get: (field) => Runtime.runPromise(runtime)(settings.store.get(field)),
+      },
       rememberWorkspaceDefaults,
       expectCreatedWorkspace: (identity, at) => createdWorkspaceOpens.expect(identity, at),
       openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
@@ -412,7 +439,7 @@ export const composeObservation = (
       unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
         broadcastSessions(sessions);
         openCreatedWorkspaces(sessions);
-        void broadcastWorkspaceProjects();
+        Runtime.runFork(runtime)(broadcastWorkspaceProjects);
         countObservedSessions(sessions);
       });
     }
@@ -501,8 +528,8 @@ export const composeObservation = (
       [GATEWAY_METHOD.WORKSPACE_PROJECTS]: () =>
         Effect.gen(function* () {
           if (!account.capabilitiesActive()) return { projects: carried([]) };
-          const defaults = yield* Effect.promise(() =>
-            settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+          const defaults = yield* Effect.orDie(
+            settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
           );
           return {
             projects: carried(

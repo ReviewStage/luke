@@ -27,12 +27,12 @@ import type { SettingsStore, StoredAccount } from "./settings-store.js";
  * caller yields.
  *
  * @deprecated The strangler shim on the `docs/adr/0001-effect.md` allowlist,
- * standing in for the callers this PR did not take: the calendars,
- * observation, and live composers, the settings composer's own
- * account-preferences and vault chains, the session action performer, and
- * `@sidecar/voice`'s `VoiceSettings`, each a promise-shaped collaborator whose
- * conversion is its own change. It is deleted by P12-14d..g as each of those
- * moves onto the store itself.
+ * standing in for the two callers still promise-shaped: `compose-calendars.ts`'s
+ * `GoogleCalendarReader`/`AppleCalendarReader` readers, and the type this
+ * interface still names for `session-action-performer.ts`'s one field read
+ * (`Pick<AwaitedSettingsStore, "get">`), even though that read no longer runs
+ * on this file's own instance. It is deleted by P12-14i once both move onto
+ * the store itself.
  */
 export interface AwaitedSettingsStore {
   get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;

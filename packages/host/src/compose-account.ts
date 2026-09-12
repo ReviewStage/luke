@@ -71,7 +71,7 @@ export interface AccountComposer extends Composer {
    */
   readonly token: AccountToken;
   applyVoiceCredential: () => Promise<void>;
-  sessionReplayState: () => Promise<{ permitted: boolean; accountId?: string }>;
+  sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
   link: (links: AccountLinks) => void;
 }
 
@@ -151,7 +151,7 @@ export const composeAccount = (
         // the promise it replaced was not waited for. The run allowlist entry
         // (`docs/adr/0001-effect.md`) goes when `onChange` answers an Effect.
         Runtime.runFork(runtime)(settings.emitSettings());
-        void emitSessionReplay();
+        Runtime.runFork(runtime)(emitSessionReplay);
         if (signedIn && !wasSignedIn) {
           settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
           links().onFirstSignInArrival();
@@ -232,25 +232,28 @@ export const composeAccount = (
      */
     let sessionReplayEndedByDeletion = false;
 
-    async function sessionReplayState(): Promise<{ permitted: boolean; accountId?: string }> {
-      const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-      const accountId = signedIn ? (await settings.awaitedStore.readAccount())?.id : undefined;
-      return {
-        permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
-        ...(accountId ? { accountId } : undefined),
-      };
-    }
+    const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> =
+      Effect.gen(function* () {
+        const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+        const accountId = signedIn
+          ? (yield* Effect.orDie(settings.store.readAccount()))?.id
+          : undefined;
+        return {
+          permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
+          ...(accountId ? { accountId } : undefined),
+        };
+      });
 
     let sessionReplayGeneration = 0;
-    async function emitSessionReplay(): Promise<void> {
-      // The account is read asynchronously, and a sign-out reports the transition
-      // before it clears the stored account, so a late answer must not restart
-      // recording under the person who just left.
+    // The account is read asynchronously, and a sign-out reports the transition
+    // before it clears the stored account, so a late answer must not restart
+    // recording under the person who just left.
+    const emitSessionReplay: Effect.Effect<void> = Effect.gen(function* () {
       const generation = ++sessionReplayGeneration;
-      const replay = await sessionReplayState();
+      const replay = yield* sessionReplayState;
       if (generation !== sessionReplayGeneration) return;
       kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
-    }
+    });
 
     /**
      * @deprecated Runs the transition on the runtime this composer was built
@@ -316,7 +319,7 @@ export const composeAccount = (
           const snapshot = yield* Effect.orDie(session.deleteEverywhere());
           // Only a deletion that landed stands recording down for the run.
           sessionReplayEndedByDeletion = true;
-          void emitSessionReplay();
+          yield* Effect.fork(emitSessionReplay);
           return { account: carried(snapshot) };
         }),
     };

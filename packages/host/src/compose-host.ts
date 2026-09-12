@@ -281,7 +281,7 @@ export const hostAssemblyLayer: Layer.Layer<
           const quiet = account.capabilitiesActive()
             ? yield* calendars.announcementsQuietNow(now())
             : false;
-          const replay = yield* Effect.promise(() => account.sessionReplayState());
+          const replay = yield* account.sessionReplayState;
           const workspaceProjectDefaults = account.capabilitiesActive()
             ? yield* Effect.orDie(
                 settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
