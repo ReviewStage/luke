@@ -15,13 +15,13 @@ import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { test } from "vitest";
-import type { NotebookMemoryAccess } from "./notebook-memory.js";
 import {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   NOTEBOOK_MEMORY_REFUSAL,
   NOTEBOOK_MEMORY_TOOL,
   NOTEBOOK_RECALL_ID,
+  type NotebookMemoryAccess,
   type NotebookMemoryProviderSeams,
   notebookMemoryProvider,
   notebookMemoryToolShapes,

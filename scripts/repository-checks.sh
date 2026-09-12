@@ -588,17 +588,11 @@ openclaw_ported_files=(
     packages/runtime/src/storage.ts
     packages/runtime/src/skills.ts
     packages/memory/src/defaults.ts
-    packages/memory/src/ranking.ts
-    packages/memory/src/chunking.ts
     packages/memory/src/flush.ts
     packages/brain/src/loop-guard.ts
     packages/brain/src/compaction.ts
     packages/brain/src/context-engine.ts
     packages/brain/src/state-store.ts
-    packages/brain/src/store/maintenance.ts
-    packages/brain/src/store/maintenance-run.ts
-    packages/brain/src/store/archives.ts
-    packages/brain/src/store/compression.ts
 )
 openclaw_effect_imports=""
 for ported in "${openclaw_ported_files[@]}"; do

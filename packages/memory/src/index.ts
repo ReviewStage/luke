@@ -1,33 +1,4 @@
-export { chunkMarkdown, hashText } from "./chunking.js";
-export {
-  type ConversationLineHit,
-  type EmbeddingModelIdentity,
-  type EmbeddingWrite,
-  type IndexedFileWrite,
-  type IndexedSourceRecord,
-  type KeywordHit,
-  MEMORY_ORIGIN,
-  MEMORY_SOURCE,
-  type MemoryApplyReport,
-  type MemoryOrigin,
-  type MemoryProvenance,
-  type MemoryReadResult,
-  type MemoryScanPlan,
-  type MemorySearchAnswer,
-  type MemorySearchOutcome,
-  type MemorySearchQuery,
-  type MemorySearchResult,
-  type MemorySource,
-  type MemorySyncApply,
-  type VectorHit,
-} from "./contracts.js";
-export {
-  ESTIMATED_CHARS_PER_TOKEN,
-  MEMORY_QUERY_MAXIMUM_CHARS,
-  MEMORY_SEARCH_DEFAULTS,
-  RETRIEVAL_MODE,
-  type RetrievalMode,
-} from "./defaults.js";
+export { ESTIMATED_CHARS_PER_TOKEN, MEMORY_QUERY_MAXIMUM_CHARS } from "./defaults.js";
 export { isMaintenanceEligibleConversation } from "./eligibility.js";
 export {
   alreadyFlushedForCompaction,
@@ -53,29 +24,12 @@ export {
   shouldRunMemoryFlush,
 } from "./flush.js";
 export {
-  appendNotebookEntry,
-  isNotebookRootFile,
-  NOTEBOOK_FILE,
-  NOTEBOOK_ROOT_FILES,
-  notebookEntryText,
-  parseNotebook,
-  removeNotebookEntry,
-} from "./notebook-markdown.js";
-export {
-  MemorySeamRefused,
-  type MemorySyncReport,
-  makeNotebookMemory,
-  type NotebookMemory,
-  type NotebookMemoryAccess,
-  type NotebookMemoryOptions,
-  type NotebookMemoryStore,
-} from "./notebook-memory.js";
-export {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   NOTEBOOK_MEMORY_REFUSAL,
   NOTEBOOK_MEMORY_TOOL,
   NOTEBOOK_RECALL_ID,
+  type NotebookMemoryAccess,
   type NotebookMemoryProviderSeams,
   type NotebookMemoryToolName,
   type NotebookMemoryToolShape,
@@ -83,21 +37,3 @@ export {
   notebookMemoryToolShapes,
   primedNotesText,
 } from "./provider.js";
-export {
-  bm25RankToScore,
-  buildFtsQuery,
-  cosineSimilarity,
-  datedNoteDay,
-  decayedScore,
-  defaultRankingOptions,
-  type HybridRankingOptions,
-  isEvergreenMemoryPath,
-  jaccardSimilarity,
-  mergeHybridResults,
-  mmrRerank,
-  parseEmbedding,
-  selectHybridSearchResults,
-  serializeEmbedding,
-  textSimilarity,
-  tokenize,
-} from "./ranking.js";

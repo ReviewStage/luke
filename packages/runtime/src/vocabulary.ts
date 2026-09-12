@@ -24,9 +24,6 @@ export {
   type ChildRunRecord,
   type ChildSpawnReceipt,
   COMPLETION_DELIVERY_STATUS,
-  childCompletionRecordFromWire,
-  childRunRecordFromWire,
-  completionIdFor,
   isChildCleanup,
   isChildContextMode,
   isTerminalChildRunStatus,
@@ -46,7 +43,6 @@ export {
   type ContextOpening,
   checkpointFormatFromTag,
   checkpointFormatTag,
-  type EmbeddingAdapter,
   type ExecutionRuntime,
   isReasoningEffort,
   type MaybePromise,
@@ -85,7 +81,6 @@ export {
 } from "./execution.js";
 export {
   type AgentId,
-  agentId,
   CONVERSATION_KIND,
   type ConversationKind,
   ConversationKindSchema,
@@ -93,7 +88,6 @@ export {
   childSessionKey,
   conversationKindOf,
   DEFAULT_AGENT_ID,
-  isConversationKind,
   isIdentifier,
   isRunOrigin,
   MAIN_CONVERSATION_NAME,
@@ -128,21 +122,12 @@ export {
 } from "./memory.js";
 export { ArchiveReasonSchema, CompactionSourceSchema } from "./storage.effect.js";
 export {
-  ARCHIVE_ENCODING,
   ARCHIVE_REASON,
-  type ArchiveEncoding,
-  type ArchiveReason,
   COMPACTION_SOURCE,
-  type CompactionBoundary,
   type CompactionSource,
   type ConversationAppendOutcome,
-  type ConversationArchiveRecord,
   type ConversationRecord,
-  conversationArchiveRecordFromWire,
   conversationRecordToWire,
-  isArchiveReason,
-  isCompactionSource,
-  type StoredTranscriptEvent,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "./storage.js";

@@ -325,30 +325,6 @@ export interface ModelAdapter {
   quietUntil(): number | undefined;
 }
 
-interface EmbeddingIdentity {
-  readonly provider: string;
-  readonly model: string;
-  readonly dimensions: number;
-}
-
-type EmbeddingBatch =
-  | {
-      readonly outcome: typeof MODEL_RESPONSE_OUTCOME.ANSWERED;
-      readonly vectors: readonly (readonly number[])[];
-    }
-  | { readonly outcome: typeof MODEL_RESPONSE_OUTCOME.THROTTLED; readonly until: number }
-  | {
-      readonly outcome: typeof MODEL_RESPONSE_OUTCOME.FAILED;
-      readonly failure: ModelFailure;
-      readonly reason: string;
-    };
-
-/** Embeds batches of text and says which model, at what width, produced them. */
-export interface EmbeddingAdapter {
-  identity(): Promise<EmbeddingIdentity>;
-  embed(texts: readonly string[], options?: { signal?: AbortSignal }): Promise<EmbeddingBatch>;
-}
-
 export const CONTEXT_INPUT_KIND = {
   /** Words from the host: an ask, an observation, a released hold, each already marked as data. */
   USER_TEXT: "user_text",

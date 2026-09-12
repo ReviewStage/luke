@@ -86,12 +86,11 @@ export interface FakeBrainStateRepository extends BrainStateRepository {
 }
 
 /**
- * The envelope on nothing but memory, with the seams a store's own tests
- * need: a refusal, an unreadable generation, and a load or a save held open
- * so a test can land a fence while one is out. One fake for every test that
- * needs a repository, because a store whose durable owner is faked five
- * different ways is five chances for one of them to be wrong about the
- * contract.
+ * The envelope on nothing but memory, with the seams the state store's own
+ * tests need: a refusal, an unreadable generation, and a load or a save held
+ * open so a test can land a fence while one is out. One fake for every test
+ * that needs a repository, because a repository faked five different ways is
+ * five chances for one of them to be wrong about the contract.
  */
 export function fakeBrainStateRepository(
   initial?: BrainPersistedState | { unreadable: true },
