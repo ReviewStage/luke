@@ -1,5 +1,6 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import { Effect, Schema } from "effect";
+import { auth } from "../../auth.js";
 import { type CloudAgentProviderId, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { runWeb } from "../../runtime.js";
 import { executeSessionAction } from "../action-execute.js";
@@ -129,10 +130,7 @@ export function productionBrainHostSeams(): BrainHostSeams {
       const own = process.env[VERCEL_ENVIRONMENT.URL]?.trim();
       return named || (own ? `https://${own}` : undefined);
     },
-    // The auth service opens the database as it is imported, so it is reached
-    // only when a bearer is checked and never by discovery of these files.
     userInfo: async (input) => {
-      const { auth } = await import("../../auth.js");
       // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.
       const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
       return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
