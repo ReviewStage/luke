@@ -138,7 +138,7 @@ function roster(
   encryptionSecret: string | undefined,
   userId: string,
 ): Effect.Effect<readonly ObservedSession[], never> {
-  return Effect.promise(() => observeCloudSessions(userId, { ...seams, encryptionSecret })).pipe(
+  return observeCloudSessions(userId, { ...seams, encryptionSecret }).pipe(
     Effect.timeout(OBSERVE_TIMEOUT_MS),
     Effect.orElseSucceed((): readonly ObservedSession[] => []),
   );

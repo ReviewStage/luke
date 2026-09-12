@@ -2,7 +2,7 @@ import type * as HttpClient from "@effect/platform/HttpClient";
 import type { ProviderSessionObservation, SessionProviderPlugin } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
-import type { Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import { conductorPlugin } from "../conductor/index.js";
 
 /**
@@ -309,7 +309,7 @@ export function pluginFor(
   httpClient: Layer.Layer<HttpClient.HttpClient>,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
     /** The roster the brain's reads answer for, when a host holds one the plugin did not read itself. */
@@ -318,7 +318,7 @@ export function pluginFor(
 ): SessionProviderPlugin {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   return conductorPlugin({
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
     httpClient,
     now: overrides.now ?? (() => TEST_TIME),

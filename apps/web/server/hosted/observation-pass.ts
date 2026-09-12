@@ -208,13 +208,11 @@ export function observeAndSnapshot(
     }
 
     const providerIds = keyedCloudProviderIds(input.rows);
-    const passes = yield* Effect.promise(() =>
-      observeCloudProviders({
-        providerIds,
-        readApiKey: readApiKeyFor(input.rows, input.secret),
-        seams: input.seams,
-      }),
-    );
+    const passes = yield* observeCloudProviders({
+      providerIds,
+      readApiKey: readApiKeyFor(input.rows, input.secret),
+      seams: input.seams,
+    });
     const failed = passes.find((pass) => pass.failure !== undefined);
     if (failed?.failure) {
       yield* store.roster.recordPass(userId, { attemptedAt: now, failure: failed.failure });

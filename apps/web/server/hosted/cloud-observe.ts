@@ -1,5 +1,5 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
-import type { Layer } from "effect";
+import { Cause, Effect, Exit, type Layer } from "effect";
 import { ADAPTER_FAILURE } from "../../../../packages/providers/src/shared/adapter-failure.js";
 import type {
   CloudAgentProviderId,
@@ -63,46 +63,51 @@ export interface CloudProviderPass {
  * with its failure rather than failing the others; a key that cannot be
  * decrypted is a plugin with nothing to observe with, named as such.
  */
-export async function observeCloudProviders(options: {
+export function observeCloudProviders(options: {
   providerIds: readonly CloudAgentProviderId[];
-  readApiKey: (providerId: CloudAgentProviderId) => () => Promise<string | undefined>;
+  readApiKey: (providerId: CloudAgentProviderId) => () => Effect.Effect<string | undefined>;
   seams: CloudObserveSeams;
-}): Promise<CloudProviderPass[]> {
-  const plugins = options.providerIds.map((providerId) =>
-    cloudSessionPluginFor(providerId, {
-      readApiKey: options.readApiKey(providerId),
-      ...(options.seams.httpClient ? { httpClient: options.seams.httpClient } : undefined),
-      ...(options.seams.now ? { now: options.seams.now } : undefined),
-    }),
-  );
-  const results = await Promise.allSettled(plugins.map((plugin) => plugin.observe()));
-  return options.providerIds.map((providerId, index) => {
-    const result = results[index];
-    const plugin = plugins[index];
-    if (!result || !plugin) {
-      return {
-        providerId,
-        observations: [],
-        projects: [],
-        failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
-      };
-    }
-    if (result.status === "rejected") {
-      return {
-        providerId,
-        observations: [],
-        projects: [],
-        failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
-      };
-    }
-    const adapterFailure = plugin.lastObservationFailure();
-    const failure =
-      adapterFailure === undefined ? undefined : FAILURE_BY_ADAPTER_FAILURE[adapterFailure];
-    return {
-      providerId,
-      observations: result.value,
-      projects: plugin.projects?.() ?? [],
-      ...(failure ? { failure } : undefined),
-    };
+}): Effect.Effect<CloudProviderPass[]> {
+  return Effect.suspend(() => {
+    const plugins = options.providerIds.map((providerId) =>
+      cloudSessionPluginFor(providerId, {
+        readApiKey: options.readApiKey(providerId),
+        ...(options.seams.httpClient ? { httpClient: options.seams.httpClient } : undefined),
+        ...(options.seams.now ? { now: options.seams.now } : undefined),
+      }),
+    );
+    return Effect.forEach(
+      options.providerIds,
+      (providerId, index): Effect.Effect<CloudProviderPass> => {
+        const plugin = plugins[index];
+        const unread: CloudProviderPass = {
+          providerId,
+          observations: [],
+          projects: [],
+          failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
+        };
+        if (!plugin) return Effect.succeed(unread);
+        return Effect.flatMap(Effect.exit(plugin.observe()), (exit) => {
+          // A pass the caller's own deadline ended is not a provider that
+          // failed, so an interruption fails the fan-out rather than being
+          // written down as this provider's answer.
+          if (Exit.isFailure(exit)) {
+            return Cause.isInterruptedOnly(exit.cause)
+              ? Effect.failCause(exit.cause)
+              : Effect.succeed(unread);
+          }
+          const adapterFailure = plugin.lastObservationFailure();
+          const failure =
+            adapterFailure === undefined ? undefined : FAILURE_BY_ADAPTER_FAILURE[adapterFailure];
+          return Effect.succeed({
+            providerId,
+            observations: exit.value,
+            projects: plugin.projects?.() ?? [],
+            ...(failure ? { failure } : undefined),
+          });
+        });
+      },
+      { concurrency: "unbounded" },
+    );
   });
 }

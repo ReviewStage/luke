@@ -46,7 +46,6 @@
     "packages/hosted/src/device-client.ts",
     "packages/hosted/src/session-messages-client.ts",
     "packages/hosted/src/vault-client.ts",
-    "packages/providers/src/shared/promise-face.ts",
     "packages/voice/src/live-session-source.ts",
     "packages/wire/src/testing/effect.ts"
   ],

@@ -112,10 +112,8 @@ function write(
   route: CloudWriteRoute,
   subject?: (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT],
 ): Effect.Effect<{ outcome: ProviderActionResult; body?: WireRecord }> {
-  return Effect.flatMap(
-    Effect.promise(() => pass.readApiKey()),
-    (apiKey) =>
-      apiKey ? pass.write(apiKey, route, subject) : Effect.succeed({ outcome: MISSING_KEY }),
+  return Effect.flatMap(pass.readApiKey(), (apiKey) =>
+    apiKey ? pass.write(apiKey, route, subject) : Effect.succeed({ outcome: MISSING_KEY }),
   );
 }
 

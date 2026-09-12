@@ -1,5 +1,5 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
-import type { Layer } from "effect";
+import { Cause, Effect, Exit, type Layer } from "effect";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
@@ -20,19 +20,20 @@ import type { VaultKeyRow } from "./vault-route.js";
 export function readApiKeyFor(
   rows: readonly VaultKeyRow[],
   secret: string,
-): (providerId: string) => () => Promise<string | undefined> {
+): (providerId: string) => () => Effect.Effect<string | undefined> {
   const ciphertextByProviderId = new Map<string, string>(
     rows.map((row) => [row.providerId, row.ciphertext]),
   );
-  return (providerId) => async () => {
-    const ciphertext = ciphertextByProviderId.get(providerId);
-    if (!ciphertext) return undefined;
-    try {
-      return decryptProviderKey(ciphertext, secret);
-    } catch {
-      return undefined;
-    }
-  };
+  return (providerId) => () =>
+    Effect.sync(() => {
+      const ciphertext = ciphertextByProviderId.get(providerId);
+      if (!ciphertext) return undefined;
+      try {
+        return decryptProviderKey(ciphertext, secret);
+      } catch {
+        return undefined;
+      }
+    });
 }
 
 export interface ProviderPassSeams {
@@ -52,29 +53,41 @@ export interface ProviderPassResult<Answer> {
  * plugin holding that provider's own key. A provider that throws is one
  * whose leg answered nothing; it never fails the others.
  */
-export async function observeProviders<Answer>(options: {
+export function observeProviders<Answer>(options: {
   providerIds?: readonly CloudAgentProviderId[];
-  readApiKey: (providerId: string) => () => Promise<string | undefined>;
-  read: (plugin: SessionProviderPlugin) => Promise<Answer>;
+  readApiKey: (providerId: string) => () => Effect.Effect<string | undefined>;
+  read: (plugin: SessionProviderPlugin) => Effect.Effect<Answer>;
   seams: ProviderPassSeams;
-}): Promise<ProviderPassResult<Answer>[]> {
-  const providerIds = options.providerIds ?? Object.values(CLOUD_AGENT_PROVIDER_ID);
-  const results = await Promise.allSettled(
-    providerIds.map((providerId) =>
-      options.read(
-        cloudSessionPluginFor(providerId, {
-          readApiKey: options.readApiKey(providerId),
-          ...(options.seams.httpClient ? { httpClient: options.seams.httpClient } : undefined),
-          ...(options.seams.now ? { now: options.seams.now } : undefined),
-        }),
-      ),
-    ),
-  );
-  return providerIds.map((providerId, index) => {
-    const result = results[index];
-    return {
-      providerId,
-      answer: result?.status === "fulfilled" ? result.value : undefined,
-    };
+}): Effect.Effect<ProviderPassResult<Answer>[]> {
+  return Effect.suspend(() => {
+    const providerIds = options.providerIds ?? Object.values(CLOUD_AGENT_PROVIDER_ID);
+    return Effect.forEach(
+      providerIds,
+      (providerId) =>
+        Effect.flatMap(
+          Effect.exit(
+            options.read(
+              cloudSessionPluginFor(providerId, {
+                readApiKey: options.readApiKey(providerId),
+                ...(options.seams.httpClient
+                  ? { httpClient: options.seams.httpClient }
+                  : undefined),
+                ...(options.seams.now ? { now: options.seams.now } : undefined),
+              }),
+            ),
+          ),
+          (exit): Effect.Effect<ProviderPassResult<Answer>> =>
+            // A leg the caller's own deadline ended is not a leg that answered
+            // nothing, so an interruption fails the fan-out rather than being
+            // read as this provider's answer.
+            Exit.isFailure(exit) && Cause.isInterruptedOnly(exit.cause)
+              ? Effect.failCause(exit.cause)
+              : Effect.succeed({
+                  providerId,
+                  answer: Exit.isSuccess(exit) ? exit.value : undefined,
+                }),
+        ),
+      { concurrency: "unbounded" },
+    );
   });
 }

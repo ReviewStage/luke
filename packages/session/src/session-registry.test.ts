@@ -10,6 +10,8 @@ import {
   type SessionProvider,
   SessionRoster,
 } from "@sidecar/session";
+import { runTest } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   ACTION_KIND,
@@ -267,10 +269,12 @@ test("refresh replaces one adapter's sessions whole and leaves other providers u
   roster.replaceProvider(codex, [observation("stale", 10), observation("active", 20)]);
   roster.replaceProvider(claude, [observation("review", 30, { status: SESSION_STATUS.WAITING })]);
 
-  await roster.refresh({
-    provider: codex,
-    observe: async () => [observation("active", 50), observation("new", 60)],
-  });
+  await runTest(
+    roster.refresh({
+      provider: codex,
+      observe: () => Effect.succeed([observation("active", 50), observation("new", 60)]),
+    }),
+  );
 
   // The roster is the latest pass: a session the provider stopped reporting
   // is gone, with nothing kept back for it.
@@ -291,10 +295,15 @@ test("refresh replaces one adapter's sessions whole and leaves other providers u
 
 test("a refresh may reshape the observation before it lands, per provider", async () => {
   const roster = new SessionRoster();
-  await roster.refresh(
-    { provider: codex, observe: async () => [observation("run:1", 10)] },
-    (providerId, observations) =>
-      observations.map((observed) => ({ ...observed, title: `${providerId}: ${observed.title}` })),
+  await runTest(
+    roster.refresh(
+      { provider: codex, observe: () => Effect.succeed([observation("run:1", 10)]) },
+      (providerId, observations) =>
+        observations.map((observed) => ({
+          ...observed,
+          title: `${providerId}: ${observed.title}`,
+        })),
+    ),
   );
   assert.equal(
     roster.get({ providerId: codex.id, providerSessionId: "run:1" })?.title,

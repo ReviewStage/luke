@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type * as HttpClient from "@effect/platform/HttpClient";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { fakeHttpClientLayer, runTest } from "@sidecar/wire/testing";
 import type { Layer } from "effect";
 import { test } from "vitest";
 import { CLOUD_AGENT_PROVIDER_ID, type WireRecord } from "../server/core";
@@ -328,42 +328,44 @@ function storedSend(id: string, message: string): WireRecord {
 
 test("a conversation read re-observes, reads the documented endpoint, and maps the page", async () => {
   const reads: string[] = [];
-  const answer = await executeConversationRead({
-    providerId: "conductor",
-    providerSessionId: SESSION_UUID,
-    afterMessageId: MESSAGE_UUIDS[0],
-    apiKey: "key-1",
-    seams: {
-      httpClient: conductorClient({
-        recordReads: reads,
-        messages: [
-          storedSend(MESSAGE_UUIDS[0], "First ask"),
-          {
-            id: MESSAGE_UUIDS[1],
-            sessionId: SESSION_UUID,
-            sessionIndex: 2,
-            type: "userMessage",
-            content: { type: "userMessage", message: "Continue please" },
-            receivedAt: "2026-09-01T00:00:00.000Z",
-          },
-          {
-            id: MESSAGE_UUIDS[2],
-            sessionId: SESSION_UUID,
-            sessionIndex: 3,
-            type: "agent",
-            content: {
-              type: "agent",
-              rawPayload: {
-                type: "assistant",
-                message: { content: [{ type: "text", text: "Continuing." }] },
-              },
+  const answer = await runTest(
+    executeConversationRead({
+      providerId: "conductor",
+      providerSessionId: SESSION_UUID,
+      afterMessageId: MESSAGE_UUIDS[0],
+      apiKey: "key-1",
+      seams: {
+        httpClient: conductorClient({
+          recordReads: reads,
+          messages: [
+            storedSend(MESSAGE_UUIDS[0], "First ask"),
+            {
+              id: MESSAGE_UUIDS[1],
+              sessionId: SESSION_UUID,
+              sessionIndex: 2,
+              type: "userMessage",
+              content: { type: "userMessage", message: "Continue please" },
+              receivedAt: "2026-09-01T00:00:00.000Z",
             },
-            receivedAt: "2026-09-01T00:00:01.000Z",
-          },
-        ],
-      }),
-    },
-  });
+            {
+              id: MESSAGE_UUIDS[2],
+              sessionId: SESSION_UUID,
+              sessionIndex: 3,
+              type: "agent",
+              content: {
+                type: "agent",
+                rawPayload: {
+                  type: "assistant",
+                  message: { content: [{ type: "text", text: "Continuing." }] },
+                },
+              },
+              receivedAt: "2026-09-01T00:00:01.000Z",
+            },
+          ],
+        }),
+      },
+    }),
+  );
 
   assert.ok(!("refused" in answer));
   if ("refused" in answer) return;
@@ -383,20 +385,22 @@ test("a conversation read re-observes, reads the documented endpoint, and maps t
 });
 
 test("an opening read answers the latest page with the positions to continue from", async () => {
-  const answer = await executeConversationRead({
-    providerId: "conductor",
-    providerSessionId: SESSION_UUID,
-    apiKey: "key-1",
-    seams: {
-      httpClient: conductorClient({
-        messages: [
-          storedSend(MESSAGE_UUIDS[0], "First ask"),
-          storedSend(MESSAGE_UUIDS[1], "Second ask"),
-          storedSend(MESSAGE_UUIDS[2], "Third ask"),
-        ],
-      }),
-    },
-  });
+  const answer = await runTest(
+    executeConversationRead({
+      providerId: "conductor",
+      providerSessionId: SESSION_UUID,
+      apiKey: "key-1",
+      seams: {
+        httpClient: conductorClient({
+          messages: [
+            storedSend(MESSAGE_UUIDS[0], "First ask"),
+            storedSend(MESSAGE_UUIDS[1], "Second ask"),
+            storedSend(MESSAGE_UUIDS[2], "Third ask"),
+          ],
+        }),
+      },
+    }),
+  );
 
   assert.ok(!("refused" in answer));
   if ("refused" in answer) return;
@@ -411,22 +415,24 @@ test("an opening read answers the latest page with the positions to continue fro
 
 test("a history read rides its offset to the adapter and back", async () => {
   const reads: string[] = [];
-  const answer = await executeConversationRead({
-    providerId: "conductor",
-    providerSessionId: SESSION_UUID,
-    beforeOffset: 2,
-    apiKey: "key-1",
-    seams: {
-      httpClient: conductorClient({
-        recordReads: reads,
-        messages: [
-          storedSend(MESSAGE_UUIDS[0], "First ask"),
-          storedSend(MESSAGE_UUIDS[1], "Second ask"),
-          storedSend(MESSAGE_UUIDS[2], "Third ask"),
-        ],
-      }),
-    },
-  });
+  const answer = await runTest(
+    executeConversationRead({
+      providerId: "conductor",
+      providerSessionId: SESSION_UUID,
+      beforeOffset: 2,
+      apiKey: "key-1",
+      seams: {
+        httpClient: conductorClient({
+          recordReads: reads,
+          messages: [
+            storedSend(MESSAGE_UUIDS[0], "First ask"),
+            storedSend(MESSAGE_UUIDS[1], "Second ask"),
+            storedSend(MESSAGE_UUIDS[2], "Third ask"),
+          ],
+        }),
+      },
+    }),
+  );
 
   assert.ok(!("refused" in answer));
   if ("refused" in answer) return;
@@ -442,22 +448,26 @@ test("a history read rides its offset to the adapter and back", async () => {
 });
 
 test("a conversation read for a session the fresh pass did not observe refuses", async () => {
-  const answer = await executeConversationRead({
-    providerId: "conductor",
-    providerSessionId: "99999999-9999-4999-8999-999999999999",
-    apiKey: "key-1",
-    seams: { httpClient: conductorClient({ messages: [] }) },
-  });
+  const answer = await runTest(
+    executeConversationRead({
+      providerId: "conductor",
+      providerSessionId: "99999999-9999-4999-8999-999999999999",
+      apiKey: "key-1",
+      seams: { httpClient: conductorClient({ messages: [] }) },
+    }),
+  );
   assert.ok("refused" in answer);
   assert.equal(answer.refused, "Session not found.");
 });
 
 test("a key the provider refuses is named as the reason, not a missing session", async () => {
-  const answer = await executeConversationRead({
-    providerId: "conductor",
-    providerSessionId: SESSION_UUID,
-    apiKey: "key-1",
-    seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
-  });
+  const answer = await runTest(
+    executeConversationRead({
+      providerId: "conductor",
+      providerSessionId: SESSION_UUID,
+      apiKey: "key-1",
+      seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
+    }),
+  );
   assert.ok("refused" in answer);
 });

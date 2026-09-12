@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { dispatchConversation, dispatchRead, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
-import { HTTP_STATUS } from "@sidecar/wire/testing";
+import { HTTP_STATUS, runTest } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
   fakeConductorApi,
@@ -142,9 +142,11 @@ function conversationApi(overrides: Partial<TestSession> = {}, api: Partial<Test
 test("reads an observed chat's conversation as the attributed words alone", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const result = await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
+  const result = await runTest(
+    dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }),
+  );
 
   assert.equal(result.status, "accepted");
   if (result.status !== "accepted") return;
@@ -187,12 +189,14 @@ test("reads an observed chat's conversation as the attributed words alone", asyn
 test("continues a conversation read behind the cursor its last answer handed back", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const result = await dispatchConversation(plugin, {
-    providerSessionId: IDLE_SESSION_UUID,
-    afterMessageId: STORED_MESSAGE_UUIDS[2],
-  });
+  const result = await runTest(
+    dispatchConversation(plugin, {
+      providerSessionId: IDLE_SESSION_UUID,
+      afterMessageId: STORED_MESSAGE_UUIDS[2],
+    }),
+  );
 
   assert.equal(result.status, "accepted");
   if (result.status !== "accepted") return;
@@ -212,12 +216,14 @@ test("continues a conversation read behind the cursor its last answer handed bac
 test("a poll walks the store's pages to the fixed bounds and answers hasMore honestly", async () => {
   const api = conversationApi(undefined, { messagesPageSize: 3 });
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const result = await dispatchConversation(plugin, {
-    providerSessionId: IDLE_SESSION_UUID,
-    afterMessageId: STORED_MESSAGE_UUIDS[0],
-  });
+  const result = await runTest(
+    dispatchConversation(plugin, {
+      providerSessionId: IDLE_SESSION_UUID,
+      afterMessageId: STORED_MESSAGE_UUIDS[0],
+    }),
+  );
 
   assert.equal(result.status, "accepted");
   if (result.status !== "accepted") return;
@@ -242,25 +248,33 @@ test("a poll walks the store's pages to the fixed bounds and answers hasMore hon
 test("refuses a conversation read for anything the latest pass did not stand behind", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
   const requestsBefore = api.requests.length;
 
-  const unobserved = await dispatchConversation(plugin, {
-    providerSessionId: "99999999-9999-4999-8999-999999999999",
-  });
-  const badCursor = await dispatchConversation(plugin, {
-    providerSessionId: IDLE_SESSION_UUID,
-    afterMessageId: "not-a-message-id",
-  });
-  const badPosition = await dispatchConversation(plugin, {
-    providerSessionId: IDLE_SESSION_UUID,
-    beforeOffset: -3,
-  });
-  const bothPositions = await dispatchConversation(plugin, {
-    providerSessionId: IDLE_SESSION_UUID,
-    afterMessageId: STORED_MESSAGE_UUIDS[0],
-    beforeOffset: 100,
-  });
+  const unobserved = await runTest(
+    dispatchConversation(plugin, {
+      providerSessionId: "99999999-9999-4999-8999-999999999999",
+    }),
+  );
+  const badCursor = await runTest(
+    dispatchConversation(plugin, {
+      providerSessionId: IDLE_SESSION_UUID,
+      afterMessageId: "not-a-message-id",
+    }),
+  );
+  const badPosition = await runTest(
+    dispatchConversation(plugin, {
+      providerSessionId: IDLE_SESSION_UUID,
+      beforeOffset: -3,
+    }),
+  );
+  const bothPositions = await runTest(
+    dispatchConversation(plugin, {
+      providerSessionId: IDLE_SESSION_UUID,
+      afterMessageId: STORED_MESSAGE_UUIDS[0],
+      beforeOffset: 100,
+    }),
+  );
 
   assert.deepEqual(unobserved, {
     status: "unsupported",
@@ -301,10 +315,12 @@ function longConversationApi() {
 test("an opening read walks to the end of a long transcript one page at a time", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
   const requestsBefore = api.requests.length;
 
-  const result = await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
+  const result = await runTest(
+    dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }),
+  );
 
   assert.equal(result.status, "accepted");
   if (result.status !== "accepted") return;
@@ -331,11 +347,13 @@ test("an opening read walks to the end of a long transcript one page at a time",
 test("a re-opened chat costs one request, from where the last read reached", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
-  await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
+  await runTest(plugin.observe());
+  await runTest(dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }));
   const requestsBefore = api.requests.length;
 
-  const result = await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
+  const result = await runTest(
+    dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }),
+  );
 
   assert.equal(result.status, "accepted");
   if (result.status !== "accepted") return;
@@ -353,15 +371,17 @@ test("a re-opened chat costs one request, from where the last read reached", asy
 test("a transcript cleared behind the cached end is walked again from its start", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
-  await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
+  await runTest(plugin.observe());
+  await runTest(dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }));
   const emptied = conversationApi({ storedMessages: [] });
   const restarted = pluginFor(emptied.layer);
-  await restarted.observe();
+  await runTest(restarted.observe());
 
   // A cached offset past a transcript the developer cleared on Conductor's
   // own surface is the one backtrack, and it is bounded to one.
-  const first = await dispatchConversation(restarted, { providerSessionId: IDLE_SESSION_UUID });
+  const first = await runTest(
+    dispatchConversation(restarted, { providerSessionId: IDLE_SESSION_UUID }),
+  );
   assert.equal(first.status, "accepted");
   if (first.status !== "accepted") return;
   assert.equal(first.messages.length, 0);
@@ -371,12 +391,14 @@ test("a transcript cleared behind the cached end is walked again from its start"
 test("a scroll to the top reads the history just before what the screen holds", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const result = await dispatchConversation(plugin, {
-    providerSessionId: IDLE_SESSION_UUID,
-    beforeOffset: 20,
-  });
+  const result = await runTest(
+    dispatchConversation(plugin, {
+      providerSessionId: IDLE_SESSION_UUID,
+      beforeOffset: 20,
+    }),
+  );
 
   assert.equal(result.status, "accepted");
   if (result.status !== "accepted") return;
@@ -409,10 +431,10 @@ test("refuses a conversation read for an observed id that is not a UUID", async 
     ],
   });
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
   const requestsBefore = api.requests.length;
 
-  const result = await dispatchConversation(plugin, { providerSessionId: "session-idle" });
+  const result = await runTest(dispatchConversation(plugin, { providerSessionId: "session-idle" }));
 
   assert.deepEqual(result, {
     status: "unsupported",
@@ -424,10 +446,12 @@ test("refuses a conversation read for an observed id that is not a UUID", async 
 test("a conversation read names what refused it without echoing the provider", async () => {
   const refusedKey = conversationApi({ messagesHttpStatus: HTTP_STATUS.UNAUTHORIZED });
   const refusedKeyAdapter = pluginFor(refusedKey.layer);
-  await refusedKeyAdapter.observe();
-  const unauthorized = await dispatchConversation(refusedKeyAdapter, {
-    providerSessionId: IDLE_SESSION_UUID,
-  });
+  await runTest(refusedKeyAdapter.observe());
+  const unauthorized = await runTest(
+    dispatchConversation(refusedKeyAdapter, {
+      providerSessionId: IDLE_SESSION_UUID,
+    }),
+  );
   assert.deepEqual(unauthorized, {
     status: "rejected",
     reason: "Conductor rejected the configured API key.",
@@ -437,11 +461,13 @@ test("a conversation read names what refused it without echoing the provider", a
   // transient refusal any unreadable answer does — never a fresh guess.
   const staleCursor = conversationApi();
   const staleCursorAdapter = pluginFor(staleCursor.layer);
-  await staleCursorAdapter.observe();
-  const stale = await dispatchConversation(staleCursorAdapter, {
-    providerSessionId: IDLE_SESSION_UUID,
-    afterMessageId: "bbbbbbbb-0000-4000-8000-00000000000b",
-  });
+  await runTest(staleCursorAdapter.observe());
+  const stale = await runTest(
+    dispatchConversation(staleCursorAdapter, {
+      providerSessionId: IDLE_SESSION_UUID,
+      afterMessageId: "bbbbbbbb-0000-4000-8000-00000000000b",
+    }),
+  );
   assert.deepEqual(stale, {
     status: "rejected",
     reason: "Conductor did not answer, so the conversation could not be read.",
@@ -451,10 +477,10 @@ test("a conversation read names what refused it without echoing the provider", a
 test("the brain's transcript read renders the attributed words one line each, in the shared vocabulary", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
   const requestsBefore = api.requests.length;
 
-  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+  const read = await runTest(dispatchRead(plugin, "transcript", IDLE_SESSION_UUID));
 
   assert.equal(read.status, "accepted");
   if (read.status !== "accepted") return;
@@ -494,9 +520,9 @@ test("a transcript read renders a long message whole, with its line breaks", asy
     ],
   });
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+  const read = await runTest(dispatchRead(plugin, "transcript", IDLE_SESSION_UUID));
 
   assert.equal(read.status, "accepted");
   if (read.status !== "accepted") return;
@@ -511,9 +537,9 @@ test("a transcript read renders a long message whole, with its line breaks", asy
 test("a transcript read of a chat longer than one page reaches the stored newest message", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+  const read = await runTest(dispatchRead(plugin, "transcript", IDLE_SESSION_UUID));
 
   assert.equal(read.status, "accepted");
   if (read.status !== "accepted") return;
@@ -525,10 +551,12 @@ test("a transcript read of a chat longer than one page reaches the stored newest
 test("a transcript read refuses a session the latest pass did not report and reaches nothing", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
   const requestsBefore = api.requests.length;
 
-  const read = await dispatchRead(plugin, "transcript", "99999999-9999-4999-8999-999999999999");
+  const read = await runTest(
+    dispatchRead(plugin, "transcript", "99999999-9999-4999-8999-999999999999"),
+  );
 
   assert.equal(read.status, "unsupported");
   assert.equal(api.requests.length, requestsBefore);
@@ -541,9 +569,9 @@ test("a transcript read of a chat with no attributed words is not found rather t
     ],
   });
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+  const read = await runTest(dispatchRead(plugin, "transcript", IDLE_SESSION_UUID));
 
   assert.deepEqual(read, {
     status: "rejected",
@@ -554,9 +582,9 @@ test("a transcript read of a chat with no attributed words is not found rather t
 test("a transcript read that Conductor refuses is rejected with the reason, never thrown", async () => {
   const api = conversationApi({ messagesHttpStatus: HTTP_STATUS.UNAUTHORIZED });
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+  const read = await runTest(dispatchRead(plugin, "transcript", IDLE_SESSION_UUID));
 
   assert.equal(read.status, "rejected");
   if (read.status !== "rejected") return;
@@ -565,9 +593,9 @@ test("a transcript read that Conductor refuses is rejected with the reason, neve
 test("the brain's incremental read with no cursor answers the newest page, says the front was cut only when history precedes it, and hands back the newest stored id", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const read = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined);
+  const read = await runTest(dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined));
 
   assert.equal(read.status, "accepted");
   if (read.status !== "accepted") return;
@@ -585,14 +613,11 @@ test("the brain's incremental read with no cursor answers the newest page, says 
 test("the brain's incremental read behind a cursor answers only what is newer and moves the cursor past lifecycle noise", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
   const requestsBefore = api.requests.length;
 
-  const read = await dispatchRead(
-    plugin,
-    "transcriptSince",
-    IDLE_SESSION_UUID,
-    STORED_MESSAGE_UUIDS[2],
+  const read = await runTest(
+    dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, STORED_MESSAGE_UUIDS[2]),
   );
 
   assert.equal(read.status, "accepted");
@@ -604,7 +629,9 @@ test("the brain's incremental read behind a cursor answers only what is newer an
   assert.equal(polls.length, 1);
   assert.equal(polls[0]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[2]);
 
-  const again = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, read.cursor);
+  const again = await runTest(
+    dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, read.cursor),
+  );
   assert.equal(again.status, "accepted");
   if (again.status !== "accepted") return;
   assert.equal(again.text, "");
@@ -614,16 +641,15 @@ test("the brain's incremental read behind a cursor answers only what is newer an
 test("the brain's incremental read refuses a cursor Conductor never handed back and a session the pass did not report", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
   const requestsBefore = api.requests.length;
 
-  const forged = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, "page=2");
+  const forged = await runTest(
+    dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, "page=2"),
+  );
   assert.equal(forged.status, "rejected");
-  const unreported = await dispatchRead(
-    plugin,
-    "transcriptSince",
-    "99999999-9999-4999-8999-999999999999",
-    undefined,
+  const unreported = await runTest(
+    dispatchRead(plugin, "transcriptSince", "99999999-9999-4999-8999-999999999999", undefined),
   );
   assert.equal(unreported.status, "unsupported");
   assert.equal(api.requests.length, requestsBefore);
@@ -632,18 +658,18 @@ test("the brain's incremental read refuses a cursor Conductor never handed back 
 test("the brain's reads answer for a roster the host hands in, not only the pass's own", async () => {
   const api = conversationApi();
   const plugin = pluginFor(api.layer, { reported: () => [] });
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
+  const read = await runTest(dispatchRead(plugin, "transcript", IDLE_SESSION_UUID));
   assert.equal(read.status, "unsupported");
 });
 
 test("the brain's first incremental read of a long chat answers one page's worth from the end and says the front was cut", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.layer);
-  await plugin.observe();
+  await runTest(plugin.observe());
 
-  const read = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined);
+  const read = await runTest(dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined));
 
   assert.equal(read.status, "accepted");
   if (read.status !== "accepted") return;
