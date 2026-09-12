@@ -20,8 +20,8 @@ import {
   type UnparsedWireValue,
   type Schema as WireSchema,
 } from "@sidecar/wire";
-import { emitJsonSchema, readEither, toSchemaRead } from "@sidecar/wire/effect";
-import { Schema } from "effect";
+import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
+import { Either, Schema } from "effect";
 import { ACTION_FAMILY, ACTION_KIND, type ActionFamily, type ActionKind } from "./action-kinds.js";
 import {
   ADD_AGENT_REQUEST,
@@ -253,7 +253,11 @@ export function requestSchema<Value, Encoded>(
 ): WireSchema<Value> {
   const read = readEither(request);
   return s.reader({
-    read: (value) => toSchemaRead(read(value)),
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
     jsonSchema: () => emitJsonSchema(request),
   });
 }

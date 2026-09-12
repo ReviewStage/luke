@@ -1,7 +1,7 @@
 import { CLOUD_AGENT_PROVIDER_ID, type CloudAgentProviderId } from "@sidecar/session";
 import { type Schema, s } from "@sidecar/wire";
-import { emitJsonSchema, readEither, toSchemaRead, verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { emitJsonSchema, readEither, verbatimJsonSchema } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import { countedNumberEffect } from "./service-wire.js";
 
 /**
@@ -40,7 +40,11 @@ const CLOUD_AGENT_PROVIDER_NAMES = Object.values(CLOUD_AGENT_PROVIDER_ID);
 function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
   const read = readEither(core);
   return s.reader({
-    read: (value) => toSchemaRead(read(value)),
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
     jsonSchema: () => emitJsonSchema(core),
   });
 }

@@ -15,7 +15,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
-import { readEither, SchemaRefusalError, toSchemaRead } from "@sidecar/wire/effect";
+import { readEither, SchemaRefusalError } from "@sidecar/wire/effect";
 import {
   safeValidateUIMessages,
   type ToolSet,
@@ -205,5 +205,8 @@ export async function readStoredUIMessages(
   messages: UnparsedWireValue,
   tools: ToolSet,
 ): Promise<SchemaRead<StoredUIMessage[]>> {
-  return toSchemaRead(await readStoredUIMessagesEither(messages, tools));
+  return Either.match(await readStoredUIMessagesEither(messages, tools), {
+    onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+    onRight: (value) => ({ ok: true, value }),
+  });
 }

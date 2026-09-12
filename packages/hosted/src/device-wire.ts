@@ -6,8 +6,8 @@ import {
   s,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-import { emitJsonSchema, readEither, toSchemaRead, wireRefusal } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import { isWireUuid, WIRE_UUID_LENGTH, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -100,7 +100,11 @@ export function deviceTokenIsStorable(token: string): boolean {
 function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
   const read = readEither(core);
   return s.reader({
-    read: (value) => toSchemaRead(read(value)),
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
     jsonSchema: () => emitJsonSchema(core),
   });
 }

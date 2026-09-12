@@ -769,7 +769,6 @@ design decision stated as such:
 | Shim | Introduced | Deleted |
 | --- | --- | --- |
 | `s.*` facade over Effect Schema | P1-02 | P12-08 |
-| `toSchemaRead(either)` | P1-01 | P12-07 |
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
 | `disposableFromScope`/`addDisposable` | P1-05 | P12-06 |
 | `streamFromEvent`/`eventFromStream` | P1-06 | P12-06 |

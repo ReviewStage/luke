@@ -27,13 +27,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import {
-  declareReader,
-  emitJsonSchema,
-  readEither,
-  toSchemaRead,
-  wireRefusal,
-} from "@sidecar/wire/effect";
+import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Either } from "effect";
 import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 
@@ -93,7 +87,11 @@ export const READ_CURSOR_BOUNDS = {
 function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
   const read = readEither(core);
   return s.reader({
-    read: (value) => toSchemaRead(read(value)),
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
     jsonSchema: () => emitJsonSchema(core),
   });
 }
@@ -189,7 +187,10 @@ function encodedCursorSchemaEffect<Value, Encoded>(record: EffectSchema.Schema<V
       } catch {
         return refuse(SCHEMA_REFUSAL.MALFORMED);
       }
-      return toSchemaRead(read(parsed));
+      return Either.match(read(parsed), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      });
     },
     { type: "string", maxLength: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH },
   );

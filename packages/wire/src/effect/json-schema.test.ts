@@ -11,7 +11,6 @@ import {
   emitJsonSchema,
   readEither,
   type SchemaRefusalError,
-  toSchemaRead,
   verbatimJsonSchema,
   WireDescriptionAnnotationId,
   wireRefusal,
@@ -397,13 +396,4 @@ test("a failed transformation answers its own refusal annotation", () => {
 
   assert.equal(refused.refusal, SCHEMA_REFUSAL.TOO_LARGE);
   assert.deepEqual(refused.path, ["value"]);
-});
-
-test("toSchemaRead answers the builder's own shape for both outcomes", () => {
-  assert.deepEqual(toSchemaRead(readBounded(WELL_FORMED)), { ok: true, value: WELL_FORMED });
-  assert.deepEqual(toSchemaRead(readBounded({ ...WELL_FORMED, name: "abcd" })), {
-    ok: false,
-    refusal: SCHEMA_REFUSAL.TOO_LARGE,
-    path: ["name"],
-  });
 });
