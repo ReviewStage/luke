@@ -13,13 +13,13 @@ export const GATEWAY_SHUTDOWN_DEFAULTS = {
 } as const;
 
 export interface GatewayShutdownSteps {
-  closeAdmissions: () => void;
+  readonly closeAdmissions: Effect.Effect<void>;
   /** Cancels everything under way; answers the ids of the runs it asked to stop. */
-  cancelActive: () => Promise<readonly string[]>;
-  /** Settles once no run is under way, or rejects/hangs, in which case the deadline decides. */
-  awaitSettled: (signal: AbortSignal) => Promise<void>;
+  readonly cancelActive: Effect.Effect<readonly string[]>;
+  /** Settles once no run is under way, or dies/hangs, in which case the deadline decides. */
+  readonly awaitSettled: Effect.Effect<void>;
   /** Writes down whatever did not settle; answers how many records were left for recovery. */
-  persistUnresolved: () => Promise<number>;
+  readonly persistUnresolved: Effect.Effect<number>;
 }
 
 export interface GatewayShutdownOptions {
@@ -45,8 +45,9 @@ export interface GatewayShutdownReport {
  * whichever step the bound lands inside, what the step before it already
  * produced stands — a `Ref` neither step's own interruption can take back —
  * and the step that was cut is counted as never having settled. A cancel or a
- * settle that hangs is not cancelled itself, only stopped being waited on,
- * same as the deadline it replaces; `persistUnresolved` always runs to
+ * settle that hangs is interrupted where it waits rather than at the work
+ * beneath it, which is the abort signal this bound used to hand the settling
+ * step; `persistUnresolved` always runs to
  * completion, whatever the deadline decided, because recovery must never be
  * the thing a cut shutdown also drops.
  */
@@ -58,22 +59,20 @@ export function shutdownGatewayEffect(
   const deadlineMs = options.deadlineMs ?? GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS;
   return Effect.gen(function* () {
     const startedAt = now();
-    steps.closeAdmissions();
-    const controller = new AbortController();
+    yield* steps.closeAdmissions;
     const cancelledRef = yield* Ref.make<readonly string[]>([]);
     const settledRef = yield* Ref.make(false);
     const work = Effect.gen(function* () {
-      const cancelled = yield* Effect.tryPromise({
-        try: () => steps.cancelActive(),
-        catch: (): readonly string[] => [],
-      }).pipe(Effect.merge);
+      // A step that died is the coordinator's to absorb rather than to carry
+      // out of the quit: a cancellation nobody counted and a settling nobody
+      // saw are what the report already says of a step the deadline cut.
+      const cancelled = yield* steps.cancelActive.pipe(
+        Effect.catchAllDefect(() => Effect.succeed<readonly string[]>([])),
+      );
       yield* Ref.set(cancelledRef, cancelled);
-      const settled = yield* Effect.tryPromise({
-        try: () => steps.awaitSettled(controller.signal),
-        catch: () => undefined,
-      }).pipe(
+      const settled = yield* steps.awaitSettled.pipe(
         Effect.as(true),
-        Effect.catchAll(() => Effect.succeed(false)),
+        Effect.catchAllDefect(() => Effect.succeed(false)),
       );
       yield* Ref.set(settledRef, settled);
     });
@@ -84,10 +83,9 @@ export function shutdownGatewayEffect(
         onSuccess: () => false,
       }),
     );
-    if (timedOut) controller.abort();
     const cancelled = yield* Ref.get(cancelledRef);
     const settled = timedOut ? false : yield* Ref.get(settledRef);
-    const unresolved = yield* Effect.promise(() => steps.persistUnresolved());
+    const unresolved = yield* steps.persistUnresolved;
     return { settled, cancelled, unresolved, elapsedMs: now() - startedAt };
   });
 }

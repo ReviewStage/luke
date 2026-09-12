@@ -1,19 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGatewayEffect } from "@sidecar/gateway";
-import { Effect } from "effect";
+import {
+  GATEWAY_SHUTDOWN_DEFAULTS,
+  type GatewayShutdownSteps,
+  shutdownGatewayEffect,
+} from "@sidecar/gateway";
+import { Deferred, Effect, Fiber, TestClock } from "effect";
 import { test } from "vitest";
 import {
   seedWorkspaceThenStartMemory,
   shutdownStepsClosingLiveSession,
   shutdownStepsFlushingEvents,
 } from "./lifecycle.js";
-
-/** The shutdown as a promise, since these bodies are plain tests rather than fibers. */
-const runShutdown = (
-  steps: Parameters<typeof shutdownGatewayEffect>[0],
-  options: Parameters<typeof shutdownGatewayEffect>[1],
-) => Effect.runPromise(shutdownGatewayEffect(steps, options));
 
 /** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
 function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
@@ -61,23 +59,32 @@ test("a seed that succeeds reports nothing, and the start does not wait on the i
   settleMemory?.();
 });
 
-function baseSteps(order: string[]) {
+function baseSteps(order: string[]): GatewayShutdownSteps {
   return {
-    closeAdmissions: () => {
+    closeAdmissions: Effect.sync(() => {
       order.push("close");
-    },
-    cancelActive: async () => {
+    }),
+    cancelActive: Effect.sync((): readonly string[] => {
       order.push("cancel");
       return ["run-1"];
-    },
-    awaitSettled: async () => {
+    }),
+    awaitSettled: Effect.sync(() => {
       order.push("settled");
-    },
-    persistUnresolved: async () => {
+    }),
+    persistUnresolved: Effect.sync(() => {
       order.push("persist");
       return 0;
-    },
+    }),
   };
+}
+
+/** Work that announces both ends and settles only when the test lets it. */
+function heldWork(order: string[], deferred: Deferred.Deferred<void>, name: string) {
+  return Effect.gen(function* () {
+    order.push(`${name}:start`);
+    yield* Deferred.await(deferred);
+    order.push(`${name}:end`);
+  });
 }
 
 it.effect(
@@ -85,21 +92,18 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const order: string[] = [];
-      let settleFlush: (() => void) | undefined;
-      const steps = shutdownStepsFlushingEvents(baseSteps(order), () => {
-        order.push("flush:start");
-        return new Promise<void>((resolve) => {
-          settleFlush = () => {
-            order.push("flush:end");
-            resolve();
-          };
-        });
-      });
-      const report = runShutdown(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
+      const settleFlush = yield* Deferred.make<void>();
+      const steps = yield* shutdownStepsFlushingEvents(
+        baseSteps(order),
+        heldWork(order, settleFlush, "flush"),
+      );
+      const fiber = yield* Effect.fork(
+        shutdownGatewayEffect(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS }),
+      );
       yield* waitFor(() => order.includes("settled"));
       assert.deepEqual(order, ["close", "flush:start", "cancel", "settled"]);
-      settleFlush?.();
-      const outcome = yield* Effect.promise(() => report);
+      yield* Deferred.succeed(settleFlush, undefined);
+      const outcome = yield* Fiber.join(fiber);
       assert.deepEqual(order, [
         "close",
         "flush:start",
@@ -113,86 +117,100 @@ it.effect(
     }),
 );
 
-test("a flush that never answers ends the shutdown at the deadline with the runs' own outcome intact", async () => {
-  const order: string[] = [];
-  const steps = shutdownStepsFlushingEvents(
-    baseSteps(order),
-    () => new Promise<void>(() => undefined),
-  );
-  const outcome = await runShutdown(steps, { deadlineMs: 20 });
-  assert.equal(outcome.settled, false);
-  assert.deepEqual(outcome.cancelled, ["run-1"]);
-  assert.equal(outcome.unresolved, 0);
-  assert.ok(order.includes("persist"));
-});
+it.effect(
+  "a flush that never answers ends the shutdown at the deadline with the runs' own outcome intact",
+  () =>
+    Effect.gen(function* () {
+      const order: string[] = [];
+      const steps = yield* shutdownStepsFlushingEvents(baseSteps(order), Effect.never);
+      const fiber = yield* Effect.fork(shutdownGatewayEffect(steps, { deadlineMs: 20 }));
+      yield* TestClock.adjust(20);
+      const outcome = yield* Fiber.join(fiber);
+      assert.equal(outcome.settled, false);
+      assert.deepEqual(outcome.cancelled, ["run-1"]);
+      assert.equal(outcome.unresolved, 0);
+      assert.ok(order.includes("persist"));
+    }),
+);
 
-test("a flush that rejects is a count nobody has, not a failed quit", async () => {
-  const order: string[] = [];
-  const steps = shutdownStepsFlushingEvents(baseSteps(order), () =>
-    Promise.reject(new Error("offline")),
-  );
-  const outcome = await runShutdown(steps, {
-    deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS,
-  });
-  assert.equal(outcome.settled, true);
-  assert.deepEqual(order, ["close", "cancel", "settled", "persist"]);
-});
+it.effect("a flush that dies is a count nobody has, not a failed quit", () =>
+  Effect.gen(function* () {
+    const order: string[] = [];
+    const steps = yield* shutdownStepsFlushingEvents(
+      baseSteps(order),
+      Effect.die(new Error("offline")),
+    );
+    const outcome = yield* shutdownGatewayEffect(steps, {
+      deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS,
+    });
+    assert.equal(outcome.settled, true);
+    assert.deepEqual(order, ["close", "cancel", "settled", "persist"]);
+  }),
+);
 
-test("closing admissions twice flushes once", () => {
-  let flushes = 0;
-  const steps = shutdownStepsFlushingEvents(baseSteps([]), async () => {
-    flushes += 1;
-  });
-  steps.closeAdmissions();
-  steps.closeAdmissions();
-  assert.equal(flushes, 1);
-});
+it.effect("closing admissions twice flushes once", () =>
+  Effect.gen(function* () {
+    let flushes = 0;
+    const steps = yield* shutdownStepsFlushingEvents(
+      baseSteps([]),
+      Effect.sync(() => {
+        flushes += 1;
+      }),
+    );
+    yield* steps.closeAdmissions;
+    yield* steps.closeAdmissions;
+    assert.equal(flushes, 1);
+  }),
+);
 
 it.effect(
   "the live session's close begins with the cancellations and is waited for beside the runs, inside the one deadline",
   () =>
     Effect.gen(function* () {
       const order: string[] = [];
-      let settleClose: (() => void) | undefined;
-      const steps = shutdownStepsClosingLiveSession(baseSteps(order), () => {
-        order.push("live:close");
-        return new Promise<void>((resolve) => {
-          settleClose = () => {
-            order.push("live:closed");
-            resolve();
-          };
-        });
-      });
-      const report = runShutdown(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
+      const settleClose = yield* Deferred.make<void>();
+      const steps = yield* shutdownStepsClosingLiveSession(
+        baseSteps(order),
+        heldWork(order, settleClose, "live"),
+      );
+      const fiber = yield* Effect.fork(
+        shutdownGatewayEffect(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS }),
+      );
       yield* waitFor(() => order.includes("settled"));
-      assert.deepEqual(order, ["close", "live:close", "cancel", "settled"]);
-      settleClose?.();
-      const outcome = yield* Effect.promise(() => report);
-      assert.deepEqual(order, [
-        "close",
-        "live:close",
-        "cancel",
-        "settled",
-        "live:closed",
-        "persist",
-      ]);
+      assert.deepEqual(order, ["close", "live:start", "cancel", "settled"]);
+      yield* Deferred.succeed(settleClose, undefined);
+      const outcome = yield* Fiber.join(fiber);
+      assert.deepEqual(order, ["close", "live:start", "cancel", "settled", "live:end", "persist"]);
       assert.equal(outcome.settled, true);
     }),
 );
 
-test("a session whose final event never comes ends the shutdown at the deadline, and a close that throws ends nothing", async () => {
-  const order: string[] = [];
-  const hanging = shutdownStepsClosingLiveSession(
-    baseSteps(order),
-    () => new Promise<void>(() => undefined),
-  );
-  const outcome = await runShutdown(hanging, { deadlineMs: 20 });
-  assert.equal(outcome.settled, false);
-  assert.deepEqual(outcome.cancelled, ["run-1"]);
+it.effect(
+  "a session whose final event never comes ends the shutdown at the deadline, and a close that dies ends nothing",
+  () =>
+    Effect.gen(function* () {
+      const order: string[] = [];
+      const settleClose = yield* Deferred.make<void>();
+      const hanging = yield* shutdownStepsClosingLiveSession(
+        baseSteps(order),
+        heldWork(order, settleClose, "live"),
+      );
+      const hangingFiber = yield* Effect.fork(shutdownGatewayEffect(hanging, { deadlineMs: 20 }));
+      yield* TestClock.adjust(20);
+      const outcome = yield* Fiber.join(hangingFiber);
+      assert.equal(outcome.settled, false);
+      assert.deepEqual(outcome.cancelled, ["run-1"]);
+      // The deadline stopped waiting on the close; it did not cut it, so the
+      // session still reaches its own end exactly as the drain's own report
+      // says it may.
+      yield* Deferred.succeed(settleClose, undefined);
+      yield* waitFor(() => order.includes("live:end"));
 
-  const throwing = shutdownStepsClosingLiveSession(baseSteps([]), async () => {
-    throw new Error("socket gone");
-  });
-  const settled = await runShutdown(throwing, { deadlineMs: 20 });
-  assert.equal(settled.settled, true);
-});
+      const throwing = yield* shutdownStepsClosingLiveSession(
+        baseSteps([]),
+        Effect.die(new Error("socket gone")),
+      );
+      const settled = yield* shutdownGatewayEffect(throwing, { deadlineMs: 20 });
+      assert.equal(settled.settled, true);
+    }),
+);

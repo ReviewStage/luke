@@ -384,20 +384,28 @@ protocol's door on the host's own runtime does not, and every one of those
 tests passes with its exact in-flight assertions unchanged. P12-09 decides
 the door: either `GatewayTransport` answers effects by then and its caller
 runs them, or the edge rule records this boundary as one.
-Two faces beside it run on the same runtime for the same reason and are on
-the allowlist too: `createGatewayService`'s own `emit` and `closeAdmissions`
-in `packages/host/src/service.ts`, because a change is reported to that
-service from a callback rather than from an effect. P7-14 found the reason
-this document gave for that pending — the `Composer` promise face — was not
-the one holding it up: `Composer` answers one scoped `lifetime` effect now,
-and the `emit` callers are unchanged, because every one of them is a
-synchronous callback a collaborator outside this host calls (the brain
+The two faces beside it that used to run on the same runtime for the same
+reason — `createGatewayService`'s own `emit` and `closeAdmissions` in
+`packages/host/src/service.ts` — are off the allowlist, and P12-15b took
+them off from the two ends rather than by rewriting their callers. `emit`
+is still called from a collaborator's own synchronous callback (the brain
 wiring's `broadcastRequests` and conversation report, the live session's
-`emit`, the node registry's `onChange`), and `closeAdmissions` is a step of
-`GatewayShutdownSteps`, whose four members are promises the gateway's own
-coordinator reads. Both go when those collaborators answer effects, which is
-a change to `packages/brain`, `packages/voice`, and the shutdown contract
-rather than to a composer. Beside them are
+`emit`, the node registry's `onChange`), and those callers are unchanged;
+what changed is the log beneath them. `GatewayEventLog` holds its ring in a
+`MutableRef` rather than a `Ref` and answers a synchronous `publish` beside
+the `emit` a fiber uses, so the append a callback makes is a plain function
+call: it numbers the event, offers it to the unbounded `PubSub`, and hands
+it to every `listen` listener in the same statement the `Ref` version ran
+under `Runtime.runSync`, which is why the 87 envelope goldens, the socket
+exchange, and every reconnection-race assertion read exactly as before.
+`closeAdmissions` is the admissions door's own `Effect` now, because the
+step that runs it is one: `GatewayShutdownSteps`' four members are effects
+the gateway's coordinator pipes, and `shutdownStepsFlushingEvents` and
+`shutdownStepsClosingLiveSession` fold their own work in by forking it at
+the step that begins it and joining it at the step that waits, so the
+`AbortSignal` the settling step used to be handed is the deadline's own
+interruption instead and `packages/gateway/src/shutdown.ts` is off the
+raw-primitive allowlist with it. Beside them are
 `gatewayTestHost` (`packages/gateway/src/testing.ts`) with
 `scopedGatewayService` (`packages/host/src/testing/gateway-service.ts`),
 which are the test's own edge while those suites are plain `test` bodies

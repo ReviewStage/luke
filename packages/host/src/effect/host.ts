@@ -57,8 +57,8 @@ export const hostDrain = (
     const outcome = yield* Deferred.make<GatewayShutdownReport, HostDrainError>();
     const run = (options: GatewayShutdownOptions) =>
       shutdownGatewayEffect(steps, options).pipe(
-        // A step that threw is a defect of the coordinator's own effect, since
-        // the steps it runs are promises it did not write; it is the drain's
+        // A step that died is a defect of the coordinator's own effect, since
+        // what the steps reach is work it did not write; it is the drain's
         // named refusal here rather than a defect that would take the close
         // down with it.
         Effect.catchAllDefect((cause) => new HostDrainError({ cause })),

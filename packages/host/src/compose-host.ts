@@ -345,10 +345,10 @@ export const hostAssemblyLayer: Layer.Layer<
      * counted rather than finished: the store's load at the next start marks
      * an unsettled run interrupted and replays nothing.
      */
-    const drainSteps: GatewayShutdownSteps = shutdownStepsFlushingEvents(
+    const drainSteps: GatewayShutdownSteps = yield* shutdownStepsFlushingEvents(
       {
-        closeAdmissions: () => service.closeAdmissions(),
-        cancelActive: async () => {
+        closeAdmissions: service.closeAdmissions,
+        cancelActive: Effect.promise(async () => {
           const cancelled: string[] = [];
           for (const record of brain.wiring.allRequests()) {
             if (
@@ -367,12 +367,9 @@ export const hostAssemblyLayer: Layer.Layer<
             await brain.wiring.children.cancel(child.childId).catch(() => undefined);
           }
           return cancelled;
-        },
-        awaitSettled: async (signal) => {
-          if (signal.aborted) return;
-          await brain.wiring.publicationSettled();
-        },
-        persistUnresolved: async () => {
+        }),
+        awaitSettled: Effect.promise(() => brain.wiring.publicationSettled()),
+        persistUnresolved: Effect.sync(() => {
           // What the next launch will find: the records as the stores last
           // persisted them, read from the envelopes rather than from memory. A
           // cancellation whose write did not land leaves its run queued or
@@ -393,13 +390,16 @@ export const hostAssemblyLayer: Layer.Layer<
             ).length;
           }
           return unresolved;
-        },
+        }),
       },
-      () => settings.flushProductEvents(),
+      Effect.promise(() => settings.flushProductEvents()),
     );
     // The live session's graceful close rides inside the same drain, so a quit
     // mid-call ends the session within the deadline and never after it.
-    const shutdownSteps = shutdownStepsClosingLiveSession(drainSteps, () => live.service.stop());
+    const shutdownSteps = yield* shutdownStepsClosingLiveSession(
+      drainSteps,
+      Effect.promise(() => live.service.stop()),
+    );
 
     const drain = yield* hostDrain(shutdownSteps, report);
 

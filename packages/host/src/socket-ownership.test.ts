@@ -22,7 +22,7 @@ import {
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireValue } from "@sidecar/wire";
-import { Context, Effect, Layer, Runtime, type Scope } from "effect";
+import { Context, Effect, Layer, type Scope } from "effect";
 import { test } from "vitest";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import type { ConversationOperations } from "./conversation-operations.js";
@@ -123,8 +123,8 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
 /** One host's own methods on a real socket, bound for as long as the test's scope stands. */
 interface Listening {
   readonly port: number;
-  /** The shutdown's own press, as the report's options take it: a callback, run on this test's runtime. */
-  readonly closeAdmissions: () => void;
+  /** The shutdown's own press, as the drain's steps take it. */
+  readonly closeAdmissions: Effect.Effect<void>;
 }
 
 /**
@@ -145,10 +145,9 @@ const listen = (
       }),
     ).pipe(Effect.orDie);
     const binding = Context.get(context, GatewaySocketBinding);
-    const runSync = Runtime.runSync(yield* Effect.runtime<never>());
     return {
       port: binding.port,
-      closeAdmissions: () => runSync(binding.closeAdmissions),
+      closeAdmissions: binding.closeAdmissions,
     };
   });
 
@@ -269,7 +268,7 @@ it.live(
                 shutdownGatewayEffect(
                   {
                     closeAdmissions,
-                    cancelActive: async () => {
+                    cancelActive: Effect.promise(async () => {
                       const cancelled: string[] = [];
                       for (const held of f.live.values()) {
                         if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
@@ -277,14 +276,16 @@ it.live(
                         await f.agent.cancelAsk(held.runId);
                       }
                       return cancelled;
-                    },
-                    awaitSettled: async () => undefined,
-                    persistUnresolved: async () =>
-                      [...f.persisted.values()].filter(
-                        (held) =>
-                          held.status === BRAIN_REQUEST_STATUS.QUEUED ||
-                          held.status === BRAIN_REQUEST_STATUS.RUNNING,
-                      ).length,
+                    }),
+                    awaitSettled: Effect.void,
+                    persistUnresolved: Effect.sync(
+                      () =>
+                        [...f.persisted.values()].filter(
+                          (held) =>
+                            held.status === BRAIN_REQUEST_STATUS.QUEUED ||
+                            held.status === BRAIN_REQUEST_STATUS.RUNNING,
+                        ).length,
+                    ),
                   },
                   { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
                 ),
@@ -316,10 +317,10 @@ test("a shutdown whose cancellation hangs still ends at the deadline with what d
   const report = await Effect.runPromise(
     shutdownGatewayEffect(
       {
-        closeAdmissions: () => undefined,
-        cancelActive: () => new Promise(() => undefined),
-        awaitSettled: async () => undefined,
-        persistUnresolved: async () => 2,
+        closeAdmissions: Effect.void,
+        cancelActive: Effect.never,
+        awaitSettled: Effect.void,
+        persistUnresolved: Effect.succeed(2),
       },
       { deadlineMs: 20 },
     ),

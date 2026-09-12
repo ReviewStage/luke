@@ -294,15 +294,15 @@ describe("the drain", () => {
   }
 
   const hangingSteps = (counts: Counted): GatewayShutdownSteps => ({
-    closeAdmissions: () => {
+    closeAdmissions: Effect.sync(() => {
       counts.admissionsClosed += 1;
-    },
-    cancelActive: async () => ["run-1"],
-    awaitSettled: () => new Promise<void>(() => undefined),
-    persistUnresolved: async () => {
+    }),
+    cancelActive: Effect.succeed<readonly string[]>(["run-1"]),
+    awaitSettled: Effect.never,
+    persistUnresolved: Effect.sync(() => {
       counts.persisted += 1;
       return 3;
-    },
+    }),
   });
 
   // The drain runs on the clock of whoever asked for it, now that no promise
@@ -336,12 +336,12 @@ describe("the drain", () => {
       const broken = new Error("the envelopes could not be read");
       const drain = yield* hostDrain(
         {
-          closeAdmissions: () => undefined,
-          cancelActive: async () => [],
-          awaitSettled: async () => undefined,
-          persistUnresolved: async () => {
+          closeAdmissions: Effect.void,
+          cancelActive: Effect.succeed<readonly string[]>([]),
+          awaitSettled: Effect.void,
+          persistUnresolved: Effect.sync((): number => {
             throw broken;
-          },
+          }),
         },
         (message) => reports.push(message),
       );
