@@ -268,24 +268,13 @@ longer one of those reasons: P12-15e made `SessionActionPerformer.perform`,
 the row's own two writes, and `settleHostedWrite` effects, so the redraw a
 landed write earns is a `yield*` of a poke that forks `loop.refresh` as a
 daemon, on the fiber the write itself is carried on, and nothing runs it. What
-is left is the brain's own promise-shaped reads: `workspaceDefaults`, which
-`ActionAdmissionReads` waits on as a promise, is run to one on the
+is left is the brain's own promise-shaped reads: `workspaceDefaults`, which the host's
+action performer still wraps in an `Effect.promise` for the `defaults` read
+`ActionAdmissionReads` declares, is run to one on the
 `Effect.runtime<never>()` this composer reads out of its own build, and
 `broadcastWorkspaceProjects` is forked onto the same runtime from the one
 place it still fires from a plain callback, `sessionRegistry.subscribe`'s
 listener. Both go when those reads and that listener answer effects.
-
-`composeBrain` in `packages/host/src/compose-brain.ts` is on the same list
-for the other half of the same seam, and runs two things on the `execution`
-runtime the store's asks and every turn already run on. The roster and
-projects reads `admitEffect`'s `ActionAdmissionReads` waits on are still
-`Promise`s, and the pass admission asks for before every session action is one
-of them, so the brain action performer's `refreshSessions` is
-`Runtime.runPromise` of `loop.refresh` there. The carrier below it is the
-other: `SessionActionPerformer.perform` answers an effect since P12-15e while
-`BrainActionPerformer.carry` is still a promise the action tool awaits, so the
-host's carrier is handed a `carry` that runs the performer's effect on that
-same runtime. Both go when those reads and that carrier answer effects.
 
 `compose-live.ts`'s entry covers a second run beside the timer bridge named
 above: `requestOnboardingBeat` decides whether to speak from the roster a
@@ -303,6 +292,13 @@ call as an effect, since the `ToolExecutor` seam they run under answers one;
 what still holds the door is the web's action endpoint, which is a promise
 from `executeSessionAction` up, and the two testing doors over it
 (`@sidecar/actions`'s `tool-call.ts` and the provider contract's oracle).
+P12-15d made the reads the gauntlet itself waits on effects — `ActionRoster`'s
+and `ActionProjects`' own, and `guardedRead`, which is now an interruptible
+`raceFirst` between the read and the guard's signal rather than a promise race
+— so everything inside `admitEffect` is an effect and only that door is not.
+The `interruptible` is load-bearing: an action is carried through the journal
+inside an uninterruptible region, and a race there whose loser cannot be
+interrupted would never answer.
 P12-04 turned out to be the CloudFetch/HttpClient family alone, so the door
 waits on those three answering effects instead.
 
@@ -1224,8 +1220,7 @@ design decision stated as such:
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
-| `composeObservation`'s `pokeRefresh`, the redraw a landed session write earns, forked on the runtime the composer was built on | P12-15a | with `SessionActionPerformer.perform` and the carrier above it answering effects |
-| `composeBrain`'s `refreshSessions`, the admission pass run to a promise on the host's own runtime | P12-15a | with `admit()`'s Promise door |
+| `composeObservation`'s runs for what the brain still awaits of it, the promise-shaped `workspaceDefaults` and the projects broadcast fired from a plain listener | P12-15a | when that read and that listener answer effects |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |

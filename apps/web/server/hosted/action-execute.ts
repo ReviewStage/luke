@@ -288,18 +288,20 @@ function admissionOver(plugin: SessionProviderPlugin, roster: ActionRoster): Adm
   return {
     origin: RUN_ORIGIN.USER,
     roster: {
-      read: async () => roster.observations.map((one) => normalizeSession(provider, one)),
+      read: () => Effect.succeed(roster.observations.map((one) => normalizeSession(provider, one))),
     },
     projects: {
-      read: async () =>
-        roster.projects.map((project) => ({
-          ...project,
-          providerId: provider.id,
-          providerName: provider.displayName,
-        })),
+      read: () =>
+        Effect.succeed(
+          roster.projects.map((project) => ({
+            ...project,
+            providerId: provider.id,
+            providerName: provider.displayName,
+          })),
+        ),
       // The phone keeps no saved tie-breaks of its own, so an ambiguous ask
       // stays ambiguous rather than being settled by somebody else's default.
-      defaults: async () => ({}),
+      defaults: () => Effect.succeed({}),
       agentModels: workspaceAgentModels,
     },
   };

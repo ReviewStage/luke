@@ -40,7 +40,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, Runtime, type Scope } from "effect";
+import { Effect, type Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
@@ -246,15 +246,9 @@ export const composeBrain = (
       actions: {
         sessionActions: observation.sessionActions,
         sessions: observation.actableSessions,
-        // The admission reads an action waits on are still promises the tool
-        // seam hands the brain, so the pass admission asks for is run to one
-        // here, on the host's own runtime; it goes when those reads are
-        // effects.
-        refreshSessions: () => Runtime.runPromise(execution)(observation.loop.refresh),
-        // The performer's own act is an effect since P12-15e, and the carrier
-        // above it is not, so the act is carried on the same runtime; it goes
-        // when `BrainActionPerformer.carry` answers an effect.
-        carry: (effect) => Runtime.runPromise(execution)(effect),
+        // The pass admission asks for before a session action is the loop's
+        // own effect, waited on by the fiber the action is admitted on.
+        refreshSessions: () => observation.loop.refresh,
         workspaceProjects: observation.workspaceProjects,
         workspaceDefaults: observation.workspaceDefaults,
         appGuide: () => appGuide,

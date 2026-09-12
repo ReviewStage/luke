@@ -32,6 +32,7 @@ import {
   recordedRoutes,
   temporaryDirectory,
 } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { type TestContext, test } from "vitest";
 import {
   assertGoldenJson,
@@ -144,7 +145,8 @@ function admissionOver(plugin: SessionProviderPlugin) {
   return {
     origin: RUN_ORIGIN.USER,
     roster: {
-      read: async () => plugin.latest().map((one) => normalizeSession(plugin.provider, one)),
+      read: () =>
+        Effect.succeed(plugin.latest().map((one) => normalizeSession(plugin.provider, one))),
     },
   };
 }

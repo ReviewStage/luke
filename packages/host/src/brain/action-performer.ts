@@ -37,7 +37,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { type Effect, Schema as EffectSchema, Either } from "effect";
+import { Effect, Schema as EffectSchema, Either, Fiber } from "effect";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -54,20 +54,14 @@ interface BrainNotebookWriter {
 
 export interface BrainActionPerformerDependencies {
   sessionActions: SessionActionPerformer;
-  /**
-   * Carries the performer's own effect to the promise this carrier still
-   * answers, on the runtime the composition was built on. It goes when
-   * `BrainActionPerformer.carry` answers an effect itself, which is the last
-   * promise between the action tool's fiber and the provider write.
-   */
-  carry: <Value>(effect: Effect.Effect<Value>) => Promise<Value>;
   /** The roster as the brain was shown it: every observed session still worth a row. */
   sessions: () => readonly Session[];
   /**
    * Triggers a fresh observation pass so the session registry is current before
-   * validation and perform. Called before every session action.
+   * validation and perform. Asked for before every session action, and waited
+   * on as an effect on the fiber the action's own admission runs on.
    */
-  refreshSessions: () => Promise<void>;
+  refreshSessions: () => Effect.Effect<void>;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceDefaults: () => Promise<WorkspaceCreationDefaults>;
   /** The guide as the renderer last reported it; empty before it has. */
@@ -175,111 +169,121 @@ function panelResult(answered: WireRecord): CarriedActionResult | undefined {
 export function createBrainActionPerformer(
   dependencies: BrainActionPerformerDependencies,
 ): BrainActionPerformer {
-  const admission = (): ActionAdmissionReads => {
-    // The roster and the projects an action is admitted against are two readings
-    // of one observation pass, so the pass runs once per action however many of
-    // them admission asks for. An action that asks for neither — a setting —
-    // observes nothing at all.
-    let pass: Promise<void> | undefined;
-    const observed = () => (pass ??= dependencies.refreshSessions());
-    return {
-      // The reads before an effect wait only as long as the standing does: a
-      // cancel landing mid-refresh settles the action inside admission, and the
-      // refresh's late answer dispatches nothing.
-      roster: {
-        read: async () => {
-          await observed();
-          return dependencies.sessions();
+  const admission = (): Effect.Effect<ActionAdmissionReads> =>
+    Effect.gen(function* () {
+      // The roster and the projects an action is admitted against are two readings
+      // of one observation pass, so the pass runs once per action however many of
+      // them admission asks for. An action that asks for neither — a setting —
+      // observes nothing at all. The pass is forked off the fiber that waits on
+      // it, because what a cancel ends is the wait and never the observation:
+      // an interrupted pass would leave the registry half-written.
+      const observed = yield* Effect.cached(
+        Effect.flatMap(Effect.forkDaemon(dependencies.refreshSessions()), Fiber.join),
+      );
+      return {
+        // The reads before an effect wait only as long as the standing does: a
+        // cancel landing mid-refresh settles the action inside admission, and the
+        // refresh's late answer dispatches nothing.
+        roster: {
+          read: () => Effect.map(observed, () => dependencies.sessions()),
         },
-      },
-      projects: {
-        read: async () => {
-          await observed();
-          return dependencies.workspaceProjects();
+        projects: {
+          read: () => Effect.map(observed, () => dependencies.workspaceProjects()),
+          defaults: () => Effect.promise(() => dependencies.workspaceDefaults()),
+          agentModels: workspaceAgentModels,
         },
-        defaults: () => dependencies.workspaceDefaults(),
-        agentModels: workspaceAgentModels,
-      },
-      guide: dependencies.appGuide(),
-      rememberedFacts: dependencies.rememberedFacts(),
-    };
-  };
+        guide: dependencies.appGuide(),
+        rememberedFacts: dependencies.rememberedFacts(),
+      };
+    });
 
-  const carrySessionAction = async (
+  const carrySessionAction = (
     action: ValidatedAction<SessionActionKind>,
     execution: BrainActionExecution,
-  ): Promise<ActionOutputEnvelope> => {
-    // The roster as admission just refreshed it is the snapshot the envelope
-    // carries: the title and agent the target wore when the action ran, read
-    // now rather than at render, when the session may be renamed or gone.
-    const sessions = dependencies.sessions();
-    const target = actionTargetSnapshot(action, sessions);
-    // The ask is recorded before the outcome is known: a refusal still leaves
-    // the developer having asked it, and the reply voicing the outcome is
-    // recorded as what Luke said.
-    dependencies.recordConversationEntry(
-      sessionActionConversationEntry(
-        action,
-        sessions,
-        execution.origin === RUN_ORIGIN.USER
-          ? CONVERSATION_ENTRY_KIND.ACTION
-          : CONVERSATION_ENTRY_KIND.OWN_ACTION,
-      ),
-    );
-    // The performer awaits once more of its own before a create or a spawn,
-    // so the execution rides along to be asked again there.
-    return actionOutputFromResult(
-      await dependencies.carry(dependencies.sessionActions.perform(action, execution)),
-      target,
-    );
-  };
+  ): Effect.Effect<ActionOutputEnvelope> =>
+    Effect.gen(function* () {
+      // The roster as admission just refreshed it is the snapshot the envelope
+      // carries: the title and agent the target wore when the action ran, read
+      // now rather than at render, when the session may be renamed or gone.
+      const sessions = dependencies.sessions();
+      const target = actionTargetSnapshot(action, sessions);
+      // The ask is recorded before the outcome is known: a refusal still leaves
+      // the developer having asked it, and the reply voicing the outcome is
+      // recorded as what Luke said.
+      dependencies.recordConversationEntry(
+        sessionActionConversationEntry(
+          action,
+          sessions,
+          execution.origin === RUN_ORIGIN.USER
+            ? CONVERSATION_ENTRY_KIND.ACTION
+            : CONVERSATION_ENTRY_KIND.OWN_ACTION,
+        ),
+      );
+      // The performer awaits once more of its own before a create or a spawn,
+      // so the execution rides along to be asked again there.
+      return actionOutputFromResult(
+        yield* dependencies.sessionActions.perform(action, execution),
+        target,
+      );
+    });
 
   /** A panel answer this build cannot read is a refusal, never an acceptance. */
-  const carryAppAction = async (
+  const carryAppAction = (
     action: BrainAppActionRequest["action"],
-  ): Promise<ActionOutputEnvelope> => {
-    const result = panelResult(await dependencies.performAppAction(action));
-    return result === undefined
-      ? refusedActionOutput(REFUSAL.UNREADABLE_PANEL_ANSWER)
-      : actionOutputFromResult(result);
-  };
+  ): Effect.Effect<ActionOutputEnvelope> =>
+    Effect.map(
+      Effect.promise(() => dependencies.performAppAction(action)),
+      (answered) => {
+        const result = panelResult(answered);
+        return result === undefined
+          ? refusedActionOutput(REFUSAL.UNREADABLE_PANEL_ANSWER)
+          : actionOutputFromResult(result);
+      },
+    );
 
-  const carry = async (
+  const carry = (
     action: ValidatedAction,
     execution: BrainActionExecution,
-  ): Promise<ActionOutputEnvelope> => {
-    if (!isExecution(execution)) return refusedActionOutput(REFUSAL.NO_EXECUTION);
-    if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
-    // Where each admitted action goes, named kind by kind: the two notebook
-    // writes are carried here, an app action is the renderer's to perform, and
-    // a session action is recorded as it is carried. Every answer is the one
-    // envelope.
-    return dispatchByKind(action, {
-      [ACTION_KIND.REMEMBER]: async (action) =>
-        (await dependencies.notebook.remember({
-          id: randomUUID(),
-          words: action.words,
-          ...(action.replaces !== undefined ? { replaces: action.replaces } : undefined),
-        }))
-          ? acceptedActionOutput()
-          : refusedActionOutput(REFUSAL.MEMORY_NOT_SAVED),
-      [ACTION_KIND.FORGET]: async (action) =>
-        (await dependencies.notebook.forget(action.id))
-          ? acceptedActionOutput()
-          : refusedActionOutput(REFUSAL.MEMORY_NOT_REMOVED),
-      [ACTION_KIND.SETTING]: carryAppAction,
-      [ACTION_KIND.PANEL]: carryAppAction,
-      [ACTION_KIND.FEEDBACK]: carryAppAction,
-      [ACTION_KIND.UPDATE]: carryAppAction,
-      [ACTION_KIND.MESSAGE]: (action) => carrySessionAction(action, execution),
-      [ACTION_KIND.CONTROL]: (action) => carrySessionAction(action, execution),
-      [ACTION_KIND.OPEN]: (action) => carrySessionAction(action, execution),
-      [ACTION_KIND.CREATE_WORKSPACE]: (action) => carrySessionAction(action, execution),
-      [ACTION_KIND.ADD_AGENT]: (action) => carrySessionAction(action, execution),
-      [ACTION_KIND.RENAME_WORKSPACE]: (action) => carrySessionAction(action, execution),
-      [ACTION_KIND.RENAME_SESSION]: (action) => carrySessionAction(action, execution),
+  ): Effect.Effect<ActionOutputEnvelope> =>
+    Effect.suspend(() => {
+      if (!isExecution(execution)) return Effect.succeed(refusedActionOutput(REFUSAL.NO_EXECUTION));
+      if (execution.isRevoked()) return Effect.succeed(refusedActionOutput(REFUSAL.TURN_OVER));
+      // Where each admitted action goes, named kind by kind: the two notebook
+      // writes are carried here, an app action is the renderer's to perform, and
+      // a session action is recorded as it is carried. Every answer is the one
+      // envelope.
+      return dispatchByKind(action, {
+        [ACTION_KIND.REMEMBER]: (action) =>
+          Effect.map(
+            Effect.promise(() =>
+              dependencies.notebook.remember({
+                id: randomUUID(),
+                words: action.words,
+                ...(action.replaces !== undefined ? { replaces: action.replaces } : undefined),
+              }),
+            ),
+            (saved) =>
+              saved ? acceptedActionOutput() : refusedActionOutput(REFUSAL.MEMORY_NOT_SAVED),
+          ),
+        [ACTION_KIND.FORGET]: (action) =>
+          Effect.map(
+            Effect.promise(() => dependencies.notebook.forget(action.id)),
+            (removed) =>
+              removed ? acceptedActionOutput() : refusedActionOutput(REFUSAL.MEMORY_NOT_REMOVED),
+          ),
+        [ACTION_KIND.SETTING]: carryAppAction,
+        [ACTION_KIND.PANEL]: carryAppAction,
+        [ACTION_KIND.FEEDBACK]: carryAppAction,
+        [ACTION_KIND.UPDATE]: carryAppAction,
+        [ACTION_KIND.MESSAGE]: (action) => carrySessionAction(action, execution),
+        [ACTION_KIND.CONTROL]: (action) => carrySessionAction(action, execution),
+        [ACTION_KIND.OPEN]: (action) => carrySessionAction(action, execution),
+        [ACTION_KIND.CREATE_WORKSPACE]: (action) => carrySessionAction(action, execution),
+        [ACTION_KIND.ADD_AGENT]: (action) => carrySessionAction(action, execution),
+        [ACTION_KIND.RENAME_WORKSPACE]: (action) => carrySessionAction(action, execution),
+        [ACTION_KIND.RENAME_SESSION]: (action) => carrySessionAction(action, execution),
+      });
     });
-  };
 
   return { admission, carry };
 }

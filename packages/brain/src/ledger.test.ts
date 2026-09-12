@@ -389,7 +389,7 @@ it.effect(
           if (dispatched === 2) {
             return Promise.resolve(refusedActionOutput("not observed"));
           }
-          return held.actions.carry(action, execution);
+          return held.carry(action, execution);
         }).actions,
       });
       mixed.client.answers.push(

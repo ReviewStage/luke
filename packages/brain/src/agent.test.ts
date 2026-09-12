@@ -670,7 +670,7 @@ it.effect("actions run one at a time in the order the model emitted them", () =>
       actions: performerWith(async (action, execution) => {
         const words = action.kind === ACTION_KIND.MESSAGE ? action.text : action.kind;
         order.push(`start ${words}`);
-        const output = await held.actions.carry(action, execution);
+        const output = await held.carry(action, execution);
         order.push(`end ${words}`);
         return output;
       }).actions,

@@ -202,7 +202,7 @@ export interface FakeActionPerformerOptions {
   /** The roster admission reads, as the latest pass would report it; empty admits no session action. */
   readonly sessions?: readonly Session[];
   readonly guide?: AppGuideSnapshot;
-  /** What carrying an admitted action answers; accepted by default. */
+  /** What carrying an admitted action answers; accepted by default. The tests' own promise, awaited by the carrier's effect. */
   readonly carry?:
     | ((action: ValidatedAction, execution: BrainActionExecution) => Promise<ActionOutputEnvelope>)
     | undefined;
@@ -226,16 +226,21 @@ export function fakeActionPerformer(options: FakeActionPerformerOptions = {}): F
   const performed: ValidatedAction[] = [];
   const executions: BrainActionExecution[] = [];
   const actions: BrainActionPerformer = {
-    admission: () => ({
-      roster: { read: async () => options.sessions ?? [] },
-      guide: options.guide ?? EMPTY_APP_GUIDE,
-      rememberedFacts: [],
-    }),
-    carry: async (action, execution) => {
-      performed.push(action);
-      executions.push(execution);
-      return options.carry ? options.carry(action, execution) : acceptedActionOutput();
-    },
+    admission: () =>
+      Effect.succeed({
+        roster: { read: () => Effect.succeed(options.sessions ?? []) },
+        guide: options.guide ?? EMPTY_APP_GUIDE,
+        rememberedFacts: [],
+      }),
+    carry: (action, execution) =>
+      Effect.suspend(() => {
+        performed.push(action);
+        executions.push(execution);
+        const chosen = options.carry;
+        return chosen
+          ? Effect.promise(() => chosen(action, execution))
+          : Effect.succeed(acceptedActionOutput());
+      }),
   };
   return { actions, performed, executions };
 }
@@ -256,10 +261,12 @@ export function performCall(
     if (!tool) return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.NO_TOOL));
     const input = toolArguments(call.argumentsJson);
     if (input === undefined) return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.UNREADABLE));
-    return tool.execute(input, {
-      ...execution,
-      admission: actions.admission(execution),
-      carry: (action) => actions.carry(action, execution),
+    return Effect.gen(function* () {
+      return yield* tool.execute(input, {
+        ...execution,
+        admission: yield* actions.admission(execution),
+        carry: (action) => actions.carry(action, execution),
+      });
     });
   });
 }

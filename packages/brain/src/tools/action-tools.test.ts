@@ -42,16 +42,18 @@ function context(revoked: () => boolean = () => false) {
     signal: new AbortController().signal,
     admission: {
       roster: {
-        read: async () => {
-          rosterReads.push(rosterReads.length + 1);
-          return [observed];
-        },
+        read: () =>
+          Effect.sync(() => {
+            rosterReads.push(rosterReads.length + 1);
+            return [observed];
+          }),
       },
     },
-    carry: async (action) => {
-      carried.push(action);
-      return acceptedActionOutput();
-    },
+    carry: (action) =>
+      Effect.sync(() => {
+        carried.push(action);
+        return acceptedActionOutput();
+      }),
   };
   return { ctx, carried, rosterReads };
 }
@@ -120,10 +122,11 @@ test("a standing revoked while admission read the roster refuses before the carr
     ...ctx,
     admission: {
       roster: {
-        read: async () => {
-          revoked = true;
-          return [observed];
-        },
+        read: () =>
+          Effect.sync(() => {
+            revoked = true;
+            return [observed];
+          }),
       },
     },
   };

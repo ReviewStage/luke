@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Effect } from "effect";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -151,12 +152,12 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
   return {
     async admission() {
       let read: Promise<HostedRoster> | undefined;
-      const roster = () => (read ??= dependencies.roster());
+      const roster = () => Effect.promise(() => (read ??= dependencies.roster()));
       return {
-        roster: { read: async () => (await roster()).sessions },
+        roster: { read: () => Effect.map(roster(), (held) => held.sessions) },
         projects: {
-          read: async () => (await roster()).projects,
-          defaults: () => dependencies.defaults(),
+          read: () => Effect.map(roster(), (held) => held.projects),
+          defaults: () => Effect.promise(() => dependencies.defaults()),
           agentModels: workspaceAgentModels,
         },
         rememberedFacts: await dependencies.facts.list(),

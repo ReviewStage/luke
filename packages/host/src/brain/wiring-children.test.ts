@@ -259,7 +259,6 @@ async function composed(
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
-      carry: (effect) => Effect.runPromise(effect),
       sessionActions: {
         perform: () =>
           Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not in test" }),
@@ -268,7 +267,7 @@ async function composed(
         openSessionChange: () => Effect.die(new Error("not in test")),
       },
       sessions: () => [],
-      refreshSessions: async () => undefined,
+      refreshSessions: () => Effect.void,
       workspaceProjects: () => [],
       workspaceDefaults: async () => ({}),
       appGuide: () => ({ facts: [], settings: [] }),

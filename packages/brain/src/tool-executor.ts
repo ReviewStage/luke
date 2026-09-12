@@ -288,18 +288,21 @@ export function createTurnToolExecutor(
         return performJournaled(
           call,
           execution,
-          Effect.suspend(() => {
+          Effect.gen(function* () {
             const input = toolArguments(call.argumentsJson);
             if (input === undefined) {
-              return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.UNREADABLE));
+              return refusedActionOutput(ACTION_REFUSAL.UNREADABLE);
             }
-            return actionTool.execute(input, {
+            return yield* actionTool.execute(input, {
               ...execution,
-              admission: dependencies.actions.admission(execution),
-              carry: async (action) =>
-                Either.getOrUndefined(
-                  readEither(ACTION_OUTPUT)(await dependencies.actions.carry(action, execution)),
-                ) ?? unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
+              admission: yield* dependencies.actions.admission(execution),
+              carry: (action) =>
+                Effect.map(
+                  dependencies.actions.carry(action, execution),
+                  (answer) =>
+                    Either.getOrUndefined(readEither(ACTION_OUTPUT)(answer)) ??
+                    unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
+                ),
             });
           }),
         );

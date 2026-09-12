@@ -29,7 +29,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Fiber, Option } from "effect";
+import { Deferred, Effect, Either, Fiber, Option } from "effect";
 import { test } from "vitest";
 import {
   type BrainActionPerformerDependencies,
@@ -134,7 +134,6 @@ function performer(
   const appActions: BrainAppActionRequest["action"][] = [];
   let facts: readonly RememberedFact[] = [];
   const dependencies: BrainActionPerformerDependencies = {
-    carry: (effect) => Effect.runPromise(effect),
     sessionActions: {
       perform: (action) =>
         Effect.sync(() => {
@@ -146,7 +145,7 @@ function performer(
       openSessionChange: () => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     },
     sessions: (): readonly Session[] => [observed],
-    refreshSessions: async () => {},
+    refreshSessions: () => Effect.void,
     workspaceProjects: () => [],
     workspaceDefaults: async () => ({}),
     appGuide: () => EMPTY_APP_GUIDE,
@@ -475,7 +474,7 @@ test("an admitted action with no turn standing is refused at the carrier, the ho
   });
   const standing = {
     origin: RUN_ORIGIN.USER,
-    roster: { read: async () => [observed] },
+    roster: { read: () => Effect.succeed([observed]) },
     guide: CAPTIONS_GUIDE,
     rememberedFacts: [],
   };
@@ -518,7 +517,7 @@ test("an admitted action with no turn standing is refused at the carrier, the ho
   ] as unknown as BrainActionExecution[];
   for (const execution of malformed) {
     for (const action of admitted) {
-      const refused = await actions.carry(action, execution);
+      const refused = await Effect.runPromise(actions.carry(action, execution));
       assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
     }
   }
@@ -531,9 +530,10 @@ test("an admitted action with no turn standing is refused at the carrier, the ho
 test("a turn revoked while the roster refreshed is refused before the effect, and nothing is recorded", async () => {
   let revoked = false;
   const { actions, performed, recorded } = performer({
-    refreshSessions: async () => {
-      revoked = true;
-    },
+    refreshSessions: () =>
+      Effect.sync(() => {
+        revoked = true;
+      }),
   });
   const refused = await Effect.runPromise(
     performCall(
@@ -584,10 +584,11 @@ test("an action is validated against the roster as refreshed inside the turn, no
   let sessions: readonly Session[] = [observed];
   const { actions, performed } = performer({
     sessions: () => sessions,
-    refreshSessions: async () => {
-      // The session is gone by the time the action is validated.
-      sessions = [];
-    },
+    refreshSessions: () =>
+      Effect.sync(() => {
+        // The session is gone by the time the action is validated.
+        sessions = [];
+      }),
   });
   const refused = await Effect.runPromise(performCall(actions, MESSAGE_CALL, LIVE));
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
@@ -599,11 +600,12 @@ test("a creation is admitted against the projects the same pass reported, and th
   let passes = 0;
   const { actions, performed } = performer({
     workspaceProjects: () => projects,
-    refreshSessions: async () => {
-      passes += 1;
-      // The project is only offered once an observation pass has run.
-      projects = [LISTED_PROJECT];
-    },
+    refreshSessions: () =>
+      Effect.sync(() => {
+        passes += 1;
+        // The project is only offered once an observation pass has run.
+        projects = [LISTED_PROJECT];
+      }),
   });
   const created = await Effect.runPromise(performCall(actions, CREATE_CALL, LIVE));
   assert.equal(created.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -613,6 +615,53 @@ test("a creation is admitted against the projects the same pass reported, and th
     [ACTION_KIND.CREATE_WORKSPACE],
   );
 });
+
+it.effect(
+  "a cancel while the pass is out leaves the pass running: the wait ends, the observation does not",
+  () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      let interrupted = false;
+      let finished = false;
+      const h = performer({
+        refreshSessions: () =>
+          Deferred.succeed(started, undefined).pipe(
+            Effect.zipRight(Deferred.await(release)),
+            Effect.zipRight(
+              Effect.sync(() => {
+                finished = true;
+              }),
+            ),
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                interrupted = true;
+              }),
+            ),
+          ),
+      });
+      const controller = new AbortController();
+      const execution: BrainActionExecution = {
+        conversationId: MAIN_SESSION_KEY,
+        turnId: "run-1",
+        runId: "run-1",
+        origin: RUN_ORIGIN.USER,
+        isRevoked: () => controller.signal.aborted,
+        signal: controller.signal,
+      };
+      const pending = yield* Effect.fork(performCall(h.actions, MESSAGE_CALL, execution));
+      yield* Deferred.await(started);
+      controller.abort();
+      const outcome = yield* Fiber.join(pending);
+      assert.equal(outcome.status, ACTION_OUTPUT_STATUS.REFUSED);
+      assert.equal(outcome.reason, ACTION_REFUSAL.TURN_OVER);
+      assert.equal(interrupted, false);
+      yield* Deferred.succeed(release, undefined);
+      yield* waitFor(() => finished);
+      assert.deepEqual(h.performed, []);
+      assert.deepEqual(h.recorded, []);
+    }),
+);
 
 it.effect(
   "a cancel during the roster refresh or the defaults read settles the action, and the late read dispatches nothing",
@@ -625,14 +674,21 @@ it.effect(
         });
         let invoked = false;
         let finished = false;
+        const waits = async () => {
+          invoked = true;
+          await gate;
+          finished = true;
+        };
         const h = performer({
           workspaceProjects: () => [LISTED_PROJECT],
-          [held]: async () => {
-            invoked = true;
-            await gate;
-            finished = true;
-            return {};
-          },
+          ...(held === "refreshSessions"
+            ? { refreshSessions: () => Effect.promise(waits) }
+            : {
+                workspaceDefaults: async () => {
+                  await waits();
+                  return {};
+                },
+              }),
         });
         const controller = new AbortController();
         const execution: BrainActionExecution = {

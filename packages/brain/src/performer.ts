@@ -1,5 +1,6 @@
 import type { ActionOutputEnvelope, ValidatedAction } from "@sidecar/actions";
 import type { Session, SessionIdentity } from "@sidecar/session";
+import type { Effect } from "effect";
 import type { ActionAdmissionReads } from "./tools/action-tools.js";
 import type { ToolContext } from "./tools/tool-module.js";
 
@@ -36,8 +37,13 @@ export type BrainActionExecution = ToolContext;
  * admission minted and answers in the one envelope every action tool shares —
  * the status, the target as the roster held it at execution, and the session
  * a creation named. The host never sees a call before admission has read it.
+ * Both halves answer effects, run on the fiber of the turn that emitted the
+ * call, so a cancelled turn interrupts them where it finds them.
  */
 export interface BrainActionPerformer {
-  admission(execution: BrainActionExecution): ActionAdmissionReads;
-  carry(action: ValidatedAction, execution: BrainActionExecution): Promise<ActionOutputEnvelope>;
+  admission(execution: BrainActionExecution): Effect.Effect<ActionAdmissionReads>;
+  carry(
+    action: ValidatedAction,
+    execution: BrainActionExecution,
+  ): Effect.Effect<ActionOutputEnvelope>;
 }
