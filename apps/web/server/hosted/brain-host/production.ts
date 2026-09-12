@@ -163,7 +163,7 @@ export function productionBrainHostSeams(): BrainHostSeams {
     vaultRows,
     vaultSecret,
     providerKey: async (userId, providerId) =>
-      readApiKeyFor(await vaultRows(userId), vaultSecret())(providerId)(),
+      runWeb(readApiKeyFor(await vaultRows(userId), vaultSecret())(providerId)()),
     executeAction: (input) => executeSessionAction(input),
     now: () => Date.now(),
   };

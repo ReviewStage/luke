@@ -1,9 +1,8 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { type ProviderSessionObservation, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
-import type { Layer } from "effect";
+import type { Effect, Layer } from "effect";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
-import { runAdapterRead } from "../shared/promise-face.js";
 import { conductorActions } from "./actions.js";
 import {
   conductorConversationEnds,
@@ -19,7 +18,7 @@ import {
 } from "./vocabulary.js";
 
 export interface ConductorPluginOptions {
-  readApiKey: () => Promise<string | undefined>;
+  readApiKey: () => Effect.Effect<string | undefined>;
   baseUrl?: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
@@ -83,7 +82,7 @@ export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPl
 
   return {
     provider: CONDUCTOR_PROVIDER,
-    observe: () => runAdapterRead(pass.run()),
+    observe: () => pass.run(),
     latest: () => pass.latest(),
     lastObservationFailure: () => pass.lastFailure(),
 

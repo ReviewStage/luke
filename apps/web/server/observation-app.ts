@@ -178,7 +178,7 @@ async function sessionsMessagesHandler(request: Request): Promise<Response> {
     ...hostedVaultSeams,
     encryptionSecret: await hostedEncryptionSecret(),
     request,
-    execute: executeConversationRead,
+    execute: (ask) => runWeb(executeConversationRead(ask)),
   });
 }
 

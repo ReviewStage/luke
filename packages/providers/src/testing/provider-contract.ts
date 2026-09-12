@@ -67,8 +67,8 @@ interface ProviderFixtureInput {
   readonly home: string;
   readonly now: () => number;
   readonly minimumRefreshIntervalMs: number;
-  /** Answers `undefined` for the no-key cases, and throws for the unreadable one. */
-  readonly readApiKey: () => Promise<string | undefined>;
+  /** Answers `undefined` for the no-key cases, and dies for the unreadable one. */
+  readonly readApiKey: () => Effect.Effect<string | undefined>;
   /**
    * The fake backing this fixture's recorded `api/` routes. Every provider is
    * handed one, whatever it is observed by: it throws for a request the
@@ -341,7 +341,7 @@ interface ContractCase {
 }
 
 interface CaseOptions {
-  readonly readApiKey?: () => Promise<string | undefined>;
+  readonly readApiKey?: () => Effect.Effect<string | undefined>;
   readonly minimumRefreshIntervalMs?: number;
   readonly hookEventsDirectory?: () => string | undefined;
 }
@@ -381,7 +381,7 @@ export function describeProviderContract(
       home,
       now: () => now,
       minimumRefreshIntervalMs: options.minimumRefreshIntervalMs ?? 0,
-      readApiKey: options.readApiKey ?? (async () => apiKey),
+      readApiKey: options.readApiKey ?? (() => Effect.succeed(apiKey)),
       api,
       hookEventsDirectory: options.hookEventsDirectory ?? (() => undefined),
       sql: async (name) =>
@@ -411,8 +411,8 @@ export function describeProviderContract(
       const { plugin, home } = await contractCase(t);
 
       const before = await homeManifest(home);
-      await plugin.observe();
-      await plugin.observe();
+      await runTest(plugin.observe());
+      await runTest(plugin.observe());
 
       assert.deepEqual(await homeManifest(home), before);
     },
@@ -426,7 +426,7 @@ export function describeProviderContract(
     test(named("an observation pass reaches no network"), async (t) => {
       const { plugin, api } = await contractCase(t);
 
-      await plugin.observe();
+      await runTest(plugin.observe());
 
       assert.deepEqual(api.requests(), []);
     });
@@ -441,7 +441,9 @@ export function describeProviderContract(
     test(named("an observation pass issues only the reads the build fixed"), async (t) => {
       const { plugin, api } = await contractCase(t);
 
-      const reported = new Set((await plugin.observe()).map((one) => one.providerSessionId));
+      const reported = new Set(
+        (await runTest(plugin.observe())).map((one) => one.providerSessionId),
+      );
 
       for (const request of api.requests()) {
         if (request.method === "GET") continue;
@@ -475,7 +477,7 @@ export function describeProviderContract(
   // when the ask arrives admitted.
   test(named("refuses every action this provider's observation does not advertise"), async (t) => {
     const { plugin, api } = await contractCase(t);
-    await plugin.observe();
+    await runTest(plugin.observe());
     const requestsAfterPass = api.requests().length;
 
     for (const kind of fixtures.unadvertised) {
@@ -493,7 +495,7 @@ export function describeProviderContract(
   // "its target has to be one the roster holds"
   test(named("admits no advertised action aimed at a session no pass reported"), async (t) => {
     const { plugin, api } = await contractCase(t);
-    await plugin.observe();
+    await runTest(plugin.observe());
     const requestsAfterPass = api.requests().length;
 
     for (const kind of fixtures.advertised) {
@@ -518,7 +520,7 @@ export function describeProviderContract(
       named("acts on the target its own observation advertised, never the caller's"),
       async (t) => {
         const { plugin, api } = await contractCase(t);
-        await plugin.observe();
+        await runTest(plugin.observe());
         const observation = observationFor(plugin, fixtures.sessionId);
         const targeted = advertisedControls(observation).find(
           (control) => control.id === fixtures.targetedControlId,
@@ -564,7 +566,7 @@ export function describeProviderContract(
   if (fixtures.advertised.includes(ACTION_KIND.MESSAGE)) {
     test(named("admits no empty or over-long message, and names none of it"), async (t) => {
       const { plugin, api } = await contractCase(t);
-      await plugin.observe();
+      await runTest(plugin.observe());
       const requestsAfterPass = api.requests().length;
       const overLong = "l".repeat(maximumSessionMessageLength + 1);
 
@@ -588,9 +590,11 @@ export function describeProviderContract(
   // one and must leave every other provider working without it."
   if (observedByKey) {
     test(named("observes nothing, and asks nothing, without a key"), async (t) => {
-      const { plugin, api } = await contractCase(t, { readApiKey: async () => undefined });
+      const { plugin, api } = await contractCase(t, {
+        readApiKey: () => Effect.succeed(undefined),
+      });
 
-      assert.deepEqual(await plugin.observe(), []);
+      assert.deepEqual(await runTest(plugin.observe()), []);
       assert.deepEqual(api.requests(), []);
       for (const kind of fixtures.advertised) {
         await askAction(plugin, kind, fixtures.sessionId);
@@ -600,22 +604,20 @@ export function describeProviderContract(
 
     test(named("observes nothing when the credential cannot be read at all"), async (t) => {
       const { plugin, api } = await contractCase(t, {
-        readApiKey: async () => {
-          throw new Error("settings are unreadable");
-        },
+        readApiKey: () => Effect.die(new Error("settings are unreadable")),
       });
 
-      assert.deepEqual(await plugin.observe(), []);
+      assert.deepEqual(await runTest(plugin.observe()), []);
       assert.deepEqual(api.requests(), []);
     });
 
     test(named("reads again at once under a credential the user just replaced"), async (t) => {
       const contract = await contractCase(t, { minimumRefreshIntervalMs: 60_000 });
 
-      await contract.plugin.observe();
+      await runTest(contract.plugin.observe());
       const requestsAfterFirstPass = contract.api.requests().length;
       contract.setApiKey(REPLACEMENT_API_KEY);
-      const observed = await contract.plugin.observe();
+      const observed = await runTest(contract.plugin.observe());
 
       assert.ok(contract.api.requests().length > requestsAfterFirstPass);
       assert.ok(observed.length > 0);
@@ -627,11 +629,11 @@ export function describeProviderContract(
       async (t) => {
         const contract = await contractCase(t);
 
-        const observed = await contract.plugin.observe();
+        const observed = await runTest(contract.plugin.observe());
         contract.api.fail(HTTP_STATUS.SERVER_ERROR);
-        const duringOutage = await contract.plugin.observe();
+        const duringOutage = await runTest(contract.plugin.observe());
         contract.api.fail(HTTP_STATUS.UNAUTHORIZED);
-        const afterRefusal = await contract.plugin.observe();
+        const afterRefusal = await runTest(contract.plugin.observe());
 
         assert.ok(observed.length > 0);
         assert.deepEqual(duringOutage, observed);
@@ -642,10 +644,10 @@ export function describeProviderContract(
     test(named("asks nothing again inside its own refresh interval"), async (t) => {
       const contract = await contractCase(t, { minimumRefreshIntervalMs: REFRESH_INTERVAL_MS });
 
-      const first = await contract.plugin.observe();
+      const first = await runTest(contract.plugin.observe());
       const requestsAfterFirstPass = contract.api.requests().length;
       contract.setNow(fixtures.now + REFRESH_INTERVAL_MS / 3);
-      const throttled = await contract.plugin.observe();
+      const throttled = await runTest(contract.plugin.observe());
 
       assert.deepEqual(throttled, first);
       assert.equal(contract.api.requests().length, requestsAfterFirstPass);
@@ -658,12 +660,13 @@ export function describeProviderContract(
   // the read reaches and nothing else does."
   test(named("reads a transcript only where this build documents reading one"), async (t) => {
     const { plugin, api } = await contractCase(t);
-    await plugin.observe();
+    await runTest(plugin.observe());
     const requestsAfterPass = api.requests().length;
 
-    const read = await plugin.reads?.transcript?.(
+    const reading = plugin.reads?.transcript?.(
       fixtures.transcript?.sessionId ?? fixtures.sessionId,
     );
+    const read = reading ? await runTest(reading) : undefined;
 
     if (fixtures.transcript) {
       assert.equal(read?.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -692,11 +695,10 @@ export function describeProviderContract(
   if (fixtures.transcript?.unrenderableSessionId) {
     test(named("refuses a stored shape it cannot render, rather than guessing"), async (t) => {
       const { plugin } = await contractCase(t);
-      await plugin.observe();
+      await runTest(plugin.observe());
 
-      const read = await plugin.reads?.transcript?.(
-        fixtures.transcript?.unrenderableSessionId ?? "",
-      );
+      const reading = plugin.reads?.transcript?.(fixtures.transcript?.unrenderableSessionId ?? "");
+      const read = reading ? await runTest(reading) : undefined;
 
       assert.equal(read?.status, ACTION_RESULT_STATUS.REJECTED);
     });
@@ -708,13 +710,14 @@ export function describeProviderContract(
   if (fixtures.conversation) {
     test(named("answers a conversation read with attributed messages alone"), async (t) => {
       const { plugin, api } = await contractCase(t);
-      await plugin.observe();
+      await runTest(plugin.observe());
       const passRoutes = recordedRoutes(api.requests());
 
-      const read = await plugin.reads?.conversation?.({
+      const reading = plugin.reads?.conversation?.({
         request: {},
         observation: observationFor(plugin, fixtures.conversation?.sessionId ?? ""),
       });
+      const read = reading ? await runTest(reading) : undefined;
 
       assert.ok(read, "the conversation read answered nothing at all");
       assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -731,12 +734,13 @@ export function describeProviderContract(
     // request naming both is refused rather than guessed at."
     test(named("refuses a conversation read that names both cursors"), async (t) => {
       const { plugin } = await contractCase(t);
-      await plugin.observe();
+      await runTest(plugin.observe());
 
-      const read = await plugin.reads?.conversation?.({
+      const reading = plugin.reads?.conversation?.({
         request: { afterMessageId: "message-1", beforeOffset: 20 },
         observation: observationFor(plugin, fixtures.conversation?.sessionId ?? ""),
       });
+      const read = reading ? await runTest(reading) : undefined;
 
       assert.equal(read?.status, ACTION_RESULT_STATUS.REJECTED);
     });
@@ -749,7 +753,9 @@ export function describeProviderContract(
       named("observes the same sessions with no hook, an empty spool, or a foreign token"),
       async (t) => {
         const withoutHook = await contractCase(t);
-        const expected = (await withoutHook.plugin.observe()).map((one) => one.providerSessionId);
+        const expected = (await runTest(withoutHook.plugin.observe())).map(
+          (one) => one.providerSessionId,
+        );
 
         for (const spooled of [undefined, "{}", '{"event":"contract-unknown-token"}']) {
           const spool = await temporaryDirectory(t, "luke-contract-spool");
@@ -758,7 +764,7 @@ export function describeProviderContract(
           }
           const contract = await contractCase(t, { hookEventsDirectory: () => spool });
 
-          const observed = await contract.plugin.observe();
+          const observed = await runTest(contract.plugin.observe());
 
           assert.deepEqual(
             observed.map((one) => one.providerSessionId),
@@ -775,8 +781,8 @@ export function describeProviderContract(
   test(named("observes exactly the recorded roster, and the same roster twice"), async (t) => {
     const { plugin } = await contractCase(t);
 
-    const observed = await plugin.observe();
-    const again = await plugin.observe();
+    const observed = await runTest(plugin.observe());
+    const again = await runTest(plugin.observe());
 
     const normalized = [...observed]
       .map((one) => normalizeSession(plugin.provider, one))
@@ -791,7 +797,7 @@ export function describeProviderContract(
   // project, never a repository URL or path of its own."
   test(named("offers exactly the projects its latest pass reported"), async (t) => {
     const { plugin, api } = await contractCase(t);
-    await plugin.observe();
+    await runTest(plugin.observe());
     const requestsAfterPass = api.requests().length;
 
     const projects: readonly WorkspaceProject[] = plugin.projects?.() ?? [];

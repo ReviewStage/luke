@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { runTest } from "@sidecar/wire/testing";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { routeFromHttpApp } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
@@ -52,7 +53,7 @@ const EXCHANGES: readonly Exchange[] = [
         ...hostedVaultSeams,
         encryptionSecret: undefined,
         request: new Request(`${ORIGIN}/api/sessions/messages`),
-        execute: executeConversationRead,
+        execute: (ask) => runTest(executeConversationRead(ask)),
       });
     },
   },

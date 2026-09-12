@@ -248,7 +248,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     const standing = held.byProvider.get(providerId);
     if (standing) return standing;
     const plugin = cloudSessionPluginFor(providerId, {
-      readApiKey: () => seams.providerKey(userId, providerId),
+      readApiKey: () => Effect.promise(() => seams.providerKey(userId, providerId)),
       reported: () =>
         (rosters.get(userId) ?? EMPTY_HOSTED_ROSTER).observations.get(providerId) ?? [],
     });

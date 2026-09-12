@@ -1182,11 +1182,7 @@ since P12-04c deleted the `CloudFetch` seam this pass used to build one from
 — the 429 cadence is a `Schedule` stepped on the fiber's clock, and `run`,
 `write`, and `credentialBoundRead` are
 themselves effects now that Conductor — the one adapter that rides it — is on
-them too. `Cause.squash` is still what `runAdapterRead` rethrows at the door
-where `SessionProviderPlugin` still holds a promise, so the `AdapterFailure` a
-caller already branches on is the failure it reads rather than the fiber's
-wrapping of it, but that is `promise-face.ts`'s allowlist entry, not a second
-one of `cloudPass`'s own.
+them too, and so is `readApiKey`, which a caller yields on its own fiber.
 
 `openReadOnlyDatabase` in the same package's `local-sqlite.ts` needed no
 allowlist entry either, once P6-11c moved Superset's own host-state reader
@@ -1232,42 +1228,29 @@ what already states reverse order and closing exactly once. So the row is
 permanent, and what it costs is one `Effect.runSync` of two synchronous
 finalizers on a path that must not wait.
 
-`runAdapterRead` in the same package's `promise-face.ts` is the one face every
-adapter answers a `SessionProviderPlugin` from. Claude Code's and Codex's reads
-are effects — the observation pass over a `Ref`-held parse cache, the JSONL
-transcript reader and its path cache, and Codex's state database inside a
-scope — while the plugin seam the host holds is still `observe(): Promise<...>`
-and two promise-returning reads, so the run happens in this one place rather
-than in each adapter: `ObservationPass#runPromise`, `promiseTranscriptReads`,
-and Codex's own `observe` all call it, and OMP's plugin is the same shape over
-the same two shared faces. Conductor's cloud pass joins it the same way: its
-own `observe` and its conversation reads' one credential-bound read are each
-effects now that `cloudPass` is, so its plugin
-calls the same face rather than a second one of its own, and its two local
-SQLite reads (`applications.ts`, `local-workspaces.ts`) call it too, each over
-`Effect.scoped(scopedReadOnlyDatabase(...))`. Superset's own host-state read
-(`reader.ts`'s `supersetHostState`) is the same shape once more: one
-`Effect.scoped(scopedReadOnlyDatabase(...))` per organization's database,
-folded into one snapshot, reached through this same face rather than a
-promise face of its own. These reads tolerate everything an absent or
-unreadable provider directory, or an unauthorized or unreachable credential,
-answers, so the face rethrows `Cause.squash` and a caller reads the failure or
-the defect it always did. P7-05 turned out not to be its deletion: the host's
-observation composer never called a plugin's `observe()` or a transcript read
-directly — its roster is the hosted service's own `HostedRosterClient`
-snapshot, drawn in `snapshot-roster.ts`, and the local registrations it built
-were read only for their `plugin.provider` identity, to reset the local roster
-at a stop. Converting that composer to `providersLayer` (P7-05) therefore
-touches none of `runAdapterRead`'s actual callers, which are every one named
-above and stay inside `packages/providers` itself; the door goes only once
-each of those adapters' own plugins holds a fiber of its own to run its
-effects on rather than answering a `Promise` through this face, which is not
-yet scheduled on any row above. P12-17 narrowed what the face answers for
-rather than deleting it: `dispatchAction` and every `ActionHandlers` member
-are Effects, so Conductor's one documented write composes into the caller's
-own fiber and runs nothing, and what still calls the face is the read half
-alone — the plugin seam's `observe(): Promise<...>` and the conversation
-read behind it, neither of which this row touches.
+`packages/providers` runs no Effect at all any more. P12-17b deleted
+`promise-face.ts` and the `runAdapterRead` face in it: every member of the
+plugin seam a host holds is an Effect now, so there is nothing left in the
+package to run one on. `SessionProviderPlugin.observe()` answers
+`Effect<readonly ProviderSessionObservation[]>` — Conductor's is `pass.run()`
+handed over unwrapped — and all three `ReadHandlers` members answer Effects
+too: the conversation read the P12-17 row named, and the two transcript reads
+beside it, which had to move with it because the three share one
+`credentialBoundRead` walk over Conductor's documented messages endpoint and a
+promise face over that walk would have been the same run under another name.
+An `AdapterFailure` a read tolerates is caught in the error channel where the
+old face's `Cause.squash` used to be rethrown, so each read still answers its
+own refusal with the `ADAPTER_FAILURE` code its caller branches on; anything
+else stays a defect the caller reads as it always did. Where a caller is still
+a promise, the run is its own edge's rather than the package's: the web's
+transcript reads yield `dispatchRead` through the `run` seam they already hold
+(`runWeb`), the conversation endpoint's `execute` seam runs
+`executeConversationRead` at `runWeb`, and a suite still on `node:assert` uses
+`runTest`. `CloudPass.readApiKey` and `ConductorPluginOptions.readApiKey`
+answer Effects on the same terms, so the credential a pass or an action reads
+afresh is read on the caller's fiber; `cloudPass` still treats a credential
+read that fails as no credential at all, now by catching the cause rather than
+the rejection.
 
 The four hosted clients this document had not named until the lint rules made
 the list machine-readable — `HostedActionClient`'s `#run` in
@@ -1357,7 +1340,6 @@ design decision stated as such:
 | `gatewayTestHost`/`scopedGatewayService`, the suites' own scoped builds | P6-13 | P12-09 |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
-| `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | not yet — every caller stays inside `packages/providers`; P7-05 confirmed the host never called one directly, and P12-17 left only the reads calling it |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |

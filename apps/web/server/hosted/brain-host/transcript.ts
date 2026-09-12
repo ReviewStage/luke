@@ -166,10 +166,12 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
     async whole(identity) {
       if (!observedSession(await seams.roster(), identity)) return NOT_OBSERVED;
       if (!isCloudAgentProviderId(identity.providerId)) return NOT_CLOUD;
-      const read = await dispatchRead(
-        seams.pluginFor(identity.providerId),
-        "transcript",
-        identity.providerSessionId,
+      const read = await seams.run(
+        dispatchRead(
+          seams.pluginFor(identity.providerId),
+          "transcript",
+          identity.providerSessionId,
+        ),
       );
       const answer: WireRecord =
         read.status === ACTION_RESULT_STATUS.ACCEPTED
@@ -184,11 +186,13 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
       if (!observedSession(await seams.roster(), identity)) return undefined;
       if (!isCloudAgentProviderId(identity.providerId)) return undefined;
       const from = await cursorFor(identity);
-      const read = await dispatchRead(
-        seams.pluginFor(identity.providerId),
-        "transcriptSince",
-        identity.providerSessionId,
-        from,
+      const read = await seams.run(
+        dispatchRead(
+          seams.pluginFor(identity.providerId),
+          "transcriptSince",
+          identity.providerSessionId,
+          from,
+        ),
       );
       if (read.status !== ACTION_RESULT_STATUS.ACCEPTED) {
         return { delta: { text: "", truncated: false, status: read.status } };

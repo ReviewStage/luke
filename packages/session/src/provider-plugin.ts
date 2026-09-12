@@ -42,7 +42,7 @@ import { WORKSPACE_TASK_SUPPORT, type WorkspaceProject } from "./workspace-proje
 export interface SessionProviderPlugin {
   readonly provider: SessionProvider;
   /** One read-only pass, which also publishes the roster actions validate against. */
-  observe(): Promise<readonly ProviderSessionObservation[]>;
+  observe(): Effect.Effect<readonly ProviderSessionObservation[]>;
   /** The roster the latest pass published — what every action is re-validated against. */
   latest(): readonly ProviderSessionObservation[];
   /** The projects the latest pass reported, or none. */
@@ -123,12 +123,12 @@ export interface ActionHandlers {
 }
 
 export interface ReadHandlers {
-  transcript(providerSessionId: string): Promise<ProviderTranscriptResult>;
+  transcript(providerSessionId: string): Effect.Effect<ProviderTranscriptResult>;
   transcriptSince(
     providerSessionId: string,
     cursor?: string,
-  ): Promise<ProviderTranscriptSinceResult>;
-  conversation(input: ActionInput<ConversationPage>): Promise<ProviderConversationResult>;
+  ): Effect.Effect<ProviderTranscriptSinceResult>;
+  conversation(input: ActionInput<ConversationPage>): Effect.Effect<ProviderConversationResult>;
 }
 
 /**
@@ -344,25 +344,29 @@ export function dispatchRead(
   plugin: SessionProviderPlugin,
   kind: "transcript",
   providerSessionId: string,
-): Promise<ProviderTranscriptResult>;
+): Effect.Effect<ProviderTranscriptResult>;
 export function dispatchRead(
   plugin: SessionProviderPlugin,
   kind: "transcriptSince",
   providerSessionId: string,
   cursor?: string,
-): Promise<ProviderTranscriptSinceResult>;
-export async function dispatchRead(
+): Effect.Effect<ProviderTranscriptSinceResult>;
+export function dispatchRead(
   plugin: SessionProviderPlugin,
   kind: "transcript" | "transcriptSince",
   providerSessionId: string,
   cursor?: string,
-): Promise<ProviderTranscriptResult | ProviderTranscriptSinceResult> {
-  if (kind === "transcript") {
-    const handler = plugin.reads?.transcript;
-    return handler ? handler(providerSessionId) : NO_TRANSCRIPT;
-  }
-  const handler = plugin.reads?.transcriptSince;
-  return handler ? handler(providerSessionId, cursor) : NO_TRANSCRIPT;
+): Effect.Effect<ProviderTranscriptResult | ProviderTranscriptSinceResult> {
+  return Effect.suspend(
+    (): Effect.Effect<ProviderTranscriptResult | ProviderTranscriptSinceResult> => {
+      if (kind === "transcript") {
+        const handler = plugin.reads?.transcript;
+        return handler ? handler(providerSessionId) : Effect.succeed(NO_TRANSCRIPT);
+      }
+      const handler = plugin.reads?.transcriptSince;
+      return handler ? handler(providerSessionId, cursor) : Effect.succeed(NO_TRANSCRIPT);
+    },
+  );
 }
 
 /**
@@ -370,14 +374,18 @@ export async function dispatchRead(
  * read: it reaches the provider, so it exists only for a session the latest
  * pass reported, and the session it names is the observation's own.
  */
-export async function dispatchConversation(
+export function dispatchConversation(
   plugin: SessionProviderPlugin,
   request: ProviderConversationRequest,
-): Promise<ProviderConversationResult> {
-  const observation = observationFor(plugin, request.providerSessionId);
-  if (!observation) return unsupportedByObservation;
-  const handler = plugin.reads?.conversation;
-  if (!handler) return NO_CONVERSATION_READ;
-  const { providerSessionId: _named, ...page } = request;
-  return handler({ request: page, observation });
+): Effect.Effect<ProviderConversationResult> {
+  // Suspended for the same reason a dispatched action is: the roster the
+  // session is resolved from is the one standing when the read runs.
+  return Effect.suspend(() => {
+    const observation = observationFor(plugin, request.providerSessionId);
+    if (!observation) return Effect.succeed(unsupportedByObservation);
+    const handler = plugin.reads?.conversation;
+    if (!handler) return Effect.succeed(NO_CONVERSATION_READ);
+    const { providerSessionId: _named, ...page } = request;
+    return handler({ request: page, observation });
+  });
 }

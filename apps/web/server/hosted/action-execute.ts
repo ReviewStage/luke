@@ -206,19 +206,20 @@ function watchingHttpClient(
   );
 }
 
-async function observeForAction(
+function observeForAction(
   providerId: CloudAgentProviderId,
   apiKey: string,
   seams: ActionExecuteSeams,
-): Promise<ObservedActionPass> {
-  const pass = { unauthorized: false, unreachable: false };
-  const plugin = cloudSessionPluginFor(providerId, {
-    readApiKey: async () => apiKey,
-    httpClient: watchingHttpClient(seams.httpClient ?? FetchHttpClient.layer, pass),
-    ...(seams.now ? { now: seams.now } : undefined),
+): Effect.Effect<ObservedActionPass> {
+  return Effect.suspend(() => {
+    const pass = { unauthorized: false, unreachable: false };
+    const plugin = cloudSessionPluginFor(providerId, {
+      readApiKey: () => Effect.succeed(apiKey),
+      httpClient: watchingHttpClient(seams.httpClient ?? FetchHttpClient.layer, pass),
+      ...(seams.now ? { now: seams.now } : undefined),
+    });
+    return Effect.map(plugin.observe(), (observations) => ({ plugin, observations, ...pass }));
   });
-  const observations = await plugin.observe();
-  return { plugin, observations, ...pass };
 }
 
 /**
@@ -235,7 +236,7 @@ function pluginOverRoster(
   seams: ActionExecuteSeams,
 ): SessionProviderPlugin {
   const plugin = cloudSessionPluginFor(providerId, {
-    readApiKey: async () => apiKey,
+    readApiKey: () => Effect.succeed(apiKey),
     ...(seams.httpClient ? { httpClient: seams.httpClient } : undefined),
     ...(seams.now ? { now: seams.now } : undefined),
   });
@@ -425,52 +426,54 @@ export interface ConversationReadRefusal {
  * adapter's own bounded read of the provider's documented transcript
  * endpoint. The answer is assembled and returned; nothing is stored.
  */
-export async function executeConversationRead(options: {
+export function executeConversationRead(options: {
   providerId: CloudAgentProviderId;
   providerSessionId: string;
   afterMessageId?: string;
   beforeOffset?: number;
   apiKey: string;
   seams?: ActionExecuteSeams;
-}): Promise<HostedConversationAnswer | ConversationReadRefusal> {
-  const { providerId, providerSessionId, afterMessageId, beforeOffset, apiKey } = options;
-  if (!providerReadsConversation(providerId)) {
-    const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
+}): Effect.Effect<HostedConversationAnswer | ConversationReadRefusal> {
+  return Effect.gen(function* () {
+    const { providerId, providerSessionId, afterMessageId, beforeOffset, apiKey } = options;
+    if (!providerReadsConversation(providerId)) {
+      const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
+      return {
+        refused: `${displayName} does not document reading a session's conversation through its API, so Luke does not offer it.`,
+      };
+    }
+
+    const pass = yield* observeForAction(providerId, apiKey, options.seams ?? {});
+    const observation = pass.observations.find(
+      (candidate) => candidate.providerSessionId === providerSessionId,
+    );
+    if (!observation) {
+      return { refused: missingTargetReason(providerId, pass, "Session not found.") };
+    }
+
+    const result = yield* dispatchConversation(pass.plugin, {
+      providerSessionId,
+      ...(afterMessageId ? { afterMessageId } : undefined),
+      ...(beforeOffset !== undefined ? { beforeOffset } : undefined),
+    });
+    if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+      return { refused: result.reason };
+    }
+    // Copied field by field although the shapes are structurally identical
+    // today: this map is the allowlist of what crosses onto the wire, so a
+    // field the adapter's type grows later stays behind unless named here.
+    const messages: HostedConversationMessage[] = result.messages.map((message) => ({
+      id: message.id,
+      author: message.author,
+      text: message.text,
+      ...(message.receivedAt !== undefined ? { receivedAt: message.receivedAt } : undefined),
+    }));
     return {
-      refused: `${displayName} does not document reading a session's conversation through its API, so Luke does not offer it.`,
+      messages,
+      ...(result.lastMessageId ? { lastMessageId: result.lastMessageId } : undefined),
+      hasMore: result.hasMore,
+      ...(result.firstOffset !== undefined ? { firstOffset: result.firstOffset } : undefined),
+      ...(result.hasOlder !== undefined ? { hasOlder: result.hasOlder } : undefined),
     };
-  }
-
-  const pass = await observeForAction(providerId, apiKey, options.seams ?? {});
-  const observation = pass.observations.find(
-    (candidate) => candidate.providerSessionId === providerSessionId,
-  );
-  if (!observation) {
-    return { refused: missingTargetReason(providerId, pass, "Session not found.") };
-  }
-
-  const result = await dispatchConversation(pass.plugin, {
-    providerSessionId,
-    ...(afterMessageId ? { afterMessageId } : undefined),
-    ...(beforeOffset !== undefined ? { beforeOffset } : undefined),
   });
-  if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-    return { refused: result.reason };
-  }
-  // Copied field by field although the shapes are structurally identical
-  // today: this map is the allowlist of what crosses onto the wire, so a
-  // field the adapter's type grows later stays behind unless named here.
-  const messages: HostedConversationMessage[] = result.messages.map((message) => ({
-    id: message.id,
-    author: message.author,
-    text: message.text,
-    ...(message.receivedAt !== undefined ? { receivedAt: message.receivedAt } : undefined),
-  }));
-  return {
-    messages,
-    ...(result.lastMessageId ? { lastMessageId: result.lastMessageId } : undefined),
-    hasMore: result.hasMore,
-    ...(result.firstOffset !== undefined ? { firstOffset: result.firstOffset } : undefined),
-    ...(result.hasOlder !== undefined ? { hasOlder: result.hasOlder } : undefined),
-  };
 }

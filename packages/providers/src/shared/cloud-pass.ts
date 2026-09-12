@@ -114,7 +114,7 @@ export interface CloudPassInput {
   defaultBaseUrl: string;
   baseUrlEnvironmentVariable?: string;
   /** Resolves the credential at observation time so a settings change applies immediately. */
-  readApiKey: () => Promise<string | undefined>;
+  readApiKey: () => Effect.Effect<string | undefined>;
   baseUrl?: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
@@ -181,7 +181,7 @@ export interface CloudPass {
   ): Effect.Effect<CloudWriteOutcome>;
   credentialBoundRead: CredentialBoundRead;
   /** The credential as the caller's own action should present it, read afresh. */
-  readApiKey(): Promise<string | undefined>;
+  readApiKey(): Effect.Effect<string | undefined>;
   reportDiagnostic(kind: AdapterDiagnosticKind, error: Error): void;
 }
 
@@ -257,7 +257,12 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * that fails is treated the same as having no credential at all — here, and
    * for the action that reads the credential again at its own moment.
    */
-  const readApiKey = (): Promise<string | undefined> => input.readApiKey().catch(() => undefined);
+  const readApiKey = (): Effect.Effect<string | undefined> =>
+    Effect.catchAllCause(input.readApiKey(), (cause) =>
+      // A caller ending the fiber is not a settings read that failed, so an
+      // interruption is re-raised rather than read as a missing credential.
+      Cause.isInterruptedOnly(cause) ? Effect.failCause(cause) : Effect.succeed(undefined),
+    );
 
   const forgetObservedState = (): void => {
     // A pass still in flight was started under a credential that no longer
@@ -559,7 +564,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     );
 
   const run: Effect.Effect<readonly ProviderSessionObservation[]> = Effect.gen(function* () {
-    const apiKey = yield* Effect.promise(readApiKey);
+    const apiKey = yield* readApiKey();
     if (!apiKey) {
       credential = undefined;
       forgetObservedState();
@@ -641,7 +646,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         // A read on a pass that has not run — the hosted brain reads a chat
         // against the roster its stored snapshot holds — takes the credential
         // the way a pass would, so the read is bound to it from here on.
-        if (credential === undefined) credential = yield* Effect.promise(readApiKey);
+        if (credential === undefined) credential = yield* readApiKey();
         const epoch = credentialEpoch;
         const apiKey = credential;
         if (!apiKey) {

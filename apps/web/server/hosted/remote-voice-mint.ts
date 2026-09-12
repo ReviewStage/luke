@@ -1,10 +1,10 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
-import type { Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import { CONTEXT_ITEM_KIND, contextItemId, type ObservedSession } from "../core.js";
 import { observedSessionForResponse } from "./observe.js";
 import { remoteSessionContextText } from "./remote-context.js";
 import { observeProviders, readApiKeyFor } from "./vault-keys.js";
-import type { HostedVaultRoute } from "./vault-route.js";
+import type { HostedVaultRoute, VaultKeyRow } from "./vault-route.js";
 
 /**
  * Mints one ephemeral Realtime credential for the signed-in iPhone, on the
@@ -33,27 +33,32 @@ export interface RemoteObserveSeams
  * answers a list rather than a refusal — a mint whose roster could not be
  * read is still a mint.
  */
-export async function observeCloudSessions(
+export function observeCloudSessions(
   userId: string,
   options: RemoteObserveSeams,
-): Promise<ObservedSession[]> {
-  const secret = (options.encryptionSecret ?? "").trim();
-  if (!secret) return [];
+): Effect.Effect<ObservedSession[]> {
+  return Effect.gen(function* () {
+    const secret = (options.encryptionSecret ?? "").trim();
+    if (!secret) return [];
 
-  const rows = await options.readVaultKeys(userId).catch(() => []);
-  const passes = await observeProviders({
-    readApiKey: readApiKeyFor(rows, secret),
-    read: (adapter) => adapter.observe(),
-    seams: options,
-  });
+    const rows = yield* Effect.orElseSucceed(
+      Effect.tryPromise(() => options.readVaultKeys(userId)),
+      (): readonly VaultKeyRow[] => [],
+    );
+    const passes = yield* observeProviders({
+      readApiKey: readApiKeyFor(rows, secret),
+      read: (adapter) => adapter.observe(),
+      seams: options,
+    });
 
-  const sessions: ObservedSession[] = [];
-  for (const pass of passes) {
-    for (const observation of pass.answer ?? []) {
-      sessions.push(observedSessionForResponse(pass.providerId, observation));
+    const sessions: ObservedSession[] = [];
+    for (const pass of passes) {
+      for (const observation of pass.answer ?? []) {
+        sessions.push(observedSessionForResponse(pass.providerId, observation));
+      }
     }
-  }
-  return sessions;
+    return sessions;
+  });
 }
 
 /** The roster's context item as the mint answers it: the item's own id and its text. */
