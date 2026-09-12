@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { BRAIN_PREFETCH_MODEL } from "@sidecar/brain";
 import { LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   resolveVoiceCapability,
@@ -83,7 +84,7 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
     fixtureRun: () => false,
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     report: (message) => reports.push(message),
   });
 
@@ -109,7 +110,7 @@ test("a wrapped brain model stands where the built one would, and only when one 
     fixtureRun: () => false,
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     report: () => undefined,
     wrapBrainModel: (model) => {
       wrapped.push(model.model ?? "unnamed");
@@ -145,7 +146,7 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
     fixtureRun: () => true,
     accountSignedIn: () => true,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     report: () => undefined,
   });
 
@@ -166,7 +167,7 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
     fixtureRun: () => false,
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     report: (message) => reports.push(message),
   });
 
@@ -183,7 +184,7 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
     fixtureRun: () => false,
     accountSignedIn: () => true,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     report: () => undefined,
     fetch: async () => new Response(null, { status: 204 }),
   };
@@ -229,7 +230,7 @@ test("live sessions follow the voice source, and stand only where a socket seam 
     fixtureRun: () => false,
     accountSignedIn: () => true,
     hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     report: () => undefined,
     fetch: async () => new Response(null, { status: 204 }),
   };

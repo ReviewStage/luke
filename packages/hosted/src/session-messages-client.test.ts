@@ -15,7 +15,7 @@ function client(fetch: CloudFetch) {
   return new HostedSessionMessagesClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch,
   });
 }

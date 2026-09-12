@@ -11,6 +11,7 @@ import {
   REASONING_EFFORT,
 } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { HostedModelAdapter, type HostedModelAdapterOptions } from "./hosted-model-adapter.js";
 import {
@@ -80,9 +81,10 @@ function adapter(
   return new HostedModelAdapter({
     serviceBaseUrl: BASE,
     readAccessToken: async () => current,
-    refreshAccount: async () => {
-      current = queue.shift() ?? current;
-    },
+    refreshAccount: () =>
+      Effect.sync(() => {
+        current = queue.shift() ?? current;
+      }),
     fetch,
     now: () => NOW,
     report: () => undefined,

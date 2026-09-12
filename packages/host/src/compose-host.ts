@@ -222,9 +222,7 @@ export const hostAssemblyLayer: Layer.Layer<
     // list: each is a cycle the concerns genuinely have, and reading one before
     // this has run throws by name rather than answering nothing.
     settings.link({
-      refreshAccount: async () => {
-        await account.session.refreshOnce();
-      },
+      refreshAccount: account.session.refreshOnce,
       applyVoiceCredential: account.applyVoiceCredential,
       setVoice: (voice) => account.voiceCapabilities.liveSessions?.setVoice(voice),
       reconcileSpeech: () => {
@@ -433,7 +431,7 @@ export const hostAssemblyLayer: Layer.Layer<
           yield* Effect.promise(() => account.applyVoiceCredential());
           void live.requestOnboardingBeat();
         }
-        void account.session.refreshOnce();
+        yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),
       // The loops are disarmed before the admissions close, so no observation
       // pass begins behind a quit; the gate's own scope is what the standing

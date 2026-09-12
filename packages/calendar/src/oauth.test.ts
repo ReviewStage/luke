@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
+import { Effect, Fiber } from "effect";
 import { test } from "vitest";
 import {
   exchangeGoogleCode,
@@ -46,37 +48,45 @@ test("the sign-in is offered exactly when the whole registration is held", () =>
   assert.equal(overridden?.clientId, CLIENT_ID);
 });
 
-test("a run without the registration offers a flow that says so", async () => {
-  const signIn = googleCalendarSignIn({ openExternal: () => undefined, environment: {} });
-  assert.deepEqual(await signIn.signIn(), { reason: "Sign-in is not configured in this build." });
-});
+it.effect("a run without the registration offers a flow that says so", () =>
+  Effect.gen(function* () {
+    const signIn = googleCalendarSignIn({ openExternal: () => undefined, environment: {} });
+    assert.deepEqual(yield* Effect.scoped(signIn.signInEffect()), {
+      reason: "Sign-in is not configured in this build.",
+    });
+  }),
+);
 
-test("the consent page is Google's own, asking for availability alone, with PKCE", async () => {
-  const opened: string[] = [];
-  const signIn = googleCalendarSignIn({
-    openExternal: (url) => opened.push(url),
-    environment: environment(),
-  });
+it.effect("the consent page is Google's own, asking for availability alone, with PKCE", () =>
+  Effect.gen(function* () {
+    const opened: string[] = [];
+    const signIn = googleCalendarSignIn({
+      openExternal: (url) => opened.push(url),
+      environment: environment(),
+    });
 
-  const pending = signIn.signIn();
-  // The browser is opened once the loopback is listening; wait for the URL.
-  while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
-  // SAFETY: The loop above returns only once the first URL was recorded.
-  const authorization = new URL(opened[0] as string);
+    const pending = yield* Effect.fork(Effect.scoped(signIn.signInEffect()));
+    // The browser is opened once the loopback is listening; wait for the URL.
+    yield* Effect.promise(async () => {
+      while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));
+    });
+    // SAFETY: The loop above returns only once the first URL was recorded.
+    const authorization = new URL(opened[0] as string);
 
-  assert.equal(authorization.origin + authorization.pathname, GOOGLE_AUTHORIZATION_URL);
-  assert.equal(authorization.searchParams.get("client_id"), CLIENT_ID);
-  assert.equal(authorization.searchParams.get("scope"), GOOGLE_CALENDAR_SCOPES);
-  assert.equal(authorization.searchParams.get("response_type"), "code");
-  assert.equal(authorization.searchParams.get("code_challenge_method"), "S256");
-  // Offline access is what a refresh token is, and the forced prompt is what
-  // guarantees Google issues one rather than assuming an earlier grant.
-  assert.equal(authorization.searchParams.get("access_type"), "offline");
-  assert.equal(authorization.searchParams.get("prompt"), "consent");
+    assert.equal(authorization.origin + authorization.pathname, GOOGLE_AUTHORIZATION_URL);
+    assert.equal(authorization.searchParams.get("client_id"), CLIENT_ID);
+    assert.equal(authorization.searchParams.get("scope"), GOOGLE_CALENDAR_SCOPES);
+    assert.equal(authorization.searchParams.get("response_type"), "code");
+    assert.equal(authorization.searchParams.get("code_challenge_method"), "S256");
+    // Offline access is what a refresh token is, and the forced prompt is what
+    // guarantees Google issues one rather than assuming an earlier grant.
+    assert.equal(authorization.searchParams.get("access_type"), "offline");
+    assert.equal(authorization.searchParams.get("prompt"), "consent");
 
-  signIn.cancel();
-  assert.deepEqual(await pending, { reason: "Sign-in was cancelled." });
-});
+    signIn.cancel();
+    assert.deepEqual(yield* Fiber.join(pending), { reason: "Sign-in was cancelled." });
+  }),
+);
 
 test("the exchange carries the desktop client's secret and the verifier", async () => {
   const { fetch: fakeFetch, requests } = recordingFetch(() => tokenResponse());

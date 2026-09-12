@@ -267,7 +267,7 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
     serviceOrigin: SERVICE_ORIGIN,
     openSocket: script.openSocket,
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     readAccountKey: async () => "dev@example.test",
     now: () => NOW,
     requestTimeoutMs: 50,
@@ -378,9 +378,10 @@ test("the hosted source renews a refused bearer once and retries with the renewe
   ]);
   const source = hosted(script, {
     readAccessToken: async () => token,
-    refreshAccount: async () => {
-      token = "token-new";
-    },
+    refreshAccount: () =>
+      Effect.sync(() => {
+        token = "token-new";
+      }),
   });
 
   const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
@@ -402,10 +403,11 @@ test("the hosted source does not carry a renewed bearer for another account", as
   const source = hosted(script, {
     readAccessToken: async () => token,
     readAccountKey: async () => holder,
-    refreshAccount: async () => {
-      token = "token-new";
-      holder = "two@example.test";
-    },
+    refreshAccount: () =>
+      Effect.sync(() => {
+        token = "token-new";
+        holder = "two@example.test";
+      }),
   });
 
   assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);

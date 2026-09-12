@@ -532,19 +532,17 @@ Promise rather than a fiber, so each runs its request to a promise in place.
 Both go with `CloudFetch` and `layerFromCloudFetch` in P12-04.
 
 `LoopbackConsent`'s `signIn` in
-`packages/credentials/src/loopback-consent.ts` is another, and the only one
-whose scope holds a listening socket: the trip itself is `signInEffect()`,
-whose `Scope` binds the loopback server and closes it on a grant, on the
-deadline, and on an interruption alike. Two of its three callers moved off it
-in P7-06: the calendars and issues composers, both built as effects now, call
-`signInEffect()` directly through `Runtime.runPromise` on the runtime their
-own layer runs on and `Effect.scoped` in place of the door's own scope. The
-one caller left is `AccountSessionManager`'s own sign-in, in
-`packages/credentials/src/account/session-manager.ts` — P7-04's account
-composer, already merged and deliberately kept promise-based, since what it
-holds late is a `Deferred`-backed `link`, not `refreshOnce` — so the scope
-still opens and closes here for that one trip. `signIn` goes once that caller
-is an effect too. `timedRequest` in
+`packages/credentials/src/loopback-consent.ts` runs nothing any more, and is
+off the allowlist: the trip is `signInEffect()` alone, whose `Scope` binds the
+listening loopback server and closes it on a grant, on the deadline, and on an
+interruption alike. Its last caller moved in P7-13c —
+`AccountSessionManager.beginSignIn` in
+`packages/credentials/src/account/session-manager.ts` is an effect that forks
+the trip as a fiber every concurrent ask joins, so the held promise that used
+to be the de-duplication is a `Fiber` and the scope is the asking run's rather
+than a door's own — and the calendars composer had already moved in P7-06,
+calling `signInEffect()` through `Runtime.runPromise` on the runtime its own
+layer runs on. `timedRequest` in
 `packages/credentials/src/linear/oauth.ts` is beside its namesake in
 `account/client.ts` and on exactly the same terms: Linear's three OAuth
 calls — the code exchange, the refresh, and the revocation — each build a
@@ -553,20 +551,20 @@ option and each still answer their callers a Promise, so the request is run
 to one in place. It goes with `CloudFetch` and `layerFromCloudFetch` in
 P12-04.
 
-`singleFlight`'s returned closure in `packages/credentials/src/single-flight.ts`
-is on the allowlist too, and the only one not shaped by `CloudFetch`; P7-06
-moved its one caller that could move. `LinearCredentials`'s renewal in
-`packages/credentials/src/linear/credentials.ts` now holds the join itself as
-`singleFlightEffect` — the same check-and-create over the internal
-`Semaphore` and `Deferred`, answered as an Effect rather than run to a promise
-inside the function — and runs it on the issues composer's own runtime
-through a `runtime` option, exactly as `DeviceRegistration`'s reads.
-`singleFlight` itself stays, as the promise-returning wrapper over
-`singleFlightEffect`, for `AccountSessionManager.refresh`'s own renewal: what
-holds `refreshOnce` there is the `AccountToken` a hosted client is handed and
-the account composer's own `link`, both of which answer promises, so that
-caller runs the join as an Effect only once `AccountSessionManager.refresh`
-is one itself.
+`packages/credentials/src/single-flight.ts` is on the allowlist for one
+`Effect.runSync`, and no longer for a promise door over it: P7-13c deleted
+`singleFlight`, so `singleFlightEffect` is the whole of the module and
+`AccountSessionManager.refreshOnce` is the Effect it answers, joined by the
+hosted clients through `AccountToken.refreshAccount` and `CallCredential.renew`
+— both effects now, which is what deleted `account-call.ts`'s own
+`Effect.tryPromise` around the renewal. What the run is still for is narrow and
+deliberate: the check-and-create of the one `Deferred` every concurrent caller
+joins happens the instant the returned closure is called, before the Effect it
+hands back is ever run, so the decision and the refresh's own start stay one
+uninterruptible step however late — or whether — a caller runs the await. The
+refresh token rotates when spent, so two flights racing would have the loser
+spend an already-rotated token and read the endpoint's `invalid_grant` as a
+revocation.
 
 `GoogleCalendarReader`'s `#run` in `packages/calendar/src/reader.ts` and
 `exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are on the allowlist
@@ -922,8 +920,6 @@ design decision stated as such:
 | `tracedModelAdapter`'s traced `respond` | P6-05 | P12-04 |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
 | `LinearIssueTracker#post` | P4-03 | P12-04 |
-| `singleFlight`'s Promise-returning closure, over `singleFlightEffect` | P4-03 | P7-13c, the account's caller once `AccountSessionManager.refresh` answers an Effect |
-| `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | once `AccountSessionManager`'s sign-in is an effect, with `compose-account.ts`'s three runs |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | P7-13c — the calendars composer's methods answer effects since P7-13 |
 | `timerSeamFromRuntime` (`packages/runtime/src/effect/timer-seam.ts`) | P12-03 | once `children.effect.ts`/`queue.effect.ts` answer `Clock`/`Scope` directly |

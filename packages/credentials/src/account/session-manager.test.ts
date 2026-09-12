@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
+import { Effect, Exit, Fiber } from "effect";
 import { test } from "vitest";
 import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
@@ -172,38 +174,40 @@ async function armed(authorizations: readonly unknown[]): Promise<void> {
   while (authorizations.length === 0) await new Promise((resolve) => setImmediate(resolve));
 }
 
-test("a withdrawn sign-in settles signed out rather than reporting a failure", async () => {
-  const subject = manager({});
-  const pending = subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB);
-  await armed(subject.authorizations);
+it.effect("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
+  Effect.gen(function* () {
+    const subject = manager({});
+    const pending = yield* Effect.fork(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
+    yield* Effect.promise(() => armed(subject.authorizations));
 
-  subject.instance.cancelSignIn();
-  assert.equal((await pending).status, ACCOUNT_STATUS.SIGNED_OUT);
-});
+    subject.instance.cancelSignIn();
+    assert.equal((yield* Fiber.join(pending)).status, ACCOUNT_STATUS.SIGNED_OUT);
+  }),
+);
 
-test("an exchange the account refuses is a failure the panel can report", async () => {
-  const subject = manager({
-    exchangeCode: () => Promise.reject(new Error("Account refused the exchange")),
-  });
-  // The rejection is claimed before the callback lands, so the refusal is the
-  // assertion rather than an unhandled rejection racing the test.
-  const refused = assert.rejects(
-    subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB),
-    /Account refused the exchange/,
-  );
-  await armed(subject.authorizations);
-  // SAFETY: `armed` returns only once the first authorization was composed.
-  const { redirectUri, state } = subject.authorizations[0] as {
-    redirectUri: string;
-    state: string;
-  };
+it.effect("an exchange the account refuses is a failure the panel can report", () =>
+  Effect.gen(function* () {
+    const subject = manager({
+      exchangeCode: () => Promise.reject(new Error("Account refused the exchange")),
+    });
+    const refused = yield* Effect.fork(
+      Effect.exit(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB)),
+    );
+    yield* Effect.promise(() => armed(subject.authorizations));
+    // SAFETY: `armed` returns only once the first authorization was composed.
+    const { redirectUri, state } = subject.authorizations[0] as {
+      redirectUri: string;
+      state: string;
+    };
 
-  const callback = new URL(redirectUri);
-  callback.searchParams.set("state", state);
-  callback.searchParams.set("code", "auth-code");
-  const answered = await fetch(callback);
-  assert.equal(answered.status, 200);
+    const callback = new URL(redirectUri);
+    callback.searchParams.set("state", state);
+    callback.searchParams.set("code", "auth-code");
+    const answered = yield* Effect.promise(() => fetch(callback));
+    assert.equal(answered.status, HTTP_STATUS.OK);
 
-  await refused;
-  assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
-});
+    const outcome = yield* Fiber.join(refused);
+    assert.equal(Exit.isFailure(outcome), true);
+    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
+  }),
+);

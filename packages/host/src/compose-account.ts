@@ -248,7 +248,7 @@ export const composeAccount = (
           settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
             account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
           });
-          const snapshot = yield* Effect.promise(() => session.beginSignIn(provider));
+          const snapshot = yield* Effect.orDie(session.beginSignIn(provider));
           return { account: carried(snapshot) };
         }),
       [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () =>

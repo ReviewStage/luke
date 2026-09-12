@@ -372,6 +372,8 @@ interface ServiceSessionOptions {
    * refresh-and-retry exists.
    */
   authorization?: AccountToken;
+  /** The runtime the account's own renewal is run on, for a source handed one; the ambient default otherwise. */
+  runtime?: Runtime.Runtime<never>;
   /**
    * This installation's `devices` row id, read at each creation so a row
    * registered after the source was built is still named; nothing while the
@@ -394,6 +396,7 @@ class ServiceLiveSessionSource {
   readonly #address: string;
   readonly #openSocket: OpenSocket;
   readonly #authorization: AccountToken | undefined;
+  readonly #runtime: Runtime.Runtime<never>;
   readonly #deviceId: (() => string | undefined) | undefined;
   readonly #configuredVoice: LiveVoice;
   #voice: LiveVoice;
@@ -411,6 +414,7 @@ class ServiceLiveSessionSource {
     this.#address = address;
     this.#openSocket = options.openSocket;
     this.#authorization = options.authorization;
+    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
     this.#deviceId = options.deviceId;
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
@@ -467,7 +471,7 @@ class ServiceLiveSessionSource {
       // Routine expiry of an hour-lived token: renew once and retry once, only
       // on a bearer that actually changed and still answers for the same account.
       const holder = await this.#holder();
-      await this.#authorization.refreshAccount().catch(() => undefined);
+      await Runtime.runPromise(this.#runtime)(Effect.ignore(this.#authorization.refreshAccount()));
       const renewed = await this.#bearer();
       if (renewed !== undefined && renewed !== bearer) {
         if ((await this.#holder()) !== holder) {
@@ -895,6 +899,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       servicePath: VOICE_SERVICE_PATH.SESSIONS,
       logLabel: "Hosted live session",
       authorization: { readAccessToken, refreshAccount, readAccountKey },
+      ...(runtime ? { runtime } : undefined),
     });
     this.#reattachDelaysMs = reattachDelaysMs ?? HOSTED_REATTACH_DELAYS_MS;
     this.#runtime = runtime ?? Runtime.defaultRuntime;

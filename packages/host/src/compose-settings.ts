@@ -52,7 +52,7 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
  * the graph however much simpler that would be.
  */
 interface SettingsLinks {
-  refreshAccount: () => Promise<void>;
+  refreshAccount: () => Effect.Effect<void, unknown>;
   applyVoiceCredential: () => Promise<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;
   reconcileSpeech: () => void;

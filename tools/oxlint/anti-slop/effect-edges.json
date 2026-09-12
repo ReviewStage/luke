@@ -32,7 +32,6 @@
     "packages/calendar/src/oauth.ts",
     "packages/calendar/src/reader.ts",
     "packages/credentials/src/account/client.ts",
-    "packages/credentials/src/loopback-consent.ts",
     "packages/credentials/src/single-flight.ts",
     "packages/devtrace/src/brain-trace.ts",
     "packages/devtrace/src/trace-writer.ts",

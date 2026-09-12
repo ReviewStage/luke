@@ -20,6 +20,7 @@ import { MAIN_SESSION_KEY, REASONING_EFFORT } from "@sidecar/runtime/vocabulary"
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { scriptedOpenSocket } from "@sidecar/voice/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./brain/host.js";
 import { drainMicrotasks } from "./testing/index.js";
@@ -98,7 +99,7 @@ function composition() {
     // A transition builds the live source and opens nothing on it; the seam
     // is scripted to answer no opening at all.
     openSocket: scriptedOpenSocket([]).openSocket,
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch: async (input) => {
       const url = String(input);
       // The hosted adapter speaks the brain contract: it reads the

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { HOSTED_BRAIN_CONTRACT_VERSION, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import { HTTP_METHOD } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import {
@@ -65,12 +66,12 @@ function hosted(
   const transport = hostedBrainTransport({
     baseUrl: BASE,
     readAccessToken: () => Promise.resolve(current),
-    refreshAccount: () => {
-      refreshes.push(1);
-      current = queue.shift() ?? current;
-      holder = holders?.shift() ?? holder;
-      return Promise.resolve();
-    },
+    refreshAccount: () =>
+      Effect.sync(() => {
+        refreshes.push(1);
+        current = queue.shift() ?? current;
+        holder = holders?.shift() ?? holder;
+      }),
     ...(holders ? { readAccountKey: () => Promise.resolve(holder) } : undefined),
     fetch,
     now: () => NOW,

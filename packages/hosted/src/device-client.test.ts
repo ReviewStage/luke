@@ -21,7 +21,7 @@ function client(
   return new HostedDeviceClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch,
     ...options,
   });
@@ -105,9 +105,10 @@ it.effect("a forget at sign-out carries the departing token and never refreshes"
     const answer = yield* Effect.promise(() =>
       client(api.fetch, {
         readAccessToken: async () => "token-standing",
-        refreshAccount: async () => {
-          refreshes += 1;
-        },
+        refreshAccount: () =>
+          Effect.sync(() => {
+            refreshes += 1;
+          }),
       }).forget({ deviceId: DEVICE_ID }, { accessToken: "token-departing" }),
     );
 
@@ -132,9 +133,10 @@ it.effect("a 401 refreshes the account and retries once on the new token", () =>
     const answer = yield* Effect.promise(() =>
       client(fetch, {
         readAccessToken: async () => tokens.shift(),
-        refreshAccount: async () => {
-          refreshes += 1;
-        },
+        refreshAccount: () =>
+          Effect.sync(() => {
+            refreshes += 1;
+          }),
       }).register({ platform: DEVICE_PLATFORM.MACOS, installationId: INSTALLATION_ID }),
     );
 

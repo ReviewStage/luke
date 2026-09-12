@@ -38,7 +38,7 @@ function senderWith(
     appVersion: APP_VERSION,
     sends: true,
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => {},
+    refreshAccount: () => Effect.void,
     fetch,
     now: () => NOON,
     ...overrides,
@@ -115,10 +115,11 @@ test("a batch queued under one account is never posted under another's bearer", 
     readAccountKey: async () => account,
     // The sign-out and sign-in the refusal was the first sign of: the token
     // the retry would carry answers for somebody else.
-    refreshAccount: async () => {
-      account = "grace@luke.test";
-      token = "fresh";
-    },
+    refreshAccount: () =>
+      Effect.sync(() => {
+        account = "grace@luke.test";
+        token = "fresh";
+      }),
   });
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   await sender.flush();
@@ -143,7 +144,7 @@ test("a failed send drops its batch rather than retrying it behind the next one"
     appVersion: APP_VERSION,
     sends: true,
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => {},
+    refreshAccount: () => Effect.void,
     fetch,
     now: () => NOON,
   });
@@ -168,7 +169,7 @@ test("signed out the queue waits rather than being spent", async () => {
     appVersion: APP_VERSION,
     sends: true,
     readAccessToken: async () => token,
-    refreshAccount: async () => {},
+    refreshAccount: () => Effect.void,
     fetch,
     now: () => NOON,
   });
