@@ -115,7 +115,7 @@ export const composeAccount = (
       clientId: ACCOUNT_CLIENT_ID,
     });
 
-    const session = new AccountSessionManager({
+    const session = yield* AccountSessionManager.make({
       client,
       // The store's own effects, with an I/O failure read as the defect the
       // rejected promise behind each of these already was. The lateness of

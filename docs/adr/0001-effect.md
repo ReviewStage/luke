@@ -1134,21 +1134,10 @@ is deleted with `packages/wire/src/effect/event.ts` itself, and this entry
 stands until a subscriber reads the stream directly.
 
 `AccountSessionManager` in `packages/credentials/src/account/session-manager.ts`
-is on the allowlist for the same reason its field needs the same
-`Effect.runSync(PubSub.unbounded())` `BrainAgent#onRunEvent`'s `#runEventsPubSub`
-already does: the class is constructed with a plain `new` outside any Effect —
-`compose-account.ts`'s `lifetime` builds one synchronously, the same seam
-`AccountSessionManagerOptions` always was — and Effect gives a `PubSub` no
-constructor that is not itself an effect. Nothing else in the class runs one:
-every snapshot it settles on is `yield* PubSub.publish(...)`, on the fiber
-already open for the store write or the token exchange that decided it, and
-the class exposes the subscription itself as `changes:
-Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>` over
-`Stream.fromPubSub(pubsub, { scoped: true })` rather than a callback a
-subscriber's own run drives, which is what let `compose-account.ts` come off
-this same list below. This entry stands until `AccountSessionManager` is
-itself built by an effect its owner runs, a larger change than the
-subscription this PR gave it.
+is off the allowlist: `AccountSessionManager.make` is the effect that builds
+the `PubSub` and hands back the instance, so `compose-account.ts`'s `lifetime`
+yields it rather than reaching for `new` outside a run, the same seam that let
+`compose-account.ts` itself come off this same list below.
 
 The coalescing timer the wake queue arms is untouched by that, since it is
 still the injected `schedule`/`cancel` seam a real elapsed-time wait stands
