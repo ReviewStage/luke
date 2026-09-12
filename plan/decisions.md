@@ -3261,3 +3261,51 @@ cut.
 **Both instances arrived described as bookkeeping**, in a PR whose subject was deleting an
 integration. That is the tell: a deletion PR's dangerous edges are not in what it deletes but in the
 *names* it retires, because a name is a contract with software that is not in this repository.
+
+
+## 2026-09-12 ~00:10Z — Dean: no installs in the field, so the append-only rule is not binding yet
+
+**Dean's words, in full, because the ruling turns on them:** *"We are just hand-syncing across
+platforms for now without codegen or a compiler. I have pretty much no Lukes installed on people's
+machines and I don't care about affecting them. This product is still very early."*
+
+**The mechanism recorded in the previous entry is unchanged and still true.** Retiring a name in the
+hosted tool catalog or the product-event allowlist breaks clients that still use it, **totally rather
+than partially** — `MODEL_FAILURE.COMPATIBILITY` on every brain turn for the first, a refused batch
+for the second. **What was wrong was the urgency, which was mine.** I filed LUKE-188 as High on an
+assumed field of installs that does not exist.
+
+**Ruling: the append-only rule stands in this log as a mechanism, not as a constraint on today's
+work.** It becomes binding the moment there are installs to care about, and it is recorded here
+precisely so that moment does not have to rediscover it.
+
+### What follows
+
+**LUKE-188 is retitled and dropped to Low** — *"Remove the retired tool and event names now that no
+installs are exposed"* — and its work inverts: instead of restoring retired names, remove the ones
+now carried for no reason. The two tool rows, the three event names and their property value sets.
+
+**G3-4 ships in its current shape, both registries untouched.** It had already been reworked to that
+shape when the ruling arrived, and **reworking work in flight to chase a ruling that arrived mid-task
+costs more than the dead rows do.** A worker reversed twice in twenty minutes rightly stops trusting
+the direction; that cost is real and is the reason, not tidiness.
+
+**The one thing that is not deferrable is `PRIVACY.md`**, which Dean confirmed in as many words.
+Deleting Linear falsifies it at lines 405-407 (*"and Linear… your sessions or issues… an issue you
+moved"*), 196, and 455 (*"Disconnect any provider, issue tracker, or calendar"*). A stale sentence
+there is a false promise to a user, a different class of thing from a dead allowlist row, and it
+belongs in G3-4 rather than a follow-up.
+
+### The argument that survives the ruling, and it is a better one
+
+**Removing the two tool rows is still right, for a reason that has nothing to do with installs:**
+keeping them registered means the brain is offered two tools on every turn that can only ever answer
+"not here". **A permanent wart in the model's catalog is a worse end state than a break nobody
+experiences.** That is LUKE-188's item 1.
+
+**One thing not to change, and it is the load-bearing part of the batch-refusal design.**
+`packages/analytics/AGENTS.md`: the iOS and watchOS apps emit from a hand-kept Swift transcription
+with no compiler between it and `product-events.ts`, so *"a transcription that drifts shows up as a
+refused batch, never as a value that traveled."* **Dean confirms the hand-syncing is deliberate for
+now, which makes the refused batch the only check that exists.** The option of trimming unknown names
+is withdrawn and should stay withdrawn.
