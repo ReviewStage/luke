@@ -44,4 +44,17 @@ export const OBSERVATION_TICK = {
   CONCURRENCY: 4,
   /** How recently an account must have been seen to be observed on the schedule. */
   ACCOUNT_SEEN_WITHIN_MS: 7 * 24 * 60 * 60 * 1000,
+  /**
+   * How far the brain's bookmark may trail the snapshot before what changed
+   * between the two is history rather than news. The pass runs about once a
+   * minute and a visit that could not hand its change over derives it again
+   * the next minute, so a bookmark further behind than this means the
+   * schedule or the brain was out for that long: a paused cron, a deploy
+   * gap, a rotated secret, a provider that refused every pass, eve refusing
+   * every turn. The opener then reseeds the bookmark from the snapshot as it
+   * stands and wakes nothing, since the roster is every reader's to show and
+   * a change that old is history arriving late, not a notification's to
+   * announce. Measured on the two rows' own instants, never the clock.
+   */
+  STALE_GAP_MS: 5 * 60 * 1000,
 } as const;

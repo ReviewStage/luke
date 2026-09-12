@@ -1295,14 +1295,30 @@ long into the next tick cannot put a later one's bookmark back; a message
 eve refuses ends the visit before that transaction, so the cursors and the
 bookmark stand and the next visit derives the same change again, wider by
 whatever moved since. Nothing is recorded that eve has not accepted, and
-nothing is dropped for having waited: there is no queue of changes to
-bound, since the change is re-derived from two rosters on every visit. The
+nothing is dropped for having waited short of the stale gap: there is no
+queue of changes to bound, since the change is re-derived from two rosters
+on every visit. The
 visit is per account by construction and opens at most eight conversations
 of an account a tick, oldest changes first; past the bound the bookmark
 carries the sessions it woke and keeps the earlier roster for the rest, so
 each of them derives again next tick. A first visit finds no bookmark and
 adopts the snapshot whole, waking nothing, as the first pass records no
-change against nothing. The snapshot itself moves when the pass writes it,
+change against nothing. The one change the opener refuses to derive is
+one across a stale gap: the bookmark's instant is the snapshot it was kept
+from, and a bookmark trailing the snapshot the pass just wrote by more than
+`OBSERVATION_TICK.STALE_GAP_MS` (five minutes, against a once-a-minute
+schedule) means no visit has handed a change over for that long — the cron
+paused, a deploy left a gap, `CRON_SECRET` rotated, the provider refused every
+pass, or eve refused every turn. What changed in between is history the
+roster already shows, not news: the visit reseeds the bookmark from the
+snapshot as it stands, over the bookmark's own instant, wakes nothing, says
+so on the log, and counts the reseed as `turns.reseeded` in the tick's
+answer, so the record of the tick says it happened. The gap is measured on
+the two rows' own instants, never the clock. A bookmark exactly the gap
+behind is still news; the next change under a reseeded bookmark wakes as
+usual. This is the one bound on re-deriving: a change eve refused for less
+than the gap is derived again, wider by whatever moved since, and one it
+refused for longer is not. The snapshot itself moves when the pass writes it,
 never when eve accepts: it is the roster every reader draws — the brain's
 standing context, the voice session's seed, the pass's own previous — and a
 snapshot that waited on eve would seed the voice with a roster as old as
