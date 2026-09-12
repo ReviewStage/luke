@@ -14,6 +14,7 @@ import {
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
 import { type CloudFetch, isWireString } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { admittedForTest, HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { Duration, Effect, Exit, Fiber, TestClock } from "effect";
 import { test } from "vitest";
@@ -124,7 +125,7 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     ...(overrides.requestHeaders ? { requestHeaders: overrides.requestHeaders } : undefined),
     readApiKey: overrides.readApiKey ?? (async () => apiKey),
     baseUrl: TEST_BASE_URL,
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
@@ -394,12 +395,14 @@ function accountBoundPlugin(options: {
   fetch: CloudFetch;
   minimumRefreshIntervalMs: number;
 }) {
+  const { fetch, ...rest } = options;
   return cloudPass({
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     now: () => TEST_TIME,
-    ...options,
+    ...rest,
+    httpClient: layerFromCloudFetch(fetch),
     collect: (request) =>
       Effect.map(
         Effect.all([request(["sessions", "first"]), request(["sessions", "second"])]),
@@ -1013,7 +1016,7 @@ test("sends a POSTed read as the document the build fixed and nothing else", asy
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     readApiKey: async () => TEST_API_KEY,
-    fetch: stub.fetch,
+    httpClient: layerFromCloudFetch(stub.fetch),
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
     collect: (request) =>
@@ -1053,7 +1056,7 @@ test("a body that never arrives ends the read on its own deadline", async () => 
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     readApiKey: async () => TEST_API_KEY,
-    fetch: stub.fetch,
+    httpClient: layerFromCloudFetch(stub.fetch),
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
     collect: (request) =>
@@ -1077,7 +1080,7 @@ test("a write whose answer never arrives hedges on its own deadline", async () =
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     readApiKey: async () => TEST_API_KEY,
-    fetch: stub.fetch,
+    httpClient: layerFromCloudFetch(stub.fetch),
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
     collect: () => Effect.succeed([]),

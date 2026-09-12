@@ -1,3 +1,4 @@
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { conductorPlugin } from "../../../../packages/providers/src/conductor/index.js";
 import type { CloudSessionPlugin } from "../../../../packages/providers/src/shared/cloud-pass.js";
 import type { CloudAgentProviderId, CloudFetch, ProviderSessionObservation } from "../core.js";
@@ -28,7 +29,7 @@ function baseOptions(seams: CloudAdapterSeams) {
   return {
     readApiKey: seams.readApiKey,
     minimumRefreshIntervalMs: 0,
-    ...(seams.fetch ? { fetch: seams.fetch } : undefined),
+    ...(seams.fetch ? { httpClient: layerFromCloudFetch(seams.fetch) } : undefined),
     ...(seams.now ? { now: seams.now } : undefined),
     ...(seams.reported ? { reported: seams.reported } : undefined),
   };

@@ -12,7 +12,7 @@ describeProviderContract(
     conductorPlugin({
       readApiKey: input.readApiKey,
       baseUrl: "https://api.conductor.test",
-      fetch: input.api.fetch,
+      httpClient: input.api.layer,
       now: input.now,
       minimumRefreshIntervalMs: input.minimumRefreshIntervalMs,
     }),
