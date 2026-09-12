@@ -514,6 +514,10 @@
               "type": "string",
               "minLength": 1
             },
+            "event_id": {
+              "type": "string",
+              "minLength": 1
+            },
             "client_event_id": {
               "type": "string",
               "minLength": 1

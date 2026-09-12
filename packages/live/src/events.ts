@@ -391,11 +391,19 @@ const inputAudioAppendSchema: Schema.Schema<LiveInputAudioAppendEvent, UnparsedW
 const outputAudioDeltaSchema: Schema.Schema<LiveOutputAudioDeltaEvent, UnparsedWireValue> =
   schemaAs(tolerant({ type: Schema.Literal(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA) }));
 
+/**
+ * Which client event an error is about may sit at the event's top level as
+ * `client_event_id`, inside `error` under the same name, or inside `error`
+ * as `event_id`, the placement the Realtime API reference documents. The
+ * GPT-Live server-events reference could not be read when this was written,
+ * so all three are carried and a reader matches on whichever arrived.
+ */
 export type LiveErrorDetail = {
   type?: string;
   code?: string;
   message?: string;
   param?: string;
+  event_id?: string;
   client_event_id?: string;
 };
 
@@ -405,6 +413,7 @@ const errorDetailSchema = cleaned<LiveErrorDetail>(
     code: Schema.optionalWith(dropped(text), { exact: true }),
     message: Schema.optionalWith(dropped(text), { exact: true }),
     param: Schema.optionalWith(dropped(text), { exact: true }),
+    event_id: Schema.optionalWith(dropped(opaqueId), { exact: true }),
     client_event_id: Schema.optionalWith(dropped(opaqueId), { exact: true }),
   }),
 );

@@ -25,8 +25,8 @@ import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
  * on every route, and on the introduction route admits only what a
  * renderer's own data channel would carry. An opening command the service
  * sends of its own once `session.started` arrives follows the docs' order:
- * the command, then its acknowledgment or refusal matched by
- * `client_event_id` under a bounded wait, then whatever the service answers
+ * the command, then its acknowledgment or refusal matched by the id it was
+ * sent with under a bounded wait, then whatever the service answers
  * that with; a caller who has hung up is sent none of it, whichever side of
  * the start they went. It ends the way the docs say a
  * session ends: `session.closed` is the finalization, reported once with the
@@ -48,7 +48,10 @@ export const RELAY_DEFAULTS = {
  * answered. The docs' order is the append, its `session.instructions.appended`
  * matched by `client_event_id`, and only then whatever follows; an `error`
  * naming the same id is the refusal to handle before continuing, and silence
- * is neither, so each is reported as itself rather than assumed.
+ * is neither, so each is reported as itself rather than assumed. An error
+ * may name the id at its top level, inside `error` as `client_event_id`, or
+ * inside `error` as `event_id`, and a refusal read from any of the three is
+ * a refusal: one matched on fewer would be reported as silence instead.
  */
 export const OPENING_OUTCOME = {
   ACKNOWLEDGED: "acknowledged",
@@ -177,7 +180,7 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
     /** How a server event answers the opening command, or nothing when it is about something else. */
     const openingAnswer = (event: LiveServerEvent): OpeningSettled | undefined => {
       if (event.type === LIVE_SERVER_EVENT.ERROR) {
-        const about = event.client_event_id ?? event.error.client_event_id;
+        const about = event.client_event_id ?? event.error.client_event_id ?? event.error.event_id;
         return about === openingEventId
           ? {
               outcome: OPENING_OUTCOME.REFUSED,

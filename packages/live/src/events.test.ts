@@ -146,6 +146,20 @@ test("an error may name no client event and may carry a null code", () => {
   assert.equal(event.error.type, "invalid_request_error");
 });
 
+test("an error naming its client event only as error.event_id keeps that id", () => {
+  const event = parseLiveServerEvent({
+    type: LIVE_SERVER_EVENT.ERROR,
+    event_id: "event_error",
+    error: { type: "invalid_request_error", code: "unsupported_content", event_id: "say-1" },
+  });
+
+  assert.ok(event);
+  if (event.type !== LIVE_SERVER_EVENT.ERROR) assert.fail(event.type);
+  assert.equal(event.client_event_id, undefined);
+  assert.equal(event.error.client_event_id, undefined);
+  assert.equal(event.error.event_id, "say-1");
+});
+
 test("usage updates are read as snapshots with an optional context ratio", () => {
   const event = parseLiveServerEvent({
     type: LIVE_SERVER_EVENT.USAGE_UPDATED,

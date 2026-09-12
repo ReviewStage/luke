@@ -668,6 +668,38 @@ test("an error naming the greeting is written down by its kind, and nothing is c
   ]);
 });
 
+test("an error naming the greeting only as error.event_id is a refusal, not a wait run out", async () => {
+  const context = await stand({ greetingTimeoutMs: 100 });
+  onTestFinished(() => context.stop());
+  const { upstream, eventId } = await greetedIntroduction(context);
+
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.ERROR,
+      event_id: "error-1",
+      error: {
+        type: "invalid_request_error",
+        code: "unsupported_content",
+        message: "What the greeting said is the one thing the log never keeps.",
+        event_id: eventId,
+      },
+    }),
+  );
+
+  // Past the wait, so a refusal the relay had missed would have settled as unacknowledged by now.
+  assert.equal(await upstream.arrives(400), false);
+  assert.deepEqual(greetingLog(context), [
+    { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.INTRODUCTION },
+    {
+      event: LOG_EVENT.GREETING_REFUSED,
+      route: VOICE_ROUTE.INTRODUCTION,
+      errorType: "invalid_request_error",
+      errorCode: "unsupported_content",
+    },
+  ]);
+});
+
 test("a greeting neither acknowledged nor refused inside the wait cues nothing, then or later", async () => {
   const context = await stand({ greetingTimeoutMs: 100 });
   onTestFinished(() => context.stop());
