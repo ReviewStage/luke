@@ -8,7 +8,7 @@ import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
-import type { VoiceSessionRecord } from "../../server/voice/session-record";
+import type { PromisedVoiceSessionRecord } from "../../server/voice/session-record";
 
 /**
  * What the voice service talks to, stood up for a test: an OpenAI on this
@@ -213,7 +213,7 @@ interface RecordedClose {
   reason: VoiceCloseReason;
 }
 
-export interface FakeSessionRecord extends VoiceSessionRecord {
+export interface FakeSessionRecord extends PromisedVoiceSessionRecord {
   registered: Array<{ userId: string; sessionId: string; deviceId?: string | undefined }>;
   /** The device rows the fake holds, by the account that holds each. */
   devices: Array<{ userId: string; deviceId: string }>;

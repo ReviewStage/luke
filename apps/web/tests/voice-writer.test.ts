@@ -26,7 +26,7 @@ import {
   voiceWriter,
 } from "../server/hosted/store";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
-import { voiceSessionRecord } from "../server/voice/session-record";
+import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { appended, delegated, heard, liveEventId, said } from "./support/live-events";
 import {
@@ -62,7 +62,10 @@ const TOOLS: ToolSet = {
 };
 
 const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
-const record = voiceSessionRecord(database.run, () => NOW);
+const record = promisedVoiceSessionRecord(
+  database.run,
+  voiceSessionRecord(() => NOW),
+);
 const speech = { writer: store };
 /** The installation the fixture sessions belong to, which is the device a briefing must be claimed by before its speech is marked. */
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";

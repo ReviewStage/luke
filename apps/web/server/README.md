@@ -258,7 +258,12 @@ seal. Outside `server/hosted/store/`, `server/hosted/device-store.ts` and the
 provider-key vault's `server/hosted/vault-key-store.ts` are on the same client;
 `server/hosted/speech-push.ts` reads the account's devices through it too,
 beside the speech module's own reads, and `server/voice/session-record.ts` is
-on it whole, its four methods each one statement over the live session row.
+on it whole, each of its five methods answering an effect over the live
+session row rather than running one: `PromisedVoiceSessionRecord` and the
+`promisedVoiceSessionRecord` that builds one, in the same file, are the
+promise face `voice/function.ts` holds over `runWeb`, since
+`VoiceService` is a class of `ws` callbacks and a registration, a usage
+snapshot, and a close each fire from one of them.
 `hostedStore()` takes the payload key ring and nothing else, and answers an
 `Effect<A, SqlError | ParseError, SqlClient>` from every method, so the caller
 composes a store read into whatever it already runs. What still holds a
@@ -780,7 +785,14 @@ conversations once a Clear has moved the standing main: after a Clear the
 ask is refused at the door and eve is not reached, rather than eve taking a
 turn the record cannot write. The service's `onBriefingAppend` seam tells the voice
 writer which message a briefing's last append carries, so the session's own
-voice past the append marks the briefing spoken. Nothing attaches this to the
+voice past the append marks the briefing spoken. The composition is a scope's:
+`hostedLiveExchange` answers an effect built in the `Scope` its caller opened
+for the socket, the fiber that reports what the record made of each live event
+is forked into that scope, and the four endings the exchange used to run from
+a `stop` of its own — the brain's follows, the briefing look, the session's
+graceful close, and the wait on every record write already started — are
+finalizers of it in that order, so closing the scope is the whole of the
+ending. Nothing attaches this to the
 sessions route; that is the desktop cutover's, by build.
 
 ### The exchange on the sessions route
@@ -791,7 +803,14 @@ stands and before the desktop is answered, and adopted over the same sideband
 the relay pipes. The service hands the attachment the socket and reaches
 nothing of the exchange or the live-session door itself; the attachment
 builds the sideband over that socket and adopts, so the voice function's
-bundle gains that edge only in the commit that passes the attachment. The
+bundle gains that edge only in the commit that passes the attachment. One
+socket, one scope: `exchangeAttachment` opens a `Scope` when the service
+offers it a session, builds the account's standing main, the exchange, its
+adoption of the sideband, and the briefing look as one effect run in that
+scope on the edge's own runner, and hands the service a `stop` that closes
+it; a standing that could not be reached closes the scope before it throws,
+so nothing an attempt acquired outlives the session the service is about to
+refuse. The
 socket admits many listeners, so the relay keeps piping raw frames to the
 desktop unchanged while the exchange reads parsed events through its
 record-observing sideband. The upstream hands the sideband over paused,

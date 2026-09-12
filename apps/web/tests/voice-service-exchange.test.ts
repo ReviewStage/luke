@@ -32,7 +32,7 @@ import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { SOCKET_CLOSE_CODE } from "../server/voice/relay";
 import { VoiceService, type VoiceServiceOptions } from "../server/voice/service";
-import { voiceSessionRecord } from "../server/voice/session-record";
+import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import {
@@ -114,7 +114,10 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = voiceSessionRecord(database.run, () => NOW);
+const sessionRecord = promisedVoiceSessionRecord(
+  database.run,
+  voiceSessionRecord(() => NOW),
+);
 
 interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];

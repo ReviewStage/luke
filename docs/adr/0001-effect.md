@@ -923,10 +923,35 @@ are untouched. The voice service's five socket-driven compositions —
 handed `runWeb` by `voice/function.ts`, which composes them, and a test hands
 them the runner over its own test database. They now name that runner
 `WebStoreRun` in `server/runtime.ts`, the edge's own runner as a composition
-below it is handed one, rather than the fiber-reading type they are not. Their
-internals answering effects, so that each socket's work is a scoped fiber
-rather than a promise chain, is P12-18d and touches `packages/voice`'s shape
-above them.
+below it is handed one, rather than the fiber-reading type they are not.
+
+P12-18d took three of the five onto that shape, and the socket is what owns
+the scope. `exchangeAttachment` opens a `Scope` when the service offers it a
+session and closes it when the service detaches, and everything between is one
+effect run in that scope on the edge's runner: the account's standing main,
+`hostedLiveExchange` itself, the adoption of the sideband, and the briefing
+look. `hostedLiveExchange` answers `Effect<HostedLiveExchange, never, Scope>`
+rather than an object with a `stop` of its own — the four endings that `stop`
+ran are finalizers added in the order that makes their reverse the order it
+ran them, and the fiber that reports what the record made of each live event
+is `Effect.forkScoped` between the wait on the record's writes and the rest,
+so the interrupt lands before the drain. That fiber carries the reporting
+only: the record is still handed each event where the event arrives, because a
+delta's place in the record's own sequence is its arrival, and deferring the
+`observe` call itself would let an ask written under a delegation jump ahead
+of deltas that reached the socket before it. `voiceSessionRecord` holds no
+runner at all now; its five methods answer
+`Effect<A, SqlError | ParseError, SqlClient>` like every other row module
+under `server/`, and `PromisedVoiceSessionRecord` beside them is the
+promise face `voice/function.ts` builds over `runWeb` for `VoiceService`,
+declared in the same file rather than mapped from the effects, since P12-18c
+moved `Promised<Methods>` out of `server/` and the service is a class of `ws`
+callbacks rather than a composition of fibers, which no PR in this plan
+rewrites. `hostedLiveBrain`, `hostedBriefings`, and
+`hostedLiveRecord` still take `WebStoreRun`, and the exchange still hands it
+to them along with the device read the briefing look asks a promise for; that
+is P12-18d2, which is what takes the last `WebStoreRun` out of this
+composition.
 
 What took the fiber's promise face was the brain host, for two reasons that
 were neither of them eve's authorship. `runTool`'s seams took it because the
@@ -1372,6 +1397,7 @@ design decision stated as such:
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and P12-18c took `relay`'s onto effects; P12-18b took the turn event stream and the voice compositions off it |
 | `runOverClient` in `fiber-runner.ts`, the replacement promise face `hostedFactsWriter`, `hostedTranscriptReads`, and the roster reader take, over a `SqlClient` `runTool` reads once rather than a runtime it reads off the fiber | P12-18e | P12-18g, with the last of its callers, as the brain's own tool contracts move onto effects; P12-18c took `relay`'s `StreamRelay` and stop carrier off it |
 | `Promised<Methods>`, the mapped type the promise-era suites' `promisedWriter`/`promisedAsks` answer in `apps/web/tests/support/promised-store.ts`; P12-18c took `StreamRelay` and `carryStop` onto effects and moved the type out of `server/hosted/fiber-runner.ts` | P10-16 | with each suite as it moves onto `it.effect` |
+| `promisedVoiceSessionRecord`, the live session row's five effects as `VoiceServiceOptions.record` takes them, run to promises over `runWeb` in `voice/function.ts` | P12-18d | when `VoiceService` itself answers effects, which no PR in this plan schedules — it is a class of `ws` callbacks, on the same terms as `createLiveUpstream` above it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | never — P12-16c settled it: the fence must stay synchronous, so the row is bookkeeping rather than a deletion owed |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h, both deleted in P12-16d) |

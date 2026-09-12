@@ -1,3 +1,6 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Exit, type ParseResult, Scope } from "effect";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { standingMain } from "../hosted/brain-host/main.js";
 import type { HostedStoreContext } from "../hosted/store/index.js";
@@ -5,6 +8,7 @@ import type { StoreWriter } from "../hosted/store/writer.js";
 import type { WebStoreRun } from "../runtime.js";
 import {
   type ExchangeAttachment,
+  type HostedLiveExchange,
   type HostedLiveExchangeOptions,
   hostedLiveExchange,
 } from "./live-exchange.js";
@@ -19,11 +23,19 @@ import { upstreamSideband } from "./live-sideband.js";
  * function's composition so the route can pass it in one line when the
  * desktop's own exchange is unwired, and not before: until then the function
  * passes nothing, the service only pipes, and the desktop answers.
+ *
+ * One socket, one scope. The attachment opens a `Scope` when the service
+ * offers it a session, builds the whole standing — the account's main, the
+ * exchange, its adoption of the sideband, and the briefing look — as one
+ * effect run in that scope on the edge's own runner, and hands the service a
+ * `stop` that closes it. A standing that could not be reached closes the
+ * scope before it throws, so nothing an attempt acquired is left behind on a
+ * session the service is about to refuse.
  */
 
 export interface ExchangeAttachmentDeps {
   readonly context: HostedStoreContext;
-  /** The runner the attachment's own reads and the exchange beneath it are answered through. */
+  /** The runner the attachment's own scope and the effects built in it are answered through. */
   readonly run: WebStoreRun;
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
@@ -41,37 +53,60 @@ export interface ExchangeAttachmentDeps {
 
 const NO_ENTRIES: HostedLiveExchangeOptions["conversationEntries"] = () => [];
 
+/** A session whose sideband the exchange could not stand on; the service refuses the session on it. */
+class ExchangeCannotStand extends Error {
+  constructor() {
+    super("the exchange could not stand on the session's sideband");
+  }
+}
+
 export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttachment {
+  const standing = (
+    session: Parameters<ExchangeAttachment>[0],
+  ): Effect.Effect<
+    HostedLiveExchange,
+    SqlError | ParseResult.ParseError | ExchangeCannotStand,
+    Scope.Scope | SqlClient.SqlClient
+  > =>
+    Effect.gen(function* () {
+      const conversationId = yield* standingMain(session.accountId, new Date(deps.now()));
+      const exchange = yield* hostedLiveExchange({
+        userId: session.accountId,
+        liveSessionId: session.sessionId,
+        conversationId,
+        context: deps.context,
+        run: deps.run,
+        writer: deps.writer,
+        eve: deps.eve(session.accountId),
+        conversationEntries: deps.conversationEntries ?? NO_ENTRIES,
+        emit: deps.emit,
+        now: deps.now,
+        schedule: deps.schedule,
+        cancel: deps.cancel,
+        createId: deps.createId,
+        report: deps.report,
+        ...(deps.trace ? { trace: deps.trace } : undefined),
+      });
+      const adopted = yield* exchange.adopt({
+        sessionId: session.sessionId,
+        attach: async () => upstreamSideband(session.sideband),
+        started: session.started,
+      });
+      if (!adopted) return yield* Effect.fail(new ExchangeCannotStand());
+      // The look at the account's open offers runs for as long as the session stands; the scope's close ends it.
+      exchange.briefings.start();
+      return exchange;
+    });
+
   return async (session) => {
-    const conversationId = await deps.run(standingMain(session.accountId, new Date(deps.now())));
-    const exchange = hostedLiveExchange({
-      userId: session.accountId,
-      liveSessionId: session.sessionId,
-      conversationId,
-      context: deps.context,
-      run: deps.run,
-      writer: deps.writer,
-      eve: deps.eve(session.accountId),
-      conversationEntries: deps.conversationEntries ?? NO_ENTRIES,
-      emit: deps.emit,
-      now: deps.now,
-      schedule: deps.schedule,
-      cancel: deps.cancel,
-      createId: deps.createId,
-      report: deps.report,
-      ...(deps.trace ? { trace: deps.trace } : undefined),
-    });
-    const adopted = await exchange.adopt({
-      sessionId: session.sessionId,
-      attach: async () => upstreamSideband(session.sideband),
-      started: session.started,
-    });
-    if (!adopted) {
-      await exchange.stop();
-      throw new Error("the exchange could not stand on the session's sideband");
+    const scope = await deps.run(Scope.make());
+    const close = () => deps.run(Scope.close(scope, Exit.void));
+    try {
+      const exchange = await deps.run(Scope.extend(standing(session), scope));
+      return { ...exchange, stop: close };
+    } catch (error) {
+      await close();
+      throw error;
     }
-    // The look at the account's open offers runs for as long as the session stands; the exchange's stop ends it.
-    exchange.briefings.start();
-    return exchange;
   };
 }

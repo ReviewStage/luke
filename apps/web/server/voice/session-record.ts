@@ -1,5 +1,6 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
-import { Effect, Option, Schema } from "effect";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, Option, type ParseResult, Schema } from "effect";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -27,18 +28,69 @@ import type { WebStoreRun } from "../runtime.js";
  * null — the column's own word for a session that names no device — and a
  * briefing on offer stays unclaimed rather than claimed as someone else's.
  */
+/**
+ * What every method answers: an effect over the ambient client, so the socket
+ * that drives the record composes it into a fiber of its own and the edge
+ * that owns the connection is the one that runs it.
+ */
+type VoiceSessionRecordEffect<A> = Effect.Effect<
+  A,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient
+>;
+
+/** The session as its creation names it: the account, the live session, and the device the handshake claimed, if any. */
+interface VoiceSessionRegistration {
+  userId: string;
+  sessionId: string;
+  deviceId?: string | undefined;
+}
+
+/** A device row as the account claiming it names it. */
+interface VoiceSessionDeviceClaim {
+  userId: string;
+  deviceId: string;
+}
+
+/** A live session as the account that opened it names it. */
+interface VoiceSessionOwnership {
+  userId: string;
+  sessionId: string;
+}
+
+/** A usage snapshot, unconfirmed until the close. */
+interface VoiceSessionUsage {
+  sessionId: string;
+  seconds: number;
+}
+
+/** The close: the confirmed seconds and why the session ended. */
+interface VoiceSessionClose extends VoiceSessionUsage {
+  reason: VoiceCloseReason;
+}
+
 export interface VoiceSessionRecord {
-  register(input: {
-    userId: string;
-    sessionId: string;
-    deviceId?: string | undefined;
-  }): Promise<void>;
+  register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<void>;
   /** Whether the account holds the device row named: the check the door makes before a session is spent on the claim. */
-  deviceOwned(input: { userId: string; deviceId: string }): Promise<boolean>;
+  deviceOwned(input: VoiceSessionDeviceClaim): VoiceSessionRecordEffect<boolean>;
   /** Whether the account created the live session named: one lookup over the indexed pair. */
-  owned(input: { userId: string; sessionId: string }): Promise<boolean>;
-  noteUsage(input: { sessionId: string; seconds: number }): Promise<void>;
-  close(input: { sessionId: string; seconds: number; reason: VoiceCloseReason }): Promise<void>;
+  owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<boolean>;
+  noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
+  close(input: VoiceSessionClose): VoiceSessionRecordEffect<void>;
+}
+
+/**
+ * The record as `VoiceService` takes it: the same five, each run to a promise
+ * on the edge's own runner, since the service is a class of `ws` callbacks
+ * rather than a composition of fibers and a registration, a usage snapshot,
+ * and a close each fire from one of those callbacks.
+ */
+export interface PromisedVoiceSessionRecord {
+  register(input: VoiceSessionRegistration): Promise<void>;
+  deviceOwned(input: VoiceSessionDeviceClaim): Promise<boolean>;
+  owned(input: VoiceSessionOwnership): Promise<boolean>;
+  noteUsage(input: VoiceSessionUsage): Promise<void>;
+  close(input: VoiceSessionClose): Promise<void>;
 }
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
@@ -126,44 +178,51 @@ const closeSession = SqlSchema.void({
     ),
 });
 
-export function voiceSessionRecord(
-  run: WebStoreRun,
-  now: () => number = Date.now,
-): VoiceSessionRecord {
+export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRecord {
   const usage = (seconds: number, confirmed: boolean) => ({ seconds, confirmed });
   return {
     register: (input) =>
-      run(
-        registerSession({
-          userId: input.userId,
-          liveSessionId: input.sessionId,
-          delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          deviceId: input.deviceId ?? null,
-        }),
-      ),
-    deviceOwned: (input) => run(Effect.map(findHeldDevice(input), Option.isSome)),
+      registerSession({
+        userId: input.userId,
+        liveSessionId: input.sessionId,
+        delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+        deviceId: input.deviceId ?? null,
+      }),
+    deviceOwned: (input) => Effect.map(findHeldDevice(input), Option.isSome),
     owned: (input) =>
-      run(
-        Effect.map(
-          findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
-          Option.isSome,
-        ),
+      Effect.map(
+        findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
+        Option.isSome,
       ),
     noteUsage: (input) =>
-      run(
-        noteSessionUsage({
-          liveSessionId: input.sessionId,
-          usage: usage(input.seconds, false),
-        }),
-      ),
+      noteSessionUsage({
+        liveSessionId: input.sessionId,
+        usage: usage(input.seconds, false),
+      }),
     close: (input) =>
-      run(
-        closeSession({
-          liveSessionId: input.sessionId,
-          closedAt: new Date(now()),
-          closeReason: input.reason,
-          usage: usage(input.seconds, true),
-        }),
-      ),
+      closeSession({
+        liveSessionId: input.sessionId,
+        closedAt: new Date(now()),
+        closeReason: input.reason,
+        usage: usage(input.seconds, true),
+      }),
+  };
+}
+
+/**
+ * The promise face above, built over an edge's runner: the effects are what a
+ * test composes and what this runs, and the runner is always one built at an
+ * edge, never one this module makes.
+ */
+export function promisedVoiceSessionRecord(
+  run: WebStoreRun,
+  record: VoiceSessionRecord,
+): PromisedVoiceSessionRecord {
+  return {
+    register: (input) => run(record.register(input)),
+    deviceOwned: (input) => run(record.deviceOwned(input)),
+    owned: (input) => run(record.owned(input)),
+    noteUsage: (input) => run(record.noteUsage(input)),
+    close: (input) => run(record.close(input)),
   };
 }
