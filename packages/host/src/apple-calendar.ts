@@ -21,6 +21,7 @@ import {
   type UnparsedWireValue,
   unparsedWire,
 } from "@sidecar/wire";
+import { Duration, Effect, Either } from "effect";
 
 const ACCESS_WORDS = new Set<string>(Object.values(APPLE_CALENDAR_ACCESS));
 
@@ -45,10 +46,6 @@ const REQUEST_ACCESS_TIMEOUT_MS = 180_000;
 /** Long enough to find the switch in System Settings; not an open-ended hold. */
 const SETTINGS_WAIT_TIMEOUT_MS = 180_000;
 const SETTINGS_WAIT_POLL_MS = 3_000;
-
-function sleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
 
 /** A source's name heads a settings section; a paragraph is not a heading. */
 const MAXIMUM_CALENDAR_GROUP_LENGTH = 40;
@@ -93,7 +90,7 @@ export interface AppleCalendarReaderOptions {
    * takes effect on the next pass without the reader being rebuilt. Absent
    * means not connected, and the helper is never run at all.
    */
-  readConnection: () => Promise<AppleCalendarConnection | undefined>;
+  readConnection: () => Effect.Effect<AppleCalendarConnection | undefined>;
   /** Given rather than resolved: only the process that holds the device can find the helper bundle. */
   runHelper: AppleCalendarHelperRun;
   now?: () => number;
@@ -187,7 +184,7 @@ export const APPLE_CALENDAR_ACCESS_REFUSAL = {
  * which the helper itself intersects with the list the same read produced.
  */
 export class AppleCalendarReader {
-  readonly #readConnection: () => Promise<AppleCalendarConnection | undefined>;
+  readonly #readConnection: () => Effect.Effect<AppleCalendarConnection | undefined>;
   readonly #runHelper: AppleCalendarHelperRun;
   readonly #now: () => number;
   /** The last good observation, which stands in when a pass fails. */
@@ -208,31 +205,34 @@ export class AppleCalendarReader {
     this.#lastObservation = undefined;
   }
 
-  async observe(): Promise<AppleCalendarObservation | undefined> {
-    const connection = await this.#readConnection();
-    // Not connected, no read: the calendar is not connected, which is a
-    // different answer from a connected calendar with no meetings.
-    if (!connection) {
-      this.#lastObservation = undefined;
-      return undefined;
-    }
-    try {
-      const observation = await this.#observeConnection(connection);
-      // What the next failing pass stands: a clean read's lists, or a
-      // refusal's emptiness with its `revoked` — a transient failure after a
-      // withdrawal must not resurrect what the withdrawal already took, nor
-      // dress the row back up as connected.
-      this.#lastObservation = {
-        accountId: observation.accountId,
-        calendars: observation.calendars,
-        meetings: observation.meetings,
-        ...(observation.revoked ? { revoked: true } : undefined),
-      };
-      return observation;
-    } catch (error) {
+  observe(): Effect.Effect<AppleCalendarObservation | undefined> {
+    return Effect.gen(this, function* () {
+      const connection = yield* this.#readConnection();
+      // Not connected, no read: the calendar is not connected, which is a
+      // different answer from a connected calendar with no meetings.
+      if (!connection) {
+        this.#lastObservation = undefined;
+        return undefined;
+      }
+      const attempt = yield* Effect.either(this.#observeConnection(connection));
+      if (Either.isRight(attempt)) {
+        const observation = attempt.right;
+        // What the next failing pass stands: a clean read's lists, or a
+        // refusal's emptiness with its `revoked` — a transient failure after
+        // a withdrawal must not resurrect what the withdrawal already took,
+        // nor dress the row back up as connected.
+        this.#lastObservation = {
+          accountId: observation.accountId,
+          calendars: observation.calendars,
+          meetings: observation.meetings,
+          ...(observation.revoked ? { revoked: true } : undefined),
+        };
+        return observation;
+      }
       // A read that merely failed — the helper crashed, or answered
       // unreadably — says nothing about the user's intent, so what the Mac
       // last showed stands, with the why beside it.
+      const error = attempt.left;
       const message = error instanceof Error ? error.message : String(error);
       return {
         accountId: APPLE_CALENDAR_ID,
@@ -241,7 +241,7 @@ export class AppleCalendarReader {
         ...(this.#lastObservation?.revoked ? { revoked: true } : undefined),
         failure: `${APPLE_CALENDAR_ID}: ${message}`,
       };
-    }
+    });
   }
 
   /**
@@ -249,9 +249,11 @@ export class AppleCalendarReader {
    * connect press consults, so the panel only stands down for a dialog that
    * will actually appear.
    */
-  async status(): Promise<AppleCalendarAccess> {
-    return parseHelperReport(await this.#runHelper([HELPER_COMMAND.STATUS], OBSERVE_TIMEOUT_MS))
-      .access;
+  status(): Effect.Effect<AppleCalendarAccess, unknown> {
+    return Effect.map(
+      this.#runHelperEffect([HELPER_COMMAND.STATUS], OBSERVE_TIMEOUT_MS),
+      (report) => report.access,
+    );
   }
 
   /**
@@ -261,16 +263,16 @@ export class AppleCalendarReader {
    * needs — how far the grant went, the calendar list, and the calendar new
    * events land on.
    */
-  async requestAccess(): Promise<AppleCalendarAccessOutcome> {
-    const report = parseHelperReport(
-      await this.#runHelper([HELPER_COMMAND.REQUEST_ACCESS], REQUEST_ACCESS_TIMEOUT_MS),
+  requestAccess(): Effect.Effect<AppleCalendarAccessOutcome, unknown> {
+    return Effect.map(
+      this.#runHelperEffect([HELPER_COMMAND.REQUEST_ACCESS], REQUEST_ACCESS_TIMEOUT_MS),
+      (report) => ({
+        access: report.access,
+        calendars: report.calendars,
+        ...(report.defaultCalendarId ? { defaultCalendarId: report.defaultCalendarId } : undefined),
+        ...(report.failure ? { failure: report.failure } : undefined),
+      }),
     );
-    return {
-      access: report.access,
-      calendars: report.calendars,
-      ...(report.defaultCalendarId ? { defaultCalendarId: report.defaultCalendarId } : undefined),
-      ...(report.failure ? { failure: report.failure } : undefined),
-    };
   }
 
   /**
@@ -283,66 +285,87 @@ export class AppleCalendarReader {
    * a newer attempt, or the user giving up — and ends the wait where it
    * stands.
    */
-  async obtainAccess(options: {
+  obtainAccess(options: {
     openSystemSettings: () => void;
     superseded: () => boolean;
-  }): Promise<AppleCalendarAccessOutcome> {
-    let outcome = await this.requestAccess();
-    // A cancel that landed while the dialog stood ends the flow here: the
-    // grant, if given, stays macOS's own, but nobody is taken to System
-    // Settings for an ask they already gave up on.
-    if (options.superseded()) return outcome;
-    if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL && !outcome.failure) {
-      options.openSystemSettings();
-      const deadline = this.#now() + SETTINGS_WAIT_TIMEOUT_MS;
-      while (this.#now() < deadline && !options.superseded()) {
-        await sleep(SETTINGS_WAIT_POLL_MS);
-        const granted = await this.status()
-          .then((access) => access === APPLE_CALENDAR_ACCESS.FULL)
-          .catch(() => false);
-        if (granted) {
-          // Already authorized, so this raises no dialog: it is the seed
-          // read, run under the grant the switch just gave.
-          outcome = await this.requestAccess();
-          break;
+  }): Effect.Effect<AppleCalendarAccessOutcome, unknown> {
+    return Effect.gen(this, function* () {
+      let outcome = yield* this.requestAccess();
+      // A cancel that landed while the dialog stood ends the flow here: the
+      // grant, if given, stays macOS's own, but nobody is taken to System
+      // Settings for an ask they already gave up on.
+      if (options.superseded()) return outcome;
+      if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL && !outcome.failure) {
+        options.openSystemSettings();
+        const deadline = this.#now() + SETTINGS_WAIT_TIMEOUT_MS;
+        while (this.#now() < deadline && !options.superseded()) {
+          yield* Effect.sleep(Duration.millis(SETTINGS_WAIT_POLL_MS));
+          const granted = yield* this.status().pipe(
+            Effect.map((access) => access === APPLE_CALENDAR_ACCESS.FULL),
+            Effect.orElseSucceed(() => false),
+          );
+          if (granted) {
+            // Already authorized, so this raises no dialog: it is the seed
+            // read, run under the grant the switch just gave.
+            outcome = yield* this.requestAccess();
+            break;
+          }
         }
       }
-    }
-    return outcome;
+      return outcome;
+    });
   }
 
-  async #observeConnection(connection: AppleCalendarConnection): Promise<AppleCalendarObservation> {
-    const now = this.#now();
-    // The same window the Google free/busy read keeps to, so the two sources
-    // hold and release announcements on identical terms.
-    const output = await this.#runHelper(
-      [
-        HELPER_COMMAND.OBSERVE,
-        new Date(now - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
-        new Date(now + CALENDAR_LOOKAHEAD_MS).toISOString(),
-        ...connection.selectedCalendarIds,
-      ],
-      OBSERVE_TIMEOUT_MS,
+  /** One helper invocation and the parse of its output, joined as one failure channel. */
+  #runHelperEffect(
+    helperArguments: readonly string[],
+    timeoutMs: number,
+  ): Effect.Effect<ParsedHelperReport, unknown> {
+    return Effect.tryPromise({
+      try: () => this.#runHelper(helperArguments, timeoutMs),
+      catch: (error) => error,
+    }).pipe(
+      Effect.flatMap((output) =>
+        Effect.try({ try: () => parseHelperReport(output), catch: (error) => error }),
+      ),
     );
-    const report = parseHelperReport(output);
-    if (report.access !== APPLE_CALENDAR_ACCESS.FULL) {
-      // The system's own answer, not a read that failed: access withdrawn in
-      // System Settings takes the calendars and the meetings with it —
-      // nothing may keep standing on consent taken back. The connection and
-      // its choices stay stored, so access re-allowed reconnects on the next
-      // pass by itself.
+  }
+
+  #observeConnection(
+    connection: AppleCalendarConnection,
+  ): Effect.Effect<AppleCalendarObservation, unknown> {
+    return Effect.gen(this, function* () {
+      const now = this.#now();
+      // The same window the Google free/busy read keeps to, so the two
+      // sources hold and release announcements on identical terms.
+      const report = yield* this.#runHelperEffect(
+        [
+          HELPER_COMMAND.OBSERVE,
+          new Date(now - MAXIMUM_MEETING_LENGTH_MS).toISOString(),
+          new Date(now + CALENDAR_LOOKAHEAD_MS).toISOString(),
+          ...connection.selectedCalendarIds,
+        ],
+        OBSERVE_TIMEOUT_MS,
+      );
+      if (report.access !== APPLE_CALENDAR_ACCESS.FULL) {
+        // The system's own answer, not a read that failed: access withdrawn
+        // in System Settings takes the calendars and the meetings with it —
+        // nothing may keep standing on consent taken back. The connection and
+        // its choices stay stored, so access re-allowed reconnects on the
+        // next pass by itself.
+        return {
+          accountId: APPLE_CALENDAR_ID,
+          calendars: [],
+          meetings: [],
+          failure: APPLE_CALENDAR_ACCESS_REFUSAL[report.access],
+          revoked: true,
+        };
+      }
       return {
         accountId: APPLE_CALENDAR_ID,
-        calendars: [],
-        meetings: [],
-        failure: APPLE_CALENDAR_ACCESS_REFUSAL[report.access],
-        revoked: true,
+        calendars: report.calendars,
+        meetings: meetingsFromBusyIntervals(report.busy, now),
       };
-    }
-    return {
-      accountId: APPLE_CALENDAR_ID,
-      calendars: report.calendars,
-      meetings: meetingsFromBusyIntervals(report.busy, now),
-    };
+    });
   }
 }
