@@ -51,7 +51,7 @@ function manager(options: {
         options.exchangeCode ??
         (async () => ({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
     } as unknown as AccountClient;
-    const instance = new AccountSessionManager({
+    const instance = yield* AccountSessionManager.make({
       client: options.client ?? fixtureClient,
       store: {
         readAccount: () => Effect.sync(() => stored),

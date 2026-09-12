@@ -31,7 +31,6 @@
     "packages/brain/src/store/testing.ts",
     "packages/calendar/src/oauth.ts",
     "packages/credentials/src/account/client.ts",
-    "packages/credentials/src/account/session-manager.ts",
     "packages/credentials/src/single-flight.ts",
     "packages/devtrace/src/trace-writer.ts",
     "packages/feedback/src/delivery.ts",

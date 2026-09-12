@@ -101,10 +101,22 @@ export interface AccountSessionManagerOptions {
 }
 
 export class AccountSessionManager {
+  /**
+   * The manager as an effect that builds its own `PubSub`, since Effect gives
+   * it no constructor that is not itself an effect: `compose-account.ts`
+   * yields one per host lifetime rather than reaching for `new` outside a run.
+   */
+  static make(options: AccountSessionManagerOptions): Effect.Effect<AccountSessionManager> {
+    return Effect.map(
+      PubSub.unbounded<AccountSnapshot>(),
+      (changesPubSub) => new AccountSessionManager(options, changesPubSub),
+    );
+  }
+
   readonly #options: AccountSessionManagerOptions;
   /** One refresh however many callers ask for it at once; every ask joins the flight already under way. */
   readonly refreshOnce: () => Effect.Effect<void, unknown>;
-  readonly #changesPubSub: PubSub.PubSub<AccountSnapshot> = Effect.runSync(PubSub.unbounded());
+  readonly #changesPubSub: PubSub.PubSub<AccountSnapshot>;
   /**
    * Every snapshot this session settles on, in order, as the subscription a
    * subscriber's own fiber pumps rather than a callback this class runs: the
@@ -112,15 +124,19 @@ export class AccountSessionManager {
    * the subscriber's scope closing is the release, so nothing here holds a
    * handle to give back.
    */
-  readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope> =
-    Stream.fromPubSub(this.#changesPubSub, { scoped: true });
+  readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>;
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
   #signInRunning: Fiber.RuntimeFiber<AccountSnapshot, Error> | undefined;
   #cancelSignIn: (() => void) | undefined;
 
-  constructor(options: AccountSessionManagerOptions) {
+  private constructor(
+    options: AccountSessionManagerOptions,
+    changesPubSub: PubSub.PubSub<AccountSnapshot>,
+  ) {
     this.#options = options;
+    this.#changesPubSub = changesPubSub;
+    this.changes = Stream.fromPubSub(this.#changesPubSub, { scoped: true });
     this.refreshOnce = singleFlightEffect(() => this.refresh());
   }
 
