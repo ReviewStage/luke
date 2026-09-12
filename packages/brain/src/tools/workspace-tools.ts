@@ -24,9 +24,9 @@ import type { ToolContext, ToolModule } from "./tool-module.js";
 
 /** How the workspace tools reach the agent's own files: bounded to the workspace by the host that supplies it. */
 export interface BrainWorkspaceAccess {
-  read(name: string): Promise<WorkspaceReadResult>;
-  write(name: string, content: string): Promise<WorkspaceWriteResult>;
-  loadSkill(location: string): Promise<SkillLoad>;
+  read(name: string): Effect.Effect<WorkspaceReadResult>;
+  write(name: string, content: string): Effect.Effect<WorkspaceWriteResult>;
+  loadSkill(location: string): Effect.Effect<SkillLoad>;
 }
 
 export interface WorkspaceToolContext extends ToolContext {
@@ -108,7 +108,7 @@ const READ_WORKSPACE_FILE: WorkspaceToolModule = {
       if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
       if (!isWireString(input.name)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
       const name = input.name;
-      const read = yield* Effect.promise(() => workspace.read(name));
+      const read = yield* workspace.read(name);
       return read.ok
         ? { status: ACTION_RESULT_STATUS.ACCEPTED, content: read.content }
         : rejection(read.reason);
@@ -133,12 +133,10 @@ const WRITE_WORKSPACE_FILE: WorkspaceToolModule = {
         return Effect.succeed(rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS));
       }
       return context.journal(
-        Effect.map(
-          Effect.promise(() => workspace.write(name, content)),
-          (written) =>
-            written.ok
-              ? { status: ACTION_RESULT_STATUS.ACCEPTED, chars: written.chars }
-              : rejection(written.reason),
+        Effect.map(workspace.write(name, content), (written) =>
+          written.ok
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED, chars: written.chars }
+            : rejection(written.reason),
         ),
       );
     });
@@ -158,7 +156,7 @@ const LOAD_SKILL: WorkspaceToolModule = {
       if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
       if (!isWireString(input.location)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
       const location = input.location;
-      const loaded = yield* Effect.promise(() => workspace.loadSkill(location));
+      const loaded = yield* workspace.loadSkill(location);
       return loaded.ok
         ? {
             status: ACTION_RESULT_STATUS.ACCEPTED,

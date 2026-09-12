@@ -76,9 +76,10 @@ const NO_SKILLS = "not loaded: this agent lists no skills";
 
 /**
  * The workspace tools' reach: the rows, bounded like the files, with no
- * skills to load. `BrainWorkspaceAccess` is the brain's own promise-shaped
- * contract, so the runner the tool call already runs on is handed in here
- * rather than composed away.
+ * skills to load. `BrainWorkspaceAccess` answers effects the brain's own
+ * fiber runs, but a row is read on the request's connection rather than on
+ * that fiber, so the runner the tool call already runs on is handed in here
+ * and each method is the effect of running its own read through it.
  */
 export function hostedWorkspaceAccess(
   run: FiberStoreRunner,
@@ -87,23 +88,25 @@ export function hostedWorkspaceAccess(
   now: () => number,
 ): BrainWorkspaceAccess {
   return {
-    read: async (name) => {
-      const path = hostedWorkspacePath(name);
-      if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
-      const row = await run(store.workspace.read(userId, path));
-      if (!row) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND };
-      return { ok: true, content: row.content.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) };
-    },
-    write: async (name, content) => {
-      const path = hostedWorkspacePath(name);
-      if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
-      if (content.length > BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) {
-        return { ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE };
-      }
-      await run(store.workspace.write(userId, path, content, now()));
-      return { ok: true, chars: content.length };
-    },
-    loadSkill: async () => ({ ok: false, reason: NO_SKILLS }),
+    read: (name) =>
+      Effect.promise(async () => {
+        const path = hostedWorkspacePath(name);
+        if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
+        const row = await run(store.workspace.read(userId, path));
+        if (!row) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND };
+        return { ok: true, content: row.content.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) };
+      }),
+    write: (name, content) =>
+      Effect.promise(async () => {
+        const path = hostedWorkspacePath(name);
+        if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
+        if (content.length > BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) {
+          return { ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE };
+        }
+        await run(store.workspace.write(userId, path, content, now()));
+        return { ok: true, chars: content.length };
+      }),
+    loadSkill: () => Effect.succeed({ ok: false, reason: NO_SKILLS }),
   };
 }
 

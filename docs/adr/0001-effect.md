@@ -871,10 +871,14 @@ end, and a handler composes its whole request into the one effect `runWeb`
 answers.
 
 What still takes a promise face are four contracts this package does not own.
-eve's tool contracts — `BrainWorkspaceAccess`, `HostedFactsWriter`,
-`HostedTranscriptReads` — are promises because a tool execution is one, so
-`brainHost`'s `runTool` reads the runner from its own fiber and builds the
-three readers over it. eve's stream handler, and the `StreamRelay` and
+eve's tool contracts — `HostedFactsWriter` and `HostedTranscriptReads` — are
+promises because a tool execution is one, so `brainHost`'s `runTool` reads the
+runner from its own fiber and builds the two readers over it.
+`BrainWorkspaceAccess` left that list in P12-16b and answers effects like the
+brain's other tool seams, but `hostedWorkspaceAccess` is built over the same
+runner all the same: the row it reads is on the request's own connection,
+which the brain's fiber carries no `SqlClient` for, so each of its three
+methods is the effect of running its own read through that runner. eve's stream handler, and the `StreamRelay` and
 `carryStop` beneath it, answer eve a promise, so `brainHost`'s `relay` builds
 them over the same runner through the `Promised` mapped type beside it. The
 turn event stream's polling body runs inside the `ReadableStream` its handler
@@ -979,9 +983,14 @@ turn's own fiber runs, so the flush before a compaction is one effect inside
 another and the host's memory maintenance builds the housekeeping turn's
 effect rather than carrying it. The
 `ToolExecutor` seam left the list in P12-15c and the read tool's
-whole-transcript read went with it into the tool loop's own fiber; what
-carries a read here now is the prefetch, whose slots are a promise memo until
-P12-02's own row moves them. A defect is squashed back to the error that
+whole-transcript read went with it into the tool loop's own fiber. What
+carries a read here now is the prefetch alone, and P12-16b took its slot memo
+off this door: a memoized read is an `Effect.cached` effect held under the
+tool and its arguments rather than a promise, and the reads one plan named
+are one carried batch rather than one carry per read. What the prefetch still
+carries is the plan itself — the policy it resolves, the planner's call, and
+the summary — because a slot runs while the developer is still speaking and
+has no fiber of its own until P12-02 gives it one. A defect is squashed back to the error that
 caused it, so a store, a listener, or an engine that threw reaches the caller
 as the error it threw rather than as the fiber failure that carried it.
 P12-04 deletes it with those seams.
@@ -1007,14 +1016,24 @@ brain answers an effect with it — the action modules, the reads, the
 briefing, delegation, the workspace writes — so the journal that records a
 call before it runs and settles it after is one effect around another, and
 the batch the runtime already held uninterruptible is still what keeps a
-dispatched effect from being parted from its result. What stays a promise
-inside the executor is what the host hands it: the turn's checkpoint, the
-whole-transcript read, and the child and workspace access. The memory
-provider's tools left that list in P12-16a; what is still a promise beneath
-them is the notebook index's own `search` and `get`, which read through the
-store client's port face, and the recent daily notes, which the OpenClaw
-workspace port answers. Both are wrapped where the provider is built
-(`packages/memory/src/provider.ts`) rather than where a call is dispatched.
+dispatched effect from being parted from its result. Nothing the executor is handed is
+a promise any more. The memory provider's tools left that list in P12-16a and
+the last four left it in P12-16b: `ToolExecutorDependencies`'s `readWhole` and
+`checkpoint` and the `BrainChildAccess` and `BrainWorkspaceAccess` contracts
+each answer an `Effect` the turn's own fiber runs, so the whole-transcript
+read is one effect inside the journal's rather than a promise carried onto
+the host's runtime. That read's race against the run's signal
+(`readWholeTranscript`) is `Effect.interruptible` for the reason
+`guardedRead` is: the race ends by interrupting whichever arm lost, and the
+batch it now runs inside is uninterruptible, so a wait on a signal that never
+fires could otherwise never be interrupted at all. What is still a promise stands one layer out, where the
+host builds each of them and is wrapped there rather than where a call is
+dispatched: the ledger's own save (`checkpoint`), the child service and the
+conversation directory (`packages/host/src/brain/wiring-children.ts`), the
+OpenClaw workspace and skills ports (`wiring.ts`), the provider's transcript
+read, and, for the memory provider, the notebook index's own `search` and
+`get` over the store client's port face and the recent daily notes the same
+workspace port answers (`packages/memory/src/provider.ts`).
 
 The rest of this package's Promise faces turned out to stand on
 `BrainAgent`'s own public surface rather than on the vocabulary's: a wake, an

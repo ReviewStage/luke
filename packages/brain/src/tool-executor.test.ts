@@ -96,18 +96,20 @@ function executor(
     children,
     memory,
     workspace: {
-      read: async (name) => ({ ok: true, content: `content of ${name}` }),
-      write: async (name, content) => {
-        written.push([name, content]);
-        return { ok: true, chars: content.length };
-      },
-      loadSkill: async () => ({ ok: true, instructions: "do it", truncated: false }),
+      read: (name) => Effect.succeed({ ok: true, content: `content of ${name}` }),
+      write: (name, content) =>
+        Effect.sync(() => {
+          written.push([name, content]);
+          return { ok: true, chars: content.length };
+        }),
+      loadSkill: () => Effect.succeed({ ok: true, instructions: "do it", truncated: false }),
     },
-    readWhole: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
-    checkpoint: async () => {
-      checkpoints.push(journal.entries().length);
-      return true;
-    },
+    readWhole: () => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
+    checkpoint: () =>
+      Effect.sync(() => {
+        checkpoints.push(journal.entries().length);
+        return true;
+      }),
     runRevoked: () => false,
     now: () => 1_800_000_000_000,
   };
@@ -261,44 +263,49 @@ test("the session tools render the host's typed answers in the records the model
   const cancelled: string[] = [];
   const children: BrainChildAccess = {
     sessionKey: MAIN_SESSION_KEY,
-    spawn: async (ask) =>
-      ask.label === "refused"
-        ? { accepted: false, reason: CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT, detail: "5 active" }
-        : {
-            accepted: true,
-            receipt: {
-              childId: "child-2",
-              childSessionKey: childSessionKey("child-2"),
-              childRunId: "child-2-run",
-              context: CHILD_CONTEXT_MODE.ISOLATED,
-              contextNote: "started isolated",
-              depth: 1,
+    spawn: (ask) =>
+      Effect.succeed(
+        ask.label === "refused"
+          ? { accepted: false, reason: CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT, detail: "5 active" }
+          : {
+              accepted: true,
+              receipt: {
+                childId: "child-2",
+                childSessionKey: childSessionKey("child-2"),
+                childRunId: "child-2-run",
+                context: CHILD_CONTEXT_MODE.ISOLATED,
+                contextNote: "started isolated",
+                depth: 1,
+              },
             },
-          },
-    list: async () => [{ record, completion }],
-    cancel: async (childId) => {
-      if (childId !== "child-1") return undefined;
-      cancelled.push(childId);
-      return { ok: true, remaining: [] };
-    },
-    conversations: async () => [
-      {
-        sessionKey: MAIN_SESSION_KEY,
-        kind: CONVERSATION_KIND.MAIN,
-        name: "main",
-        createdAt: NOW,
-        lastActivityAt: NOW,
-      },
-      {
-        sessionKey: childSessionKey("child-0"),
-        kind: CONVERSATION_KIND.CHILD,
-        name: "archived",
-        createdAt: NOW,
-        lastActivityAt: NOW,
-        archivedAt: NOW,
-      },
-    ],
-    lines: async (childId) => (childId === "child-1" ? ["ask: hi", "reply: done"] : undefined),
+      ),
+    list: () => Effect.succeed([{ record, completion }]),
+    cancel: (childId) =>
+      Effect.sync(() => {
+        if (childId !== "child-1") return undefined;
+        cancelled.push(childId);
+        return { ok: true, remaining: [] };
+      }),
+    conversations: () =>
+      Effect.succeed([
+        {
+          sessionKey: MAIN_SESSION_KEY,
+          kind: CONVERSATION_KIND.MAIN,
+          name: "main",
+          createdAt: NOW,
+          lastActivityAt: NOW,
+        },
+        {
+          sessionKey: childSessionKey("child-0"),
+          kind: CONVERSATION_KIND.CHILD,
+          name: "archived",
+          createdAt: NOW,
+          lastActivityAt: NOW,
+          archivedAt: NOW,
+        },
+      ]),
+    lines: (childId) =>
+      Effect.succeed(childId === "child-1" ? ["ask: hi", "reply: done"] : undefined),
   };
   const h = executor(BRAIN_TURN_TRIGGER.ASK, children);
 

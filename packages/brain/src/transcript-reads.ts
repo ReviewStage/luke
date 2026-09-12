@@ -121,16 +121,21 @@ export interface WholeTranscriptRead {
  * dispatched inside the batch of calls the model emitted, which the tool
  * loop holds uninterruptible as one: a revocation reaches this wait only as
  * the signal, and a provider that never answers would otherwise hold the
- * batch — and the run behind it — open past the deadline that fired it.
+ * batch — and the run behind it — open past the deadline that fired it. The
+ * race itself is interruptible for the same reason `guardedRead` is: it ends
+ * by interrupting whichever arm lost, and under that uninterruptible batch a
+ * wait on the signal could never be interrupted at all.
  */
 export function readWholeTranscript(
   identity: SessionIdentity,
   options: WholeTranscriptRead,
 ): Effect.Effect<WireRecord> {
   return Effect.map(
-    settledUnlessAborted(
-      Effect.either(Effect.tryPromise(async () => await options.read(identity))),
-      options.signal,
+    Effect.interruptible(
+      settledUnlessAborted(
+        Effect.either(Effect.tryPromise(async () => await options.read(identity))),
+        options.signal,
+      ),
     ),
     Option.match({
       onNone: () => rejection(REFUSAL_REASON.RUN_REVOKED),

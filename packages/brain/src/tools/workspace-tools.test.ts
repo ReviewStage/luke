@@ -39,12 +39,13 @@ function context(access: { workspace: BrainWorkspaceAccess | undefined }) {
 function fakeWorkspace() {
   const written: [string, string][] = [];
   const workspace: BrainWorkspaceAccess = {
-    read: async (name) => ({ ok: true, content: `content of ${name}` }),
-    write: async (name, content) => {
-      written.push([name, content]);
-      return { ok: true, chars: content.length };
-    },
-    loadSkill: async () => ({ ok: true, instructions: "do it", truncated: false }),
+    read: (name) => Effect.succeed({ ok: true, content: `content of ${name}` }),
+    write: (name, content) =>
+      Effect.sync(() => {
+        written.push([name, content]);
+        return { ok: true, chars: content.length };
+      }),
+    loadSkill: () => Effect.succeed({ ok: true, instructions: "do it", truncated: false }),
   };
   return { workspace, written };
 }
