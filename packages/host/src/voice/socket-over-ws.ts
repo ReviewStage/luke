@@ -1,4 +1,5 @@
 import {
+  holdSocket,
   type LiveSocket,
   type OpenSocket,
   SOCKET_OPEN_FAULT,
@@ -55,7 +56,11 @@ export const openSocketOverWs: OpenSocket = (url, headers) =>
       settled = true;
       resolve(opening);
     };
-    socket.once("open", () => settle({ socket: socketOver(socket) }));
+    // Held here, inside the open handler and not in the caller's continuation: `ws` re-queues the
+    // bytes that followed the handshake response and flushes them on the next tick, which runs
+    // before any promise continuation, so a frame in that same chunk would otherwise be emitted to
+    // no listener. The hold's listener stands before this handler returns.
+    socket.once("open", () => settle({ socket: holdSocket(socketOver(socket)) }));
     socket.once("unexpected-response", (_request, response) => {
       settle({ fault: SOCKET_OPEN_FAULT.REFUSED, status: response.statusCode ?? 0 });
       socket.terminate();

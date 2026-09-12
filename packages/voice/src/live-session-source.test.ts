@@ -470,7 +470,13 @@ test("the hosted source records a socket closed or silent before it answered as 
   assert.equal(await quiet.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
   assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
   assert.equal(silent.sockets[0]?.closedByClient, true);
-  assert.deepEqual(silent.sockets[0]?.listenerCounts, { messages: 0, closes: 0 });
+  // The hold's one listener of each kind stands for the socket's life; the wait itself left none.
+  assert.deepEqual(silent.sockets[0]?.listenerCounts, { messages: 1, closes: 1 });
+  // A frame or close arriving after the deadline settled the wait records nothing over its outcome.
+  silent.sockets[0]?.receiveText("not a document");
+  silent.sockets[0]?.closeFromServer({ code: 1000 });
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
 });
 
 function attachedFrame(sessionId = SESSION_ID) {
@@ -759,4 +765,108 @@ test("the hosted source names this installation's device on the create handshake
     }),
   );
   assert.deepEqual(unregistered.opens[0]?.headers, { authorization: "Bearer token-1" });
+});
+
+/** An opening whose far side answers the first frame and speaks again in the same tick, before any continuation runs. */
+function answeringThenSpeaking(
+  answer: ParsedJsonObject,
+  spoken: ParsedJsonObject[],
+): ScriptedOpening {
+  return (socket) => {
+    socket.onSent(() =>
+      queueMicrotask(() => {
+        socket.receive(answer);
+        for (const frame of spoken) socket.receive(frame);
+      }),
+    );
+    return undefined;
+  };
+}
+
+test("a frame the service sends right behind session.created, before the sideband subscribes, reaches the sideband in order", async () => {
+  const script = scriptedOpenSocket([
+    answeringThenSpeaking(createdFrame(), [
+      { type: LIVE_SERVER_EVENT.SESSION_STARTED, event_id: "ev_1", session: { id: SESSION_ID } },
+      { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "ev_2", client_event_id: "c_1" },
+    ]),
+  ]);
+  const source = hosted(script);
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const seen: LiveServerEvent[] = [];
+  sideband.onEvent((event) => seen.push(event));
+  assert.deepEqual(
+    seen.map((event) => event.type),
+    [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
+  );
+});
+
+test("a frame the service sends right behind session.attached, before the recovering socket adopts the connection, reaches the sideband", async () => {
+  const script = scriptedOpenSocket([
+    answering(createdFrame()),
+    answeringThenSpeaking(attachedFrame(), [
+      { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "ev_2", client_event_id: "c_2" },
+    ]),
+  ]);
+  const source = reattaching(script, { readAccessToken: async () => "token-2" });
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const seen: LiveServerEvent[] = [];
+  sideband.onEvent((event) => seen.push(event));
+  const [first] = script.sockets;
+  assert.ok(first);
+  first.closeFromServer({ code: 1006 });
+  await openedSockets(script, 2);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(
+    seen.map((event) => event.type),
+    [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
+  );
+});
+
+test("a close that lands in the keyed attach's open gap reaches the sideband that subscribes after the attached flag, and the flag reads false", async () => {
+  const { fetchLike } = openAi([created()]);
+  const script = scriptedOpenSocket([
+    (socket) => {
+      queueMicrotask(() => socket.closeFromServer({ code: 1006 }));
+      return undefined;
+    },
+  ]);
+  const source = new KeyedLiveSessionSource({
+    apiKey: "sk-test",
+    fetch: fetchLike,
+    openSocket: script.openSocket,
+    now: () => NOW,
+  });
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const closes: (number | undefined)[] = [];
+  sideband.onClose((close) => closes.push(close.code));
+  assert.deepEqual(closes, [1006]);
+  assert.equal(source.diagnostics().sidebandAttached, false);
+});
+
+test("a normal close right behind session.created ends the recovering socket, and the sideband that subscribes afterwards is told", async () => {
+  const script = scriptedOpenSocket([
+    (socket) => {
+      socket.onSent(() =>
+        queueMicrotask(() => {
+          socket.receive(createdFrame());
+          socket.closeFromServer({ code: 1000 });
+        }),
+      );
+      return undefined;
+    },
+  ]);
+  const source = hosted(script);
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const closes: (number | undefined)[] = [];
+  sideband.onClose((close) => closes.push(close.code));
+  assert.deepEqual(closes, [1000]);
+  assert.equal(script.sockets.length, 1);
 });

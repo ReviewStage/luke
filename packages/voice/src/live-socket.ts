@@ -4,6 +4,7 @@ import {
   type LiveServerEvent,
   parseLiveServerEvent,
 } from "@sidecar/live";
+import type { HeldSocket } from "./held-socket.js";
 
 /**
  * The socket seam a live session source opens its trusted connections
@@ -41,16 +42,20 @@ export type SocketOpenFailure =
       errorName?: string;
     };
 
-export type SocketOpening = { socket: LiveSocket } | SocketOpenFailure;
+export type SocketOpening = { socket: HeldSocket } | SocketOpenFailure;
 
-export function socketOpened(opening: SocketOpening): opening is { socket: LiveSocket } {
+export function socketOpened(opening: SocketOpening): opening is { socket: HeldSocket } {
   return "socket" in opening;
 }
 
 /**
  * Opens one WebSocket and settles once the handshake has: with the socket, or
  * with why the upgrade was refused. The headers are the handshake's alone, and
- * the one this package ever sets is the bearer the endpoint takes.
+ * the one this package ever sets is the bearer the endpoint takes. The socket
+ * settled with is held (`holdSocket`) from inside the transport's own open
+ * handler, so a frame or a close in the handshake's own chunk waits for the
+ * consumer that subscribes in the continuation; every implementation of this
+ * seam, the host's over `ws` and the tests' scripted one, keeps that contract.
  */
 export type OpenSocket = (
   url: string,

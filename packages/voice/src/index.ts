@@ -7,6 +7,7 @@ export {
   type VoiceCapabilityPolicy,
   type VoiceSettings,
 } from "./capability-assembler.js";
+export { HELD_SOCKET, type HeldArrival, type HeldSocket, holdSocket } from "./held-socket.js";
 export {
   environmentLiveVoice,
   HOSTED_REATTACH_DELAYS_MS,
