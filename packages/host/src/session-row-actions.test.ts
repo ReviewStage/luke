@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { ACTION_REFUSAL } from "@sidecar/actions";
 import {
   PRODUCT_EVENT,
@@ -19,7 +20,7 @@ import {
   type Session,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
-import { test } from "vitest";
+import { Effect, Fiber } from "effect";
 import { createSessionRowActions } from "./session-row-actions.js";
 
 /*
@@ -72,9 +73,9 @@ function fixture(outcome: HostedActionOutcome, drawn: readonly Session[] = [CLOU
         return outcome;
       },
     },
-    refresh: async () => {
+    refresh: Effect.sync(() => {
       recorded.refreshes += 1;
-    },
+    }),
     recordProductEvent: (name, properties) => {
       recorded.events.push({ name, properties });
     },
@@ -87,96 +88,143 @@ const identityOf = (session: Session) => ({
   providerSessionId: session.providerSessionId,
 });
 
-test("a session the drawn roster does not hold is refused without a call", async () => {
-  const { actions, recorded } = fixture({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
-  const result = await actions.sendMessage(
-    { providerId: CLOUD.providerId, providerSessionId: "chat-nobody-drew" },
-    "hello",
-  );
-  assert.deepEqual(result, {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: ACTION_REFUSAL.NO_SESSION,
-  });
-  assert.equal(recorded.calls.length, 0);
-  assert.equal(recorded.refreshes, 0);
-});
+it.effect("a session the drawn roster does not hold is refused without a call", () =>
+  Effect.gen(function* () {
+    const { actions, recorded } = fixture({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
+    const result = yield* actions.sendMessage(
+      { providerId: CLOUD.providerId, providerSessionId: "chat-nobody-drew" },
+      "hello",
+    );
+    assert.deepEqual(result, {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: ACTION_REFUSAL.NO_SESSION,
+    });
+    assert.equal(recorded.calls.length, 0);
+    assert.equal(recorded.refreshes, 0);
+  }),
+);
 
-test("a session whose provider has no endpoint from this Mac is unsupported without a call", async () => {
-  const { actions, recorded } = fixture({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
-  const result = await actions.executeControl(identityOf(LOCAL), "cancel-run");
-  assert.equal(result.status, ACTION_RESULT_STATUS.UNSUPPORTED);
-  assert.equal(recorded.calls.length, 0);
-});
+it.effect(
+  "a session whose provider has no endpoint from this Mac is unsupported without a call",
+  () =>
+    Effect.gen(function* () {
+      const { actions, recorded } = fixture({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
+      const result = yield* actions.executeControl(identityOf(LOCAL), "cancel-run");
+      assert.equal(result.status, ACTION_RESULT_STATUS.UNSUPPORTED);
+      assert.equal(recorded.calls.length, 0);
+    }),
+);
 
-test("an accepted write names the drawn session, redraws the rows, and is counted once", async () => {
-  const { actions, recorded } = fixture({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
+it.effect("an accepted write names the drawn session, redraws the rows, and is counted once", () =>
+  Effect.gen(function* () {
+    const { actions, recorded } = fixture({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
 
-  assert.deepEqual(await actions.sendMessage(identityOf(CLOUD), "ship it"), {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-  });
-  assert.deepEqual(await actions.executeControl(identityOf(CLOUD), "cancel-run"), {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-  });
+    assert.deepEqual(yield* actions.sendMessage(identityOf(CLOUD), "ship it"), {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+    });
+    assert.deepEqual(yield* actions.executeControl(identityOf(CLOUD), "cancel-run"), {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+    });
 
-  assert.deepEqual(recorded.calls, [
-    { target: identityOf(CLOUD), ask: "ship it" },
-    { target: identityOf(CLOUD), ask: "cancel-run" },
-  ]);
-  assert.equal(recorded.refreshes, 2);
-  assert.deepEqual(recorded.events, [
-    {
-      name: PRODUCT_EVENT.SESSION_ACTION_SEND,
-      properties: {
-        provider_id: CLOUD.providerId,
-        session_action: PRODUCT_SESSION_ACTION.MESSAGE_SEND,
+    assert.deepEqual(recorded.calls, [
+      { target: identityOf(CLOUD), ask: "ship it" },
+      { target: identityOf(CLOUD), ask: "cancel-run" },
+    ]);
+    assert.equal(recorded.refreshes, 2);
+    assert.deepEqual(recorded.events, [
+      {
+        name: PRODUCT_EVENT.SESSION_ACTION_SEND,
+        properties: {
+          provider_id: CLOUD.providerId,
+          session_action: PRODUCT_SESSION_ACTION.MESSAGE_SEND,
+        },
       },
-    },
-    {
-      name: PRODUCT_EVENT.SESSION_ACTION_SEND,
-      properties: {
-        provider_id: CLOUD.providerId,
-        session_action: PRODUCT_SESSION_ACTION.CONTROL_RUN,
+      {
+        name: PRODUCT_EVENT.SESSION_ACTION_SEND,
+        properties: {
+          provider_id: CLOUD.providerId,
+          session_action: PRODUCT_SESSION_ACTION.CONTROL_RUN,
+        },
       },
-    },
-  ]);
-});
+    ]);
+  }),
+);
 
-test("the service's refusal reaches the row as written, redraws, and is not counted", async () => {
-  const { actions, recorded } = fixture({
-    answer: { result: ACTION_RESULT_STATUS.REJECTED, reason: "That run has ended." },
-  });
-  assert.deepEqual(await actions.executeControl(identityOf(CLOUD), "cancel-run"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: "That run has ended.",
-  });
-  assert.equal(recorded.refreshes, 1);
-  assert.equal(recorded.events.length, 0);
-});
+it.effect("the service's refusal reaches the row as written, redraws, and is not counted", () =>
+  Effect.gen(function* () {
+    const { actions, recorded } = fixture({
+      answer: { result: ACTION_RESULT_STATUS.REJECTED, reason: "That run has ended." },
+    });
+    assert.deepEqual(yield* actions.executeControl(identityOf(CLOUD), "cancel-run"), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: "That run has ended.",
+    });
+    assert.equal(recorded.refreshes, 1);
+    assert.equal(recorded.events.length, 0);
+  }),
+);
 
-test("a call that never left is a refusal, and one that lost its answer is unknown", async () => {
-  const unsent = fixture({ failure: HOSTED_ACTION_FAILURE.NOT_SENT });
-  assert.equal(
-    (await unsent.actions.sendMessage(identityOf(CLOUD), "hello")).status,
-    ACTION_RESULT_STATUS.REJECTED,
-  );
+it.effect("a call that never left is a refusal, and one that lost its answer is unknown", () =>
+  Effect.gen(function* () {
+    const unsent = fixture({ failure: HOSTED_ACTION_FAILURE.NOT_SENT });
+    assert.equal(
+      (yield* unsent.actions.sendMessage(identityOf(CLOUD), "hello")).status,
+      ACTION_RESULT_STATUS.REJECTED,
+    );
 
-  const refused = fixture({ failure: HOSTED_ACTION_FAILURE.REFUSED });
-  assert.equal(
-    (await refused.actions.sendMessage(identityOf(CLOUD), "hello")).status,
-    ACTION_RESULT_STATUS.REJECTED,
-  );
+    const refused = fixture({ failure: HOSTED_ACTION_FAILURE.REFUSED });
+    assert.equal(
+      (yield* refused.actions.sendMessage(identityOf(CLOUD), "hello")).status,
+      ACTION_RESULT_STATUS.REJECTED,
+    );
 
-  const lost = fixture({ failure: HOSTED_ACTION_FAILURE.LOST });
-  assert.equal(
-    (await lost.actions.sendMessage(identityOf(CLOUD), "hello")).status,
-    UNKNOWN_ACTION_STATUS,
-  );
+    const lost = fixture({ failure: HOSTED_ACTION_FAILURE.LOST });
+    assert.equal(
+      (yield* lost.actions.sendMessage(identityOf(CLOUD), "hello")).status,
+      UNKNOWN_ACTION_STATUS,
+    );
 
-  const unreadable = fixture({ failure: HOSTED_ACTION_FAILURE.UNREADABLE });
-  assert.equal(
-    (await unreadable.actions.executeControl(identityOf(CLOUD), "cancel-run")).status,
-    UNKNOWN_ACTION_STATUS,
-  );
-  assert.equal(unreadable.recorded.refreshes, 1);
-  assert.equal(unreadable.recorded.events.length, 0);
-});
+    const unreadable = fixture({ failure: HOSTED_ACTION_FAILURE.UNREADABLE });
+    assert.equal(
+      (yield* unreadable.actions.executeControl(identityOf(CLOUD), "cancel-run")).status,
+      UNKNOWN_ACTION_STATUS,
+    );
+    assert.equal(unreadable.recorded.refreshes, 1);
+    assert.equal(unreadable.recorded.events.length, 0);
+  }),
+);
+
+it.effect("a write the service already carried settles though its caller is interrupted", () =>
+  Effect.gen(function* () {
+    const recorded = { refreshes: 0, events: 0 };
+    let release: (() => void) | undefined;
+    const actions = createSessionRowActions({
+      drawn: () => [CLOUD, LOCAL],
+      client: {
+        sendMessage: () =>
+          new Promise<HostedActionOutcome>((resolve) => {
+            release = () => resolve({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
+          }),
+        executeControl: async () => ({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } }),
+      },
+      refresh: Effect.sync(() => {
+        recorded.refreshes += 1;
+      }),
+      recordProductEvent: () => {
+        recorded.events += 1;
+      },
+    });
+
+    const writing = yield* Effect.fork(actions.sendMessage(identityOf(CLOUD), "ship it"));
+    for (let tick = 0; tick < 100 && release === undefined; tick += 1) yield* Effect.yieldNow();
+    assert.ok(release, "the write reached the service");
+    // The caller ends under the write; the answer the service is still
+    // holding is read out all the same, and what it earns is not dropped.
+    const interrupting = yield* Effect.fork(Fiber.interrupt(writing));
+    release();
+    yield* Fiber.join(interrupting);
+
+    assert.equal(recorded.refreshes, 1);
+    assert.equal(recorded.events, 1);
+  }),
+);

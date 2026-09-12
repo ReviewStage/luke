@@ -37,7 +37,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { type Effect, Schema as EffectSchema, Either } from "effect";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -54,6 +54,13 @@ interface BrainNotebookWriter {
 
 export interface BrainActionPerformerDependencies {
   sessionActions: SessionActionPerformer;
+  /**
+   * Carries the performer's own effect to the promise this carrier still
+   * answers, on the runtime the composition was built on. It goes when
+   * `BrainActionPerformer.carry` answers an effect itself, which is the last
+   * promise between the action tool's fiber and the provider write.
+   */
+  carry: <Value>(effect: Effect.Effect<Value>) => Promise<Value>;
   /** The roster as the brain was shown it: every observed session still worth a row. */
   sessions: () => readonly Session[];
   /**
@@ -222,7 +229,7 @@ export function createBrainActionPerformer(
     // The performer awaits once more of its own before a create or a spawn,
     // so the execution rides along to be asked again there.
     return actionOutputFromResult(
-      await dependencies.sessionActions.perform(action, execution),
+      await dependencies.carry(dependencies.sessionActions.perform(action, execution)),
       target,
     );
   };

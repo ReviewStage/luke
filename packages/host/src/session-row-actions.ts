@@ -13,6 +13,7 @@ import {
   sessionWithIdentity,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Effect } from "effect";
 import {
   HOSTED_ACTION_ANSWER,
   hostedActionResult,
@@ -32,7 +33,7 @@ export interface SessionRowActionsDependencies {
   drawn: () => readonly Session[];
   client: Pick<HostedActionClient, "sendMessage" | "executeControl">;
   /** Pokes a fresh observation pass, so a write that moved a session is seen rather than remembered. */
-  refresh: () => void;
+  refresh: Effect.Effect<void>;
   recordProductEvent: RecordProductEvent;
 }
 
@@ -49,8 +50,8 @@ export interface SessionRowActionsDependencies {
  * user's own act and what became of it belongs beside the field it left.
  */
 export interface SessionRowActions {
-  sendMessage(identity: SessionIdentity, text: string): Promise<SessionWriteResult>;
-  executeControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
+  sendMessage(identity: SessionIdentity, text: string): Effect.Effect<SessionWriteResult>;
+  executeControl(identity: SessionIdentity, controlId: string): Effect.Effect<SessionWriteResult>;
 }
 
 export function createSessionRowActions(
@@ -58,26 +59,41 @@ export function createSessionRowActions(
 ): SessionRowActions {
   const { drawn, client, refresh, recordProductEvent } = dependencies;
 
-  const carry = async (
+  const carry = (
     identity: SessionIdentity,
     counted: ProductSessionAction,
     call: (target: HostedActionTarget) => Promise<HostedActionOutcome>,
-  ): Promise<SessionWriteResult> => {
-    const session = sessionWithIdentity(identity, drawn());
-    if (!session)
-      return { status: ACTION_RESULT_STATUS.REJECTED, reason: ACTION_REFUSAL.NO_SESSION };
-    const providerId = session.providerId;
-    if (!isCloudAgentProviderId(providerId)) {
-      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: HOSTED_ACTION_ANSWER.NO_ENDPOINT };
-    }
-    return settleHostedWrite(
-      hostedActionResult(await call({ providerId, providerSessionId: session.providerSessionId })),
-      providerId,
-      counted,
-      refresh,
-      recordProductEvent,
-    );
-  };
+  ): Effect.Effect<SessionWriteResult> =>
+    Effect.gen(function* () {
+      const session = sessionWithIdentity(identity, drawn());
+      if (!session)
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: ACTION_REFUSAL.NO_SESSION };
+      const providerId = session.providerId;
+      if (!isCloudAgentProviderId(providerId)) {
+        return {
+          status: ACTION_RESULT_STATUS.UNSUPPORTED,
+          reason: HOSTED_ACTION_ANSWER.NO_ENDPOINT,
+        };
+      }
+      // From the call to the settle the fiber is uninterruptible: a write the
+      // service already carried to the provider may have landed, so the
+      // redraw it earns and the count it earns are never dropped by a
+      // request fiber ending under them.
+      return yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const outcome = yield* Effect.promise(() =>
+            call({ providerId, providerSessionId: session.providerSessionId }),
+          );
+          return yield* settleHostedWrite(
+            hostedActionResult(outcome),
+            providerId,
+            counted,
+            refresh,
+            recordProductEvent,
+          );
+        }),
+      );
+    });
 
   return {
     sendMessage: (identity, text) =>
