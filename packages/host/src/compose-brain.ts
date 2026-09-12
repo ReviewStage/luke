@@ -40,7 +40,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, type Scope } from "effect";
+import { Effect, Runtime, type Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
@@ -246,7 +246,11 @@ export const composeBrain = (
       actions: {
         sessionActions: observation.sessionActions,
         sessions: observation.actableSessions,
-        refreshSessions: () => observation.loop.refresh(),
+        // The admission reads an action waits on are still promises the tool
+        // seam hands the brain, so the pass admission asks for is run to one
+        // here, on the host's own runtime; it goes when those reads are
+        // effects.
+        refreshSessions: () => Runtime.runPromise(execution)(observation.loop.refresh),
         workspaceProjects: observation.workspaceProjects,
         workspaceDefaults: observation.workspaceDefaults,
         appGuide: () => appGuide,

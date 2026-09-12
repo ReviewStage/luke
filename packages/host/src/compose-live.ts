@@ -225,7 +225,11 @@ export const composeLive = (
         return;
       }
       if (!arrivalBeatOwed(calendars.onboarding())) return;
-      await observation.loop.refresh().catch(() => undefined);
+      // The beat's own decision waits on the pass, and the link that asks for
+      // a beat is a synchronous callback the calendars composer holds, so the
+      // pass is run to a promise on this composition's own runtime; it goes
+      // when that link answers an effect.
+      await Runtime.runPromise(runtime)(observation.loop.refresh);
       if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
       service.speakBeat(await arrivalBeat());
     }

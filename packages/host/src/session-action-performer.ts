@@ -79,8 +79,8 @@ export interface SessionActionPerformerDependencies {
     | "renameSession"
     | "renameWorkspace"
   >;
-  /** Draws the roster again, so a write that moved a session is seen rather than remembered. */
-  refreshSessions: () => Promise<void>;
+  /** Pokes a fresh observation pass, so a write that moved a session is seen rather than remembered. */
+  refreshSessions: () => void;
   sendsNetwork: boolean;
   settingsStore: Pick<AwaitedSettingsStore, "get">;
   rememberWorkspaceDefaults: (

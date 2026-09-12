@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
+import { it } from "@effect/vitest";
 import type { HostedProjectsAnswer, ObserveAnswer } from "@sidecar/hosted";
 import {
   CLOUD_AGENT_PROVIDER_ID,
@@ -41,13 +43,15 @@ function fixture(answers: readonly (ObserveAnswer | undefined)[]) {
       return Effect.succeed(answer);
     },
   };
-  const draw = () =>
+  const draw = Effect.provide(
     drawSnapshotRoster({
       client,
       registry,
       isCurrent: () => current,
       report: (line) => reports.push(line),
-    });
+    }),
+    FetchHttpClient.layer,
+  );
   const ids = () => registry.list().map((session) => session.providerSessionId);
   const stop = () => {
     current = false;
@@ -55,70 +59,84 @@ function fixture(answers: readonly (ObserveAnswer | undefined)[]) {
   return { draw, ids, reports, registry, stop };
 }
 
-test("a pass replaces the provider's slice whole, newest activity first, and a session the next snapshot lacks leaves", async () => {
-  const { draw, ids } = fixture([
-    { sessions: [OLDER, NEWER], observedAt: OBSERVED_AT },
-    { sessions: [NEWER], observedAt: OBSERVED_AT + 60_000 },
-  ]);
+it.effect(
+  "a pass replaces the provider's slice whole, newest activity first, and a session the next snapshot lacks leaves",
+  () =>
+    Effect.gen(function* () {
+      const { draw, ids } = fixture([
+        { sessions: [OLDER, NEWER], observedAt: OBSERVED_AT },
+        { sessions: [NEWER], observedAt: OBSERVED_AT + 60_000 },
+      ]);
 
-  await draw();
-  assert.deepEqual(ids(), [NEWER.sessionId, OLDER.sessionId]);
+      yield* draw;
+      assert.deepEqual(ids(), [NEWER.sessionId, OLDER.sessionId]);
 
-  await draw();
-  assert.deepEqual(ids(), [NEWER.sessionId]);
-});
+      yield* draw;
+      assert.deepEqual(ids(), [NEWER.sessionId]);
+    }),
+);
 
-test("a read that answers nothing leaves the last roster standing and says so", async () => {
-  const { draw, ids, reports } = fixture([
-    { sessions: [NEWER], observedAt: OBSERVED_AT },
-    undefined,
-  ]);
+it.effect("a read that answers nothing leaves the last roster standing and says so", () =>
+  Effect.gen(function* () {
+    const { draw, ids, reports } = fixture([
+      { sessions: [NEWER], observedAt: OBSERVED_AT },
+      undefined,
+    ]);
 
-  await draw();
-  await draw();
-  assert.deepEqual(ids(), [NEWER.sessionId]);
-  assert.equal(reports.length, 1);
-});
+    yield* draw;
+    yield* draw;
+    assert.deepEqual(ids(), [NEWER.sessionId]);
+    assert.equal(reports.length, 1);
+  }),
+);
 
-test("a slice that cannot be drawn leaves the provider's previous sessions standing", async () => {
-  const { draw, ids, reports } = fixture([
-    { sessions: [NEWER], observedAt: OBSERVED_AT },
-    { sessions: [OLDER, OLDER], observedAt: OBSERVED_AT },
-  ]);
+it.effect("a slice that cannot be drawn leaves the provider's previous sessions standing", () =>
+  Effect.gen(function* () {
+    const { draw, ids, reports } = fixture([
+      { sessions: [NEWER], observedAt: OBSERVED_AT },
+      { sessions: [OLDER, OLDER], observedAt: OBSERVED_AT },
+    ]);
 
-  await draw();
-  await draw();
-  assert.deepEqual(ids(), [NEWER.sessionId]);
-  assert.equal(reports.length, 1);
-});
+    yield* draw;
+    yield* draw;
+    assert.deepEqual(ids(), [NEWER.sessionId]);
+    assert.equal(reports.length, 1);
+  }),
+);
 
-test("a pass stopped while its read was out draws nothing", async () => {
-  const { draw, ids, reports, stop } = fixture([{ sessions: [NEWER], observedAt: OBSERVED_AT }]);
+it.effect("a pass stopped while its read was out draws nothing", () =>
+  Effect.gen(function* () {
+    const { draw, ids, reports, stop } = fixture([{ sessions: [NEWER], observedAt: OBSERVED_AT }]);
 
-  stop();
-  await draw();
-  assert.deepEqual(ids(), []);
-  assert.equal(reports.length, 0);
-});
+    stop();
+    yield* draw;
+    assert.deepEqual(ids(), []);
+    assert.equal(reports.length, 0);
+  }),
+);
 
-test("the sessions drawn carry the provider's identity and the snapshot's advertisements", async () => {
-  const { draw, registry } = fixture([
-    {
-      sessions: [{ ...NEWER, canReceiveMessage: true, link: "conductor://session/chat-newer" }],
-      observedAt: OBSERVED_AT,
-    },
-  ]);
+it.effect(
+  "the sessions drawn carry the provider's identity and the snapshot's advertisements",
+  () =>
+    Effect.gen(function* () {
+      const { draw, registry } = fixture([
+        {
+          sessions: [{ ...NEWER, canReceiveMessage: true, link: "conductor://session/chat-newer" }],
+          observedAt: OBSERVED_AT,
+        },
+      ]);
 
-  await draw();
-  const [session] = registry.list();
-  assert.equal(session?.providerId, CLOUD_AGENT_PROVIDER_ID.CONDUCTOR);
-  assert.deepEqual(session?.provider, {
-    id: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-    displayName: "Conductor",
-  });
-  assert.equal(session?.detail.link, "conductor://session/chat-newer");
-  assert.equal(session?.advertises.length, 1);
-});
+      yield* draw;
+      const [session] = registry.list();
+      assert.equal(session?.providerId, CLOUD_AGENT_PROVIDER_ID.CONDUCTOR);
+      assert.deepEqual(session?.provider, {
+        id: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+        displayName: "Conductor",
+      });
+      assert.equal(session?.detail.link, "conductor://session/chat-newer");
+      assert.equal(session?.advertises.length, 1);
+    }),
+);
 
 const PROJECT = {
   providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
@@ -169,25 +187,31 @@ test("the projects answer becomes the app's own project list, stamped with the p
   ]);
 });
 
-test("a projects read that answers nothing, or answers after the pass was stopped, replaces no list and reports only the first", async () => {
-  const reports: string[] = [];
-  let current = true;
-  const answers: (HostedProjectsAnswer | undefined)[] = [
-    { projects: [PROJECT], agentModels: [] },
-    undefined,
-    { projects: [PROJECT], agentModels: [] },
-  ];
-  const draw = () =>
-    drawSnapshotProjects({
-      client: { projects: () => Effect.succeed(answers.shift()) },
-      isCurrent: () => current,
-      report: (line) => reports.push(line),
-    });
+it.effect(
+  "a projects read that answers nothing, or answers after the pass was stopped, replaces no list and reports only the first",
+  () =>
+    Effect.gen(function* () {
+      const reports: string[] = [];
+      let current = true;
+      const answers: (HostedProjectsAnswer | undefined)[] = [
+        { projects: [PROJECT], agentModels: [] },
+        undefined,
+        { projects: [PROJECT], agentModels: [] },
+      ];
+      const draw = Effect.provide(
+        drawSnapshotProjects({
+          client: { projects: () => Effect.succeed(answers.shift()) },
+          isCurrent: () => current,
+          report: (line) => reports.push(line),
+        }),
+        FetchHttpClient.layer,
+      );
 
-  assert.equal((await draw())?.length, 1);
-  assert.equal(await draw(), undefined);
-  assert.equal(reports.length, 1);
-  current = false;
-  assert.equal(await draw(), undefined);
-  assert.equal(reports.length, 1);
-});
+      assert.equal((yield* draw)?.length, 1);
+      assert.equal(yield* draw, undefined);
+      assert.equal(reports.length, 1);
+      current = false;
+      assert.equal(yield* draw, undefined);
+      assert.equal(reports.length, 1);
+    }),
+);

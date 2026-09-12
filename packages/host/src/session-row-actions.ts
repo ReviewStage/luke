@@ -31,8 +31,8 @@ export interface SessionRowActionsDependencies {
   /** The roster the rows were drawn from, as it stands at the press. */
   drawn: () => readonly Session[];
   client: Pick<HostedActionClient, "sendMessage" | "executeControl">;
-  /** Draws the roster again, so a write that moved a session is seen rather than remembered. */
-  refresh: () => Promise<void>;
+  /** Pokes a fresh observation pass, so a write that moved a session is seen rather than remembered. */
+  refresh: () => void;
   recordProductEvent: RecordProductEvent;
 }
 

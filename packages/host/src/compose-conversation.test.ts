@@ -212,7 +212,7 @@ async function clear(composer: ReturnType<typeof composeConversation>) {
 test("without a device row a poll reads every resource, and tells every client once when the picture moved", async () => {
   const { composer, client, views } = harness();
   assert.deepEqual(composer.snapshot(), { groups: [], settled: false });
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   assert.deepEqual(client.calls, ["messages:", "events:", "turns:"]);
   assert.equal(views().length, 1);
   const [view] = views();
@@ -220,7 +220,7 @@ test("without a device row a poll reads every resource, and tells every client o
   assert.equal(view?.groups.length, 1);
   assert.equal(view?.groups[0]?.turnId, TURN);
   // The same answers again move nothing, and nothing is told.
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   assert.equal(views().length, 1);
   assert.deepEqual(client.calls.slice(3), [
     "messages:messages-head",
@@ -232,12 +232,12 @@ test("without a device row a poll reads every resource, and tells every client o
 test("with a device row the change signal decides which resources are read", async () => {
   const { composer, client } = harness({ deviceId: DEVICE });
   client.changesAnswer = { seen: true, messages: "messages-head", events: "events-head" };
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   // Nothing held yet, so each head differs from the cursor and is read once; an
   // account with no turn has no turns head, and nothing is read for it.
   assert.deepEqual(client.calls, [`changes:${DEVICE}`, "messages:", "events:"]);
   client.calls.length = 0;
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   // Every cursor now equals its head: only the signal travels.
   assert.deepEqual(client.calls, [`changes:${DEVICE}`]);
   client.changesAnswer = {
@@ -247,19 +247,19 @@ test("with a device row the change signal decides which resources are read", asy
     turns: "turns-head",
   };
   client.calls.length = 0;
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   assert.deepEqual(client.calls, [`changes:${DEVICE}`, "messages:messages-head", "turns:"]);
 });
 
 test("an unreadable row is surfaced on the snapshot and never drawn as an empty page", async () => {
   const { composer, client, views } = harness();
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   client.messagesAnswer = {
     ok: false,
     failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW,
     row: { conversationId: MAIN, seq: 7 },
   };
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   const latest = views().at(-1);
   assert.deepEqual(latest?.unreadable, { conversationId: MAIN, seq: 7 });
   // The thread stands as it was last read.
@@ -304,7 +304,7 @@ test("a page this build's registry refuses is named on the snapshot like a row t
     hasMore: true,
   };
   client.messagesAnswer = ok(refused);
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   assert.deepEqual(composer.snapshot().unreadable, { conversationId: MAIN, seq: 3 });
   assert.deepEqual(views().at(-1)?.unreadable, { conversationId: MAIN, seq: 3 });
   // One read, not a walk: the cursor did not pass the row and no page after it was asked for.
@@ -314,7 +314,7 @@ test("a page this build's registry refuses is named on the snapshot like a row t
 
 test("Clear carries the service's soft delete and reads again at once; a Clear the service did not take answers false", async () => {
   const { composer, client } = harness();
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   client.messagesAnswer = ok({
     conversations: [
       {
@@ -338,7 +338,7 @@ test("Clear carries the service's soft delete and reads again at once; a Clear t
 
 test("a Clear answers only after a poll that began after it has published, even with a poll already under way", async () => {
   const { composer, client, views } = harness();
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   assert.equal(views().at(-1)?.groups.length, 1);
   // A poll reads the thread as it stood before the Clear and is held there.
   let release: () => void = () => undefined;
@@ -346,7 +346,7 @@ test("a Clear answers only after a poll that began after it has published, even 
     release = () => resolve();
   });
   client.messagesAnswer = ok(messagesAnswer("hello", "messages-later"));
-  const held = composer.loop.refresh();
+  const held = Effect.runPromise(composer.loop.refresh);
   // The Clear lands while that poll is out, and the service now lists a new, empty main.
   const emptied = ok({
     conversations: [
@@ -375,7 +375,7 @@ test("a Clear answers only after a poll that began after it has published, even 
 
 test("a Clear the service took empties the picture even when the read after it does not land, and a pass that read before it cannot bring the thread back", async () => {
   const { composer, client, views } = harness();
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   assert.equal(views().at(-1)?.groups.length, 1);
   // A pass read the pre-Clear page and is held there; it lands after the Clear.
   let release: () => void = () => undefined;
@@ -383,7 +383,7 @@ test("a Clear the service took empties the picture even when the read after it d
     release = () => resolve();
   });
   client.messagesAnswer = ok(messagesAnswer("hello", "messages-later"));
-  const held = composer.loop.refresh();
+  const held = Effect.runPromise(composer.loop.refresh);
   const clearing = clear(composer);
   // Every read after the Clear fails.
   client.messagesAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
@@ -397,7 +397,7 @@ test("a Clear the service took empties the picture even when the read after it d
 
 test("a refusal from a pass that read before the Clear is not written over the cleared thread", async () => {
   const { composer, client } = harness();
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   let release: () => void = () => undefined;
   client.messagesGate = new Promise<void>((resolve) => {
     release = () => resolve();
@@ -408,7 +408,7 @@ test("a refusal from a pass that read before the Clear is not written over the c
     failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW,
     row: { conversationId: MAIN, seq: 7 },
   };
-  const held = composer.loop.refresh();
+  const held = Effect.runPromise(composer.loop.refresh);
   const clearing = clear(composer);
   // The reads after the Clear answer nothing, so the only refusal is the stale one.
   client.messagesAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
@@ -422,19 +422,19 @@ test("a refusal from a pass that read before the Clear is not written over the c
 
 test("a run that sends nothing polls nothing and is settled from the start, and a closed gate refuses Clear", async () => {
   const fixture = harness({ sendsNetwork: false });
-  await fixture.composer.loop.refresh();
+  await Effect.runPromise(fixture.composer.loop.refresh);
   assert.deepEqual(fixture.client.calls, []);
   assert.deepEqual(fixture.composer.snapshot(), { groups: [], settled: true });
   assert.equal(await clear(fixture.composer), false);
   const signedOut = harness({ active: false });
-  await signedOut.composer.loop.refresh();
+  await Effect.runPromise(signedOut.composer.loop.refresh);
   assert.deepEqual(signedOut.client.calls, []);
   assert.equal(await clear(signedOut.composer), false);
 });
 
 test("a reset drops everything held and tells every client the thread is gone", async () => {
   const { composer, views } = harness();
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   assert.equal(views().length, 1);
   composer.reset();
   assert.equal(views().length, 2);
@@ -473,7 +473,7 @@ async function rate(
 
 test("the rating a read carries on a message reaches the picture", async () => {
   const { composer } = harness();
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   const [group] = composer.snapshot().groups;
   assert.deepEqual(
     group?.messages.map((message) => message.rating),
@@ -484,7 +484,7 @@ test("the rating a read carries on a message reaches the picture", async () => {
 test("a rating on one of Luke's messages travels to the service with this device's id, shows at once, and is counted by verdict and kind alone", async () => {
   const { composer, client, views, counted } = harness({ deviceId: DEVICE });
   client.changesAnswer = { seen: true, messages: "messages-head", events: "events-head" };
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   const published = views().length;
   const answer = await rate(composer, { messageId: REPLY, rating: MESSAGE_RATING.DOWN });
   assert.deepEqual(answer, { status: CONVERSATION_RATE_STATUS.RATED });
@@ -508,7 +508,7 @@ test("a rating on one of Luke's messages travels to the service with this device
 
 test("a rating is refused before it travels where the device has no row, the gate is closed, or the message is not one of Luke's this device holds", async () => {
   const noDevice = harness();
-  await noDevice.composer.loop.refresh();
+  await Effect.runPromise(noDevice.composer.loop.refresh);
   assert.deepEqual(await rate(noDevice.composer, { messageId: REPLY, rating: MESSAGE_RATING.UP }), {
     status: CONVERSATION_RATE_STATUS.UNAVAILABLE,
   });
@@ -519,7 +519,7 @@ test("a rating is refused before it travels where the device has no row, the gat
   });
 
   const held = harness({ deviceId: DEVICE });
-  await held.composer.loop.refresh();
+  await Effect.runPromise(held.composer.loop.refresh);
   // The developer's own ask, and a message this device never read.
   assert.deepEqual(await rate(held.composer, { messageId: ASK, rating: MESSAGE_RATING.UP }), {
     status: CONVERSATION_RATE_STATUS.NOT_FOUND,
@@ -543,7 +543,7 @@ test("a rating is refused before it travels where the device has no row, the gat
 
 test("the service's refusals reach the control apart, leave the verdict as it was, and count nothing", async () => {
   const { composer, client, counted } = harness({ deviceId: DEVICE });
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   const before = composer.snapshot();
   client.rateAnswer = { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_RATEABLE };
   assert.deepEqual(await rate(composer, { messageId: REPLY, rating: MESSAGE_RATING.DOWN }), {
@@ -563,7 +563,7 @@ test("the service's refusals reach the control apart, leave the verdict as it wa
 
 test("a rating whose params are not one message and one verdict is refused as invalid before anything is read", async () => {
   const { composer, client } = harness({ deviceId: DEVICE });
-  await composer.loop.refresh();
+  await Effect.runPromise(composer.loop.refresh);
   const outcome = await rateOutcome(composer, { messageId: REPLY, rating: "sideways" });
   assert.ok(Exit.isFailure(outcome));
   assert.deepEqual(
