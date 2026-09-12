@@ -174,27 +174,43 @@ interface Stand {
   readonly log: LogEntry[];
   readonly reports: string[];
   readonly openAi: Awaited<ReturnType<typeof startFakeOpenAi>>;
+  /** Lets a gated attachment proceed; a no-op for every other offer. */
+  release(): void;
   url(path: string): string;
   stop(): Promise<void>;
 }
 
+/** How the exchange is offered: as the route would, not at all, one that cannot stand, or one held until the test releases it. */
+const OFFER = {
+  NONE: "none",
+  EXCHANGE: "exchange",
+  FAILING: "failing",
+  GATED: "gated",
+} as const;
+
+type Offer = (typeof OFFER)[keyof typeof OFFER];
+
 /** The service for one account, with the exchange offered as the route would offer it, or nothing, or one that cannot stand. */
-async function stand(offer: "none" | "exchange" | "failing"): Promise<Stand> {
+async function stand(offer: Offer): Promise<Stand> {
   const target = await account();
   const openAi = await startFakeOpenAi();
   const eve = fakeEve();
   const log: LogEntry[] = [];
   const reports: string[] = [];
   const accounts = { ...fakeAccounts(), resolveUserId: async () => target.userId };
-  const exchange: VoiceServiceOptions["exchange"] =
-    offer === "none"
+  let release = (): void => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const attachment: VoiceServiceOptions["exchange"] =
+    offer === OFFER.NONE
       ? undefined
-      : offer === "failing"
+      : offer === OFFER.FAILING
         ? async () => {
             throw new Error("the store is not reachable");
           }
         : exchangeAttachment({
-            context: { db: database.db, run: database.run, keys: KEYS },
+            context: { run: database.run, keys: KEYS },
             writer,
             eve: () => eve,
             emit: () => undefined,
@@ -207,6 +223,13 @@ async function stand(offer: "none" | "exchange" | "failing"): Promise<Stand> {
             createId: () => randomUUID(),
             report: (message) => reports.push(message),
           });
+  const exchange: VoiceServiceOptions["exchange"] =
+    offer === OFFER.GATED && attachment !== undefined
+      ? async (session) => {
+          await gate;
+          return attachment(session);
+        }
+      : attachment;
   const service = new VoiceService({
     apiKey: API_KEY,
     accounts,
@@ -227,6 +250,7 @@ async function stand(offer: "none" | "exchange" | "failing"): Promise<Stand> {
     log,
     reports,
     openAi,
+    release: () => release(),
     url: (path) => `ws://127.0.0.1:${port}${path}`,
     stop: async () => {
       await service.close();
@@ -282,7 +306,7 @@ async function hangUp(context: Stand, session: Awaited<ReturnType<typeof openSes
 }
 
 test("with no exchange offered the service only pipes: the session speaks, and nothing of Luke's reaches it, eve, or the record", async () => {
-  const context = await stand("none");
+  const context = await stand(OFFER.NONE);
   const session = await openSession(context);
   assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
   await speak(session.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
@@ -306,7 +330,7 @@ test("with no exchange offered the service only pipes: the session speaks, and n
 });
 
 test("with the exchange offered it stands before the desktop is answered, seeds nothing a second time, reads the developer's words off the piped sideband, answers through eve, and appends the reply upstream while the desktop still receives every server frame", async () => {
-  const context = await stand("exchange");
+  const context = await stand(OFFER.EXCHANGE);
   const session = await openSession(context);
   assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
   assert.deepEqual(
@@ -391,7 +415,7 @@ test("with the exchange offered it stands before the desktop is answered, seeds 
 });
 
 test("an exchange offered that cannot stand refuses the session as unavailable, with the sideband released and the refusal logged, rather than running it with no one to answer", async () => {
-  const context = await stand("failing");
+  const context = await stand(OFFER.FAILING);
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
   const desktop = opened.reader;
@@ -411,6 +435,104 @@ test("an exchange offered that cannot stand refuses the session as unavailable, 
   assert.deepEqual(
     context.log.map((entry) => entry.event),
     [LOG_EVENT.EXCHANGE_FAILED, LOG_EVENT.SESSION_REFUSED],
+  );
+  await context.stop();
+});
+
+test("a desktop that hangs up while the exchange is standing is answered nothing: the exchange is stopped, the session closed gracefully, the sideband released, and no session is reported created or ended", async () => {
+  const context = await stand(OFFER.GATED);
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+    sdp: SDP_OFFER,
+    voice: LIVE_VOICE.MARIN,
+    input: SEED,
+  });
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+  await desktop.closed;
+  context.release();
+  // The exchange's own graceful close, answered as OpenAI would, so its stop settles on the final event.
+  const closing = clientEvent(await upstream.next(5_000));
+  assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+  await sendText(
+    attach.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "closed",
+      reason: "close_requested",
+      usage: { seconds: 0 },
+    }),
+  );
+  // The exchange's own graceful close is what closes the socket, normally; the release after it finds it gone.
+  const upstreamClosed = await upstream.closed;
+  assert.equal(upstreamClosed.code, SOCKET_CLOSE_CODE.NORMAL);
+  assert.deepEqual(
+    context.log.map((entry) => entry.event),
+    [LOG_EVENT.EXCHANGE_ATTACHED],
+  );
+  await context.stop();
+});
+
+test("what the session speaks while the exchange is standing is read once both consumers listen: the desktop is handed the frames in order, and the exchange has heard the start and the words when the delegation arrives", async () => {
+  const context = await stand(OFFER.GATED);
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+    sdp: SDP_OFFER,
+    voice: LIVE_VOICE.MARIN,
+    input: SEED,
+  });
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+  // Spoken before either consumer listens: the exchange is still standing, the relay not yet piping.
+  await sendText(attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
+  await sendText(attach.socket, JSON.stringify(heard("What needs me?", 1000, 2400)));
+  await sleep(QUIET_MS);
+  context.release();
+  const created = record(
+    await desktop.next(5_000).catch((error: Error) => {
+      assert.fail(
+        `${error.message}: log ${JSON.stringify(context.log.map((entry) => entry.event))}; reports ${JSON.stringify(context.reports)}; upstream open ${attach.socket.readyState}`,
+      );
+    }),
+  );
+  assert.equal(created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+  const relayed: string[] = [];
+  const deadline = Date.now() + 1_500;
+  while (Date.now() < deadline) {
+    try {
+      relayed.push(String(record(await desktop.next(Math.max(1, deadline - Date.now()))).type));
+    } catch {
+      break;
+    }
+  }
+  assert.deepEqual(
+    relayed,
+    [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA],
+    `desktop frames after created: ${JSON.stringify(relayed)}; log ${JSON.stringify(context.log.map((entry) => entry.event))}; reports ${JSON.stringify(context.reports)}; upstream paused ${attach.socket.isPaused}`,
+  );
+  await sendText(attach.socket, JSON.stringify(delegated("dl_1", 2500)));
+  await until(
+    () => context.eve.opened.length === 1,
+    () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+  );
+  assert.deepEqual(
+    context.eve.opened.map((message) => [message.conversationId, message.turn]),
+    [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+  );
+  // What the exchange sends after the ask is its own: appends under the delegation, nothing else.
+  const afterAsk = await framesWithin(upstream, QUIET_MS);
+  assert.ok(afterAsk.length > 0);
+  assert.deepEqual(
+    afterAsk.map((frame) => ("delegation_id" in frame ? frame.delegation_id : undefined)),
+    afterAsk.map(() => "dl_1"),
   );
   await context.stop();
 });

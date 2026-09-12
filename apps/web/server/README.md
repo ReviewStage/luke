@@ -717,9 +717,13 @@ builds the sideband over that socket and adopts, so the voice function's
 bundle gains that edge only in the commit that passes the attachment. The
 socket admits many listeners, so the relay keeps piping raw frames to the
 desktop unchanged while the exchange reads parsed events through its
-record-observing sideband, and the events the session spoke between the
-attach and the exchange's first listener are held and replayed, so nothing
-said before it stood is lost. The exchange adopts rather than
+record-observing sideband. The upstream hands the sideband over paused,
+inside its own open handler, because the bytes after the handshake response
+are re-queued and flushed on the next tick, before any promise continuation;
+the service resumes it once both consumers listen, so what the session spoke
+while the exchange stood is read then, by both, in order, and a desktop that
+went meanwhile is answered nothing, its exchange stopped and its sideband
+released rather than left standing for the invocation. The exchange adopts rather than
 creates (`LiveSessionService.adoptSession`): the desktop's create frame
 seeded the session, and a second seed would put the recent lines into the
 conversation twice. An exchange offered that cannot stand refuses the session

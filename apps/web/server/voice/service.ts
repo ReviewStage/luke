@@ -333,7 +333,7 @@ export class VoiceService {
         ? await this.#openAttached(upstream, admission, frame)
         : await this.#openCreated(upstream, admission, frame);
     if (!isOpen(desktop)) {
-      if ("sideband" in opened) opened.sideband.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+      if ("sideband" in opened) this.#release(opened.sideband);
       return;
     }
     if ("refusal" in opened) {
@@ -341,10 +341,10 @@ export class VoiceService {
       return;
     }
     const { sessionId, accountId, sideband } = opened;
-    // The exchange stands before the desktop is answered, on the same
-    // sideband the relay is about to pipe: the socket admits many listeners,
-    // and the events the session spoke since the attach are held for the
-    // exchange's first listener, so nothing said before it stood is lost.
+    // The exchange stands before the desktop is answered, on the same socket
+    // the relay is about to pipe. The socket is paused since the attach, so a
+    // frame the session spoke while the exchange stood is read once both
+    // consumers listen, by both, in order.
     const standing =
       accountId === undefined
         ? { exchange: undefined }
@@ -355,15 +355,24 @@ export class VoiceService {
             sideband,
           });
     if ("refused" in standing) {
-      sideband.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+      this.#release(sideband);
       refuse(HOSTED_API_ERROR.UNAVAILABLE);
       return;
     }
     const { exchange } = standing;
+    // The desktop may have gone while the exchange stood: nothing is answered
+    // to a socket that is not there, and the exchange and the sideband are
+    // released here rather than left standing for the invocation.
+    if (!isOpen(desktop)) {
+      sideband.resume();
+      if (exchange !== undefined) await this.#stopExchange(exchange);
+      this.#release(sideband);
+      return;
+    }
     desktop.send(JSON.stringify(opened.answer));
     this.#log({ event: opened.logEvent, route });
 
-    const summary = await relaySession({
+    const relaying = relaySession({
       route,
       desktop,
       upstream: sideband,
@@ -402,6 +411,9 @@ export class VoiceService {
               await this.#recordUsage(accountId, sessionId, closed.usage.seconds);
             },
     });
+    // Both consumers listen now: what the session spoke since the attach is read here, by both.
+    sideband.resume();
+    const summary = await relaying;
     // The relay has settled and closed both transports; the exchange ends its
     // follows and its look, closes the session it holds (already gone, which
     // its sideband reports as the close it held), and waits for every record
@@ -433,6 +445,12 @@ export class VoiceService {
       this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route });
       return { refused: true };
     }
+  }
+
+  /** A sideband let go before any pipe stood: resumed first, since a paused socket cannot complete its close handshake. */
+  #release(sideband: WebSocket): void {
+    sideband.resume();
+    sideband.close(SOCKET_CLOSE_CODE.GOING_AWAY);
   }
 
   /** The exchange's stop, whose failure is the service's to report and never the relay's to inherit. */
@@ -605,6 +623,13 @@ export class VoiceService {
     };
   }
 
+  /**
+   * The sideband as the upstream hands it over: open and paused, since no
+   * consumer listens yet and a frame the session speaks before the relay and
+   * the exchange register would otherwise be emitted to nobody. `#serve`
+   * resumes it once every listener stands, and what arrived meanwhile is read
+   * then, in order.
+   */
   async #attach(upstream: LiveUpstream, sessionId: string): Promise<WebSocket | undefined> {
     try {
       return await upstream.attach(sessionId);
