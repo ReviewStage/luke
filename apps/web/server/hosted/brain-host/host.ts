@@ -14,11 +14,10 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
-import type { WebStoreRun } from "../../runtime.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
-import { type Promised, runOverClient } from "../fiber-runner.js";
-import { type AskDeliveryBinding, askRecord } from "../store/asks.js";
+import { runOverClient } from "../fiber-runner.js";
+import { askRecord } from "../store/asks.js";
 import { type ConversationTarget, promptHashOf, type StoreWriter } from "../store/index.js";
 import { offerBriefing } from "./announce.js";
 import { turnKindOf } from "./auth.js";
@@ -163,64 +162,48 @@ export interface BrainHost {
 
 export function brainHost(seams: BrainHostSeams): BrainHost {
   /**
-   * The relay over the promise face of the fiber its event arrived on: it is
-   * eve's own stream handler and holds no state of its own, so one stands per
-   * event rather than one per host.
+   * The relay as eve's own stream handler: it holds no state of its own, so
+   * one stands per event rather than one per host, and every seam it reaches
+   * is the store's own effect on the fiber the event arrived on.
    */
-  const relayOver = (run: WebStoreRun, writer: StoreWriter) =>
+  const relayOver = (writer: StoreWriter) =>
     new StreamRelay({
-      writer: {
-        consume: (target, event) => run(writer.consume(target, event)),
-        enqueueTurn: (target, enqueue) => run(writer.enqueueTurn(target, enqueue)),
-        attachAskLines: (target, turnId) => run(writer.attachAskLines(target, turnId)),
-      },
-      asks: promisedAsks(run),
+      writer,
+      asks: askRecord(),
       // A Stop an ask took while it waited is carried the moment its turn starts, by the deployment
       // acting for the account, since the hook that sees the start holds no bearer of the account's;
       // a deployment with no secret or no origin for eve reports the Stop it could not carry.
-      stopTurn: async (target, sessionId, eveTurnId, turnId) => {
-        const secret = seams.deploymentSecret();
-        const origin = seams.eveOrigin();
-        if (secret === undefined || origin === undefined) {
-          console.warn(
-            `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
-          );
-          return;
-        }
-        const eve = eveSessions({
-          origin,
-          caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
-        });
-        await carryStop(
-          {
-            eve,
-            writer: {
-              requestTurnCancel: (cancelTarget, cancel) =>
-                run(writer.requestTurnCancel(cancelTarget, cancel)),
+      stopTurn: (target, sessionId, eveTurnId, turnId) =>
+        Effect.suspend(() => {
+          const secret = seams.deploymentSecret();
+          const origin = seams.eveOrigin();
+          if (secret === undefined || origin === undefined) {
+            console.warn(
+              `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+            );
+            return Effect.void;
+          }
+          const eve = eveSessions({
+            origin,
+            caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
+          });
+          return carryStop(
+            {
+              eve,
+              writer,
+              now: seams.now,
+              report: (message) => console.warn(message),
             },
-            now: seams.now,
-            report: (message) => console.warn(message),
-          },
-          target,
-          sessionId,
-          eveTurnId,
-          turnId,
-        );
-      },
-      offer: (target, turnId) => run(offerBriefing({ writer, now: seams.now }, target, turnId)),
+            target,
+            sessionId,
+            eveTurnId,
+            turnId,
+          );
+        }),
+      offer: (target, turnId) => offerBriefing({ writer, now: seams.now }, target, turnId),
       now: seams.now,
       report: (message) => console.warn(message),
     });
-
-  /** The ask record as the relay takes it: the two bindings, each run to the promise its seam answers. */
-  const promisedAsks = (run: WebStoreRun): Promised<AskDeliveryBinding> => {
-    const asks = askRecord();
-    return {
-      bindDeliveries: (target, deliveryIds, turnId) =>
-        run(asks.bindDeliveries(target, deliveryIds, turnId)),
-      stoppedOn: (target, turnId) => run(asks.stoppedOn(target, turnId)),
-    };
-  };
 
   /**
    * The roster each account's tools last read, and the cloud plugins built
@@ -416,20 +399,16 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   new Date(seams.now()),
                 )
             : undefined;
-        const client = yield* SqlClient.SqlClient;
-        const run = runOverClient(client);
         const writer = yield* seams.writer();
-        yield* Effect.promise(() =>
-          relayOver(run, writer).handle(event, {
-            sessionId: session.id,
-            target: admitted.target,
-            turn,
-            ...(model !== undefined ? { model } : undefined),
-            ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
-            ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
-            state,
-          }),
-        );
+        yield* relayOver(writer).handle(event, {
+          sessionId: session.id,
+          target: admitted.target,
+          turn,
+          ...(model !== undefined ? { model } : undefined),
+          ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
+          ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
+          state,
+        });
       }),
   };
 }

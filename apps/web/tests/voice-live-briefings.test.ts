@@ -21,12 +21,12 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import { claimSpeech, offerSpeech, SPEECH_OFFER } from "../server/hosted/store/speech";
 import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/live-briefings";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks, promisedWriter } from "./support/promised-store";
 import {
   insertConversation,
   insertDevice,
@@ -56,11 +56,10 @@ const writer = await database.run(
   }),
 );
 const relay = new StreamRelay({
-  writer: promisedWriter(database.run, writer),
-  asks: promisedAsks(database.run),
-  stopTurn: async () => undefined,
-  offer: (target, turnId) =>
-    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
+  writer,
+  asks: askRecord(),
+  stopTurn: () => Effect.void,
+  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: () => undefined,
 });
@@ -96,7 +95,7 @@ async function voiceSession(userId: string, deviceId: string | undefined): Promi
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
-  for (const event of events) await relay.handle(event, standing);
+  for (const event of events) await database.run(relay.handle(event, standing));
 }
 
 /** Puts one briefing on offer the way the brain does: an announce turn through the relay. Answers the offered message's id. */

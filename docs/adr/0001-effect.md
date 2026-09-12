@@ -942,12 +942,22 @@ in `runTool` and `Effect.provideService`-s it to each seam, with
 from `server/runtime.ts` rather than a runner of `fiber-runner.ts`'s own —
 which is what deleted `fiberStoreRunner`/`FiberStoreRunner` outright, and what
 takes `fiber-runner.ts` off `runOnHandedRuntime`: nothing left in it reads a
-runtime. `relay`'s seams still take the promise face for the other reason:
-`StreamRelay` and `carryStop` are `apps/web`'s own 700 lines of async class
-beneath a `relay` that already answers an effect, built the same way over
-`runOverClient` in `brain-host/host.ts`, so the `Promised` mapped type over
-the writer and the ask bindings goes when those two answer effects, in
-P12-18c.
+runtime. `relay`'s seams no longer take a promise face at all: P12-18c took
+`StreamRelay` and `carryStop`, `apps/web`'s own 700 lines of async class
+beneath a `relay` that already answered an effect, onto effects themselves, so
+the relay is composed into that effect and every seam it reaches — the
+writer's three writes, the two ask bindings, the briefing offer, and eve's
+cancel with the row's stamp behind it — is the store's own effect on the fiber
+the event arrived on. eve's cancel is a request over the network and still
+answers a promise, so `carryStop` awaits it with `Effect.promise` inside the
+effect rather than running anything beside it. That left no module under
+`apps/web/server` holding a promise-shaped seam, so the `Promised` mapped type
+is gone from `fiber-runner.ts`; what is left of it is a copy in
+`apps/web/tests/support/promised-store.ts`, test support for the suites that
+predate `it.effect`, and it goes with the last of them. What still calls
+`runOverClient` is `runTool`'s own three — `hostedFactsWriter`,
+`hostedTranscriptReads`, and the roster reader — whose contracts are the
+brain's and answer promises; that is P12-18g.
 
 `HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
 carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
@@ -1377,9 +1387,9 @@ design decision stated as such:
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
-| `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and `relay`'s build the same runner over `runOverClient` until P12-18c takes it onto effects; P12-18b took the turn event stream and the voice compositions off it |
-| `runOverClient` in `fiber-runner.ts`, the replacement promise face `hostedFactsWriter`, `hostedTranscriptReads`, and `relay`'s `StreamRelay`/stop carrier take, over a `SqlClient` `runTool` reads once rather than a runtime it reads off the fiber | P12-18e | P12-18c, with the last of its callers: `relay`'s two, and `hostedFactsWriter`/`hostedTranscriptReads` as their own contracts move onto effects |
-| `Promised<Methods>`, the mapped type `brainHost`'s `relay` hands `StreamRelay` and `carryStop`, and the promise-era suites' `promisedWriter`/`promisedAsks` | P10-16 | P12-18c for the relay and its stop carrier; with each suite as it moves onto `it.effect` |
+| `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and P12-18c took `relay`'s onto effects; P12-18b took the turn event stream and the voice compositions off it |
+| `runOverClient` in `fiber-runner.ts`, the replacement promise face `hostedFactsWriter`, `hostedTranscriptReads`, and the roster reader take, over a `SqlClient` `runTool` reads once rather than a runtime it reads off the fiber | P12-18e | P12-18g, with the last of its callers, as the brain's own tool contracts move onto effects; P12-18c took `relay`'s `StreamRelay` and stop carrier off it |
+| `Promised<Methods>`, the mapped type the promise-era suites' `promisedWriter`/`promisedAsks` answer in `apps/web/tests/support/promised-store.ts`; P12-18c took `StreamRelay` and `carryStop` onto effects and moved the type out of `server/hosted/fiber-runner.ts` | P10-16 | with each suite as it moves onto `it.effect` |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | never — P12-16c settled it: the fence must stay synchronous, so the row is bookkeeping rather than a deletion owed |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h, both deleted in P12-16d) |

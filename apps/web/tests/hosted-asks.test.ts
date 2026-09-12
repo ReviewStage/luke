@@ -269,18 +269,18 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
   const writer = await database.run(
     storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
   );
-  const writes = promisedWriter(database.run, writer);
   const relay = new StreamRelay({
-    writer: writes,
-    asks,
-    stopTurn: async (stopped, session, eveTurnId, turnId) => {
-      if (throwOnce) {
-        throwOnce = false;
-        throw new Error("eve unreachable");
-      }
-      stops.push([stopped.conversationId, session, eveTurnId, turnId]);
-    },
-    offer: async () => true,
+    writer,
+    asks: askEffects,
+    stopTurn: (stopped, session, eveTurnId, turnId) =>
+      Effect.sync(() => {
+        if (throwOnce) {
+          throwOnce = false;
+          throw new Error("eve unreachable");
+        }
+        stops.push([stopped.conversationId, session, eveTurnId, turnId]);
+      }),
+    offer: () => Effect.succeed(true),
     now: () => NOW,
     report: () => undefined,
   });
@@ -298,11 +298,11 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
     return { ...started, meta: { ...started.meta, deliveryIds: [...deliveries] } };
   };
 
-  await relay.handle(start("turn_1", ["delivery-q"]), standing);
+  await database.run(relay.handle(start("turn_1", ["delivery-q"]), standing));
   assert.deepEqual(stops, []);
-  await relay.handle(start("turn_2", ["delivery-s"]), standing);
+  await database.run(relay.handle(start("turn_2", ["delivery-s"]), standing));
   assert.deepEqual(stops, [[conversationId, sessionId, "turn_2", hostTurnId(sessionId, "turn_2")]]);
-  await relay.handle(start("turn_2", ["delivery-s"]), standing);
+  await database.run(relay.handle(start("turn_2", ["delivery-s"]), standing));
   assert.equal(stops.length, 1);
 
   // A stop that throws leaves the start unrecorded, so the start eve emits again carries it.
@@ -313,9 +313,9 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
   }));
   await asks.cancelRequested(failing.id, new Date(NOW));
   throwOnce = true;
-  await assert.rejects(relay.handle(start("turn_3", ["delivery-f"]), standing));
+  await assert.rejects(database.run(relay.handle(start("turn_3", ["delivery-f"]), standing)));
   assert.equal(stops.length, 1);
-  await relay.handle(start("turn_3", ["delivery-f"]), standing);
+  await database.run(relay.handle(start("turn_3", ["delivery-f"]), standing));
   assert.deepEqual(stops[1], [
     conversationId,
     sessionId,
@@ -329,7 +329,7 @@ test("a Stop stamped on a waiting ask is carried the moment eve's start names it
   const openingTurn = hostTurnId(sessionId, "turn_0");
   await asks.dispatchOnce(target, opener.id, async () => ({ sessionId, turnId: openingTurn }));
   await asks.cancelRequested(opener.id, new Date(NOW));
-  await relay.handle(start("turn_0", []), standing);
+  await database.run(relay.handle(start("turn_0", []), standing));
   assert.deepEqual(stops[2], [conversationId, sessionId, "turn_0", openingTurn]);
   assert.equal(stops.length, 3);
   assert.deepEqual(
@@ -415,12 +415,13 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
   assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
   const stops: (readonly [string, string, string, string])[] = [];
   const relay = new StreamRelay({
-    writer: writes,
-    asks,
-    stopTurn: async (stopped, session, eveTurnId, stoppedTurn) => {
-      stops.push([stopped.conversationId, session, eveTurnId, stoppedTurn]);
-    },
-    offer: async () => true,
+    writer,
+    asks: askEffects,
+    stopTurn: (stopped, session, eveTurnId, stoppedTurn) =>
+      Effect.sync(() => {
+        stops.push([stopped.conversationId, session, eveTurnId, stoppedTurn]);
+      }),
+    offer: () => Effect.succeed(true),
     now: () => NOW,
     report: () => undefined,
   });
@@ -428,9 +429,11 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     { type: "turn.started", data: { turnId: "turn_10", sequence: 1 } },
     NOW,
   );
-  await relay.handle(
-    { ...started, meta: { ...started.meta, deliveryIds: ["delivery-l"] } },
-    { sessionId, target, turn: BRAIN_HOST_TURN.TYPED, state: memoryRelayState() },
+  await database.run(
+    relay.handle(
+      { ...started, meta: { ...started.meta, deliveryIds: ["delivery-l"] } },
+      { sessionId, target, turn: BRAIN_HOST_TURN.TYPED, state: memoryRelayState() },
+    ),
   );
   assert.deepEqual(stops, [
     [conversationId, sessionId, "turn_10", hostTurnId(sessionId, "turn_10")],
@@ -520,12 +523,11 @@ test("over the real record, a follow-up ask stands queued under its own id until
   const writer = await database.run(
     storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
   );
-  const writes = promisedWriter(database.run, writer);
   const relay = new StreamRelay({
-    writer: writes,
-    asks,
-    stopTurn: async () => undefined,
-    offer: async () => true,
+    writer,
+    asks: askEffects,
+    stopTurn: () => Effect.void,
+    offer: () => Effect.succeed(true),
     now: () => NOW,
     report: () => undefined,
   });
@@ -543,8 +545,8 @@ test("over the real record, a follow-up ask stands queued under its own id until
     ...started,
     meta: { ...started.meta, deliveryIds: ["delivery-1"] },
   };
-  await relay.handle(withDeliveries, standing);
-  await relay.handle(withDeliveries, standing);
+  await database.run(relay.handle(withDeliveries, standing));
+  await database.run(relay.handle(withDeliveries, standing));
 
   const turnId = hostTurnId(sessionId, "turn_3");
   const running = await database.run(askStanding(reads, userId, accepted.answer.id));

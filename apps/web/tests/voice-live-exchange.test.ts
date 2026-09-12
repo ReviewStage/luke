@@ -7,7 +7,7 @@ import {
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
@@ -27,6 +27,7 @@ import {
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -40,7 +41,7 @@ import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, sessionStarted } from "./support/live-events";
-import { promisedAsks, promisedWriter } from "./support/promised-store";
+import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation,
   insertDevice,
@@ -86,11 +87,10 @@ const writer = await database.run(
 );
 const asks = promisedAsks(database.run);
 const relay = new StreamRelay({
-  writer: promisedWriter(database.run, writer),
-  asks,
-  stopTurn: async () => undefined,
-  offer: (target, turnId) =>
-    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
+  writer,
+  asks: askRecord(),
+  stopTurn: () => Effect.void,
+  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: () => undefined,
 });
@@ -141,7 +141,7 @@ async function device(userId: string): Promise<string> {
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
-  for (const event of events) await relay.handle(event, standing);
+  for (const event of events) await database.run(relay.handle(event, standing));
 }
 
 async function until(predicate: () => boolean, what: () => string): Promise<void> {

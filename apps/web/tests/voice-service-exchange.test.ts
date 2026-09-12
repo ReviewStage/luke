@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
@@ -16,6 +17,7 @@ import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
@@ -40,7 +42,7 @@ import {
   sessionStarted,
   thinkingAppended,
 } from "./support/live-events";
-import { promisedAsks, promisedWriter } from "./support/promised-store";
+import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation,
   insertDevice,
@@ -105,11 +107,10 @@ const writer = await database.run(
 );
 const asks = promisedAsks(database.run);
 const relay = new StreamRelay({
-  writer: promisedWriter(database.run, writer),
-  asks,
-  stopTurn: async () => undefined,
-  offer: (target, turnId) =>
-    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
+  writer,
+  asks: askRecord(),
+  stopTurn: () => Effect.void,
+  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: () => undefined,
 });
@@ -383,7 +384,8 @@ test("with the exchange offered it stands before the desktop is answered, seeds 
     model: "scripted-model",
     state: memoryRelayState(),
   };
-  for (const event of spokenTurn(FIRST_EVE_TURN, NOW)) await relay.handle(event, standing);
+  for (const event of spokenTurn(FIRST_EVE_TURN, NOW))
+    await database.run(relay.handle(event, standing));
   // The reply reaches the session as the service's own appends, each acknowledged here as OpenAI
   // would: the thinking note the reply streams under, then the sentences, which alone are spoken.
   const spoken: string[] = [];
@@ -629,7 +631,7 @@ test("the briefing look runs for as long as the session stands: a briefing on of
     state: memoryRelayState(),
   };
   for (const event of announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW)) {
-    await relay.handle(event, standing);
+    await database.run(relay.handle(event, standing));
   }
   const [offer] = await database.run(database.store.speech.open(context.target.userId));
   assert.ok(offer);

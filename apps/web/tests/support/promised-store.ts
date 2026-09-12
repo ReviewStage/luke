@@ -1,7 +1,25 @@
-import type { Promised } from "../../server/hosted/fiber-runner";
+import type { Effect } from "effect";
 import type { StoreWriter } from "../../server/hosted/store";
 import { type AskDeliveryBinding, type AskRecord, askRecord } from "../../server/hosted/store/asks";
 import type { HostedStoreTestRun } from "./hosted-store-database";
+
+/**
+ * An effect-shaped collaborator as a promise-shaped suite takes it. It lived
+ * in `server/hosted/fiber-runner.ts` until P12-18c took `StreamRelay` and
+ * `carryStop` onto effects, which left no module under `server/` holding a
+ * promise-shaped seam; what is left of it is here, for the suites that
+ * predate `it.effect`, and it goes with the last of them.
+ *
+ * @deprecated A strangler shim, test support only. It goes with each suite as
+ * it moves onto `it.effect`.
+ */
+type Promised<Methods> = {
+  [Name in keyof Methods]: Methods[Name] extends (
+    ...args: infer Args
+  ) => Effect.Effect<infer Value, infer _Failure, infer _Services>
+    ? (...args: Args) => Promise<Value>
+    : never;
+};
 
 /**
  * The ask record as a suite still written on promises takes it: every method
@@ -10,7 +28,13 @@ import type { HostedStoreTestRun } from "./hosted-store-database";
  * instead. New assertions belong on the effects themselves, through
  * `it.effect`; this is for the suites that predate them.
  */
-export function promisedAsks(run: HostedStoreTestRun): Promised<AskRecord & AskDeliveryBinding> {
+/** The ask record as a promise-era suite holds it. */
+type PromisedAskRecord = Promised<AskRecord & AskDeliveryBinding>;
+
+/** The store writer as a promise-era suite holds it. */
+type PromisedStoreWriter = Promised<StoreWriter>;
+
+export function promisedAsks(run: HostedStoreTestRun): PromisedAskRecord {
   const asks = askRecord();
   return {
     record: (ask) => run(asks.record(ask)),
@@ -25,10 +49,7 @@ export function promisedAsks(run: HostedStoreTestRun): Promised<AskRecord & AskD
 }
 
 /** The store writer, composed on the suite's runner, with every method run to a promise. */
-export function promisedWriter(
-  run: HostedStoreTestRun,
-  writer: StoreWriter,
-): Promised<StoreWriter> {
+export function promisedWriter(run: HostedStoreTestRun, writer: StoreWriter): PromisedStoreWriter {
   return {
     consume: (target, event) => run(writer.consume(target, event)),
     enqueueTurn: (target, enqueue) => run(writer.enqueueTurn(target, enqueue)),
