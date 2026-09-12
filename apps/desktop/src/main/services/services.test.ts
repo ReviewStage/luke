@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
 import { HostAssemblyTag, hostStandingLayer, layersInOrder } from "@sidecar/host/effect";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
-import { Effect, Exit, Layer, ManagedRuntime } from "effect";
+import { Effect, Exit, Fiber, Layer, ManagedRuntime, Runtime, Stream } from "effect";
 import { test } from "vitest";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { UpdaterEngine, UpdaterEngineEvents } from "../update-service";
@@ -218,7 +218,6 @@ test("the host stands and drains leaving no handle, and a second close is not a 
 test("the updater's timers are handles the stop takes back, and a restart tears down first", async (t) => {
   const stateRoot = await temporaryDirectory(t);
   const order: string[] = [];
-  const snapshots: string[] = [];
   let events: UpdaterEngineEvents | undefined;
   const engine: UpdaterEngine = {
     wire: (wired) => {
@@ -232,8 +231,15 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
     ...fixtureConfig(stateRoot),
     runMode: runModeFor({ capture: false, fixture: false }),
   };
-  const state = new AppStateStore(initialAppState(config, true));
-  state.subscribe(() => snapshots.push(state.snapshot().update.status));
+  const state = new AppStateStore(initialAppState(config, true), Runtime.defaultRuntime);
+  const snapshots: string[] = [];
+  const watching = Effect.runSync(
+    Effect.forkDaemon(
+      Stream.runForEach(state.changes, (held) =>
+        Effect.sync(() => snapshots.push(held.update.status)),
+      ),
+    ),
+  );
   const quit = desktopQuit();
   quit.closesThrough(async () => {
     order.push("teardown");
@@ -257,6 +263,7 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
   assert.ok(snapshots.length > 0, "no update state ever reached the windows");
   await updates.stop();
   await updates.stop();
+  await Effect.runPromise(Fiber.interrupt(watching));
 });
 
 test("a launch suspended on one of its waits opens nothing once a quit has been asked for", async () => {

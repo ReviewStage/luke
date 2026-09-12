@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
-import { Effect, type Stream, SubscriptionRef } from "effect";
+import { Runtime, type Stream, SubscriptionRef } from "effect";
 import type { AppState } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { HostBootstrap } from "./gateway/host-operator";
@@ -31,31 +31,34 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
 
 /**
  * The one path anything in main writes what it holds: a patch of whole
- * slices, dropped where it says nothing new, and one notification per
- * applied patch. Nothing else may hold a copy of a slice — a reader takes a
- * snapshot, which is the document as it stands.
+ * slices, dropped where it says nothing new, and one write of the resulting
+ * document into the ref per applied patch. Nothing else may hold a copy of a
+ * slice — a reader takes a snapshot, which is the document as it stands.
  *
  * The document itself is a `SubscriptionRef`, so its own `changes` Stream is
  * the one subscription a production caller forks to reach the windows.
- * `snapshot`, `update`, `touch`, and `subscribe` are the synchronous face the
- * rest of main and this file's own tests still hold, each running its Ref
- * operation through `Effect.runSync`, which never suspends here because
- * nothing behind a `SubscriptionRef` write is asynchronous.
+ * `snapshot`, `update`, and `touch` are the synchronous face the rest of main
+ * still holds, each running its Ref operation on the launch's own runtime —
+ * the one `main.ts` disposes, captured once at construction — rather than the
+ * default runtime `Effect.runSync` would otherwise reach for; a
+ * `SubscriptionRef` read or write never suspends, so the call still answers
+ * in the same turn its caller made it in.
  */
 export class AppStateStore {
   readonly #ref: SubscriptionRef.SubscriptionRef<AppState>;
-  readonly #listeners = new Set<() => void>();
+  readonly #runtime: Runtime.Runtime<never>;
 
-  constructor(initial: Omit<AppState, "version">) {
-    this.#ref = Effect.runSync(SubscriptionRef.make<AppState>({ ...initial, version: 0 }));
+  constructor(initial: Omit<AppState, "version">, runtime: Runtime.Runtime<never>) {
+    this.#runtime = runtime;
+    this.#ref = Runtime.runSync(runtime)(
+      SubscriptionRef.make<AppState>({ ...initial, version: 0 }),
+    );
   }
 
-  /** @deprecated the synchronous read over the ref; P8-07 deletes it once every caller reads `changes` directly. */
   snapshot(): AppState {
-    return Effect.runSync(SubscriptionRef.get(this.#ref));
+    return Runtime.runSync(this.#runtime)(SubscriptionRef.get(this.#ref));
   }
 
-  /** @deprecated the synchronous write over the ref; P8-07 deletes it once every caller reads `changes` directly. */
   update(patch: AppStatePatch): void {
     const previous = this.snapshot();
     const moved = patchEntries(patch).filter(
@@ -67,8 +70,7 @@ export class AppStateStore {
       ...Object.fromEntries(moved),
       version: previous.version + 1,
     };
-    Effect.runSync(SubscriptionRef.set(this.#ref, next));
-    this.#announce();
+    Runtime.runSync(this.#runtime)(SubscriptionRef.set(this.#ref, next));
   }
 
   /**
@@ -79,33 +81,14 @@ export class AppStateStore {
    * changed has to be handed one again. The ref is set to its own current
    * value so `changes` re-announces it too, the same document under the same
    * version.
-   *
-   * @deprecated the synchronous re-announce over the ref; P8-07 deletes it
-   * once every caller reads `changes` directly.
    */
   touch(): void {
-    Effect.runSync(SubscriptionRef.set(this.#ref, this.snapshot()));
-    this.#announce();
-  }
-
-  /** @deprecated the callback face over the ref's own subscribers; P8-07 deletes it, `changes` is the ref's own subscription. */
-  subscribe(listener: () => void): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
+    Runtime.runSync(this.#runtime)(SubscriptionRef.set(this.#ref, this.snapshot()));
   }
 
   /** The document's own change stream, direct from the ref, for the one production subscriber. */
   get changes(): Stream.Stream<AppState> {
     return this.#ref.changes;
-  }
-
-  #announce(): void {
-    // A listener that patches in turn is applied and announced inside this
-    // call, so nothing it wrote is lost; the copy is what lets it subscribe
-    // or unsubscribe while the round is running.
-    for (const listener of Array.from(this.#listeners)) listener();
   }
 }
 

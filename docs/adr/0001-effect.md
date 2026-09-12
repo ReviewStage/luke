@@ -315,17 +315,25 @@ mid-wait. It goes once `update-service-host.ts`'s own composer is a `Layer`
 of its own rather than a promise calling these two synchronous methods.
 
 `AppStateStore`'s `snapshot`, `update`, and `touch` in
-`apps/desktop/src/main/app-state.ts` are on the same allowlist: the document
-they read and write is a `SubscriptionRef`, whose own `changes` Stream is what
-`compose-desktop.ts`'s one production subscriber forks over, but every other
-caller in main — the ipc handlers, the window, gateway, and update-service
-wiring — and this file's own tests still hold a synchronous object, so each of
-the three runs its Ref operation through `Effect.runSync` in place, which
-never suspends here because nothing behind a `SubscriptionRef` write is
-asynchronous. `subscribe`, the Set-backed callback face beside them, runs no
-effect of its own and is on no allowlist, but is the same shim wearing a
-smaller face, answering this file's own tests without touching the ref at
-all. P8-07 deletes all four once every caller reads `changes` directly.
+`apps/desktop/src/main/app-state.ts` are not on this allowlist, and P8-07 is
+why: the document they read and write is a `SubscriptionRef`, whose own
+`changes` Stream is what `compose-desktop.ts`'s one production subscriber
+forks over, but every other caller in main — the ipc handlers, the window,
+gateway, and update-service wiring — still holds a synchronous object, and the
+ordering those callers and this file's own tests depend on (a listener's own
+patch is not lost, a re-announce lands before the caller's next statement) is
+exactly what turning them into effects a caller awaits would give up. Each of
+the three still runs its Ref operation through `Runtime.runSync`, which never
+suspends here because nothing behind a `SubscriptionRef` read or write is
+asynchronous, but on the launch's own runtime — captured once at construction
+and handed in by `compose-desktop.ts`, the same `Runtime.Runtime<never>`
+`DesktopServices.run` answers promises on — rather than the default runtime
+`Effect.runSync` would otherwise reach for. That is what removes them from the
+allowlist rather than a further conversion: nothing here is a second runtime
+any more, and P8-07 deleted `subscribe`, the Set-backed callback face beside
+them, once its one production caller turned out to be `compose-desktop.ts`'s
+own fork over `changes` and its every other caller turned out to be this
+file's own tests, which now watch `changes` itself instead.
 
 `deviceCadence`'s `start` and `stop` in `packages/host/src/compose-devices.ts`
 are on the allowlist: the poll's cadence is a `Schedule` on a fiber forked
@@ -810,10 +818,11 @@ design decision stated as such:
 | `UpdateService`'s `start`/`stop`/`#armPublishingRetry` over its own `Scope` | P8-03 | once `update-service-host.ts`'s composer is a `Layer` of its own |
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
 | `startConversationMaintenance`'s own `Scope` | P7-05 | P7-10 |
-| `AppStateStore`'s `snapshot`/`update`/`touch` over its own `SubscriptionRef`, and `subscribe` beside them | P8-02 | P8-07 |
+| `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `deviceCadence`'s `start`/`stop` over their own `Scope` | P7-09 | P7-10 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
 | The calendars composer's `startObservation`/`stopObservation` over their own `Scope` | P7-06 | P7-10 |
+| `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
 The two permanent entries are not unfinished work. A `GATEWAY_ERROR` code and
