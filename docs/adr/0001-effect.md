@@ -198,6 +198,14 @@ it starts the work on the runtime it was handed rather than building a
 second one, so this is that runtime's own edge for as long as the seam it
 answers still takes closures instead of an effect. It goes once `BrainAgent`
 answers `Clock` and `Scope` directly instead.
+`forkOn` in `packages/brain/src/effect/fork.ts` is on the same list for the
+same reason read the other way: P12-16h gave the read prefetch's slot a fiber
+of its own, and a slot opens where no fiber of the caller's stands — a live
+session saying `anticipateAsk` while the developer is still speaking. The fork
+starts that fiber on the `ExecutionRuntime` the host handed the agent rather
+than on a runtime of its own, nothing is awaited through it, and the value the
+turn later takes travels through the slot's own `Deferred` instead. It goes
+once `anticipateAsk` answers an effect the host forks itself.
 The `ScheduledTimer` type alias itself — the opaque handle a
 `schedule`/`cancel` pair traffics in — still names a real constraint two
 things forced back into a dedicated declaration file rather than an inline
@@ -1034,14 +1042,17 @@ turn's own fiber runs, so the flush before a compaction is one effect inside
 another and the host's memory maintenance builds the housekeeping turn's
 effect rather than carrying it. The
 `ToolExecutor` seam left the list in P12-15c and the read tool's
-whole-transcript read went with it into the tool loop's own fiber. What
-carries a read here now is the prefetch alone, and P12-16b took its slot memo
-off this door: a memoized read is an `Effect.cached` effect held under the
-tool and its arguments rather than a promise, and the reads one plan named
-are one carried batch rather than one carry per read. What the prefetch still
-carries is the plan itself — the policy it resolves, the planner's call, and
-the summary — because a slot runs while the developer is still speaking and
-has no fiber of its own until P12-02 gives it one. A defect is squashed back to the error that
+whole-transcript read went with it into the tool loop's own fiber. The read
+prefetch left this door in P12-16h, which gave a slot the fiber it had been
+missing: the policy it resolves, the planner's call, the reads it named, the
+summary, and the whole-transcript read the agent builds for it all run in that
+fiber, forked through `forkOn` above, and a supersession, a take past its
+wait, and a drop each end the slot as that fiber's interruption rather than as
+a signal raced against a carried promise. A memoized read keeps the shape
+P12-16b gave it — one answer however many times it is asked for — as the join
+of a daemon fiber rather than an `Effect.cached` effect, because the words
+that supersede a slot must leave a read already out to finish into the memo
+for the plan that follows. A defect is squashed back to the error that
 caused it, so a store, a listener, or an engine that threw reaches the caller
 as the error it threw rather than as the fiber failure that carried it.
 P12-04 deletes it with those seams. What still awaits this door after P12-16c
@@ -1049,9 +1060,8 @@ is these and nothing else: the turn runner's `runAsk` and `turn`, because
 the conversation's own serial queue and the host's lane both take a
 `() => Promise<T>`; `Maintenance`'s housekeeping turn, which rides that same
 queue; the generation's context open, which `generationFrom` must hold as a
-promise so the object is built in one synchronous statement; the prefetch's
-plan, planner call, and summary, and the whole-transcript read the agent
-builds for it; and `resetConversation`'s capture in the host. Each is named
+promise so the object is built in one synchronous statement; and
+`resetConversation`'s capture in the host. Each is named
 where it stands, and the ask face — with the conversation's serial queue and
 the host's lane beneath it — is what moves the turn runner's two and the
 maintenance's one.
@@ -1304,12 +1314,13 @@ machine-readable twin: the same paths under `runtimeEdges`, `runShims`, and
 `runOnHandedRuntime`, beside a fourth list, `rawAsyncPrimitives`, naming every
 file a raw timer, promise, abort controller, or `fs.watch` still lives in.
 `packages/brain/src/read-prefetch.ts` is the one row added there after the
-list was drawn: the read prefetch's slot is cancelled through the
-`AbortSignal` seams its collaborators still take — `ModelAdapter#respond`, a
-tool module's `ToolExecutionContext`, the turn's own signal — so it holds a
-controller per slot and one for the reads, on the same terms as `turn.ts` and
-`runtime.ts` beside it, and goes with them in P12-02 when those seams become
-a fiber's own interruption.
+list was drawn: the slot itself is a fiber since P12-16h and is ended by
+interrupting it, but the collaborators it calls still read an `AbortSignal`
+rather than a fiber — `ModelAdapter#respond`, a tool module's
+`ToolExecutionContext`, the turn's own signal — so it holds a controller per
+slot and one for the reads, fired where the interruption is raised, on the
+same terms as `turn.ts` and `runtime.ts` beside it, and goes with them in
+P12-02 when those seams become a fiber's own interruption.
 `anti-slop/no-run-promise-outside-edges` and `anti-slop/no-raw-async-primitives`
 read it, so both rules are the linter's rather than review's, and the two
 directions are enforced in two places: a file that starts running an Effect
@@ -1360,6 +1371,7 @@ design decision stated as such:
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
 | `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
 | `carryOn`, the brain's one promise door onto the host's `ExecutionRuntime` | P12-02 | P12-04 |
+| `forkOn`, the read prefetch's fork of its slot onto the host's `ExecutionRuntime` | P12-16h | once `anticipateAsk` answers an effect the host forks itself |
 | `BrainAgent#onRunEvent`'s per-subscription fiber over `Stream.fromPubSub` | P5-06 | once a subscriber reads the stream directly |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |

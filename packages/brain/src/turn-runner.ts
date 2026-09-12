@@ -904,7 +904,7 @@ export class TurnRunner {
       ) {
         return [];
       }
-      const taken = yield* awaited(() => prefetch.take(policy, turnContext.signal));
+      const taken = yield* prefetch.take(policy, turnContext.signal);
       return this.#revoked(turnContext) ? [] : taken.reads;
     });
   }

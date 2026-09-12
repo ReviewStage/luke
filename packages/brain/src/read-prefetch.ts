@@ -1,5 +1,6 @@
 import type { EffectiveToolPolicy } from "@sidecar/runtime";
 import {
+  type ExecutionRuntime,
   type MemoryDefinition,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -12,13 +13,12 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
-import { Effect, Option } from "effect";
-import type { Carry } from "./effect/carry.js";
-import { settledUnlessAborted } from "./effect/settled.js";
+import { Deferred, Duration, Effect, Fiber, FiberId, Option } from "effect";
+import { type ForkOn, forkOn } from "./effect/fork.js";
+import { whenAborted } from "./effect/settled.js";
 import { anticipatedAskInputText, prefetchedReadsInputText } from "./input-items.js";
 import type { BrainRoster } from "./performer.js";
 import { userMessageItem } from "./responses-api.js";
-import type { ScheduledTimer } from "./scheduled-timer.js";
 import { BRAIN_TOOL } from "./tools/names.js";
 import {
   offeredSessions,
@@ -54,6 +54,15 @@ import {
  * words supersede a plan under way; a stop, a generation's replacement, or a
  * session's close drops the slot whole. Nothing here acts, and nothing here
  * decides on the developer's behalf: a wrong plan wastes a read.
+ *
+ * A slot is a fiber of its own from the words that open it, forked onto the
+ * runtime the host handed the agent, because it runs while the developer is
+ * still speaking rather than inside anyone's turn: the plan, the reads, and
+ * the summary are steps in it, what it read travels to the turn that takes it
+ * through the slot's own `Deferred`, and superseding, abandoning, or dropping
+ * a slot is interrupting that fiber. A read already out is the one thing left
+ * running: it finishes into the memo on a fiber of its own, for the plan the
+ * next words make.
  *
  * The voice is handed a summary too, once per slot: a second small-model
  * call over the reads writes a few factual sentences the live session may
@@ -139,7 +148,7 @@ export interface PrefetchTake {
 
 /** What a turn asks of the prefetch: the slot, filtered by the tools the turn may call. */
 export interface TurnReadPrefetch {
-  take(policy: EffectiveToolPolicy, signal: AbortSignal): Promise<PrefetchTake>;
+  take(policy: EffectiveToolPolicy, signal: AbortSignal): Effect.Effect<PrefetchTake>;
 }
 
 export interface ReadPrefetchOptions {
@@ -148,7 +157,7 @@ export interface ReadPrefetchOptions {
   conversationId: SessionKey;
   roster: () => BrainRoster;
   /** One observed session's whole tail, bounded to the prefetch's own bound, through the host; the identity is one the roster holds. */
-  readTranscript: (identity: SessionIdentity, signal: AbortSignal) => Promise<WireRecord>;
+  readTranscript: (identity: SessionIdentity, signal: AbortSignal) => Effect.Effect<WireRecord>;
   /**
    * The effective tool policy a spoken ask's turn would run under, resolved
    * now: a read that policy does not offer is never planned for, never run,
@@ -158,16 +167,15 @@ export interface ReadPrefetchOptions {
    */
   policy: () => Promise<EffectiveToolPolicy>;
   /**
-   * Carries this prefetch's own waits to the promises it holds. A prefetch
-   * runs while the developer is still speaking rather than inside a turn, so
-   * it has no fiber of its own for a supersession to interrupt and races the
-   * slot's signal instead.
+   * The runtime a slot is forked onto. A prefetch runs while the developer is
+   * still speaking rather than inside a turn, so the slot opens a fiber of
+   * its own here, and the words that supersede it, the take that outlasts its
+   * wait, and the drop that abandons it each end it as that fiber's
+   * interruption.
    */
-  carry: Carry;
+  execution: ExecutionRuntime;
   memory?: MemoryDefinition;
   now: () => number;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
   createId: () => string;
   report: (message: string) => void;
   trace?: (record: BrainPrefetchTraceRecord) => void;
@@ -182,14 +190,21 @@ interface Slot {
   id: string;
   partialAsk: string;
   startedAt: number;
-  /** Fires when the slot is superseded, taken past its wait, or dropped; the planner and the summary settle on it. */
+  /**
+   * Fires with the slot's interruption, for the collaborators that still read
+   * a signal rather than a fiber: the planner's and the summary's
+   * `ModelAdapter#respond`, and the read modules' own context.
+   */
   abort: AbortController;
-  ready: Promise<readonly HeldRead[] | undefined>;
+  /** The reads this slot planned, for the turn that takes them; `undefined` where the plan answered none. */
+  ready: Deferred.Deferred<readonly HeldRead[] | undefined>;
+  /** The slot's own fiber, held from the statement that forks it. */
+  fiber: Fiber.RuntimeFiber<void> | undefined;
   readyAt: number | undefined;
 }
 
 interface MemoEntry {
-  /** The read as one effect however many times it is asked for: `Effect.cached` holds the first answer. */
+  /** The read as one effect however many times it is asked for: the join of the fiber it runs on holds the first answer. */
   read: Effect.Effect<WireRecord>;
   readAt: number;
 }
@@ -217,6 +232,7 @@ function answered(output: WireRecord): boolean {
 export class ReadPrefetch implements TurnReadPrefetch {
   readonly #options: ReadPrefetchOptions;
   readonly #planTool: ToolSchema;
+  readonly #fork: ForkOn;
   readonly #factsListeners = new Set<(facts: BrainAnticipationFacts) => void>();
   #slot: Slot | undefined;
   /** The reads made under the standing memo, by tool then arguments, so a re-plan naming the same read reads once. */
@@ -229,6 +245,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
   constructor(options: ReadPrefetchOptions, planTool: ToolSchema) {
     this.#options = options;
     this.#planTool = planTool;
+    this.#fork = forkOn(options.execution);
   }
 
   /** Hears each summary the voice may append; a listener is told only for a slot still standing when the summary lands. */
@@ -254,27 +271,68 @@ export class ReadPrefetch implements TurnReadPrefetch {
     ) {
       return;
     }
-    if (standing) standing.abort.abort();
+    if (standing) this.#abandon(standing);
     const slot: Slot = {
       id: anticipation.id,
       partialAsk: anticipation.partialAsk,
       startedAt: this.#options.now(),
       abort: new AbortController(),
-      ready: Promise.resolve(undefined),
+      ready: Deferred.unsafeMake(FiberId.none),
+      fiber: undefined,
       readyAt: undefined,
     };
-    slot.ready = this.#plan(slot, anticipation).catch((error) => {
-      this.#options.report(
-        `Read prefetch failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return undefined;
-    });
     this.#slot = slot;
+    slot.fiber = this.#fork(this.#run(slot, anticipation));
+  }
+
+  /**
+   * The slot's own fiber: the plan, and the summary of what it read. A slot
+   * whose fiber is interrupted hands nothing over — the turn waiting on it
+   * reads the same nothing a plan that named no reads leaves — and a defect
+   * anywhere in it is this prefetch's alone to report, never the fiber
+   * failure of the runtime it was forked onto.
+   */
+  #run(slot: Slot, anticipation: BrainAnticipation): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const kept = yield* Effect.onInterrupt(this.#plan(slot, anticipation), () =>
+        Effect.sync(() =>
+          this.#traceOutcome(
+            slot,
+            BRAIN_PREFETCH_OUTCOME.FAILED,
+            anticipation.partialAsk.length,
+            0,
+            "superseded",
+          ),
+        ),
+      );
+      yield* Deferred.succeed(slot.ready, kept);
+      if (kept !== undefined) yield* this.#summarize(slot, kept);
+    }).pipe(
+      Effect.catchAllDefect((defect) =>
+        Effect.sync(() =>
+          this.#options.report(
+            `Read prefetch failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+          ),
+        ),
+      ),
+      Effect.ensuring(Deferred.succeed(slot.ready, undefined)),
+    );
+  }
+
+  /**
+   * The slot is abandoned: the signal its collaborators read fires at once,
+   * so a model call already out is cancelled where the caller stands, and its
+   * fiber is interrupted behind that. Nothing waits for the interruption to
+   * land; what it guarantees is that no step after it runs.
+   */
+  #abandon(slot: Slot): void {
+    slot.abort.abort();
+    slot.fiber?.unsafeInterruptAsFork(FiberId.none);
   }
 
   /** Everything under way is abandoned and everything held is forgotten: nothing planned before survives. */
   drop(): void {
-    this.#slot?.abort.abort();
+    if (this.#slot) this.#abandon(this.#slot);
     this.#slot = undefined;
     this.#reads.abort();
     this.#reads = new AbortController();
@@ -290,47 +348,52 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * meanwhile is neither handed over nor torn down, and the newer plan stands
    * for the turn that follows.
    */
-  async take(policy: EffectiveToolPolicy, signal: AbortSignal): Promise<PrefetchTake> {
-    const slot = this.#slot;
-    const startedAt = this.#options.now();
-    if (!slot) return this.#took(BRAIN_PREFETCH_TAKE.MISS_NONE, [], 0);
-    let reads: readonly HeldRead[] | undefined;
-    let waited = false;
-    if (slot.readyAt === undefined) {
-      waited = true;
-      const outcome = await this.#awaitReady(slot, signal);
-      if (outcome === TAKE_WAIT.REVOKED) {
-        return this.#took(BRAIN_PREFETCH_TAKE.MISS_REVOKED, [], this.#elapsed(startedAt));
+  take(policy: EffectiveToolPolicy, signal: AbortSignal): Effect.Effect<PrefetchTake> {
+    return Effect.gen(this, function* () {
+      const slot = this.#slot;
+      const startedAt = this.#options.now();
+      if (!slot) return this.#took(BRAIN_PREFETCH_TAKE.MISS_NONE, [], 0);
+      let reads: readonly HeldRead[] | undefined;
+      let waited = false;
+      if (slot.readyAt === undefined) {
+        waited = true;
+        const outcome = yield* this.#awaitReady(slot, signal);
+        if (outcome === TAKE_WAIT.REVOKED) {
+          return this.#took(BRAIN_PREFETCH_TAKE.MISS_REVOKED, [], this.#elapsed(startedAt));
+        }
+        if (outcome === TAKE_WAIT.TIMEOUT) {
+          // Only the slot this turn waited on is abandoned: words said since
+          // may have superseded it with a plan of their own, which stands, and
+          // the memo stands with it.
+          this.#abandon(slot);
+          if (this.#slot === slot) this.#slot = undefined;
+          return this.#took(BRAIN_PREFETCH_TAKE.MISS_TIMEOUT, [], this.#elapsed(startedAt));
+        }
+        reads = outcome;
+      } else {
+        reads = yield* Deferred.await(slot.ready);
       }
-      if (outcome === TAKE_WAIT.TIMEOUT) {
-        // Only the slot this turn waited on is abandoned: words said since
-        // may have superseded it with a plan of their own, which stands, and
-        // the memo stands with it.
-        slot.abort.abort();
-        if (this.#slot === slot) this.#slot = undefined;
-        return this.#took(BRAIN_PREFETCH_TAKE.MISS_TIMEOUT, [], this.#elapsed(startedAt));
+      if (this.#slot === slot) {
+        this.#slot = undefined;
+        this.#memo = new Map();
       }
-      reads = outcome;
-    } else {
-      reads = await slot.ready;
-    }
-    if (this.#slot === slot) {
-      this.#slot = undefined;
-      this.#memo = new Map();
-    }
-    const waitedMs = this.#elapsed(startedAt);
-    if (reads === undefined) return this.#took(BRAIN_PREFETCH_TAKE.MISS_NONE, [], waitedMs);
-    if (slot.readyAt !== undefined && this.#options.now() - slot.readyAt > PREFETCH_BOUNDS.TTL_MS) {
-      return this.#took(BRAIN_PREFETCH_TAKE.MISS_EXPIRED, [], waitedMs);
-    }
-    const allowed = reads
-      .filter((read) => policy.allows(read.name))
-      .map(({ about: _about, ...read }) => read);
-    return this.#took(
-      waited ? BRAIN_PREFETCH_TAKE.HIT_WAITED : BRAIN_PREFETCH_TAKE.HIT,
-      allowed,
-      waitedMs,
-    );
+      const waitedMs = this.#elapsed(startedAt);
+      if (reads === undefined) return this.#took(BRAIN_PREFETCH_TAKE.MISS_NONE, [], waitedMs);
+      if (
+        slot.readyAt !== undefined &&
+        this.#options.now() - slot.readyAt > PREFETCH_BOUNDS.TTL_MS
+      ) {
+        return this.#took(BRAIN_PREFETCH_TAKE.MISS_EXPIRED, [], waitedMs);
+      }
+      const allowed = reads
+        .filter((read) => policy.allows(read.name))
+        .map(({ about: _about, ...read }) => read);
+      return this.#took(
+        waited ? BRAIN_PREFETCH_TAKE.HIT_WAITED : BRAIN_PREFETCH_TAKE.HIT,
+        allowed,
+        waitedMs,
+      );
+    });
   }
 
   #took(take: BrainPrefetchTake, reads: readonly PrefetchedRead[], waitedMs: number): PrefetchTake {
@@ -342,62 +405,44 @@ export class ReadPrefetch implements TurnReadPrefetch {
     return Math.max(0, this.#options.now() - since);
   }
 
-  #awaitReady(slot: Slot, signal: AbortSignal): Promise<WaitOutcome> {
-    return new Promise<WaitOutcome>((resolve) => {
-      if (signal.aborted) {
-        resolve(TAKE_WAIT.REVOKED);
-        return;
-      }
-      const timer = this.#options.schedule(() => {
-        signal.removeEventListener("abort", revoked);
-        resolve(TAKE_WAIT.TIMEOUT);
-      }, PREFETCH_BOUNDS.TAKE_WAIT_MS);
-      const revoked = () => {
-        this.#options.cancel(timer);
-        resolve(TAKE_WAIT.REVOKED);
-      };
-      signal.addEventListener("abort", revoked, { once: true });
-      void slot.ready.then((reads) => {
-        this.#options.cancel(timer);
-        signal.removeEventListener("abort", revoked);
-        resolve(reads);
-      });
+  /**
+   * The turn's wait on a slot still planning: the reads, the turn's own
+   * revocation, or the bound past which it reads for itself, whichever is
+   * first. A signal already fired is read before the race rather than inside
+   * it, so a slot that is ready in the same instant cannot be handed to a
+   * turn that no longer stands.
+   */
+  #awaitReady(slot: Slot, signal: AbortSignal): Effect.Effect<WaitOutcome> {
+    return Effect.suspend(() => {
+      if (signal.aborted) return Effect.succeed(TAKE_WAIT.REVOKED);
+      const waits: readonly Effect.Effect<WaitOutcome>[] = [
+        Deferred.await(slot.ready),
+        Effect.as(whenAborted(signal), TAKE_WAIT.REVOKED),
+        Effect.as(Effect.sleep(Duration.millis(PREFETCH_BOUNDS.TAKE_WAIT_MS)), TAKE_WAIT.TIMEOUT),
+      ];
+      return Effect.raceAll(waits);
     });
   }
 
-  /** The planner's one call, then the reads it named, under the slot's own signal and the planning bound. */
-  async #plan(
+  /** The planner's one call, then the reads it named, on the slot's own fiber and within the planning bound. */
+  #plan(
     slot: Slot,
     anticipation: BrainAnticipation,
-  ): Promise<readonly HeldRead[] | undefined> {
-    const chars = anticipation.partialAsk.length;
-    const resolved = await this.#options.carry(
-      settledUnlessAborted(
-        Effect.promise(async () => await this.#options.policy()),
-        slot.abort.signal,
-      ),
-    );
-    if (Option.isNone(resolved)) {
-      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
-      return undefined;
-    }
-    const policy = resolved.value;
-    const offeredKinds = Object.values(PREFETCH_READ_KIND).filter((kind) => policy.allows(kind));
-    if (offeredKinds.length === 0) {
-      // Nothing the policy offers could be read ahead, so no planner is spent.
-      slot.readyAt = this.#options.now();
-      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.PLANNED, chars, 0);
-      return [];
-    }
-    const roster = this.#options.roster();
-    const sessions = roster.sessions ?? [];
-    const offered = offeredSessions(sessions);
-    const deadline = this.#options.schedule(
-      () => slot.abort.abort(),
-      PREFETCH_BOUNDS.PLAN_TIMEOUT_MS,
-    );
-    const planned = await this.#options.carry(
-      settledUnlessAborted(
+  ): Effect.Effect<readonly HeldRead[] | undefined> {
+    return Effect.gen(this, function* () {
+      const chars = anticipation.partialAsk.length;
+      const policy = yield* Effect.promise(async () => await this.#options.policy());
+      const offeredKinds = Object.values(PREFETCH_READ_KIND).filter((kind) => policy.allows(kind));
+      if (offeredKinds.length === 0) {
+        // Nothing the policy offers could be read ahead, so no planner is spent.
+        slot.readyAt = this.#options.now();
+        this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.PLANNED, chars, 0);
+        return [];
+      }
+      const roster = this.#options.roster();
+      const sessions = roster.sessions ?? [];
+      const offered = offeredSessions(sessions);
+      const planned = yield* Effect.timeoutOption(
         Effect.promise(
           async () =>
             await this.#options.model.respond(
@@ -421,51 +466,46 @@ export class ReadPrefetch implements TurnReadPrefetch {
               },
             ),
         ),
-        slot.abort.signal,
-      ),
-    );
-    this.#options.cancel(deadline);
-    if (Option.isNone(planned)) {
-      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
-      return undefined;
-    }
-    const answer = planned.value;
-    if (answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED) {
-      if (answer.failure === MODEL_FAILURE.COMPATIBILITY) {
-        this.#unavailable = true;
-        this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.UNAVAILABLE, chars, 0, answer.reason);
-      } else {
-        this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, answer.reason);
+        Duration.millis(PREFETCH_BOUNDS.PLAN_TIMEOUT_MS),
+      );
+      if (Option.isNone(planned)) {
+        // The planner's own bound abandons the slot: the fiber is this one, so
+        // what the bound must still end is the call the adapter has out.
+        slot.abort.abort();
+        this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "timeout");
+        return undefined;
       }
-      return undefined;
-    }
-    if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
-      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "quiet");
-      return undefined;
-    }
-    const call = answer.toolCalls.find((candidate) => candidate.name === PLAN_READS_TOOL_NAME);
-    const reads = call ? planReadsFromCall(call.argumentsJson, offered.identities) : undefined;
-    if (!reads) {
-      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "no plan");
-      return undefined;
-    }
-    const held = await this.#options.carry(
-      Effect.all(
+      const answer = planned.value;
+      if (answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED) {
+        if (answer.failure === MODEL_FAILURE.COMPATIBILITY) {
+          this.#unavailable = true;
+          this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.UNAVAILABLE, chars, 0, answer.reason);
+        } else {
+          this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, answer.reason);
+        }
+        return undefined;
+      }
+      if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
+        this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "quiet");
+        return undefined;
+      }
+      const call = answer.toolCalls.find((candidate) => candidate.name === PLAN_READS_TOOL_NAME);
+      const reads = call ? planReadsFromCall(call.argumentsJson, offered.identities) : undefined;
+      if (!reads) {
+        this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "no plan");
+        return undefined;
+      }
+      const held = yield* Effect.all(
         reads
           .filter((read) => policy.allows(read.kind))
           .map((read) => this.#read(read, roster, sessions, offered.options)),
         { concurrency: "unbounded" },
-      ),
-    );
-    if (slot.abort.signal.aborted) {
-      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
-      return undefined;
-    }
-    const kept = held.filter((read): read is HeldRead => read !== undefined);
-    slot.readyAt = this.#options.now();
-    this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.PLANNED, chars, kept.length);
-    void this.#summarize(slot, kept);
-    return kept;
+      );
+      const kept = held.filter((read): read is HeldRead => read !== undefined);
+      slot.readyAt = this.#options.now();
+      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.PLANNED, chars, kept.length);
+      return kept;
+    });
   }
 
   #traceOutcome(
@@ -537,10 +577,13 @@ export class ReadPrefetch implements TurnReadPrefetch {
   /**
    * The read under the standing memo: a read of the same tool with the same
    * arguments inside the memo's own window answers from the first one rather
-   * than reaching the module again. What the memo holds is the read as an
-   * `Effect.cached` effect — one answer however many times it is yielded —
-   * so the memo is entered on the slot's own fiber rather than through a
-   * promise, and a read that failed is held as the refusal it answered.
+   * than reaching the module again. What the memo holds is the join of a
+   * fiber of the read's own — one answer however many times it is yielded —
+   * forked as a daemon rather than as the slot's child on purpose: the next
+   * words interrupt the slot, and a read already out is left to finish into
+   * the memo for the plan that follows, which is what makes a re-plan naming
+   * the same read read once. A read that failed is held as the refusal it
+   * answered.
    */
   #memoized(
     name: string,
@@ -553,11 +596,12 @@ export class ReadPrefetch implements TurnReadPrefetch {
       const standing = byArguments.get(argumentsJson);
       const now = this.#options.now();
       if (standing && now - standing.readAt <= PREFETCH_BOUNDS.TTL_MS) return standing.read;
-      const read = yield* Effect.cached(
+      const fiber = yield* Effect.forkDaemon(
         Effect.catchAllDefect(execute(), () =>
           Effect.succeed(rejection(REFUSAL_REASON.READ_FAILED)),
         ),
       );
+      const read = Fiber.join(fiber);
       byArguments.set(argumentsJson, { read, readAt: now });
       return read;
     });
@@ -575,8 +619,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
         isRevoked: () => signal.aborted,
         signal,
         roster: { text: roster.text, identities: roster.identities },
-        readTranscript: (identity) =>
-          Effect.promise(() => this.#options.readTranscript(identity, signal)),
+        readTranscript: (identity) => this.#options.readTranscript(identity, signal),
       };
       if (read.kind === PREFETCH_READ_KIND.TRANSCRIPT) {
         const module = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
@@ -595,49 +638,46 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * handed to the listeners only while the slot it was read for still stands
    * unsuperseded, because an append cannot be taken back.
    */
-  async #summarize(slot: Slot, reads: readonly HeldRead[]): Promise<void> {
-    if (reads.length === 0 || this.#factsListeners.size === 0) return;
-    const summarized = await this.#options
-      .carry(
-        settledUnlessAborted(
-          Effect.promise(
-            async () =>
-              await this.#options.model.respond(
-                [
-                  userMessageItem(
-                    prefetchedReadsInputText(
-                      reads.map((read) => ({
-                        tool: read.name,
-                        arguments: read.argumentsJson,
-                        ...(read.about !== undefined ? { session_title: read.about } : undefined),
-                        output: read.outputJson,
-                      })),
-                      this.#options.now(),
-                    ),
-                  ),
-                ],
-                {
-                  prompt: PREFETCH_SUMMARY_PROMPT,
-                  tools: [],
-                  maximumOutputTokens: PREFETCH_BOUNDS.SUMMARY_TOKENS,
-                  reasoningEffort: REASONING_EFFORT.LOW,
-                  signal: slot.abort.signal,
-                },
+  #summarize(slot: Slot, reads: readonly HeldRead[]): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (reads.length === 0 || this.#factsListeners.size === 0) return;
+      const answer = yield* Effect.promise(
+        async () =>
+          await this.#options.model.respond(
+            [
+              userMessageItem(
+                prefetchedReadsInputText(
+                  reads.map((read) => ({
+                    tool: read.name,
+                    arguments: read.argumentsJson,
+                    ...(read.about !== undefined ? { session_title: read.about } : undefined),
+                    output: read.outputJson,
+                  })),
+                  this.#options.now(),
+                ),
               ),
+            ],
+            {
+              prompt: PREFETCH_SUMMARY_PROMPT,
+              tools: [],
+              maximumOutputTokens: PREFETCH_BOUNDS.SUMMARY_TOKENS,
+              reasoningEffort: REASONING_EFFORT.LOW,
+              signal: slot.abort.signal,
+            },
           ),
-          slot.abort.signal,
-        ),
-      )
-      .catch(() => undefined);
-    if (!summarized || Option.isNone(summarized) || slot.abort.signal.aborted) return;
-    const answer = summarized.value;
-    if (answer.outcome !== MODEL_RESPONSE_OUTCOME.ANSWERED) return;
-    const summary = answer.text.trim();
-    if (summary.length === 0) return;
-    this.#options.trace?.({
-      summaryChars: summary.length,
-      elapsedMs: this.#elapsed(slot.startedAt),
+      );
+      if (answer.outcome !== MODEL_RESPONSE_OUTCOME.ANSWERED) return;
+      const summary = answer.text.trim();
+      if (summary.length === 0) return;
+      // The slot was abandoned while the summary was out: the interruption
+      // behind that abort is on its way to this fiber, and an append cannot
+      // be taken back, so the signal decides rather than the scheduler.
+      if (slot.abort.signal.aborted) return;
+      this.#options.trace?.({
+        summaryChars: summary.length,
+        elapsedMs: this.#elapsed(slot.startedAt),
+      });
+      for (const listener of [...this.#factsListeners]) listener({ id: slot.id, text: summary });
     });
-    for (const listener of [...this.#factsListeners]) listener({ id: slot.id, text: summary });
   }
 }

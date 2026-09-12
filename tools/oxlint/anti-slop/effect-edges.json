@@ -52,6 +52,7 @@
   ],
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
+    "packages/brain/src/effect/fork.ts",
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-live.ts",
     "packages/runtime/src/children.effect.ts",

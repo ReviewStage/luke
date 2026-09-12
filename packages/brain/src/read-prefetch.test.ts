@@ -17,7 +17,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Schema as EffectSchema, TestClock } from "effect";
+import { Effect, Schema as EffectSchema, Fiber, TestClock } from "effect";
 import { ambientTimers } from "./effect/harness.js";
 import {
   ABC,
@@ -175,6 +175,7 @@ const rig = (
 ): Effect.Effect<Rig> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
+    const runtime = yield* Effect.runtime<never>();
     const timers = yield* ambientTimers;
     const model = new DeferredModel();
     const transcriptReads: SessionIdentity[] = [];
@@ -186,24 +187,23 @@ const rig = (
     const prefetch = new ReadPrefetch(
       {
         model,
-        carry: (effect) => Effect.runPromise(effect),
+        execution: runtime,
         conversationId: MAIN_SESSION_KEY,
         roster: () => ({
           text: "Currently observed sessions:\n- abc\n- def",
           identities: [ABC, DEF],
           sessions: [session(ABC.providerSessionId), session(DEF.providerSessionId)],
         }),
-        readTranscript: async (identity) => {
-          transcriptReads.push(identity);
-          return transcriptStatus.value === ACTION_RESULT_STATUS.ACCEPTED
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole", truncated: false }
-            : { status: transcriptStatus.value, reason: "no read" };
-        },
+        readTranscript: (identity) =>
+          Effect.sync(() => {
+            transcriptReads.push(identity);
+            return transcriptStatus.value === ACTION_RESULT_STATUS.ACCEPTED
+              ? { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole", truncated: false }
+              : { status: transcriptStatus.value, reason: "no read" };
+          }),
         memory: options.memory ?? answeringMemory(searches),
         policy: async () => options.policy ?? ASK_POLICY,
         now: timers.now,
-        schedule: timers.schedule,
-        cancel: timers.cancel,
         createId: () => `id-${++ids}`,
         report: () => undefined,
         trace: (record) => traces.push(record),
@@ -219,9 +219,7 @@ const drained = Effect.promise(() => settle());
 it.effect("a take with nothing anticipated is a miss, and reads nothing", () =>
   Effect.gen(function* () {
     const r = yield* rig();
-    const taken = yield* Effect.promise(() =>
-      r.prefetch.take(ASK_POLICY, new AbortController().signal),
-    );
+    const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
     assert.deepEqual(taken, { take: BRAIN_PREFETCH_TAKE.MISS_NONE, reads: [], waitedMs: 0 });
     assert.equal(r.model.requests.length, 0);
   }),
@@ -253,9 +251,7 @@ it.effect(
       assert.equal(r.searches.length, 1);
       assert.equal(r.searches[0]?.query, MEMORY_SEARCH.query);
       assert.equal(r.searches[0]?.max_results, PREFETCH_BOUNDS.MEMORY_RESULTS);
-      const taken = yield* Effect.promise(() =>
-        r.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT);
       assert.deepEqual(
         taken.reads.map((read) => read.name),
@@ -271,9 +267,7 @@ it.effect(
       assert.equal(transcript.status, ACTION_RESULT_STATUS.ACCEPTED);
       assert.equal(new Set(taken.reads.map((read) => read.callId)).size, 2);
       // The slot is spent: a second take finds nothing.
-      const again = yield* Effect.promise(() =>
-        r.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const again = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(again.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
       assert.deepEqual(
         r.traces.filter((trace) => trace.outcome !== undefined).map((trace) => trace.outcome),
@@ -321,11 +315,11 @@ it.effect(
       const r = yield* rig();
       r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
-      const taking = r.prefetch.take(ASK_POLICY, new AbortController().signal);
+      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS - 1);
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
-      const taken = yield* Effect.promise(() => taking);
+      const taken = yield* Fiber.join(taking);
       assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT_WAITED);
       assert.equal(taken.reads.length, 1);
       assert.equal(taken.waitedMs, PREFETCH_BOUNDS.TAKE_WAIT_MS - 1);
@@ -339,9 +333,10 @@ it.effect(
       const r = yield* rig();
       r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
-      const taking = r.prefetch.take(ASK_POLICY, new AbortController().signal);
+      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS);
-      const taken = yield* Effect.promise(() => taking);
+      const taken = yield* Fiber.join(taking);
+      yield* drained;
       assert.equal(taken.take, BRAIN_PREFETCH_TAKE.MISS_TIMEOUT);
       assert.equal(r.model.requests[0]?.options.signal?.aborted, true);
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
@@ -352,16 +347,48 @@ it.effect(
 );
 
 it.effect(
+  "a planner past its own bound abandons the slot on the slot's own fiber: the request is aborted, the failure is traced, and nothing is handed over",
+  () =>
+    Effect.gen(function* () {
+      const r = yield* rig();
+      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* drained;
+      yield* TestClock.adjust(PREFETCH_BOUNDS.PLAN_TIMEOUT_MS);
+      yield* drained;
+      assert.equal(r.model.requests[0]?.options.signal?.aborted, true);
+      assert.deepEqual(
+        r.traces.filter((trace) => trace.outcome !== undefined),
+        [
+          {
+            outcome: BRAIN_PREFETCH_OUTCOME.FAILED,
+            chars: "what is abc doing".length,
+            reads: 0,
+            elapsedMs: PREFETCH_BOUNDS.PLAN_TIMEOUT_MS,
+            error: "timeout",
+          },
+        ],
+      );
+      const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
+      assert.equal(taken.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
+      // The planner's late answer reaches nothing, and no read follows it.
+      r.model.answer(plan(TRANSCRIPT_OF_ABC));
+      yield* drained;
+      assert.deepEqual(r.transcriptReads, []);
+    }),
+);
+
+it.effect(
   "a take bound to a slot the next words superseded is a miss that hands nothing over and tears nothing down: the newer plan and the memo stand for the turn that follows",
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
       r.prefetch.anticipate(anticipation("what is"));
       yield* drained;
-      const taking = r.prefetch.take(ASK_POLICY, new AbortController().signal);
+      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
+      yield* drained;
       r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
-      const superseded = yield* Effect.promise(() => taking);
+      const superseded = yield* Fiber.join(taking);
       assert.equal(superseded.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
       const replanned = r.model.requests[1];
       assert.ok(replanned);
@@ -371,9 +398,7 @@ it.effect(
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
       assert.deepEqual(r.transcriptReads, [ABC]);
-      const taken = yield* Effect.promise(() =>
-        r.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT);
       assert.equal(taken.reads.length, 1);
       // The memo went with the slot that was taken, not with the wait that lost.
@@ -395,9 +420,7 @@ it.effect("a ready slot older than its life is an expired miss", () =>
     r.model.answer(plan(TRANSCRIPT_OF_ABC));
     yield* drained;
     yield* TestClock.adjust(PREFETCH_BOUNDS.TTL_MS + 1);
-    const taken = yield* Effect.promise(() =>
-      r.prefetch.take(ASK_POLICY, new AbortController().signal),
-    );
+    const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
     assert.equal(taken.take, BRAIN_PREFETCH_TAKE.MISS_EXPIRED);
     assert.deepEqual(taken.reads, []);
   }),
@@ -410,19 +433,18 @@ it.effect("a take under a signal already fired, or fired while it waits, is a re
     yield* drained;
     const fired = new AbortController();
     fired.abort();
-    const atOnce = yield* Effect.promise(() => r.prefetch.take(ASK_POLICY, fired.signal));
+    const atOnce = yield* r.prefetch.take(ASK_POLICY, fired.signal);
     assert.equal(atOnce.take, BRAIN_PREFETCH_TAKE.MISS_REVOKED);
     const later = new AbortController();
-    const taking = r.prefetch.take(ASK_POLICY, later.signal);
+    const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, later.signal));
+    yield* drained;
     later.abort();
-    const revoked = yield* Effect.promise(() => taking);
+    const revoked = yield* Fiber.join(taking);
     assert.equal(revoked.take, BRAIN_PREFETCH_TAKE.MISS_REVOKED);
     // The slot stands for the turn that follows.
     r.model.answer(plan(TRANSCRIPT_OF_ABC));
     yield* drained;
-    const taken = yield* Effect.promise(() =>
-      r.prefetch.take(ASK_POLICY, new AbortController().signal),
-    );
+    const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
     assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT);
   }),
 );
@@ -453,9 +475,7 @@ it.effect(
       r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       assert.equal(r.model.requests.length, 4);
-      const taken = yield* Effect.promise(() =>
-        r.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT);
       assert.equal(taken.reads.length, 1);
     }),
@@ -472,9 +492,7 @@ it.effect(
       yield* drained;
       assert.deepEqual(denied.transcriptReads, []);
       assert.equal(denied.searches.length, 1);
-      const taken = yield* Effect.promise(() =>
-        denied.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const taken = yield* denied.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.deepEqual(
         taken.reads.map((read) => read.name),
         [PREFETCH_READ_KIND.MEMORY],
@@ -484,9 +502,7 @@ it.effect(
       nothing.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       assert.equal(nothing.model.requests.length, 0);
-      const empty = yield* Effect.promise(() =>
-        nothing.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const empty = yield* nothing.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(empty.take, BRAIN_PREFETCH_TAKE.HIT);
       assert.deepEqual(empty.reads, []);
       assert.deepEqual(
@@ -508,9 +524,7 @@ it.effect(
       yield* drained;
       r.model.answer(plan(TRANSCRIPT_OF_ABC, MEMORY_SEARCH));
       yield* drained;
-      const taken = yield* Effect.promise(() =>
-        r.prefetch.take(NO_TRANSCRIPT_POLICY, new AbortController().signal),
-      );
+      const taken = yield* r.prefetch.take(NO_TRANSCRIPT_POLICY, new AbortController().signal);
       assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT);
       assert.deepEqual(
         taken.reads.map((read) => read.name),
@@ -523,9 +537,7 @@ it.effect(
       yield* drained;
       refused.model.answer(plan(TRANSCRIPT_OF_ABC, MEMORY_SEARCH));
       yield* drained;
-      const empty = yield* Effect.promise(() =>
-        refused.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const empty = yield* refused.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(empty.take, BRAIN_PREFETCH_TAKE.HIT);
       assert.deepEqual(empty.reads, []);
       // Nothing to summarize: no second call.
@@ -542,9 +554,7 @@ it.effect(
       yield* drained;
       r.model.answer(failedAnswer("upstream"));
       yield* drained;
-      const failed = yield* Effect.promise(() =>
-        r.prefetch.take(ASK_POLICY, new AbortController().signal),
-      );
+      const failed = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(failed.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
       r.prefetch.anticipate(anticipation("what is def doing"));
       yield* drained;
@@ -590,18 +600,14 @@ it.effect("a drop abandons the plan under way and its reads, and forgets what wa
     yield* drained;
     r.prefetch.drop();
     assert.equal(r.model.requests[0]?.options.signal?.aborted, true);
-    const taken = yield* Effect.promise(() =>
-      r.prefetch.take(ASK_POLICY, new AbortController().signal),
-    );
+    const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
     assert.equal(taken.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
     r.prefetch.anticipate(anticipation("what is abc doing"));
     yield* drained;
     r.model.answer(plan(TRANSCRIPT_OF_ABC));
     yield* drained;
     r.prefetch.drop();
-    const dropped = yield* Effect.promise(() =>
-      r.prefetch.take(ASK_POLICY, new AbortController().signal),
-    );
+    const dropped = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
     assert.equal(dropped.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
   }),
 );
