@@ -15,32 +15,38 @@ import {
   LIVE_BRAIN_SUBMISSION,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
-import { Emitter } from "@sidecar/wire";
 import { test } from "vitest";
 import { brainAgentLiveBrain, type LiveBrainAgent } from "./live-brain-adapter.js";
 
 /** The stamp every run event carries beside its own fields, as the agent's teller adds it: the conversation, the turn, its place in it. */
-function stamped(emitter: Emitter<BrainRunEvent>) {
+function stamped(listeners: Set<(event: BrainRunEvent) => void>) {
   let sequence = 0;
   return {
     fire: (body: BrainRunEventBody) => {
       sequence += 1;
-      emitter.fire({
+      // SAFETY: the body's own kind fields are BrainRunEventBody's; the stamp adds only the fields the agent's teller always adds.
+      const event = {
         ...body,
         conversationId: MAIN_SESSION_KEY,
         turnId: "runId" in body ? body.runId : body.kind,
         sequence,
-      });
+      } as BrainRunEvent;
+      for (const listener of [...listeners]) listener(event);
     },
   };
 }
 
 function fakeAgent(options: { reject?: boolean } = {}) {
-  const emitter = new Emitter<BrainRunEvent>();
-  const events = stamped(emitter);
+  const listeners = new Set<(event: BrainRunEvent) => void>();
+  const events = stamped(listeners);
   const submissions: BrainSubmission[] = [];
   const agent: LiveBrainAgent = {
-    onRunEvent: emitter.event,
+    onRunEvent: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     submitAsk: async (submission) => {
       submissions.push(submission);
       if (options.reject) {

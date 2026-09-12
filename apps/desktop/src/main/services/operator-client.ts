@@ -5,7 +5,6 @@ import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { type LateRef, lateRef } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";
 import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
@@ -66,7 +65,13 @@ export interface OperatorClientDependencies {
  */
 export function createOperatorClient(dependencies: OperatorClientDependencies): OperatorClient {
   const { config, state } = dependencies;
-  const links: LateRef<OperatorClientLinks> = lateRef("the operator client's links");
+  let heldLinks: OperatorClientLinks | undefined;
+  const links = (): OperatorClientLinks => {
+    if (heldLinks === undefined) {
+      throw new Error("the operator client's links are read before link() has run");
+    }
+    return heldLinks;
+  };
 
   /**
    * Whether a voice stands at all, which is the one thing this client decides
@@ -101,7 +106,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
       const stoodVoice = voiceAvailable;
       voiceAvailable = change.settings.status.voiceAvailable;
       state.update({ settings: change.settings });
-      if (stoodVoice !== voiceAvailable) links.get().reapplyTalkHotkey();
+      if (stoodVoice !== voiceAvailable) links().reapplyTalkHotkey();
     }),
     gateway.host.onAccountChanged((account) => {
       state.update({ account });
@@ -140,7 +145,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
           },
         },
       });
-      links.get().sendToVoice(channels.onVoiceLiveSessionChanged, change);
+      links().sendToVoice(channels.onVoiceLiveSessionChanged, change);
     }),
     // The host's own answer about recording stands the halt down: it is the
     // account transition the halt was waiting on.
@@ -155,7 +160,9 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
 
   return {
     name: "operator",
-    link: (next) => links.set(next),
+    link: (next) => {
+      heldLinks = next;
+    },
     host: gateway.host,
     operator: gateway.operator,
     settings: () => state.snapshot().settings,
@@ -196,7 +203,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
       if (!boot) throw new Error("the host answered no bootstrap");
       adoptBootstrap(boot);
       if (attachments === 1) return;
-      const relay = links.get();
+      const relay = links();
       relay.reapplyTalkHotkey();
       relay.recycleVoiceWindow();
     },

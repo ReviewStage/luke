@@ -24,8 +24,7 @@ import {
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
 import { LiveSessionService } from "@sidecar/voice/live-session";
-import { lateRef } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
@@ -33,7 +32,7 @@ import type { CalendarsComposer } from "./compose-calendars.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
-import { HostKernelTag } from "./effect/kernel.js";
+import { HostKernelTag, lateService } from "./effect/kernel.js";
 
 /** What the live session reaches in the brain that re-decides a held briefing. */
 interface LiveLinks {
@@ -81,7 +80,14 @@ export const composeLive = (
     const liveBrain = yield* LiveBrainTag;
     const liveRecord = yield* LiveRecordTag;
     const { now, runMode } = kernel;
-    const links = lateRef<LiveLinks>("the live composer's links");
+    const late = yield* lateService<LiveLinks>();
+    const links = (): LiveLinks => {
+      const standing = late.unsafePeek();
+      if (Option.isNone(standing)) {
+        throw new Error("the live composer's links are read before link() has run");
+      }
+      return standing.value;
+    };
     // The service's own idle, settle, and finalize timers, over the Effect
     // runtime this composition runs on rather than Node's own `setTimeout`, so
     // a test driving a `TestClock` drives them too.
@@ -107,7 +113,7 @@ export const composeLive = (
       record: liveRecord,
       conversationEntries: () => brain.store.thread().entries(),
       quietNow: () => calendars.announcementsQuietNow(now()),
-      releaseHeldBriefings: (held) => links.get().releaseHeld(held),
+      releaseHeldBriefings: (held) => links().releaseHeld(held),
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
       now: timers.now,
       schedule: timers.schedule,
@@ -236,7 +242,9 @@ export const composeLive = (
         if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
         calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
       },
-      link: (next) => links.set(next),
+      link: (next) => {
+        late.unsafeSet(next);
+      },
       start: async () => undefined,
       // The session itself is closed by the drain, inside the quit's deadline,
       // before any composer stops; nothing is left here to give back.

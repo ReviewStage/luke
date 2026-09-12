@@ -138,14 +138,15 @@ The concerns depend on each other in both directions in six places — the
 account's capability gate starts the loops whose owners read that gate, the
 calendars hold the speech that reconciles against them, the live session
 hands a held briefing back to the brain that decided it — so those edges are
-`link()`'s, listed once in the merge and held in `@sidecar/wire`'s `LateRef`
-where the concern is still built as a plain object, and in the kernel's own
-set-once `Deferred` (`lateService`) where it is built as an effect, as the
-account's and the calendars' both are; either throws by name when read before `link()` has run, since
-what holds the link is a callback the session manager and the Gateway
-handlers answer synchronously. The desktop's own
-composition closes its cycles the same way, which is why the holder lives in
-the package below both rather than in either. Everything else is a constructor
+`link()`'s, listed once in the merge and held in the kernel's own set-once
+`Deferred` (`lateService`, behind `@sidecar/host/effect`), read through the
+`unsafePeek`/`unsafeSet` faces every composer here still holds since none of
+their own callers has migrated to await the value instead; it throws by name
+when read before `link()` has run, since what holds the link is a callback
+the session manager and the Gateway handlers answer synchronously. The
+desktop's own composition, built as plain objects rather than effects, closes
+its cycles the same way with a closure of its own reading a local variable,
+thrown by the same message. Everything else is a constructor
 argument, in the order the composers are built.
 
 ## One drain, in one place
