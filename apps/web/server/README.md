@@ -97,6 +97,14 @@ rewrites of `vercel.json` carry. Those rewrites are generated into a committed
 table, `server/api-rewrites.json`, and `vercel.json` is assembled from the
 table: `pnpm functions:rewrites` regenerates both after adding, moving, or
 removing a route, and `repository-checks.sh` refuses drift on either half. The
+same script reads the other side of the table through `scripts/api-callers.ts`
+(`server/api-callers.ts`): every `/api/` literal and path builder a client in
+the repository spells — the desktop's, the packages', the iOS app's Swift, the
+scripts' — and the exports of `@sidecar/hosted`'s paths module, evaluated, must
+resolve to a rewrite of the table or to an extensionless alias the Build Output
+emits, and a builder the check cannot read is refused by name rather than
+skipped, because a path constant that outlives its route otherwise fails
+nothing until production answers 404 (LUKE-186). The
 table is its own file so a `vercel.ts` can one day import it and `vercel.json`
 be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
 bundles only its relative imports, which takes a JSON table and not this

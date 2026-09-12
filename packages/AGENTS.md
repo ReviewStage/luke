@@ -195,7 +195,12 @@ the tree). The `/api/` rewrites of `apps/web/vercel.json` land each route on its
 function's public path; they are generated into the committed table
 `apps/web/server/api-rewrites.json`, from which `vercel.json` is assembled, so
 a later `vercel.ts` can import the table and the JSON go (LUKE-183). `pnpm
---filter @luke/web functions:rewrites` regenerates both after a route is added. Reachability into a package is read from the bundles' inputs,
+--filter @luke/web functions:rewrites` regenerates both after a route is added,
+and `repository-checks.sh` reads the table's other side too: every `/api/`
+path a client under `apps/desktop/src`, `apps/ios`, `packages/*/src`,
+`scripts`, or `tools` spells or builds must resolve to a rewrite of the table
+or a Build Output alias (`apps/web/server/api-callers.ts`), so a path constant
+cannot outlive its route unnoticed. Reachability into a package is read from the bundles' inputs,
 not their externals, because an inlined import leaves no external behind.
 Server code still names packages by bare specifier like everything else, and
 `apps/web/package.json` declares each one it names: the bundle step refuses an
