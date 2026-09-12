@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { BRAIN_PREFETCH_MODEL } from "@sidecar/brain";
-import { LIVE_SESSION_OUTCOME } from "@sidecar/live";
+import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import { Effect } from "effect";
 import { test } from "vitest";
@@ -10,6 +10,34 @@ import {
   type VoiceSettings,
 } from "./capability-assembler.js";
 import { scriptedOpenSocket } from "./testing.js";
+
+const SDP_OFFER =
+  "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
+const SDP_ANSWER =
+  "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
+
+interface RecordedRequest {
+  url: string;
+  init: RequestInit | undefined;
+}
+
+function recordingOpenAi() {
+  const requests: RecordedRequest[] = [];
+  const fetchLike = async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    requests.push({ url: String(input), init });
+    return new Response(
+      JSON.stringify({
+        session: { id: "ls_test", model: LIVE_DEFAULTS.MODEL },
+        transport: { type: "webrtc", sdp: SDP_ANSWER },
+      }),
+      { status: 201 },
+    );
+  };
+  return { requests, fetchLike };
+}
 
 test("fixture runs never expose or select a credential", () => {
   assert.deepEqual(
@@ -284,4 +312,28 @@ test("live sessions follow the voice source, and stand only where a socket seam 
   await withoutSeam.apply();
   assert.ok(withoutSeam.brainModel);
   assert.equal(withoutSeam.liveSessions, undefined);
+});
+
+test("the assembler's own fetch reaches the keyed live session it builds, not the real network", async () => {
+  const { openSocket } = scriptedOpenSocket([]);
+  const { requests, fetchLike } = recordingOpenAi();
+
+  const keyed = new VoiceCapabilityAssembler({
+    credentialsUsable: () => true,
+    fixtureRun: () => false,
+    accountSignedIn: () => true,
+    hostedServiceBaseUrl: "https://example.test",
+    refreshAccount: () => Effect.void,
+    report: () => undefined,
+    fetch: fetchLike,
+    openSocket,
+    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+  });
+  await keyed.apply();
+
+  const opened = await keyed.liveSessions?.create({ sdpOffer: SDP_OFFER, input: [] });
+
+  assert.ok(opened);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.url, "https://api.openai.com/v1/live/sessions");
 });
