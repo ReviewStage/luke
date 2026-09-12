@@ -26,6 +26,10 @@ export const LOG_EVENT = {
   /** The commentary that asks the model to begin, sent once the greeting stood. */
   GREETING_CUED: "greeting-cued",
   USAGE_RECORDED: "usage-recorded",
+  /** The hosted exchange stands on the session: the record, the brain, and the briefings run here for it. */
+  EXCHANGE_ATTACHED: "exchange-attached",
+  /** The composition offered an exchange and it could not stand on the session; the session is refused rather than run with no one to answer. */
+  EXCHANGE_FAILED: "exchange-failed",
   SESSION_ENDED: "session-ended",
 } as const;
 
@@ -69,6 +73,8 @@ export type LogEntry =
       seconds: number;
       outcome: VoiceSecondsOutcome;
     }
+  | { event: typeof LOG_EVENT.EXCHANGE_ATTACHED; route: VoiceRoute }
+  | { event: typeof LOG_EVENT.EXCHANGE_FAILED; route: VoiceRoute }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;
       route: VoiceRoute;

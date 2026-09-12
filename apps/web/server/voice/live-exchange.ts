@@ -1,5 +1,6 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import {
+  type AdoptableSession,
   type BriefingDelivery,
   type LiveSessionOpened,
   LiveSessionService,
@@ -7,6 +8,7 @@ import {
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
 import { Effect, Option, Schema } from "effect";
+import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { askRecord } from "../hosted/store/asks.js";
@@ -35,10 +37,11 @@ import { observedSideband } from "./live-sideband.js";
  * and the briefings claimed as the session's device before they are spoken.
  * Everything of the store arrives as one context — the database, the runner,
  * and the key ring — so the writers, the ask record, and the reads hold one
- * client over one database. The session itself is still the caller's: the
- * source handed in is what creates and attaches it, and nothing here attaches
- * the composition to the sessions route, which is the desktop cutover's, by
- * build. The account's quiet is not this composition's: a held offer is
+ * client over one database. The session itself is still the caller's: a
+ * source handed in is what creates and attaches it, or the sessions route
+ * hands in a session it already created for the desktop and the exchange
+ * adopts it, seeding nothing, through `adopt`. Whether the route hands one in
+ * is the route's composition's decision, by build. The account's quiet is not this composition's: a held offer is
  * `speech.held` on the record and never open here, so the service's own hold
  * stands empty and releases nothing.
  */
@@ -59,7 +62,8 @@ export interface HostedLiveExchangeOptions {
    * here and a test hands in a fake.
    */
   readonly eve: EveSessions;
-  readonly source: () => LiveSessionSource | undefined;
+  /** What creates a session for the service's own `createSession`; absent where every session is adopted. */
+  readonly source?: () => LiveSessionSource | undefined;
   readonly conversationEntries: LiveSessionServiceOptions<BriefingDelivery>["conversationEntries"];
   readonly emit: LiveSessionServiceOptions<BriefingDelivery>["emit"];
   readonly now: () => number;
@@ -70,12 +74,41 @@ export interface HostedLiveExchangeOptions {
   readonly trace?: LiveSessionServiceOptions<BriefingDelivery>["trace"];
 }
 
+/** One signed-in session the sessions route created or re-attached, as an exchange is offered it. */
+export interface AttachedSession {
+  readonly accountId: string;
+  readonly sessionId: string;
+  /** The device the handshake named and the account was shown to hold; none where the desktop sent none or the route re-attached. */
+  readonly deviceId: string | undefined;
+  /** The socket the route attached to the session, which the relay pipes and the exchange reads its sideband over. */
+  readonly sideband: WebSocket;
+}
+
+/**
+ * The composition's exchange for one session, standing on it, or nothing
+ * where this build stands none; one offered that cannot stand throws, and the
+ * route refuses the session. The attachment builds the sideband over the
+ * socket and adopts, so the service itself reaches nothing of the exchange
+ * or the live-session door, and the function bundle gains that edge only in
+ * the commit that passes the attachment: the desktop still runs an exchange
+ * of its own, and with both live every spoken ask would be delegated twice
+ * and every reply appended twice.
+ */
+export type ExchangeAttachment = (
+  session: AttachedSession,
+) => Promise<HostedLiveExchange | undefined>;
+
 export interface HostedLiveExchange {
   readonly service: LiveSessionService<HostedBriefingDelivery>;
   readonly brain: HostedLiveBrain;
   readonly briefings: HostedBriefings;
   readonly store: HostedStore;
-  /** Ends the follows and the briefing look, then closes the session gracefully. */
+  /**
+   * Runs a session the route created for the desktop: the record observes its
+   * sideband ahead of the service, and the service stands it without seeding.
+   */
+  adopt(opened: AdoptableSession): Promise<boolean>;
+  /** Ends the follows and the briefing look, closes the session gracefully, and waits for every record write already started. */
   stop(): Promise<void>;
 }
 
@@ -141,28 +174,28 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
     report,
   });
 
-  /** The source with the record listening ahead of the service on every session it opens. */
+  /** The sideband with the record listening ahead of the service, on every session, created or adopted. */
+  const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
+    return async () =>
+      observedSideband(await attach(), (event) => {
+        void record.observe(event).then(
+          (result) => {
+            if (!result.ok) report(`The record refused a live event: ${result.refusal}`);
+          },
+          (error: Error) => report(`The record could not take a live event: ${error.message}`),
+        );
+      });
+  };
+
   const source = (): LiveSessionSource | undefined => {
-    const inner = options.source();
+    const inner = options.source?.();
     if (!inner) return undefined;
     return {
       ...inner,
       create: async (input) => {
         const opened = await inner.create(input);
         if (!opened) return undefined;
-        const observed: LiveSessionOpened = {
-          ...opened,
-          attach: async () =>
-            observedSideband(await opened.attach(), (event) => {
-              void record.observe(event).then(
-                (result) => {
-                  if (!result.ok) report(`The record refused a live event: ${result.refusal}`);
-                },
-                (error: Error) =>
-                  report(`The record could not take a live event: ${error.message}`),
-              );
-            }),
-        };
+        const observed: LiveSessionOpened = { ...opened, attach: observing(() => opened.attach()) };
         return observed;
       },
     };
@@ -191,10 +224,16 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
     brain,
     briefings,
     store,
+    adopt: (opened) =>
+      service.adoptSession({
+        sessionId: opened.sessionId,
+        attach: observing(() => opened.attach()),
+      }),
     async stop() {
       brain.stop();
       briefings.stop();
       await service.stop();
+      await record.drained();
     },
   };
 }

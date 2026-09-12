@@ -112,6 +112,9 @@ export const ASK_UNRECORDED_NOTE =
  */
 export const STOP_SPEAKING_INSTRUCTION = "Stop speaking now, then wait for the developer.";
 
+/** A session that stands somewhere, offered for this service to attach to and run: its id and the one attach. */
+export type AdoptableSession = Pick<LiveSessionOpened, "sessionId" | "attach">;
+
 /** A briefing as the brain delivered it; the rest of the delivery rides along for a held re-decision. */
 export interface BriefingDelivery {
   briefing: string;
@@ -318,6 +321,24 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
   }
 
+  /**
+   * Stands a session another party created for this peer and seeds nothing:
+   * the creator seeded it from the offer it was handed, and a second seed
+   * would put the recent lines into the conversation twice. From the attach
+   * on, the session is this service's exactly as one it created.
+   */
+  async adoptSession(opened: AdoptableSession): Promise<boolean> {
+    if (this.#standing) await this.endSession();
+    this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
+    const sideband = await this.#attach(opened);
+    if (!sideband) return false;
+    this.#standing = this.#stand(opened.sessionId, sideband);
+    this.#usageConfirmed = false;
+    this.#options.onSessionCreated?.();
+    this.#trace(LIVE_TRACE_DECISION.CREATED);
+    return true;
+  }
+
   /** The renderer's hang-up, the idle decision, and the drain all end the session the same way. */
   async endSession(): Promise<void> {
     const session = this.#standing;
@@ -464,7 +485,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return false;
   }
 
-  async #attach(opened: LiveSessionOpened): Promise<LiveSideband | undefined> {
+  async #attach(opened: AdoptableSession): Promise<LiveSideband | undefined> {
     try {
       return await opened.attach();
     } catch (error) {

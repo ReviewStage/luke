@@ -12,6 +12,7 @@ export {
 } from "./live-brain.js";
 export type { LiveRecord } from "./live-record.js";
 export {
+  type AdoptableSession,
   ASK_UNRECORDED_NOTE,
   type BriefingDelivery,
   LiveSessionService,

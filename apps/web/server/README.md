@@ -706,6 +706,37 @@ writer which message a briefing's last append carries, so the session's own
 voice past the append marks the briefing spoken. Nothing attaches this to the
 sessions route; that is the desktop cutover's, by build.
 
+### The exchange on the sessions route
+
+`server/voice/service.ts` takes one more seam, `VoiceServiceOptions.exchange`:
+the composition's exchange for a signed-in session, offered once the session
+stands and before the desktop is answered, and adopted over the same sideband
+the relay pipes. The service hands the attachment the socket and reaches
+nothing of the exchange or the live-session door itself; the attachment
+builds the sideband over that socket and adopts, so the voice function's
+bundle gains that edge only in the commit that passes the attachment. The
+socket admits many listeners, so the relay keeps piping raw frames to the
+desktop unchanged while the exchange reads parsed events through its
+record-observing sideband, and the events the session spoke between the
+attach and the exchange's first listener are held and replayed, so nothing
+said before it stood is lost. The exchange adopts rather than
+creates (`LiveSessionService.adoptSession`): the desktop's create frame
+seeded the session, and a second seed would put the recent lines into the
+conversation twice. An exchange offered that cannot stand refuses the session
+as unavailable rather than running it with no one to answer its asks. When
+the relay settles, the exchange ends its follows and its look, closes the
+session it holds (already gone, which its sideband reports as the close it
+held), and waits for every record write already started, so no line begun
+before the settle is cut; an append not yet sent is dropped with the session
+and never re-sent, and a write that fails after the socket closed is
+reported. `server/voice/exchange-attachment.ts` is what the route would pass:
+the account's standing main resolved at the session's start, the function's
+store context and writer, and eve reached as the deployment for the account.
+**The function passes nothing today, by design.** The desktop still runs an
+exchange of its own, and with both live every spoken ask would be delegated
+twice and every reply appended twice; the route passes the seam in the one
+commit that unwires the desktop's, so both-live never exists.
+
 ### One connection is one invocation
 
 A WebSocket connection to a Vercel Function closes when the function reaches

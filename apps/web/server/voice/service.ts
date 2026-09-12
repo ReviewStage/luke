@@ -34,6 +34,7 @@ import {
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { frameText, routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
+import type { AttachedSession, ExchangeAttachment, HostedLiveExchange } from "./live-exchange.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
 import {
@@ -119,6 +120,12 @@ export interface VoiceServiceOptions {
   accounts: VoiceAccounts;
   /** The `voice_sessions` row of each signed-in session; the introduction, with no account, writes none. */
   record: VoiceSessionRecord;
+  /**
+   * The hosted exchange to stand on each signed-in session, adopted over the
+   * same sideband the relay pipes; absent, the service only pipes, and the
+   * desktop's own exchange is the one that answers.
+   */
+  exchange?: ExchangeAttachment;
   /** The OpenAI `/v1` base; a test points it at a fake. */
   openAiBaseUrl?: string;
   fetch?: CloudFetch;
@@ -156,6 +163,8 @@ type Opened =
       sessionId: string;
       /** The account the session is billed to; none for the introduction. */
       accountId: string | undefined;
+      /** The device the handshake named and the account was shown to hold; none for the introduction, for a desktop that sent none, and on a re-attach, which checks the session's owner and not a device. */
+      deviceId: string | undefined;
       sideband: WebSocket;
       answer: SessionCreatedFrame | SessionAttachedFrame;
       logEvent: typeof LOG_EVENT.SESSION_CREATED | typeof LOG_EVENT.SESSION_ATTACHED;
@@ -331,10 +340,29 @@ export class VoiceService {
       refuse(opened.refusal);
       return;
     }
+    const { sessionId, accountId, sideband } = opened;
+    // The exchange stands before the desktop is answered, on the same
+    // sideband the relay is about to pipe: the socket admits many listeners,
+    // and the events the session spoke since the attach are held for the
+    // exchange's first listener, so nothing said before it stood is lost.
+    const standing =
+      accountId === undefined
+        ? { exchange: undefined }
+        : await this.#attachExchange(route, {
+            accountId,
+            sessionId,
+            deviceId: opened.deviceId,
+            sideband,
+          });
+    if ("refused" in standing) {
+      sideband.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+      refuse(HOSTED_API_ERROR.UNAVAILABLE);
+      return;
+    }
+    const { exchange } = standing;
     desktop.send(JSON.stringify(opened.answer));
     this.#log({ event: opened.logEvent, route });
 
-    const { sessionId, accountId, sideband } = opened;
     const summary = await relaySession({
       route,
       desktop,
@@ -374,7 +402,46 @@ export class VoiceService {
               await this.#recordUsage(accountId, sessionId, closed.usage.seconds);
             },
     });
+    // The relay has settled and closed both transports; the exchange ends its
+    // follows and its look, closes the session it holds (already gone, which
+    // its sideband reports as the close it held), and waits for every record
+    // write already started, so no line begun before the settle is cut.
+    if (exchange !== undefined) await this.#stopExchange(exchange);
     this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
+  }
+
+  /**
+   * The exchange the composition offers for the session, standing on the same
+   * socket the relay pipes: none where the composition offers none, or the
+   * refusal where one was offered and could not stand, since a session with an
+   * exchange offered and none standing would have no one to answer its asks.
+   * The attachment builds the sideband and adopts; this service hands it the
+   * socket and reaches nothing of the exchange itself.
+   */
+  async #attachExchange(
+    route: VoiceRoute,
+    session: AttachedSession,
+  ): Promise<{ exchange: HostedLiveExchange | undefined } | { refused: true }> {
+    const attachment = this.#options.exchange;
+    if (attachment === undefined) return { exchange: undefined };
+    try {
+      const exchange = await attachment(session);
+      if (exchange === undefined) return { exchange: undefined };
+      this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route });
+      return { exchange };
+    } catch {
+      this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route });
+      return { refused: true };
+    }
+  }
+
+  /** The exchange's stop, whose failure is the service's to report and never the relay's to inherit. */
+  async #stopExchange(exchange: HostedLiveExchange): Promise<void> {
+    try {
+      await exchange.stop();
+    } catch {
+      this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route: VOICE_ROUTE.SESSIONS });
+    }
   }
 
   /**
@@ -470,6 +537,7 @@ export class VoiceService {
     return {
       sessionId: answer.sessionId,
       accountId: account?.accountId,
+      deviceId: account?.deviceId,
       sideband,
       answer,
       logEvent: LOG_EVENT.SESSION_CREATED,
@@ -530,6 +598,7 @@ export class VoiceService {
     return {
       sessionId: frame.sessionId,
       accountId,
+      deviceId: undefined,
       sideband,
       answer,
       logEvent: LOG_EVENT.SESSION_ATTACHED,

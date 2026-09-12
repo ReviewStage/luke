@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
@@ -112,7 +113,9 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
       }
       response.writeHead(HTTP_CREATED, { "content-type": "application/json" }).end(
         JSON.stringify({
-          session: { id: `live_test_${sessions}` },
+          // Unique across every fake this process starts: a counter restarting per fake gave two tests'
+          // sessions one id, and the real session record keeps the first row an id names.
+          session: { id: `live_test_${sessions}_${randomUUID()}` },
           transport: { type: LIVE_TRANSPORT_TYPE, sdp: FAKE_SDP_ANSWER },
         }),
       );
