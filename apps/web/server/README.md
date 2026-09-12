@@ -726,7 +726,11 @@ early, as its own group, reads it again in the turn's group and lets the
 copy it held go; a line that lands after the first step, the voice writer's
 cut racing eve, is placed at a fresh position and the journal moved behind it
 to another, so a device that previewed the journal reads it again where it
-now stands. Every device holds a message once, by its id, where its latest
+now stands; and a line the turn takes with a journal already open — a
+received message eve told again after the step — moves the journal behind it
+the same way, so the developer's line precedes the turn's work on every path
+a line enters a turn by, and no renderer sorts a group by anything but the
+sequence. Every device holds a message once, by its id, where its latest
 delivery placed it; `reads-wire.ts` states the rule and the desktop's
 `conversation-view-sync.ts` and the phone's `ConversationThread.swift` keep
 it. A device from before this rule holds the line where it first read it and

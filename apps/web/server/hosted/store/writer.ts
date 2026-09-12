@@ -336,8 +336,9 @@ export interface StoreWriter {
    * ran, where the row stands with no turn yet: the other half of
    * `turnOfAsk`, for a row written before the ask learned its turn. A row
    * taken moves to a fresh place in the conversation's sequence, ahead of
-   * everything the turn will write, so a device that already passed its old
-   * place reads it again where it now stands. Under the conversation's lock,
+   * everything the turn will write and of anything it already wrote, which
+   * moves behind it, so a device that already passed its old place reads it
+   * again where it now stands. Under the conversation's lock,
    * so a row being written meanwhile is seen once it lands, never missed.
    */
   attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
@@ -1611,7 +1612,13 @@ function attachAskLines(context: WriterContext, turnId: string): Write<AskLinesA
     });
     const attached: string[] = [];
     for (const row of standing) {
-      yield* takeLineIntoTurn(context, turnId, row.id);
+      const seq = yield* takeLineIntoTurn(context, turnId, row.id);
+      // The received message ordinarily precedes the first step, so nothing of
+      // the turn's stands yet; where one does — a received message eve told
+      // again after the step, an attach refused the first time — the work moves
+      // behind the line all the same, so the order holds by the store's own
+      // sequence on every path a line enters a turn by.
+      yield* moveTurnWorkAfter(context, turnId, seq);
       attached.push(row.id);
     }
     return { ok: true, attached };

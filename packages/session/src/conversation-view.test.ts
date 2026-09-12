@@ -200,6 +200,15 @@ test("a spoken ask keeps its voice metadata, and its transcript read is a collap
   assert.equal(groups.length, 1);
   const [group] = groups;
   assert.equal(group?.turn?.origin, TURN_ORIGIN.SPOKEN);
+  // The developer's line precedes the reply, in the store's own sequence: the
+  // view sorts a group by that sequence and by nothing else.
+  assert.deepEqual(
+    group?.messages.map((message) => [message.message.role, message.seq]),
+    [
+      [MESSAGE_ROLE.USER, 21],
+      [MESSAGE_ROLE.ASSISTANT, 22],
+    ],
+  );
   const [ask, reply] = group?.messages ?? [];
   assert.equal(ask?.message, input.main[0]?.message);
   assert.equal(authorOf(ask?.message), MESSAGE_AUTHOR.DEVELOPER);
