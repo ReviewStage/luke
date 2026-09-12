@@ -202,7 +202,7 @@ export const hostAssemblyLayer: Layer.Layer<
       // then wins as the newest word on the same queue.
       if (account.signedIn()) yield* settings.reconcileVaultKeys();
       if (account.signedIn()) yield* settings.reconcileAccountPreferences();
-      yield* Effect.promise(() => account.applyVoiceCredential());
+      yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
       if (!account.capabilitiesActive()) return;
       observation.startObservation();
@@ -218,7 +218,7 @@ export const hostAssemblyLayer: Layer.Layer<
       settings.forgetVaultKeys();
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
-      yield* Effect.promise(() => account.applyVoiceCredential());
+      yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
 
@@ -429,7 +429,7 @@ export const hostAssemblyLayer: Layer.Layer<
         if (account.capabilitiesActive()) {
           yield* openCapabilities;
         } else {
-          yield* Effect.promise(() => account.applyVoiceCredential());
+          yield* account.applyVoiceCredential;
           void live.requestOnboardingBeat();
         }
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));

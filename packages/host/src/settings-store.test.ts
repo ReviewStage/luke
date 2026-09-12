@@ -4,8 +4,9 @@ import path from "node:path";
 import * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import type { CalendarAccountCredential } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
 import { VAULT_KEY_MAX_LENGTH, vaultKeyIsStorable } from "@sidecar/hosted";
 import { LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
@@ -17,15 +18,27 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import {
+  type AccountPreferenceField,
+  type AccountPreferences,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
   isKeyedAppSettingField,
+  type KeyedAppSettingField,
+  type SettingEntryValue,
   settingEntryGuard,
   VOICE_HOTKEY_NONE,
 } from "@sidecar/settings";
-import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "@sidecar/settings/wire";
+import {
+  type AppSettings,
+  appSettingsView,
+  SETTINGS_RESET_SCOPE,
+  type SettingsResetScope,
+  type SettingsUpdateResult,
+  VOICE_SOURCE,
+  type VoiceSource,
+} from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACTION_RESULT_STATUS,
@@ -36,6 +49,7 @@ import {
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { ConfigProvider, Effect, Layer, Runtime } from "effect";
 import { test } from "vitest";
+import type { AppleCalendarConnection } from "./apple-calendar.js";
 import { Environment } from "./effect/seams.js";
 import {
   type SettingsEnvironmentOverrides,
@@ -46,8 +60,8 @@ import {
   type SecretCipher,
   SettingsStore,
   type SettingsStoreOptions,
+  type StoredAccount,
 } from "./settings-store.js";
-import { type AwaitedSettingsStore, awaitedSettingsStore } from "./settings-store-awaited.js";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";
@@ -132,12 +146,114 @@ const FILE_SYSTEM: FileSystem.FileSystem = Effect.runSync(
 );
 
 /**
- * The runtime the awaited face below runs the store's effects on. The store's
- * own methods are effects; this suite holds them as the promises its
- * assertions are written against, which is the same face the callers that
- * have not migrated hold.
+ * The runtime this suite's own promise face runs the store's effects on: the
+ * store's own methods are effects, and this suite holds them as the promises
+ * its assertions are written against. `settings-store-awaited.ts` answered
+ * production callers the same shape by name until P12-14i deleted it; this is
+ * that shape kept for the suite alone, where the run-outside-an-edge rule
+ * does not reach (tests are exempt by extension).
  */
 const RUNTIME: Runtime.Runtime<never> = Runtime.defaultRuntime;
+
+/**
+ * The store's own methods, as this suite's assertions are written against
+ * them — every one this file calls, never the store's whole face.
+ */
+interface PromisedSettingsStore {
+  get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;
+  set<Field extends AppSettingField>(
+    field: Field,
+    value: AppSettingValue<Field>,
+  ): Promise<SettingsUpdateResult>;
+  setEntry<Field extends KeyedAppSettingField>(
+    field: Field,
+    key: string,
+    value: SettingEntryValue<Field> | undefined,
+  ): Promise<SettingsUpdateResult>;
+  clearEntryIfUnchanged<Field extends KeyedAppSettingField>(
+    field: Field,
+    key: string,
+    expected: SettingEntryValue<Field>,
+  ): Promise<SettingsUpdateResult & { cleared: boolean }>;
+  snapshot(): Promise<AppSettings>;
+  resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
+  readAccount(): Promise<StoredAccount | undefined>;
+  setAccount(account: StoredAccount): Promise<AccountSnapshot>;
+  clearAccount(): Promise<AccountSnapshot>;
+  accountPreferences(): Promise<AccountPreferences>;
+  applyAccountPreferences(
+    settings: AccountPreferences,
+    expected?: { accountEmail: string; preferences: AccountPreferences },
+  ): Promise<SettingsUpdateResult & { changed: readonly AccountPreferenceField[] }>;
+  accountPreferencesSyncBaseline(accountEmail: string): Promise<AccountPreferences | undefined>;
+  setAccountPreferencesSyncBaseline(
+    accountEmail: string,
+    preferences: AccountPreferences,
+  ): Promise<boolean>;
+  readVoiceSource(): Promise<VoiceSource>;
+  readApiKey(providerId: CredentialProviderId): Promise<string | undefined>;
+  setApiKey(
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ): Promise<SettingsUpdateResult>;
+  readCalendarAccounts(): Promise<readonly CalendarAccountCredential[]>;
+  addCalendarAccount(
+    accountId: string,
+    refreshToken: string,
+    selectedCalendarIds: readonly string[],
+  ): Promise<SettingsUpdateResult>;
+  removeCalendarAccount(accountId: string): Promise<SettingsUpdateResult>;
+  setCalendarSelected(
+    accountId: string,
+    calendarId: string,
+    selected: boolean,
+  ): Promise<SettingsUpdateResult>;
+  connectAppleCalendar(selectedCalendarIds: readonly string[]): Promise<SettingsUpdateResult>;
+  disconnectAppleCalendar(): Promise<SettingsUpdateResult>;
+  calendarConnectionStored(): Promise<boolean>;
+  readAppleCalendarConnection(): Promise<AppleCalendarConnection | undefined>;
+}
+
+function awaitedStoreOf(
+  store: SettingsStore,
+  runtime: Runtime.Runtime<never>,
+): PromisedSettingsStore {
+  const awaited = <Value>(effect: Effect.Effect<Value, unknown>): Promise<Value> =>
+    Runtime.runPromise(runtime)(effect);
+  return {
+    get: (field) => awaited(store.get(field)),
+    set: (field, value) => awaited(store.set(field, value)),
+    setEntry: (field, key, value) => awaited(store.setEntry(field, key, value)),
+    clearEntryIfUnchanged: (field, key, expected) =>
+      awaited(store.clearEntryIfUnchanged(field, key, expected)),
+    snapshot: () => awaited(store.snapshot()),
+    resetSettings: (scope) => awaited(store.resetSettings(scope)),
+    readAccount: () => awaited(store.readAccount()),
+    setAccount: (account) => awaited(store.setAccount(account)),
+    clearAccount: () => awaited(store.clearAccount()),
+    accountPreferences: () => awaited(store.accountPreferences()),
+    applyAccountPreferences: (settings, expected) =>
+      awaited(store.applyAccountPreferences(settings, expected)),
+    accountPreferencesSyncBaseline: (accountEmail) =>
+      awaited(store.accountPreferencesSyncBaseline(accountEmail)),
+    setAccountPreferencesSyncBaseline: (accountEmail, preferences) =>
+      awaited(store.setAccountPreferencesSyncBaseline(accountEmail, preferences)),
+    readVoiceSource: () => awaited(store.readVoiceSource()),
+    readApiKey: (providerId) => awaited(store.readApiKey(providerId)),
+    setApiKey: (providerId, apiKey) => awaited(store.setApiKey(providerId, apiKey)),
+    readCalendarAccounts: () => awaited(store.readCalendarAccounts()),
+    addCalendarAccount: (accountId, refreshToken, selectedCalendarIds) =>
+      awaited(store.addCalendarAccount(accountId, refreshToken, selectedCalendarIds)),
+    removeCalendarAccount: (accountId) => awaited(store.removeCalendarAccount(accountId)),
+    setCalendarSelected: (accountId, calendarId, selected) =>
+      awaited(store.setCalendarSelected(accountId, calendarId, selected)),
+    connectAppleCalendar: (selectedCalendarIds) =>
+      awaited(store.connectAppleCalendar(selectedCalendarIds)),
+    disconnectAppleCalendar: () => awaited(store.disconnectAppleCalendar()),
+    calendarConnectionStored: () => awaited(store.calendarConnectionStored()),
+    readAppleCalendarConnection: () => awaited(store.readAppleCalendarConnection()),
+  };
+}
 
 function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverrides {
   const entries = Object.entries(environment).filter(
@@ -158,7 +274,7 @@ function storeIn(
     environment?: NodeJS.ProcessEnv;
     vaultKeyHeld?: SettingsStoreOptions["vaultKeyHeld"];
   } = {},
-): AwaitedSettingsStore {
+): PromisedSettingsStore {
   const config: SettingsStoreOptions = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
@@ -166,7 +282,7 @@ function storeIn(
     vaultKeyHeld: options.vaultKeyHeld ?? (() => false),
     fileSystem: FILE_SYSTEM,
   };
-  return awaitedSettingsStore(new SettingsStore(config), RUNTIME);
+  return awaitedStoreOf(new SettingsStore(config), RUNTIME);
 }
 
 test("a failed first load is retried before a later write", async (t) => {
@@ -180,7 +296,7 @@ test("a failed first load is retried before a later write", async (t) => {
     }),
   );
   let directoryReads = 0;
-  const store = awaitedSettingsStore(
+  const store = awaitedStoreOf(
     new SettingsStore({
       directory: () => {
         directoryReads += 1;
@@ -206,24 +322,24 @@ test("a failed first load is retried before a later write", async (t) => {
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
 });
 
-async function readWorkspaceAgentDefault(store: AwaitedSettingsStore, providerId: ProviderId) {
+async function readWorkspaceAgentDefault(store: PromisedSettingsStore, providerId: ProviderId) {
   return (await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId];
 }
 
 async function setWorkspaceAgentDefault(
-  store: AwaitedSettingsStore,
+  store: PromisedSettingsStore,
   providerId: ProviderId,
   selection: WorkspaceAgentSelection | undefined,
 ) {
   return store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, providerId, selection);
 }
 
-async function readWorkspaceProjectDefault(store: AwaitedSettingsStore, providerId: ProviderId) {
+async function readWorkspaceProjectDefault(store: PromisedSettingsStore, providerId: ProviderId) {
   return (await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId];
 }
 
 async function setWorkspaceProjectDefault(
-  store: AwaitedSettingsStore,
+  store: PromisedSettingsStore,
   providerId: ProviderId,
   providerProjectId: string | undefined,
 ) {

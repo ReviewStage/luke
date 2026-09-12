@@ -70,7 +70,7 @@ export interface AccountComposer extends Composer {
    * off the network.
    */
   readonly token: AccountToken;
-  applyVoiceCredential: () => Promise<void>;
+  applyVoiceCredential: Effect.Effect<void>;
   sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
   link: (links: AccountLinks) => void;
 }
@@ -100,9 +100,8 @@ export const composeAccount = (
     // `VoiceCapabilityAssembler` to every model adapter it builds, so the
     // promise each of those still answers is run on the host's own runtime
     // rather than on an ambient default one, and what this composer runs on it
-    // itself: `applyVoiceCredential`'s transition below, and the settings
-    // change the account's own `onChange` asks for from a synchronous body
-    // that has no fiber to yield on.
+    // itself: the settings change the account's own `onChange` asks for from a
+    // synchronous body that has no fiber to yield on.
     const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<AccountLinks>();
     const links = (): AccountLinks => {
@@ -259,17 +258,10 @@ export const composeAccount = (
       kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
     });
 
-    /**
-     * @deprecated Runs the transition on the runtime this composer was built
-     * on because `applyVoiceCredential`'s own callers — the settings side
-     * effects and the account gate in `compose-host.ts` — still hold it as a
-     * `Promise<void>`; each is a promise-shaped collaborator of its own, not
-     * this PR's voice-settings slice. The run allowlist entry
-     * (`docs/adr/0001-effect.md`) is deleted with this comment when
-     * `applyVoiceCredential` itself answers an Effect.
-     */
-    async function applyVoiceCredential(): Promise<void> {
-      await Runtime.runPromise(runtime)(
+    // The transition's own `PlatformError` reads as a defect, exactly as the
+    // promise this replaced rejected on the same failure.
+    const applyVoiceCredential: Effect.Effect<void> = Effect.orDie(
+      Effect.asVoid(
         transitionVoiceSource({
           retire: () => links().retireBrain(),
           apply: () => voiceCapabilities.apply(),
@@ -278,8 +270,8 @@ export const composeAccount = (
             links().syncMemory();
           },
         }),
-      );
-    }
+      ),
+    );
 
     const methods: GatewayMethodTable = {
       [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => Effect.succeed({ account: carried(account) }),
