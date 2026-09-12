@@ -46,6 +46,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import {
   handleTurnEventStream,
   projectTurnEvents,
@@ -55,7 +56,6 @@ import {
 } from "../server/hosted/turn-event-stream";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks, promisedWriter } from "./support/promised-store";
 import { insertConversation } from "./support/store-rows";
 
 /**
@@ -79,11 +79,10 @@ const writer = await database.run(
   }),
 );
 const relay = new StreamRelay({
-  writer: promisedWriter(database.run, writer),
-  asks: promisedAsks(database.run),
-  stopTurn: async () => undefined,
-  offer: (target, turnId) =>
-    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
+  writer,
+  asks: askRecord(),
+  stopTurn: () => Effect.void,
+  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: () => undefined,
 });
@@ -174,7 +173,7 @@ function standingFor(target: ConversationTarget): RelayStanding {
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
-  for (const event of events) await relay.handle(event, standing);
+  for (const event of events) await database.run(relay.handle(event, standing));
 }
 
 /** The eve events up to and including the transcript read's request: the turn is running with one slow call on its journal. */
@@ -385,7 +384,7 @@ test("a cancelled turn and a failed one end without a settled mark or a sentence
     const events = spokenTurn(EVE_TURN);
     const turnId = hostTurnId(standing.sessionId, EVE_TURN);
     await play(events.slice(0, untilRequested(events)), standing);
-    await relay.handle(stamped(ending), standing);
+    await database.run(relay.handle(stamped(ending), standing));
 
     const heard = await readStream(
       await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),

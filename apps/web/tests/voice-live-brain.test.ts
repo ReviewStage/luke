@@ -36,7 +36,7 @@ import {
 } from "../server/voice/live-brain";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks, promisedWriter } from "./support/promised-store";
+import { promisedAsks } from "./support/promised-store";
 import { deleteConversation, insertConversation } from "./support/store-rows";
 
 /**
@@ -72,10 +72,10 @@ const writer = await database.run(
 const asks = promisedAsks(database.run);
 const askEffects = askRecord();
 const relay = new StreamRelay({
-  writer: promisedWriter(database.run, writer),
-  asks,
-  stopTurn: async () => undefined,
-  offer: async () => false,
+  writer,
+  asks: askEffects,
+  stopTurn: () => Effect.void,
+  offer: () => Effect.succeed(false),
   now: () => NOW,
   report: () => undefined,
 });
@@ -155,7 +155,7 @@ async function sessionOf(target: ConversationTarget, askId: string): Promise<str
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
-  for (const event of events) await relay.handle(event, standing);
+  for (const event of events) await database.run(relay.handle(event, standing));
 }
 
 async function until(predicate: () => boolean, what: string): Promise<void> {

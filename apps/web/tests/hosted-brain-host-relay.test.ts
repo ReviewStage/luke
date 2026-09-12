@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { isToolUIPart } from "ai";
+import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -35,10 +36,11 @@ import {
   STORE_WRITE_REFUSAL,
   storeWriter,
 } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks, promisedWriter } from "./support/promised-store";
+import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation,
   readEventsByConversation,
@@ -68,11 +70,10 @@ const writer = await database.run(
 );
 const refusals: string[] = [];
 const relay = new StreamRelay({
-  writer: promisedWriter(database.run, writer),
-  asks: promisedAsks(database.run),
-  stopTurn: async () => undefined,
-  offer: (target, turnId) =>
-    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
+  writer,
+  asks: askRecord(),
+  stopTurn: () => Effect.void,
+  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
   now: () => NOW,
   report: (message) => refusals.push(message),
 });
@@ -176,7 +177,7 @@ function standingFor(target: ConversationTarget, turn: BrainHostTurn | undefined
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
-  for (const event of events) await relay.handle(event, standing);
+  for (const event of events) await database.run(relay.handle(event, standing));
 }
 
 async function rows(target: ConversationTarget) {
@@ -564,12 +565,14 @@ test("a failed turn settles its journal and names the failure; a cancelled one s
   const events = typedTurn("turn_0", 0);
   const requested = events.findIndex((event) => event.type === "actions.requested");
   await play(events.slice(0, requested + 1), failedStanding);
-  await relay.handle(
-    stamped({
-      type: "turn.failed",
-      data: { turnId: "turn_0", sequence: 0, code: "model_error", message: "upstream failed" },
-    }),
-    failedStanding,
+  await database.run(
+    relay.handle(
+      stamped({
+        type: "turn.failed",
+        data: { turnId: "turn_0", sequence: 0, code: "model_error", message: "upstream failed" },
+      }),
+      failedStanding,
+    ),
   );
   const failedRows = await rows(failed);
   assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
@@ -581,9 +584,11 @@ test("a failed turn settles its journal and names the failure; a cancelled one s
   const cancelled = await conversation();
   const cancelledStanding = standingFor(cancelled, BRAIN_HOST_TURN.TYPED);
   await play(events.slice(0, requested + 1), cancelledStanding);
-  await relay.handle(
-    stamped({ type: "turn.cancelled", data: { turnId: "turn_0", sequence: 0 } }),
-    cancelledStanding,
+  await database.run(
+    relay.handle(
+      stamped({ type: "turn.cancelled", data: { turnId: "turn_0", sequence: 0 } }),
+      cancelledStanding,
+    ),
   );
   const cancelledRows = await rows(cancelled);
   assert.equal(cancelledRows.turnRows[0]?.status, TURN_STATUS.CANCELLED);
@@ -796,22 +801,22 @@ test("a turn whose answer the store refuses ends failed for persistence rather t
   const target = await conversation();
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
-    asks: promisedAsks(database.run),
-    stopTurn: async () => undefined,
+    asks: askRecord(),
+    stopTurn: () => Effect.void,
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
         event.message.role === MESSAGE_ROLE.ASSISTANT
-          ? Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
-          : database.run(writer.consume(to, event)),
-      enqueueTurn: (to, enqueue) => database.run(writer.enqueueTurn(to, enqueue)),
-      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
+          ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
+          : writer.consume(to, event),
+      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
-    offer: () => Promise.resolve(true),
+    offer: () => Effect.succeed(true),
     now: () => NOW,
     report: (message) => refusals.push(message),
   });
-  for (const event of typedTurn("turn_0", 0)) await refusing.handle(event, standing);
+  for (const event of typedTurn("turn_0", 0)) await database.run(refusing.handle(event, standing));
 
   const { turnRows } = await rows(target);
   assert.equal(turnRows[0]?.status, TURN_STATUS.FAILED);
@@ -823,29 +828,29 @@ test("a turn start whose write throws keeps nothing in relay state, so the start
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   let failures = 1;
   const failing = new StreamRelay({
-    asks: promisedAsks(database.run),
-    stopTurn: async () => undefined,
+    asks: askRecord(),
+    stopTurn: () => Effect.void,
     writer: {
-      consume: (to, event) => database.run(writer.consume(to, event)),
+      consume: (to, event) => writer.consume(to, event),
       enqueueTurn: (to, enqueue) => {
         if (failures > 0) {
           failures -= 1;
-          return Promise.reject(new Error("the database went away"));
+          return Effect.die(new Error("the database went away"));
         }
-        return database.run(writer.enqueueTurn(to, enqueue));
+        return writer.enqueueTurn(to, enqueue);
       },
-      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
-    offer: () => Promise.resolve(true),
+    offer: () => Effect.succeed(true),
     now: () => NOW,
     report: (message) => refusals.push(message),
   });
   const started = () => stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } });
-  await assert.rejects(async () => failing.handle(started(), standing), Error);
+  await assert.rejects(() => database.run(failing.handle(started(), standing)), Error);
   assert.deepEqual(standing.state.get(), { turns: {} });
   assert.equal((await rows(target)).turnRows.length, 0);
 
-  await failing.handle(started(), standing);
+  await database.run(failing.handle(started(), standing));
   assert.equal(Object.hasOwn(standing.state.get().turns, "turn_0"), true);
   const { turnRows } = await rows(target);
   assert.equal(turnRows.length, 1);
@@ -856,21 +861,21 @@ test("a turn whose ask the store refuses writes no answer and ends failed for pe
   const target = await conversation();
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
-    asks: promisedAsks(database.run),
-    stopTurn: async () => undefined,
+    asks: askRecord(),
+    stopTurn: () => Effect.void,
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED && event.message.role === MESSAGE_ROLE.USER
-          ? Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
-          : database.run(writer.consume(to, event)),
-      enqueueTurn: (to, enqueue) => database.run(writer.enqueueTurn(to, enqueue)),
-      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
+          ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
+          : writer.consume(to, event),
+      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
-    offer: () => Promise.resolve(true),
+    offer: () => Effect.succeed(true),
     now: () => NOW,
     report: (message) => refusals.push(message),
   });
-  for (const event of typedTurn("turn_0", 0)) await refusing.handle(event, standing);
+  for (const event of typedTurn("turn_0", 0)) await database.run(refusing.handle(event, standing));
 
   const { turnRows, messageRows } = await rows(target);
   assert.equal(turnRows[0]?.status, TURN_STATUS.FAILED);
@@ -893,32 +898,34 @@ test("a turn end the store refuses keeps the turn in relay state, so the boundar
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   let refuseEnds = 1;
   const refusing = new StreamRelay({
-    asks: promisedAsks(database.run),
-    stopTurn: async () => undefined,
+    asks: askRecord(),
+    stopTurn: () => Effect.void,
     writer: {
       consume: (to, event) => {
         if (event.kind === BRAIN_RUN_EVENT.TURN_ENDED && refuseEnds > 0) {
           refuseEnds -= 1;
-          return Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
+          return Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
         }
-        return database.run(writer.consume(to, event));
+        return writer.consume(to, event);
       },
-      enqueueTurn: (to, enqueue) => database.run(writer.enqueueTurn(to, enqueue)),
-      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
+      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
+      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
     },
-    offer: () => Promise.resolve(true),
+    offer: () => Effect.succeed(true),
     now: () => NOW,
     report: (message) => refusals.push(message),
   });
   const events = typedTurn("turn_0", 0);
-  for (const event of events) await refusing.handle(event, standing);
+  for (const event of events) await database.run(refusing.handle(event, standing));
   assert.equal(Object.hasOwn(standing.state.get().turns, "turn_0"), true);
   const running = await rows(target);
   assert.equal(running.turnRows[0]?.status, TURN_STATUS.RUNNING);
 
-  await refusing.handle(
-    stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
-    standing,
+  await database.run(
+    refusing.handle(
+      stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+      standing,
+    ),
   );
   assert.deepEqual(standing.state.get(), { turns: {} });
   const settled = await rows(target);
