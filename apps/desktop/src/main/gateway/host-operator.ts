@@ -261,6 +261,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
 
   const wireReporter = (reporter: string) => ({ reporter });
 
+  /**
+   * A setting's value as the method's own field, or no field for a cleared
+   * one. The envelope is JSON, and its encoder refuses a record holding
+   * `undefined` rather than dropping the key, so a clear carried as a value
+   * would never leave this process.
+   */
+  const wireValue = <Value>(value: Value | undefined) =>
+    value !== undefined ? { value: carried(value) } : undefined;
+
   return {
     bootstrap: async () =>
       answered<HostBootstrap>(record(await client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP))),
@@ -270,7 +279,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       settingsResult(
         client.call(GATEWAY_METHOD.SETTINGS_UPDATE, {
           field,
-          value: carried(value),
+          ...wireValue(value),
           ...wireReporter(reporter),
         }),
       ),
@@ -279,7 +288,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY, {
           field,
           key,
-          ...(value !== undefined ? { value: carried(value) } : undefined),
+          ...wireValue(value),
           ...wireReporter(reporter),
         }),
       ),
