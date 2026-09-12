@@ -49,7 +49,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Effect, Runtime, type Scope } from "effect";
+import { Effect, type Scope } from "effect";
 import type { SettableConfigurationPatch } from "./brain/wiring.js";
 import type { ConversationOperations } from "./conversation-operations.js";
 
@@ -119,7 +119,7 @@ export interface GatewayService {
    * reconnections still answer, so a client can see the host leaving rather
    * than lose it. Nothing under way is touched; that is the coordinator's.
    */
-  readonly closeAdmissions: () => void;
+  readonly closeAdmissions: Effect.Effect<void>;
   /** Appends one event to the log, for a host concern with no narrower report of its own below. */
   readonly emit: (kind: GatewayEventKind, payload: WireValue) => void;
   readonly nodes: NodeRegistry;
@@ -469,21 +469,19 @@ export function createGatewayService(
 
   return Effect.map(gatewayInProcessHost(layerOptions), (gateway) => {
     /**
-     * The log's own append, run where the composers still ask for it: every
-     * change below is reported to this service synchronously, from a
-     * callback rather than from an effect, and an in-process transport
+     * The log's own append, where the composers ask for it: every change
+     * below is reported to this service synchronously, from a collaborator's
+     * own callback rather than from an effect — the brain wiring's request
+     * and conversation reports, the live session's, the node registry's — so
+     * the append is the log's synchronous one, and an in-process transport
      * delivers what it appended on the same tick.
-     *
-     * @deprecated A strangler shim on the ADR's allowlist, deleted by
-     * P12-05 with the `Composer` promise face: a composer that is an effect
-     * appends to the log itself.
      */
     const emit = (
       kind: GatewayEventKind,
       payload: WireValue,
       identity?: { sessionKey?: string; runId?: string },
     ): void => {
-      Runtime.runSync(gateway.runtime)(gateway.log.emit(kind, payload, identity));
+      gateway.log.publish(kind, payload, identity);
     };
 
     nodes.onChange((list) => {
@@ -494,7 +492,7 @@ export function createGatewayService(
       gateway,
       layerOptions,
       emit,
-      closeAdmissions: () => Runtime.runSync(gateway.runtime)(gateway.admissions.close),
+      closeAdmissions: gateway.admissions.close,
       nodes,
       runsReported: (snapshots) => {
         emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });

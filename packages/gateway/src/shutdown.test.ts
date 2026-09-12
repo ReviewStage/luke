@@ -11,18 +11,20 @@ it.effect("every step settles before the deadline, and persistUnresolved always 
   Effect.gen(function* () {
     const order: string[] = [];
     const steps: GatewayShutdownSteps = {
-      closeAdmissions: () => order.push("close"),
-      cancelActive: async () => {
+      closeAdmissions: Effect.sync(() => {
+        order.push("close");
+      }),
+      cancelActive: Effect.sync((): readonly string[] => {
         order.push("cancel");
         return ["run-1"];
-      },
-      awaitSettled: async () => {
+      }),
+      awaitSettled: Effect.sync(() => {
         order.push("settled");
-      },
-      persistUnresolved: async () => {
+      }),
+      persistUnresolved: Effect.sync(() => {
         order.push("persist");
         return 0;
-      },
+      }),
     };
     const outcome = yield* shutdownGatewayEffect(steps, {
       deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS,
@@ -40,16 +42,18 @@ it.effect(
     Effect.gen(function* () {
       const order: string[] = [];
       const steps: GatewayShutdownSteps = {
-        closeAdmissions: () => order.push("close"),
-        cancelActive: async () => {
+        closeAdmissions: Effect.sync(() => {
+          order.push("close");
+        }),
+        cancelActive: Effect.sync((): readonly string[] => {
           order.push("cancel");
           return ["run-1"];
-        },
-        awaitSettled: () => new Promise<void>(() => undefined),
-        persistUnresolved: async () => {
+        }),
+        awaitSettled: Effect.never,
+        persistUnresolved: Effect.sync(() => {
           order.push("persist");
           return 1;
-        },
+        }),
       };
       const fiber = yield* Effect.fork(shutdownGatewayEffect(steps, { deadlineMs: 1_000 }));
       yield* TestClock.adjust(1_000);
@@ -67,15 +71,17 @@ it.effect(
     Effect.gen(function* () {
       const order: string[] = [];
       const steps: GatewayShutdownSteps = {
-        closeAdmissions: () => order.push("close"),
-        cancelActive: () => new Promise<readonly string[]>(() => undefined),
-        awaitSettled: async () => {
+        closeAdmissions: Effect.sync(() => {
+          order.push("close");
+        }),
+        cancelActive: Effect.never,
+        awaitSettled: Effect.sync(() => {
           order.push("settled");
-        },
-        persistUnresolved: async () => {
+        }),
+        persistUnresolved: Effect.sync(() => {
           order.push("persist");
           return 2;
-        },
+        }),
       };
       const fiber = yield* Effect.fork(shutdownGatewayEffect(steps, { deadlineMs: 1_000 }));
       yield* TestClock.adjust(1_000);
@@ -87,19 +93,21 @@ it.effect(
     }),
 );
 
-it.effect("a cancelActive that rejects is a count nobody has, not a failed shutdown", () =>
+it.effect("a cancelActive that dies is a count nobody has, not a failed shutdown", () =>
   Effect.gen(function* () {
     const order: string[] = [];
     const steps: GatewayShutdownSteps = {
-      closeAdmissions: () => order.push("close"),
-      cancelActive: () => Promise.reject(new Error("offline")),
-      awaitSettled: async () => {
+      closeAdmissions: Effect.sync(() => {
+        order.push("close");
+      }),
+      cancelActive: Effect.promise(() => Promise.reject(new Error("offline"))),
+      awaitSettled: Effect.sync(() => {
         order.push("settled");
-      },
-      persistUnresolved: async () => {
+      }),
+      persistUnresolved: Effect.sync(() => {
         order.push("persist");
         return 0;
-      },
+      }),
     };
     const outcome = yield* shutdownGatewayEffect(steps, {
       deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS,

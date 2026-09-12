@@ -165,15 +165,28 @@ export type GatewayEventListener = (event: GatewayEvent) => void;
 /**
  * The event log: a ring of the newest events, bounded to the replay window,
  * and the stream every transport delivers from. The sequence is the newest
- * event's own number, so the ring is the one record of where the log stands;
- * `revision` reads a synchronous stamp of it, because the envelope
- * serialization stamps an answer's revision inside its encoder, which the
- * Rpc runtime calls as a plain function.
+ * event's own number, so the ring is the one record of where the log stands,
+ * and the ring is a `MutableRef` rather than a `Ref`, because two readers of
+ * it are plain functions: the envelope serialization stamps an answer's
+ * revision inside its encoder, which the Rpc runtime calls as one, and the
+ * host reports a change from a collaborator's own synchronous callback.
  */
 export class GatewayEventLog extends Context.Tag("@sidecar/gateway/GatewayEventLog")<
   GatewayEventLog,
   {
-    /** Appends one event, numbered as the next in sequence, and publishes it to every stream. */
+    /**
+     * Appends one event, numbered as the next in sequence, and hands it to
+     * every stream and every listener before answering: the append itself,
+     * for a caller that is a collaborator's synchronous callback rather than
+     * a fiber, so an in-process transport delivers it on the tick the host
+     * reported the change.
+     */
+    readonly publish: (
+      kind: GatewayEventKind,
+      payload: WireValue,
+      identity?: { sessionKey?: string; runId?: string },
+    ) => GatewayEvent;
+    /** The same append, for a caller that is already an effect. */
     readonly emit: (
       kind: GatewayEventKind,
       payload: WireValue,
@@ -211,34 +224,37 @@ function makeGatewayEventLog(
 ): Effect.Effect<GatewayEventLog["Type"]> {
   return Effect.gen(function* () {
     const window = Math.max(1, options.replayWindow ?? GATEWAY_SERVER_DEFAULTS.REPLAY_WINDOW);
-    const ring = yield* Ref.make(Chunk.empty<GatewayEvent>());
-    const stamp = MutableRef.make(0);
+    const ring = MutableRef.make(Chunk.empty<GatewayEvent>());
     const bus = yield* PubSub.unbounded<GatewayEvent>();
     const listeners = new Set<GatewayEventListener>();
+    const publish = (
+      kind: GatewayEventKind,
+      payload: WireValue,
+      identity: { sessionKey?: string; runId?: string } = {},
+    ): GatewayEvent => {
+      const events = MutableRef.get(ring);
+      const emitted: GatewayEvent = {
+        eventId: options.createEventId(),
+        sequence: newestSequence(events) + 1,
+        kind,
+        at: options.now(),
+        ...(identity.sessionKey !== undefined ? { sessionKey: identity.sessionKey } : undefined),
+        ...(identity.runId !== undefined ? { runId: identity.runId } : undefined),
+        payload,
+      };
+      MutableRef.set(ring, Chunk.takeRight(Chunk.append(events, emitted), window));
+      // The unbounded bus takes every event, so the offer is the publish an
+      // effect would have awaited, made where the caller is not a fiber.
+      bus.unsafeOffer(emitted);
+      for (const listener of [...listeners]) listener(emitted);
+      return emitted;
+    };
     return GatewayEventLog.of({
-      emit: (kind, payload, identity = {}) =>
-        Effect.gen(function* () {
-          const event = yield* Ref.modify(ring, (events) => {
-            const emitted: GatewayEvent = {
-              eventId: options.createEventId(),
-              sequence: newestSequence(events) + 1,
-              kind,
-              at: options.now(),
-              ...(identity.sessionKey !== undefined
-                ? { sessionKey: identity.sessionKey }
-                : undefined),
-              ...(identity.runId !== undefined ? { runId: identity.runId } : undefined),
-              payload,
-            };
-            return [emitted, Chunk.takeRight(Chunk.append(events, emitted), window)];
-          });
-          MutableRef.update(stamp, (held) => Math.max(held, event.sequence));
-          yield* PubSub.publish(bus, event);
-          for (const listener of [...listeners]) listener(event);
-          return event;
-        }),
+      publish,
+      emit: (kind, payload, identity) => Effect.sync(() => publish(kind, payload, identity)),
       replayFrom: (lastSequence) =>
-        Effect.map(Ref.get(ring), (events) => {
+        Effect.sync(() => {
+          const events = MutableRef.get(ring);
           const sequence = newestSequence(events);
           if (lastSequence >= sequence) {
             return { kind: GATEWAY_RECONNECT_KIND.REPLAY, events: [] };
@@ -258,11 +274,11 @@ function makeGatewayEventLog(
             ),
           };
         }),
-      sequence: Effect.map(Ref.get(ring), newestSequence),
+      sequence: Effect.sync(() => newestSequence(MutableRef.get(ring))),
       events: Stream.fromPubSub(bus, { scoped: true }),
       revision: () => ({
         configuration: options.configurationRevision(),
-        sequence: MutableRef.get(stamp),
+        sequence: newestSequence(MutableRef.get(ring)),
       }),
       listen: (listener) => {
         listeners.add(listener);
