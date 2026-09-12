@@ -49,18 +49,14 @@ const decodeFunctionConfig = Schema.decodeUnknownSync(Schema.parseJson(FunctionC
 const LOAD_MODULE = "await import(process.argv[1]);";
 
 /**
- * What a load is given: a PATH to find node, and a database URL that connects
- * to nothing, because the auth module opens its pool as it is imported and a
- * pool is not a connection. That is a fact about the artifact and not a
- * convenience of this test: every bundle reaches the auth module statically,
- * so without the variable every function fails at load (LUKE-184). The guard
- * is about what a bundle can resolve, not what a deployment is configured
- * with, so nothing else is set.
+ * What a load is given: a PATH to find node, and nothing else. Every bundle
+ * reaches the auth module statically, and that module once built its pool as
+ * it was constructed, so a load needed a `DATABASE_URL` to get through the
+ * import at all; a load now reads no environment, and this environment is
+ * what proves it. The guard is about what a bundle can resolve, not what a
+ * deployment is configured with.
  */
-const LOAD_ENVIRONMENT = {
-  PATH: process.env.PATH ?? "",
-  DATABASE_URL: "postgresql://isolation:isolation@127.0.0.1:1/isolation",
-} as const;
+const LOAD_ENVIRONMENT = { PATH: process.env.PATH ?? "" } as const;
 
 async function emitFromPlan(): Promise<{
   readonly outputDirectory: string;

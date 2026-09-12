@@ -27,8 +27,14 @@ const deployment = authDeployment(process.env);
  * defaults (`user`, `session`, `oauthClient`, ...) are already what
  * `CamelCasePlugin` turns them into (`oauth_client`, ...).
  */
-const authDatabase = new Kysely<unknown>({
-  dialect: new PostgresDialect({ pool: getPool() }),
+/** Exported for the one test that proves the first query, not the import, is where a missing `DATABASE_URL` fails. */
+export const authDatabase = new Kysely<unknown>({
+  // The pool is built at the first query, not as this module is imported: every function bundle
+  // imports the auth service statically, so a pool resolved here made `DATABASE_URL` a condition
+  // of loading any function at all, and a deployment without it failed every route at load rather
+  // than the routes that reach the database. Kysely calls the factory once, on the first query,
+  // which is when `pg` connected before too.
+  dialect: new PostgresDialect({ pool: async () => getPool() }),
   plugins: [new CamelCasePlugin()],
 });
 
