@@ -28,7 +28,6 @@ export const SETTING_SECTION = {
   /** Which credential the voice runs on, drawn by the Provider section's picker. */
   PROVIDER: "provider",
   WORKSPACES: "workspaces",
-  SYNC: "sync",
   PROVIDERS: "providers",
   CALENDAR: "calendar",
 } as const;
@@ -61,7 +60,6 @@ export const SETTING_SIDE_EFFECT = {
   MEDIA_DUCK: "media-duck",
   VOICE_SOURCE: "voice-source",
   ANNOUNCEMENT_HOLD: "announcement-hold",
-  VAULT_SYNC: "vault-sync",
 } as const;
 
 export type SettingSideEffectId = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];

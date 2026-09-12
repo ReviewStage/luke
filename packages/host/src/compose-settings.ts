@@ -6,7 +6,11 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { ProductEventSender } from "@sidecar/analytics/sender";
-import { isCredentialProviderId, VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
+import {
+  CREDENTIAL_PROVIDERS,
+  isCredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER_ID,
+} from "@sidecar/credentials";
 import {
   carried,
   GATEWAY_EVENT,
@@ -14,7 +18,12 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import { HostedVaultClient } from "@sidecar/hosted";
+import { HostedVaultClient, vaultKeyIsStorable } from "@sidecar/hosted";
+import {
+  CLOUD_AGENT_PROVIDER_ID,
+  type CloudAgentProviderId,
+  isCloudAgentProviderId,
+} from "@sidecar/session";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
   type AccountPreferenceField,
@@ -39,9 +48,8 @@ import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
-import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
-import { SettingsStore, type StoredAccount } from "./settings-store.js";
+import { apiKeyRejection, SettingsStore, type StoredAccount } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
@@ -75,7 +83,14 @@ export interface SettingsComposer extends Composer {
     refusal: string,
     reporter: string | undefined,
   ) => Promise<SettingsUpdateResult>;
-  reconcileProviderKeyVault: () => void;
+  /**
+   * The vault's key list read again, after a key an earlier build kept on this
+   * Mac has been handed to it: run when the account's capabilities open, so a
+   * cloud provider's row answers for what the service holds.
+   */
+  reconcileVaultKeys: () => Promise<void>;
+  /** The account is gone, and so is what its vault held: every cloud provider's row reads not connected. */
+  forgetVaultKeys: () => void;
   reconcileAccountPreferences: () => Promise<void>;
   /** The developer's own preference write, on its way to the account behind it. */
   pushAccountPreferences: () => void;
@@ -112,11 +127,20 @@ export const composeSettings = (): Effect.Effect<
       return standing.value;
     };
 
+    /**
+     * Which cloud agent providers the vault holds a key for, as it last listed
+     * them: what a Conductor row's connected state is read from, since the key
+     * itself is the service's and never this Mac's. Filled when the account's
+     * capabilities open, moved by each store and delete, and emptied when the
+     * account goes.
+     */
+    const vaultKeys = new Set<CloudAgentProviderId>();
     const store = new SettingsStore({
       directory: () => kernel.stateRoot,
       // A fixture or evidence run refuses the credentials it resolves, so nothing is
       // reported as available that would not actually happen.
       credentialsUsable: runMode.observesProviders,
+      vaultKeyHeld: (providerId) => vaultKeys.has(providerId),
       cipher,
       overrides,
       runtime,
@@ -160,31 +184,183 @@ export const composeSettings = (): Effect.Effect<
           Effect.orElseSucceed(() => undefined),
         ),
     });
-    const vaultSync = new ProviderKeyVaultSync({
-      vault: hostedVault,
-      readStoredApiKey: (providerId) => store.readStoredApiKey(providerId),
-      account: async () => {
-        const held = await store.readAccount();
-        if (!held) return undefined;
-        const vaultAccount: VaultSyncAccount = { email: held.email };
-        if (held.id) vaultAccount.id = held.id;
-        return vaultAccount;
-      },
-      tenant: {
-        read: () => store.readVaultSyncAccount(),
-        write: (accountKey) => store.setVaultSyncAccount(accountKey),
-      },
-    });
-
     let accountPreferencesHydratedAccount: string | undefined;
     let accountPreferencesSync: Promise<void> = Promise.resolve();
 
-    function reconcileProviderKeyVault(): void {
-      void store
-        .snapshot()
-        .then((settings) =>
-          settings.stored.syncProviderKeys ? vaultSync.apply(true, { claim: false }) : undefined,
+    /**
+     * Every touch of the vault's key list rides one chain, in the order the
+     * hands and the account's edges took them, and every step that awaited
+     * the service checks two things before it writes: that no sign-out has
+     * moved the generation since it began, and that the account it began
+     * under is the one signed in. A list that returns after a sign-out, or a
+     * store that finishes after the account changed, installs nothing.
+     */
+    let vaultActions: Promise<void> = Promise.resolve();
+    let vaultGeneration = 0;
+    function enqueueVault<Answer>(action: () => Promise<Answer>): Promise<Answer> {
+      const next = vaultActions.then(action, action);
+      vaultActions = next.then(
+        () => undefined,
+        () => undefined,
+      );
+      return next;
+    }
+
+    /**
+     * Who is signed in, by address: the one name an identity refresh cannot
+     * add or drop mid-flight, where the opaque id can, so a store that
+     * outlived a refresh is not read as a sign-out.
+     */
+    async function signedInAccountKey(): Promise<string | undefined> {
+      return (await store.readAccount())?.email;
+    }
+
+    /** Whether a step begun under this generation and account may still write. */
+    async function vaultStillCurrent(generation: number, accountKey: string): Promise<boolean> {
+      return vaultGeneration === generation && (await signedInAccountKey()) === accountKey;
+    }
+
+    /**
+     * The row says what the vault last listed, so until the first list of a
+     * sign-in lands it says not connected; the emit that follows the list is
+     * what brings it to true. A list that could not be read is asked for once
+     * more, and one that still cannot leaves the last answer standing — the
+     * vault did not say its keys were gone, only that it could not be asked —
+     * until the next reconcile: a save, a sign-in, or a launch. Answers the
+     * providers listed, or nothing when the vault could not be asked.
+     */
+    async function refreshVaultKeys(
+      generation: number,
+      accountKey: string,
+    ): Promise<ReadonlySet<CloudAgentProviderId> | undefined> {
+      const listed = (await hostedVault.listKeys()) ?? (await hostedVault.listKeys());
+      if (listed === undefined) return undefined;
+      if (!(await vaultStillCurrent(generation, accountKey))) return undefined;
+      vaultKeys.clear();
+      for (const entry of listed) vaultKeys.add(entry.providerId);
+      return new Set(vaultKeys);
+    }
+
+    /**
+     * A cloud provider's key an earlier build kept encrypted on this Mac is
+     * handed to the vault once and then deleted here, so after this the
+     * machine holds none — and only to the account that build last synced it
+     * for, read from the tenant record it kept, so a later sign-in on a shared
+     * Mac cannot claim someone else's key. The vault's own list is read
+     * first: a provider the vault already holds a key for keeps the vault's,
+     * which the developer may have saved since from any device, and the
+     * leftover here is deleted without travelling. A key with no tenant on
+     * record, or another account's, stays where it is and is sent nowhere:
+     * its row reads not connected, and the developer enters the key again
+     * under their own account. A vault that refuses leaves the key for the
+     * next sign-in rather than losing it; an environment key is not Luke's to
+     * send. Answers whether the vault's list moved.
+     */
+    async function migrateLocalCloudKeys(
+      generation: number,
+      account: StoredAccount,
+      held: ReadonlySet<CloudAgentProviderId>,
+    ): Promise<boolean> {
+      const tenant = await store.readVaultSyncAccount();
+      if (tenant === undefined || (tenant !== account.id && tenant !== account.email)) return false;
+      let moved = false;
+      for (const providerId of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
+        const local = await store.readStoredApiKey(providerId);
+        if (local === undefined) continue;
+        if (!held.has(providerId)) {
+          const stored = await hostedVault.storeKey(providerId, local);
+          if (!stored?.stored) continue;
+          moved = true;
+        }
+        if (!(await vaultStillCurrent(generation, account.email))) return moved;
+        // The vault answered that it holds this key, so the row says so from
+        // here whether or not the list that follows can be read.
+        vaultKeys.add(providerId);
+        await store.setApiKey(providerId, undefined);
+      }
+      return moved;
+    }
+
+    function reconcileVaultKeys(): Promise<void> {
+      return enqueueVault(async () => {
+        const generation = vaultGeneration;
+        const account = await store.readAccount();
+        if (!account) return;
+        const held = await refreshVaultKeys(generation, account.email);
+        if (held === undefined) return;
+        if (await migrateLocalCloudKeys(generation, account, held)) {
+          await refreshVaultKeys(generation, account.email);
+        }
+        if (!(await vaultStillCurrent(generation, account.email))) return;
+        await emitSettings();
+      });
+    }
+
+    /**
+     * The account is gone: the set empties now and the generation moves, so
+     * whatever vault call is still in flight installs nothing when it returns,
+     * and the sign-out's own emit reads the row as not connected.
+     */
+    function forgetVaultKeys(): void {
+      vaultGeneration += 1;
+      vaultKeys.clear();
+    }
+
+    /**
+     * A cloud agent provider's key: stored with Luke's service in the same
+     * press, under the account's own bearer, and never written to this
+     * machine, so the desktop holds no provider key. The row learns the
+     * result from the vault's own answer, and its connected state from what
+     * the vault now holds for the account still signed in. A leftover an
+     * earlier build kept here is deleted in the same press, since the vault's
+     * key is now the one that stands.
+     */
+    function storeCloudKey(
+      providerId: CloudAgentProviderId,
+      apiKey: string | undefined,
+      reporter: string | undefined,
+    ): Promise<SettingsUpdateResult> {
+      return enqueueVault(async () => {
+        const generation = vaultGeneration;
+        const accountKey = await signedInAccountKey();
+        if (accountKey === undefined) {
+          return refusedSettings(
+            "Sign in first: this key is held by Luke's service, not on this Mac.",
+          );
+        }
+        const normalized = apiKey?.trim();
+        if (normalized) {
+          const rejection =
+            apiKeyRejection(normalized, CREDENTIAL_PROVIDERS[providerId].keyFormat) ??
+            (vaultKeyIsStorable(normalized) ? undefined : "That API key contains spaces.");
+          if (rejection) return refusedSettings(rejection);
+          const stored = await hostedVault.storeKey(providerId, normalized);
+          if (!stored?.stored) {
+            return refusedSettings("Could not store that key with Luke's service.");
+          }
+          if (!(await vaultStillCurrent(generation, accountKey))) {
+            return refusedSettings("The account signed out while the key was being stored.");
+          }
+          vaultKeys.add(providerId);
+          await store.setApiKey(providerId, undefined);
+        } else {
+          const deleted = await hostedVault.deleteKey(providerId);
+          if (deleted === undefined) {
+            return refusedSettings("Could not remove that key from Luke's service.");
+          }
+          if (!(await vaultStillCurrent(generation, accountKey))) {
+            return refusedSettings("The account signed out while the key was being removed.");
+          }
+          vaultKeys.delete(providerId);
+        }
+        recordProductEvent(
+          normalized ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
+          { connection_id: providerId },
         );
+        const settings = await store.snapshot();
+        emitSettingsSnapshot(settings, reporter);
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
+      });
     }
 
     async function readAccountPreferenceAccountKey(): Promise<string | undefined> {
@@ -336,7 +512,6 @@ export const composeSettings = (): Effect.Effect<
       setVoice: (voice) => links().setVoice(voice),
       applyVoiceCredential: () => links().applyVoiceCredential(),
       reconcileSpeech: () => links().reconcileSpeech(),
-      applyVaultSync: (syncProviderKeys) => void vaultSync.apply(syncProviderKeys, { claim: true }),
       emitSettings,
     });
 
@@ -486,6 +661,11 @@ export const composeSettings = (): Effect.Effect<
           if (apiKey !== undefined && !isWireString(apiKey)) {
             return yield* invalid("apiKey must be a string");
           }
+          if (isCloudAgentProviderId(providerId)) {
+            return carried(
+              yield* Effect.promise(() => storeCloudKey(providerId, apiKey, reporterOf(params))),
+            );
+          }
           const result = yield* Effect.promise(() =>
             settingsWrite(
               () => store.setApiKey(providerId, apiKey),
@@ -495,7 +675,6 @@ export const composeSettings = (): Effect.Effect<
                   await links().applyVoiceCredential();
                   await emitSettings();
                 }
-                void vaultSync.keySaved(providerId, apiKey, saved.settings.stored.syncProviderKeys);
                 recordProductEvent(
                   apiKey?.trim()
                     ? PRODUCT_EVENT.PROVIDER_CONNECT
@@ -535,7 +714,8 @@ export const composeSettings = (): Effect.Effect<
       emitSettings,
       refusedSettings,
       settingsWrite,
-      reconcileProviderKeyVault,
+      reconcileVaultKeys,
+      forgetVaultKeys,
       reconcileAccountPreferences,
       pushAccountPreferences,
       forgetAccountPreferenceHydration: () => {

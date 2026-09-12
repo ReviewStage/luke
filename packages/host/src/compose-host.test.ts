@@ -9,7 +9,7 @@ import {
   InProcessTransport,
 } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
-import { ACTION_RESULT_STATUS, isRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, isWireString } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Effect, Either, Layer } from "effect";
 import { hostLayer } from "./compose-host.js";
@@ -87,6 +87,36 @@ it.effect(
         fixtureHostLayer(stateRoot),
       );
     }),
+);
+
+it.effect("a cloud provider's key is refused signed out, and the store never held it", (t) =>
+  Effect.gen(function* () {
+    const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
+    yield* Effect.provide(
+      Effect.gen(function* () {
+        const host = yield* HostTag;
+        const transport = operatorTransport(host.gateway);
+        const response = yield* Effect.promise(() =>
+          transport.request({
+            protocolVersion: GATEWAY_PROTOCOL_VERSION,
+            id: "key-1",
+            method: GATEWAY_METHOD.CREDENTIAL_SET_API_KEY,
+            params: { providerId: "conductor", apiKey: "cnd_test_key_1234567890" },
+            idempotencyKey: "key-1",
+          }),
+        );
+        assert.ok(response.ok);
+        assert.ok(isRecord(response.result));
+        assert.equal(response.result.status, ACTION_RESULT_STATUS.REJECTED);
+        assert.ok(isWireString(response.result.reason));
+        assert.ok(isRecord(response.result.settings));
+        assert.ok(isRecord(response.result.settings.status));
+        assert.ok(isRecord(response.result.settings.status.credentialSources));
+        assert.equal(response.result.settings.status.credentialSources.conductor, "none");
+      }),
+      fixtureHostLayer(stateRoot),
+    );
+  }),
 );
 
 it.effect(

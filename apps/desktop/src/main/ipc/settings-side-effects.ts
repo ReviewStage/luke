@@ -63,7 +63,6 @@ export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDe
     [SETTING_SIDE_EFFECT.NONE]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: noClientSettingSideEffect,
-    [SETTING_SIDE_EFFECT.VAULT_SYNC]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: ({ settings }) => applyLoginItem(settings.stored.openAtLogin),
     [SETTING_SIDE_EFFECT.DOCK]: ({ settings, sender }) =>
       dock.apply(settings.stored.showInDock, panels.displayIdFor(sender)),

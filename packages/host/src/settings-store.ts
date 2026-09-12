@@ -20,6 +20,7 @@ import {
   type SecretStorage,
 } from "@sidecar/credentials/vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
+import { type CloudAgentProviderId, isCloudAgentProviderId } from "@sidecar/session";
 import {
   type AppSettings,
   type SettingsResetScope,
@@ -122,6 +123,14 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
   /**
+   * Whether Luke's service holds a key for a cloud agent provider, as its
+   * vault last listed. A cloud provider's key lives there and nowhere on this
+   * machine, so its row's source is read from this and never from the file or
+   * the environment; the local store still carries one such key only until
+   * the migration below has handed it to the vault.
+   */
+  vaultKeyHeld: (providerId: CloudAgentProviderId) => boolean;
+  /**
    * What `#readPersisted` and `#write` below run their `FileSystem` effects
    * on: the composer's own runtime, captured once with `Effect.runtime` over
    * the `FileSystem` the host's assembly layer already resolves, rather than a
@@ -171,11 +180,12 @@ export interface PersistedSettings extends StoredAppSettings {
    */
   appleCalendar?: { calendars: readonly string[] };
   /**
-   * Which account this Mac's provider keys were last synced for — the
-   * account's opaque id, or its address where the identity carried no id. It
-   * outlives a sign-out on purpose: it is what keeps an automatic sweep from
-   * handing one person's keys to whoever signs in next, so it must remember
-   * the person after they have gone.
+   * Which account an earlier build last synced this Mac's provider keys for —
+   * its opaque id, or its address where the identity carried no id. Read
+   * only: this build writes it never and keeps no local provider key of its
+   * own, but the one migration of a key that earlier build left here asks
+   * it whose key that was, so a later sign-in on a shared Mac cannot claim
+   * someone else's.
    */
   vaultSyncAccount?: string;
 }
@@ -491,6 +501,7 @@ export class SettingsStore {
   readonly #cipher: SecretCipher;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
+  readonly #vaultKeyHeld: (providerId: CloudAgentProviderId) => boolean;
   /**
    * The runtime `#readPersisted` and `#write` below run their `FileSystem`
    * effects on: the composer's own, handed in rather than a layer this class
@@ -652,6 +663,7 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
+    this.#vaultKeyHeld = options.vaultKeyHeld;
     this.#runtime = options.runtime;
   }
 
@@ -659,9 +671,22 @@ export class SettingsStore {
     const persisted = await this.#load();
     const voiceCapability = await this.#voiceCapability(persisted);
     const sources = await Promise.all(
-      CREDENTIAL_PROVIDER_LIST.map(
-        async (provider) => [provider.id, (await this.#resolveApiKey(provider)).source] as const,
-      ),
+      CREDENTIAL_PROVIDER_LIST.map(async (provider) => {
+        // A cloud agent provider's key is the service's: its row answers for
+        // the vault, and a key this Mac still holds or reads from its shell
+        // is not one Luke observes with.
+        if (isCloudAgentProviderId(provider.id)) {
+          // Held only while an account stands in this same snapshot: the
+          // vault's list is the account's, so a sign-out reads not connected
+          // in the very emit that reports it, whatever the list last said.
+          const source =
+            persisted.account !== undefined && this.#vaultKeyHeld(provider.id)
+              ? CREDENTIAL_SOURCE.SERVICE
+              : CREDENTIAL_SOURCE.NONE;
+          return [provider.id, source] as const;
+        }
+        return [provider.id, (await this.#resolveApiKey(provider)).source] as const;
+      }),
     );
     return {
       stored: {
@@ -831,30 +856,23 @@ export class SettingsStore {
     return (await this.#resolveApiKey(provider)).apiKey;
   }
 
+  /** The account an earlier build last synced this Mac's keys for; see the field. Never written here. */
+  async readVaultSyncAccount(): Promise<string | undefined> {
+    return (await this.#load()).vaultSyncAccount;
+  }
+
   /**
    * Main-process only: the key stored encrypted in Luke's own file, and never
-   * one resolved from the launch environment. The vault sweep is the caller —
-   * an environment key was configured for this machine's shell, not entered
-   * into Luke, so it is not Luke's to send anywhere.
+   * one resolved from the launch environment. The migration of a cloud
+   * provider's key into the vault is the caller — an environment key was
+   * configured for this machine's shell, not entered into Luke, so it is not
+   * Luke's to send anywhere.
    */
   async readStoredApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
     const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
     if (!provider) return undefined;
     const resolved = await this.#resolveApiKey(provider);
     return resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined;
-  }
-
-  /** Which account this Mac's provider keys were last synced for; see the field. */
-  async readVaultSyncAccount(): Promise<string | undefined> {
-    return (await this.#load()).vaultSyncAccount;
-  }
-
-  async setVaultSyncAccount(accountKey: string): Promise<void> {
-    await this.#mutate((persisted) =>
-      persisted.vaultSyncAccount === accountKey
-        ? undefined
-        : { ...persisted, vaultSyncAccount: accountKey },
-    );
   }
 
   /**

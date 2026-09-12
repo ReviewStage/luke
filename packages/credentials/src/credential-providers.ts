@@ -200,6 +200,8 @@ export const CREDENTIAL_SOURCE = {
   NONE: "none",
   ENVIRONMENT: "environment",
   ENCRYPTED_FILE: "encrypted-file",
+  /** Held by Luke's own service, in its vault, and nowhere on this machine: a cloud agent provider's key. */
+  SERVICE: "service",
 } as const;
 
 export type CredentialSource = (typeof CREDENTIAL_SOURCE)[keyof typeof CREDENTIAL_SOURCE];

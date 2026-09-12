@@ -143,6 +143,10 @@ export const composeAccount = (
         const nextAccountKey = signedIn ? next.email : undefined;
         account = next;
         if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
+        // The vault's list is the departing account's: emptied here, ahead of
+        // the departure's own emit, so the very snapshot that reports the
+        // sign-out reads every cloud provider as not connected.
+        if (wasSignedIn && !signedIn) settings.forgetVaultKeys();
         if (signedIn && !wasSignedIn) links().onFirstSignIn();
         kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(account));
         void settings.emitSettings();

@@ -197,13 +197,16 @@ export const hostAssemblyLayer: Layer.Layer<
      * this opened.
      */
     const openCapabilities = Effect.gen(function* () {
+      // First on the vault's chain, so the list is read and any leftover key
+      // migrated before a save the developer makes in the meantime, which
+      // then wins as the newest word on the same chain.
+      if (account.signedIn()) void settings.reconcileVaultKeys();
       if (account.signedIn()) void settings.reconcileAccountPreferences();
       yield* Effect.promise(() => account.applyVoiceCredential());
       yield* Effect.promise(() => settings.emitSettings());
       if (!account.capabilitiesActive()) return;
       observation.startObservation();
       yield* capabilities.arm;
-      if (account.signedIn()) settings.reconcileProviderKeyVault();
       void live.requestOnboardingBeat();
     });
 
@@ -212,6 +215,7 @@ export const hostAssemblyLayer: Layer.Layer<
       yield* capabilities.disarm;
       conversation.reset();
       observation.stopObservation();
+      settings.forgetVaultKeys();
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
       yield* Effect.promise(() => account.applyVoiceCredential());

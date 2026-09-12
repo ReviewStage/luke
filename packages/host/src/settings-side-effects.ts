@@ -27,7 +27,6 @@ export interface HostSettingSideEffectDependencies {
   setVoice: (voice: StoredAppSettings["voice"]) => void;
   applyVoiceCredential: () => Promise<void>;
   reconcileSpeech: () => void;
-  applyVaultSync: (syncProviderKeys: boolean) => void;
   emitSettings: () => Promise<void>;
 }
 
@@ -52,7 +51,5 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
       await dependencies.emitSettings();
     },
     [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () => dependencies.reconcileSpeech(),
-    [SETTING_SIDE_EFFECT.VAULT_SYNC]: ({ settings }) =>
-      dependencies.applyVaultSync(settings.syncProviderKeys),
   } satisfies HostSettingSideEffects;
 }
