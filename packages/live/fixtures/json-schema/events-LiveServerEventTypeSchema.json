@@ -1,0 +1,20 @@
+{
+  "type": "string",
+  "enum": [
+    "session.started",
+    "session.closed",
+    "session.input_audio.muted",
+    "session.input_audio.unmuted",
+    "session.instructions.appended",
+    "session.thinking.appended",
+    "session.commentary.appended",
+    "session.input_transcript.delta",
+    "session.output_transcript.delta",
+    "session.delegation.created",
+    "session.usage.updated",
+    "session.input_audio.append",
+    "session.output_audio.delta",
+    "error",
+    "info"
+  ]
+}

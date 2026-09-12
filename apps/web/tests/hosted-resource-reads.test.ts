@@ -28,7 +28,6 @@ import {
   MESSAGE_RATING,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
-  type Schema,
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
@@ -36,7 +35,8 @@ import {
   type WireBoundaryInput,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, Schema as EffectSchema } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Schema as EffectSchema, Either } from "effect";
 import { afterAll, test } from "vitest";
 import type { StoredUIMessage } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
@@ -246,13 +246,23 @@ function options(userId: string, req: Request): ResourceReadOptions {
   return { request: req, resolveUserId: async () => userId, store: database.store };
 }
 
-async function answered<Value>(response: Response, schema: Schema<Value>): Promise<Value> {
+async function answered<Value, Encoded>(
+  response: Response,
+  schema: EffectSchema.Schema<Value, Encoded>,
+): Promise<Value> {
   assert.equal(response.status, 200);
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
   const body = (await response.json()) as UnparsedWireValue;
-  const read = schema.read(body);
-  if (!read.ok) assert.fail(`${read.refusal} at ${read.path.join(".")}`);
-  return read.value;
+  const read = readEither(schema)(body);
+  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
+  return read.right;
+}
+
+function parse<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
 }
 
 /**
@@ -584,7 +594,7 @@ test("two devices paging at different bounds converge on the same messages in th
   assert.deepEqual(narrow.ordered(), expected);
   assert.deepEqual(wide.ordered(), expected);
   assert.equal(narrow.cursor, wide.cursor);
-  assert.deepEqual(sequenceReadCursorSchema.parse(wide.cursor ?? ""), {
+  assert.deepEqual(parse(sequenceReadCursorSchema, wide.cursor ?? ""), {
     positions: [
       { conversationId: main, seq: 4 },
       { conversationId: observed, seq: 3 },
@@ -656,7 +666,7 @@ test("a message still in flight is answered on every read and passed only once i
     ],
   });
   const mainPosition = (cursor: string | undefined) =>
-    sequenceReadCursorSchema.parse(cursor ?? "")?.positions.find((p) => p.conversationId === main)
+    parse(sequenceReadCursorSchema, cursor ?? "")?.positions.find((p) => p.conversationId === main)
       ?.seq;
 
   const device = new Device(userId, 200);
@@ -755,7 +765,7 @@ test("an open journal at the front of the page does not hold the other conversat
   );
   await narrowest.catchUp();
   assert.deepEqual(narrowest.ordered(), [...expected, [running, journal]]);
-  const positions = sequenceReadCursorSchema.parse(narrowest.cursor ?? "")?.positions ?? [];
+  const positions = parse(sequenceReadCursorSchema, narrowest.cursor ?? "")?.positions ?? [];
   assert.deepEqual(
     new Map(positions.map((position) => [position.conversationId, position.seq])),
     new Map([
@@ -786,8 +796,7 @@ test("a cleared main is absent from the next read: its groups leave the device, 
   // The device still holds the observed group it read before the Clear; the client's own rule drops rows older than the new main.
   assert.deepEqual([...device.groups.keys()], [ids.roster]);
   assert.deepEqual(
-    sequenceReadCursorSchema
-      .parse(answer.next)
+    parse(sequenceReadCursorSchema, answer.next)
       ?.positions.map((position) => [position.conversationId, position.seq])
       .sort(),
     [
@@ -796,7 +805,7 @@ test("a cleared main is absent from the next read: its groups leave the device, 
     ].sort(),
   );
   assert.equal(
-    sequenceReadCursorSchema.parse(answer.next)?.positions.some((p) => p.conversationId === main),
+    parse(sequenceReadCursorSchema, answer.next)?.positions.some((p) => p.conversationId === main),
     false,
   );
 
@@ -804,8 +813,7 @@ test("a cleared main is absent from the next read: its groups leave the device, 
   await fresh.catchUp();
   assert.deepEqual(fresh.ordered(), []);
   assert.deepEqual(
-    sequenceReadCursorSchema
-      .parse(fresh.cursor ?? "")
+    parse(sequenceReadCursorSchema, fresh.cursor ?? "")
       ?.positions.map((position) => [position.conversationId, position.seq])
       .sort(),
     [
@@ -863,7 +871,8 @@ test("a Clear empties the thread of observed rows from before the new main and k
     touchDevice: async () => false,
     now: () => NOW,
   });
-  const head = changesAnswerSchema.parse(
+  const head = parse(
+    changesAnswerSchema,
     // SAFETY: the response body is the route's own JSON; the schema read is the validation.
     (await heads.json()) as UnparsedWireValue,
   );
@@ -1036,8 +1045,7 @@ test("events page behind a cursor of their own and two devices converge on them"
   );
   assert.equal(cursor, wide.next);
   assert.deepEqual(
-    sequenceReadCursorSchema
-      .parse(wide.next)
+    parse(sequenceReadCursorSchema, wide.next)
       ?.positions.map((position) => [position.conversationId, position.seq])
       .sort(),
     [
@@ -1082,7 +1090,7 @@ test("turns are answered in the order they last changed, again when a stamp move
     [[ids.typed, TURN_STATUS.SETTLED, "gpt-5", settledAt.getTime()]],
   );
   assert.equal(changed.hasMore, false);
-  assert.equal(turnReadCursorSchema.parse(changed.next ?? "")?.id, ids.typed);
+  assert.equal(parse(turnReadCursorSchema, changed.next ?? "")?.id, ids.typed);
 
   const paged: BrainTurnsAnswer = await answered(
     await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { limit: 2 }))),
@@ -1190,9 +1198,9 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
   );
   assert.deepEqual(moved.turns, []);
   assert.equal(moved.hasMore, false);
-  assert.equal(turnReadCursorSchema.parse(moved.next ?? "")?.id, ids.idle);
+  assert.equal(parse(turnReadCursorSchema, moved.next ?? "")?.id, ids.idle);
   const head = await database.store.turns.latest(userId);
-  assert.deepEqual(turnReadCursorSchema.parse(moved.next ?? ""), head);
+  assert.deepEqual(parse(turnReadCursorSchema, moved.next ?? ""), head);
   const settled = await answered(
     await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
     brainTurnsAnswerSchema,

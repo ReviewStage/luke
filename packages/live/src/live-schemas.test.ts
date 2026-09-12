@@ -1,7 +1,8 @@
 import {
-  type JsonSchemaSource,
   jsonSchemaGoldenRoot,
-  type RecordedJsonSchemas,
+  jsonSchemaOf,
+  type RecordedEffectJsonSchemas,
+  type RecordedJsonSchemaSource,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,
 } from "@sidecar/wire/testing";
@@ -19,21 +20,37 @@ const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 
 const MODULE_SCHEMAS = {
   events: {
+    LiveStatusSchema: events.LiveStatusSchema,
+    LiveClientEventTypeSchema: events.LiveClientEventTypeSchema,
+    LiveServerEventTypeSchema: events.LiveServerEventTypeSchema,
+    LiveCloseReasonSchema: events.LiveCloseReasonSchema,
+    LiveDelegationTargetSchema: events.LiveDelegationTargetSchema,
     liveServerEventSchema: events.liveServerEventSchema,
-  } satisfies RecordedJsonSchemas<typeof events>,
+  } satisfies RecordedEffectJsonSchemas<typeof events>,
   session: {
+    LiveTransportTypeSchema: session.LiveTransportTypeSchema,
+    LiveDelegationTypeSchema: session.LiveDelegationTypeSchema,
     liveCreateAnswerSchema: session.liveCreateAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof session>,
+    NoApiKeyRefusal: session.NoApiKeyRefusal,
+    DisabledByFixtureRefusal: session.DisabledByFixtureRefusal,
+    HttpErrorRefusal: session.HttpErrorRefusal,
+    NetworkErrorRefusal: session.NetworkErrorRefusal,
+    MalformedResponseRefusal: session.MalformedResponseRefusal,
+    SidebandFailedRefusal: session.SidebandFailedRefusal,
+    NotSignedInRefusal: session.NotSignedInRefusal,
+    QuotaExhaustedRefusal: session.QuotaExhaustedRefusal,
+    HostedUnavailableRefusal: session.HostedUnavailableRefusal,
+  } satisfies RecordedEffectJsonSchemas<typeof session>,
 } as const;
 
-const RECORDED: readonly (readonly [string, JsonSchemaSource])[] = Object.entries(
+const RECORDED: readonly (readonly [string, RecordedJsonSchemaSource])[] = Object.entries(
   MODULE_SCHEMAS,
 ).flatMap(([module, schemas]) =>
   Object.entries(schemas).map(([name, schema]) => [`${module}-${name}`, schema] as const),
 );
 
 test.for(RECORDED)("%s emits the recorded JSON Schema", async ([name, schema]) => {
-  await settleJsonSchemaGolden(ROOT, name, schema.jsonSchema());
+  await settleJsonSchemaGolden(ROOT, name, jsonSchemaOf(schema));
 });
 
 test("the recorded set is exactly the schemas the live modules declare", async () => {

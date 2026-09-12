@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Either } from "effect";
 import { test } from "vitest";
 import {
   CONVERSATION_EVENT_KIND,
@@ -8,8 +9,9 @@ import {
   maximumRatingNoteLength,
   RATING_EVENT_PAYLOAD,
 } from "./conversation-event.js";
+import { readEither } from "./effect/json-schema.js";
 import { unparsedWire } from "./json.js";
-import { SCHEMA_REFUSAL } from "./schema.js";
+import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
 
 test("the speech kinds are every event kind but the rating", () => {
   const kinds: ConversationEventKind[] = Object.values(CONVERSATION_EVENT_KIND);
@@ -20,17 +22,21 @@ test("the speech kinds are every event kind but the rating", () => {
 });
 
 test("a rating payload is a verdict with an optional bounded note, and nothing else", () => {
-  assert.deepEqual(RATING_EVENT_PAYLOAD.parse({ rating: MESSAGE_RATING.DOWN, note: "too long" }), {
+  const read = readEither(RATING_EVENT_PAYLOAD);
+  const parse = (value: Parameters<typeof unparsedWire>[0]) =>
+    Either.getOrUndefined(read(unparsedWire(value)));
+  assert.deepEqual(parse({ rating: MESSAGE_RATING.DOWN, note: "too long" }), {
     rating: MESSAGE_RATING.DOWN,
     note: "too long",
   });
-  assert.deepEqual(RATING_EVENT_PAYLOAD.parse({ rating: MESSAGE_RATING.UP }), {
+  assert.deepEqual(parse({ rating: MESSAGE_RATING.UP }), {
     rating: MESSAGE_RATING.UP,
   });
-  const refusalOf = (value: Parameters<typeof unparsedWire>[0]) => {
-    const read = RATING_EVENT_PAYLOAD.read(unparsedWire(value));
-    return read.ok ? "admitted" : [read.refusal, read.path];
-  };
+  const refusalOf = (value: Parameters<typeof unparsedWire>[0]) =>
+    Either.match(read(unparsedWire(value)), {
+      onLeft: (refused) => [refused.refusal, refused.path],
+      onRight: () => "admitted",
+    });
   assert.deepEqual(refusalOf({ rating: "sideways" }), [SCHEMA_REFUSAL.MALFORMED, ["rating"]]);
   assert.deepEqual(
     refusalOf({ rating: MESSAGE_RATING.UP, note: "n".repeat(maximumRatingNoteLength + 1) }),

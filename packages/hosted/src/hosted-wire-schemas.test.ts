@@ -3,7 +3,6 @@ import {
   jsonSchemaOf,
   type RecordedEffectJsonSchemas,
   type RecordedJsonSchemaSource,
-  type RecordedJsonSchemas,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,
 } from "@sidecar/wire/testing";
@@ -29,30 +28,32 @@ import * as vaultWire from "./vault-wire.js";
  * hosted contract's own request schemas are what a model's tool call is
  * measured against on the service, so these bytes travel the same way a tool
  * definition's do, and each module's set is typed against the module itself:
- * a schema added there does not compile until it is recorded here.
+ * a schema added there does not compile until it is recorded here. Every
+ * module in this package declares its schemas directly as Effect's own, so
+ * every set below is `RecordedEffectJsonSchemas`.
  */
 
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 
-/** The registry a `s.registered` schema is built with, which its node never carries. */
+/** The registry a `registered` schema is built with, which its node never carries. */
 const FIXTURE_TOOL_CATALOG: ReadonlySet<string> = new Set(["fixture_tool"]);
 
-const MODULE_SCHEMAS = {
+const EFFECT_MODULE_SCHEMAS = {
   "action-wire": {
     hostedActionAnswerSchema: actionWire.hostedActionAnswerSchema,
     hostedActionWorkspaceAnswerSchema: actionWire.hostedActionWorkspaceAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof actionWire>,
+  } satisfies RecordedEffectJsonSchemas<typeof actionWire>,
   "ask-wire": {
     hostedBrainAskRequestSchema: askWire.hostedBrainAskRequestSchema,
     hostedBrainAskAnswerSchema: askWire.hostedBrainAskAnswerSchema,
     hostedBrainTurnAnswerSchema: askWire.hostedBrainTurnAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof askWire>,
+  } satisfies RecordedEffectJsonSchemas<typeof askWire>,
   "conversation-clear-wire": {
     conversationClearAnswerSchema: conversationClearWire.conversationClearAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof conversationClearWire>,
+  } satisfies RecordedEffectJsonSchemas<typeof conversationClearWire>,
   "conversation-wire": {
     hostedConversationAnswerSchema: conversationWire.hostedConversationAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof conversationWire>,
+  } satisfies RecordedEffectJsonSchemas<typeof conversationWire>,
   "device-wire": {
     deviceWireIdSchema: deviceWire.deviceWireIdSchema,
     deviceRegisterRequestSchema: deviceWire.deviceRegisterRequestSchema,
@@ -61,21 +62,7 @@ const MODULE_SCHEMAS = {
     deviceHeartbeatAnswerSchema: deviceWire.deviceHeartbeatAnswerSchema,
     deviceForgetRequestSchema: deviceWire.deviceForgetRequestSchema,
     deviceForgetAnswerSchema: deviceWire.deviceForgetAnswerSchema,
-  } satisfies RecordedJsonSchemas<typeof deviceWire>,
-} as const;
-
-/**
- * The modules that declare their schemas as Effect's own rather than through
- * the builder. `brain-contract`, `live-contract`, `mint-wire`, `observe-wire`,
- * and `projects-wire` export the Effect declaration under its historic name
- * directly, since nothing outside their own golden test reads it through the
- * facade. `service-wire`, `vault-wire`, `rating-wire`, `reads-wire`, and
- * `turn-events-wire` keep a `fromEffect` twin under the historic name for the
- * callers that still hold one, and record the Effect declaration underneath
- * separately, under its own `<name>Effect` export — both emit the same node
- * through the same AST, pinned here once rather than under both names.
- */
-const EFFECT_MODULE_SCHEMAS = {
+  } satisfies RecordedEffectJsonSchemas<typeof deviceWire>,
   "brain-contract": {
     hostedBrainCapabilitiesSchema: brainContract.hostedBrainCapabilitiesSchema,
     hostedBrainEmbedRequestSchema: brainContract.hostedBrainEmbedRequestSchema,
@@ -101,35 +88,35 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedProjectsAnswerSchema: projectsWire.hostedProjectsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof projectsWire>,
   "service-wire": {
-    writtenTextEffect: serviceWire.writtenTextEffect,
-    countedNumberEffect: serviceWire.countedNumberEffect,
-    hostedQuotaSchemaEffect: serviceWire.hostedQuotaSchemaEffect,
-    hostedErrorSchemaEffect: serviceWire.hostedErrorSchemaEffect,
-    wireUuidSchemaEffect: serviceWire.wireUuidSchemaEffect,
+    writtenText: serviceWire.writtenText,
+    countedNumber: serviceWire.countedNumber,
+    hostedQuotaSchema: serviceWire.hostedQuotaSchema,
+    hostedErrorSchema: serviceWire.hostedErrorSchema,
+    wireUuidSchema: serviceWire.wireUuidSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
   "vault-wire": {
-    vaultKeyStoreAnswerSchemaEffect: vaultWire.vaultKeyStoreAnswerSchemaEffect,
-    vaultKeysListAnswerSchemaEffect: vaultWire.vaultKeysListAnswerSchemaEffect,
-    vaultKeyDeleteAnswerSchemaEffect: vaultWire.vaultKeyDeleteAnswerSchemaEffect,
+    vaultKeyStoreAnswerSchema: vaultWire.vaultKeyStoreAnswerSchema,
+    vaultKeysListAnswerSchema: vaultWire.vaultKeysListAnswerSchema,
+    vaultKeyDeleteAnswerSchema: vaultWire.vaultKeyDeleteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof vaultWire>,
   "rating-wire": {
-    hostedMessageRatingRequestSchemaEffect: ratingWire.hostedMessageRatingRequestSchemaEffect,
-    hostedMessageRatingAnswerSchemaEffect: ratingWire.hostedMessageRatingAnswerSchemaEffect,
+    hostedMessageRatingRequestSchema: ratingWire.hostedMessageRatingRequestSchema,
+    hostedMessageRatingAnswerSchema: ratingWire.hostedMessageRatingAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof ratingWire>,
   "reads-wire": {
-    sequenceReadCursorSchemaEffect: readsWire.sequenceReadCursorSchemaEffect,
-    turnReadCursorSchemaEffect: readsWire.turnReadCursorSchemaEffect,
-    readLimitSchemaEffect: readsWire.readLimitSchemaEffect,
-    conversationMessagesAnswerSchemaEffect: readsWire.conversationMessagesAnswerSchemaEffect,
-    conversationEventsAnswerSchemaEffect: readsWire.conversationEventsAnswerSchemaEffect,
-    brainTurnsAnswerSchemaEffect: readsWire.brainTurnsAnswerSchemaEffect,
-    changesRequestSchemaEffect: readsWire.changesRequestSchemaEffect,
-    changesAnswerSchemaEffect: readsWire.changesAnswerSchemaEffect,
-    unreadableRowRefusalSchemaEffect: readsWire.unreadableRowRefusalSchemaEffect,
+    sequenceReadCursorSchema: readsWire.sequenceReadCursorSchema,
+    turnReadCursorSchema: readsWire.turnReadCursorSchema,
+    readLimitSchema: readsWire.readLimitSchema,
+    conversationMessagesAnswerSchema: readsWire.conversationMessagesAnswerSchema,
+    conversationEventsAnswerSchema: readsWire.conversationEventsAnswerSchema,
+    brainTurnsAnswerSchema: readsWire.brainTurnsAnswerSchema,
+    changesRequestSchema: readsWire.changesRequestSchema,
+    changesAnswerSchema: readsWire.changesAnswerSchema,
+    unreadableRowRefusalSchema: readsWire.unreadableRowRefusalSchema,
   } satisfies RecordedEffectJsonSchemas<typeof readsWire>,
   "turn-events-wire": {
-    turnEventCursorSchemaEffect: turnEventsWire.turnEventCursorSchemaEffect,
-    turnEventSchemaEffect: turnEventsWire.turnEventSchemaEffect,
+    turnEventCursorSchema: turnEventsWire.turnEventCursorSchema,
+    turnEventSchema: turnEventsWire.turnEventSchema,
   } satisfies RecordedEffectJsonSchemas<typeof turnEventsWire>,
 } as const;
 
@@ -158,7 +145,6 @@ const declaredSchemas = (
   );
 
 const RECORDED: readonly (readonly [string, RecordedJsonSchemaSource])[] = [
-  ...declaredSchemas(MODULE_SCHEMAS),
   ...declaredSchemas(EFFECT_MODULE_SCHEMAS),
   ...BUILT_SCHEMAS,
 ];

@@ -7,7 +7,14 @@ import {
   SESSION_STATUS,
   type Session,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  UNKNOWN_ACTION_STATUS,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { test } from "vitest";
 import { ACTION_KIND, type CarriedAction, type SessionActionKind } from "./action-kinds.js";
 import {
@@ -20,6 +27,10 @@ import {
   refusedActionOutput,
   unknownActionOutput,
 } from "./action-output.js";
+
+function parse(value: UnparsedWireValue) {
+  return Either.getOrUndefined(readEither(ACTION_OUTPUT)(value));
+}
 
 const NOW = 1_800_000_000_000;
 const IDENTITY = { providerId: "conductor", providerSessionId: "chat-1" } as const;
@@ -112,7 +123,7 @@ test("every envelope the builders make validates, and validation reads it back u
     unknownActionOutput("the node went away", target),
   ];
   for (const envelope of envelopes) {
-    assert.deepEqual(ACTION_OUTPUT.read(envelope), { ok: true, value: envelope });
+    assert.deepEqual(readEither(ACTION_OUTPUT)(envelope), Either.right(envelope));
   }
 });
 
@@ -126,15 +137,15 @@ test("a refusal or an unknown without a reason, a status outside the set, and a 
     { status: ACTION_OUTPUT_STATUS.ACCEPTED, createdSession: { providerId: "conductor" } },
   ];
   for (const record of malformed) {
-    assert.equal(ACTION_OUTPUT.read(record).ok, false);
+    assert.equal(Either.isLeft(readEither(ACTION_OUTPUT)(record)), true);
   }
-  assert.deepEqual(ACTION_OUTPUT.parse({ status: ACTION_OUTPUT_STATUS.ACCEPTED, later: true }), {
+  assert.deepEqual(parse({ status: ACTION_OUTPUT_STATUS.ACCEPTED, later: true }), {
     status: ACTION_OUTPUT_STATUS.ACCEPTED,
   });
 });
 
 test("a row's fields are dropped when malformed rather than refusing the envelope, and a sentence past its bound is cut", () => {
-  const read = ACTION_OUTPUT.parse({
+  const read = parse({
     status: ACTION_OUTPUT_STATUS.ACCEPTED,
     target: {
       providerId: "conductor",
@@ -149,9 +160,7 @@ test("a row's fields are dropped when malformed rather than refusing the envelop
     status: ACTION_OUTPUT_STATUS.ACCEPTED,
     target: { providerId: "conductor", providerSessionId: "chat-1" },
   });
-  const long = ACTION_OUTPUT.parse(
-    refusedActionOutput("x".repeat(maximumActionOutputSentenceLength + 10)),
-  );
+  const long = parse(refusedActionOutput("x".repeat(maximumActionOutputSentenceLength + 10)));
   assert.equal(long?.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(long?.reason.length, maximumActionOutputSentenceLength);
 });

@@ -32,11 +32,12 @@ import {
 import {
   ACTION_RESULT_STATUS,
   isWireString,
-  RECORD_EXTRA_KEYS,
-  s,
   UNKNOWN_ACTION_STATUS,
+  type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -90,28 +91,47 @@ const REFUSAL = {
   UNREADABLE_PANEL_ANSWER: "The panel answered in a shape this build cannot read.",
 } as const;
 
+/** A trimmed text, refused when only whitespace remains. */
+const text: EffectSchema.Schema<string, string> = EffectSchema.transform(
+  EffectSchema.String,
+  EffectSchema.String,
+  {
+    strict: true,
+    decode: (value) => value.trim(),
+    encode: (value) => value,
+  },
+).pipe(EffectSchema.minLength(1));
+
+/** The value a dropped field admits: whatever the inner schema read, or nothing. */
+function dropped<Value, Encoded>(
+  inner: EffectSchema.Schema<Value, Encoded>,
+): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
+  const read = readEither(inner);
+  return declareReader<Value | undefined>(
+    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    emitJsonSchema(inner),
+  );
+}
+
 /**
  * The panel's answer to an app action, read as untrusted: the status and the
  * sentence beside it, in the panel's own dialect — a refusal's reason, or the
  * note or outcome an acceptance sometimes carries — and nothing else it says.
  */
-const PANEL_ANSWER = s.record(
-  {
-    status: s.enumOf<CarriedActionResult["status"]>([
-      ACTION_RESULT_STATUS.ACCEPTED,
-      ACTION_RESULT_STATUS.REJECTED,
-      ACTION_RESULT_STATUS.UNSUPPORTED,
-      UNKNOWN_ACTION_STATUS,
-    ]),
-    reason: s.dropRefused(s.text()),
-    note: s.dropRefused(s.text()),
-    outcome: s.dropRefused(s.text()),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const PANEL_ANSWER = EffectSchema.Struct({
+  status: EffectSchema.Literal(
+    ACTION_RESULT_STATUS.ACCEPTED,
+    ACTION_RESULT_STATUS.REJECTED,
+    ACTION_RESULT_STATUS.UNSUPPORTED,
+    UNKNOWN_ACTION_STATUS,
+  ),
+  reason: EffectSchema.optionalWith(dropped(text), { exact: true }),
+  note: EffectSchema.optionalWith(dropped(text), { exact: true }),
+  outcome: EffectSchema.optionalWith(dropped(text), { exact: true }),
+}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
 function panelResult(answered: WireRecord): CarriedActionResult | undefined {
-  const read = PANEL_ANSWER.parse(answered);
+  const read = Either.getOrUndefined(readEither(PANEL_ANSWER)(answered));
   if (read === undefined) return undefined;
   if (read.status === ACTION_RESULT_STATUS.ACCEPTED) {
     const note = read.note ?? read.outcome;

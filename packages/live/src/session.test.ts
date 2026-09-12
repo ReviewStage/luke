@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { test } from "vitest";
 import { RENDERER_CLIENT_EVENTS, RENDERER_SERVER_EVENTS } from "./events.js";
 import { LIVE_SCENE, sessionInstructions } from "./instructions.js";
@@ -70,8 +73,12 @@ test("the creation request carries the session and the WebRTC offer", () => {
   assert.deepEqual(request.transport, { type: LIVE_TRANSPORT_TYPE, sdp: "v=0\r\n" });
 });
 
+function parseLiveCreateAnswer(value: UnparsedWireValue) {
+  return Either.getOrUndefined(readEither(liveCreateAnswerSchema)(value));
+}
+
 test("the creation answer is read for its id and SDP, ignoring what else the service adds", () => {
-  const answer = liveCreateAnswerSchema.parse({
+  const answer = parseLiveCreateAnswer({
     session: { id: "live_123", status: "active" },
     transport: { type: "webrtc", sdp: "v=0\r\na=answer\r\n", extra: true },
   });
@@ -84,15 +91,15 @@ test("the creation answer is read for its id and SDP, ignoring what else the ser
 
 test("an answer without an id or an SDP, or on another transport, is refused whole", () => {
   assert.equal(
-    liveCreateAnswerSchema.parse({ session: {}, transport: { type: "webrtc", sdp: "x" } }),
+    parseLiveCreateAnswer({ session: {}, transport: { type: "webrtc", sdp: "x" } }),
     undefined,
   );
   assert.equal(
-    liveCreateAnswerSchema.parse({ session: { id: "live_1" }, transport: { type: "webrtc" } }),
+    parseLiveCreateAnswer({ session: { id: "live_1" }, transport: { type: "webrtc" } }),
     undefined,
   );
   assert.equal(
-    liveCreateAnswerSchema.parse({
+    parseLiveCreateAnswer({
       session: { id: "live_1" },
       transport: { type: "websocket", sdp: "x" },
     }),

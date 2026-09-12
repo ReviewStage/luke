@@ -27,6 +27,8 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { test } from "vitest";
 import { drainMicrotasks } from "../testing/index.js";
 import {
@@ -253,7 +255,7 @@ test("every answer is the envelope: a session action's target as the roster held
   });
 
   for (const envelope of [sent, stopped, created]) {
-    assert.deepEqual(ACTION_OUTPUT.parse(envelope), envelope);
+    assert.deepEqual(Either.getOrUndefined(readEither(ACTION_OUTPUT)(envelope)), envelope);
   }
 });
 

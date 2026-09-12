@@ -49,10 +49,10 @@ import {
   SCHEMA_REFUSAL,
   type SchemaPath,
   type SchemaRead,
-  s,
-  TEXT_ENDS,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import { isSessionIdentity, type SessionOpenResult } from "./session";
 import type { UpdateSnapshot } from "./update";
@@ -209,7 +209,7 @@ function guarded<Value>(admits: (value: UnparsedWireValue) => boolean): ActSchem
 
 /**
  * A payload named field by field, each field admitted by the parser its own
- * domain owns. What `s.record` is for a payload whose fields are texts and
+ * domain owns. What `record` is for a payload whose fields are texts and
  * counts, for the payloads whose fields are whole domain values instead.
  */
 function fields<Value>(guards: {
@@ -223,12 +223,70 @@ function fields<Value>(guards: {
   });
 }
 
+/** An `ActSchema` read through an Effect `Schema`, so `.read()` answers the same word and path `readEither` does. */
+function actSchema<Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>): ActSchema<Value> {
+  const read = readEither(schema);
+  return {
+    read: (value) =>
+      Either.match(read(value), {
+        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onRight: (value) => ({ ok: true, value }),
+      }),
+  };
+}
+
+/** Whether a value reads under a schema at all, for a result the payload's own row only checks admits. */
+const isReadable =
+  <Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>) =>
+  (value: UnparsedWireValue): boolean =>
+    Either.isRight(readEither(schema)(value));
+
+/** A payload's field table as a struct, refusing a key it did not name. */
+function record<Fields extends EffectSchema.Struct.Fields>(
+  fields: Fields,
+): ActSchema<EffectSchema.Schema.Type<EffectSchema.Struct<Fields>>> {
+  type Value = EffectSchema.Schema.Type<EffectSchema.Struct<Fields>>;
+  const struct = EffectSchema.Struct(fields);
+  return actSchema(EffectSchema.make<Value, UnparsedWireValue>(struct.ast));
+}
+
+/** An identifier's ends, admitted as written rather than trimmed, and refused when it carries nothing. */
+function exactText(max?: number): EffectSchema.Schema<string, string> {
+  const nonBlank = EffectSchema.String.pipe(
+    EffectSchema.filter((value) => value.trim().length > 0, {
+      schemaId: EffectSchema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+  );
+  return max === undefined ? nonBlank : nonBlank.pipe(EffectSchema.maxLength(max));
+}
+
+/** An identifier's ends, admitted as written and admitting nothing at all. */
+function exactTextAllowingEmpty(max: number): EffectSchema.Schema<string, string> {
+  return EffectSchema.String.pipe(EffectSchema.maxLength(max));
+}
+
+/** A text collapsed to one line and trimmed, refused when nothing is left. */
+function oneLineText(max?: number): EffectSchema.Schema<string, string> {
+  const collapsed = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+    strict: true,
+    decode: (value) => value.replace(/\s+/gu, " ").trim(),
+    encode: (value) => value,
+  }).pipe(
+    EffectSchema.filter((value) => value.length > 0, {
+      schemaId: EffectSchema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+  );
+  return max === undefined ? collapsed : collapsed.pipe(EffectSchema.maxLength(max));
+}
+
 /**
  * An identifier that has to match the one it names elsewhere — a session, a
  * run, a delivery, an account, a calendar — so its ends are admitted as
  * written rather than trimmed into a value the roster would not hold.
  */
-const exactId = s.text({ max: 512, ends: TEXT_ENDS.KEEP });
+const exactId = exactText(512);
 
 /** Every credential provider this build registered, which is what its record is keyed by. */
 const CREDENTIAL_PROVIDER_IDS = Object.keys(CREDENTIAL_PROVIDERS).filter(isCredentialProviderId);
@@ -245,7 +303,8 @@ const isComposedMessage = (value: UnparsedWireValue): boolean =>
   isWireString(value) && value.trim().length > 0 && value.length <= maximumSessionMessageLength;
 
 /** A control's id as the roster advertised it, admitted as written so it matches the advertisement. */
-const isControlId = (value: UnparsedWireValue): boolean => exactId.read(value).ok;
+const isControlId = (value: UnparsedWireValue): boolean =>
+  Either.isRight(readEither(exactId)(value));
 
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
@@ -346,8 +405,8 @@ const settingsPress = (refusal: string): ActDeclaration<undefined, SettingsUpdat
  */
 export const ACT = {
   [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
-    payload: s.record({
-      provider: s.enumOf(Object.values(ACCOUNT_PROVIDER)),
+    payload: record({
+      provider: EffectSchema.Literal(...Object.values(ACCOUNT_PROVIDER)),
     }),
     result: answersAccount,
     refusal: "Could not start signing in on this system.",
@@ -374,23 +433,23 @@ export const ACT = {
     refusal: "Could not save that setting on this system.",
   },
   [ACT_KIND.SETTINGS_RESET]: {
-    payload: s.record({
-      scope: s.enumOf(Object.values(SETTINGS_RESET_SCOPE)),
+    payload: record({
+      scope: EffectSchema.Literal(...Object.values(SETTINGS_RESET_SCOPE)),
     }),
     result: answersSettings,
     refusal: "Could not reset those settings on this system.",
   },
   [ACT_KIND.CREDENTIAL_SET_API_KEY]: {
-    payload: s.record({
-      providerId: s.enumOf(CREDENTIAL_PROVIDER_IDS),
-      apiKey: s.text({ max: 4096, ends: TEXT_ENDS.KEEP, allowEmpty: true }).optional(),
+    payload: record({
+      providerId: EffectSchema.Literal(...CREDENTIAL_PROVIDER_IDS),
+      apiKey: EffectSchema.optionalWith(exactTextAllowingEmpty(4096), { exact: true }),
     }),
     result: answersSettings,
     refusal: "Could not save that API key on this system.",
   },
   [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: {
-    payload: s.record({
-      providerId: s.enumOf(CREDENTIAL_PROVIDER_IDS),
+    payload: record({
+      providerId: EffectSchema.Literal(...CREDENTIAL_PROVIDER_IDS),
     }),
     result: answersNothing,
     refusal: "Could not open that provider's keys page.",
@@ -401,7 +460,7 @@ export const ACT = {
   [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: press("Could not cancel that sign-in on this system."),
   [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: press("Could not reopen that sign-in on this system."),
   [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: {
-    payload: s.record({ accountId: exactId }),
+    payload: record({ accountId: exactId }),
     result: answersSettings,
     refusal: "Could not disconnect that account on this system.",
   },
@@ -422,10 +481,10 @@ export const ACT = {
   [ACT_KIND.CALENDAR_OPEN_SETTINGS]: press("Could not open the Calendar privacy settings."),
   [ACT_KIND.CALENDAR_REFRESH]: press("Could not read the calendars on this system."),
   [ACT_KIND.CALENDAR_SET_SELECTED]: {
-    payload: s.record({
+    payload: record({
       accountId: exactId,
       calendarId: exactId,
-      selected: s.boolean(),
+      selected: EffectSchema.Boolean,
     }),
     result: answersSettings,
     refusal: "Could not save that calendar choice on this system.",
@@ -473,22 +532,22 @@ export const ACT = {
     refusal: "Could not run that control on this system.",
   },
   [ACT_KIND.BRAIN_CANCEL_ASK]: {
-    payload: s.record({ runId: exactId }),
+    payload: record({ runId: exactId }),
     result: wireResult<BrainRequestSnapshot | undefined>(
       (value) => value === undefined || isBrainRequestSnapshot(value),
     ),
     refusal: "Could not reach Luke's runtime to cancel that.",
   },
   [ACT_KIND.CONVERSATION_RATE_MESSAGE]: {
-    payload: conversationRateMessageParamsSchema,
+    payload: actSchema(conversationRateMessageParamsSchema),
     result: wireResult<ConversationRateMessageResult>(
-      (value) => conversationRateMessageResultSchema.read(value).ok,
+      isReadable(conversationRateMessageResultSchema),
     ),
     refusal: "Could not record that rating on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
-    payload: s.record({
-      command: s.enumOf(Object.values(VOICE_COMMAND)),
+    payload: record({
+      command: EffectSchema.Literal(...Object.values(VOICE_COMMAND)),
     }),
     result: wireResult<VoiceCommandOutcome | undefined>(
       (value) => value === undefined || isVoiceCommandOutcome(value),
@@ -496,26 +555,26 @@ export const ACT = {
     refusal: "Could not carry that command on this system.",
   },
   [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {
-    payload: voiceCreateLiveSessionParamsSchema,
+    payload: actSchema(voiceCreateLiveSessionParamsSchema),
     result: wireResult<VoiceCreateLiveSessionResult | undefined>(
-      (value) => value === undefined || voiceCreateLiveSessionResultSchema.read(value).ok,
+      (value) => value === undefined || isReadable(voiceCreateLiveSessionResultSchema)(value),
     ),
     refusal: "Could not open a voice session on this system.",
   },
   [ACT_KIND.VOICE_END_LIVE_SESSION]: press("Could not end the voice session on this system."),
   [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
-    payload: voiceReportLiveTransportParamsSchema,
+    payload: actSchema(voiceReportLiveTransportParamsSchema),
     result: wireResult<undefined>((value) => value === undefined),
     refusal: "Could not report the voice transport on this system.",
   },
   [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: {
-    payload: voiceReportLiveActivityParamsSchema,
+    payload: actSchema(voiceReportLiveActivityParamsSchema),
     result: wireResult<undefined>((value) => value === undefined),
     refusal: "Could not report the voice activity on this system.",
   },
   [ACT_KIND.VOICE_STOP_SPEAKING]: {
     payload: noPayload,
-    result: wireResult<boolean>((value) => s.boolean().read(value).ok),
+    result: wireResult<boolean>((value) => Either.isRight(readEither(EffectSchema.Boolean)(value))),
     refusal: "Could not tell Luke to stop speaking on this system.",
   },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {
@@ -535,22 +594,22 @@ export const ACT = {
   },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
   [ACT_KIND.WINDOW_SET_EXPANDED]: {
-    payload: s.record({
-      expanded: s.boolean(),
-      focus: s.boolean().optional(),
+    payload: record({
+      expanded: EffectSchema.Boolean,
+      focus: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
     }),
     result: wireResult<WindowMode>(),
     refusal: "Could not resize the panel on this system.",
   },
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
-    payload: s.record({ words: s.text({ max: 100_000, ends: TEXT_ENDS.KEEP }) }),
+    payload: record({ words: exactText(100_000) }),
     result: answersNothing,
     refusal: "Could not copy that to the clipboard on this system.",
   },
   [ACT_KIND.WINDOW_QUIT]: press("Could not quit on this system."),
   [ACT_KIND.FEEDBACK_SUMMON]: {
-    payload: s.record({ kind: s.enumOf(Object.values(FEEDBACK_KIND)) }),
+    payload: record({ kind: EffectSchema.Literal(...Object.values(FEEDBACK_KIND)) }),
     result: answersNothing,
     refusal: "Could not open the composer on this system.",
   },
@@ -564,25 +623,25 @@ export const ACT = {
   [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: press("Could not skip that step on this system."),
   [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: press("Could not settle that step on this system."),
   [ACT_KIND.INTRODUCTION_CREATE_SESSION]: {
-    payload: s.record({
-      sdp: s.text({ max: LIVE_SDP_MAX_CHARACTERS, ends: TEXT_ENDS.KEEP }),
-      titles: s.array(s.text({ max: INTRODUCTION_SEED_BOUNDS.TITLE_CHARS, oneLine: true }), {
-        max: INTRODUCTION_SEED_BOUNDS.TITLES,
-      }),
+    payload: record({
+      sdp: exactText(LIVE_SDP_MAX_CHARACTERS),
+      titles: EffectSchema.Array(oneLineText(INTRODUCTION_SEED_BOUNDS.TITLE_CHARS)).pipe(
+        EffectSchema.maxItems(INTRODUCTION_SEED_BOUNDS.TITLES),
+      ),
     }),
     result: wireResult<VoiceCreateLiveSessionResult | undefined>(
-      (value) => value === undefined || voiceCreateLiveSessionResultSchema.read(value).ok,
+      (value) => value === undefined || isReadable(voiceCreateLiveSessionResultSchema)(value),
     ),
     refusal: "Could not open the introduction's voice session on this system.",
   },
   [ACT_KIND.INTRODUCTION_END_SESSION]: press("Could not end the introduction's voice session."),
   [ACT_KIND.INTRODUCTION_COMPLETE]: {
-    payload: s.record({ given: s.boolean() }),
+    payload: record({ given: EffectSchema.Boolean }),
     result: answersNothing,
     refusal: "Could not record the introduction on this system.",
   },
   [ACT_KIND.INTRODUCTION_ABANDON]: {
-    payload: s.record({ reason: s.text({ max: 1024, oneLine: true }) }),
+    payload: record({ reason: oneLineText(1024) }),
     result: answersNothing,
     refusal: "Could not stand the introduction down on this system.",
   },

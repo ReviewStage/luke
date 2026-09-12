@@ -28,13 +28,13 @@ import {
 import {
   ACTION_RESULT_STATUS,
   type ActionResult,
-  RECORD_EXTRA_KEYS,
-  type Schema,
-  s,
-  TEXT_OVERFLOW,
+  SCHEMA_REFUSAL,
   UNKNOWN_ACTION_STATUS,
   type UnknownActionResult,
+  type UnparsedWireValue,
 } from "@sidecar/wire";
+import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import { ACTION_KIND, type CarriedAction, type SessionActionKind } from "./action-kinds.js";
 import { maximumIdentifierLength } from "./action-schemas.js";
 
@@ -91,12 +91,75 @@ export type ActionOutputEnvelope = AcceptedActionOutput | UnknownActionOutput | 
 /** A sentence a person reads; past the bound it is cut with an ellipsis rather than lost whole. */
 export const maximumActionOutputSentenceLength = 2_000;
 
-const identifier = s.text({ max: maximumIdentifierLength });
-const sentence = s.text({
-  max: maximumActionOutputSentenceLength,
-  oneLine: true,
-  overflow: TEXT_OVERFLOW.ELLIPSIS,
-});
+/** A declaration handed the interface it decodes into; Effect's `Schema` is invariant in its decoded type. */
+function schemaAs<Value>(
+  schema: EffectSchema.Schema.Any,
+): EffectSchema.Schema<Value, UnparsedWireValue> {
+  return EffectSchema.make<Value, UnparsedWireValue>(schema.ast);
+}
+
+/** A text trimmed and refused when left with nothing, bounded to `max` characters. */
+function boundedText(max: number): EffectSchema.Schema<string, string> {
+  return EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+    strict: true,
+    decode: (value) => value.trim(),
+    encode: (value) => value,
+  }).pipe(
+    EffectSchema.filter((value) => value.length > 0, {
+      schemaId: EffectSchema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+    EffectSchema.maxLength(max),
+  );
+}
+
+/** A sentence collapsed to one line and cut with an ellipsis rather than lost whole past `max`. */
+function sentenceText(max: number): EffectSchema.Schema<string, string> {
+  return EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+    strict: true,
+    decode: (value) => {
+      const collapsed = value.replace(/\s+/gu, " ").trim();
+      return collapsed.length > max ? `${collapsed.slice(0, max - 1).trimEnd()}…` : collapsed;
+    },
+    encode: (value) => value,
+  }).pipe(
+    EffectSchema.filter((value) => value.length > 0, {
+      schemaId: EffectSchema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+    EffectSchema.maxLength(max),
+  );
+}
+
+/** The inner schema read forgivingly: what it refuses decodes to nothing, and its node stands. */
+function droppedField<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
+): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
+  const read = readEither(schema);
+  return declareReader<Value | undefined>(
+    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    emitJsonSchema(schema),
+  );
+}
+
+/**
+ * A key a `droppedField` left holding `undefined` is dropped entirely, exactly
+ * as an absent optional key is: a struct's decode still writes the key when it
+ * arrived, even holding nothing.
+ */
+function omittingUndefinedKeys<Fields extends object, Encoded>(
+  schema: EffectSchema.Schema<Fields, Encoded>,
+) {
+  return EffectSchema.transform(schema, EffectSchema.Unknown, {
+    strict: false,
+    decode: (value) =>
+      Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+    encode: (value) => value,
+  });
+}
+
+const identifier = boundedText(maximumIdentifierLength);
+const sentence = sentenceText(maximumActionOutputSentenceLength);
 
 /**
  * An envelope is an answer, so a key a later build added is ignored rather
@@ -107,48 +170,65 @@ const sentence = s.text({
  * became of the action. The identifiers stay required and exact, because an
  * effect hangs on them.
  */
-const answer = <Fields extends Parameters<typeof s.record>[0]>(fields: Fields) =>
-  s.record(fields, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
+const answer = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
-const TARGET_SNAPSHOT: Schema<ActionTargetSnapshot> = answer({
+const optional = <A, I>(field: EffectSchema.Schema<A, I>) =>
+  EffectSchema.optionalWith(field, { exact: true });
+
+const TARGET_SNAPSHOT_CORE = answer({
   providerId: identifier,
-  providerSessionId: identifier.optional(),
-  title: s.dropRefused(s.text({ max: maximumSessionTitleLength })),
-  agentId: s.dropRefused(identifier),
-  controlKind: s.dropRefused(s.enumOf(Object.values(SESSION_CONTROL_KIND))),
-  controlLabel: s.dropRefused(s.text({ max: maximumSessionTitleLength })),
-  applicationId: s.dropRefused(s.enumOf(Object.values(SESSION_APPLICATION_ID))),
+  providerSessionId: optional(identifier),
+  title: optional(droppedField(boundedText(maximumSessionTitleLength))),
+  agentId: optional(droppedField(identifier)),
+  controlKind: optional(droppedField(EffectSchema.Literal(...Object.values(SESSION_CONTROL_KIND)))),
+  controlLabel: optional(droppedField(boundedText(maximumSessionTitleLength))),
+  applicationId: optional(
+    droppedField(EffectSchema.Literal(...Object.values(SESSION_APPLICATION_ID))),
+  ),
 });
 
-const CREATED_SESSION: Schema<SessionIdentity> = answer({
-  providerId: identifier,
-  providerSessionId: identifier,
-});
+const TARGET_SNAPSHOT = schemaAs<ActionTargetSnapshot>(omittingUndefinedKeys(TARGET_SNAPSHOT_CORE));
+
+const CREATED_SESSION = schemaAs<SessionIdentity>(
+  answer({
+    providerId: identifier,
+    providerSessionId: identifier,
+  }),
+);
+
+const ACTION_OUTPUT_CORE = EffectSchema.Union(
+  omittingUndefinedKeys(
+    answer({
+      status: EffectSchema.Literal(ACTION_OUTPUT_STATUS.ACCEPTED),
+      target: optional(TARGET_SNAPSHOT),
+      createdSession: optional(CREATED_SESSION),
+      note: optional(droppedField(sentence)),
+      warning: optional(droppedField(sentence)),
+    }),
+  ),
+  omittingUndefinedKeys(
+    answer({
+      status: EffectSchema.Literal(ACTION_OUTPUT_STATUS.UNKNOWN),
+      reason: sentence,
+      target: optional(TARGET_SNAPSHOT),
+    }),
+  ),
+  omittingUndefinedKeys(
+    answer({
+      status: EffectSchema.Literal(ACTION_OUTPUT_STATUS.REFUSED),
+      reason: sentence,
+      target: optional(TARGET_SNAPSHOT),
+    }),
+  ),
+).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
  * The envelope as it is validated on write and read back: every action tool's
  * output has to read under this schema, and a record that does not is not an
  * action's output at all.
  */
-export const ACTION_OUTPUT: Schema<ActionOutputEnvelope> = s.union([
-  answer({
-    status: s.literal(ACTION_OUTPUT_STATUS.ACCEPTED),
-    target: TARGET_SNAPSHOT.optional(),
-    createdSession: CREATED_SESSION.optional(),
-    note: s.dropRefused(sentence),
-    warning: s.dropRefused(sentence),
-  }),
-  answer({
-    status: s.literal(ACTION_OUTPUT_STATUS.UNKNOWN),
-    reason: sentence,
-    target: TARGET_SNAPSHOT.optional(),
-  }),
-  answer({
-    status: s.literal(ACTION_OUTPUT_STATUS.REFUSED),
-    reason: sentence,
-    target: TARGET_SNAPSHOT.optional(),
-  }),
-]);
+export const ACTION_OUTPUT = schemaAs<ActionOutputEnvelope>(ACTION_OUTPUT_CORE);
 
 export function refusedActionOutput(
   reason: string,

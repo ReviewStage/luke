@@ -1,8 +1,9 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import type { Fragment } from "@effect/sql/Statement";
+import { readEither } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
-import { Effect, type ParseResult, Schema } from "effect";
+import { Effect, Either, type ParseResult, Schema } from "effect";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_ROLE,
@@ -849,7 +850,9 @@ export function latestMessageRating(
   return Effect.map(findLatestRating({ userId, messageId }), (found) => {
     if (found._tag === "None") return undefined;
     const row = found.value;
-    const payload = RATING_EVENT_PAYLOAD.parse(unparsedWire(row.payload));
+    const payload = Either.getOrUndefined(
+      readEither(RATING_EVENT_PAYLOAD)(unparsedWire(row.payload)),
+    );
     if (payload === undefined) return undefined;
     return {
       ...payload,

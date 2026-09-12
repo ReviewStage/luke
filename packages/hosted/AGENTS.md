@@ -11,57 +11,18 @@ credential contract (`realtime-contract.ts`, with the reader of a mint
 response into it), and depends only on lower wire/session vocabulary and `@sidecar/live`
 for the Live voice set and the
 `InitialItem` shape (that package imports nothing of this one, so the edge
-points down). `brain-contract.ts` was the first module here to state its
-declarations as Effect `Schema`s directly rather than through wire's `s.*`
-facade, and `live-contract.ts`, `mint-wire.ts`, `observe-wire.ts`, and
-`projects-wire.ts` now do the same: each reads through `readEither`, shows
-what `emitJsonSchema` walks out of the same AST, and keeps the reader
-`declareReader` states for the rule no combinator can declare — a frame's one
-part read as its tuple in `live-contract.ts`, a credential's `wsUrl` read
-against the record it arrived in in `mint-wire.ts`, a row's dropped field or
-skipped array entry in `observe-wire.ts` and `projects-wire.ts` — so the
-bytes a model or a device is shown are the same bytes the goldens under
-`fixtures/json-schema/` already held. Nothing a caller reads changed with it:
-the reads answer the same interfaces in the same words, a caller that held a
-`Schema<Value>`'s `read`/`parse` now calls the module's own `*Read`/`*FromWire`
-function instead, and every module still on the facade declares through it
-until its own conversion, which is why the golden test carries two recorded
-tables — `RecordedJsonSchemas` for the facade's modules and
-`RecordedEffectJsonSchemas` for a module that has moved — each exhaustive over
-its own kind. `action-wire.ts`, `conversation-clear-wire.ts`,
-`conversation-wire.ts`, and `device-wire.ts` declare the same way, composing
-`Schema.Struct` directly rather than through the facade, but their exported
-schemas stay the facade's own `Schema<Value>`, each built by a local
-`fromEffect` that answers `read`/`parse`/`jsonSchema` from the Effect
-declaration underneath: unlike the readers above, these four are read with
-`.parse()` and `.read()` by callers elsewhere in this package and in
-`apps/web` (the device routes, `device-client.ts`, `rating-wire.ts`'s
-composition of `deviceWireIdSchema` into its own record, and the `apps/web`
-test over `conversation-clear-wire.ts`'s own answer) — `conversation-client.ts`'s
-`clear` reads that answer through `effectSchema` and `accountCall`'s `ask`
-instead of the facade directly, which is why its recorded golden still stays
-under `RecordedJsonSchemas` rather than moving to `RecordedEffectJsonSchemas`:
-the facade wrapper's own `jsonSchema()` already walks the same Effect AST
-`emitJsonSchema` does, so the bytes are identical either way.
-`service-wire.ts`, `vault-wire.ts`, `rating-wire.ts`,
-`reads-wire.ts`, and `turn-events-wire.ts` go one step further than those
-four `fromEffect`-only modules: each export a still-facade sibling module or
-an outside caller reaches through `.read`/`.parse`/`.jsonSchema`
-(`service-wire.ts`'s `writtenText`, `countedNumber`, `hostedQuotaSchema`,
-`hostedErrorSchema`, and `wireUuidSchema`; `vault-wire.ts`'s three answer
-schemas; `rating-wire.ts`'s two request/answer schemas; `reads-wire.ts`'s
-cursor and per-resource answer schemas; `turn-events-wire.ts`'s cursor and
-event schemas) keeps that name as a `fromEffect` twin, but the Effect
-declaration underneath is also exported, under a distinct `<name>Effect`
-name, and recorded in `RecordedEffectJsonSchemas` instead of beside the
-facade name, so a later caller can move onto it directly without this module
-changing again; `rating-wire.ts`, `reads-wire.ts`, and `turn-events-wire.ts`
-reach `service-wire.ts`'s and `device-wire.ts`'s facade exports for their own
-Effect declarations through wire's `effectSchema()` bridge. The twin is what
-`vault-client.ts`, `conversation-client.ts`, `changes-client.ts`,
-`@sidecar/voice`, `@sidecar/brain`, and `apps/web` still call `.parse()`/
-`.read()` on; it is the strangler shim P12-08 deletes, once every one of
-those callers declares against the `Effect` export directly. The clients here are `vault-client.ts`, the desktop's side of
+points down). Every module here states its declarations as Effect `Schema`s
+directly: each reads through `readEither`, shows what `emitJsonSchema` walks
+out of the same AST, and keeps the reader `declareReader` states for the rule
+no combinator can declare — a frame's one part read as its tuple in
+`live-contract.ts`, a credential's `wsUrl` read against the record it arrived
+in in `mint-wire.ts`, a row's dropped field or skipped array entry in
+`observe-wire.ts` and `projects-wire.ts` — so the bytes a model or a device is
+shown are the same bytes the goldens under `fixtures/json-schema/` hold. A
+caller reads one of these schemas through `readEither` and shows it through
+`emitJsonSchema`, both from `@sidecar/wire/effect`, and every recorded golden
+in `hosted-wire-schemas.test.ts` is typed against its module through
+`RecordedEffectJsonSchemas`, exhaustive by construction. The clients here are `vault-client.ts`, the desktop's side of
 the three vault routes, `device-client.ts`, its side of the one devices
 path, `changes-client.ts`, its side of the change-signal poll that carries
 the device's presence and quiet instants, `roster-client.ts`, its read of the
@@ -108,7 +69,8 @@ that takes no identity at all), so who may renew a credential and who may say
 which account it answers for stay their owners' to know. What a caller keeps
 is its own vocabulary and its own reading of a status: `ask` for a caller that
 wants a body the answer's own Effect schema admitted or nothing, `read` for
-one that still holds a `Schema<Value>` facade and hands its own reader over,
+one that hands its own reader function over directly rather than a schema
+(unused outside its own test now that every client here reads through `ask`),
 and `send` for one that reads the status itself. Every caller in this package
 now makes that call, `device-client.ts` included, and so do the two hosted
 endpoints that reach a third party on a key the deployment fixed: a
@@ -132,16 +94,15 @@ builds the `HttpClient` layer once, from its own `fetch` option or the global
 one, and each Promise-returning method provides that layer to the effect it
 built and runs it with `Effect.runPromise`, so a caller of any of these six
 classes still awaits a promise and the Effect face never crosses their
-boundary. `device-client.ts` and `vault-client.ts` read their answers with
-`ask` against `effectSchema` of the facade schema each still declares its
-shape in; `action-client.ts` keeps reading its answer by hand off the
-`send`ed response, unchanged, because what it distinguishes is the status a
-fault or a refusal left the call in rather than a validated body.
-`changes-client.ts`'s `poll` and `conversation-client.ts`'s `clear` read the
-same way, through `ask` and `effectSchema(changesAnswerSchema)` /
-`effectSchema(conversationClearAnswerSchema)`, and `roster-client.ts`'s
-`observe` reads `observe-wire.ts`'s own `observeAnswerSchema` the same way,
-already an Effect schema rather than a facade one. `conversation-client.ts`'s
+boundary. `device-client.ts`, `vault-client.ts`, `changes-client.ts`'s `poll`,
+and `conversation-client.ts`'s `clear`, `messages`, `events`, and `turns` all
+read their answers with `ask` directly against the Effect schema each wire
+module declares (`changesAnswerSchema`, `conversationClearAnswerSchema`, and
+so on); `action-client.ts` keeps reading its answer by hand off the `send`ed
+response, unchanged, because what it distinguishes is the status a
+fault or a refusal left the call in rather than a validated body, and
+`roster-client.ts`'s `observe` reads `observe-wire.ts`'s own
+`observeAnswerSchema` the same way `ask` does. `conversation-client.ts`'s
 per-resource reads and its rating still read the raw `Response` through
 `send`, because the unreadable-row refusal and the two rating refusals need
 the body under a status `ask` would already have discarded. `createAccountCall`

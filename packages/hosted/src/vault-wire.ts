@@ -1,20 +1,15 @@
 import { CLOUD_AGENT_PROVIDER_ID, type CloudAgentProviderId } from "@sidecar/session";
-import { type Schema, s } from "@sidecar/wire";
-import { emitJsonSchema, readEither, verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
-import { countedNumberEffect } from "./service-wire.js";
+import { verbatimJsonSchema } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
+import { countedNumber } from "./service-wire.js";
 
 /**
  * The provider-key vault: which providers it accepts a key for, the shape a
  * key must have before it is stored, and what its three endpoints answer.
  *
- * Every declaration below is composed directly as an Effect `Schema`, under
- * its own `<name>Effect` export; the plain `<name>` export beside it is the
- * same declaration read through `fromEffect` (the pattern P1-04 established
- * in `packages/wire/src/ui-message-metadata.ts`), which is what still
- * answers the facade's `read`/`parse`/`jsonSchema` for `vault-client.ts`'s
- * `.parse()` callers. The facade twin is the strangler shim P12-08 deletes,
- * once every caller declares against the `Effect` export directly.
+ * Every declaration below is composed directly as an Effect `Schema` and
+ * exported under its own name; `vault-client.ts` reads one through
+ * `readEither` and shows it through `emitJsonSchema`.
  */
 
 /** Maximum length the vault accepts for a provider API key. */
@@ -33,23 +28,6 @@ export function vaultKeyIsStorable(key: string): boolean {
 const CLOUD_AGENT_PROVIDER_NAMES = Object.values(CLOUD_AGENT_PROVIDER_ID);
 
 /**
- * The Effect schema a declaration was composed from, adapted to the facade
- * still-held callers use: `read` through `readEither`, `jsonSchema` through
- * the emitter walking the same schema.
- */
-function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
-  const read = readEither(core);
-  return s.reader({
-    read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
-      }),
-    jsonSchema: () => emitJsonSchema(core),
-  });
-}
-
-/**
  * A record that ignores a key a newer service added, which is what an answer
  * does. Each record states its own rule, because Effect hands a struct's
  * parse options down to the structs inside it.
@@ -57,7 +35,7 @@ function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): 
 const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
   EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
-/** A member set read with its ends trimmed, the way `s.enumOf({ ends: TEXT_ENDS.TRIM })` reads one. */
+/** A member set read with its ends trimmed. */
 function trimmedEnum<const Member extends string>(members: readonly Member[]) {
   return verbatimJsonSchema(
     EffectSchema.transform(EffectSchema.String, EffectSchema.Literal(...members), {
@@ -75,13 +53,9 @@ export interface VaultKeyStoreAnswer {
 }
 
 /** Anything other than `{ stored: true }` is not a store that landed. */
-export const vaultKeyStoreAnswerSchemaEffect = tolerantRecord({
+export const vaultKeyStoreAnswerSchema = tolerantRecord({
   stored: EffectSchema.Literal(true),
 });
-
-export const vaultKeyStoreAnswerSchema: Schema<VaultKeyStoreAnswer> = fromEffect(
-  vaultKeyStoreAnswerSchemaEffect,
-);
 
 /** One key entry as returned by the list endpoint — never contains the key. */
 export interface VaultKeyListEntry {
@@ -99,28 +73,20 @@ export interface VaultKeysListAnswer {
  * silently missing from the list is a key the panel offers no way to replace
  * or delete, which is worse than a list that plainly did not read.
  */
-export const vaultKeysListAnswerSchemaEffect = tolerantRecord({
+export const vaultKeysListAnswerSchema = tolerantRecord({
   keys: EffectSchema.mutable(
     EffectSchema.Array(
       tolerantRecord({
         providerId: trimmedEnum(CLOUD_AGENT_PROVIDER_NAMES),
-        updatedAt: countedNumberEffect,
+        updatedAt: countedNumber,
       }),
     ),
   ),
 });
-
-export const vaultKeysListAnswerSchema: Schema<VaultKeysListAnswer> = fromEffect(
-  vaultKeysListAnswerSchemaEffect,
-);
 
 /** Confirms whether a delete operation found and removed a key. */
 export interface VaultKeyDeleteAnswer {
   deleted: boolean;
 }
 
-export const vaultKeyDeleteAnswerSchemaEffect = tolerantRecord({ deleted: EffectSchema.Boolean });
-
-export const vaultKeyDeleteAnswerSchema: Schema<VaultKeyDeleteAnswer> = fromEffect(
-  vaultKeyDeleteAnswerSchemaEffect,
-);
+export const vaultKeyDeleteAnswerSchema = tolerantRecord({ deleted: EffectSchema.Boolean });

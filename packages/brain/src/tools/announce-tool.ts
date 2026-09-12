@@ -1,4 +1,6 @@
-import { ACTION_RESULT_STATUS, RECORD_EXTRA_KEYS, s, text, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { describeWire } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL, maximumBriefingLength } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -21,13 +23,31 @@ export interface AnnounceToolContext extends ToolContext {
 
 export type AnnounceToolModule = ToolModule<WireRecord, AnnounceToolContext>;
 
-const ANNOUNCE_INPUT = s.record(
-  {
-    briefing: s.text({
-      description: `What Luke says aloud, in his own voice, under ${maximumBriefingLength} characters.`,
+const briefingText = describeWire(
+  EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+    strict: true,
+    decode: (value) => value.trim(),
+    encode: (value) => value,
+  }).pipe(
+    EffectSchema.filter((value) => value.trim().length > 0, {
+      schemaId: EffectSchema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
     }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+  ),
+  `What Luke says aloud, in his own voice, under ${maximumBriefingLength} characters.`,
+);
+
+/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase<A, I>(
+  schema: EffectSchema.Schema<A, I>,
+): EffectSchema.Schema<unknown, UnparsedWireValue> {
+  return EffectSchema.make(schema.ast);
+}
+
+const ANNOUNCE_INPUT = erase(
+  EffectSchema.Struct({ briefing: briefingText }).annotations({
+    parseOptions: { onExcessProperty: "ignore" },
+  }),
 );
 
 export const ANNOUNCE_TOOL: AnnounceToolModule = {

@@ -3,8 +3,10 @@ import {
   type ConversationViewToolKinds,
   type NamedConversationViewToolKind,
 } from "@sidecar/session";
-import { type Schema, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
 import { jsonSchema, type Tool, type ToolSet, tool } from "ai";
+import { Either, type Schema } from "effect";
 import { brainToolCatalog, brainToolRegistry, TOOL_GROUP } from "./tools.js";
 
 /**
@@ -20,21 +22,22 @@ import { brainToolCatalog, brainToolRegistry, TOOL_GROUP } from "./tools.js";
  * the build, so a caller builds each once and holds it.
  */
 
-function validatedInput(schema: Schema<unknown>) {
+function validatedInput(schema: Schema.Schema<unknown, UnparsedWireValue>) {
   return jsonSchema<unknown>(
     // SAFETY: the wire schema's node is JSON Schema in the strict form a function tool takes; a
     // round trip is its plain-object form, which is what the SDK's schema type names.
-    JSON.parse(JSON.stringify(schema.jsonSchema())),
+    JSON.parse(JSON.stringify(emitJsonSchema(schema))),
     {
       validate: (value) => {
         // SAFETY: the SDK hands the part's input back as it was stored, which is JSON; the read is the validation.
-        const read = schema.read(unparsedWire(value as WireBoundaryInput));
-        return read.ok
-          ? { success: true, value: read.value }
-          : {
-              success: false,
-              error: new Error(`${read.refusal} at ${read.path.map(String).join(".")}`),
-            };
+        const read = readEither(schema)(unparsedWire(value as WireBoundaryInput));
+        return Either.match(read, {
+          onRight: (value) => ({ success: true as const, value }),
+          onLeft: (refused) => ({
+            success: false as const,
+            error: new Error(`${refused.refusal} at ${refused.path.map(String).join(".")}`),
+          }),
+        });
       },
     },
   );

@@ -7,12 +7,7 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
 } from "@sidecar/live";
-import {
-  effectSchema,
-  SCHEMA_REFUSAL,
-  type SchemaRead,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
+import { SCHEMA_REFUSAL, type SchemaRead, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Either, Schema } from "effect";
 import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
@@ -401,7 +396,7 @@ export const sessionCreatedFrameSchema = schemaAs<SessionCreatedFrame>(
     tolerantRecord({
       type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
       ...CREATED_FIELDS,
-      quota: Schema.optionalWith(droppedField(effectSchema(hostedQuotaSchema)), { exact: true }),
+      quota: Schema.optionalWith(droppedField(hostedQuotaSchema), { exact: true }),
     }),
   ),
 );

@@ -50,6 +50,8 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -374,7 +376,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     createLiveSession: async (sdp) => {
       const answer = await client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp });
-      return answer.ok ? voiceCreateLiveSessionResultSchema.parse(answer.result) : undefined;
+      return answer.ok
+        ? Either.getOrUndefined(readEither(voiceCreateLiveSessionResultSchema)(answer.result))
+        : undefined;
     },
     endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
     reportLiveTransport: (state) =>
@@ -384,7 +388,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     stopSpeaking: async () => {
       const answer = await client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING);
       return answer.ok
-        ? (voiceStopSpeakingResultSchema.parse(answer.result)?.stopped ?? false)
+        ? (Either.getOrUndefined(readEither(voiceStopSpeakingResultSchema)(answer.result))
+            ?.stopped ?? false)
         : false;
     },
     recordAgentTrace: (trace) => {
@@ -417,7 +422,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         rating,
       });
       return (
-        (answer.ok ? conversationRateMessageResultSchema.parse(answer.result) : undefined) ?? {
+        (answer.ok
+          ? Either.getOrUndefined(readEither(conversationRateMessageResultSchema)(answer.result))
+          : undefined) ?? {
           status: CONVERSATION_RATE_STATUS.UNAVAILABLE,
         }
       );
@@ -501,7 +508,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onVoiceLiveSessionChanged: (listener) =>
       on(
         GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED,
-        (payload) => voiceLiveSessionChangedSchema.parse(payload),
+        (payload) => Either.getOrUndefined(readEither(voiceLiveSessionChangedSchema)(payload)),
         listener,
       ),
     onSessionReplayChanged: (listener) =>

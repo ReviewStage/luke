@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Schema } from "effect";
 import { emitJsonSchema } from "../effect/json-schema.js";
-import type { JsonSchemaNode } from "../schema.js";
+import type { JsonSchemaNode } from "../schema-vocabulary.js";
 
 /**
  * The JSON Schema a model is shown, recorded. These bytes are prompt-cache

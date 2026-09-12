@@ -1,0 +1,11 @@
+{
+  "type": "string",
+  "enum": [
+    "session.input_audio.mute",
+    "session.input_audio.unmute",
+    "session.instructions.append",
+    "session.thinking.append",
+    "session.commentary.append",
+    "session.close"
+  ]
+}

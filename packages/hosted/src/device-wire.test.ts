@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { type Schema as EffectSchema, Either } from "effect";
 import { test } from "vitest";
 import {
   DEVICE_PLATFORM,
@@ -15,6 +17,13 @@ import {
   isPushEnvironment,
   PUSH_ENVIRONMENT,
 } from "./device-wire.js";
+
+function parse<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
 
 const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -49,14 +58,14 @@ test("a wire id is the canonical lowercase UUID form", () => {
 
 test("a registration names a platform and an installation, with an optional paired push token", () => {
   assert.deepEqual(
-    deviceRegisterRequestSchema.parse({
+    parse(deviceRegisterRequestSchema, {
       platform: DEVICE_PLATFORM.MACOS,
       installationId: INSTALLATION_ID.toUpperCase(),
     }),
     { platform: DEVICE_PLATFORM.MACOS, installationId: INSTALLATION_ID },
   );
   assert.deepEqual(
-    deviceRegisterRequestSchema.parse({
+    parse(deviceRegisterRequestSchema, {
       platform: DEVICE_PLATFORM.IOS,
       installationId: INSTALLATION_ID,
       pushToken: TOKEN.toUpperCase(),
@@ -89,27 +98,27 @@ test("a registration names a platform and an installation, with an optional pair
     "register",
   ];
   for (const body of refused) {
-    assert.equal(deviceRegisterRequestSchema.parse(body), undefined, JSON.stringify(body));
+    assert.equal(parse(deviceRegisterRequestSchema, body), undefined, JSON.stringify(body));
   }
 });
 
 test("a heartbeat names the device and carries only the changes it means", () => {
-  assert.deepEqual(deviceHeartbeatRequestSchema.parse({ deviceId: DEVICE_ID }), {
+  assert.deepEqual(parse(deviceHeartbeatRequestSchema, { deviceId: DEVICE_ID }), {
     deviceId: DEVICE_ID,
   });
   assert.deepEqual(
-    deviceHeartbeatRequestSchema.parse({ deviceId: DEVICE_ID, activeUntil: 1_800_000_000_000 }),
+    parse(deviceHeartbeatRequestSchema, { deviceId: DEVICE_ID, activeUntil: 1_800_000_000_000 }),
     { deviceId: DEVICE_ID, activeUntil: 1_800_000_000_000 },
   );
   assert.deepEqual(
-    deviceHeartbeatRequestSchema.parse({
+    parse(deviceHeartbeatRequestSchema, {
       deviceId: DEVICE_ID,
       pushToken: TOKEN,
       pushEnvironment: PUSH_ENVIRONMENT.PRODUCTION,
     }),
     { deviceId: DEVICE_ID, pushToken: TOKEN, pushEnvironment: PUSH_ENVIRONMENT.PRODUCTION },
   );
-  assert.deepEqual(deviceHeartbeatRequestSchema.parse({ deviceId: DEVICE_ID, pushToken: null }), {
+  assert.deepEqual(parse(deviceHeartbeatRequestSchema, { deviceId: DEVICE_ID, pushToken: null }), {
     deviceId: DEVICE_ID,
     pushToken: null,
   });
@@ -124,26 +133,26 @@ test("a heartbeat names the device and carries only the changes it means", () =>
     {},
   ];
   for (const body of refused) {
-    assert.equal(deviceHeartbeatRequestSchema.parse(body), undefined, JSON.stringify(body));
+    assert.equal(parse(deviceHeartbeatRequestSchema, body), undefined, JSON.stringify(body));
   }
 });
 
 test("a forget names the device and nothing else", () => {
-  assert.deepEqual(deviceForgetRequestSchema.parse({ deviceId: DEVICE_ID }), {
+  assert.deepEqual(parse(deviceForgetRequestSchema, { deviceId: DEVICE_ID }), {
     deviceId: DEVICE_ID,
   });
-  assert.equal(deviceForgetRequestSchema.parse({ deviceId: DEVICE_ID, force: true }), undefined);
-  assert.equal(deviceForgetRequestSchema.parse({}), undefined);
+  assert.equal(parse(deviceForgetRequestSchema, { deviceId: DEVICE_ID, force: true }), undefined);
+  assert.equal(parse(deviceForgetRequestSchema, {}), undefined);
 });
 
 test("device answers read only their documented shapes", () => {
-  assert.deepEqual(deviceRegisterAnswerSchema.parse({ deviceId: DEVICE_ID, extra: 1 }), {
+  assert.deepEqual(parse(deviceRegisterAnswerSchema, { deviceId: DEVICE_ID, extra: 1 }), {
     deviceId: DEVICE_ID,
   });
-  assert.equal(deviceRegisterAnswerSchema.parse({ deviceId: "row-1" }), undefined);
-  assert.equal(deviceRegisterAnswerSchema.parse({ stored: true }), undefined);
-  assert.deepEqual(deviceHeartbeatAnswerSchema.parse({ seen: false }), { seen: false });
-  assert.equal(deviceHeartbeatAnswerSchema.parse({ seen: "yes" }), undefined);
-  assert.deepEqual(deviceForgetAnswerSchema.parse({ deleted: true }), { deleted: true });
-  assert.equal(deviceForgetAnswerSchema.parse("deleted"), undefined);
+  assert.equal(parse(deviceRegisterAnswerSchema, { deviceId: "row-1" }), undefined);
+  assert.equal(parse(deviceRegisterAnswerSchema, { stored: true }), undefined);
+  assert.deepEqual(parse(deviceHeartbeatAnswerSchema, { seen: false }), { seen: false });
+  assert.equal(parse(deviceHeartbeatAnswerSchema, { seen: "yes" }), undefined);
+  assert.deepEqual(parse(deviceForgetAnswerSchema, { deleted: true }), { deleted: true });
+  assert.equal(parse(deviceForgetAnswerSchema, "deleted"), undefined);
 });

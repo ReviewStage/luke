@@ -17,11 +17,12 @@ import {
   ACTION_RESULT_STATUS,
   isWireBoolean,
   isWireNumber,
-  RECORD_EXTRA_KEYS,
-  s,
   text,
+  type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { describeWire } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON, SPAWN_REFUSAL_REASON } from "./refusals.js";
@@ -98,57 +99,103 @@ const SUBAGENTS_ACTION = {
   CANCEL: "cancel",
 } as const;
 
-const SESSIONS_SPAWN_INPUT = s.record(
-  {
-    task: s.text({
-      description: `The task, briefed in full, under ${maximumChildTaskLength} characters.`,
+/** A text trimmed and refused when left with nothing. */
+function trimmedText(description: string): EffectSchema.Schema<string, string> {
+  return describeWire(
+    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+      strict: true,
+      decode: (value) => value.trim(),
+      encode: (value) => value,
+    }).pipe(
+      EffectSchema.filter((value) => value.trim().length > 0, {
+        schemaId: EffectSchema.MinLengthSchemaId,
+        jsonSchema: { minLength: 1 },
+      }),
+    ),
+    description,
+  );
+}
+
+/** A whole number, with no bound beyond being finite and integral. */
+function wholeNumber(description: string): EffectSchema.Schema<number, number> {
+  return describeWire(
+    EffectSchema.Number.pipe(EffectSchema.finite(), EffectSchema.int()),
+    description,
+  );
+}
+
+function memberEnum<const Member extends string>(
+  members: readonly Member[],
+  description: string,
+): EffectSchema.Schema<Member, Member> {
+  return describeWire(EffectSchema.Literal(...members), description);
+}
+
+const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase<A, I>(
+  schema: EffectSchema.Schema<A, I>,
+): EffectSchema.Schema<unknown, UnparsedWireValue> {
+  return EffectSchema.make(schema.ast);
+}
+
+const SESSIONS_SPAWN_INPUT = erase(
+  tolerantRecord({
+    task: trimmedText(`The task, briefed in full, under ${maximumChildTaskLength} characters.`),
+    label: EffectSchema.optionalWith(trimmedText("A short title for the work, for listings."), {
+      exact: true,
     }),
-    label: s.text({ description: "A short title for the work, for listings." }).optional(),
-    context: s
-      .enumOf(Object.values(CHILD_CONTEXT_MODE), {
-        description: "How the child's context starts; isolated by default.",
-      })
-      .optional(),
-    cleanup: s
-      .enumOf(Object.values(CHILD_CLEANUP), {
-        description:
-          "Whether the child's conversation is kept for an hour after it ends (default) or archived at once.",
-      })
-      .optional(),
-    run_timeout_seconds: s
-      .wholeNumber({
-        description:
-          "A deadline for this child alone; 0, the default, means none beyond the ordinary run deadline.",
-      })
-      .optional(),
-    expects_completion: s
-      .boolean({
-        description:
-          "False for a fire-and-forget child whose end is not reported back; true by default.",
-      })
-      .optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+    context: EffectSchema.optionalWith(
+      memberEnum(
+        Object.values(CHILD_CONTEXT_MODE),
+        "How the child's context starts; isolated by default.",
+      ),
+      { exact: true },
+    ),
+    cleanup: EffectSchema.optionalWith(
+      memberEnum(
+        Object.values(CHILD_CLEANUP),
+        "Whether the child's conversation is kept for an hour after it ends (default) or archived at once.",
+      ),
+      { exact: true },
+    ),
+    run_timeout_seconds: EffectSchema.optionalWith(
+      wholeNumber(
+        "A deadline for this child alone; 0, the default, means none beyond the ordinary run deadline.",
+      ),
+      { exact: true },
+    ),
+    expects_completion: EffectSchema.optionalWith(
+      describeWire(
+        EffectSchema.Boolean,
+        "False for a fire-and-forget child whose end is not reported back; true by default.",
+      ),
+      { exact: true },
+    ),
+  }),
 );
 
-const SUBAGENTS_INPUT = s.record(
-  {
-    action: s
-      .enumOf(Object.values(SUBAGENTS_ACTION), { description: "What to do; list by default." })
-      .optional(),
-    child_id: s.text({ description: "The child to cancel, as the list gave it." }).optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const SUBAGENTS_INPUT = erase(
+  tolerantRecord({
+    action: EffectSchema.optionalWith(
+      memberEnum(Object.values(SUBAGENTS_ACTION), "What to do; list by default."),
+      { exact: true },
+    ),
+    child_id: EffectSchema.optionalWith(trimmedText("The child to cancel, as the list gave it."), {
+      exact: true,
+    }),
+  }),
 );
 
-const SESSIONS_LIST_INPUT = s.record({}, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
+const SESSIONS_LIST_INPUT = erase(tolerantRecord({}));
 
-const SESSIONS_HISTORY_INPUT = s.record(
-  {
-    child_id: s.text({ description: "The child, as the subagents list gave it." }),
-    limit: s.wholeNumber({ description: "How many lines at most." }).optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const SESSIONS_HISTORY_INPUT = erase(
+  tolerantRecord({
+    child_id: trimmedText("The child, as the subagents list gave it."),
+    limit: EffectSchema.optionalWith(wholeNumber("How many lines at most."), { exact: true }),
+  }),
 );
 
 /** A spawn's receipt as the model reads it: accepted, never done, with the completion's route named. */

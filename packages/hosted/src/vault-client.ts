@@ -1,6 +1,6 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
-import { type CloudFetch, effectSchema, HTTP_METHOD } from "@sidecar/wire";
+import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
 import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect, type Layer } from "effect";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
@@ -22,10 +22,6 @@ export interface HostedVaultClientOptions extends AccountToken {
   fetch?: CloudFetch;
   requestTimeoutMs?: number;
 }
-
-const vaultKeyStoreAnswerEffect = effectSchema(vaultKeyStoreAnswerSchema);
-const vaultKeysListAnswerEffect = effectSchema(vaultKeysListAnswerSchema);
-const vaultKeyDeleteAnswerEffect = effectSchema(vaultKeyDeleteAnswerSchema);
 
 /**
  * The desktop's side of the provider-key vault: store a key, list what is
@@ -64,7 +60,7 @@ export class HostedVaultClient {
           path: HOSTED_SERVICE_PATH.VAULT_KEY,
           body: JSON.stringify({ providerId, key }),
         },
-        vaultKeyStoreAnswerEffect,
+        vaultKeyStoreAnswerSchema,
       ),
     );
   }
@@ -74,7 +70,7 @@ export class HostedVaultClient {
     const answer = await this.#run(
       this.#call.ask(
         { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.VAULT_KEYS },
-        vaultKeysListAnswerEffect,
+        vaultKeysListAnswerSchema,
       ),
     );
     return answer?.keys;
@@ -89,7 +85,7 @@ export class HostedVaultClient {
           path: HOSTED_SERVICE_PATH.VAULT_KEY,
           body: JSON.stringify({ providerId }),
         },
-        vaultKeyDeleteAnswerEffect,
+        vaultKeyDeleteAnswerSchema,
       ),
     );
   }

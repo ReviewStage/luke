@@ -1,6 +1,6 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
-import { type CloudFetch, effectSchema, HTTP_METHOD } from "@sidecar/wire";
+import { type CloudFetch, HTTP_METHOD } from "@sidecar/wire";
 import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect, type Layer } from "effect";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
@@ -68,7 +68,7 @@ export class HostedSessionMessagesClient {
           method: HTTP_METHOD.GET,
           path: `${HOSTED_SERVICE_PATH.SESSION_MESSAGES}?${parameters.toString()}`,
         },
-        effectSchema(hostedConversationAnswerSchema),
+        hostedConversationAnswerSchema,
       ),
     );
   }

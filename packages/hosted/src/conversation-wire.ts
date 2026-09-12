@@ -1,5 +1,5 @@
 import { CONVERSATION_MESSAGE_AUTHOR, type ConversationMessageAuthor } from "@sidecar/session";
-import { effectSchema, type Schema, s, type UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   declareReader,
   emitJsonSchema,
@@ -14,9 +14,8 @@ import { countedNumber, writtenText } from "./service-wire.js";
  * conversation. Who wrote one message, like every other vocabulary on this
  * wire, is the owning package's own set rather than a copy of it.
  *
- * Every shape below is composed directly with Effect's `Schema.Struct` rather
- * than through the `s.*` facade; {@link fromEffect} is what still answers the
- * facade's `read`/`parse`/`jsonSchema` for the callers that hold one.
+ * Every shape below is composed directly with Effect's `Schema.Struct` and
+ * exported under its own name.
  */
 
 /**
@@ -62,24 +61,7 @@ export interface HostedConversationAnswer {
   hasOlder?: boolean;
 }
 
-/**
- * The Effect schema a declaration was composed from, adapted to the facade
- * still-held callers use: `read` through `readEither`, `jsonSchema` through
- * the emitter walking the same schema.
- */
-function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
-  const read = readEither(core);
-  return s.reader({
-    read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
-      }),
-    jsonSchema: () => emitJsonSchema(core),
-  });
-}
-
-/** A text trimmed and refused when left with nothing, the facade's `s.text` default. */
+/** A text trimmed and refused when left with nothing. */
 function trimmedText(maximumChars?: number): EffectSchema.Schema<string, string> {
   const core = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
     strict: true,
@@ -151,14 +133,14 @@ const conversationMessageFieldsFrom = EffectSchema.Struct({
   // The words are read as written: a message is rendered as its author
   // wrote it, and trimming is a display decision this wire reader has no
   // business making. Only an empty message is no message.
-  text: effectSchema(writtenText),
-  receivedAt: EffectSchema.optionalWith(dropped(effectSchema(countedNumber)), { exact: true }),
+  text: writtenText,
+  receivedAt: EffectSchema.optionalWith(dropped(countedNumber), { exact: true }),
 }).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
 const conversationMessageFieldsTo = EffectSchema.Struct({
   id: trimmedText(),
   author: trimmedEnum(Object.values(CONVERSATION_MESSAGE_AUTHOR)),
-  text: effectSchema(writtenText),
+  text: writtenText,
   receivedAt: EffectSchema.optionalWith(EffectSchema.Number, { exact: true }),
 });
 
@@ -180,7 +162,7 @@ const conversationAnswerFieldsFrom = EffectSchema.Struct({
   messages: keptEntries(conversationMessageCore),
   lastMessageId: EffectSchema.optionalWith(dropped(trimmedText()), { exact: true }),
   hasMore: EffectSchema.Boolean,
-  firstOffset: EffectSchema.optionalWith(dropped(effectSchema(countedNumber)), { exact: true }),
+  firstOffset: EffectSchema.optionalWith(dropped(countedNumber), { exact: true }),
   hasOlder: EffectSchema.optionalWith(dropped(EffectSchema.Boolean), { exact: true }),
 }).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
@@ -209,6 +191,4 @@ const hostedConversationAnswerCore = EffectSchema.transform(
   },
 );
 
-export const hostedConversationAnswerSchema: Schema<HostedConversationAnswer> = fromEffect(
-  hostedConversationAnswerCore,
-);
+export const hostedConversationAnswerSchema = hostedConversationAnswerCore;

@@ -1,4 +1,6 @@
 import { setTimeout as sleepFor } from "node:timers/promises";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import {
   BRAIN_TURN_TRIGGER,
   type BrainTurnTrigger,
@@ -208,7 +210,7 @@ function cursorOf(query: URLSearchParams): number | undefined {
   const text = query.get(READ_QUERY.AFTER);
   if (text === null) return 0;
   if (!CURSOR_DIGITS.test(text)) return undefined;
-  return turnEventCursorSchema.parse(unparsedWire(Number(text)));
+  return Either.getOrUndefined(readEither(turnEventCursorSchema)(unparsedWire(Number(text))));
 }
 
 export async function handleTurnEventStream(options: TurnEventStreamOptions): Promise<Response> {
@@ -235,7 +237,7 @@ export async function handleTurnEventStream(options: TurnEventStreamOptions): Pr
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
   // An id that is not a uuid names no row and answers as none, the same as another account's.
-  const turnId = wireUuidSchema.parse(unparsedWire(id));
+  const turnId = Either.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
   if (turnId === undefined) return notFound();
   const [turn] = await store.turns.named(userId, [turnId]);
   if (turn === undefined) return notFound();

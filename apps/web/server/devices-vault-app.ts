@@ -1,17 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Redacted } from "effect";
+import { Effect, type Schema as EffectSchema, Either, Redacted } from "effect";
 import {
   DEVICE_METHOD,
   deviceForgetRequestSchema,
   deviceHeartbeatRequestSchema,
   deviceRegisterRequestSchema,
-  effectSchema,
   isCloudAgentProviderId,
   isRecord,
   isWireString,
-  type Schema,
   text,
   type UnparsedWireValue,
   vaultKeyIsStorable,
@@ -86,12 +84,12 @@ function bearerUserId(
   });
 }
 
-/** Decodes a wire body through the facade's own Effect declaration, refusing anything it does not read. */
-function decodeBody<Value>(
-  schema: Schema<Value>,
+/** Decodes a wire body through its Effect declaration, refusing anything it does not read. */
+function decodeBody<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
   payload: UnparsedWireValue,
 ): Effect.Effect<Value, HostedRefusal> {
-  return Either.match(readEither(effectSchema(schema))(payload), {
+  return Either.match(readEither(schema)(payload), {
     onLeft: () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST),
     onRight: Effect.succeed,
   });

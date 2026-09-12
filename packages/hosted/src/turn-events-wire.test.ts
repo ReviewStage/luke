@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { SCHEMA_REFUSAL, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { test } from "vitest";
 import {
   decodeTurnEventFrame,
@@ -24,10 +26,10 @@ const EVENTS: readonly TurnEvent[] = [
 
 test("every kind of event reads back as itself", () => {
   for (const event of EVENTS) {
-    assert.deepEqual(turnEventSchema.read(unparsedWire(JSON.parse(JSON.stringify(event)))), {
-      ok: true,
-      value: event,
-    });
+    assert.deepEqual(
+      readEither(turnEventSchema)(unparsedWire(JSON.parse(JSON.stringify(event)))),
+      Either.right(event),
+    );
   }
 });
 
@@ -50,27 +52,28 @@ test("a heartbeat, a frame whose id disagrees with its event, and an unreadable 
 });
 
 test("an event outside the vocabulary is refused: an unnumbered one, a step kind no build names, an empty sentence, a turn id that is no uuid", () => {
-  const refused = (value: WireBoundaryInput) => turnEventSchema.read(unparsedWire(value)).ok;
-  assert.equal(refused({ turnId: TURN, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), false);
-  assert.equal(refused({ turnId: TURN, seq: 0, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), false);
+  const refused = (value: WireBoundaryInput) =>
+    Either.isLeft(readEither(turnEventSchema)(unparsedWire(value)));
+  assert.equal(refused({ turnId: TURN, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), true);
+  assert.equal(refused({ turnId: TURN, seq: 0, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), true);
   assert.equal(
     refused({ turnId: TURN, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: "coffee" }),
-    false,
+    true,
   );
   assert.equal(
     refused({ turnId: TURN, seq: 1, kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence: "" }),
-    false,
+    true,
   );
-  assert.equal(refused({ turnId: "turn-1", seq: 1, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), false);
+  assert.equal(refused({ turnId: "turn-1", seq: 1, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), true);
 });
 
 test("the cursor is a whole number from zero", () => {
-  assert.deepEqual(turnEventCursorSchema.read(unparsedWire(0)), { ok: true, value: 0 });
-  assert.deepEqual(turnEventCursorSchema.read(unparsedWire(12)), { ok: true, value: 12 });
-  assert.deepEqual(turnEventCursorSchema.read(unparsedWire(-1)), {
-    ok: false,
-    refusal: SCHEMA_REFUSAL.MALFORMED,
-    path: [],
-  });
-  assert.equal(turnEventCursorSchema.read(unparsedWire(1.5)).ok, false);
+  assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(0)), Either.right(0));
+  assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(12)), Either.right(12));
+  assert.equal(Either.isLeft(readEither(turnEventCursorSchema)(unparsedWire(-1))), true);
+  const negative = readEither(turnEventCursorSchema)(unparsedWire(-1));
+  assert.ok(Either.isLeft(negative));
+  assert.equal(negative.left.refusal, SCHEMA_REFUSAL.MALFORMED);
+  assert.deepEqual(negative.left.path, []);
+  assert.equal(Either.isLeft(readEither(turnEventCursorSchema)(unparsedWire(1.5))), true);
 });

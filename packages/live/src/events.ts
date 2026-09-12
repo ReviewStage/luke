@@ -1,13 +1,12 @@
 import {
   isRecord,
   isWireString,
-  RECORD_EXTRA_KEYS,
-  s,
-  TEXT_ENDS,
+  SCHEMA_REFUSAL,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { Schema } from "effect";
+import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
+import { Either, Schema } from "effect";
 
 /**
  * The Live wire grammar: how far a session has progressed, the events both
@@ -125,21 +124,84 @@ export type LiveDelegationTarget =
 
 export const LiveDelegationTargetSchema = Schema.Literal(...Object.values(LIVE_DELEGATION_TARGET));
 
+/** A schema handed the interface it decodes into, since a struct assembled field by field only agrees with that interface rather than restating it. */
+function schemaAs<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
+  return Schema.make<Value, UnparsedWireValue>(schema.ast);
+}
+
+/** A record that ignores a key a newer service added, which is what every answer here does. */
+const tolerant = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
+  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** A trimmed text, refused when only whitespace remains. */
+const text: Schema.Schema<string, string> = Schema.transform(Schema.String, Schema.String, {
+  strict: true,
+  decode: (value) => value.trim(),
+  encode: (value) => value,
+}).pipe(Schema.minLength(1));
+
 /**
  * An identifier as the service wrote it. Session and delegation ids are
  * opaque and are returned unchanged, prefix included, so nothing here trims
- * or reshapes one.
+ * or reshapes one; only a blank one is refused.
  */
-const opaqueId = s.text({ ends: TEXT_ENDS.KEEP });
+const opaqueId: Schema.Schema<string, string> = Schema.String.pipe(
+  Schema.filter((value) => value.trim().length > 0, {
+    schemaId: Schema.MinLengthSchemaId,
+    jsonSchema: { minLength: 1 },
+  }),
+);
 
 /**
  * A transcript fragment exactly as received. The captions recipe forbids
  * trimming a fragment or inserting a space between two, so a delta of one
  * space is a delta and not a blank.
  */
-const transcriptDelta = s.text({ ends: TEXT_ENDS.KEEP, allowEmpty: true });
+const transcriptDelta: Schema.Schema<string, string> = Schema.String;
 
-const sessionTimeMs = s.wholeNumber({ minimum: 0 });
+const sessionTimeMs = Schema.Number.pipe(
+  Schema.finite(),
+  Schema.int(),
+  Schema.greaterThanOrEqualTo(0),
+);
+
+const nonNegativeNumber = Schema.Number.pipe(Schema.finite(), Schema.greaterThanOrEqualTo(0));
+
+/**
+ * The value a dropped field admits: whatever the inner schema read, or
+ * nothing. Wrapped with `Schema.optionalWith(_, { exact: true })` at the
+ * field, this is the per-field counterpart of an array that skips a refused
+ * entry: a value worth having when well formed and worth nothing when it is
+ * not, where refusing the whole event over one of them would cost the reader
+ * everything else it carried.
+ */
+function dropped<Value, Encoded>(
+  inner: Schema.Schema<Value, Encoded>,
+): Schema.Schema<Value | undefined, UnparsedWireValue> {
+  const read = readEither(inner);
+  return declareReader<Value | undefined>(
+    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    emitJsonSchema(inner),
+  );
+}
+
+/**
+ * A struct that carries a dropped field leaves the key out entirely when
+ * that field's value came back `undefined`, exactly as an absent optional key
+ * is left out — a struct's own decode still writes the key when it arrived,
+ * even holding nothing, so this is the cleanup every such record needs on top
+ * of it.
+ */
+function cleaned<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
+  return schemaAs<Value>(
+    Schema.transform(schema, Schema.Unknown, {
+      strict: false,
+      decode: (value) =>
+        Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+      encode: (value) => value,
+    }),
+  );
+}
 
 /**
  * The fields every server event carries: its own id and, when it answers a
@@ -148,69 +210,104 @@ const sessionTimeMs = s.wholeNumber({ minimum: 0 });
  */
 const acknowledgment = {
   event_id: opaqueId,
-  client_event_id: opaqueId.optional(),
+  client_event_id: Schema.optionalWith(opaqueId, { exact: true }),
 };
 
-const answer = { extraKeys: RECORD_EXTRA_KEYS.IGNORE } as const;
+export type LiveSessionSnapshot = {
+  id: string;
+  model?: string;
+  expires_at?: number;
+};
 
-const sessionSnapshot = s.record(
-  {
+const sessionSnapshotSchema = cleaned<LiveSessionSnapshot>(
+  tolerant({
     id: opaqueId,
-    model: s.dropRefused(s.text()),
-    expires_at: s.dropRefused(sessionTimeMs),
-  },
-  answer,
+    model: Schema.optionalWith(dropped(text), { exact: true }),
+    expires_at: Schema.optionalWith(dropped(sessionTimeMs), { exact: true }),
+  }),
 );
 
-const usage = s.record({ seconds: s.number({ minimum: 0 }) }, answer);
+export type LiveUsageSnapshot = {
+  seconds: number;
+};
+
+const usageSchema: Schema.Schema<LiveUsageSnapshot, UnparsedWireValue> = schemaAs(
+  tolerant({ seconds: nonNegativeNumber }),
+);
+
+type Acknowledged = {
+  event_id: string;
+  client_event_id?: string;
+};
 
 function appended<const Type extends string>(type: Type) {
-  return s.record(
-    {
-      type: s.literal(type),
-      ...acknowledgment,
-      start_ms: sessionTimeMs,
-      end_ms: sessionTimeMs,
-    },
-    answer,
-  );
+  return tolerant({
+    type: Schema.Literal(type),
+    ...acknowledgment,
+    start_ms: sessionTimeMs,
+    end_ms: sessionTimeMs,
+  });
 }
+
+export type LiveAppendedEvent<Type extends string> = Acknowledged & {
+  type: Type;
+  start_ms: number;
+  end_ms: number;
+};
 
 function transcriptDeltaEvent<const Type extends string>(type: Type) {
-  return s.record(
-    {
-      type: s.literal(type),
-      ...acknowledgment,
-      delta: transcriptDelta,
-      start_ms: sessionTimeMs,
-      end_ms: sessionTimeMs,
-    },
-    answer,
-  );
+  return tolerant({
+    type: Schema.Literal(type),
+    ...acknowledgment,
+    delta: transcriptDelta,
+    start_ms: sessionTimeMs,
+    end_ms: sessionTimeMs,
+  });
 }
+
+export type LiveTranscriptDeltaEvent<Type extends string> = Acknowledged & {
+  type: Type;
+  delta: string;
+  start_ms: number;
+  end_ms: number;
+};
 
 function microphoneAcknowledgment<const Type extends string>(type: Type) {
-  return s.record({ type: s.literal(type), ...acknowledgment }, answer);
+  return tolerant({ type: Schema.Literal(type), ...acknowledgment });
 }
 
-const sessionStartedSchema = s.record(
-  {
-    type: s.literal(LIVE_SERVER_EVENT.SESSION_STARTED),
+export type LiveMicrophoneAckEvent<Type extends string> = Acknowledged & {
+  type: Type;
+};
+
+export type LiveSessionStartedEvent = Acknowledged & {
+  type: typeof LIVE_SERVER_EVENT.SESSION_STARTED;
+  session: LiveSessionSnapshot;
+};
+
+const sessionStartedSchema: Schema.Schema<LiveSessionStartedEvent, UnparsedWireValue> = schemaAs(
+  tolerant({
+    type: Schema.Literal(LIVE_SERVER_EVENT.SESSION_STARTED),
     ...acknowledgment,
-    session: sessionSnapshot,
-  },
-  answer,
+    session: sessionSnapshotSchema,
+  }),
 );
 
-const sessionClosedSchema = s.record(
-  {
-    type: s.literal(LIVE_SERVER_EVENT.SESSION_CLOSED),
+export type LiveSessionClosed = Acknowledged & {
+  type: typeof LIVE_SERVER_EVENT.SESSION_CLOSED;
+  reason: LiveCloseReason;
+  usage: LiveUsageSnapshot;
+  session?: LiveSessionSnapshot;
+};
+
+const sessionClosedSchema = cleaned<LiveSessionClosed>(
+  tolerant({
+    type: Schema.Literal(LIVE_SERVER_EVENT.SESSION_CLOSED),
     ...acknowledgment,
-    reason: s.enumOf(Object.values(LIVE_CLOSE_REASON)),
-    usage,
-    session: s.dropRefused(sessionSnapshot),
-  },
-  answer,
+    reason: LiveCloseReasonSchema,
+    usage: usageSchema,
+    session: Schema.optionalWith(dropped(sessionSnapshotSchema), { exact: true }),
+  }),
 );
 
 const inputAudioMutedSchema = microphoneAcknowledgment(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
@@ -221,106 +318,165 @@ const commentaryAppendedSchema = appended(LIVE_SERVER_EVENT.COMMENTARY_APPENDED)
 const inputTranscriptDeltaSchema = transcriptDeltaEvent(LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA);
 const outputTranscriptDeltaSchema = transcriptDeltaEvent(LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA);
 
+export type LiveDelegation = {
+  id: string;
+  target: LiveDelegationTarget;
+  response_id?: string;
+};
+
+const delegationSchema = cleaned<LiveDelegation>(
+  tolerant({
+    id: opaqueId,
+    target: LiveDelegationTargetSchema,
+    response_id: Schema.optionalWith(dropped(opaqueId), { exact: true }),
+  }),
+);
+
+export type LiveDelegationCreated = Acknowledged & {
+  type: typeof LIVE_SERVER_EVENT.DELEGATION_CREATED;
+  offset_ms: number;
+  delegation: LiveDelegation;
+};
+
 /**
  * A delegation carries metadata and a place on the session timeline, never
  * the developer's words: what was asked is read from the transcript the
  * application kept, from the previous delegation's offset on.
  */
-const delegationCreatedSchema = s.record(
-  {
-    type: s.literal(LIVE_SERVER_EVENT.DELEGATION_CREATED),
+const delegationCreatedSchema: Schema.Schema<LiveDelegationCreated, UnparsedWireValue> = schemaAs(
+  tolerant({
+    type: Schema.Literal(LIVE_SERVER_EVENT.DELEGATION_CREATED),
     ...acknowledgment,
     offset_ms: sessionTimeMs,
-    delegation: s.record(
-      {
-        id: opaqueId,
-        target: s.enumOf(Object.values(LIVE_DELEGATION_TARGET)),
-        response_id: s.dropRefused(opaqueId),
-      },
-      answer,
-    ),
-  },
-  answer,
+    delegation: delegationSchema,
+  }),
 );
 
+export type LiveContextWindow = {
+  usage_ratio: number;
+};
+
+export type LiveUsageUpdatedEvent = Acknowledged & {
+  type: typeof LIVE_SERVER_EVENT.USAGE_UPDATED;
+  usage: LiveUsageSnapshot;
+  context_window?: LiveContextWindow;
+};
+
 /** Cumulative seconds as a snapshot, never an increment to sum. */
-const usageUpdatedSchema = s.record(
-  {
-    type: s.literal(LIVE_SERVER_EVENT.USAGE_UPDATED),
+const usageUpdatedSchema = cleaned<LiveUsageUpdatedEvent>(
+  tolerant({
+    type: Schema.Literal(LIVE_SERVER_EVENT.USAGE_UPDATED),
     ...acknowledgment,
-    usage,
-    context_window: s.dropRefused(s.record({ usage_ratio: s.number({ minimum: 0 }) }, answer)),
-  },
-  answer,
+    usage: usageSchema,
+    context_window: Schema.optionalWith(dropped(tolerant({ usage_ratio: nonNegativeNumber })), {
+      exact: true,
+    }),
+  }),
 );
+
+export type LiveInputAudioAppendEvent = {
+  type: typeof LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND;
+};
+
+export type LiveOutputAudioDeltaEvent = {
+  type: typeof LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA;
+};
 
 /**
  * Reflected audio, read for its type alone: a sideband drops both by type
  * before anything else looks at them, and the payload is never parsed.
  */
-const inputAudioAppendSchema = s.record(
-  { type: s.literal(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND) },
-  answer,
+const inputAudioAppendSchema: Schema.Schema<LiveInputAudioAppendEvent, UnparsedWireValue> =
+  schemaAs(tolerant({ type: Schema.Literal(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND) }));
+const outputAudioDeltaSchema: Schema.Schema<LiveOutputAudioDeltaEvent, UnparsedWireValue> =
+  schemaAs(tolerant({ type: Schema.Literal(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA) }));
+
+export type LiveErrorDetail = {
+  type?: string;
+  code?: string;
+  message?: string;
+  param?: string;
+  client_event_id?: string;
+};
+
+const errorDetailSchema = cleaned<LiveErrorDetail>(
+  tolerant({
+    type: Schema.optionalWith(dropped(text), { exact: true }),
+    code: Schema.optionalWith(dropped(text), { exact: true }),
+    message: Schema.optionalWith(dropped(text), { exact: true }),
+    param: Schema.optionalWith(dropped(text), { exact: true }),
+    client_event_id: Schema.optionalWith(dropped(opaqueId), { exact: true }),
+  }),
 );
-const outputAudioDeltaSchema = s.record(
-  { type: s.literal(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA) },
-  answer,
-);
+
+export type LiveErrorEvent = Acknowledged & {
+  type: typeof LIVE_SERVER_EVENT.ERROR;
+  error: LiveErrorDetail;
+};
 
 /**
  * An error may or may not name the client event it is about, and its code
  * may be null; one that names none is never read as any command's success.
  */
-const errorEventSchema = s.record(
-  {
-    type: s.literal(LIVE_SERVER_EVENT.ERROR),
+const errorEventSchema: Schema.Schema<LiveErrorEvent, UnparsedWireValue> = schemaAs(
+  tolerant({
+    type: Schema.Literal(LIVE_SERVER_EVENT.ERROR),
     ...acknowledgment,
-    error: s.record(
-      {
-        type: s.dropRefused(s.text()),
-        code: s.dropRefused(s.text()),
-        message: s.dropRefused(s.text()),
-        param: s.dropRefused(s.text()),
-        client_event_id: s.dropRefused(opaqueId),
-      },
-      answer,
-    ),
-  },
-  answer,
+    error: errorDetailSchema,
+  }),
 );
 
-const infoEventSchema = s.record(
-  {
-    type: s.literal(LIVE_SERVER_EVENT.INFO),
+export type LiveInfoEvent = Acknowledged & {
+  type: typeof LIVE_SERVER_EVENT.INFO;
+  code?: string;
+  message?: string;
+};
+
+const infoEventSchema = cleaned<LiveInfoEvent>(
+  tolerant({
+    type: Schema.Literal(LIVE_SERVER_EVENT.INFO),
     ...acknowledgment,
-    code: s.dropRefused(s.text()),
-    message: s.dropRefused(s.text()),
-  },
-  answer,
+    code: Schema.optionalWith(dropped(text), { exact: true }),
+    message: Schema.optionalWith(dropped(text), { exact: true }),
+  }),
 );
 
-export const liveServerEventSchema = s.union([
-  sessionStartedSchema,
-  sessionClosedSchema,
-  inputAudioMutedSchema,
-  inputAudioUnmutedSchema,
-  instructionsAppendedSchema,
-  thinkingAppendedSchema,
-  commentaryAppendedSchema,
-  inputTranscriptDeltaSchema,
-  outputTranscriptDeltaSchema,
-  delegationCreatedSchema,
-  usageUpdatedSchema,
-  inputAudioAppendSchema,
-  outputAudioDeltaSchema,
-  errorEventSchema,
-  infoEventSchema,
-]);
+export type LiveServerEvent =
+  | LiveSessionStartedEvent
+  | LiveSessionClosed
+  | LiveMicrophoneAckEvent<typeof LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED>
+  | LiveMicrophoneAckEvent<typeof LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED>
+  | LiveAppendedEvent<typeof LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED>
+  | LiveAppendedEvent<typeof LIVE_SERVER_EVENT.THINKING_APPENDED>
+  | LiveAppendedEvent<typeof LIVE_SERVER_EVENT.COMMENTARY_APPENDED>
+  | LiveTranscriptDeltaEvent<typeof LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA>
+  | LiveTranscriptDeltaEvent<typeof LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA>
+  | LiveDelegationCreated
+  | LiveUsageUpdatedEvent
+  | LiveInputAudioAppendEvent
+  | LiveOutputAudioDeltaEvent
+  | LiveErrorEvent
+  | LiveInfoEvent;
 
-export type LiveServerEvent = NonNullable<ReturnType<typeof liveServerEventSchema.parse>>;
-export type LiveDelegationCreated = NonNullable<ReturnType<typeof delegationCreatedSchema.parse>>;
-export type LiveSessionClosed = NonNullable<ReturnType<typeof sessionClosedSchema.parse>>;
-export type LiveErrorEvent = NonNullable<ReturnType<typeof errorEventSchema.parse>>;
+export const liveServerEventSchema: Schema.Schema<LiveServerEvent, UnparsedWireValue> = schemaAs(
+  Schema.Union(
+    sessionStartedSchema,
+    sessionClosedSchema,
+    inputAudioMutedSchema,
+    inputAudioUnmutedSchema,
+    instructionsAppendedSchema,
+    thinkingAppendedSchema,
+    commentaryAppendedSchema,
+    inputTranscriptDeltaSchema,
+    outputTranscriptDeltaSchema,
+    delegationCreatedSchema,
+    usageUpdatedSchema,
+    inputAudioAppendSchema,
+    outputAudioDeltaSchema,
+    errorEventSchema,
+    infoEventSchema,
+  ).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
+);
 
 /**
  * Decodes one data-channel or socket payload to the record it carries, or
@@ -349,7 +505,9 @@ export function decodeLivePayload(data: UnparsedWireValue): WireRecord | undefin
  */
 export function parseLiveServerEvent(data: UnparsedWireValue): LiveServerEvent | undefined {
   const payload = decodeLivePayload(data);
-  return payload === undefined ? undefined : liveServerEventSchema.parse(payload);
+  return payload === undefined
+    ? undefined
+    : Either.getOrUndefined(readEither(liveServerEventSchema)(payload));
 }
 
 /**
@@ -359,34 +517,34 @@ export function parseLiveServerEvent(data: UnparsedWireValue): LiveServerEvent |
  */
 export type LiveDelegationId = string | null;
 
-export interface LiveAppendInput {
+export type LiveAppendInput = {
   eventId: string;
   delegationId: LiveDelegationId;
   /** Plain text of at most 500 tokens; `chunkForAppend` cuts a longer text. */
   content: string;
-}
+};
 
 type AppendType =
   | typeof LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND
   | typeof LIVE_CLIENT_EVENT.THINKING_APPEND
   | typeof LIVE_CLIENT_EVENT.COMMENTARY_APPEND;
 
-export interface LiveAppendEvent<Type extends AppendType = AppendType> {
+export type LiveAppendEvent<Type extends AppendType = AppendType> = {
   type: Type;
   event_id: string;
   delegation_id: LiveDelegationId;
   content: string;
-}
+};
 
-export interface LiveCommandEvent<
+export type LiveCommandEvent<
   Type extends
     | typeof LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE
     | typeof LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE
     | typeof LIVE_CLIENT_EVENT.CLOSE,
-> {
+> = {
   type: Type;
   event_id: string;
-}
+};
 
 export type LiveClientEvent =
   | LiveAppendEvent
@@ -449,9 +607,9 @@ export function closeEvent(eventId: string): LiveCommandEvent<typeof LIVE_CLIENT
 }
 
 /** One server event the renderer's data channel may receive, as `client.data_channel` names it. */
-export interface LiveServerEventSelector {
+export type LiveServerEventSelector = {
   type: LiveServerEventType;
-}
+};
 
 /**
  * What an untrusted renderer may send on its data channel: the microphone

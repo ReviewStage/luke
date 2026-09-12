@@ -1,6 +1,7 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Either, Option, type ParseResult, Schema } from "effect";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_TOOL,
@@ -11,7 +12,6 @@ import {
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
-  RECORD_EXTRA_KEYS,
   SPEECH_EXPIRY_REASON,
   SPEECH_HELD_EVENT_PAYLOAD,
   SPEECH_OFFERED_EVENT_PAYLOAD,
@@ -20,7 +20,6 @@ import {
   type SpeechHeldEventPayload,
   type SpeechOfferedEventPayload,
   type SpeechSpokenEventPayload,
-  s,
   TURN_ORIGIN,
   toolPartType,
   unparsedWire,
@@ -315,7 +314,7 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
     if (standing === undefined) {
       if (row.kind !== CONVERSATION_EVENT_KIND.SPEECH_OFFERED) continue;
       const offeredAt = row.createdAt.getTime();
-      const payload = SPEECH_OFFERED_EVENT_PAYLOAD.parse(row.payload);
+      const payload = Either.getOrUndefined(readEither(SPEECH_OFFERED_EVENT_PAYLOAD)(row.payload));
       standing = {
         state: SPEECH_STATE.OFFERED,
         offeredAt,
@@ -330,7 +329,7 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
       standing = { ...standing, claimedByDeviceId: row.deviceId };
     }
     if (row.kind === CONVERSATION_EVENT_KIND.SPEECH_HELD) {
-      const held = SPEECH_HELD_EVENT_PAYLOAD.parse(row.payload);
+      const held = Either.getOrUndefined(readEither(SPEECH_HELD_EVENT_PAYLOAD)(row.payload));
       standing = held === undefined ? standing : { ...standing, quietUntil: held.quietUntil };
     }
   }
@@ -908,17 +907,26 @@ function briefingOf(parts: ReadParts): string | undefined {
  * own input item spells them: the marker line, then the JSON the host
  * wrote. A message this build cannot read as one names nothing.
  */
-const heldBriefingsWords = s.record(
-  {
-    held_briefings: s.array(
-      s.record(
-        { briefing: s.text(), decided_at: s.text() },
-        { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-      ),
-    ),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const ignoringExtraKeys = { parseOptions: { onExcessProperty: "ignore" } } as const;
+
+const trimmedText = Schema.transform(Schema.String, Schema.String, {
+  strict: true,
+  decode: (value) => value.trim(),
+  encode: (value) => value,
+}).pipe(
+  Schema.filter((value) => value.trim().length > 0, {
+    schemaId: Schema.MinLengthSchemaId,
+    jsonSchema: { minLength: 1 },
+  }),
 );
+
+const heldBriefingsWords = Schema.Struct({
+  held_briefings: Schema.Array(
+    Schema.Struct({ briefing: trimmedText, decided_at: trimmedText }).annotations(
+      ignoringExtraKeys,
+    ),
+  ),
+}).annotations(ignoringExtraKeys);
 
 /** One briefing as a hold-release item names it: what it said and, in epoch milliseconds, when the brain decided it. */
 export interface NamedBriefing {
@@ -976,9 +984,9 @@ export function heldBriefingsNamed(text: string): readonly NamedBriefing[] {
     } catch {
       continue;
     }
-    const words = heldBriefingsWords.read(unparsedWire(parsed));
-    if (!words.ok) continue;
-    for (const held of words.value.held_briefings) {
+    const words = readEither(heldBriefingsWords)(unparsedWire(parsed));
+    if (Either.isLeft(words)) continue;
+    for (const held of words.right.held_briefings) {
       const decidedAt = Date.parse(held.decided_at);
       if (Number.isNaN(decidedAt)) continue;
       named.push({ briefing: held.briefing, decidedAt });

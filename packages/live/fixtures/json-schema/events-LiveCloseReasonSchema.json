@@ -1,0 +1,10 @@
+{
+  "type": "string",
+  "enum": [
+    "close_requested",
+    "expired",
+    "content",
+    "remote_hangup",
+    "connection_lost"
+  ]
+}

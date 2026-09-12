@@ -1,14 +1,8 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
-import {
-  type CloudFetch,
-  HTTP_METHOD,
-  type Schema,
-  unparsedWire,
-  type WireRecord,
-} from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Effect, type Layer } from "effect";
+import { type CloudFetch, HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import { Effect, type Schema as EffectSchema, Either, type Layer } from "effect";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -176,10 +170,10 @@ export class HostedActionClient {
   }
 
   /** One action call, its answer read by the schema of the route it went to. */
-  async #post<Answer extends HostedActionAnswer>(
+  async #post<Answer extends HostedActionAnswer, Encoded>(
     path: string,
     body: WireRecord,
-    answerSchema: Schema<Answer>,
+    answerSchema: EffectSchema.Schema<Answer, Encoded>,
   ): Promise<{ answer: Answer } | { failure: HostedActionFailure }> {
     const sent = await this.#run(
       this.#call.send({
@@ -200,7 +194,10 @@ export class HostedActionClient {
     }
     if (!sent.response.ok) return { failure: HOSTED_ACTION_FAILURE.REFUSED };
     const payload = await sent.response.json().catch(() => undefined);
-    const answer = payload === undefined ? undefined : answerSchema.parse(unparsedWire(payload));
+    const answer =
+      payload === undefined
+        ? undefined
+        : Either.getOrUndefined(readEither(answerSchema)(unparsedWire(payload)));
     return answer ? { answer } : { failure: HOSTED_ACTION_FAILURE.UNREADABLE };
   }
 

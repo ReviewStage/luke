@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import { BRAIN_TOOL } from "./names.js";
 import { READ_TOOLS, type ReadToolContext, readToolNamed } from "./read-tools.js";
@@ -35,7 +36,8 @@ test("the two reads are modules named as the catalog names them, each with the s
   );
   for (const tool of READ_TOOLS) assert.equal(readToolNamed(tool.name), tool);
   assert.equal(readToolNamed(BRAIN_TOOL.ANNOUNCE), undefined);
-  const identity = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT)?.inputSchema.jsonSchema();
+  const readTranscript = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
+  const identity = readTranscript && emitJsonSchema(readTranscript.inputSchema);
   assert.ok(identity && "required" in identity);
   assert.deepEqual([...identity.required].sort(), ["provider_id", "provider_session_id"]);
 });

@@ -29,7 +29,8 @@ import type {
 } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { unparsedWire } from "@sidecar/wire";
-import { Effect } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Either } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { DevicesComposer } from "./compose-devices.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -341,9 +342,10 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       }),
     [GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE]: (params) =>
       Effect.gen(function* () {
-        const read = conversationRateMessageParamsSchema.read(unparsedWire(params));
-        if (!read.ok) return yield* invalid("a rating names one message and one verdict");
-        const { messageId, rating } = read.value;
+        const read = readEither(conversationRateMessageParamsSchema)(unparsedWire(params));
+        if (Either.isLeft(read))
+          return yield* invalid("a rating names one message and one verdict");
+        const { messageId, rating } = read.right;
         // A rating names the device it came from, so before this installation's
         // row is registered there is nothing to send one as.
         const deviceId = devices.deviceId();

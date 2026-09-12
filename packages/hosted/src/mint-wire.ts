@@ -1,4 +1,4 @@
-import { effectSchema, type UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
 import { Either, Schema } from "effect";
 import {
@@ -111,7 +111,7 @@ function droppedField<Value, Encoded>(
   );
 }
 
-const quotaField = Schema.optionalWith(droppedField(effectSchema(hostedQuotaSchema)), {
+const quotaField = Schema.optionalWith(droppedField(hostedQuotaSchema), {
   exact: true,
 });
 

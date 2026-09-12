@@ -33,30 +33,28 @@ wire, and `@sidecar/session` keeps the narrower act vocabulary an observation
 advertises with; the two are proven to be the same strings where
 `@sidecar/actions` declares the whole of it.
 
-A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
-which both parses the untrusted value and emits the JSON Schema a model is
-shown for it. A hand-written parser beside a hand-written schema is two
-statements of the same rule that can drift. Every declaration is an Effect
-`Schema` underneath: the `s.*` builder in `packages/wire/src/schema.ts` is a
-facade whose every combinator constructs one, reads through `readEither`,
-and shows the node `emitJsonSchema` walks out of that schema's AST, so what a
-declaration parses and what it shows are one AST, and `effectSchema(declaration)`
-hands the Effect schema out of a facade value, typed as the declaration types
-itself, for a caller that declares directly. The node a model is shown is
-produced by wire's own emitter, `packages/wire/src/effect/json-schema.ts`'s
-`emitJsonSchema`, and never by Effect's `JSONSchema.make`: it writes the same
-`JsonSchemaNode` the builder always answered, key for key and in the same
-order, reading only wire's own annotations — the description `describeWire`
-sets under `WireDescriptionAnnotationId`, the refusal word `wireRefusal` sets
-on a filter, a transformation, or a union, and the node `verbatimJsonSchema`
-declares beside a reader, where `declareReader` is a reader as an Effect
-declaration, failing with the issue `refusalIssue` writes for the word and
-path the reader decided — and never Effect's `title` or `description`, which
-Effect writes on every primitive and every built-in filter. A decode failure
-becomes a `SchemaRefusalError` in the same three refusal words the builder
-answers, through `readEither`; a caller still holding a `SchemaRead` matches
-the `Either` at its own boundary, and the facade itself is the shim P12-08
-deletes once every caller declares directly and `SchemaRead` goes with it.
+A wire value's rules are declared once, as an Effect `Schema`, which both
+parses the untrusted value and emits the JSON Schema a model is shown for
+it. A hand-written parser beside a hand-written schema is two statements of
+the same rule that can drift; every declaration in this repository composes
+`Schema.Struct`, `Schema.Literal`, `Schema.Union`, and the rest of Effect's
+own combinators directly, and reads through `readEither`, both from
+`@sidecar/wire/effect`. The node a model is shown is produced by wire's own
+emitter, `packages/wire/src/effect/json-schema.ts`'s `emitJsonSchema`, and
+never by Effect's `JSONSchema.make`: it writes a `JsonSchemaNode` key for key
+and in a fixed order, reading only wire's own annotations — the description
+`describeWire` sets under `WireDescriptionAnnotationId`, the refusal word
+`wireRefusal` sets on a filter, a transformation, or a union, and the node
+`verbatimJsonSchema` declares beside a reader, where `declareReader` is a
+reader as an Effect declaration, failing with the issue `refusalIssue`
+writes for the word and path the reader decided — and never Effect's
+`title` or `description`, which Effect writes on every primitive and every
+built-in filter. A decode failure becomes a `SchemaRefusalError` in one of
+the three refusal words `packages/wire/src/schema-vocabulary.ts` names
+(`SCHEMA_REFUSAL`), read through `readEither`; a caller that still needs the
+older `{ ok, value }`/`{ ok, refusal, path }` shape (`SchemaRead`, also in
+`schema-vocabulary.ts`) converts the `Either` at its own boundary rather than
+finding a second producer of it.
 
 What a schema emits is recorded rather than described. Every tool definition
 the action catalog produces, every schema the hosted wire and the live
@@ -67,14 +65,14 @@ goldens under each package's `fixtures/json-schema/`, written and compared by
 prompt cache on the text of a request, so a reordered key, a widened bound, or
 a reworded description costs every standing conversation its prefix, and
 nothing sorts the keys because their order is part of what is being held
-still. A module's recorded set is typed against the module itself, so a schema
-added beside one already recorded does not compile until it is recorded too,
-and Biome is kept off those fixture trees because its JSON formatting would
-rewrite the recorded bytes. A module that has moved off the facade records
-through `RecordedEffectJsonSchemas` instead, and `jsonSchemaOf` emits either
-kind: the two tables are separate because a module holds Effect schemas that
-show no node to any model — a fixed value set beside its `as const` object, a
-refusal declared as a tagged error — and those are not bytes a golden pins.
+still. A module's recorded set is typed against the module itself, through
+`RecordedEffectJsonSchemas`, so a schema added beside one already recorded
+does not compile until it is recorded too, and Biome is kept off those
+fixture trees because its JSON formatting would rewrite the recorded bytes.
+Not every Effect schema a module holds shows a node to any model — a fixed
+value set beside its `as const` object, a refusal declared as a tagged error
+— and those are not bytes a golden pins, so `jsonSchemaOf` and
+`RecordedEffectJsonSchemas` cover only the schemas a module actually emits.
 
 Anything that carries identity — a `Context.Tag`, a schema brand — has exactly
 one copy across the whole install, which the `pnpm-workspace.yaml` catalog
@@ -99,9 +97,10 @@ scope of Effect's to hold a `Deferred` in.
 Every tool the brain's catalog lists is a module under
 `packages/brain/src/tools/` (the memory provider's two reads are declared in
 `@sidecar/memory` in the same shape), each declaring its `description`, its
-`inputSchema` (the wire `Schema` its fields are declared in once, which
+`inputSchema` (the Effect `Schema` its fields are declared in once, which
 parses a call and emits what the model is shown; the AI SDK's `tool()` takes
-it through `jsonSchema()`), and one `execute(input, ctx)`, where `ctx`
+it through `emitJsonSchema` from `@sidecar/wire/effect`), and one
+`execute(input, ctx)`, where `ctx`
 carries the conversation, the turn, the run, who opened it, the abort signal,
 and the seams that kind of tool needs and no others — the shape eve's
 `defineTool` and the AI SDK's `tool()` both take. An action tool's `execute`
@@ -334,7 +333,7 @@ already reports what it did rather than failing. `repository-checks.sh` names
 the ported files and refuses an `effect` import in any of them. A door is not
 what keeps `effect`
 out of a bundle generally: `@sidecar/wire`'s own barrel resolves `Schema`,
-`SchemaAST`, and `ParseResult` beneath the `s.*` builder, and
+`SchemaAST`, and `ParseResult` beneath its own vocabulary declarations, and
 `@sidecar/session`'s fixed value sets are declared as `Schema.Literal` beside
 the `as const` object they derive from, each `is*` guard over one that
 schema's own `Schema.is`, so a renderer naming a single declaration or a

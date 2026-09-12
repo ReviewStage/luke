@@ -11,6 +11,7 @@ import {
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import type { NotebookMemoryAccess } from "./notebook-memory.js";
 import {
@@ -78,7 +79,7 @@ test("the two tools are the notebook's reads, in catalog order, each a module wh
       [NOTEBOOK_MEMORY_TOOL.GET, TOOL_EFFECT.READ],
     ],
   );
-  const nodes = shapes.map((shape) => shape.inputSchema.jsonSchema());
+  const nodes = shapes.map((shape) => emitJsonSchema(shape.inputSchema));
   assert.deepEqual(
     nodes.map((node) => ("properties" in node ? Object.keys(node.properties) : [])),
     [

@@ -1,3 +1,5 @@
+import { readEither } from "@sidecar/wire/effect";
+import { type Schema as EffectSchema, Either } from "effect";
 import {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
@@ -22,12 +24,12 @@ import {
   READ_PAGE_BOUNDS,
   READ_QUERY,
   readLimitSchema,
-  type Schema,
   type SequenceReadCursor,
   selectConversationView,
   sequenceReadCursorSchema,
   type TurnReadCursor,
   turnReadCursorSchema,
+  type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
   type WireValue,
@@ -113,14 +115,17 @@ interface ReadPage<Cursor> {
  */
 function readPage<Cursor>(
   query: URLSearchParams,
-  cursorSchema: Schema<Cursor>,
+  cursorSchema: EffectSchema.Schema<Cursor, UnparsedWireValue>,
 ): ReadPage<Cursor> | undefined {
   const afterText = query.get(READ_QUERY.AFTER);
-  const after = afterText === null ? undefined : cursorSchema.parse(afterText);
+  const after =
+    afterText === null ? undefined : Either.getOrUndefined(readEither(cursorSchema)(afterText));
   if (afterText !== null && after === undefined) return undefined;
   const limitText = query.get(READ_QUERY.LIMIT);
   const limit =
-    limitText === null ? READ_PAGE_BOUNDS.MAX_LIMIT : readLimitSchema.parse(Number(limitText));
+    limitText === null
+      ? READ_PAGE_BOUNDS.MAX_LIMIT
+      : Either.getOrUndefined(readEither(readLimitSchema)(Number(limitText)));
   if (limit === undefined) return undefined;
   return { after, limit };
 }
@@ -321,7 +326,9 @@ function viewEvent(event: StoredEventRecord): ConversationViewEvent {
   const rating =
     event.kind === CONVERSATION_EVENT_KIND.RATING
       ? // SAFETY: the payload column is jsonb, which the driver hands back as the JSON it holds; the read is the validation.
-        RATING_EVENT_PAYLOAD.parse(unparsedWire(event.payload as WireBoundaryInput))
+        Either.getOrUndefined(
+          readEither(RATING_EVENT_PAYLOAD)(unparsedWire(event.payload as WireBoundaryInput)),
+        )
       : undefined;
   return {
     messageId: event.messageId,

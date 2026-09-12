@@ -11,6 +11,8 @@ import {
   MESSAGE_ROLE,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { type Schema as EffectSchema, Either } from "effect";
 import { afterAll, test } from "vitest";
 import { handleConversationClear } from "../server/hosted/conversation-clear";
 import { handleConversationMessages } from "../server/hosted/resource-reads";
@@ -47,6 +49,13 @@ async function body(response: Response): Promise<UnparsedWireValue> {
   return (await response.json()) as UnparsedWireValue;
 }
 
+function parse<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
 async function populate(userId: string): Promise<string> {
   const conversationId = await insertConversation(database.run, { userId, nextMessageSeq: 2 });
   await insertMessage(database.run, {
@@ -67,7 +76,8 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   const userId = await database.createUser();
   const main = await populate(userId);
 
-  const before = conversationMessagesAnswerSchema.parse(
+  const before = parse(
+    conversationMessagesAnswerSchema,
     await body(await handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET")))),
   );
   assert.ok(before);
@@ -79,7 +89,7 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
 
   const response = await handleConversationClear(options(userId, request(CLEAR_PATH, "POST")));
   assert.equal(response.status, 200);
-  const answer = conversationClearAnswerSchema.parse(await body(response));
+  const answer = parse(conversationClearAnswerSchema, await body(response));
   assert.ok(answer);
   assert.equal(answer.cleared, 1);
   assert.notEqual(answer.opened, main);
@@ -88,7 +98,8 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   const [stamped] = await readConversationById(database.run, main);
   assert.deepEqual(stamped?.deleted_at, new Date(NOW));
 
-  const after = conversationMessagesAnswerSchema.parse(
+  const after = parse(
+    conversationMessagesAnswerSchema,
     await body(await handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET")))),
   );
   assert.ok(after);
@@ -102,10 +113,12 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
 test("a second Clear stamps the main the first one opened", async () => {
   const userId = await database.createUser();
   await populate(userId);
-  const first = conversationClearAnswerSchema.parse(
+  const first = parse(
+    conversationClearAnswerSchema,
     await body(await handleConversationClear(options(userId, request(CLEAR_PATH, "POST")))),
   );
-  const second = conversationClearAnswerSchema.parse(
+  const second = parse(
+    conversationClearAnswerSchema,
     await body(await handleConversationClear(options(userId, request(CLEAR_PATH, "POST")))),
   );
   assert.ok(first && second);

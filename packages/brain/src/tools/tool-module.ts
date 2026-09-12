@@ -1,5 +1,6 @@
 import type { RunOrigin, SessionKey, ToolExecutionContext } from "@sidecar/runtime/vocabulary";
-import { isRecord, type Schema, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import type { Schema } from "effect";
 
 /**
  * The shape every tool of the brain is declared in: what it is called, what
@@ -44,8 +45,8 @@ export function toolArguments(argumentsJson: string): WireRecord | undefined {
 export interface ToolModule<Output extends WireRecord, Context extends ToolContext> {
   readonly name: string;
   readonly description: string;
-  /** The tool's fields as the model is offered them and as a call is read; declared once, in `@sidecar/wire`'s schema. */
-  readonly inputSchema: Schema<unknown>;
+  /** The tool's fields as the model is offered them and as a call is read; declared once, as an Effect `Schema`. */
+  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
   /** Carries one call whose arguments parsed as a record; everything the call may do runs inside. */
   execute(input: WireRecord, context: Context): Promise<Output>;
 }

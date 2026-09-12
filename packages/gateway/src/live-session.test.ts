@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either, type Schema } from "effect";
 import { test } from "vitest";
 import {
   GATEWAY_EVENT,
@@ -17,6 +20,13 @@ import {
   voiceStopSpeakingResultSchema,
 } from "./protocol.js";
 
+function parse<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
 const LIVE_METHODS = [
   GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION,
   GATEWAY_METHOD.VOICE_END_LIVE_SESSION,
@@ -34,12 +44,12 @@ test("the five live session methods are in the vocabulary, and every one of them
 });
 
 test("a stop answer carries one boolean and nothing else is read from it", () => {
-  assert.deepEqual(voiceStopSpeakingResultSchema.parse({ stopped: true }), { stopped: true });
-  assert.deepEqual(voiceStopSpeakingResultSchema.parse({ stopped: false, extra: 1 }), {
+  assert.deepEqual(parse(voiceStopSpeakingResultSchema, { stopped: true }), { stopped: true });
+  assert.deepEqual(parse(voiceStopSpeakingResultSchema, { stopped: false, extra: 1 }), {
     stopped: false,
   });
-  assert.equal(voiceStopSpeakingResultSchema.parse({}), undefined);
-  assert.equal(voiceStopSpeakingResultSchema.parse({ stopped: "yes" }), undefined);
+  assert.equal(parse(voiceStopSpeakingResultSchema, {}), undefined);
+  assert.equal(parse(voiceStopSpeakingResultSchema, { stopped: "yes" }), undefined);
 });
 
 test("the retired Realtime vocabulary is no longer in the contract", () => {
@@ -64,57 +74,60 @@ test("the retired Realtime vocabulary is no longer in the contract", () => {
 
 test("a create request carries the offer and nothing else", () => {
   const offer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
-  assert.deepEqual(voiceCreateLiveSessionParamsSchema.parse({ sdp: offer }), { sdp: offer });
-  assert.equal(voiceCreateLiveSessionParamsSchema.parse({}), undefined);
-  assert.equal(voiceCreateLiveSessionParamsSchema.parse({ sdp: "" }), undefined);
-  assert.equal(voiceCreateLiveSessionParamsSchema.parse({ sdp: offer, voice: "marin" }), undefined);
+  assert.deepEqual(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer }), { sdp: offer });
+  assert.equal(parse(voiceCreateLiveSessionParamsSchema, {}), undefined);
+  assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: "" }), undefined);
   assert.equal(
-    voiceCreateLiveSessionParamsSchema.parse({ sdp: "a".repeat(LIVE_SDP_MAX_CHARACTERS + 1) }),
+    parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, voice: "marin" }),
+    undefined,
+  );
+  assert.equal(
+    parse(voiceCreateLiveSessionParamsSchema, { sdp: "a".repeat(LIVE_SDP_MAX_CHARACTERS + 1) }),
     undefined,
   );
 });
 
 test("a create answer names the session and the SDP answer, tolerating what a newer host adds", () => {
   const answer = { sessionId: "sess_1", sdpAnswer: "v=0\r\n", quota: { remaining: 1 } };
-  assert.deepEqual(voiceCreateLiveSessionResultSchema.parse(answer), {
+  assert.deepEqual(parse(voiceCreateLiveSessionResultSchema, answer), {
     sessionId: "sess_1",
     sdpAnswer: "v=0\r\n",
   });
-  assert.equal(voiceCreateLiveSessionResultSchema.parse({ sessionId: "sess_1" }), undefined);
-  assert.equal(voiceCreateLiveSessionResultSchema.parse({ sdpAnswer: "v=0\r\n" }), undefined);
+  assert.equal(parse(voiceCreateLiveSessionResultSchema, { sessionId: "sess_1" }), undefined);
+  assert.equal(parse(voiceCreateLiveSessionResultSchema, { sdpAnswer: "v=0\r\n" }), undefined);
 });
 
 test("a transport report names one of the declared states", () => {
   for (const state of Object.values(LIVE_TRANSPORT_STATE)) {
-    assert.deepEqual(voiceReportLiveTransportParamsSchema.parse({ state }), { state });
+    assert.deepEqual(parse(voiceReportLiveTransportParamsSchema, { state }), { state });
   }
-  assert.equal(voiceReportLiveTransportParamsSchema.parse({ state: "new" }), undefined);
-  assert.equal(voiceReportLiveTransportParamsSchema.parse({}), undefined);
+  assert.equal(parse(voiceReportLiveTransportParamsSchema, { state: "new" }), undefined);
+  assert.equal(parse(voiceReportLiveTransportParamsSchema, {}), undefined);
 });
 
 test("an activity report is one boolean", () => {
-  assert.deepEqual(voiceReportLiveActivityParamsSchema.parse({ idle: true }), { idle: true });
-  assert.deepEqual(voiceReportLiveActivityParamsSchema.parse({ idle: false }), { idle: false });
-  assert.equal(voiceReportLiveActivityParamsSchema.parse({ idle: "yes" }), undefined);
-  assert.equal(voiceReportLiveActivityParamsSchema.parse({ idle: true, sinceMs: 1 }), undefined);
+  assert.deepEqual(parse(voiceReportLiveActivityParamsSchema, { idle: true }), { idle: true });
+  assert.deepEqual(parse(voiceReportLiveActivityParamsSchema, { idle: false }), { idle: false });
+  assert.equal(parse(voiceReportLiveActivityParamsSchema, { idle: "yes" }), undefined);
+  assert.equal(parse(voiceReportLiveActivityParamsSchema, { idle: true, sinceMs: 1 }), undefined);
 });
 
 test("a session change carries a phase, and a session id and reason only when the host has one", () => {
   for (const phase of Object.values(LIVE_SESSION_PHASE)) {
-    assert.deepEqual(voiceLiveSessionChangedSchema.parse({ phase }), { phase });
+    assert.deepEqual(parse(voiceLiveSessionChangedSchema, { phase }), { phase });
   }
   assert.deepEqual(
-    voiceLiveSessionChangedSchema.parse({
+    parse(voiceLiveSessionChangedSchema, {
       sessionId: "sess_1",
       phase: LIVE_SESSION_PHASE.CLOSED,
       reason: "expired",
     }),
     { sessionId: "sess_1", phase: LIVE_SESSION_PHASE.CLOSED, reason: "expired" },
   );
-  assert.equal(voiceLiveSessionChangedSchema.parse({ phase: "speaking" }), undefined);
-  assert.equal(voiceLiveSessionChangedSchema.parse({ sessionId: "sess_1" }), undefined);
+  assert.equal(parse(voiceLiveSessionChangedSchema, { phase: "speaking" }), undefined);
+  assert.equal(parse(voiceLiveSessionChangedSchema, { sessionId: "sess_1" }), undefined);
   assert.equal(
-    voiceLiveSessionChangedSchema.parse({ phase: LIVE_SESSION_PHASE.STARTED, sessionId: 7 }),
+    parse(voiceLiveSessionChangedSchema, { phase: LIVE_SESSION_PHASE.STARTED, sessionId: 7 }),
     undefined,
   );
 });

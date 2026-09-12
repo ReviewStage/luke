@@ -1,11 +1,5 @@
-import {
-  effectSchema,
-  SCHEMA_REFUSAL,
-  type Schema,
-  s,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
-import { emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
+import { SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
+import { readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Either } from "effect";
 import { wireUuidSchema, writtenText } from "./service-wire.js";
 
@@ -26,31 +20,11 @@ import { wireUuidSchema, writtenText } from "./service-wire.js";
  * here because the wire cannot reach the brain; a test above both holds them
  * equal.
  *
- * Every declaration below is composed directly as an Effect `Schema`, under
- * its own `<name>Effect` export; the plain `<name>` export beside it is the
- * same declaration read through `fromEffect` (the pattern P1-04 established
- * in `packages/wire/src/ui-message-metadata.ts`), which is what
- * `decodeTurnEventFrame` below and `apps/web/server/hosted/turn-event-stream.ts`
- * still call `.parse()` on. The facade twin is the strangler shim P12-08
- * deletes, once every caller declares against the `Effect` export directly.
+ * Every declaration below is composed directly as an Effect `Schema` and
+ * exported under its own name; `decodeTurnEventFrame` below and
+ * `apps/web/server/hosted/turn-event-stream.ts` read one through
+ * `readEither`.
  */
-
-/**
- * The Effect schema a declaration was composed from, adapted to the facade
- * still-held callers use: `read` through `readEither`, `jsonSchema` through
- * the emitter walking the same schema.
- */
-function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
-  const read = readEither(core);
-  return s.reader({
-    read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
-      }),
-    jsonSchema: () => emitJsonSchema(core),
-  });
-}
 
 /**
  * A record that ignores a key a newer service added, which is what an answer
@@ -99,9 +73,7 @@ export const TURN_END = {
 export type TurnEnd = (typeof TURN_END)[keyof typeof TURN_END];
 
 /** The cursor as the query carries it under `READ_QUERY.AFTER`: the number of the last event taken, zero for none. */
-export const turnEventCursorSchemaEffect = wholeNumber(0);
-
-export const turnEventCursorSchema: Schema<number> = fromEffect(turnEventCursorSchemaEffect);
+export const turnEventCursorSchema = wholeNumber(0);
 
 /** What every event of the stream carries beside its own fields: the turn it belongs to and its place in that turn. */
 interface TurnEventBase {
@@ -118,34 +90,32 @@ export type TurnEventBody =
 
 export type TurnEvent = TurnEventBody & TurnEventBase;
 
-const eventBaseEffect = {
-  turnId: effectSchema(wireUuidSchema),
+const eventBase = {
+  turnId: wireUuidSchema,
   seq: wholeNumber(1),
 } as const;
 
-export const turnEventSchemaEffect = EffectSchema.Union(
+export const turnEventSchema = EffectSchema.Union(
   tolerantRecord({
-    ...eventBaseEffect,
+    ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.SLOW_STEP),
     step: EffectSchema.Literal(...Object.values(TURN_SLOW_STEP)),
   }),
   tolerantRecord({
-    ...eventBaseEffect,
+    ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.ACTIONS_SETTLED),
   }),
   tolerantRecord({
-    ...eventBaseEffect,
+    ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.REPLY_SENTENCE),
-    sentence: effectSchema(writtenText),
+    sentence: writtenText,
   }),
   tolerantRecord({
-    ...eventBaseEffect,
+    ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.ENDED),
     end: EffectSchema.Literal(...Object.values(TURN_END)),
   }),
 ).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
-
-export const turnEventSchema: Schema<TurnEvent> = fromEffect(turnEventSchemaEffect);
 
 /**
  * The stream's framing, as the Server-Sent Events format has it: one frame is
@@ -195,7 +165,7 @@ export function decodeTurnEventFrame(frame: string): TurnEvent | undefined {
   } catch {
     return undefined;
   }
-  const event = turnEventSchema.parse(parsed);
+  const event = Either.getOrUndefined(readEither(turnEventSchema)(parsed));
   if (event === undefined || id !== String(event.seq)) return undefined;
   return event;
 }

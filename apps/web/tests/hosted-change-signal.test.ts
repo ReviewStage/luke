@@ -17,7 +17,8 @@ import {
   type UnparsedWireValue,
   type WireValue,
 } from "@sidecar/wire";
-import { Effect } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, type Schema as EffectSchema, Either } from "effect";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { type ChangeSignalOptions, handleChanges } from "../server/hosted/change-signal";
@@ -77,16 +78,23 @@ async function deviceRow(id: string) {
   return row;
 }
 
+function parse<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
 async function answered(response: Response) {
   assert.equal(response.status, 200);
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
-  const read = changesAnswerSchema.read((await response.json()) as UnparsedWireValue);
-  if (!read.ok) assert.fail(`${read.refusal} at ${read.path.join(".")}`);
-  return read.value;
+  const read = readEither(changesAnswerSchema)((await response.json()) as UnparsedWireValue);
+  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
+  return read.right;
 }
 
 function positionsOf(cursor: string): [string, number][] {
-  const decoded = sequenceReadCursorSchema.parse(cursor);
+  const decoded = parse(sequenceReadCursorSchema, cursor);
   assert.ok(decoded);
   return decoded.positions.map((position) => [position.conversationId, position.seq]);
 }
@@ -260,7 +268,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
       [observed, 1],
     ]),
   );
-  assert.deepEqual(turnReadCursorSchema.parse(heads.turns ?? ""), {
+  assert.deepEqual(parse(turnReadCursorSchema, heads.turns ?? ""), {
     changedAt: "2026-09-10 12:00:00.0005+00",
     id: turnId,
   });

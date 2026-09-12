@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { test } from "vitest";
 import { hostedConversationAnswerSchema } from "./conversation-wire.js";
 
+function parse(value: UnparsedWireValue) {
+  return Either.getOrUndefined(readEither(hostedConversationAnswerSchema)(value));
+}
+
 test("a conversation answer keeps only attributed, non-empty messages", () => {
-  const answer = hostedConversationAnswerSchema.parse(
+  const answer = parse(
     JSON.parse(
       JSON.stringify({
         messages: [
@@ -41,21 +48,11 @@ test("a conversation answer keeps only attributed, non-empty messages", () => {
 });
 
 test("a conversation answer without its envelope is no answer at all", () => {
-  assert.equal(hostedConversationAnswerSchema.parse(undefined), undefined);
-  assert.equal(hostedConversationAnswerSchema.parse("messages"), undefined);
-  assert.equal(
-    hostedConversationAnswerSchema.parse(JSON.parse(JSON.stringify({ messages: [] }))),
-    undefined,
-  );
-  assert.equal(
-    hostedConversationAnswerSchema.parse(
-      JSON.parse(JSON.stringify({ messages: "none", hasMore: false })),
-    ),
-    undefined,
-  );
-  const empty = hostedConversationAnswerSchema.parse(
-    JSON.parse(JSON.stringify({ messages: [], hasMore: false })),
-  );
+  assert.equal(parse(undefined), undefined);
+  assert.equal(parse("messages"), undefined);
+  assert.equal(parse(JSON.parse(JSON.stringify({ messages: [] }))), undefined);
+  assert.equal(parse(JSON.parse(JSON.stringify({ messages: "none", hasMore: false }))), undefined);
+  const empty = parse(JSON.parse(JSON.stringify({ messages: [], hasMore: false })));
   assert.ok(empty);
   assert.deepEqual(empty.messages, []);
   assert.equal(empty.lastMessageId, undefined);
@@ -63,7 +60,7 @@ test("a conversation answer without its envelope is no answer at all", () => {
 });
 
 test("a conversation answer carries its history positions when the read reported them", () => {
-  const answer = hostedConversationAnswerSchema.parse(
+  const answer = parse(
     JSON.parse(
       JSON.stringify({
         messages: [],
@@ -77,7 +74,7 @@ test("a conversation answer carries its history positions when the read reported
   assert.equal(answer.firstOffset, 240);
   assert.equal(answer.hasOlder, true);
 
-  const malformed = hostedConversationAnswerSchema.parse(
+  const malformed = parse(
     JSON.parse(
       JSON.stringify({
         messages: [],

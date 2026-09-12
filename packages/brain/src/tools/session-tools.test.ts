@@ -14,6 +14,7 @@ import {
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -147,7 +148,7 @@ test("the four session tools are modules in catalog order", () => {
     ],
   );
   const required = SESSION_TOOLS.map((tool) => {
-    const node = tool.inputSchema.jsonSchema();
+    const node = emitJsonSchema(tool.inputSchema);
     return "required" in node ? [...node.required] : [];
   });
   assert.deepEqual(required, [["task"], [], [], ["child_id"]]);

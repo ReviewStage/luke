@@ -1,7 +1,7 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
-import { type CloudFetch, effectSchema, type WireRecord } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Effect, type Layer } from "effect";
+import type { CloudFetch, WireRecord } from "@sidecar/wire";
+import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import { Effect, Either, type Layer } from "effect";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
@@ -59,7 +59,9 @@ export class HostedChangesClient {
   }
 
   poll(request: ChangesRequest): Promise<ChangesAnswer | undefined> {
-    const admitted = changesRequestSchema.parse(changesRecord(request));
+    const admitted = Either.getOrUndefined(
+      readEither(changesRequestSchema)(changesRecord(request)),
+    );
     if (admitted === undefined) return Promise.resolve(undefined);
     return this.#run(
       this.#call.ask(
@@ -68,7 +70,7 @@ export class HostedChangesClient {
           path: HOSTED_SERVICE_PATH.CHANGES,
           body: JSON.stringify(changesRecord(admitted)),
         },
-        effectSchema(changesAnswerSchema),
+        changesAnswerSchema,
       ),
     );
   }

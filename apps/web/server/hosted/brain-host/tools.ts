@@ -1,3 +1,4 @@
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolContext as EveToolContext, ToolDefinition } from "eve/tools";
 import { NOTEBOOK_MEMORY_TOOL } from "../../../../../packages/memory/src/index.js";
 import {
@@ -173,7 +174,7 @@ export function hostedToolDeclarations(
       {
         name: named.module.name,
         description: named.module.description,
-        inputSchema: named.module.inputSchema.jsonSchema(),
+        inputSchema: emitJsonSchema(named.module.inputSchema),
       },
     ];
   });

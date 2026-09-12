@@ -1,3 +1,5 @@
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import {
   type ChangesAnswer,
   type ChangesRequest,
@@ -81,7 +83,9 @@ export async function handleChanges(options: ChangeSignalOptions): Promise<Respo
   }
   const parsed = await readJsonBody(request, MAXIMUM_CHANGES_BODY_BYTES);
   if (parsed instanceof Response) return parsed;
-  const body: ChangesRequest | undefined = changesRequestSchema.parse(parsed);
+  const body: ChangesRequest | undefined = Either.getOrUndefined(
+    readEither(changesRequestSchema)(parsed),
+  );
   if (!body) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }

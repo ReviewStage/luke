@@ -9,6 +9,7 @@ import {
   TOOL_POLICY_LAYER,
 } from "@sidecar/runtime";
 import { wireRecord } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import { ACTION_TOOLS } from "./tools/action-tools.js";
 import {
@@ -178,7 +179,7 @@ test("every tool the catalog lists is a module of one shape: a name, words, a wi
     // The registry's schema is the module's own wire schema, emitted once.
     assert.deepEqual(
       entry.schema.parameters,
-      JSON.parse(JSON.stringify(module.inputSchema.jsonSchema())),
+      JSON.parse(JSON.stringify(emitJsonSchema(module.inputSchema))),
     );
     assert.equal(entry.schema.description, module.description);
   }
@@ -199,7 +200,7 @@ test("the registry holds every catalog tool once under its name, with the schema
     assert.equal(registration.name, entry.schema.name);
     assert.equal(registration.description, entry.schema.description);
     assert.deepEqual(
-      JSON.parse(JSON.stringify(registration.inputSchema.jsonSchema())),
+      JSON.parse(JSON.stringify(emitJsonSchema(registration.inputSchema))),
       entry.schema.parameters,
     );
   }
