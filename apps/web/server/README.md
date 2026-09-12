@@ -7,12 +7,17 @@ Neon is provisioned through the Vercel integration. It supplies the pooled
 migrations; the connection strings live nowhere in this repository. There is
 no ORM and no generated schema module: every query is a statement the
 `@effect/sql` `SqlClient` runs, and a table's shape lives in its migration
-alone. Better Auth reaches the same tables through its own Kysely adapter
-(`server/auth.ts`), a `Kysely` instance built over the same `pg.Pool` with
-`CamelCasePlugin`, which is what maps the camelCase fields Better Auth reads
-and writes onto the migrations' snake_case columns; there is no generated
-auth schema module to hand-edit and nothing to regenerate after changing
-Better Auth or one of its plugins.
+alone. Better Auth reaches its tables through its Drizzle adapter over
+`server/db/auth-schema.ts` (see below), the one schema module the app keeps,
+so a migration that changes an auth column's type changes that declaration
+too.
+
+Every instant column is `timestamp with time zone` (migration 0026 moved the
+last naive ones), so a JavaScript `Date` round-trips losslessly whatever zone
+the host or the session sits in; `bigint` epochs stand where a table already
+kept them. `tests/instant-columns.test.ts` reads `information_schema` on both
+dialects and refuses any `timestamp without time zone` column, so a new table
+declares `timestamptz` or fails the store tests.
 
 For a new table or a changed one, write the migration by hand under
 `drizzle/` (a plain SQL file plus its `meta/_journal.json` entry, the shape
