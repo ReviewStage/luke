@@ -45,10 +45,10 @@ here, which `apps/web` declares for the same reason it declares the others —
 a runtime requirement of a dependency the function bundles keep external.
 
 `@sidecar/wire` reaches both and declares them as dependencies rather than
-development ones, because the bridges under `packages/wire/src/effect/` are
-product code: `scope.ts` carries a disposable into a `Scope` and back, and
-`http.ts` offers an `HttpClient` over a `CloudFetch` and a `CloudFetch` over an
-`HttpClient`. The spike test at `packages/wire/src/effect-spike.test.ts`, which
+development ones, because the bridge under `packages/wire/src/effect/` is
+product code: `http.ts` offers an `HttpClient` over a `CloudFetch` and a
+`CloudFetch` over an `HttpClient`. The spike test at
+`packages/wire/src/effect-spike.test.ts`, which
 exercises `Schema.Struct` decoding, `Effect.gen`, `Layer`, and `Context.Tag`
 under the repository's own test runner, stands beside them. `@sidecar/runtime`
 declares `effect` on the same terms, for the delay and the clock bridge under
@@ -727,20 +727,23 @@ stands before the caller's next statement so a result of the generation it
 replaced installs nothing. A `SynchronizedRef` would still be wrong for the
 ask ledger for the reason it always was — its permit is one turn later, which
 let a housekeeping turn the decision means to outrank slip in ahead of it —
-and an effect here could only ever be run. The agent's own `eventFromStream`
-bridge is the one of the four that stays, and it names P12-06 below.
+and an effect here could only ever be run. The fourth, the run event
+subscriber, is on the allowlist for the reason below rather than exempt from
+one.
 
-`BrainAgent`'s own construction in `packages/brain/src/agent.ts` is on the
-allowlist too: `onRunEvent` still answers the `Event<BrainRunEvent>` its
-subscribers hold, now bridged from a `PubSub` by `eventFromStream`, and
-building that bridge takes a `Scope` the agent owns rather than one an edge
-handed it, so the scope is made and the bridge built with a `runSync` at
-construction. Closing that scope in `stop()` runs to a promise instead,
-since interrupting the bridge's own daemon pump — parked waiting on the
-pubsub whenever nothing has fired since the last event — is not guaranteed
-to settle synchronously. P12-06 deletes both runs, with `eventFromStream`
-itself: the bridge cannot outlive the `Event` its subscribers hold, and it
-cannot go before it.
+`BrainAgent#onRunEvent` in `packages/brain/src/agent.ts` is on the allowlist:
+its callers still hold a plain callback and an unsubscribe function rather
+than a `Stream`, so each subscription forks its own fiber pumping
+`Stream.fromPubSub` at `Effect.runFork` and answers an unsubscribe that
+interrupts it at another. Every rule a listener could observe under the old
+`Emitter` still holds — subscription order, a listener subscribed mid-round
+hearing only what follows, a thrower stopping none of the rest — because the
+pump is the same `Stream.runForEach` either way; what changed is that the
+fiber belongs to the subscription rather than to a scope the agent owned, so
+`stop()` closes no scope of its own for this any more. The bridge this
+replaced — `eventFromStream` and the scope built at construction to hold it —
+is deleted with `packages/wire/src/effect/event.ts` itself, and this entry
+stands until a subscriber reads the stream directly.
 
 The coalescing timer the wake queue arms is untouched by that, since it is
 still the injected `schedule`/`cancel` seam a real elapsed-time wait stands
@@ -819,12 +822,6 @@ each of those adapters' own plugins holds a fiber of its own to run its
 effects on rather than answering a `Promise` through this face, which is not
 yet scheduled on any row above.
 
-`disposableFromScope` in `packages/wire/src/effect/scope.ts` is on the
-allowlist as the bridge's own close: an `IDisposable`'s `dispose()` cannot be
-awaited, so the scope is closed with `Effect.runSyncExit` here and a failure
-rethrown rather than carried in a fiber nobody holds. It goes in P12-06 with
-the seam.
-
 The four hosted clients this document had not named until the lint rules made
 the list machine-readable — `HostedActionClient`'s `#run` in
 `packages/hosted/src/action-client.ts`, `DeviceClient`'s `#ask` in
@@ -883,8 +880,6 @@ design decision stated as such:
 | --- | --- | --- |
 | `s.*` facade over Effect Schema | P1-02 | P12-08 |
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
-| `disposableFromScope`/`addDisposable` | P1-05 | P12-06 |
-| `streamFromEvent`/`eventFromStream` | P1-06 | P12-06 |
 | `cloudFetchFromHttpClient` | P1-07 | P12-04 |
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `ObservationLoop`'s `start`/`stop`, the arming the account gate calls | P2-04 | with the gate's own promises; P7-10 made the scope the host's |
@@ -915,7 +910,7 @@ design decision stated as such:
 | `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
 | `Settled` Promise signatures | P5-01 | P12-02 |
 | `promiseAgentRuntime`, the `Promise` door over `AgentRuntimeEffect` | P5-14b | P12-02 |
-| `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P12-06 |
+| `BrainAgent#onRunEvent`'s per-subscription fiber over `Stream.fromPubSub` | P5-06 | once a subscriber reads the stream directly |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P12-02 |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |

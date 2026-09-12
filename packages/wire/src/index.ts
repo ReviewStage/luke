@@ -37,7 +37,6 @@ export {
   type SpeechOfferedEventPayload,
   type SpeechSpokenEventPayload,
 } from "./conversation-event.js";
-export { Emitter, type Event } from "./event.js";
 export {
   type CloudFetch,
   HTTP_METHOD,
@@ -74,13 +73,6 @@ export {
   wireRecord,
   withoutTrailingSlash,
 } from "./json.js";
-export { type LateRef, lateRef } from "./late-ref.js";
-export {
-  DisposableStore,
-  disposeAll,
-  type IDisposable,
-  toDisposable,
-} from "./lifecycle.js";
 export {
   type ArrayOptions,
   type BoundedTextOptions,

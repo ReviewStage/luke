@@ -13,9 +13,8 @@ import type {
   ProviderTranscriptSinceResult,
   SessionIdentity,
 } from "@sidecar/session";
-import type { Event, WireRecord } from "@sidecar/wire";
-import { eventFromStream } from "@sidecar/wire/effect";
-import { Effect, Exit, PubSub, Scope, Stream } from "effect";
+import type { WireRecord } from "@sidecar/wire";
+import { Effect, Fiber, PubSub, Stream } from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -223,7 +222,6 @@ export class BrainAgent {
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
   #incompatibleReported: string | undefined;
-  readonly #runEventsScope: Scope.CloseableScope = Effect.runSync(Scope.make());
   readonly #runEventsPubSub: PubSub.PubSub<BrainRunEvent> = Effect.runSync(PubSub.unbounded());
 
   /**
@@ -236,25 +234,29 @@ export class BrainAgent {
    * its end, each event stamped with the conversation, the turn, and its
    * place in the turn's sequence. A listener that throws ends no turn.
    *
-   * Published from `#fireRunEvent` into `#runEventsPubSub` and read out here
-   * as the `Event` every subscriber already holds, bridged by
-   * `eventFromStream`; the bridge's own daemon pump is what keeps the
-   * delivery order and the mid-round-subscribe rule an `Emitter` guaranteed.
-   *
-   * Building that bridge is a run outside a runtime edge, on the
-   * `docs/adr/0001-effect.md` allowlist on the same terms as this file's
-   * other seams: every subscriber here still holds a plain `Event`, not a
-   * `Stream`, so the bridge is built once, synchronously, over a scope this
-   * agent owns and closes in `stop()`. P12-06 deletes it with
-   * `eventFromStream` itself, once a subscriber reads the stream directly.
+   * Published from `#fireRunEvent` into `#runEventsPubSub`; each subscription
+   * forks its own fiber pumping `Stream.fromPubSub`, which is what keeps
+   * delivery order and lets a listener subscribed mid-round hear only what
+   * follows. Unsubscribing interrupts that fiber, so no subscription outlives
+   * its listener and nothing here needs a scope of the agent's own; stopping
+   * the agent shuts the pubsub down instead, which ends every pump whether or
+   * not its subscriber ever unsubscribed. A thrower stops none of the rest,
+   * the same guarantee `Emitter#fire` gave: the failure is logged rather than
+   * left to end that subscription's own pump.
    */
-  readonly onRunEvent: Event<BrainRunEvent> = Effect.runSync(
-    Effect.provideService(
-      eventFromStream(Stream.fromPubSub(this.#runEventsPubSub)),
-      Scope.Scope,
-      this.#runEventsScope,
-    ),
-  );
+  onRunEvent(listener: (event: BrainRunEvent) => void): () => void {
+    const fiber = Effect.runFork(
+      Stream.runForEach(Stream.fromPubSub(this.#runEventsPubSub), (event) =>
+        Effect.catchAllDefect(
+          Effect.sync(() => listener(event)),
+          (defect) => Effect.logError("a listener failed while a run event was delivered", defect),
+        ),
+      ),
+    );
+    return () => {
+      Effect.runFork(Fiber.interrupt(fiber));
+    };
+  }
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
@@ -626,11 +628,11 @@ export class BrainAgent {
     await this.#queue;
     const retiring = this.#generations.standing();
     if (retiring) retireGeneration(retiring);
-    // Closing this scope interrupts the bridge's daemon pump, which may be
-    // suspended waiting on the pubsub; that interruption is not guaranteed
-    // to settle synchronously, so the close runs to a promise here rather
-    // than with runSync.
-    await Effect.runPromise(Scope.close(this.#runEventsScope, Exit.void));
+    // Shutting the pubsub down ends every `Stream.fromPubSub` pump this agent
+    // ever forked, whether or not its subscriber ever called the unsubscribe
+    // it was handed back: a retired agent's followers stop hearing rather
+    // than parking a fiber for the rest of the process.
+    await Effect.runPromise(PubSub.shutdown(this.#runEventsPubSub));
   }
 
   #fireRunEvent(event: BrainRunEvent): void {

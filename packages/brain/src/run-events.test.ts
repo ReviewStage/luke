@@ -1019,16 +1019,24 @@ it.effect("every ask's turn is prepared with the spoken origin and told under it
   }),
 );
 
-it.effect("a listener that throws ends no run", () =>
+it.effect("a listener that throws ends no run, and stops hearing nothing further", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
+    let heardByThrower = 0;
     h.agent.onRunEvent(() => {
+      heardByThrower += 1;
       throw new Error("listener");
     });
+    const heardByOthers: BrainRunEvent[] = [];
+    h.agent.onRunEvent((event) => heardByOthers.push(event));
     h.client.answers.push(answered([message("Fine.")]));
     const record = yield* Effect.promise(() => ask(h, "hello"));
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record?.text, "Fine.");
+    // A throw stops none of the rest: the thrower keeps hearing every event
+    // that follows its own throw, and a sibling subscription is unaffected.
+    assert.ok(heardByThrower > 1);
+    assert.ok(heardByOthers.length >= heardByThrower);
     yield* Effect.promise(() => h.agent.stop());
   }),
 );

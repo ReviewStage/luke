@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import type { HostNodeOpenKind } from "@sidecar/host";
-import { ACTION_RESULT_STATUS, type LateRef, lateRef, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { systemPreferences } from "electron";
 import { channels } from "#shared/bridge";
 import type { AppAudioSlice } from "#shared/messages/app-state";
@@ -94,7 +94,13 @@ export interface NativeNode extends DesktopService {
  */
 export function createNativeNode(dependencies: NativeNodeDependencies): NativeNode {
   const { config, state } = dependencies;
-  const links: LateRef<NativeNodeLinks> = lateRef("the native node's links");
+  let heldLinks: NativeNodeLinks | undefined;
+  const links = (): NativeNodeLinks => {
+    if (heldLinks === undefined) {
+      throw new Error("the native node's links are read before link() has run");
+    }
+    return heldLinks;
+  };
   const mediaDuck = new MediaDuckController();
   const pendingAppActions = new Map<string, (answer: WireRecord) => void>();
   let outputVolumeWatcher: OutputVolumeWatch | undefined;
@@ -146,7 +152,7 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
         resolve(answer);
       };
       pendingAppActions.set(requestId, settle);
-      if (!links.get().sendToPrimaryPanel(channels.onBrainAppAction, { requestId, action })) {
+      if (!links().sendToPrimaryPanel(channels.onBrainAppAction, { requestId, action })) {
         settle({
           status: ACTION_RESULT_STATUS.REJECTED,
           reason: "No panel is open to carry that.",
@@ -164,12 +170,14 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
 
   return {
     name: "native",
-    link: (next) => links.set(next),
+    link: (next) => {
+      heldLinks = next;
+    },
     capabilities: {
       openExternal: createNodeOpen({
         openExternal: config.openExternal,
         fixtureMode: config.launch.fixtureMode,
-        standPanelsDown: () => links.get().standPanelsDown(),
+        standPanelsDown: () => links().standPanelsDown(),
       }),
       performAppAction,
       runAppleCalendarHelper,

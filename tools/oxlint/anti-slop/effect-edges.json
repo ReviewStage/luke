@@ -60,7 +60,6 @@
     "packages/voice/src/live-session-source.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts",
     "packages/wire/src/effect/http.ts",
-    "packages/wire/src/effect/scope.ts",
     "packages/wire/src/testing/effect.ts"
   ],
   "runOnHandedRuntime": ["apps/desktop/src/main/app-state.ts"],

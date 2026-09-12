@@ -31,11 +31,11 @@ import {
   settingEntryGuard,
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, isWireString, lateRef, type UnparsedWireValue } from "@sidecar/wire";
-import { Effect } from "effect";
+import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Effect, Option } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
-import { HostKernelTag } from "./effect/kernel.js";
+import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
@@ -101,7 +101,14 @@ export const composeSettings = (): Effect.Effect<
     const overrides = yield* settingsOverrides;
     const runtime = yield* Effect.runtime<FileSystem.FileSystem>();
     const { runMode, report, options } = kernel;
-    const links = lateRef<SettingsLinks>("the settings composer's links");
+    const late = yield* lateService<SettingsLinks>();
+    const links = (): SettingsLinks => {
+      const standing = late.unsafePeek();
+      if (Option.isNone(standing)) {
+        throw new Error("the settings composer's links are read before link() has run");
+      }
+      return standing.value;
+    };
 
     const store = new SettingsStore({
       directory: () => kernel.stateRoot,
@@ -118,21 +125,21 @@ export const composeSettings = (): Effect.Effect<
       appVersion: options.appVersion,
       sends: runMode.sendsNetwork,
       readAccessToken: async () => (await store.readAccount())?.accessToken,
-      refreshAccount: () => links.get().refreshAccount(),
+      refreshAccount: () => links().refreshAccount(),
       readAccountKey: async () => (await store.readAccount())?.email,
     });
     const hostedVault = new HostedVaultClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       readAccessToken: async () =>
         runMode.sendsNetwork ? (await store.readAccount())?.accessToken : undefined,
-      refreshAccount: () => links.get().refreshAccount(),
+      refreshAccount: () => links().refreshAccount(),
       readAccountKey: async () => (await store.readAccount())?.email,
     });
     const accountPreferencesClient = new AccountPreferencesClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       readAccessToken: async () =>
         runMode.sendsNetwork ? (await store.readAccount())?.accessToken : undefined,
-      refreshAccount: () => links.get().refreshAccount(),
+      refreshAccount: () => links().refreshAccount(),
       readAccountKey: readAccountPreferenceAccountKey,
     });
     const vaultSync = new ProviderKeyVaultSync({
@@ -308,9 +315,9 @@ export const composeSettings = (): Effect.Effect<
     }
 
     const sideEffects = hostSettingSideEffects({
-      setVoice: (voice) => links.get().setVoice(voice),
-      applyVoiceCredential: () => links.get().applyVoiceCredential(),
-      reconcileSpeech: () => links.get().reconcileSpeech(),
+      setVoice: (voice) => links().setVoice(voice),
+      applyVoiceCredential: () => links().applyVoiceCredential(),
+      reconcileSpeech: () => links().reconcileSpeech(),
       applyVaultSync: (syncProviderKeys) => void vaultSync.apply(syncProviderKeys, { claim: true }),
       emitSettings,
     });
@@ -334,7 +341,7 @@ export const composeSettings = (): Effect.Effect<
         changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
         changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
       ) {
-        await links.get().broadcastWorkspaceProjects();
+        await links().broadcastWorkspaceProjects();
       }
       emitSettingsSnapshot(result.settings);
     }
@@ -408,7 +415,7 @@ export const composeSettings = (): Effect.Effect<
           if (
             field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
             isWireString(projectWire) &&
-            !links.get().workspaceProjectOffered(key, projectWire)
+            !links().workspaceProjectOffered(key, projectWire)
           ) {
             return yield* invalid("that project is not one a provider offers");
           }
@@ -467,7 +474,7 @@ export const composeSettings = (): Effect.Effect<
               async (saved) => {
                 if (saved.reason) return;
                 if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-                  await links.get().applyVoiceCredential();
+                  await links().applyVoiceCredential();
                   await emitSettings();
                 }
                 void vaultSync.keySaved(providerId, apiKey, saved.settings.stored.syncProviderKeys);
@@ -518,7 +525,7 @@ export const composeSettings = (): Effect.Effect<
       },
       flushProductEvents: () => productEvents.flush(),
       link: (next) => {
-        links.set(next);
+        late.unsafeSet(next);
       },
       start: async () => {
         void store.snapshot();

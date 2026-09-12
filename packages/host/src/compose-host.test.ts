@@ -9,7 +9,7 @@ import {
   InProcessTransport,
 } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
-import { ACTION_RESULT_STATUS, isRecord, lateRef } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Effect, Layer } from "effect";
 import { hostLayer } from "./compose-host.js";
@@ -65,13 +65,6 @@ it("a method two composers claim is a construction failure, not a last writer", 
     ).sort(),
     [GATEWAY_METHOD.ACCOUNT_SNAPSHOT, GATEWAY_METHOD.SETTINGS_SNAPSHOT].sort(),
   );
-});
-
-it("a late reference read before link() has run says so rather than answering nothing", () => {
-  const held = lateRef<{ value: number }>("the test's links");
-  assert.throws(() => held.get(), /the test's links is read before link\(\) has run/);
-  held.set({ value: 1 });
-  assert.equal(held.get().value, 1);
 });
 
 it("the kernel's service is a named failure before the merge composed it", () => {

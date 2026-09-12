@@ -81,28 +81,20 @@ one copy across the whole install, which the `pnpm-workspace.yaml` catalog
 guarantees by pinning every package to the same resolved version of the
 dependency that defines it.
 
-`@sidecar/wire` is also the base every layer's lifecycle is written in —
-`IDisposable`, `DisposableStore`, `toDisposable`, `Event`, and `Emitter` — so a
-listener's unsubscribe, a watcher's teardown, and the store that ends both are
-one shape wherever they are held, and adopting it adds no edge: every package
-but `packages/panel` already depends on wire. That base is being replaced by
-Effect's own, and while both stand `packages/wire/src/effect/scope.ts` is the
-bridge: `addDisposable` carries a disposable into a `Scope`,
-`disposableFromScope` carries a scope back to a caller that speaks only
-`dispose()`, and `layerFromDisposable` builds a service that its layer's scope
-ends. A `Scope` closing already guarantees what `DisposableStore` was written
-for — the reverse order and the failures aggregated into one shape — so the
-store, `toDisposable`, and `disposeAll` are deprecated in place and P12-06
-deletes them with the bridge. `packages/wire/src/effect/event.ts` is the same
-bridge for the other half: `streamFromEvent` subscribes when a stream's scope
-opens and unsubscribes when it closes, buffering without a bound because a
-listener cannot refuse a value and a `fire` returns having delivered, and
-`eventFromStream` answers an `Event` pumped by a fiber forked into the scope,
-which keeps every rule a listener can observe — the subscription order, a
-listener subscribed mid-round hearing the next value rather than that one, a
-thrower stopping none of the rest — and can only differ in having nobody above
-the pump to throw a failed round at, so that round is logged instead. `Event`
-and `Emitter` are deprecated in place and P12-06 deletes them too.
+A lifecycle is a `Scope`, and an event is a `Stream` over a `PubSub`. A
+listener's unsubscribe is a fiber's interruption, a watcher's teardown is a
+finalizer, and the store that once held both is the scope those finalizers
+run in, in the reverse of the order they were added, with a thrower stopping
+none of the rest — Effect's own guarantee, needing no wrapper of wire's.
+`IDisposable`, `DisposableStore`, `toDisposable`, `disposeAll`, `Event`,
+`Emitter`, and the `LateRef` built on the same shape are gone from
+`@sidecar/wire`, along with the `scope.ts` and `event.ts` bridges that stood
+between them and `Scope`/`Stream` while both bases stood; a composer still
+built as a plain object rather than an effect (the desktop's operator client
+and native node) now holds its own late-bound link as a closure reading a
+local variable, thrown by name before `link()` has run, the same message the
+old `LateRef` gave and nothing more, since a plain-object composer has no
+scope of Effect's to hold a `Deferred` in.
 
 Every tool the brain's catalog lists is a module under
 `packages/brain/src/tools/` (the memory provider's two reads are declared in
@@ -264,10 +256,9 @@ until the class it feeds — `LiveSessionService` or `LiveVoiceOrchestrator` —
 reads the tag itself rather than taking the value as a constructor argument,
 and `docs/adr/0001-effect.md` names which caller and which PR for each.
 
-`@sidecar/wire/effect` is the same door for the Effect bridges that stand
-beside the hand-rolled base while both are still in use — the `Scope`,
-`Stream`, and `HttpClient` bridges over `IDisposable`, `Event`, and
-`CloudFetch`, and the JSON Schema emitter with its `readEither` — kept off
+`@sidecar/wire/effect` is the same door for what still bridges a hand-rolled
+base to Effect's own — the `HttpClient` bridge over `CloudFetch`, and the
+JSON Schema emitter with its `readEither` — kept off
 the main barrel so a caller that only wants the wire vocabulary never
 resolves `@effect/platform`. `@sidecar/runtime/effect` is
 that door one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and
