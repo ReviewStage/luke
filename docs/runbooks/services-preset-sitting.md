@@ -125,8 +125,11 @@ one of:
 - Any line setting `EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY`: a build command from
   before the flat layout, relocating output by hand through eve's internals.
 - `The api/ directory will not be built because services are configured`: this
-  warning is **expected** and harmless, because nothing is committed under
-  `api/` any more. It is listed so a reader does not take it for a failure.
+  warning may or may not appear, and either way it is not a failure. Nothing is
+  committed under `api/` any more, so there is nothing for it to protect; the
+  redeploy that passed the sitting on 2026-09-12 did not print it at all, and
+  the only warnings in that log were pnpm's "Ignored build scripts". It is
+  listed so a reader neither aborts on seeing it nor distrusts a log without it.
 
 ## The eight probes
 
