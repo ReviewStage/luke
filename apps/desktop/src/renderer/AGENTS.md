@@ -173,7 +173,10 @@ microphone is asked for first, at the developer's press, and the session
 opens only once it is granted; the greeting is the voice service's, the
 takeover sends nothing but the microphone switch and the hang-up, and it ends
 when Luke's output has gone quiet by the ledger's settle and the remote
-track's level (`introduction-quiet.ts`), never by a missing event. The panel
+track's level (`introduction-quiet.ts`), never by a missing event, or at the
+greeting's own ceiling when an answered greeting never goes quiet. Every beat
+a session stands in leaves on some clock of the takeover's own: none waits
+on the model alone. The panel
 window's `connect-src` names no OpenAI host: nothing in this bundle fetches
 one any more.
 

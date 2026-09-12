@@ -1164,7 +1164,9 @@ Canonical commands:
   introduction's duration is the same unmute; the introduction ends when
   Luke's output has gone quiet after the greeting — read from the transcript
   ledger's settle and the remote track's level, never from a missing event —
-  and a bounded listening window for a word back has passed: the takeover
+  or the greeting has run to its own ceiling (45 seconds) without going
+  quiet, because a greeting answered and answered back never does, and a
+  bounded listening window for a word back has passed: the takeover
   hangs up, the panel leaves the display it took and stands up as the ordinary
   signed-out panel with its own gate, and observation, announcements, and
   every other capability still release only through the ordinary account gate
