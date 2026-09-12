@@ -1,4 +1,4 @@
-import type { Carry } from "./effect/carry.js";
+import type { Effect } from "effect";
 import type { Generation } from "./generation.js";
 import type { BrainRequestLedger } from "./ledger.js";
 import type { ScheduledTimer } from "./scheduled-timer.js";
@@ -15,11 +15,13 @@ export type { ScheduledTimer } from "./scheduled-timer.js";
 export interface AgentSeam {
   readonly now: () => number;
   /**
-   * Carries one of this conversation's effects to the promise a caller still
-   * holds, on the runtime the host handed the agent. A turn is a fiber of
-   * that runtime from here inward.
+   * Runs one of this conversation's effects on a fiber of its own, for an
+   * edge that holds nothing open while it runs: the queue's own drain, and
+   * the wake window's flush, each a callback a timer calls with nowhere to
+   * answer. The fiber is the agent's, so what it detaches is still a turn of
+   * the runtime every turn of this conversation is one of.
    */
-  readonly carry: Carry;
+  readonly detach: (work: Effect.Effect<unknown>) => void;
   readonly schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   readonly cancel: (timer: ScheduledTimer) => void;
   readonly report: (message: string) => void;
@@ -27,14 +29,14 @@ export interface AgentSeam {
   /** The generation that stands, or nothing before the first load. */
   generation(): Generation | undefined;
   stopped(): boolean;
-  ready(): Promise<void>;
+  ready(): Effect.Effect<void>;
   /** The door check every entry point runs before it reads a generation. */
   expireIfDue(): void;
   /** Reports an unrunnable checkpoint once per generation id. */
   reportIncompatible(generation: Generation, reason: string): void;
   runRevoked(run: RunControl): boolean;
   /** The conversation's serial queue, under the host's lane for the trigger. */
-  queueTurn<T>(trigger: BrainTurnTrigger, work: () => Promise<T>): Promise<T>;
+  queueTurn<A>(trigger: BrainTurnTrigger, work: Effect.Effect<A>): Effect.Effect<A>;
   /** The serial queue with no lane, for the maintenance a turn leaves behind. */
-  enqueue<T>(work: () => Promise<T>): Promise<T>;
+  enqueue<A>(work: Effect.Effect<A>): Effect.Effect<A>;
 }

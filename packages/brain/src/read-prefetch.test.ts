@@ -175,7 +175,6 @@ const rig = (
 ): Effect.Effect<Rig> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    const runtime = yield* Effect.runtime<never>();
     const timers = yield* ambientTimers;
     const model = new DeferredModel();
     const transcriptReads: SessionIdentity[] = [];
@@ -187,7 +186,6 @@ const rig = (
     const prefetch = new ReadPrefetch(
       {
         model,
-        execution: runtime,
         conversationId: MAIN_SESSION_KEY,
         roster: () => ({
           text: "Currently observed sessions:\n- abc\n- def",
@@ -230,7 +228,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       assert.equal(r.model.requests.length, 1);
       const planner = r.model.requests[0];
@@ -282,7 +280,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is abc doing", "row-4"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing", "row-4"));
       yield* drained;
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
@@ -300,7 +298,7 @@ it.effect(
       assert.equal(r.traces.filter((trace) => trace.summaryChars !== undefined).length, 1);
 
       const silent = yield* rig({ listen: false });
-      silent.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* silent.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       silent.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
@@ -313,7 +311,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS - 1);
@@ -331,7 +329,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS);
@@ -351,7 +349,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       yield* TestClock.adjust(PREFETCH_BOUNDS.PLAN_TIMEOUT_MS);
       yield* drained;
@@ -382,11 +380,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is"));
+      yield* r.prefetch.anticipate(anticipation("what is"));
       yield* drained;
       const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
       yield* drained;
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       const superseded = yield* Fiber.join(taking);
       assert.equal(superseded.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
@@ -402,7 +400,7 @@ it.effect(
       assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT);
       assert.equal(taken.reads.length, 1);
       // The memo went with the slot that was taken, not with the wait that lost.
-      r.prefetch.anticipate(anticipation("what is abc doing", "2"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing", "2"));
       yield* drained;
       // The taken slot's summary is still waiting ahead of the new planner; it is answered first.
       while (r.model.waiting > 1) r.model.answer(answered([message("facts")]));
@@ -415,7 +413,7 @@ it.effect(
 it.effect("a ready slot older than its life is an expired miss", () =>
   Effect.gen(function* () {
     const r = yield* rig();
-    r.prefetch.anticipate(anticipation("what is abc doing"));
+    yield* r.prefetch.anticipate(anticipation("what is abc doing"));
     yield* drained;
     r.model.answer(plan(TRANSCRIPT_OF_ABC));
     yield* drained;
@@ -429,7 +427,7 @@ it.effect("a ready slot older than its life is an expired miss", () =>
 it.effect("a take under a signal already fired, or fired while it waits, is a revoked miss", () =>
   Effect.gen(function* () {
     const r = yield* rig();
-    r.prefetch.anticipate(anticipation("what is abc doing"));
+    yield* r.prefetch.anticipate(anticipation("what is abc doing"));
     yield* drained;
     const fired = new AbortController();
     fired.abort();
@@ -454,13 +452,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is"));
+      yield* r.prefetch.anticipate(anticipation("what is"));
       yield* drained;
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
       assert.deepEqual(r.transcriptReads, [ABC]);
       // The summary of the first plan is still waiting; more words supersede the slot before it lands.
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       assert.equal(r.model.requests[1]?.options.signal?.aborted, true);
       r.model.answer(answered([message("stale summary")]));
@@ -472,7 +470,7 @@ it.effect(
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
       assert.deepEqual(r.transcriptReads, [ABC]);
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       assert.equal(r.model.requests.length, 4);
       const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
@@ -486,7 +484,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const denied = yield* rig({ policy: NO_TRANSCRIPT_POLICY });
-      denied.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* denied.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       denied.model.answer(plan(TRANSCRIPT_OF_ABC, MEMORY_SEARCH));
       yield* drained;
@@ -499,7 +497,7 @@ it.effect(
       );
 
       const nothing = yield* rig({ policy: NO_READS_POLICY });
-      nothing.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* nothing.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       assert.equal(nothing.model.requests.length, 0);
       const empty = yield* nothing.prefetch.take(ASK_POLICY, new AbortController().signal);
@@ -520,7 +518,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       r.model.answer(plan(TRANSCRIPT_OF_ABC, MEMORY_SEARCH));
       yield* drained;
@@ -533,7 +531,7 @@ it.effect(
 
       const refused = yield* rig({ memory: emptyNotebook() });
       refused.transcriptStatus.value = ACTION_RESULT_STATUS.REJECTED;
-      refused.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* refused.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       refused.model.answer(plan(TRANSCRIPT_OF_ABC, MEMORY_SEARCH));
       yield* drained;
@@ -550,17 +548,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const r = yield* rig();
-      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       r.model.answer(failedAnswer("upstream"));
       yield* drained;
       const failed = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
       assert.equal(failed.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
-      r.prefetch.anticipate(anticipation("what is def doing"));
+      yield* r.prefetch.anticipate(anticipation("what is def doing"));
       yield* drained;
       r.model.answer(answered([message("no call")]));
       yield* drained;
-      r.prefetch.anticipate(anticipation("what is ghi doing"));
+      yield* r.prefetch.anticipate(anticipation("what is ghi doing"));
       yield* drained;
       r.model.answer(plan({ kind: PREFETCH_READ_KIND.TRANSCRIPT, session: 3 }));
       yield* drained;
@@ -575,7 +573,7 @@ it.effect(
       );
 
       const unavailable = yield* rig();
-      unavailable.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* unavailable.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
       unavailable.model.answer({
         outcome: MODEL_RESPONSE_OUTCOME.FAILED,
@@ -583,7 +581,7 @@ it.effect(
         reason: "no prefetch",
       });
       yield* drained;
-      unavailable.prefetch.anticipate(anticipation("what is def doing"));
+      yield* unavailable.prefetch.anticipate(anticipation("what is def doing"));
       yield* drained;
       assert.equal(unavailable.model.requests.length, 1);
       assert.deepEqual(
@@ -596,13 +594,13 @@ it.effect(
 it.effect("a drop abandons the plan under way and its reads, and forgets what was held", () =>
   Effect.gen(function* () {
     const r = yield* rig();
-    r.prefetch.anticipate(anticipation("what is abc doing"));
+    yield* r.prefetch.anticipate(anticipation("what is abc doing"));
     yield* drained;
     r.prefetch.drop();
     assert.equal(r.model.requests[0]?.options.signal?.aborted, true);
     const taken = yield* r.prefetch.take(ASK_POLICY, new AbortController().signal);
     assert.equal(taken.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
-    r.prefetch.anticipate(anticipation("what is abc doing"));
+    yield* r.prefetch.anticipate(anticipation("what is abc doing"));
     yield* drained;
     r.model.answer(plan(TRANSCRIPT_OF_ABC));
     yield* drained;

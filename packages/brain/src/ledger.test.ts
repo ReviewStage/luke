@@ -83,13 +83,13 @@ it.effect(
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
       h.repository.refuse();
-      assert.deepEqual(yield* Effect.promise(() => submit(h, "send")), {
+      assert.deepEqual(yield* submit(h, "send"), {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
       });
       assert.equal(h.agent.requests().length, 0);
       h.repository.accept();
-      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "send")));
+      const runId = acceptedRunId(yield* submit(h, "send"));
       yield* Effect.promise(() => settle());
       h.repository.refuse();
       gated.open();
@@ -123,7 +123,7 @@ it.effect(
         answered([messageAction("call_1", "one"), messageAction("call_2", "two")]),
         answered([message("Sent.")]),
       );
-      const record = yield* Effect.promise(() => ask(h, "send two"));
+      const record = yield* ask(h, "send two");
       assert.equal(acted, 1);
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
       assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
@@ -144,7 +144,7 @@ it.effect(
       const held = heldPerformer();
       const h = yield* effectHarness({ actions: held.actions });
       h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
-      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "send")));
+      const runId = acceptedRunId(yield* submit(h, "send"));
       yield* Effect.promise(() => settle());
       // The process dies here: the action has started, its result never recorded.
       const stored = h.repository.state;
@@ -153,7 +153,7 @@ it.effect(
       assert.equal(functionOutputs(stored?.items ?? []).length, 0);
 
       const relaunched = yield* effectHarness({}, fakeBrainStateRepository(stored));
-      yield* Effect.promise(() => relaunched.agent.ready());
+      yield* relaunched.agent.ready();
       const record = relaunched.agent.request(runId);
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
       assert.equal(relaunched.performed.length, 0);
@@ -163,7 +163,7 @@ it.effect(
       assert.equal(paired.length, 1);
       // The next ask opens on a memory with no dangling call, and runs no old act.
       relaunched.client.answers.push(answered([message("Hello.")]));
-      const next = yield* Effect.promise(() => ask(relaunched, "hi"));
+      const next = yield* ask(relaunched, "hi");
       assert.equal(next?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       assert.equal(relaunched.performed.length, 0);
       assert.equal(
@@ -175,10 +175,10 @@ it.effect(
       );
       // A wait on the interrupted run answers at once; a wait on an unknown run answers nothing.
       assert.equal(
-        (yield* Effect.promise(() => relaunched.agent.waitAsk(runId, 1)))?.status,
+        (yield* relaunched.agent.waitAsk(runId, 1))?.status,
         BRAIN_REQUEST_STATUS.INTERRUPTED,
       );
-      assert.equal(yield* Effect.promise(() => relaunched.agent.waitAsk("never", 1)), undefined);
+      assert.equal(yield* relaunched.agent.waitAsk("never", 1), undefined);
     }),
 );
 
@@ -187,20 +187,22 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      yield* Effect.promise(() => h.agent.ready());
+      yield* h.agent.ready();
       const releaseWrite = h.repository.hold();
       h.client.answers.push(answered([message("once")]));
 
-      const first = submit(h, "send", "sub-1");
+      const first = yield* Effect.fork(submit(h, "send", "sub-1"));
       yield* Effect.promise(() => settle());
-      const retry = submit(h, "send", "sub-1");
-      const other = submit(h, "send", "sub-1").then(() => h.agent.requests().length);
+      const retry = yield* Effect.fork(submit(h, "send", "sub-1"));
+      const other = yield* Effect.fork(
+        Effect.map(submit(h, "send", "sub-1"), () => h.agent.requests().length),
+      );
       yield* Effect.promise(() => settle());
       // Nobody has been told anything yet, and no run stands to be found.
       assert.equal(h.agent.requests().length, 0);
       // The write refuses: every caller hears the same refusal, and no run remains.
       releaseWrite?.(false);
-      const answers = yield* Effect.promise(() => Promise.all([first, retry]));
+      const answers = yield* Fiber.joinAll([first, retry]);
       assert.deepEqual(answers, [
         {
           outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
@@ -211,31 +213,27 @@ it.effect(
           reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
         },
       ]);
-      assert.equal(yield* Effect.promise(() => other), 0);
+      assert.equal(yield* Fiber.join(other), 0);
       assert.equal(h.agent.requests().length, 0);
 
       // The write lands: both callers hear the one run, which executes once.
-      const accepted = yield* Effect.promise(() =>
-        Promise.all([submit(h, "send", "sub-1"), submit(h, "send", "sub-1")]),
-      );
+      const accepted = yield* Effect.all([submit(h, "send", "sub-1"), submit(h, "send", "sub-1")]);
       assert.equal(accepted[0]?.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       assert.deepEqual(accepted[0], accepted[1]);
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 1);
       assert.equal(h.agent.requests().length, 1);
       // The same id with other words, or another origin, is a conflict, not a retry.
-      assert.deepEqual(yield* Effect.promise(() => submit(h, "send something else", "sub-1")), {
+      assert.deepEqual(yield* submit(h, "send something else", "sub-1"), {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.CONFLICT,
       });
       assert.equal(
-        (yield* Effect.promise(() =>
-          h.agent.submitAsk({
-            submissionId: "sub-1",
-            question: "send",
-            origin: BRAIN_REQUEST_ORIGIN.CHILD,
-          }),
-        )).outcome,
+        (yield* h.agent.submitAsk({
+          submissionId: "sub-1",
+          question: "send",
+          origin: BRAIN_REQUEST_ORIGIN.CHILD,
+        })).outcome,
         BRAIN_SUBMISSION_OUTCOME.REJECTED,
       );
     }),
@@ -244,14 +242,14 @@ it.effect(
 it.effect("a stop while an acceptance is being written interrupts the run it accepted", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
-    yield* Effect.promise(() => h.agent.ready());
+    yield* h.agent.ready();
     const releaseWrite = h.repository.hold();
-    const pending = submit(h, "send", "sub-1");
+    const pending = yield* Effect.fork(submit(h, "send", "sub-1"));
     yield* Effect.promise(() => settle());
-    const stopping = h.agent.stop();
+    const stopping = yield* Effect.fork(h.agent.stop());
     releaseWrite?.(true);
-    const accepted = yield* Effect.promise(() => pending);
-    yield* Effect.promise(() => stopping);
+    const accepted = yield* Fiber.join(pending);
+    yield* Fiber.join(stopping);
     assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
     yield* Effect.promise(() => settle());
     const record = h.agent.requests()[0];
@@ -264,14 +262,14 @@ it.effect("a run's history mark is kept once and survives a relaunch", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
     h.client.answers.push(answered([message("Hi.")]));
-    const record = yield* Effect.promise(() => ask(h, "hello"));
+    const record = yield* ask(h, "hello");
     assert.ok(record);
     assert.equal(record.conversationRecordedAt, undefined);
-    yield* Effect.promise(() => h.agent.markConversationRecorded(record.runId, NOW + 5));
-    yield* Effect.promise(() => h.agent.markConversationRecorded(record.runId, NOW + 9));
+    yield* h.agent.markConversationRecorded(record.runId, NOW + 5);
+    yield* h.agent.markConversationRecorded(record.runId, NOW + 9);
     assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, NOW + 5);
     const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
-    yield* Effect.promise(() => relaunched.agent.ready());
+    yield* relaunched.agent.ready();
     assert.equal(relaunched.agent.request(record.runId)?.conversationRecordedAt, NOW + 5);
   }),
 );
@@ -281,22 +279,23 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      yield* Effect.promise(() => h.agent.ready());
+      yield* h.agent.ready();
       const releaseWrite = h.repository.hold();
-      const pending = submit(h, "send", "sub-1");
+      const pending = yield* Effect.fork(submit(h, "send", "sub-1"));
       yield* Effect.promise(() => settle());
       let stopped = false;
-      const stopping = h.agent.stop().then(() => {
-        stopped = true;
-      });
+      const stopping = yield* Effect.fork(
+        Effect.flatMap(h.agent.stop(), () =>
+          Effect.sync(() => {
+            stopped = true;
+          }),
+        ),
+      );
       yield* Effect.promise(() => settle());
       assert.equal(stopped, false, "stop waits for the acceptance to settle");
       releaseWrite?.(true);
-      yield* Effect.promise(() => stopping);
-      assert.equal(
-        (yield* Effect.promise(() => pending)).outcome,
-        BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
-      );
+      yield* Fiber.join(stopping);
+      assert.equal((yield* Fiber.join(pending)).outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       assert.equal(h.agent.requests()[0]?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
       assert.equal(h.client.inputs.length, 0);
 
@@ -305,7 +304,7 @@ it.effect(
       const successorModel = adapterOf(new FakeClient());
       const successorRuntime = yield* Effect.runtime<never>();
       const successorTimers = timerSeamFromRuntime(successorRuntime);
-      const successor = new BrainAgent({
+      const successor = yield* BrainAgent.make({
         conversationId: MAIN_SESSION_KEY,
         runtime: toolLoopRuntimeOver(successorModel),
         observes: { kind: LOOK_SUBJECT.NONE },
@@ -324,19 +323,13 @@ it.effect(
         schedule: successorTimers.schedule,
         cancel: successorTimers.cancel,
       });
-      yield* Effect.promise(() => successor.ready());
+      yield* successor.ready();
       const runId = h.agent.requests()[0]?.runId ?? "";
-      assert.equal(
-        yield* Effect.promise(() => h.agent.markConversationRecorded(runId, NOW + 1)),
-        false,
-      );
+      assert.equal(yield* h.agent.markConversationRecorded(runId, NOW + 1), false);
       assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, undefined);
-      assert.equal(
-        yield* Effect.promise(() => successor.markConversationRecorded(runId, NOW + 1)),
-        true,
-      );
+      assert.equal(yield* successor.markConversationRecorded(runId, NOW + 1), true);
       assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 1);
-      yield* Effect.promise(() => successor.stop());
+      yield* successor.stop();
     }),
 );
 
@@ -360,7 +353,7 @@ it.effect(
         quietUntil: () => undefined,
       };
       const h = yield* effectHarness({ client });
-      yield* Effect.promise(() => submit(h, "send"));
+      yield* submit(h, "send");
       yield* Effect.promise(() => settle());
       assert.ok(release, "the second model call is held");
       const copy = h.repository.state;
@@ -368,14 +361,14 @@ it.effect(
       assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
       assert.equal(stored?.requests[0]?.performedActions, 1);
       const relaunched = yield* effectHarness({}, fakeBrainStateRepository(copy));
-      yield* Effect.promise(() => relaunched.agent.ready());
+      yield* relaunched.agent.ready();
       const record = relaunched.agent.requests()[0];
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
       assert.equal(record?.performedActions, 1);
       assert.equal(record?.unknownActions, 0);
       // A second relaunch of the recovered file says the same.
       const again = yield* effectHarness({}, fakeBrainStateRepository(relaunched.repository.state));
-      yield* Effect.promise(() => again.agent.ready());
+      yield* again.agent.ready();
       assert.equal(again.agent.requests()[0]?.performedActions, 1);
 
       // One explicitly unknown action, one confirmed refusal, one started-unanswered
@@ -399,13 +392,13 @@ it.effect(
           messageAction("m3", "three"),
         ]),
       );
-      yield* Effect.promise(() => submit(mixed, "send three"));
+      yield* submit(mixed, "send three");
       yield* Effect.promise(() => settle());
       const midway = mixed.repository.state;
       assert.equal(midway?.requests[0]?.unknownActions, 1);
       assert.equal(midway?.journal.length, 3);
       const recovered = yield* effectHarness({}, fakeBrainStateRepository(mixed.repository.state));
-      yield* Effect.promise(() => recovered.agent.ready());
+      yield* recovered.agent.ready();
       const mixedRecord = recovered.agent.requests()[0];
       assert.equal(mixedRecord?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
       assert.equal(mixedRecord?.performedActions, 0);
@@ -419,27 +412,21 @@ it.effect(
     Effect.gen(function* () {
       const h = yield* effectHarness();
       h.client.answers.push(answered([message("Hi.")]));
-      const record = yield* Effect.promise(() => ask(h, "hello"));
+      const record = yield* ask(h, "hello");
       assert.ok(record);
       h.repository.refuse();
-      assert.equal(
-        yield* Effect.promise(() => h.agent.markConversationRecorded(record.runId, NOW + 5)),
-        false,
-      );
+      assert.equal(yield* h.agent.markConversationRecorded(record.runId, NOW + 5), false);
       assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
       h.repository.accept();
-      assert.equal(
-        yield* Effect.promise(() => h.agent.markConversationRecorded(record.runId, NOW + 6)),
-        true,
-      );
+      assert.equal(yield* h.agent.markConversationRecorded(record.runId, NOW + 6), true);
       assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, NOW + 6);
       assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 6);
       // The same terms for the ask's own mark.
       h.repository.refuse();
-      assert.equal(yield* Effect.promise(() => h.agent.markAskRecorded(record.runId, NOW)), false);
+      assert.equal(yield* h.agent.markAskRecorded(record.runId, NOW), false);
       assert.equal(h.agent.request(record.runId)?.askRecordedAt, undefined);
       h.repository.accept();
-      assert.equal(yield* Effect.promise(() => h.agent.markAskRecorded(record.runId, NOW)), true);
+      assert.equal(yield* h.agent.markAskRecorded(record.runId, NOW), true);
     }),
 );
 
@@ -449,38 +436,37 @@ it.effect(
     Effect.gen(function* () {
       const h = yield* effectHarness();
       h.client.answers.push(answered([message("Hi.")]));
-      const record = yield* Effect.promise(() => ask(h, "hello"));
+      const record = yield* ask(h, "hello");
       assert.ok(record);
       const releaseWrite = h.repository.hold();
-      const first = h.agent.markConversationRecorded(record.runId, NOW + 5);
+      const first = yield* Effect.fork(h.agent.markConversationRecorded(record.runId, NOW + 5));
       yield* Effect.promise(() => settle());
       // Nothing reads the mark while the write is out, and a second caller waits
       // on the same write rather than being told yes.
       assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
       let secondAnswered = false;
-      const second = h.agent.markConversationRecorded(record.runId, NOW + 7).then((written) => {
-        secondAnswered = true;
-        return written;
-      });
+      const second = yield* Effect.fork(
+        Effect.map(h.agent.markConversationRecorded(record.runId, NOW + 7), (written) => {
+          secondAnswered = true;
+          return written;
+        }),
+      );
       // The ask marker is another field: it stages its own write and touches
       // nothing of the history marker's.
-      const other = h.agent.markAskRecorded(record.runId, NOW);
+      const other = yield* Effect.fork(h.agent.markAskRecorded(record.runId, NOW));
       yield* Effect.promise(() => settle());
       assert.equal(secondAnswered, false);
       releaseWrite(false);
-      assert.deepEqual(yield* Effect.promise(() => Promise.all([first, second])), [false, false]);
+      assert.deepEqual(yield* Fiber.joinAll([first, second]), [false, false]);
       assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
       assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, undefined);
       // The ask marker's write queued behind the held one and landed on its own
       // terms once storage answered again: one marker's refusal is not the other's.
-      assert.equal(yield* Effect.promise(() => other), true);
+      assert.equal(yield* Fiber.join(other), true);
       assert.equal(h.agent.request(record.runId)?.askRecordedAt, NOW);
       // A retry after storage recovers writes the mark, and lands beside fields
       // that advanced meanwhile rather than over them.
-      assert.equal(
-        yield* Effect.promise(() => h.agent.markConversationRecorded(record.runId, NOW + 9)),
-        true,
-      );
+      assert.equal(yield* h.agent.markConversationRecorded(record.runId, NOW + 9), true);
       const marked = h.agent.request(record.runId);
       assert.equal(marked?.conversationRecordedAt, NOW + 9);
       assert.equal(marked?.askRecordedAt, NOW);
@@ -496,8 +482,8 @@ it.effect("a run's success is seen by no reader before the write that keeps it h
     inner.answers.push(answered([message("hi")]));
     const gated = gatedClient(inner);
     const h = yield* effectHarness({ client: gated.client });
-    yield* Effect.promise(() => h.agent.ready());
-    const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "hello")));
+    yield* h.agent.ready();
+    const runId = acceptedRunId(yield* submit(h, "hello"));
     const seen: BrainRequestRecord["status"][] = [];
     h.agent.subscribe((records) => {
       const record = records.find((entry) => entry.runId === runId);
@@ -521,10 +507,10 @@ it.effect("a run's success is seen by no reader before the write that keeps it h
     // Every public reader still sees the run under way.
     assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
     assert.equal(h.agent.requests()[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
-    const waited = h.agent.waitAsk(runId, 1_000);
+    const waited = yield* Effect.fork(h.agent.waitAsk(runId, 1_000));
     yield* Effect.promise(() => settle());
     yield* advanceHarness(NOW + 1_000);
-    assert.equal((yield* Effect.promise(() => waited))?.status, BRAIN_REQUEST_STATUS.RUNNING);
+    assert.equal((yield* Fiber.join(waited))?.status, BRAIN_REQUEST_STATUS.RUNNING);
     assert.ok(!seen.includes(BRAIN_REQUEST_STATUS.SUCCEEDED));
     assert.equal(h.repository.state?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
     // The write fails: the run ends as the persistence failure it is, the reply
@@ -545,9 +531,9 @@ it.effect("a run's success is seen by no reader before the write that keeps it h
     okInner.answers.push(answered([message("hi")]));
     const okGate = gatedClient(okInner);
     const ok = yield* effectHarness({ client: okGate.client });
-    yield* Effect.promise(() => ok.agent.ready());
+    yield* ok.agent.ready();
     const okLanded = ok.repository.save;
-    const okRun = acceptedRunId(yield* Effect.promise(() => submit(ok, "hello")));
+    const okRun = acceptedRunId(yield* submit(ok, "hello"));
     yield* Effect.promise(() => settle());
     let okRelease: (() => void) | undefined;
     let okWrites = 0;
@@ -572,13 +558,13 @@ it.effect("a run's success is seen by no reader before the write that keeps it h
     darkInner.answers.push(answered([message("hi")]));
     const darkGate = gatedClient(darkInner);
     const dark = yield* effectHarness({ client: darkGate.client });
-    yield* Effect.promise(() => dark.agent.ready());
-    const darkRun = acceptedRunId(yield* Effect.promise(() => submit(dark, "hello")));
+    yield* dark.agent.ready();
+    const darkRun = acceptedRunId(yield* submit(dark, "hello"));
     yield* Effect.promise(() => settle());
     dark.repository.refuse();
     darkGate.open();
     yield* Effect.promise(() => settle());
-    const darkEnd = yield* Effect.promise(() => dark.agent.waitAsk(darkRun, 1));
+    const darkEnd = yield* dark.agent.waitAsk(darkRun, 1);
     assert.equal(darkEnd?.status, BRAIN_REQUEST_STATUS.FAILED);
     assert.equal(darkEnd?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
   }),
@@ -590,13 +576,14 @@ it.effect(
     Effect.gen(function* () {
       for (const conversationFirst of [true, false]) {
         const h = yield* effectHarness();
-        const runId = yield* Effect.promise(() => completedRun(h));
+        const runId = yield* completedRun(h);
         const marks = [
           () => h.agent.markConversationRecorded(runId, NOW + 1),
           () => h.agent.markAskRecorded(runId, NOW),
         ];
-        const results = yield* Effect.promise(() =>
-          Promise.all(conversationFirst ? marks.map((m) => m()) : marks.reverse().map((m) => m())),
+        const results = yield* Effect.all(
+          conversationFirst ? marks.map((m) => m()) : marks.reverse().map((m) => m()),
+          { concurrency: "unbounded" },
         );
         assert.deepEqual(results, [true, true]);
         const live = h.agent.request(runId);
@@ -607,15 +594,16 @@ it.effect(
       }
       // Two runs marked at once: each keeps its own.
       const h = yield* effectHarness();
-      const first = yield* Effect.promise(() => completedRun(h, "one"));
-      const second = yield* Effect.promise(() => completedRun(h, "two"));
+      const first = yield* completedRun(h, "one");
+      const second = yield* completedRun(h, "two");
       assert.deepEqual(
-        yield* Effect.promise(() =>
-          Promise.all([
+        yield* Effect.all(
+          [
             h.agent.markConversationRecorded(first, NOW + 1),
             h.agent.markConversationRecorded(second, NOW + 2),
             h.agent.markAskRecorded(second, NOW),
-          ]),
+          ],
+          { concurrency: "unbounded" },
         ),
         [true, true, true],
       );
@@ -633,9 +621,9 @@ it.effect("an ordinary observation checkpoint composed behind a held mark keeps 
         sessions: [session(ABC.providerSessionId)],
       }),
     });
-    const runId = yield* Effect.promise(() => completedRun(h));
+    const runId = yield* completedRun(h);
     const releaseWrite = h.repository.hold();
-    const marking = h.agent.markConversationRecorded(runId, NOW + 1);
+    const marking = yield* Effect.fork(h.agent.markConversationRecorded(runId, NOW + 1));
     yield* Effect.promise(() => settle());
     // Periodic observation races the publication: its inference and checkpoint
     // queue behind the held mark write.
@@ -646,7 +634,7 @@ it.effect("an ordinary observation checkpoint composed behind a held mark keeps 
     yield* Effect.promise(() => settle());
     releaseWrite(true);
     yield* Fiber.join(looking);
-    assert.equal(yield* Effect.promise(() => marking), true);
+    assert.equal(yield* Fiber.join(marking), true);
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 2);
     assert.equal(h.agent.request(runId)?.conversationRecordedAt, NOW + 1);
@@ -663,20 +651,21 @@ it.effect(
       inner.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
-      const first = acceptedRunId(yield* Effect.promise(() => submit(h, "send")));
+      const first = acceptedRunId(yield* submit(h, "send"));
       yield* Effect.promise(() => settle());
       gated.open();
       // While the first run's end and marks are being saved, a second ask is
       // accepted and an observation wakes: every save composes on the last.
-      const [second, end, marked, askMarked] = yield* Effect.promise(() =>
-        Promise.all([
+      const [second, end, marked, askMarked] = yield* Effect.all(
+        [
           submit(h, "second"),
           h.agent.waitAsk(first, 60_000),
-          h.agent
-            .waitAsk(first, 60_000)
-            .then(() => h.agent.markConversationRecorded(first, NOW + 9)),
+          Effect.flatMap(h.agent.waitAsk(first, 60_000), () =>
+            h.agent.markConversationRecorded(first, NOW + 9),
+          ),
           h.agent.markAskRecorded(first, NOW),
-        ]),
+        ],
+        { concurrency: "unbounded" },
       );
       yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
@@ -704,7 +693,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const runId = yield* Effect.promise(() => completedRun(h));
+      const runId = yield* completedRun(h);
       const landed = h.repository.save;
       let writes = 0;
       h.repository.save = (state, transcript) => {
@@ -712,11 +701,9 @@ it.effect(
         // The second of the overlapping saves is refused.
         return writes === 2 ? false : landed(state, transcript);
       };
-      const results = yield* Effect.promise(() =>
-        Promise.all([
-          h.agent.markConversationRecorded(runId, NOW + 1),
-          h.agent.markAskRecorded(runId, NOW),
-        ]),
+      const results = yield* Effect.all(
+        [h.agent.markConversationRecorded(runId, NOW + 1), h.agent.markAskRecorded(runId, NOW)],
+        { concurrency: "unbounded" },
       );
       assert.deepEqual(results, [true, false]);
       h.repository.save = landed;
@@ -725,7 +712,7 @@ it.effect(
       assert.equal(live?.conversationRecordedAt, NOW + 1);
       assert.equal(live?.askRecordedAt, undefined);
       assert.deepEqual(stored, live);
-      assert.equal(yield* Effect.promise(() => h.agent.markAskRecorded(runId, NOW)), true);
+      assert.equal(yield* h.agent.markAskRecorded(runId, NOW), true);
       live = h.agent.request(runId);
       stored = h.repository.state?.requests[0];
       assert.equal(live?.askRecordedAt, NOW);
@@ -739,13 +726,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const a = yield* Effect.promise(() => completedRun(h, "s"));
+      const a = yield* completedRun(h, "s");
       const held = holdNextWrite(h.repository);
-      const firstMark = h.agent.markConversationRecorded(a, NOW + 1);
+      const firstMark = yield* Effect.fork(h.agent.markConversationRecorded(a, NOW + 1));
       yield* Effect.promise(() => settle());
-      const secondMark = h.agent.markAskRecorded(a, NOW);
+      const secondMark = yield* Effect.fork(h.agent.markAskRecorded(a, NOW));
       // B is provisional while its own acceptance write waits behind the marks.
-      const rejectedB = submit(h, "ASK_THAT_WAS_REJECTED", "rejected-b");
+      const rejectedB = yield* Effect.fork(submit(h, "ASK_THAT_WAS_REJECTED", "rejected-b"));
       yield* Effect.promise(() => settle());
       // Behind the held write: A's second mark lands, B's own write is refused.
       const landed = h.repository.save;
@@ -755,9 +742,9 @@ it.effect(
         return later === 2 ? false : landed(state, transcript);
       };
       held.release(true);
-      const [first, second, b] = yield* Effect.promise(() =>
-        Promise.all([firstMark, secondMark, rejectedB]),
-      );
+      const first = yield* Fiber.join(firstMark);
+      const second = yield* Fiber.join(secondMark);
+      const b = yield* Fiber.join(rejectedB);
       assert.deepEqual([first, second], [true, true]);
       assert.deepEqual(b, {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
@@ -776,7 +763,7 @@ it.effect(
       assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 1);
       assert.equal(h.repository.state?.requests[0]?.askRecordedAt, NOW);
       const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
-      yield* Effect.promise(() => relaunched.agent.ready());
+      yield* relaunched.agent.ready();
       assert.deepEqual(
         relaunched.agent.requests().map((r) => r.submissionId),
         [`submission-${submissionsIssued() - 3}`].map(
@@ -786,13 +773,11 @@ it.effect(
       assert.equal(relaunched.agent.requests().length, 1);
       // The refused submission retried lands as a fresh acceptance, once.
       relaunched.client.answers.push(answered([message("now")]));
-      const retried = yield* Effect.promise(() =>
-        relaunched.agent.submitAsk({
-          submissionId: "rejected-b",
-          question: "ASK_THAT_WAS_REJECTED",
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        }),
-      );
+      const retried = yield* relaunched.agent.submitAsk({
+        submissionId: "rejected-b",
+        question: "ASK_THAT_WAS_REJECTED",
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      });
       assert.equal(retried.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       yield* Effect.promise(() => settle());
       assert.equal(relaunched.repository.state?.requests.length, 2);
@@ -804,7 +789,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      yield* Effect.promise(() => h.agent.ready());
+      yield* h.agent.ready();
       const landed = h.repository.save;
       let writes = 0;
       h.repository.save = (state, transcript) => {
@@ -812,8 +797,9 @@ it.effect(
         return writes === 2 ? false : landed(state, transcript);
       };
       h.client.answers.push(answered([message("one")]), answered([message("two")]));
-      const [first, second] = yield* Effect.promise(() =>
-        Promise.all([submit(h, "first", "a"), submit(h, "second", "b")]),
+      const [first, second] = yield* Effect.all(
+        [submit(h, "first", "a"), submit(h, "second", "b")],
+        { concurrency: "unbounded" },
       );
       assert.equal(first.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       assert.deepEqual(second, {
@@ -831,10 +817,7 @@ it.effect(
         ["a"],
       );
       // The refused one retried is a fresh run, and the accepted one ran once.
-      assert.equal(
-        (yield* Effect.promise(() => submit(h, "second", "b"))).outcome,
-        BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
-      );
+      assert.equal((yield* submit(h, "second", "b")).outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 2);
       assert.deepEqual(
@@ -853,11 +836,11 @@ it.effect(
       const h = yield* effectHarness({ client: gated.client });
       // A completed run, answered before the gate closes on the observation.
       gated.open();
-      const a = yield* Effect.promise(() => completedRun(h, "hello"));
+      const a = yield* completedRun(h, "hello");
       const regate = gatedClient(inner);
       // Swap the client for the observation only.
       const observing = yield* effectHarness({ client: regate.client }, h.repository);
-      yield* Effect.promise(() => observing.agent.ready());
+      yield* observing.agent.ready();
       // The pending wake rides in the hold release's turn: one observation that
       // reads a real delta, moves a cursor, and then waits on the model.
       yield* observing.agent.wake([edge(ABC)]);
@@ -870,12 +853,9 @@ it.effect(
       assert.equal(before?.inbox.length, 1);
       assert.deepEqual(before?.captureCursors, { [claude.id]: { abc: "abc-cursor" } });
       // Unrelated publication and acceptance land while the observation is out.
-      assert.equal(
-        yield* Effect.promise(() => observing.agent.markConversationRecorded(a, NOW + 1)),
-        true,
-      );
+      assert.equal(yield* observing.agent.markConversationRecorded(a, NOW + 1), true);
       inner.answers.push(answered([message("later")]));
-      const accepted = yield* Effect.promise(() => submit(observing, "another ask"));
+      const accepted = yield* submit(observing, "another ask");
       assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       const during = observing.repository.state;
       assert.deepEqual(during?.cursors, before?.cursors);
@@ -885,7 +865,7 @@ it.effect(
         {},
         fakeBrainStateRepository(observing.repository.state),
       );
-      yield* Effect.promise(() => crashed.agent.ready());
+      yield* crashed.agent.ready();
       assert.deepEqual(crashed.repository.state?.cursors, before?.cursors);
       // The observation fails: memory and the consumed cursor never advanced,
       // and the captured entry stands for the next turn.
@@ -898,10 +878,7 @@ it.effect(
       const after = observing.repository.state;
       assert.equal(after?.inbox.length, 0);
       assert.equal(after?.cursors["claude-code"]?.abc, "abc-cursor");
-      assert.equal(
-        (yield* Effect.promise(() => observing.agent.waitAsk(acceptedRunId(accepted), 1)))?.text,
-        "later",
-      );
+      assert.equal((yield* observing.agent.waitAsk(acceptedRunId(accepted), 1))?.text, "later");
       assert.deepEqual(
         observing.sinceReads.map((read) => read.cursor),
         [undefined],
@@ -917,13 +894,13 @@ it.effect(
       const h = yield* effectHarness({
         actions: fakeActionPerformer().actions,
       });
-      yield* Effect.promise(() => h.agent.ready());
+      yield* h.agent.ready();
       h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
       const landed = h.repository.save;
       h.repository.save = (state, transcript) =>
         CARRIES_A_RUNNING_RUN(state) ? false : landed(state, transcript);
-      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "send")));
-      const record = yield* Effect.promise(() => h.agent.waitAsk(runId, 60_000));
+      const runId = acceptedRunId(yield* submit(h, "send"));
+      const record = yield* h.agent.waitAsk(runId, 60_000);
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
       assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
       assert.equal(record?.performedActions, 0);
@@ -932,7 +909,7 @@ it.effect(
       assert.deepEqual(h.repository.state?.requests[0], record);
       assert.equal(h.agent.requests().length, 1);
       const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
-      yield* Effect.promise(() => relaunched.agent.ready());
+      yield* relaunched.agent.ready();
       assert.deepEqual(relaunched.agent.requests()[0], record);
     }),
 );
@@ -943,16 +920,16 @@ it.effect(
     Effect.gen(function* () {
       // Cancel during the held start write.
       const cancelling = yield* effectHarness();
-      yield* Effect.promise(() => cancelling.agent.ready());
+      yield* cancelling.agent.ready();
       cancelling.client.answers.push(answered([messageAction("call_1")]));
       const heldStart = holdWriteMatching(cancelling.repository, CARRIES_A_RUNNING_RUN);
-      const runId = acceptedRunId(yield* Effect.promise(() => submit(cancelling, "send")));
+      const runId = acceptedRunId(yield* submit(cancelling, "send"));
       yield* Effect.promise(() => settle());
       assert.equal(heldStart.held(), true);
-      const cancelled = cancelling.agent.cancelAsk(runId);
+      const cancelled = yield* Effect.fork(cancelling.agent.cancelAsk(runId));
       yield* Effect.promise(() => settle());
       heldStart.release(true);
-      yield* Effect.promise(() => cancelled);
+      yield* Fiber.join(cancelled);
       yield* Effect.promise(() => settle());
       assert.equal(cancelling.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
       assert.equal(cancelling.client.inputs.length, 0);
@@ -961,15 +938,15 @@ it.effect(
 
       // Stop during a start that is then refused.
       const stopping = yield* effectHarness();
-      yield* Effect.promise(() => stopping.agent.ready());
+      yield* stopping.agent.ready();
       stopping.client.answers.push(answered([messageAction("call_1")]));
       const refusedStart = holdWriteMatching(stopping.repository, CARRIES_A_RUNNING_RUN);
-      const stopRun = acceptedRunId(yield* Effect.promise(() => submit(stopping, "send")));
+      const stopRun = acceptedRunId(yield* submit(stopping, "send"));
       yield* Effect.promise(() => settle());
       assert.equal(refusedStart.held(), true);
-      const stopped = stopping.agent.stop();
+      const stopped = yield* Effect.fork(stopping.agent.stop());
       refusedStart.release(false);
-      yield* Effect.promise(() => stopped);
+      yield* Fiber.join(stopped);
       assert.equal(stopping.agent.request(stopRun)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
       assert.equal(stopping.client.inputs.length, 0);
       assert.deepEqual(stopping.performed, []);
@@ -978,10 +955,10 @@ it.effect(
       // and a cancel over a dispatched act still waits to publish the counted end.
       const held = heldPerformer();
       const h = yield* effectHarness({ actions: held.actions });
-      yield* Effect.promise(() => h.agent.ready());
+      yield* h.agent.ready();
       h.client.answers.push(answered([messageAction("call_1")]));
       const start = holdWriteMatching(h.repository, CARRIES_A_RUNNING_RUN);
-      const live = acceptedRunId(yield* Effect.promise(() => submit(h, "send")));
+      const live = acceptedRunId(yield* submit(h, "send"));
       yield* Effect.promise(() => settle());
       assert.equal(start.held(), true);
       assert.equal(h.client.inputs.length, 0);
@@ -989,7 +966,7 @@ it.effect(
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 1);
       assert.equal(held.performed.length, 1);
-      const cancelledLate = yield* Effect.promise(() => h.agent.cancelAsk(live));
+      const cancelledLate = yield* h.agent.cancelAsk(live);
       assert.equal(cancelledLate?.status, BRAIN_REQUEST_STATUS.RUNNING);
       const seen: BrainRequestRecord[] = [];
       h.agent.subscribe((records) => {
@@ -1027,13 +1004,10 @@ it.effect(
           answered([messageAction(`call_${words}`)]),
           answered([message(words)]),
         );
-        const record = yield* Effect.promise(() => ask(h, words));
+        const record = yield* ask(h, words);
         assert.ok(record);
         runIds.push(record.runId);
-        assert.equal(
-          yield* Effect.promise(() => h.agent.markConversationRecorded(record.runId, NOW)),
-          true,
-        );
+        assert.equal(yield* h.agent.markConversationRecorded(record.runId, NOW), true);
       }
       // Retention ran inside the marks: the four oldest seeded runs went to make
       // room, in the file, in the live records, and in the journal the agent holds.
@@ -1076,9 +1050,9 @@ it.effect(
       });
       const h = yield* effectHarness({ store }, repository);
       h.client.answers.push(answered([message("a")]));
-      const first = yield* Effect.promise(() => ask(h, "a"));
+      const first = yield* ask(h, "a");
       assert.ok(first);
-      assert.deepEqual(yield* Effect.promise(() => submit(h, "b")), {
+      assert.deepEqual(yield* submit(h, "b"), {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.FULL,
       });
@@ -1087,12 +1061,9 @@ it.effect(
       h.agent.subscribe((records) => heard.push(records));
       // The oldest seeded run's end reaches the thread, and the room it held opens.
       const oldest = seeded[0]?.runId ?? "";
-      assert.equal(
-        yield* Effect.promise(() => h.agent.markConversationRecorded(oldest, NOW)),
-        true,
-      );
+      assert.equal(yield* h.agent.markConversationRecorded(oldest, NOW), true);
       h.client.answers.push(answered([message("b")]));
-      const second = yield* Effect.promise(() => ask(h, "b"));
+      const second = yield* ask(h, "b");
       assert.equal(second?.text, "b");
       // The subscriber heard the oldest run go when the second was admitted.
       assert.ok(heard.some((records) => !records.some((record) => record.runId === oldest)));
@@ -1110,7 +1081,7 @@ it.effect(
     Effect.gen(function* () {
       const repository = fakeBrainStateRepository();
       const h = yield* effectHarness({}, repository);
-      yield* Effect.promise(() => h.agent.ready());
+      yield* h.agent.ready();
       const landed = repository.save;
       let refused = 0;
       // Only the checkpoints carrying an action's recorded result are refused; the
@@ -1132,9 +1103,7 @@ it.effect(
         ]),
         answered([message("Sent.")]),
       );
-      const answer = yield* Effect.promise(() =>
-        ask(h, "tell the checkout agent to run the tests"),
-      );
+      const answer = yield* ask(h, "tell the checkout agent to run the tests");
       assert.ok(refused > 0);
       assert.equal(h.performed.length, 1);
       // The action's acceptance was observed, so its count stands, and the run ends
@@ -1161,7 +1130,7 @@ it.effect(
       // performs nothing again.
       repository.save = landed;
       const again = yield* effectHarness({}, repository);
-      yield* Effect.promise(() => again.agent.ready());
+      yield* again.agent.ready();
       const restored = again.agent.request(answer?.runId ?? "");
       assert.equal(restored?.status, BRAIN_REQUEST_STATUS.FAILED);
       assert.equal(restored?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);

@@ -35,7 +35,7 @@ it.effect(
       const runIds = yield* Effect.promise(() => c.submitMany(5));
       yield* waitFor(() => (c.repository.state?.requests.length ?? 0) === 5);
 
-      yield* Effect.promise(() => c.host.replace(() => undefined));
+      yield* Effect.promise(() => c.host.replace(() => Effect.succeed(undefined)));
       yield* waitFor(
         () =>
           c.host.current() === undefined &&
@@ -152,13 +152,11 @@ it.effect(
       // The retired agent takes nothing more and writes nothing more: its store
       // lease passed to the successor with the handoff.
       assert.equal(
-        (yield* Effect.promise(() =>
-          agent.submitAsk({
-            submissionId: "stale",
-            question: "old ask",
-            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-          }),
-        )).outcome,
+        (yield* agent.submitAsk({
+          submissionId: "stale",
+          question: "old ask",
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        })).outcome,
         "rejected",
       );
       assert.equal(c.store.holdsLease(agent.lease), false);
@@ -186,7 +184,7 @@ it.effect(
       const stored = c.repository.state;
       assert.equal(stored?.requests.length, 0);
       assert.equal(stored?.reset?.generationId, "gen-1");
-      yield* Effect.promise(() => c.host.replace(() => undefined));
+      yield* Effect.promise(() => c.host.replace(() => Effect.succeed(undefined)));
       yield* waitFor(
         () => c.host.current() === undefined && (c.repository.state?.requests.length ?? -1) === 0,
       );

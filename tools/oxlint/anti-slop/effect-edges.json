@@ -24,7 +24,6 @@
     "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",
     "packages/analytics/src/sender.ts",
-    "packages/brain/src/agent.ts",
     "packages/brain/src/effect/carry.ts",
     "packages/brain/src/generation.ts",
     "packages/brain/src/store/database.ts",
@@ -51,7 +50,6 @@
   ],
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
-    "packages/brain/src/effect/fork.ts",
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-live.ts",
     "packages/runtime/src/children.effect.ts",

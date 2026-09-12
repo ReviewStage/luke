@@ -156,45 +156,49 @@ function agentWith(
     createGenerationId: () => `gen-${Math.random().toString(36).slice(2)}`,
     now: () => NOW,
   });
-  const agent = new BrainAgent({
-    conversationId: MAIN_SESSION_KEY,
-    runtime,
-    observes: { kind: LOOK_SUBJECT.NONE },
-    prepareTurn: () => ({ prompt: "flush test", layers: {} }),
-    actions: fakeActionPerformer().actions,
-    roster: () => ({ text: "", identities: [] }),
-    standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
-    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
-    deliver: () => undefined,
-    store,
-    createRunId: () => `run-${ids++}`,
-    report: (line) => {
-      reports.push(line);
-    },
-    now: () => NOW,
-    memory: {
-      scope: SCOPE,
-      provider: {
-        recall: () => Effect.succeed({ messages: [] }),
-        capture: (turn) => Effect.promise(() => capture(turn)),
-        tools: [],
+  const agent = Effect.runSync(
+    BrainAgent.make({
+      conversationId: MAIN_SESSION_KEY,
+      runtime,
+      observes: { kind: LOOK_SUBJECT.NONE },
+      prepareTurn: () => ({ prompt: "flush test", layers: {} }),
+      actions: fakeActionPerformer().actions,
+      roster: () => ({ text: "", identities: [] }),
+      standingContext: () => "",
+      readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+      deliver: () => undefined,
+      store,
+      createRunId: () => `run-${ids++}`,
+      report: (line) => {
+        reports.push(line);
       },
-    },
-    ...(launch.marker ? { flushMarker: launch.marker } : undefined),
-  });
+      now: () => NOW,
+      memory: {
+        scope: SCOPE,
+        provider: {
+          recall: () => Effect.succeed({ messages: [] }),
+          capture: (turn) => Effect.promise(() => capture(turn)),
+          tools: [],
+        },
+      },
+      ...(launch.marker ? { flushMarker: launch.marker } : undefined),
+    }),
+  );
   return { agent, model, reports, store, repository };
 }
 
 async function ask(agent: BrainAgent, question: string) {
-  const accepted = await agent.submitAsk({
-    submissionId: `s-${question.length}-${Math.random()}`,
-    question,
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  const accepted = await Effect.runPromise(
+    agent.submitAsk({
+      submissionId: `s-${question.length}-${Math.random()}`,
+      question,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-  const record = await agent.waitAsk(runId, 60_000);
+  const record = await Effect.runPromise(agent.waitAsk(runId, 60_000));
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   await settle();
 }
@@ -222,13 +226,13 @@ test("a turn that leaves the context over the flush threshold runs the flush onc
     compactionCount: 0,
   });
   assert.ok(flush.items.length >= 2, "the copy carries the conversation so far");
-  const snapshot = await h.agent.contextSnapshot();
+  const snapshot = await Effect.runPromise(h.agent.contextSnapshot());
   assert.ok(snapshot);
   assert.notEqual(snapshot, flush.items, "a copy, never the engine's own array");
   await ask(h.agent, "another small ask");
   assert.equal(calls.length, 1, "already flushed in this compaction cycle");
   assert.equal(marker.markers.get(h.store.generationId() ?? ""), 0, "cycle zero is marked");
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });
 
 test("an interrupted or failed flush is reported and runs again at the next assessment; a completed one marks the cycle", async () => {
@@ -260,7 +264,7 @@ test("an interrupted or failed flush is reported and runs again at the next asse
   assert.equal(marker.markers.get(h.store.generationId() ?? ""), 0, "the completed flush marks it");
   await ask(h.agent, "once more");
   assert.equal(calls, 2);
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });
 
 /** Around 3,400 characters of items: past the 750-token flush threshold, under the 1,500-token compaction threshold. */
@@ -281,7 +285,7 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
   const generation = first.store.generationId();
   assert.ok(generation);
   assert.equal(marker.markers.get(generation), 0, "the marker names the generation and cycle zero");
-  await first.agent.stop();
+  await Effect.runPromise(first.agent.stop());
 
   // The relaunch: a new store over the same file, a new agent, the same marker table.
   const second = agentWith(hook, { repository: first.repository, marker });
@@ -294,11 +298,11 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
   await ask(second.agent, OVER_COMPACTION_THRESHOLD);
   assert.equal(second.store.current()?.compactionCount, 1, "the compaction was counted");
   assert.equal(calls, 1, "cycle zero flushed once; the fold itself is not a flush");
-  const folded = await second.agent.contextSnapshot();
+  const folded = await Effect.runPromise(second.agent.contextSnapshot());
   assert.ok(folded);
   assert.equal(folded[0]?.role, "assistant", "the summary stands first, in Luke's own voice");
   assert.equal(folded.length, 3, "the summary and the most recent exchange");
-  await second.agent.stop();
+  await Effect.runPromise(second.agent.stop());
 
   const third = agentWith(hook, { repository: first.repository, marker });
   assert.equal((await third.store.load()).compactionCount, 1, "the count rode on the envelope");
@@ -307,7 +311,7 @@ test("restart: a flushed cycle is not flushed again after a relaunch, and a comp
   assert.equal(marker.markers.get(generation), 1);
   await ask(third.agent, "again");
   assert.equal(calls, 2);
-  await third.agent.stop();
+  await Effect.runPromise(third.agent.stop());
 });
 
 test("reset: after Start fresh the new generation starts at cycle zero, reads no earlier marker, and flushes on its first due assessment", async () => {
@@ -337,7 +341,7 @@ test("reset: after Start fresh the new generation starts at cycle zero, reads no
     0,
     "the old lifetime's marker is untouched and unread",
   );
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });
 
 test("failed persistence: a marker write that fails is reported and leaves the cycle unflushed; a housekeeping turn that failed writes no marker", async () => {
@@ -374,7 +378,7 @@ test("failed persistence: a marker write that fails is reported and leaves the c
   await ask(h.agent, "next assessment");
   assert.equal(calls, 2, "the unflushed cycle is flushed again");
   assert.equal(marker.markers.get(h.store.generationId() ?? ""), 0, "the retry marked the cycle");
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 
   const failing = new FakeMarkerStore();
   outcome = { outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED, writes: 0, reason: "upstream down" };
@@ -382,7 +386,7 @@ test("failed persistence: a marker write that fails is reported and leaves the c
   await ask(f.agent, OVER_FLUSH_THRESHOLD);
   assert.equal(failing.writes, 0, "a turn that did not run to its end writes no marker");
   assert.equal(failing.markers.size, 0);
-  await f.agent.stop();
+  await Effect.runPromise(f.agent.stop());
 });
 
 test("a marker write still out when the turn is revoked is waited for at the next assessment: a write that lands late marks the cycle and the hook is not rerun", async () => {
@@ -408,17 +412,19 @@ test("a marker write still out when the turn is revoked is waited for at the nex
   assert.equal(calls, 1, "the flush ran in maintenance");
   assert.equal(marker.markers.size, 0, "its marker write is still out");
   // A new ask revokes the maintenance holding the write; the write lands only afterwards.
-  const accepted = await h.agent.submitAsk({
-    submissionId: "after-revoke",
-    question: "still over the threshold",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  const accepted = await Effect.runPromise(
+    h.agent.submitAsk({
+      submissionId: "after-revoke",
+      question: "still over the threshold",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(release);
   release();
   const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-  const record = await h.agent.waitAsk(runId, 60_000);
+  const record = await Effect.runPromise(h.agent.waitAsk(runId, 60_000));
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   await settle();
   const generation = h.store.generationId();
@@ -428,5 +434,5 @@ test("a marker write still out when the turn is revoked is waited for at the nex
   assert.equal(calls, 1, "the flushed cycle is not run again");
   await ask(h.agent, "another");
   assert.equal(calls, 1);
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });

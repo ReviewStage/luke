@@ -53,11 +53,11 @@ it.effect(
         prefetch: { model: adapterOf(planner), trace: (record) => prefetchTraces.push(record) },
       });
       planner.answers.push(plan(), answered([message("abc read whole.")]));
-      h.agent.anticipateAsk(anticipation);
+      yield* h.agent.anticipateAsk(anticipation);
       yield* Effect.promise(() => settle());
       assert.deepEqual(h.wholeReads, [ABC]);
       h.client.answers.push(answered([message("abc is running the tests.")]));
-      const record = yield* Effect.promise(() => ask(h, "what is abc doing"));
+      const record = yield* ask(h, "what is abc doing");
       assert.equal(record?.text, "abc is running the tests.");
       const input = h.client.inputs[0];
       assert.ok(input);
@@ -99,7 +99,7 @@ it.effect(
         prefetch: { model: adapterOf(planner), trace: (record) => prefetchTraces.push(record) },
       });
       planner.answers.push(plan(), answered([message("abc read whole.")]));
-      h.agent.anticipateAsk(anticipation);
+      yield* h.agent.anticipateAsk(anticipation);
       yield* Effect.promise(() => settle());
       h.client.answers.push(answered([message("nothing to announce")]));
       yield* h.agent.rosterLook();
@@ -110,12 +110,12 @@ it.effect(
       assert.equal(itemsOfType(look, RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length, 0);
       assert.equal(prefetchTraces.filter((record) => record.take !== undefined).length, 0);
       h.client.answers.push(answered([message("abc is running the tests.")]));
-      yield* Effect.promise(() => ask(h, "what is abc doing"));
+      yield* ask(h, "what is abc doing");
       const spoken = h.client.inputs[1];
       assert.ok(spoken);
       assert.equal(itemsOfType(spoken, RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length, 1);
       h.client.answers.push(answered([message("Nothing yet.")]));
-      yield* Effect.promise(() => ask(h, "anything need me"));
+      yield* ask(h, "anything need me");
       const plain = h.client.inputs[2];
       assert.ok(plain);
       // The context keeps the earlier turn's read; this turn added no call of its own.
@@ -137,17 +137,17 @@ it.effect(
       const planner = new FakeClient();
       const h = yield* effectHarness({ roster, prefetch: { model: adapterOf(planner) } });
       planner.answers.push(plan(), answered([message("abc read whole.")]));
-      h.agent.anticipateAsk(anticipation);
+      yield* h.agent.anticipateAsk(anticipation);
       yield* Effect.promise(() => settle());
       assert.equal(h.wholeReads.length, 1);
       h.agent.dropAnticipation();
       h.client.answers.push(answered([message("Nothing yet.")]));
-      yield* Effect.promise(() => ask(h, "what is abc doing"));
+      yield* ask(h, "what is abc doing");
       const input = h.client.inputs[0];
       assert.ok(input);
       assert.equal(itemsOfType(input, RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length, 0);
-      yield* Effect.promise(() => h.agent.stop());
-      h.agent.anticipateAsk(anticipation);
+      yield* h.agent.stop();
+      yield* h.agent.anticipateAsk(anticipation);
       yield* Effect.promise(() => settle());
       assert.equal(planner.inputs.length, 1);
     }),

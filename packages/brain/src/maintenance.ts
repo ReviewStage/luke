@@ -124,15 +124,16 @@ export class Maintenance {
    * of the context, decided against the window once the turn's reply is
    * persisted and its deliveries have settled. It runs behind every turn
    * already queued, under a signal a new ask cancels, so housekeeping never
-   * delays the developer and never folds a context a new turn is reading.
+   * delays the developer and never folds a context a new turn is reading. It
+   * is detached rather than forked from the turn that queued it: that turn
+   * ends first, and the housekeeping must already stand in the queue behind
+   * it when it does.
    */
   schedule(turnContext: TurnContext, countedTokens: number | undefined): void {
     this.cancel();
     const abort = new AbortController();
     this.#queued = abort;
-    void this.#seam.enqueue(() =>
-      this.#seam.carry(this.#maintain(turnContext, countedTokens, abort)),
-    );
+    this.#seam.detach(this.#seam.enqueue(this.#maintain(turnContext, countedTokens, abort)));
   }
 
   #maintain(

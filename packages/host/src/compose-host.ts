@@ -152,7 +152,7 @@ export const hostAssemblyLayer: Layer.Layer<
     // The brain and record the live session speaks through are built here,
     // where the brain composer stands, and handed to the composer as
     // `@sidecar/voice/effect` layers rather than as constructor arguments.
-    const liveBrain = brainAgentLiveBrain({ agent: () => brain.wiring.current() });
+    const liveBrain = yield* brainAgentLiveBrain({ agent: () => brain.wiring.current() });
     const liveRecord = conversationLiveRecord({
       recordConversationEntry: (entry, recordedAt, sessionKey) =>
         brain.store.recordConversationEntry(entry, recordedAt, sessionKey),
@@ -354,7 +354,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const drainSteps: GatewayShutdownSteps = yield* shutdownStepsFlushingEvents(
       {
         closeAdmissions: service.closeAdmissions,
-        cancelActive: Effect.promise(async () => {
+        cancelActive: Effect.gen(function* () {
           const cancelled: string[] = [];
           for (const record of brain.wiring.allRequests()) {
             if (
@@ -366,11 +366,13 @@ export const hostAssemblyLayer: Layer.Layer<
             const agent = brain.wiring.agentForRun(record.runId);
             if (!agent) continue;
             cancelled.push(record.runId);
-            await agent.cancelAsk(record.runId).catch(() => undefined);
+            yield* Effect.catchAllDefect(agent.cancelAsk(record.runId), () => Effect.void);
           }
           for (const child of brain.wiring.children.children()) {
             if (isTerminalChildRunStatus(child.status)) continue;
-            await brain.wiring.children.cancel(child.childId).catch(() => undefined);
+            yield* Effect.promise(() =>
+              brain.wiring.children.cancel(child.childId).catch(() => undefined),
+            );
           }
           return cancelled;
         }),

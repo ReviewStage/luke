@@ -1,10 +1,11 @@
-import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
+import type { BrainAgent, BrainRequestRecord, Carry } from "@sidecar/brain";
 import {
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+import { Effect } from "effect";
 
 /** What the publication owner reaches: every window, and the drain. */
 export interface BrainPublicationDependencies {
@@ -39,19 +40,21 @@ export type BrainPublicationAgent = Pick<BrainAgent, "request" | "markConversati
  * commentary, whose transcript is the record. The mark is still needed, since
  * only an ended run marked taken may be let go of when the envelope is full.
  */
-async function publishEnd(
+function publishEnd(
   agent: BrainPublicationAgent,
   runId: string,
-): Promise<BrainRequestRecord | undefined> {
-  const current = agent.request(runId);
-  if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
-  if (current.conversationRecordedAt !== undefined) return current;
-  const at = current.settledAt ?? current.acceptedAt;
-  if (!(await agent.markConversationRecorded(runId, at))) return undefined;
-  // Re-read rather than patched: the mark landed on the live record, and a
-  // Clear or a replacement in the meantime has taken the record with it.
-  const marked = agent.request(runId);
-  return marked?.conversationRecordedAt !== undefined ? marked : undefined;
+): Effect.Effect<BrainRequestRecord | undefined> {
+  return Effect.gen(function* () {
+    const current = agent.request(runId);
+    if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
+    if (current.conversationRecordedAt !== undefined) return current;
+    const at = current.settledAt ?? current.acceptedAt;
+    if (!(yield* agent.markConversationRecorded(runId, at))) return undefined;
+    // Re-read rather than patched: the mark landed on the live record, and a
+    // Clear or a replacement in the meantime has taken the record with it.
+    const marked = agent.request(runId);
+    return marked?.conversationRecordedAt !== undefined ? marked : undefined;
+  });
 }
 
 /**
@@ -62,15 +65,17 @@ async function publishEnd(
  * report that prompted it, so an older report cannot mark what a newer one
  * already did, and a follower retired mid-way marks nothing more.
  */
-export async function publishRuns(
+export function publishRuns(
   agent: BrainPublicationAgent,
   snapshots: readonly BrainRequestSnapshot[],
   stillFollowing: () => boolean = () => true,
-): Promise<void> {
-  for (const snapshot of snapshots) {
-    if (!stillFollowing()) return;
-    await publishEnd(agent, snapshot.runId);
-  }
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (const snapshot of snapshots) {
+      if (!stillFollowing()) return;
+      yield* publishEnd(agent, snapshot.runId);
+    }
+  });
 }
 
 /**
@@ -85,7 +90,10 @@ export async function publishRuns(
  */
 export function followBrainRequests(
   agent: BrainAgent,
-  dependencies: Pick<BrainPublicationDependencies, "broadcastRequests" | "onPublication">,
+  dependencies: Pick<BrainPublicationDependencies, "broadcastRequests" | "onPublication"> & {
+    /** Carries the marks and the first read to the publication chain's promises. */
+    carry: Carry;
+  },
 ): () => Promise<void> {
   let accepting = true;
   let following = true;
@@ -96,10 +104,14 @@ export function followBrainRequests(
     dependencies.broadcastRequests(records);
     // Reports are published one at a time, each against the records as they
     // then stand, so two reports of the same end cannot both find it unmarked.
-    publishing = publishing.then(() => publishRuns(agent, records, () => following));
+    publishing = publishing.then(() =>
+      dependencies.carry(publishRuns(agent, records, () => following)),
+    );
   };
   const unsubscribe = agent.subscribe(listener);
-  void agent.ready().then(() => listener(agent.requests()));
+  void dependencies.carry(
+    Effect.flatMap(agent.ready(), () => Effect.sync(() => listener(agent.requests()))),
+  );
   // Unfollowing takes no more reports at once, but lets the ones already
   // taken finish: the stop that retires an agent reports every run it
   // interrupted, and those ends belong marked before the follower goes. Each

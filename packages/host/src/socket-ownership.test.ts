@@ -69,28 +69,30 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
     // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- A fake agent is stood up whole for the host under test.
     const agent = {
-      submitAsk: async (submission: BrainSubmission) => {
-        const runId = `run-${++runs}`;
-        const held = record({
-          runId,
-          submissionId: submission.submissionId,
-          question: submission.question,
-        });
-        live.set(runId, held);
-        persisted.set(runId, held);
-        return { outcome: "accepted", runId, acceptedAt: NOW };
-      },
+      submitAsk: (submission: BrainSubmission) =>
+        Effect.sync(() => {
+          const runId = `run-${++runs}`;
+          const held = record({
+            runId,
+            submissionId: submission.submissionId,
+            question: submission.question,
+          });
+          live.set(runId, held);
+          persisted.set(runId, held);
+          return { outcome: "accepted", runId, acceptedAt: NOW };
+        }),
       request: (runId: string) => live.get(runId),
-      waitAsk: async (runId: string) => live.get(runId),
-      cancelAsk: async (runId: string) => {
-        const held = live.get(runId);
-        if (!held) return undefined;
-        const cancelled = { ...held, status: BRAIN_REQUEST_STATUS.CANCELLED, settledAt: NOW + 1 };
-        live.set(runId, cancelled);
-        if (options.persistCancellations !== false) persisted.set(runId, cancelled);
-        return cancelled;
-      },
-      markAskRecorded: async () => true,
+      waitAsk: (runId: string) => Effect.sync(() => live.get(runId)),
+      cancelAsk: (runId: string) =>
+        Effect.sync(() => {
+          const held = live.get(runId);
+          if (!held) return undefined;
+          const cancelled = { ...held, status: BRAIN_REQUEST_STATUS.CANCELLED, settledAt: NOW + 1 };
+          live.set(runId, cancelled);
+          if (options.persistCancellations !== false) persisted.set(runId, cancelled);
+          return cancelled;
+        }),
+      markAskRecorded: () => Effect.succeed(true),
     } as unknown as BrainAgent;
     const service = yield* createGatewayService({
       brain: {
@@ -273,7 +275,7 @@ it.live(
                       for (const held of f.live.values()) {
                         if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
                         cancelled.push(held.runId);
-                        await f.agent.cancelAsk(held.runId);
+                        await Effect.runPromise(f.agent.cancelAsk(held.runId));
                       }
                       return cancelled;
                     }),

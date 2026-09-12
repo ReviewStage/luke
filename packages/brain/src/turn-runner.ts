@@ -245,11 +245,7 @@ export class TurnRunner {
    * asks that opened, and from no other: the overflow's summary from the
    * folded ones, then each ask's own words.
    */
-  runAsk(inputs: readonly AskInput[]): Promise<void> {
-    return this.#seam.carry(this.#runAsk(inputs));
-  }
-
-  #runAsk(inputs: readonly AskInput[]): Effect.Effect<void> {
+  runAsk(inputs: readonly AskInput[]): Effect.Effect<void> {
     return Effect.gen(this, function* () {
       const waiting = [...inputs];
       while (waiting.length > 0) {
@@ -413,8 +409,8 @@ export class TurnRunner {
    * hook, or by the model — the asks riding in it end with it, the asks that
    * waited behind it open, and an observation turn leaves its notice.
    */
-  turn(plan: TurnPlan): Promise<TurnResult> {
-    return this.#seam.carry(Effect.map(this.#turn(plan, []), (opened) => opened.result));
+  turn(plan: TurnPlan): Effect.Effect<TurnResult> {
+    return Effect.map(this.#turn(plan, []), (opened) => opened.result);
   }
 
   /** The turn and its teller, for the ask's settlement that tells the turn's end after the record's. */
@@ -458,7 +454,7 @@ export class TurnRunner {
   /** The turn itself, answering its result and the run it ran under; the door's refusals answer the plan's own. */
   #openTurn(plan: TurnPlan, riders: RunControl[]): Effect.Effect<OpenedTurn> {
     return Effect.gen(this, function* () {
-      yield* awaited(() => this.#seam.ready());
+      yield* this.#seam.ready();
       // The generation's death is checked at the door of every turn, so a
       // memory that outlived its fortnight while the app sat idle is not read
       // one more time on the way out.

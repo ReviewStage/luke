@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
+import {
+  type BrainAgent,
+  type BrainRequestRecord,
+  type BrainSubmission,
+  carryOn,
+} from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import { maximumAskLength } from "@sidecar/session";
-import { Effect } from "effect";
+import { Effect, Fiber, Runtime } from "effect";
 import { test } from "vitest";
 import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
@@ -52,10 +57,11 @@ function record(overrides: RecordOverrides = {}): BrainRequestRecord {
 function acceptingBrain(asked: BrainSubmission[]): BrainAgent {
   // SAFETY: the ask path reads only `submitAsk` and `request` off the agent; the fixture stands in for the rest.
   return {
-    submitAsk: async (submission: BrainSubmission) => {
-      asked.push(submission);
-      return { outcome: "accepted", runId: "run-1", acceptedAt: NOW };
-    },
+    submitAsk: (submission: BrainSubmission) =>
+      Effect.sync(() => {
+        asked.push(submission);
+        return { outcome: "accepted", runId: "run-1", acceptedAt: NOW };
+      }),
     request: () => record({ status: BRAIN_REQUEST_STATUS.QUEUED }),
   } as unknown as BrainAgent;
 }
@@ -66,10 +72,11 @@ function markingBrain(
   records: () => readonly BrainRequestRecord[] = () => [],
 ): Pick<BrainAgent, "markConversationRecorded" | "request"> {
   return {
-    markConversationRecorded: async (runId, at) => {
-      marked.push({ runId, at });
-      return true;
-    },
+    markConversationRecorded: (runId, at) =>
+      Effect.sync(() => {
+        marked.push({ runId, at });
+        return true;
+      }),
     request: (runId) => records().find((record) => record.runId === runId),
   };
 }
@@ -105,16 +112,16 @@ test("a run's end is marked taken once, at the moment it settled, decided agains
     record({ status: BRAIN_REQUEST_STATUS.RUNNING, revision: 1, text: undefined }),
   ];
   const agent = markingBrain(marked, () => live);
-  await publishRuns(agent, live);
+  await Effect.runPromise(publishRuns(agent, live));
   assert.deepEqual(marked, []);
   live = [record()];
-  await publishRuns(agent, live);
+  await Effect.runPromise(publishRuns(agent, live));
   assert.deepEqual(marked, [{ runId: "run-1", at: NOW + 2 }]);
   // Once marked, the live record says so: an unrelated later report, an
   // older report captured before the mark, or a rebuilt follower all leave
   // it alone. A plain stop is marked on the same terms as a reply.
   live = [{ ...record(), conversationRecordedAt: NOW + 2 }];
-  await publishRuns(agent, [record()]);
+  await Effect.runPromise(publishRuns(agent, [record()]));
   live = [
     ...live,
     record({
@@ -124,14 +131,14 @@ test("a run's end is marked taken once, at the moment it settled, decided agains
       settledAt: undefined,
     }),
   ];
-  await publishRuns(agent, live);
+  await Effect.runPromise(publishRuns(agent, live));
   assert.deepEqual(marked, [
     { runId: "run-1", at: NOW + 2 },
     { runId: "run-2", at: NOW },
   ]);
   // A run the live agent no longer knows — the generation was reset — is not marked.
   live = [];
-  await publishRuns(agent, [record({ runId: "run-3" })]);
+  await Effect.runPromise(publishRuns(agent, [record({ runId: "run-3" })]));
   assert.equal(marked.length, 2);
 });
 
@@ -145,18 +152,18 @@ it.effect(
       const agent: Pick<BrainAgent, "request" | "markConversationRecorded"> = {
         request: (runId) => live.find((entry) => entry.runId === runId),
         markConversationRecorded: (runId) =>
-          new Promise((resolve) => {
+          Effect.async((resume) => {
             marked.push(runId);
-            holdMark = () => resolve(true);
+            holdMark = () => resume(Effect.succeed(true));
           }),
       };
       let following = true;
-      const publishing = publishRuns(agent, live, () => following);
+      const publishing = yield* Effect.fork(publishRuns(agent, live, () => following));
       yield* waitFor(() => marked.length === 1);
       assert.deepEqual(marked, ["run-1"]);
       following = false;
       holdMark?.();
-      yield* Effect.promise(() => publishing);
+      yield* Fiber.join(publishing);
       assert.deepEqual(marked, ["run-1"]);
     }),
 );
@@ -181,18 +188,20 @@ it.effect(
             listener = undefined;
           };
         },
-        ready: () => Promise.resolve(),
+        ready: () => Effect.void,
         requests: () => [ready],
         request: (runId: string) => live.get(runId),
-        markConversationRecorded: async (runId: string, at: number) => {
-          marked.push(runId);
-          const held = live.get(runId);
-          if (held) live.set(runId, { ...held, conversationRecordedAt: at });
-          return true;
-        },
+        markConversationRecorded: (runId: string, at: number) =>
+          Effect.sync(() => {
+            marked.push(runId);
+            const held = live.get(runId);
+            if (held) live.set(runId, { ...held, conversationRecordedAt: at });
+            return true;
+          }),
       } as unknown as BrainAgent;
       const broadcasts: (readonly BrainRequestRecord[])[] = [];
       const unfollow = followBrainRequests(agent, {
+        carry: carryOn(Runtime.defaultRuntime),
         broadcastRequests: (snapshots) => broadcasts.push(snapshots),
       });
       // The launch's interrupted run is marked and relayed once it is read.
@@ -220,18 +229,20 @@ it.effect("a retired follower relays nothing a late report carries", () =>
         return () => undefined;
       },
       ready: () =>
-        new Promise<void>((resolve) => {
-          releaseReady = resolve;
+        Effect.async<void>((resume) => {
+          releaseReady = () => resume(Effect.void);
         }),
       requests: () => [record()],
       request: () => record(),
-      markConversationRecorded: async (runId: string) => {
-        marked.push(runId);
-        return true;
-      },
+      markConversationRecorded: (runId: string) =>
+        Effect.sync(() => {
+          marked.push(runId);
+          return true;
+        }),
     } as unknown as BrainAgent;
     const broadcasts: (readonly BrainRequestRecord[])[] = [];
     const unfollow = followBrainRequests(agent, {
+      carry: carryOn(Runtime.defaultRuntime),
       broadcastRequests: (snapshots) => broadcasts.push(snapshots),
     });
     unfollow();
@@ -253,14 +264,15 @@ test("a refused mark leaves the end for the next report, and a retired follower 
   // SAFETY: publication reads only these members off the agent.
   const agent = {
     request: () => live(),
-    markConversationRecorded: async (_runId: string, at: number) => {
-      if (markRefused) return false;
-      marks.push(at);
-      marked = true;
-      return true;
-    },
+    markConversationRecorded: (_runId: string, at: number) =>
+      Effect.sync(() => {
+        if (markRefused) return false;
+        marks.push(at);
+        marked = true;
+        return true;
+      }),
   } as unknown as BrainAgent;
-  await publishRuns(agent, [live()]);
+  await Effect.runPromise(publishRuns(agent, [live()]));
   assert.equal(marked, false);
   markRefused = false;
   let following = true;
@@ -269,16 +281,19 @@ test("a refused mark leaves the end for the next report, and a retired follower 
   // SAFETY: publication reads only `request` and the mark off the agent; the fixture stands in for the rest.
   const retiringAgent = {
     ...agent,
-    markConversationRecorded: async (_runId: string, at: number) => {
-      marks.push(at);
-      marked = true;
-      following = false;
-      return true;
-    },
+    markConversationRecorded: (_runId: string, at: number) =>
+      Effect.sync(() => {
+        marks.push(at);
+        marked = true;
+        following = false;
+        return true;
+      }),
   } as unknown as BrainAgent;
-  await publishRuns(retiringAgent, [live(), record({ runId: "run-2" })], () => following);
+  await Effect.runPromise(
+    publishRuns(retiringAgent, [live(), record({ runId: "run-2" })], () => following),
+  );
   assert.deepEqual(marks, [NOW + 2]);
   // Already marked: the next report finds the mark on the live record and asks for nothing.
-  await publishRuns(agent, [live()]);
+  await Effect.runPromise(publishRuns(agent, [live()]));
   assert.deepEqual(marks, [NOW + 2]);
 });

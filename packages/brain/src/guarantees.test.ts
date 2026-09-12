@@ -179,7 +179,7 @@ it.effect("an action in a turn the developer did not open is Luke's own", () =>
     assert.ok(observation.every((trace) => trace.origin === RUN_ORIGIN.OBSERVATION));
 
     h.client.answers.push(answered([message("hi")]));
-    yield* Effect.promise(() => ask(h, "hello"));
+    yield* ask(h, "hello");
     const asked = h.traces.filter((trace) => trace.trigger === BRAIN_TURN_TRIGGER.ASK);
     assert.equal(asked.length, 1);
     assert.equal(asked[0]?.origin, RUN_ORIGIN.USER);
@@ -297,7 +297,7 @@ it.effect(
         1,
         "one edge, delivered twice",
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -382,7 +382,7 @@ it.effect(
 
       const h = yield* effectHarness();
       h.client.answers.push(answered([message("hi")]));
-      yield* Effect.promise(() => ask(h, "hello"));
+      yield* ask(h, "hello");
       assert.equal(h.persisted.at(-1)?.expiresAt, fresh.expiresAt, "the write moved nothing");
       assert.equal(h.persisted.at(-1)?.version, BRAIN_STATE_VERSION);
     }),
@@ -449,13 +449,13 @@ it.effect(
           requests: seededRequests(MAXIMUM_TERMINAL_REQUESTS, false),
         }),
       );
-      const refused = yield* Effect.promise(() => submit(h, "one more"));
+      const refused = yield* submit(h, "one more");
       assert.equal(refused.outcome, BRAIN_SUBMISSION_OUTCOME.REJECTED);
       assert.equal(
         refused.outcome === BRAIN_SUBMISSION_OUTCOME.REJECTED ? refused.reason : undefined,
         BRAIN_SUBMISSION_REJECTION.FULL,
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -507,7 +507,7 @@ it.effect("a briefing leaves only from a turn that still stands", () =>
     // into the gated client's held model call — the turn genuinely mid-flight,
     // never a guess about which of two pending microtasks runs first.
     yield* advanceHarness(NOW + 3_000);
-    yield* Effect.promise(() => other.agent.stop());
+    yield* other.agent.stop();
     gatedOther.open();
     yield* Effect.promise(() => settle());
     assert.deepEqual(
@@ -530,7 +530,7 @@ it.effect("an ask's reply is its final text, and announce is refused inside one"
       answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { briefing: "spoken instead" })]),
       answered([message("the reply")]),
     );
-    const record = yield* Effect.promise(() => ask(h, "what is up?"));
+    const record = yield* ask(h, "what is up?");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record.text, "the reply");
     assert.deepEqual(h.deliveries, [], "nothing was announced");

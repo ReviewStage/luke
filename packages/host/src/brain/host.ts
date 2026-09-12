@@ -1,4 +1,5 @@
-import type { BrainAgent } from "@sidecar/brain";
+import type { BrainAgent, Carry } from "@sidecar/brain";
+import type { Effect } from "effect";
 
 /**
  * Who owns the standing brain agent through a transition. A key or account
@@ -16,6 +17,13 @@ interface BrainHostDependencies {
   follow: (agent: BrainAgent) => () => Promise<void>;
   /** Tells every window what stands when no agent does: no runs at all. */
   publishEmpty: () => void;
+  /**
+   * Carries the agent's own effects — building one, stopping one — to the
+   * promises this transition chain is written in, on the runtime the host
+   * handed the brain. The chain is what orders the transitions, so it is
+   * still a promise; what it holds is effects.
+   */
+  carry: Carry;
 }
 
 type RetirementOutcome = { ok: true } | { ok: false; error: Error };
@@ -29,6 +37,7 @@ function settledOutcome(drain: Promise<unknown>): Promise<RetirementOutcome> {
 
 export class BrainHost {
   readonly #dependencies: BrainHostDependencies;
+  readonly #carry: Carry;
   #agent: BrainAgent | undefined;
   #unfollow: (() => Promise<void>) | undefined;
   /**
@@ -43,6 +52,7 @@ export class BrainHost {
 
   constructor(dependencies: BrainHostDependencies) {
     this.#dependencies = dependencies;
+    this.#carry = dependencies.carry;
   }
 
   current(): BrainAgent | undefined {
@@ -51,8 +61,9 @@ export class BrainHost {
 
   /**
    * Withdraws the standing agent now: nothing may ask it anything more, and
-   * its `stop` — which revokes every run and observation turn synchronously
-   * before it awaits — is begun at once. Its follower relays the stop's own
+   * its `stop` — whose own first step revokes every run and observation turn,
+   * before the effect suspends — is begun at once on the runtime the host
+   * handed the brain. Its follower relays the stop's own
    * interruptions and retires when the stop settles. The stop's settling is
    * awaited by the next build, never by the caller.
    */
@@ -75,8 +86,7 @@ export class BrainHost {
     // store's lease, wait on it.
     this.#retiring.push(
       settledOutcome(
-        previous
-          .stop()
+        this.#carry(previous.stop())
           .catch(() => undefined)
           .then(() => unfollow?.()),
       ),
@@ -89,7 +99,7 @@ export class BrainHost {
    * in which case this one installs nothing and the newer one decides. A
    * build answering nothing stands the host down and says so to the windows.
    */
-  replace(build: () => BrainAgent | undefined): Promise<void> {
+  replace(build: () => Effect.Effect<BrainAgent | undefined>): Promise<void> {
     this.retire();
     const transition = ++this.#transitions;
     const step = this.#chain.then(async () => {
@@ -100,11 +110,11 @@ export class BrainHost {
       const failed = outcomes.find((outcome) => !outcome.ok);
       if (failed && !failed.ok) throw failed.error;
       if (transition !== this.#transitions) return;
-      const agent = build();
+      const agent = await this.#carry(build());
       if (transition !== this.#transitions) {
         // Decided too late: a newer transition owns the outcome, and an
         // agent built for this one must not stand beside its successor.
-        if (agent) await agent.stop();
+        if (agent) await this.#carry(agent.stop());
         return;
       }
       this.#agent = agent;
