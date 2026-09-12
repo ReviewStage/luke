@@ -11,27 +11,19 @@ policy explains what we collect, who we send it to, and how to turn it off.
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
 errors, and the tool it is running. It keeps none of these fields in a file
-of its own; what it does keep is the working memory described below. For a
-session running on your Mac whose agent keeps a transcript this build can read
-(Claude Code, Codex, and OMP today), Luke also reads that session's own
-transcript file — the file its agent already writes, which Luke never writes
-to — so he can notice what changed and tell you about it. He reads it at three
-moments: when an agent's hook says a turn just ended, on his own periodic look
-at the sessions that are working or waiting, and when you ask him about a
-session. On the first two he reads what each transcript gained since he last
-looked, up to the last 20,000 characters of new text per session per look,
-and may also read one session's recent tail, up to its last 60,000
-characters, while deciding whether there is anything to tell you; when you
-ask, he reads the same bounded tail. Each observed session is followed by a
+of its own; what it does keep is the working memory described below. Luke
+looks at the sessions that are working or waiting on his own periodic look,
+and at a session you ask him about; he reads no transcript file on your Mac,
+and what he may read of a session's conversation is the bounded tail the
+Conductor sentences below describe. Each observed session is followed by a
 conversation of Luke's own, kept inside his application data: that
-conversation is the one that reads the session's transcript and briefs you
+conversation is the one that looks at the session and briefs you
 about it, and no other conversation of his — the main one included — is
-handed those excerpts. What the main conversation
+handed what it read. What the main conversation
 learns of them is a short notice in Luke's own words and counts (which
 session a turn looked at, what he briefed, how many actions he took), never
-the transcript's text. What he reads is written down first — the new text, with the
-session's title and status and the position it was read to — in that
-conversation's own inbox on your Mac, so that a turn interrupted by a
+the transcript's text. What he reads is written down first — the session as
+the roster showed it — in that conversation's own inbox on your Mac, so that a turn interrupted by a
 throttle, a failure, or a quit picks it up rather than rereading or losing
 it; an entry leaves the inbox when a turn has consumed it, and the inbox
 holds at most 20 entries. What he reads is sent to a model as described under
@@ -46,15 +38,8 @@ shown, and only inside a turn: one you opened, or one a status change on that
 chat woke; the periodic look itself reads no message of any chat. Our service
 stores nothing of that page, and what he reads is held in that turn's working
 memory on your Mac and stored nowhere else. Nothing
-else reads message history, file contents, or command output. If you run
-agents inside the Herdr terminal manager, Luke also asks Herdr's own
-command-line tool which of those sessions it holds, so their rows can say so;
-that read never starts Herdr, reads no terminal output, and sends nothing
-anywhere. If you run Claude Code sessions in the Claude desktop app's Code tab,
-Luke also reads that app's own list of the sessions it holds — each one's
-title, whether you archived it, and the id the app opens it by — so their rows
-can say which app holds them and open there; that read opens no transcript and
-sends nothing anywhere. It stays on your Mac unless a feature below sends it.
+else reads message history, file contents, or command output. It stays on
+your Mac unless a feature below sends it.
 
 **Your conversation with Luke.** Luke keeps the conversations you have with
 him — what you said, what he spoke or announced, the actions he took at your
@@ -375,10 +360,9 @@ your Conductor sessions on its own schedule, about once a minute, the same
 read-only pass the iOS app used to ask for on demand: your open workspaces,
 their chats, each chat's status, the agent kind running it, and the error
 line it stopped on. It never reads a chat's messages. On your Mac, a status
-change on a Conductor chat wakes Luke's judgment for that chat the way a
-change on a local session does; that turn may read the chat's recent messages
-under the "read the recent tail" terms above, and the pass itself still reads
-none. We keep the latest roster it read, encrypted at rest with the same
+change on a Conductor chat wakes Luke's judgment for that chat; that turn may
+read the chat's recent messages under the "read the recent tail" terms above,
+and the pass itself still reads none. We keep the latest roster it read, encrypted at rest with the same
 server-only secret as your keys, and beside it what changed since the pass
 before — a session that appeared or vanished, a status that moved, an error
 line that changed — so the Mac app, the phone, and the watch can show your
@@ -488,7 +472,7 @@ Send.
   the service accepts that name only for a row your account holds), so a
   briefing that device claims is spoken into that session and no other. With your own OpenAI key the Mac
   reaches OpenAI directly and our service sees nothing of the session. Luke's judgment is a separate call
-  to OpenAI's Responses API, made when an agent's hook or his periodic look
+  to OpenAI's Responses API, made when his periodic look
   wakes the conversation following that session and when
   you ask him something: it carries that conversation's working memory —
   the bounded transcript excerpts described above, the session fields, the 20
@@ -575,8 +559,7 @@ Send.
   nothing about you.
 
 We do not sell your information or use it for advertising. If you connect
-nothing, Luke sends nothing to any provider, and reading your local sessions
-works with no network connection.
+nothing, Luke sends nothing to any provider.
 
 ## Our website
 
@@ -617,7 +600,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   them on our service are edited through Luke alone, and go with your
   account.
 - Luke may act on his own judgment in a turn you did not open — answering a
-  coding agent, keeping his notes, on a hook or a look
+  coding agent, keeping his notes, on a look
   — within the tool policy his configuration sets; the Conversation tab records
   such an action as his own, never as your request.
 - What you type or say to Luke goes to his main conversation; the
