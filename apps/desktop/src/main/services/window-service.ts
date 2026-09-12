@@ -435,6 +435,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     await hotkeys.reapply(HOTKEY_RANK.TALK);
     if (!launchStanding()) return;
     if (panels.enterTakeover() === undefined) {
+      // No panel to take the screen with is no attempt: the run's one
+      // attempt is given back, so a panel that opens later can still play it.
+      introductionAttempted = false;
       state.update({ introduction: { playing: false } });
       await hotkeys.reapply(HOTKEY_RANK.TALK);
     }
@@ -475,7 +478,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     endIntroduction,
     introductionPlaying,
     reconcileIntroduction: () => {
-      if (!launchStanding() || !introductionDue()) return;
+      // Before the launch has opened a panel there is nothing to take the
+      // screen with; `start` decides for itself once one stands.
+      if (!launchStanding() || panels.standing === 0 || !introductionDue()) return;
       void beginIntroduction();
     },
     start: async () => {
@@ -515,6 +520,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // introduction to run and the ordinary launch stands. Taking it
       // reconciles again, to the one display it covers.
       if (giveIntroduction && panels.enterTakeover() === undefined) {
+        introductionAttempted = false;
         state.update({ introduction: { playing: false } });
         await hotkeys.reapply(HOTKEY_RANK.TALK);
         if (!launchStanding()) return;
