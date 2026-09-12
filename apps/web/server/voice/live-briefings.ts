@@ -2,7 +2,6 @@ import type { BriefingDelivery } from "@sidecar/voice/live-session";
 import type { ToolSet } from "ai";
 import { Deferred, Duration, Effect, FiberId, Schedule } from "effect";
 import { briefingWordsOf } from "../hosted/briefing-words.js";
-import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import {
   claimSpeech,
@@ -12,6 +11,7 @@ import {
   type SpeechOffer,
   type SpeechStore,
 } from "../hosted/store/speech.js";
+import type { WebStoreRun } from "../runtime.js";
 
 /**
  * How a briefing reaches the hosted live session: the brain's `announce` put
@@ -59,7 +59,7 @@ export interface HostedBriefingsOptions {
   readonly speech: SpeechStore;
   /** The account's open offers, as the store lists them. */
   /** The promise face the look's own reads are run to, since the voice service drives them from socket callbacks. */
-  readonly run: FiberStoreRunner;
+  readonly run: WebStoreRun;
   readonly offers: Pick<HostedStore["speech"], "open">;
   /** The tool registry the announcement's row is read back under. */
   readonly tools: ToolSet;

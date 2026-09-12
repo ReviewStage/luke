@@ -1,4 +1,5 @@
 import { FetchHttpClient } from "@effect/platform";
+import type { SqlClient } from "@effect/sql";
 import type { Effect } from "effect";
 import { Layer, ManagedRuntime } from "effect";
 import { webSqlClient } from "./db/sql-client.js";
@@ -53,6 +54,16 @@ export function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServ
 export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   return webRuntime().runPromise(effect);
 }
+
+/**
+ * The edge's own runner as a composition below it is handed one: a
+ * collaborator driven by something other than a request — a socket's
+ * callbacks, a stream's reader — has no request fiber to compose into, so the
+ * function that composes it hands it `runWeb` itself, and a test hands it the
+ * runner over its own test database. It is not a second runtime and not a
+ * fiber's own face: the runner it names is always one built at an edge.
+ */
+export type WebStoreRun = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
 
 /**
  * Releases what the layer acquired and leaves the next call to build it again.

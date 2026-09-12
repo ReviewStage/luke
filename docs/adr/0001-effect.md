@@ -896,26 +896,45 @@ record, the device seams, the brain host, and every route handler under
 end, and a handler composes its whole request into the one effect `runWeb`
 answers.
 
-What still takes a promise face are four contracts this package does not own.
-eve's tool contracts — `HostedFactsWriter` and `HostedTranscriptReads` — are
-promises because a tool execution is one, so `brainHost`'s `runTool` reads the
-runner from its own fiber and builds the two readers over it.
-`BrainWorkspaceAccess` left that list in P12-16b and answers effects like the
-brain's other tool seams, but `hostedWorkspaceAccess` is built over the same
-runner all the same: the row it reads is on the request's own connection,
-which the brain's fiber carries no `SqlClient` for, so each of its three
-methods is the effect of running its own read through that runner. eve's stream handler, and the `StreamRelay` and
-`carryStop` beneath it, answer eve a promise, so `brainHost`'s `relay` builds
-them over the same runner through the `Promised` mapped type beside it. The
-turn event stream's polling body runs inside the `ReadableStream` its handler
-has already answered with, so it outlives that handler's fiber and reads the
-runner before it answers. And the voice service drives
+P12-18b decided each of the four contracts that took that promise face, and
+two of the four no longer do. The turn event stream's polling body used to run
+inside a hand-built `ReadableStream` its handler had already answered with,
+outliving that handler's fiber, so it read the runner before it answered; it
+is now a `Stream.unfoldChunkEffect` over the same poll, and
+`Stream.toReadableStreamEffect` hands the reader a fiber forked on the runtime
+the request itself runs on, which the stream's cancel interrupts. The request's
+own abort is read at the top of each step, where the old loop's `gone()` check
+stood, and the poll interval is the seam's effect rather than
+`node:timers/promises`; the frame bytes and the response's status and headers
+are untouched. The voice service's five socket-driven compositions —
 `hostedLiveExchange`, `hostedLiveBrain`, `hostedBriefings`,
-`hostedLiveRecord`, and `voiceSessionRecord` from socket callbacks rather than
-from a request, so those five are handed `runWeb` by the function that
-composes them rather than reading a fiber they have none of. The type goes
-when those four contracts answer effects themselves; no PR in this plan is
-that one yet.
+`hostedLiveRecord`, `voiceSessionRecord` — never read a fiber at all: they are
+handed `runWeb` by `voice/function.ts`, which composes them, and a test hands
+them the runner over its own test database. They now name that runner
+`WebStoreRun` in `server/runtime.ts`, the edge's own runner as a composition
+below it is handed one, rather than the fiber-reading type they are not. Their
+internals answering effects, so that each socket's work is a scoped fiber
+rather than a promise chain, is P12-18d and touches `packages/voice`'s shape
+above them.
+
+What still takes the fiber's promise face is the brain host, and neither of
+its two reasons is eve's authorship. `runTool`'s seams take it because the
+brain's tool contracts carry no requirement: `BrainWorkspaceAccess` answers
+`Effect<A, never, never>` since P12-16b and `read-tools.ts`'s `readTranscript`
+always did, so a seam reading a row on the request's connection has nowhere in
+those types to say `SqlClient`, and `hostedWorkspaceAccess`,
+`hostedFactsWriter`, `hostedTranscriptReads`, and the roster and defaults
+readers each run their own read through the runner instead. That is a
+requirement, not a promise, and the runner is not the only way to meet one:
+reading `SqlClient` off the request's fiber once in `runTool` and
+`Effect.provideService`-ing it to each seam, with `Effect.orDie` where the
+brain's contract admits no error, says the same thing without running
+anything. That is P12-18e, and it is what would delete `fiberStoreRunner`
+outright. `relay`'s seams take it for the other reason: `StreamRelay` and
+`carryStop` are `apps/web`'s own 700 lines of async class beneath a `relay`
+that already answers an effect, so the `Promised` mapped type over the writer
+and the ask bindings goes when those two answer effects, in P12-18c. The type
+goes when both have landed.
 
 `HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
 carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
@@ -1313,7 +1332,8 @@ design decision stated as such:
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
-| `FiberStoreRunner`/`fiberStoreRunner`, the promise face the four promise-shaped contracts above `apps/web`'s effects are handed (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | once eve's tool and stream contracts, the turn event stream, and the voice service's socket-driven compositions answer effects themselves |
+| `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e for `runTool`'s seams, which need the request's `SqlClient` rather than a runner, and P12-18c for `relay`'s; P12-18b took the turn event stream and the voice compositions off it |
+| `Promised<Methods>`, the mapped type `brainHost`'s `relay` hands `StreamRelay` and `carryStop`, and the promise-era suites' `promisedWriter`/`promisedAsks` | P10-16 | P12-18c for the relay and its stop carrier; with each suite as it moves onto `it.effect` |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h, both deleted in P12-16d) |

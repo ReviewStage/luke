@@ -24,9 +24,9 @@ import {
   askStanding,
 } from "../hosted/brain-ask.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
-import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
+import type { WebStoreRun } from "../runtime.js";
 
 /**
  * The hosted implementation of the live brain: Luke's judgment reached in
@@ -112,7 +112,7 @@ export interface HostedLiveBrainOptions {
    */
   readonly conversationId?: string;
   /** The promise face the follow's own reads are run to, since the voice service drives them from socket callbacks. */
-  readonly run: FiberStoreRunner;
+  readonly run: WebStoreRun;
   /** The ask door's seams: the ask record, eve under the deployment principal for this account, and the clock. */
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, over the same runner. */

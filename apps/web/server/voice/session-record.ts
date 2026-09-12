@@ -6,7 +6,7 @@ import {
   type VoiceCloseReason,
 } from "../db/voice-vocabulary.js";
 import { findHeldDevice } from "../hosted/device-store.js";
-import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
+import type { WebStoreRun } from "../runtime.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.
@@ -127,7 +127,7 @@ const closeSession = SqlSchema.void({
 });
 
 export function voiceSessionRecord(
-  run: FiberStoreRunner,
+  run: WebStoreRun,
   now: () => number = Date.now,
 ): VoiceSessionRecord {
   const usage = (seconds: number, confirmed: boolean) => ({ seconds, confirmed });
