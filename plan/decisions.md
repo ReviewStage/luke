@@ -3360,3 +3360,50 @@ enqueues anything, ask if unsure* — was the one that held.
 Every one of tonight's four production deploys landed while the preset was still Vite, so the hazard
 never fired; all eight caller paths answered correctly through each. The rollback anchor was re-read
 at every move and ended at record `6404254998`, sha `faf4e3e9`, Production, success, 00:55:57Z.
+
+
+## 2026-09-12 ~06:11Z — the Services preset sitting DONE; eve serves production from one project
+
+**#1018 merged as `7c0f5033` at 06:09:20Z and production is green under the Services preset.**
+
+**The build log's two facts, read from Dean's own log:**
+
+- **Two service builds, each with its own install** — `pnpm install … --filter @luke/web…` at
+  22:49:30, then `cd .. && pnpm install … --filter @luke/web… --filter @luke/eve` at 22:50:11.
+- **The discriminator:** `[BUILD] built output at /vercel/path0/apps/web/eve/.vercel/output` — the
+  path ends in **`eve/.vercel/output`**. Nitro reports `preset: vercel`, not `node-server`; **no
+  `EVE_INTERNAL…` line anywhere.** All three wrong shapes absent. The web side emitted its own tree
+  with 9 functions.
+
+**Production, record `6406640951`, sha `7c0f5033`, terminal 06:11:32Z — two minutes eleven seconds
+from merge.** All ten paths over HTTP/1.1, cache-busted, every function `x-vercel-cache: MISS`:
+`/` 200 · capabilities 401 · observation/tick 401 · devices 405 · brain/ask 405 · voice/sessions 426 ·
+voice/introduction 426 · feedback 405 · **`/eve/v1/health` 200
+`{"ok":true,"status":"ready","workflowId":"workflow//eve//workflowEntry"}`** · feedback.mjs 405.
+**No 404 anywhere.**
+
+**So option (A) is delivered as Dean chose it: eve serves production from the one project, with no
+second Vercel project and no nine duplicated environment variables**, and the migration to (B) stays
+open for whenever `eve/vercel` is released.
+
+### Why it worked this time, which is the whole lesson
+
+**One rebase, in a window quiet across every lane.** Last night the same PR was rebased **seven
+times** and the sitting aborted; my freeze covered five workers and held perfectly, and the merges
+that broke it came from a lane I could not freeze. **This morning Dean quieted that lane himself, and
+the PR went from rebase to merged production in about thirty minutes.**
+
+**The precondition is a person, not a process:** #1018 could only land on a queue quiet across every
+lane, and only Dean could make it so. That sentence is in
+`docs/runbooks/services-preset-sitting.md` (#1210) rather than in anyone's head, which is why the
+sitting survived a night's gap and a different worker could have run it.
+
+**One deviation, in our favour and worth correcting:** `api_dir_ignored` **did not fire**. The runbook
+names it as expected so nobody aborts on it; a runbook that predicts a warning which does not come
+teaches the next reader to distrust it, so it is being amended to *"may or may not appear; either way
+not a failure"* with this log as the example.
+
+**Charles's #1242 merged at 05:41:35Z inside the window and did not dirty #1018** — it touched none of
+the contested files. **Not every merge is a treadmill turn; the ones that matter are the ones touching
+`vercel.json`, the route table, or `packages/AGENTS.md`.** Worth knowing before freezing everything
+next time.
