@@ -604,6 +604,21 @@ ahead of P10-15's own promise-to-Effect move, is the smaller and more honest
 change, and the three wiring sites and the harness lost only the field they
 never read.
 
+`drizzle-orm` and `@better-auth/drizzle-adapter` are back in `apps/web` as of
+the fix after P10-14d, as Better Auth's own adapter dependency and nothing of
+Luke's: P10-14d moved Better Auth onto its Kysely adapter, and on Postgres
+that adapter stores a `string[]` field as a JSON string where the Drizzle
+adapter stores a native array, which is how Better Auth's CLI generated the
+auth schema's `text[]` columns. The token exchange that completes every
+sign-in is the first such write, and production refused it. Better Auth is
+not Effect code and this migration never depended on which adapter it ran,
+so `server/auth-database.ts` holds the Drizzle adapter over the restored
+`server/db/auth-schema.ts` (the one Drizzle file that returns), and a test
+over PGlite writes an access token through Better Auth's own adapter so the
+adapter and the schema cannot part again unnoticed. Letting the two packages
+go is a schema change first — those columns to JSON text, existing rows
+rewritten, the seeder writing JSON — and only then the adapter swap.
+
 `createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
 for the same reason `HostedStoreRun` is: `RateBrake.check` is an
 `Effect.Effect<boolean>` a per-user window reads through the ambient `Clock`,

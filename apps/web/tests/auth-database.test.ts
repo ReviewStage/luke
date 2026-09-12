@@ -1,20 +1,26 @@
 import assert from "node:assert/strict";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { betterAuth } from "better-auth";
+import { jwt } from "better-auth/plugins";
+import { drizzle } from "drizzle-orm/pglite";
+import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { test } from "vitest";
+import { authDatabaseAdapter } from "../server/auth-database";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
   JWT_KEY_STORAGE,
 } from "../server/auth-policy";
+import * as authSchema from "../server/db/auth-schema";
 import {
   DESKTOP_OAUTH_CLIENT,
   MOBILE_OAUTH_CLIENT,
   oauthClientRecord,
 } from "../server/oauth-clients";
 import { seedOAuthClient } from "../server/seed-clients";
-import { testSqlClient } from "./support/sql-client";
+import { openMigratedPglite, sqlClientOverPglite, testSqlClient } from "./support/sql-client";
 
 const AUTH_TABLE_NAME = {
   ACCOUNT: "account",
@@ -131,6 +137,81 @@ it.layer(testSqlClient)("the auth service's own tables", (it) => {
         assert.equal(rows.length, 1);
       }),
   );
+});
+
+const AccessTokenRowSchema = Schema.Struct({
+  token: Schema.String,
+  client_id: Schema.String,
+  scopes: Schema.Array(Schema.String),
+});
+
+const ISSUED_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
+
+/**
+ * The write every sign-in ends on, taken through Better Auth's own adapter
+ * rather than the seeder's raw statement: the token exchange stores the
+ * access token with its `scopes`, a `string[]` field whose stored shape is
+ * the adapter's decision and not the schema's, and this is the one write in
+ * the test suite that would notice the two disagreeing.
+ */
+test("Better Auth's own adapter writes an access token's scopes into the migrated schema and reads them back", async () => {
+  const client = await openMigratedPglite();
+  const runtime = ManagedRuntime.make(Layer.mergeAll(sqlClientOverPglite(client)));
+  try {
+    await runtime.runPromise(seedOAuthClient(DESKTOP_OAUTH_CLIENT));
+    const auth = betterAuth({
+      database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
+      baseURL: "http://127.0.0.1",
+      secret: "auth-database-test-secret-with-enough-length",
+      plugins: [
+        jwt(JWT_KEY_STORAGE),
+        oauthProvider({
+          loginPage: "/sign-in.html",
+          consentPage: "/consent.html",
+          allowDynamicClientRegistration: false,
+        }),
+      ],
+    });
+    const context = await auth.$context;
+    const issued = new Date("2026-09-12T00:00:00.000Z");
+    const token = "access-token-under-test";
+    await context.adapter.create({
+      model: "oauthAccessToken",
+      data: {
+        token,
+        clientId: DESKTOP_OAUTH_CLIENT.id,
+        scopes: [...ISSUED_SCOPES],
+        createdAt: issued,
+        expiresAt: new Date(issued.getTime() + 60 * 60 * 1000),
+      },
+    });
+
+    const stored = await context.adapter.findOne({
+      model: "oauthAccessToken",
+      where: [{ field: "token", value: token }],
+    });
+    assert.ok(stored);
+    assert.deepEqual(
+      Schema.decodeUnknownSync(Schema.Struct({ scopes: Schema.Array(Schema.String) }))(stored)
+        .scopes,
+      [...ISSUED_SCOPES],
+    );
+
+    const rows = await runtime.runPromise(
+      Effect.flatMap(
+        SqlClient.SqlClient,
+        (sql) =>
+          sql`select token, client_id, scopes from oauth_access_token where token = ${token}`,
+      ),
+    );
+    assert.deepEqual(
+      rows.map((row) => Schema.decodeUnknownSync(AccessTokenRowSchema)(row)),
+      [{ token, client_id: DESKTOP_OAUTH_CLIENT.id, scopes: [...ISSUED_SCOPES] }],
+    );
+  } finally {
+    await runtime.dispose();
+    await client.close();
+  }
 });
 
 test("the auth service encrypts credentials and refuses user-provisioned OAuth clients", () => {

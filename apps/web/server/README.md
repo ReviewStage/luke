@@ -61,6 +61,13 @@ vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
 ```
 
+Better Auth runs on its Drizzle adapter over `server/db/auth-schema.ts`
+(`server/auth-database.ts`), not its Kysely one: the migrations declare the
+OAuth tables' `scopes`, `redirect_uris`, `grant_types`, and `response_types`
+as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
+adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
+access token through the adapter over PGlite to hold the two together.
+
 Dynamic client registration stays disabled. Two public clients are compiled in:
 
 - **`luke-desktop`** (`server/oauth-clients.ts`) — the macOS companion

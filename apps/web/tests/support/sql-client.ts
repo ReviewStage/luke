@@ -88,7 +88,7 @@ export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlCl
   ).pipe(Layer.provide(Reactivity.layer));
 
 /** A PGlite carrying the same generated migrations the store's tests run against. */
-async function openMigratedPglite(): Promise<PGlite> {
+export async function openMigratedPglite(): Promise<PGlite> {
   const client = new PGlite();
   const migrationRuntime = ManagedRuntime.make(
     Layer.mergeAll(sqlClientOverPglite(client), NodeContext.layer),

@@ -1,8 +1,8 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
-import { CamelCasePlugin, Kysely, PostgresDialect } from "kysely";
 import { USER_ROLE } from "./admin/admin-access.js";
+import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
 import { authDeployment } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
@@ -10,7 +10,6 @@ import {
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
 import { authProxy } from "./auth-proxy.js";
-import { getPool } from "./db/index.js";
 import { DESKTOP_OAUTH_CLIENT, MOBILE_OAUTH_CLIENT } from "./oauth-clients.js";
 
 const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
@@ -18,32 +17,12 @@ const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
 
 const deployment = authDeployment(process.env);
 
-/**
- * The Kysely instance Better Auth's own db-adapter path builds a `kyselyAdapter`
- * over: `CamelCasePlugin` is what maps the camelCase fields Better Auth reads
- * and writes (`emailVerified`, `createdAt`, ...) onto the snake_case columns
- * the migrations declared, the same mapping `drizzleAdapter`'s schema object
- * gave it before. Table names need no plugin, because Better Auth's own
- * defaults (`user`, `session`, `oauthClient`, ...) are already what
- * `CamelCasePlugin` turns them into (`oauth_client`, ...).
- */
-/** Exported for the one test that proves the first query, not the import, is where a missing `DATABASE_URL` fails. */
-export const authDatabase = new Kysely<unknown>({
-  // The pool is built at the first query, not as this module is imported: every function bundle
-  // imports the auth service statically, so a pool resolved here made `DATABASE_URL` a condition
-  // of loading any function at all, and a deployment without it failed every route at load rather
-  // than the routes that reach the database. Kysely calls the factory once, on the first query,
-  // which is when `pg` connected before too.
-  dialect: new PostgresDialect({ pool: async () => getPool() }),
-  plugins: [new CamelCasePlugin()],
-});
-
 export const auth = betterAuth({
   appName: "Luke",
   baseURL: deployment.baseURL,
   trustedOrigins: deployment.trustedOrigins,
   secret: process.env.BETTER_AUTH_SECRET,
-  database: { db: authDatabase, type: "postgres" },
+  database: authDatabaseAdapter(authDatabase),
   account: ACCOUNT_TOKEN_STORAGE,
   // Admin access is a plain-text `role` on the user, managed by Better Auth:
   // the migrations declared it on the `user` table, and returned on
