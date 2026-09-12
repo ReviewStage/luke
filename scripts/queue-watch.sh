@@ -44,7 +44,10 @@ set -euo pipefail
 #   usage or configuration             2
 #
 # A watcher started against a pull request already in the queue adopts the
-# entry rather than pressing again; its retry budget starts fresh.
+# entry rather than pressing again; its retry budget starts fresh. Unarmed,
+# it adopts the entry as a reader only: a thread appearing on it is written
+# to stderr and the entry is left where its owner put it, so the watch ends
+# with whatever the queue does to it.
 
 readonly EXIT_DONE=0
 readonly EXIT_USAGE=2
@@ -376,12 +379,15 @@ while :; do
 
     if [[ $QUEUE_STATE != "$QUEUE_NONE" ]]; then
         phase=$PHASE_QUEUED
-        if ((UNRESOLVED > 0)); then
+        if ((UNRESOLVED > 0 && PRESS == 0)); then
+            printf 'unarmed: %s unresolved thread(s) on a queued entry this watcher did not press; leaving it\n' "$UNRESOLVED" >&2
+        elif ((UNRESOLVED > 0)); then
             # The queue checked threads at enqueue and will not look again; the
             # watcher takes the entry out so the thread is answered before the
-            # merge, not after. A dequeue that fails is left to the next read,
-            # which sees either the entry still standing or the merge that
-            # outran the thread.
+            # merge, not after. Only an armed watcher does, because the entry
+            # is then its own press; an unarmed one touches the queue nowhere.
+            # A dequeue that fails is left to the next read, which sees either
+            # the entry still standing or the merge that outran the thread.
             if gh api graphql -f query="$DEQUEUE_MUTATION" -F id="$PR_ID" >/dev/null; then
                 drop "$EXIT_DEQUEUED" "$OUTCOME_DEQUEUED" "$HEAD_OID" "$UNRESOLVED"
             else

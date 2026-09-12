@@ -267,6 +267,16 @@ test("a second thread while queued spends the retry and ends the watch", () => {
   assert.deepEqual(run.calls, { reads: 4, enqueues: 2, dequeues: 2 });
 });
 
+test("unarmed, an adopted entry is watched out and a thread on it dequeues nothing", () => {
+  const run = runWatcher([QUEUED_WITH_THREAD, QUEUED_WITH_THREAD, OPEN_WITH_THREAD, MERGED], {
+    press: false,
+  });
+
+  assert.equal(run.status, EXIT.DONE);
+  assert.deepEqual(run.outcome, [OUTCOME.MERGED, MERGE_OID]);
+  assert.deepEqual(run.calls, { reads: 4, enqueues: 0, dequeues: 0 });
+});
+
 test("a failed check outside the ruleset's list still ends the watch when the build requires it", () => {
   const run = runWatcher([
     snapshot({
