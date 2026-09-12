@@ -6,6 +6,7 @@ import { test } from "vitest";
 import {
   buildOutputAliases,
   CALLER_KIND,
+  CALLER_ROOTS,
   callerDirectories,
   checkApiCallers,
   evaluatePathsModule,
@@ -132,6 +133,37 @@ test("comments are not callers, and skipped directories are not scanned", async 
   });
   assert.deepEqual(report.scan.sites, []);
   assert.equal(report.scan.filesScanned, 3);
+});
+
+test("a package directory with no source directory contributes nothing, and the scan completes", async () => {
+  const root = scratch({
+    "packages/one/src/client.ts": 'fetch("/api/devices");\n',
+    "packages/two/src/nested/Client.swift":
+      'let url = base.appendingPathComponent("api/feedback")\n',
+    "packages/stale/dist/index.js": 'fetch("/api/nowhere");\n',
+    "packages/notes.md": "# not a package\n",
+  });
+  mkdirSync(join(root, "packages", "empty"));
+  for (const callerRoot of CALLER_ROOTS) mkdirSync(join(root, callerRoot), { recursive: true });
+
+  const directories = await callerDirectories(root);
+  assert.equal(directories.includes("packages/one/src"), true);
+  assert.equal(directories.includes("packages/two/src"), true);
+  assert.equal(directories.includes("packages/stale/src"), false);
+  assert.equal(directories.includes("packages/empty/src"), false);
+  assert.equal(directories.length, CALLER_ROOTS.length + 1);
+
+  const scan = await scanCallers(root, directories);
+  assert.equal(scan.filesScanned, 2);
+  const report = resolveCallers(scan.sites, TABLE, ALIASES);
+  assert.deepEqual(report.refused, []);
+  assert.deepEqual(
+    report.resolved.map((entry) => [entry.caller.display, entry.resolution, entry.route]),
+    [
+      ["/api/devices", RESOLUTION.REWRITE, "/api/devices"],
+      ["/api/feedback", RESOLUTION.ALIAS, "/api/feedback"],
+    ],
+  );
 });
 
 test("a paths-module export that is not a path is refused by name", async () => {
