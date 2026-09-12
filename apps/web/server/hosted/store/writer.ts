@@ -190,6 +190,8 @@ type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAIN_REQUE
 interface TurnEnqueue {
   /** The turn's id where the runtime minted one already; minted here otherwise. */
   readonly turnId?: string;
+  /** eve's own id for the turn, where the relay queues the row at eve's start; the opener's inbox row names none, since eve has not yet started a turn for it. */
+  readonly eveTurnId?: string;
   readonly origin: TurnOrigin;
   readonly model?: string;
   readonly reasoningEffort?: string;
@@ -659,6 +661,7 @@ const insertQueuedTurn = SqlSchema.void({
     userId: Schema.String,
     conversationId: Schema.String,
     origin: TurnOriginSchema,
+    eveTurnId: Schema.NullOr(Schema.String),
     model: Schema.NullOr(Schema.String),
     reasoningEffort: Schema.NullOr(Schema.String),
     promptHash: Schema.NullOr(Schema.String),
@@ -669,12 +672,13 @@ const insertQueuedTurn = SqlSchema.void({
     statement(
       (sql) => sql`
         insert into turns (
-          id, user_id, conversation_id, origin, status, model, reasoning_effort,
+          id, user_id, conversation_id, origin, status, eve_turn_id, model, reasoning_effort,
           prompt_hash, tool_set_hash, queued_at
         )
         values (
           ${row.turnId}, ${row.userId}, ${row.conversationId}, ${row.origin}, ${TURN_STATUS.QUEUED},
-          ${row.model}, ${row.reasoningEffort}, ${row.promptHash}, ${row.toolSetHash}, ${row.queuedAt}
+          ${row.eveTurnId}, ${row.model}, ${row.reasoningEffort}, ${row.promptHash}, ${row.toolSetHash},
+          ${row.queuedAt}
         )
       `,
     ),
@@ -1273,6 +1277,7 @@ function enqueueTurn(context: WriterContext, enqueue: TurnEnqueue): Write<TurnEn
       userId: context.target.userId,
       conversationId: context.target.conversationId,
       origin: enqueue.origin,
+      eveTurnId: nullable(enqueue.eveTurnId),
       model: nullable(enqueue.model),
       reasoningEffort: nullable(enqueue.reasoningEffort),
       promptHash: nullable(enqueue.promptHash),

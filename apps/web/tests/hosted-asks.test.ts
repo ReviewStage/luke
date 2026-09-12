@@ -354,11 +354,11 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     sessionId,
     deliveryId: "delivery-w",
   }));
-  const cancels: string[] = [];
+  const cancels: (readonly [string, string | undefined])[] = [];
   const eve = {
     ...eveAccepting(sessionId),
-    async cancel(session: string) {
-      cancels.push(session);
+    async cancel(session: string, eveTurnId?: string) {
+      cancels.push([session, eveTurnId]);
       return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
     },
   };
@@ -369,7 +369,13 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     cancelRequested: (id: string, at: Date) =>
       Effect.promise(async () => {
         assert.equal(
-          (await writes.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED })).ok,
+          (
+            await writes.enqueueTurn(target, {
+              turnId,
+              eveTurnId: "turn_9",
+              origin: TURN_ORIGIN.TYPED,
+            })
+          ).ok,
           true,
         );
         await asks.bindDeliveries(target, ["delivery-w"], turnId);
@@ -390,7 +396,7 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     ),
   );
   assert.equal(outcome.ok, true);
-  assert.deepEqual(cancels, [sessionId]);
+  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
   const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
 
@@ -406,7 +412,7 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     ),
   );
   assert.equal(stampedFirst.ok, true);
-  assert.deepEqual(cancels, [sessionId]);
+  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
   const stops: (readonly [string, string, string, string])[] = [];
   const relay = new StreamRelay({
     writer: writes,
@@ -429,7 +435,7 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
   assert.deepEqual(stops, [
     [conversationId, sessionId, "turn_10", hostTurnId(sessionId, "turn_10")],
   ]);
-  assert.deepEqual(cancels, [sessionId]);
+  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
 
   // Both landed before both later reads: the start's honour stamped the turn, so the Stop's re-read
   // finds the stamp standing and answers it without a cancel of its own, which unscoped could reach
@@ -445,8 +451,13 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     cancelRequested: (askId: string, at: Date) =>
       Effect.promise(async () => {
         assert.equal(
-          (await writes.enqueueTurn(target, { turnId: honouredTurn, origin: TURN_ORIGIN.TYPED }))
-            .ok,
+          (
+            await writes.enqueueTurn(target, {
+              turnId: honouredTurn,
+              eveTurnId: "turn_11",
+              origin: TURN_ORIGIN.TYPED,
+            })
+          ).ok,
           true,
         );
         await asks.bindDeliveries(target, ["delivery-h"], honouredTurn);
@@ -468,7 +479,7 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     ),
   );
   assert.deepEqual(afterHonour.ok && afterHonour.answer.cancelRequestedAt, NOW - 5);
-  assert.deepEqual(cancels, [sessionId]);
+  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
 
   // A second Stop on a running turn already stamped is a repeat: eve is not asked again.
   const again = await database.run(
@@ -479,7 +490,7 @@ test("the stamp and the start's binding converge in either order: bound-then-sta
     ),
   );
   assert.deepEqual(again.ok && again.answer.cancelRequestedAt, NOW);
-  assert.deepEqual(cancels, [sessionId]);
+  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
 });
 
 test("over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in", async () => {

@@ -185,6 +185,9 @@ const TurnRowSchema = Schema.Struct({
   conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
   origin: Schema.String,
   status: Schema.String,
+  eveTurnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("eve_turn_id"),
+  ),
   model: Schema.NullOr(Schema.String),
   reasoningEffort: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
     Schema.fromKey("reasoning_effort"),

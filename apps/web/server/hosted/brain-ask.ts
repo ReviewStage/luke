@@ -52,9 +52,10 @@ export type { AskRecord, AskRow } from "./store/asks.js";
  * answers that record until eve's `turn.started` names the delivery and the
  * record learns its turn. A retry with the same client id finds the record
  * and dispatches again only where the first dispatch never reached eve: one
- * ask, one delivery. A Stop on a turn eve is running is eve's cancel; a Stop
- * on an ask still waiting is a stamp on the record, honoured when its turn
- * starts. Every id the routes mint or read is one `ids.ts` mints.
+ * ask, one delivery. A Stop on a turn eve is running is eve's cancel of that
+ * turn, named by the eve turn id the relay wrote on its row at the start; a
+ * Stop on an ask still waiting is a stamp on the record, honoured when its
+ * turn starts. Every id the routes mint or read is one `ids.ts` mints.
  *
  * The ask and the standing read answer effects over the ambient SQL client,
  * as the record they are handed does: a caller composes them into the one
@@ -444,10 +445,12 @@ export interface StopSeams extends AskStandingReads {
  * carry the same Stop. A turn already settled is answered as it stands and
  * nothing is asked of eve. An ask eve has not yet started a turn for takes
  * the stamp on its record, for the start that names its delivery to honour.
- * A turn under way is eve's cancel of the session's turn, which is the one
- * the row says is running since a conversation runs one session and one
- * turn at a time, and then the stamp on the row; a conversation that records
- * no session has nothing running to stop and is refused as such.
+ * A turn under way is eve's cancel scoped to that turn, by the eve turn id
+ * its row carries, and then the stamp on the row; a conversation that
+ * records no session has nothing running to stop and is refused as such. A
+ * row that names no eve turn was queued by the opener ahead of eve's start,
+ * or written before the column stood: eve runs nothing this build can name
+ * under it, so the Stop is the stamp alone and eve is asked nothing.
  */
 export function stopAsk(seams: StopSeams, userId: string, id: string): AskEffect<StopOutcome> {
   return Effect.gen(function* () {
@@ -478,9 +481,7 @@ export function stopAsk(seams: StopSeams, userId: string, id: string): AskEffect
       turn = standing.turn;
     }
     // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
-    // is answered as it stands: the route's cancel names eve's session and not its turn, so a
-    // second cancel could reach the turn queued after this one. Recording eve's turn id on the row
-    // (LUKE-180) is what scopes it; until then a stamp that stands is the one cancel this turn gets.
+    // is answered as it stands: a stamp that stands is the one cancel this turn gets.
     const answer = turn === standing.turn ? standing.answer : turnAnswer(id, turn);
     if (TERMINAL_TURN_STATUSES.has(turn.status)) return { ok: true, answer };
     if (turn.cancelRequestedAt) {
@@ -492,9 +493,15 @@ export function stopAsk(seams: StopSeams, userId: string, id: string): AskEffect
     const target = { userId, conversationId: turn.conversationId };
     const sessionId = yield* recordedRuntimeSession(target);
     if (sessionId === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_RUNNING };
-    const cancelled = yield* Effect.promise(() => seams.eve.cancel(sessionId));
-    if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-      return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
+    // The cancel names the turn the row was written for and never the session's turn under way:
+    // a turn that ends between the read above and eve's answer is answered `no_active_turn`, and
+    // the turn queued after it, now the one under way, is left running.
+    if (turn.eveTurnId !== null) {
+      const eveTurnId = turn.eveTurnId;
+      const cancelled = yield* Effect.promise(() => seams.eve.cancel(sessionId, eveTurnId));
+      if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
+        return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
+      }
     }
     const stamped = yield* seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
     if (!stamped.ok) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };

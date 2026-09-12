@@ -542,7 +542,7 @@ const TURN_COLUMNS =
   "turns.id, turns.user_id, turns.conversation_id, turns.origin, turns.status, turns.model, " +
   "turns.reasoning_effort, turns.prompt_hash, turns.tool_set_hash, turns.response_ids, " +
   "turns.usage, turns.queued_at, turns.started_at, turns.settled_at, turns.failure, " +
-  "turns.cancel_requested_at";
+  "turns.cancel_requested_at, turns.eve_turn_id";
 
 const TurnRowSchema = Schema.Struct({
   id: Schema.String,
@@ -550,6 +550,10 @@ const TurnRowSchema = Schema.Struct({
   conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
   origin: Schema.String,
   status: Schema.String,
+  /** eve's own id for the turn, `turn_<n>` within its session, where the relay queued the row at eve's start; the opener's inbox row and a row from before the column names none. */
+  eveTurnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+    Schema.fromKey("eve_turn_id"),
+  ),
   model: Schema.NullOr(Schema.String),
   reasoningEffort: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
     Schema.fromKey("reasoning_effort"),
