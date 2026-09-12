@@ -37,10 +37,10 @@ import type { HostedRoster } from "./roster.js";
 
 /**
  * The host's half of the gauntlet every action the hosted brain asks for
- * runs. The action tool's own `execute` admits the call by `admit`, against
- * the roster it reads for itself through the readers handed out here — the
- * stored snapshot, the projects that snapshot listed, the developer's saved
- * defaults, the facts Luke remembers — and only the validated action it
+ * runs. The action tool's own `execute` admits the call by `admitEffect`,
+ * against the roster it reads for itself through the readers handed out here
+ * — the stored snapshot, the projects that snapshot listed, the developer's
+ * saved defaults, the facts Luke remembers — and only the validated action it
  * mints reaches the carrier below. The carrier reaches the facts table for
  * a memory and the cloud action execution for a session or a workspace,
  * which admits the action once more against a fresh pass before the
@@ -65,7 +65,7 @@ export type CloudActionExecutor = (input: {
   apiKey: string;
   /** The provider's slice of the stored roster, which the execution admits the action against again. */
   roster: ActionRoster;
-}) => Promise<ActionExecutionAnswer>;
+}) => Effect.Effect<ActionExecutionAnswer>;
 
 export interface HostedCarrierDependencies {
   /** The roster as the snapshot holds it now, read again for every action. */
@@ -88,13 +88,13 @@ const REFUSAL = {
 /** What the hosted carrier answers with, for the action tools' context. */
 export interface HostedActionCarrier {
   /** The readers admission consults for one call; the roster is read once per call however many readers ask. */
-  admission(): Promise<ActionAdmissionReads>;
+  admission(): Effect.Effect<ActionAdmissionReads>;
   /** Carries an action admission minted, with the call's own fields for the execution that admits it again. */
   carry(
     action: ValidatedAction,
     fields: WireRecord,
     standing: ToolContext,
-  ): Promise<ActionOutputEnvelope>;
+  ): Effect.Effect<ActionOutputEnvelope>;
 }
 
 function carriedResult(executed: ActionExecutionAnswer): CarriedActionResult {
@@ -121,75 +121,92 @@ function storedRosterOf(roster: HostedRoster): { roster?: ObservedRoster } {
 }
 
 export function hostedActionCarrier(dependencies: HostedCarrierDependencies): HostedActionCarrier {
-  const carrySessionAction = async (
+  const carrySessionAction = (
     action: ValidatedAction<SessionActionKind>,
     fields: WireRecord,
     standing: ToolContext,
-  ): Promise<ActionOutputEnvelope> => {
-    const roster = await dependencies.roster();
-    const target = actionTargetSnapshot(action, roster.sessions);
-    const kind = hostedSessionKind(action.kind);
-    if (kind === undefined) return refusedActionOutput(REFUSAL.NOT_HERE, target);
-    const providerId = "identity" in action ? action.identity.providerId : action.providerId;
-    if (!isCloudAgentProviderId(providerId)) return refusedActionOutput(REFUSAL.NOT_CLOUD, target);
-    const apiKey = await dependencies.apiKey(providerId);
-    if (standing.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER, target);
-    if (!apiKey) return refusedActionOutput(REFUSAL.NO_KEY, target);
-    return actionOutputFromResult(
-      carriedResult(
-        await dependencies.execute({
-          kind,
-          providerId,
-          fields,
-          apiKey,
-          roster: actionRosterFor(providerId, storedRosterOf(await dependencies.roster())),
-        }),
-      ),
-      target,
+  ): Effect.Effect<ActionOutputEnvelope> =>
+    Effect.gen(function* () {
+      const roster = yield* Effect.promise(() => dependencies.roster());
+      const target = actionTargetSnapshot(action, roster.sessions);
+      const kind = hostedSessionKind(action.kind);
+      if (kind === undefined) return refusedActionOutput(REFUSAL.NOT_HERE, target);
+      const providerId = "identity" in action ? action.identity.providerId : action.providerId;
+      if (!isCloudAgentProviderId(providerId))
+        return refusedActionOutput(REFUSAL.NOT_CLOUD, target);
+      const apiKey = yield* Effect.promise(() => dependencies.apiKey(providerId));
+      if (standing.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER, target);
+      if (!apiKey) return refusedActionOutput(REFUSAL.NO_KEY, target);
+      const stored = yield* Effect.promise(() => dependencies.roster());
+      const executed = yield* dependencies.execute({
+        kind,
+        providerId,
+        fields,
+        apiKey,
+        roster: actionRosterFor(providerId, storedRosterOf(stored)),
+      });
+      return actionOutputFromResult(carriedResult(executed), target);
+    });
+
+  const wrote = (
+    write: () => Promise<boolean>,
+    refusal: string,
+  ): Effect.Effect<ActionOutputEnvelope> =>
+    Effect.map(Effect.promise(write), (done) =>
+      done ? acceptedActionOutput() : refusedActionOutput(refusal),
     );
-  };
+
+  const notHere = (): Effect.Effect<ActionOutputEnvelope> =>
+    Effect.sync(() => refusedActionOutput(REFUSAL.NOT_HERE));
 
   return {
-    async admission() {
-      let read: Promise<HostedRoster> | undefined;
-      const roster = () => Effect.promise(() => (read ??= dependencies.roster()));
-      return {
-        roster: { read: () => Effect.map(roster(), (held) => held.sessions) },
-        projects: {
-          read: () => Effect.map(roster(), (held) => held.projects),
-          defaults: () => Effect.promise(() => dependencies.defaults()),
-          agentModels: workspaceAgentModels,
-        },
-        rememberedFacts: await dependencies.facts.list(),
-      };
-    },
+    admission: () =>
+      Effect.gen(function* () {
+        let read: Promise<HostedRoster> | undefined;
+        const roster = () => Effect.promise(() => (read ??= dependencies.roster()));
+        return {
+          roster: { read: () => Effect.map(roster(), (held) => held.sessions) },
+          projects: {
+            read: () => Effect.map(roster(), (held) => held.projects),
+            defaults: () => Effect.promise(() => dependencies.defaults()),
+            agentModels: workspaceAgentModels,
+          },
+          rememberedFacts: yield* Effect.promise(() => dependencies.facts.list()),
+        };
+      }),
     carry(action, fields, standing) {
-      if (standing.isRevoked())
-        return Promise.resolve(refusedActionOutput(ACTION_REFUSAL.TURN_OVER));
-      return dispatchByKind(action, {
-        [ACTION_KIND.REMEMBER]: async (remember) =>
-          (await dependencies.facts.remember({
-            id: randomUUID(),
-            words: remember.words,
-            ...(remember.replaces !== undefined ? { replaces: remember.replaces } : undefined),
-          }))
-            ? acceptedActionOutput()
-            : refusedActionOutput(REFUSAL.MEMORY_NOT_SAVED),
-        [ACTION_KIND.FORGET]: async (forget) =>
-          (await dependencies.facts.forget(forget.id))
-            ? acceptedActionOutput()
-            : refusedActionOutput(REFUSAL.MEMORY_NOT_REMOVED),
-        [ACTION_KIND.MESSAGE]: (carried) => carrySessionAction(carried, fields, standing),
-        [ACTION_KIND.CONTROL]: (carried) => carrySessionAction(carried, fields, standing),
-        [ACTION_KIND.CREATE_WORKSPACE]: (carried) => carrySessionAction(carried, fields, standing),
-        [ACTION_KIND.ADD_AGENT]: (carried) => carrySessionAction(carried, fields, standing),
-        [ACTION_KIND.RENAME_WORKSPACE]: (carried) => carrySessionAction(carried, fields, standing),
-        [ACTION_KIND.RENAME_SESSION]: (carried) => carrySessionAction(carried, fields, standing),
-        [ACTION_KIND.OPEN]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
-        [ACTION_KIND.SETTING]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
-        [ACTION_KIND.PANEL]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
-        [ACTION_KIND.FEEDBACK]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
-        [ACTION_KIND.UPDATE]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
+      return Effect.suspend(() => {
+        if (standing.isRevoked())
+          return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.TURN_OVER));
+        return dispatchByKind(action, {
+          [ACTION_KIND.REMEMBER]: (remember) =>
+            wrote(
+              () =>
+                dependencies.facts.remember({
+                  id: randomUUID(),
+                  words: remember.words,
+                  ...(remember.replaces !== undefined
+                    ? { replaces: remember.replaces }
+                    : undefined),
+                }),
+              REFUSAL.MEMORY_NOT_SAVED,
+            ),
+          [ACTION_KIND.FORGET]: (forget) =>
+            wrote(() => dependencies.facts.forget(forget.id), REFUSAL.MEMORY_NOT_REMOVED),
+          [ACTION_KIND.MESSAGE]: (carried) => carrySessionAction(carried, fields, standing),
+          [ACTION_KIND.CONTROL]: (carried) => carrySessionAction(carried, fields, standing),
+          [ACTION_KIND.CREATE_WORKSPACE]: (carried) =>
+            carrySessionAction(carried, fields, standing),
+          [ACTION_KIND.ADD_AGENT]: (carried) => carrySessionAction(carried, fields, standing),
+          [ACTION_KIND.RENAME_WORKSPACE]: (carried) =>
+            carrySessionAction(carried, fields, standing),
+          [ACTION_KIND.RENAME_SESSION]: (carried) => carrySessionAction(carried, fields, standing),
+          [ACTION_KIND.OPEN]: notHere,
+          [ACTION_KIND.SETTING]: notHere,
+          [ACTION_KIND.PANEL]: notHere,
+          [ACTION_KIND.FEEDBACK]: notHere,
+          [ACTION_KIND.UPDATE]: notHere,
+        });
       });
     },
   };

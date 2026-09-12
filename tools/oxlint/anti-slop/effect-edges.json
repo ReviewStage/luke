@@ -22,7 +22,6 @@
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",
-    "packages/actions/src/admit.ts",
     "packages/analytics/src/sender.ts",
     "packages/brain/src/agent.ts",
     "packages/brain/src/effect/carry.ts",

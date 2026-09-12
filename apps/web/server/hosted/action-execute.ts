@@ -8,7 +8,8 @@ import {
   type ActionRequest,
   type ActionResultStatus,
   type AdmitContext,
-  admit,
+  type AdmitRefusal,
+  admitEffect,
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   dispatchAction,
@@ -18,6 +19,8 @@ import {
   type HostedConversationMessage,
   HTTP_STATUS,
   normalizeSession,
+  type PluginActionKind,
+  type PluginActionRequests,
   PROVIDER_IDENTITY_BY_ID,
   type ProviderActionResult,
   type ProviderSessionObservation,
@@ -28,7 +31,6 @@ import {
   providerWorkspaceAgentRequest,
   providerWorkspaceRenameRequest,
   providerWorkspaceRequest,
-  type Refusal,
   RUN_ORIGIN,
   type SessionActionKind,
   type SessionProviderPlugin,
@@ -323,7 +325,7 @@ function missingTargetPhrase(reason: string): string | undefined {
 function fromRefusal(
   providerId: CloudAgentProviderId,
   pass: Pick<ActionRoster, "unauthorized" | "unreachable">,
-  refusal: Refusal,
+  refusal: AdmitRefusal,
 ): ActionExecutionAnswer {
   const missing = missingTargetPhrase(refusal.reason);
   return {
@@ -333,16 +335,17 @@ function fromRefusal(
 }
 
 /**
- * One action a remote client asked, admitted and carried. The build's own
- * capability map answers first; then `admit()` reads the roster the action
- * stands on for itself — the stored snapshot's slice for this provider, the
- * session or the project it names, the advertisement it stands on, the
- * bounds on the developer's own words — and only the validated action it
- * mints reaches the adapter, which builds each effect's route back out of
- * the same roster. No pass runs here: the snapshot is what the user was
- * shown, and the provider answers for whether the target still stands.
+ * One action a remote client asked, admitted and carried, as the effect the
+ * caller composes into its own. The build's own capability map answers first;
+ * then `admitEffect()` reads the roster the action stands on for itself — the
+ * stored snapshot's slice for this provider, the session or the project it
+ * names, the advertisement it stands on, the bounds on the developer's own
+ * words — and only the validated action it mints reaches the adapter, which
+ * builds each effect's route back out of the same roster. No pass runs here:
+ * the snapshot is what the user was shown, and the provider answers for
+ * whether the target still stands.
  */
-export async function executeSessionAction(options: {
+export function executeSessionAction(options: {
   kind: HostedSessionActionKind;
   providerId: CloudAgentProviderId;
   /** The ask's own fields, keyed by the names admission reads, unparsed. */
@@ -350,37 +353,48 @@ export async function executeSessionAction(options: {
   apiKey: string;
   roster: ActionRoster;
   seams?: ActionExecuteSeams;
-}): Promise<ActionExecutionAnswer> {
-  const { kind, providerId, fields, apiKey, roster } = options;
-  const unsupported = actionUnsupportedReason(kind, providerId);
-  if (unsupported) return { result: ACTION_RESULT_STATUS.UNSUPPORTED, reason: unsupported };
+}): Effect.Effect<ActionExecutionAnswer> {
+  return Effect.suspend(() => {
+    const { kind, providerId, fields, apiKey, roster } = options;
+    const unsupported = actionUnsupportedReason(kind, providerId);
+    if (unsupported) {
+      return Effect.succeed<ActionExecutionAnswer>({
+        result: ACTION_RESULT_STATUS.UNSUPPORTED,
+        reason: unsupported,
+      });
+    }
 
-  const plugin = pluginOverRoster(providerId, apiKey, roster, options.seams ?? {});
-  const request: ActionRequest<HostedSessionActionKind> = { kind, fields };
-  const admitted = await admit(request, admissionOver(plugin, roster));
-  if (admitted.kind === undefined) return fromRefusal(providerId, roster, admitted);
+    const plugin = pluginOverRoster(providerId, apiKey, roster, options.seams ?? {});
+    const request: ActionRequest<HostedSessionActionKind> = { kind, fields };
+    const carried = <Kind extends PluginActionKind>(
+      name: Kind,
+      ask: PluginActionRequests[Kind],
+    ): Effect.Effect<ActionExecutionAnswer> =>
+      Effect.map(
+        Effect.promise(() => dispatchAction(plugin, name, ask)),
+        fromProviderResult,
+      );
 
-  return dispatchByKind(admitted, {
-    [ACTION_KIND.MESSAGE]: async (action) =>
-      fromProviderResult(await dispatchAction(plugin, "message", providerSessionMessage(action))),
-    [ACTION_KIND.CONTROL]: async (action) =>
-      fromProviderResult(await dispatchAction(plugin, "control", providerControlRequest(action))),
-    [ACTION_KIND.ADD_AGENT]: async (action) =>
-      fromProviderResult(
-        await dispatchAction(plugin, "spawnAgent", providerWorkspaceAgentRequest(action)),
+    return admitEffect(request, admissionOver(plugin, roster)).pipe(
+      Effect.flatMap(
+        (admitted): Effect.Effect<ActionExecutionAnswer> =>
+          dispatchByKind(admitted, {
+            [ACTION_KIND.MESSAGE]: (action) => carried("message", providerSessionMessage(action)),
+            [ACTION_KIND.CONTROL]: (action) => carried("control", providerControlRequest(action)),
+            [ACTION_KIND.ADD_AGENT]: (action) =>
+              carried("spawnAgent", providerWorkspaceAgentRequest(action)),
+            [ACTION_KIND.RENAME_SESSION]: (action) =>
+              carried("renameSession", providerSessionRenameRequest(action)),
+            [ACTION_KIND.RENAME_WORKSPACE]: (action) =>
+              carried("renameWorkspace", providerWorkspaceRenameRequest(action)),
+            [ACTION_KIND.CREATE_WORKSPACE]: (action) =>
+              carried("createWorkspace", providerWorkspaceRequest(action)),
+          }),
       ),
-    [ACTION_KIND.RENAME_SESSION]: async (action) =>
-      fromProviderResult(
-        await dispatchAction(plugin, "renameSession", providerSessionRenameRequest(action)),
+      Effect.catchTag("AdmitRefusal", (refusal) =>
+        Effect.succeed(fromRefusal(providerId, roster, refusal)),
       ),
-    [ACTION_KIND.RENAME_WORKSPACE]: async (action) =>
-      fromProviderResult(
-        await dispatchAction(plugin, "renameWorkspace", providerWorkspaceRenameRequest(action)),
-      ),
-    [ACTION_KIND.CREATE_WORKSPACE]: async (action) =>
-      fromProviderResult(
-        await dispatchAction(plugin, "createWorkspace", providerWorkspaceRequest(action)),
-      ),
+    );
   });
 }
 

@@ -21,11 +21,11 @@ import {
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { ACTION_KIND, type ActionKind } from "./action-kinds.js";
+import { ACTION_KIND, type ActionKind, type ActionRequest } from "./action-kinds.js";
 import {
   ACTION_REFUSAL,
   type AdmitContext,
-  admit,
+  admitEffect,
   type Refusal,
   type ValidatedAction,
 } from "./admit.js";
@@ -140,6 +140,25 @@ const SESSION_KINDS = [
 // SAFETY: the table above is keyed by every action kind and by nothing else.
 const EVERY_KIND = Object.keys(FIELDS) as readonly ActionKind[];
 
+/**
+ * The gauntlet's decision as the one value these cases read: what
+ * `admitEffect` succeeded with, or the refusal it failed with as the record
+ * the action journal takes. A roster read that fails is left to reject, which
+ * is what `admit-effect.test.ts` holds it to.
+ */
+function decide<Kind extends ActionKind>(
+  request: ActionRequest<Kind>,
+  context: AdmitContext,
+): Promise<ValidatedAction<Kind> | Refusal> {
+  return Effect.runPromise(
+    Effect.catchAll(
+      admitEffect(request, context),
+      (refusal): Effect.Effect<ValidatedAction<Kind> | Refusal> =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal.reason }),
+    ),
+  );
+}
+
 function refused(result: ValidatedAction | Refusal): string {
   assert.equal(result.kind, undefined, "expected a refusal");
   assert.ok(result.kind === undefined);
@@ -150,7 +169,7 @@ function refused(result: ValidatedAction | Refusal): string {
 test("each validated against the observed roster before an adapter sees it", async () => {
   const elsewhere = context({ sessions: [] });
   for (const kind of SESSION_KINDS) {
-    const answer = await admit({ kind, fields: FIELDS[kind] }, elsewhere);
+    const answer = await decide({ kind, fields: FIELDS[kind] }, elsewhere);
     assert.equal(refused(answer), ACTION_REFUSAL.NO_SESSION, kind);
   }
   assert.equal(elsewhere.rosterReads(), SESSION_KINDS.length);
@@ -159,14 +178,14 @@ test("each validated against the observed roster before an adapter sees it", asy
 test("a fresh roster read precedes it, and admission reads it once per action", async () => {
   for (const kind of SESSION_KINDS) {
     const standing = context();
-    assert.notEqual((await admit({ kind, fields: FIELDS[kind] }, standing)).kind, undefined, kind);
+    assert.notEqual((await decide({ kind, fields: FIELDS[kind] }, standing)).kind, undefined, kind);
     assert.equal(standing.rosterReads(), 1, kind);
   }
 });
 
 test("its target has to be one the roster holds", async () => {
   // The same session id under another provider is another session, and names nothing.
-  const answer = await admit(
+  const answer = await decide(
     { kind: ACTION_KIND.MESSAGE, fields: { ...FIELDS[ACTION_KIND.MESSAGE], provider_id: "codex" } },
     context(),
   );
@@ -177,7 +196,7 @@ test("a cancellation or a revoked run refuses it", async () => {
   for (const kind of EVERY_KIND) {
     const revoked = context({ guard: { isRevoked: () => true } });
     assert.equal(
-      refused(await admit({ kind, fields: FIELDS[kind] }, revoked)),
+      refused(await decide({ kind, fields: FIELDS[kind] }, revoked)),
       ACTION_REFUSAL.TURN_OVER,
       kind,
     );
@@ -188,7 +207,7 @@ test("a cancellation or a revoked run refuses it", async () => {
 test("a turn that ends while the roster is read refuses rather than dispatching", async () => {
   let over = false;
   const controller = new AbortController();
-  const answer = await admit(
+  const answer = await decide(
     { kind: ACTION_KIND.MESSAGE, fields: FIELDS[ACTION_KIND.MESSAGE] },
     {
       origin: RUN_ORIGIN.USER,
@@ -211,7 +230,7 @@ test("a read still out when the signal fires answers nothing, and the action ref
   const held = new Promise<readonly Session[]>((resolve) => {
     release = () => resolve([offering()]);
   });
-  const pending = admit(
+  const pending = decide(
     { kind: ACTION_KIND.MESSAGE, fields: FIELDS[ACTION_KIND.MESSAGE] },
     {
       origin: RUN_ORIGIN.USER,
@@ -226,7 +245,7 @@ test("a read still out when the signal fires answers nothing, and the action ref
 
 test("a control its provider advertised for it, and never the caller's copy", async () => {
   const roster = [offering()];
-  const admitted = await admit(
+  const admitted = await decide(
     { kind: ACTION_KIND.CONTROL, fields: FIELDS[ACTION_KIND.CONTROL] },
     context({ sessions: roster }),
   );
@@ -238,7 +257,7 @@ test("a control its provider advertised for it, and never the caller's copy", as
   assert.deepEqual(admitted.control, advertised);
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.CONTROL, fields: { ...IDENTITY, control_id: "terminate" } },
         context(),
       ),
@@ -254,7 +273,7 @@ test("a session whose current state is documented for none advertises nothing an
   for (const kind of SESSION_KINDS) {
     if (kind === ACTION_KIND.OPEN) continue;
     assert.notEqual(
-      refused(await admit({ kind, fields: { ...FIELDS[kind], ...named } }, quiet)),
+      refused(await decide({ kind, fields: { ...FIELDS[kind], ...named } }, quiet)),
       "",
       kind,
     );
@@ -268,21 +287,21 @@ test("local sessions have no such endpoint and stay entirely read-only", async (
   for (const kind of SESSION_KINDS) {
     if (kind === ACTION_KIND.OPEN) continue;
     assert.equal(
-      (await admit({ kind, fields: { ...FIELDS[kind], ...named } }, observed)).kind,
+      (await decide({ kind, fields: { ...FIELDS[kind], ...named } }, observed)).kind,
       undefined,
       kind,
     );
   }
   // An open is not a write, and a session reporting no address is offered nowhere to open.
   assert.equal(
-    refused(await admit({ kind: ACTION_KIND.OPEN, fields: named }, observed)),
+    refused(await decide({ kind: ACTION_KIND.OPEN, fields: named }, observed)),
     ACTION_REFUSAL.NO_ADDRESS,
   );
 });
 
 test("the developer's own text, bounded and refused rather than cut", async () => {
   const atBound = "a".repeat(maximumSessionMessageLength);
-  const admitted = await admit(
+  const admitted = await decide(
     { kind: ACTION_KIND.MESSAGE, fields: { ...IDENTITY, text: atBound } },
     context(),
   );
@@ -290,7 +309,7 @@ test("the developer's own text, bounded and refused rather than cut", async () =
   assert.equal(admitted.text, atBound);
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.MESSAGE, fields: { ...IDENTITY, text: `${atBound}a` } },
         context(),
       ),
@@ -299,21 +318,24 @@ test("the developer's own text, bounded and refused rather than cut", async () =
   );
   const name = "n".repeat(maximumWorkspaceNameLength + 1);
   for (const kind of [ACTION_KIND.RENAME_WORKSPACE, ACTION_KIND.RENAME_SESSION] as const) {
-    assert.equal((await admit({ kind, fields: { ...IDENTITY, name } }, context())).kind, undefined);
+    assert.equal(
+      (await decide({ kind, fields: { ...IDENTITY, name } }, context())).kind,
+      undefined,
+    );
   }
 });
 
 test("lands only in a project its provider reported on the latest observation pass", async () => {
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.CREATE_WORKSPACE, fields: { project_id: "/Users/me/other" } },
         context(),
       ),
     ),
     ACTION_REFUSAL.NO_PROJECT,
   );
-  const admitted = await admit(
+  const admitted = await decide(
     { kind: ACTION_KIND.CREATE_WORKSPACE, fields: { project_id: "luke" } },
     context(),
   );
@@ -323,7 +345,7 @@ test("lands only in a project its provider reported on the latest observation pa
   assert.equal(admitted.providerProjectId, LISTED_PROJECT.providerProjectId);
   // A target the ask invents for a project listed without one names no host
   // to pick, so it neither hides the project nor rides the action.
-  const targeted = await admit(
+  const targeted = await decide(
     { kind: ACTION_KIND.CREATE_WORKSPACE, fields: { project_id: "luke", target_id: "default" } },
     context(),
   );
@@ -343,7 +365,7 @@ test("each project says whether it takes a task, needs one, or takes none", asyn
     });
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.CREATE_WORKSPACE, fields: { project_id: "luke", task: "start" } },
         withSupport(WORKSPACE_TASK_SUPPORT.NONE),
       ),
@@ -352,7 +374,7 @@ test("each project says whether it takes a task, needs one, or takes none", asyn
   );
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.CREATE_WORKSPACE, fields: { project_id: "luke" } },
         withSupport(WORKSPACE_TASK_SUPPORT.REQUIRED),
       ),
@@ -364,14 +386,14 @@ test("each project says whether it takes a task, needs one, or takes none", asyn
 test("as one of the agent kinds that row's latest observation listed", async () => {
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.ADD_AGENT, fields: { ...IDENTITY, agent: "opencode" } },
         context(),
       ),
     ),
     ACTION_REFUSAL.NO_SESSION_AGENT,
   );
-  const admitted = await admit(
+  const admitted = await decide(
     { kind: ACTION_KIND.ADD_AGENT, fields: FIELDS[ACTION_KIND.ADD_AGENT] },
     context(),
   );
@@ -382,7 +404,7 @@ test("as one of the agent kinds that row's latest observation listed", async () 
 test("who opened a turn is recorded on the action and is never by itself a permission", async () => {
   const answers = await Promise.all(
     Object.values(RUN_ORIGIN).map(async (origin) => {
-      const admitted = await admit(
+      const admitted = await decide(
         { kind: ACTION_KIND.MESSAGE, fields: FIELDS[ACTION_KIND.MESSAGE] },
         { ...context(), origin },
       );
@@ -398,7 +420,7 @@ test("who opened a turn is recorded on the action and is never by itself a permi
 test("a setting the guide does not carry is one the conversation cannot change", async () => {
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.SETTING, fields: FIELDS[ACTION_KIND.SETTING] },
         { ...context(), guide: EMPTY_APP_GUIDE },
       ),
@@ -408,13 +430,13 @@ test("a setting the guide does not carry is one the conversation cannot change",
   // A run that reports nothing about itself changes nothing about itself.
   assert.equal(
     refused(
-      await admit({ kind: ACTION_KIND.SETTING, fields: FIELDS[ACTION_KIND.SETTING] }, context()),
+      await decide({ kind: ACTION_KIND.SETTING, fields: FIELDS[ACTION_KIND.SETTING] }, context()),
     ),
     ACTION_REFUSAL.NO_SETTING,
   );
   assert.equal(
     refused(
-      await admit({ kind: ACTION_KIND.UPDATE, fields: FIELDS[ACTION_KIND.UPDATE] }, context()),
+      await decide({ kind: ACTION_KIND.UPDATE, fields: FIELDS[ACTION_KIND.UPDATE] }, context()),
     ),
     ACTION_REFUSAL.NO_UPDATE_REPORT,
   );
@@ -424,12 +446,12 @@ test("only an id from the remembered list can be named, and the cap refuses rath
   const held = [{ id: "fact-one", words: "prefers concise answers" }];
   const notebook = context({ rememberedFacts: held });
   assert.equal(
-    refused(await admit({ kind: ACTION_KIND.FORGET, fields: { id: "fact-two" } }, notebook)),
+    refused(await decide({ kind: ACTION_KIND.FORGET, fields: { id: "fact-two" } }, notebook)),
     ACTION_REFUSAL.NO_SUCH_FACT,
   );
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.REMEMBER, fields: { words: "x", replaces: "fact-two" } },
         notebook,
       ),
@@ -442,7 +464,7 @@ test("only an id from the remembered list can be named, and the cap refuses rath
   }));
   assert.equal(
     refused(
-      await admit(
+      await decide(
         { kind: ACTION_KIND.REMEMBER, fields: FIELDS[ACTION_KIND.REMEMBER] },
         context({ rememberedFacts: full }),
       ),
@@ -452,7 +474,7 @@ test("only an id from the remembered list can be named, and the cap refuses rath
 });
 
 test("opening a session is not a write: the action carries an identity, never an address", async () => {
-  const admitted = await admit(
+  const admitted = await decide(
     { kind: ACTION_KIND.OPEN, fields: FIELDS[ACTION_KIND.OPEN] },
     context(),
   );
@@ -486,7 +508,7 @@ const READS = {
 test("each action is admitted against the observed state it names, and against nothing wider", async () => {
   for (const kind of EVERY_KIND) {
     const reached: string[] = [];
-    await admit(
+    await decide(
       { kind, fields: FIELDS[kind] },
       {
         origin: RUN_ORIGIN.USER,

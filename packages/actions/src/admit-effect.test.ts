@@ -9,16 +9,15 @@ import {
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { ACTION_KIND } from "./action-kinds.js";
-import { ACTION_REFUSAL, type AdmitContext, AdmitRefusal, admit, admitEffect } from "./admit.js";
+import { ACTION_REFUSAL, type AdmitContext, AdmitRefusal, admitEffect } from "./admit.js";
 
 /**
  * The gauntlet as an Effect: what it succeeds with, what it fails with, and
- * that the Promise door answers the same decision in the shape its callers
- * still hold. Each case asserts the refusal's tag and its reason as values,
- * because the reason is what the action journal records and Luke says aloud.
+ * what it reads to decide. Each case asserts the refusal's tag and its reason
+ * as values, because the reason is what the action journal records and Luke
+ * says aloud.
  */
 
 const NOW = 1_800_000_000_000;
@@ -297,33 +296,6 @@ describe("admitEffect", () => {
       assert.equal(admitted.kind, ACTION_KIND.MESSAGE);
     }),
   );
-});
-
-describe("admit", () => {
-  it("answers the refusal as the record the action journal takes", async () => {
-    const answer = await admit(MESSAGE, context({ sessions: [] }));
-    assert.deepEqual(answer, {
-      status: ACTION_RESULT_STATUS.REJECTED,
-      reason: ACTION_REFUSAL.NO_SESSION,
-    });
-  });
-
-  it("rejects with a roster read's own failure, not a wrapper of it", async () => {
-    const failure = new Error("roster offline");
-    await assert.rejects(
-      admit(MESSAGE, {
-        origin: RUN_ORIGIN.USER,
-        roster: { read: () => Effect.promise(() => Promise.reject(failure)) },
-      }),
-      (caught) => caught === failure,
-    );
-  });
-
-  it("answers what the effect succeeded with", async () => {
-    const admitted = await admit(MESSAGE, context());
-    assert.equal(admitted.kind, ACTION_KIND.MESSAGE);
-    assert.equal(admitted.origin, RUN_ORIGIN.USER);
-  });
 });
 
 it("AdmitRefusal is the tagged error the gauntlet fails with", () => {

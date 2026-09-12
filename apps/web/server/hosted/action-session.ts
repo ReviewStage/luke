@@ -77,7 +77,7 @@ function aimed(
  * reads, and the one place that says which actions name a session at all — the
  * creation names a project instead. Nothing here validates a value: it is
  * renamed and handed on unparsed, because whether it is a message, a name, a
- * task, or a model any session or project actually takes is `admit()`'s
+ * task, or a model any session or project actually takes is `admitEffect()`'s
  * question, asked once, against the stored snapshot the action stands on.
  */
 const HOSTED_ACTION_FIELDS = {
@@ -253,7 +253,7 @@ export async function handleSessionAction(options: SessionActionOptions): Promis
   if (key instanceof Response) return key;
 
   const roster = await options.roster(userId, providerId, secret);
-  const execute = options.execute ?? executeSessionAction;
+  const execute = options.execute ?? routeExecute;
   return actionAnswer(await execute({ kind, providerId, fields, apiKey: key.apiKey, roster }));
 }
 
@@ -275,6 +275,15 @@ function routeRoster(route: HostedVaultRoute): SessionActionOptions["roster"] {
       }),
     );
 }
+
+/**
+ * The execution a deployed route carries an admitted action through. It is an
+ * effect, and this is where a deployed route runs it: on the same edge
+ * runtime {@link routeRoster} reads the snapshot on, since the handler above
+ * answers a `Response` and holds no fiber of its own.
+ */
+const routeExecute: NonNullable<SessionActionOptions["execute"]> = (options) =>
+  runWeb(executeSessionAction(options));
 
 /** The six actions, each as the one thing its route names. */
 export const handleMessageAction = (route: HostedVaultRoute): Promise<Response> =>

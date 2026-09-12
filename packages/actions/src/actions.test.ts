@@ -27,12 +27,14 @@ const appToolAction = (
   sessions: readonly never[],
   rememberedFacts: readonly RememberedFact[],
 ) =>
-  admitToolCall(call, {
-    origin: RUN_ORIGIN.USER,
-    roster: { read: () => Effect.succeed(sessions) },
-    guide,
-    rememberedFacts,
-  });
+  Effect.runPromise(
+    admitToolCall(call, {
+      origin: RUN_ORIGIN.USER,
+      roster: { read: () => Effect.succeed(sessions) },
+      guide,
+      rememberedFacts,
+    }),
+  );
 
 test("a setting action narrates the setting label and accepted value", async () => {
   assert.equal(

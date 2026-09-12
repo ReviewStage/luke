@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { type ActionKind, type ActionRequest, admit } from "@sidecar/actions";
+import {
+  type ActionKind,
+  type ActionRequest,
+  type AdmitContext,
+  admitEffect,
+  type Refusal,
+  type ValidatedAction,
+} from "@sidecar/actions";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_KIND,
@@ -30,6 +37,7 @@ import {
   type JsonObject,
   type JsonValue,
   recordedRoutes,
+  runTest,
   temporaryDirectory,
 } from "@sidecar/wire/testing";
 import { Effect } from "effect";
@@ -137,11 +145,12 @@ const ADVERTISED_ACTION_KINDS = Object.values({
 
 /**
  * The roster and the request as admission reads them, over this provider's own
- * recorded pass. The two cases below hold `admit()` to a sentence rather than
- * the adapter, because admission is where the sentence now lives — and they
- * run per provider so each provider's own advertisement shape is what is read.
+ * recorded pass. The two cases below hold `admitEffect()` to a sentence rather
+ * than the adapter, because admission is where the sentence now lives — and
+ * they run per provider so each provider's own advertisement shape is what is
+ * read.
  */
-function admissionOver(plugin: SessionProviderPlugin) {
+function admissionOver(plugin: SessionProviderPlugin): AdmitContext {
   return {
     origin: RUN_ORIGIN.USER,
     roster: {
@@ -149,6 +158,24 @@ function admissionOver(plugin: SessionProviderPlugin) {
         Effect.succeed(plugin.latest().map((one) => normalizeSession(plugin.provider, one))),
     },
   };
+}
+
+/**
+ * The gauntlet's decision as one value: what it minted, or the refusal it
+ * failed with in the shape the action journal records. A case here reads both
+ * the same, because what it is holding admission to is the sentence.
+ */
+function decide(
+  request: ActionRequest<ActionKind>,
+  context: AdmitContext,
+): Promise<ValidatedAction | Refusal> {
+  return runTest(
+    Effect.catchAll(
+      admitEffect(request, context),
+      (refusal): Effect.Effect<ValidatedAction | Refusal> =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal.reason }),
+    ),
+  );
 }
 
 function admissionRequest(
@@ -460,7 +487,7 @@ export function describeProviderContract(
     const requestsAfterPass = api.requests().length;
 
     for (const kind of fixtures.advertised) {
-      const admitted = await admit(
+      const admitted = await decide(
         admissionRequest(plugin, kind, fixtures.absentSessionId, {
           ...advertisementFor(plugin, fixtures, kind),
         }),
@@ -530,7 +557,7 @@ export function describeProviderContract(
       const overLong = "l".repeat(maximumSessionMessageLength + 1);
 
       for (const text of ["", "   ", overLong]) {
-        const admitted = await admit(
+        const admitted = await decide(
           admissionRequest(plugin, ACTION_KIND.MESSAGE, fixtures.sessionId, { text }),
           admissionOver(plugin),
         );
