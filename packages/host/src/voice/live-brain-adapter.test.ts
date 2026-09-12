@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { BRAIN_RUN_EVENT, type BrainRunEvent, type BrainRunEventBody } from "@sidecar/brain";
+import {
+  BRAIN_RUN_EVENT,
+  type BrainAnticipation,
+  type BrainAnticipationFacts,
+  type BrainRunEvent,
+  type BrainRunEventBody,
+} from "@sidecar/brain";
 import {
   BRAIN_ASK_REFUSAL,
   BRAIN_REQUEST_ORIGIN,
@@ -144,4 +150,60 @@ test("an agent rebuilt between asks is followed once each, and a listener let go
   stop();
   second.events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "unheard" });
   assert.deepEqual(heard, ["from-first", "from-second"]);
+});
+
+/** An agent with the read prefetch's three seams, recording what reached them. */
+function anticipatingAgent() {
+  const base = fakeAgent();
+  const anticipations: BrainAnticipation[] = [];
+  const factsListeners = new Set<(facts: BrainAnticipationFacts) => void>();
+  let drops = 0;
+  const agent: LiveBrainAgent = {
+    ...base.agent,
+    anticipateAsk: (anticipation) => {
+      anticipations.push(anticipation);
+    },
+    dropAnticipation: () => {
+      drops += 1;
+    },
+    onAnticipationFacts: (listener) => {
+      factsListeners.add(listener);
+      return () => {
+        factsListeners.delete(listener);
+      };
+    },
+  };
+  const facts = {
+    fire: (heard: BrainAnticipationFacts) => {
+      for (const listener of [...factsListeners]) listener(heard);
+    },
+  };
+  return { agent, anticipations, facts, drops: () => drops };
+}
+
+test("an anticipation crosses with the row as the brain's key, a drop reaches the agent, and facts come back under the row they were read for", () => {
+  const fake = anticipatingAgent();
+  const brain = brainAgentLiveBrain({ agent: () => fake.agent });
+  const heard: { rowId: number; text: string }[] = [];
+  brain.onAnticipationFacts?.((facts) => heard.push(facts));
+  brain.anticipate?.({ rowId: 7, partialAsk: "what is", recentTurns: "Developer: what is" });
+  assert.deepEqual(fake.anticipations, [
+    { id: "7", partialAsk: "what is", recentTurns: "Developer: what is" },
+  ]);
+  fake.facts.fire({ id: "7", text: "The agent finished the tests." });
+  fake.facts.fire({ id: "not-a-row", text: "dropped" });
+  assert.deepEqual(heard, [{ rowId: 7, text: "The agent finished the tests." }]);
+  brain.dropAnticipation?.();
+  assert.equal(fake.drops(), 1);
+});
+
+test("an agent without the prefetch, or no agent at all, takes no anticipation and reports no facts", () => {
+  const plain = fakeAgent();
+  const brain = brainAgentLiveBrain({ agent: () => plain.agent });
+  brain.anticipate?.({ rowId: 1, partialAsk: "hi", recentTurns: "Developer: hi" });
+  brain.dropAnticipation?.();
+  const absent = brainAgentLiveBrain({ agent: () => undefined });
+  absent.anticipate?.({ rowId: 1, partialAsk: "hi", recentTurns: "Developer: hi" });
+  absent.dropAnticipation?.();
+  assert.deepEqual(plain.submissions, []);
 });

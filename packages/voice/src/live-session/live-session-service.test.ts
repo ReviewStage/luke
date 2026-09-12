@@ -5,6 +5,7 @@ import {
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
 import {
+  chunkForAppend,
   type InitialItem,
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -15,6 +16,7 @@ import {
   type LiveClientEvent,
   type LiveServerEvent,
   type LiveServerEventType,
+  PREFETCH_DEBOUNCE_MS,
   PROACTIVE_SPEECH_KIND,
   parseLiveServerEvent,
   type RosterSeedSession,
@@ -37,12 +39,15 @@ import {
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
+  type LiveBrainAnticipation,
+  type LiveBrainAnticipationFacts,
   type LiveBrainAsk,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
 import type { DeveloperUtteranceRecord, LiveRecord, LukeUtteranceRecord } from "./live-record.js";
 import {
+  ANTICIPATION_FACTS_PREFIX,
   ASK_UNRECORDED_NOTE,
   LiveSessionService,
   RUN_END_NOTE,
@@ -190,6 +195,32 @@ class FakeBrain implements LiveBrain {
   }
 }
 
+/** A brain that reads ahead: it records each anticipation, each drop, and hands facts back by hand. */
+class AnticipatingBrain extends FakeBrain {
+  readonly anticipations: LiveBrainAnticipation[] = [];
+  drops = 0;
+  readonly #factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
+
+  anticipate(anticipation: LiveBrainAnticipation): void {
+    this.anticipations.push(anticipation);
+  }
+
+  dropAnticipation(): void {
+    this.drops += 1;
+  }
+
+  onAnticipationFacts(listener: (facts: LiveBrainAnticipationFacts) => void): () => void {
+    this.#factsListeners.add(listener);
+    return () => {
+      this.#factsListeners.delete(listener);
+    };
+  }
+
+  facts(facts: LiveBrainAnticipationFacts): void {
+    for (const listener of [...this.#factsListeners]) listener(facts);
+  }
+}
+
 class FakeRecord implements LiveRecord {
   readonly developer: DeveloperUtteranceRecord[] = [];
   readonly luke: LukeUtteranceRecord[] = [];
@@ -247,9 +278,8 @@ interface Fixture {
   onBriefingAppend?: (delivery: { briefing: string; decidedAt: number }, eventId: string) => void;
 }
 
-function fixture(): Fixture {
+function fixture(brain: FakeBrain = new FakeBrain()): Fixture {
   const clock = new FakeClock();
-  const brain = new FakeBrain();
   const record = new FakeRecord();
   const sidebands: FakeSideband[] = [];
   const creates: LiveSessionOpened[] = [];
@@ -1507,4 +1537,118 @@ test("a roster append does not keep a quiet session open: the idle clock reads t
   f.service.reportActivity(true);
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
+});
+
+test("the developer's fragments arm one debounce; when it fires the words so far reach the brain once, and more words arm it again", async () => {
+  const brain = new AnticipatingBrain();
+  const f = fixture(brain);
+  const sideband = await f.open();
+  sideband.input("What is", 1000, 1300);
+  sideband.input(" abc", 1300, 1500);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS - 1);
+  assert.equal(brain.anticipations.length, 0);
+  await f.clock.advance(f.clock.now + 1);
+  assert.deepEqual(brain.anticipations, [
+    { rowId: 1, partialAsk: "What is abc", recentTurns: "Developer: What is abc" },
+  ]);
+  // The same words again plan nothing new; more words plan again under the same row.
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS * 3);
+  assert.equal(brain.anticipations.length, 1);
+  sideband.input(" doing", 1500, 1900);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  assert.equal(brain.anticipations.length, 2);
+  assert.equal(brain.anticipations[1]?.rowId, 1);
+  assert.equal(brain.anticipations[1]?.partialAsk, "What is abc doing");
+  assert.deepEqual(
+    f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.ANTICIPATED).length,
+    2,
+  );
+});
+
+test("a delegation cancels the pending debounce, Luke's own fragments arm none, and a brain that reads nothing ahead is handed nothing", async () => {
+  const brain = new AnticipatingBrain();
+  const f = fixture(brain);
+  const sideband = await f.open();
+  sideband.output("Nukualofa finished.", 0, 900);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  assert.equal(brain.anticipations.length, 0);
+  sideband.input("What needs me", 1000, 1800);
+  sideband.delegation("item_1", 1900);
+  await drainMicrotasks();
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  assert.equal(brain.anticipations.length, 0);
+  assert.equal(f.brain.asks.length, 1);
+
+  const plain = fixture();
+  const plainSideband = await plain.open();
+  plainSideband.input("What needs me", 1000, 1800);
+  assert.equal(plain.clock.delays.filter((delay) => delay === PREFETCH_DEBOUNCE_MS).length, 0);
+});
+
+test("facts read ahead are appended once, as thinking under no delegation and behind the data prefix, and leave the idle clock where it was", async () => {
+  const brain = new AnticipatingBrain();
+  const f = fixture(brain);
+  const sideband = await f.open();
+  f.clock.now += LIVE_IDLE_WINDOW_MS;
+  sideband.input("What is abc doing", 1000, 1800);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  brain.facts({ rowId: 1, text: "abc finished the tests." });
+  brain.facts({ rowId: 1, text: "abc finished the tests, again." });
+  await drainMicrotasks();
+  const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+  assert.equal(thinking.length, 1);
+  const [append] = thinking;
+  assert.ok(append && append.type === LIVE_CLIENT_EVENT.THINKING_APPEND);
+  assert.equal(append.delegation_id, null);
+  // The one append is the first chunk of the prefixed facts, cut by the same rule every append is.
+  assert.equal(
+    append.content,
+    chunkForAppend(`${ANTICIPATION_FACTS_PREFIX}abc finished the tests.`)[0],
+  );
+  assert.deepEqual(
+    f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_APPENDED).length,
+    1,
+  );
+  assert.deepEqual(
+    f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_DROPPED).length,
+    1,
+  );
+  f.service.reportActivity(true);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
+});
+
+test("facts for words since superseded, for a row never anticipated, or with no started session are dropped, never appended", async () => {
+  const brain = new AnticipatingBrain();
+  const f = fixture(brain);
+  const sideband = await f.open();
+  sideband.input("What is", 1000, 1300);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  sideband.input(" abc doing", 1300, 1800);
+  brain.facts({ rowId: 1, text: "stale" });
+  brain.facts({ rowId: 9, text: "unknown row" });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+  assert.equal(
+    f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_DROPPED).length,
+    2,
+  );
+  sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 12);
+  brain.facts({ rowId: 1, text: "too late" });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+});
+
+test("a session's end and the drain each drop what the brain read ahead", async () => {
+  const brain = new AnticipatingBrain();
+  const f = fixture(brain);
+  const sideband = await f.open();
+  sideband.input("What is abc doing", 1000, 1800);
+  sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 12);
+  assert.equal(brain.drops, 1);
+  assert.equal(brain.anticipations.length, 0);
+  await f.clock.advance(f.clock.now + PREFETCH_DEBOUNCE_MS);
+  assert.equal(brain.anticipations.length, 0);
+  await f.service.stop();
+  assert.equal(brain.drops, 2);
 });

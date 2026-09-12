@@ -38,6 +38,15 @@ export const UTTERANCE_GAP_MS = 1_200;
  */
 export const UTTERANCE_SETTLE_MARGIN_MS = 800;
 
+/**
+ * The pause in the developer's own fragments after which the words so far are
+ * handed to the brain as an anticipation of the ask, so a read the answer
+ * will need can begin before the utterance ends. Short of the gap that ends
+ * an utterance on purpose: the point is to start while they are still
+ * talking, and the next fragment supersedes what was anticipated.
+ */
+export const PREFETCH_DEBOUNCE_MS = 400;
+
 export interface TranscriptFragment {
   speaker: TranscriptSpeaker;
   /** The delta exactly as received, untrimmed and unpadded. */
@@ -67,6 +76,25 @@ export interface AskContext {
   turns: readonly TranscriptUtterance[];
   /** The developer's latest utterance in that span, which is what a delegation asks about. */
   ask: TranscriptUtterance | undefined;
+}
+
+/**
+ * The developer's ask as far as it has been said, for the brain to read ahead
+ * of: the row it is being said on, its words so far, and the span it stands
+ * in. Nothing about it is settled; the row id is what a later reading is
+ * matched against.
+ */
+export interface Anticipation {
+  rowId: number;
+  text: string;
+  context: AskContext;
+}
+
+/** The anticipation an ask context stands for, or nothing while no developer utterance is in the span. */
+export function anticipationOf(context: AskContext): Anticipation | undefined {
+  const ask = context.ask;
+  if (!ask) return undefined;
+  return { rowId: ask.rowId, text: ask.text, context };
 }
 
 interface Group {

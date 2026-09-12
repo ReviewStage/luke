@@ -12,12 +12,13 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
-import { HostedModelAdapter } from "./hosted-model-adapter.js";
+import { HostedModelAdapter, type HostedModelAdapterOptions } from "./hosted-model-adapter.js";
 import {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
 } from "./model-adapter-shared.js";
 import { userMessageItem } from "./responses-api.js";
+import { RESPONSES_OPERATION } from "./responses-model-adapter.js";
 import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./tools.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
@@ -72,6 +73,7 @@ function service(routes: Record<string, (() => Response)[]>) {
 function adapter(
   fetch: (url: string, init: RequestInit) => Promise<Response>,
   tokens: (string | undefined)[] = ["token-1"],
+  options: Partial<HostedModelAdapterOptions> = {},
 ) {
   const queue = [...tokens];
   let current = queue.shift();
@@ -84,8 +86,86 @@ function adapter(
     fetch,
     now: () => NOW,
     report: () => undefined,
+    ...options,
   });
 }
+
+const PLANNED = {
+  status: "completed",
+  output: [
+    {
+      type: "function_call",
+      call_id: "call_1",
+      name: "plan_reads",
+      arguments: '{"reads":[]}',
+    },
+  ],
+};
+
+test("a prefetch adapter admits against the capabilities' own prefetch field, names that model, and posts the kind rather than any tool", async () => {
+  const { fetch, calls } = service({
+    [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [
+      () => Response.json(capabilities({ prefetch: { model: "gpt-small" } })),
+    ],
+    [HOSTED_SERVICE_PATH.BRAIN_PREFETCH]: [
+      () => Response.json(PLANNED),
+      () => Response.json({ status: "completed", output: [] }),
+    ],
+  });
+  const model = adapter(fetch, ["token-1"], { respondOperation: RESPONSES_OPERATION.PREFETCH });
+  const planned = await model.respond(INPUT, {
+    ...OPTIONS,
+    tools: [OPTIONS.tools[0] ?? { name: "plan_reads", description: "", parameters: {} }],
+    toolChoice: "plan_reads",
+    maximumOutputTokens: 600,
+  });
+  assert.equal(planned.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.equal(model.model, "gpt-small");
+  assert.equal(calls[1]?.url, `${BASE}${HOSTED_SERVICE_PATH.BRAIN_PREFETCH}`);
+  const sent = calls[1]?.body;
+  assert.ok(isRecord(sent));
+  assert.equal(sent.kind, "plan");
+  assert.equal("tools" in sent, false);
+  assert.deepEqual(sent.options, { maximumOutputTokens: 600 });
+  const summarized = await model.respond(INPUT, {
+    ...OPTIONS,
+    tools: [],
+    maximumOutputTokens: 350,
+  });
+  assert.equal(summarized.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
+  const summary = calls[2]?.body;
+  assert.ok(isRecord(summary));
+  assert.equal(summary.kind, "summarize");
+  const answered = await model.capabilities();
+  assert.ok(answered.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.equal(answered.capabilities.model, "gpt-small");
+});
+
+test("a service that advertises no prefetch fails a prefetch adapter as a compatibility failure, while a turn adapter over the same capabilities still stands", async () => {
+  const { fetch, calls } = service({
+    [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [
+      () => Response.json(capabilities()),
+      () => Response.json(capabilities()),
+    ],
+    [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2]: [
+      () => Response.json({ status: "completed", output: [] }),
+    ],
+  });
+  const prefetch = adapter(fetch, ["token-1"], { respondOperation: RESPONSES_OPERATION.PREFETCH });
+  const refused = await prefetch.respond(INPUT, { ...OPTIONS, toolChoice: "plan_reads" });
+  assert.deepEqual(
+    { outcome: refused.outcome, failure: "failure" in refused ? refused.failure : undefined },
+    { outcome: MODEL_RESPONSE_OUTCOME.FAILED, failure: MODEL_FAILURE.COMPATIBILITY },
+  );
+  assert.equal(prefetch.model, undefined);
+  const turn = adapter(fetch);
+  const answer = await turn.respond(INPUT, OPTIONS);
+  assert.equal(answer.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.equal(
+    calls.filter((call) => call.url === `${BASE}${HOSTED_SERVICE_PATH.BRAIN_PREFETCH}`).length,
+    0,
+  );
+});
 
 test("the adapter reads the capabilities once, then posts the prepared prompt, the tool names, and the options", async () => {
   const { fetch, calls } = service({

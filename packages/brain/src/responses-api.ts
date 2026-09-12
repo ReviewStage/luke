@@ -53,6 +53,7 @@ export const BRAIN_RESPONSES_PATH = "/responses";
 export type ResponsesInputItem = WireRecord;
 
 const RESPONSES_TOOL_CHOICE_AUTO = "auto";
+const RESPONSES_TOOL_CHOICE_FUNCTION = "function";
 const RESPONSES_INCLUDE_ENCRYPTED_REASONING = "reasoning.encrypted_content";
 
 /** How much of its reasoning the model is asked to put into words beside each opaque reasoning item. */
@@ -90,6 +91,13 @@ export interface BrainResponsesOptions {
    * travels.
    */
   promptCacheKey?: string;
+  /**
+   * One offered function tool the model must call, by name: a classifying
+   * inference is answered by that call and nothing else, so the choice is
+   * forced and parallel calls are off. Absent, the model chooses among the
+   * tools and may answer in words.
+   */
+  toolChoice?: string;
 }
 
 /**
@@ -108,8 +116,11 @@ export function brainResponsesRequest(
     instructions: options.instructions,
     input,
     tools: options.tools,
-    tool_choice: RESPONSES_TOOL_CHOICE_AUTO,
-    parallel_tool_calls: true,
+    tool_choice:
+      options.toolChoice === undefined
+        ? RESPONSES_TOOL_CHOICE_AUTO
+        : { type: RESPONSES_TOOL_CHOICE_FUNCTION, name: options.toolChoice },
+    parallel_tool_calls: options.toolChoice === undefined,
     include: [RESPONSES_INCLUDE_ENCRYPTED_REASONING],
     reasoning: { effort: options.reasoningEffort, summary: BRAIN_REASONING_SUMMARY },
     max_output_tokens: options.maximumOutputTokens,
@@ -136,6 +147,26 @@ export function assistantMessageItem(text: string): ResponsesInputItem {
     type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
     role: RESPONSES_MESSAGE_ROLE.ASSISTANT,
     content: [{ type: RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT, text }],
+  };
+}
+
+/**
+ * One function call as the input array carries it, minted by the host rather
+ * than answered by the model: exactly the three fields the API documents and
+ * the hosted admission replays, so a read made ahead of a turn enters the
+ * turn's context as the call the model would have made, paired with its
+ * output by the id.
+ */
+export function functionCallItem(
+  callId: string,
+  name: string,
+  argumentsJson: string,
+): ResponsesInputItem {
+  return {
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+    call_id: callId,
+    name,
+    arguments: argumentsJson,
   };
 }
 

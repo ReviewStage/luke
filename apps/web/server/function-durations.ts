@@ -82,6 +82,7 @@ const GROUPS: readonly GroupDefinition[] = [
     routes: [
       routeKeyOf(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2),
       routeKeyOf(HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS),
+      routeKeyOf(HOSTED_SERVICE_PATH.BRAIN_PREFETCH),
     ],
   },
   {

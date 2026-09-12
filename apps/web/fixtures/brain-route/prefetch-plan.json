@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"id\":\"resp_2\",\"status\":\"completed\",\"output\":[{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"plan_reads\",\"arguments\":\"{\\\"reads\\\":[{\\\"kind\\\":\\\"read_transcript\\\",\\\"session\\\":1}]}\",\"status\":\"completed\"}],\"usage\":{\"input_tokens\":40}}"
+}

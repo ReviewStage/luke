@@ -4,6 +4,7 @@ import type {
   ChildCompletionRecord,
   ChildRunRecord,
   MemoryDefinition,
+  ModelAdapter,
   ReasoningEffort,
   SessionKey,
 } from "@sidecar/runtime/vocabulary";
@@ -36,6 +37,12 @@ import { type BrainFlushMarkerStore, Maintenance } from "./maintenance.js";
 import { inboxEvents } from "./observation-inbox.js";
 import type { BrainActionPerformer, BrainRoster } from "./performer.js";
 import {
+  type BrainAnticipation,
+  type BrainAnticipationFacts,
+  PREFETCH_BOUNDS,
+  ReadPrefetch,
+} from "./read-prefetch.js";
+import {
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
   type BrainSubmission,
@@ -48,7 +55,9 @@ import type { AgentSeam, ScheduledTimer } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 import type { BrainChildAccess, BrainWorkspaceAccess } from "./tool-executor.js";
-import type { BrainTurnTraceRecord } from "./trace.js";
+import { planReadsToolSchema } from "./tools.js";
+import type { BrainPrefetchTraceRecord, BrainTurnTraceRecord } from "./trace.js";
+import { readWholeTranscript } from "./transcript-reads.js";
 import {
   BRAIN_TURN_TRIGGER,
   type BrainTurnDescription,
@@ -68,6 +77,16 @@ export type { BrainFlushMarkerStore } from "./maintenance.js";
 export type { BrainWorkspaceAccess } from "./tool-executor.js";
 
 export { LOOK_SUBJECT } from "./wakes.js";
+
+/**
+ * The read prefetch's own seams: the small model its planner and summary run
+ * on, and where its moments are traced. Handed to main's conversation alone,
+ * because a spoken ask reaches main.
+ */
+interface BrainPrefetchOptions {
+  model: ModelAdapter;
+  trace?: (record: BrainPrefetchTraceRecord) => void;
+}
 
 /** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
 type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
@@ -135,6 +154,13 @@ export interface BrainAgentOptions {
   child?: ChildPolicyContext;
   /** Delegation, supplied by the host that owns the conversations; absent, the session tools refuse. */
   children?: BrainChildAccess;
+  /**
+   * The read prefetch: a small model that, handed the developer's words so
+   * far, names the reads a spoken ask's turn will need and begins them before
+   * the ask is finished. Absent, nothing is anticipated and every turn reads
+   * for itself.
+   */
+  prefetch?: BrainPrefetchOptions;
   /**
    * The requester's active context a forked child starts over, adopted
    * whole into this conversation's empty context on its first turn and
@@ -215,6 +241,7 @@ export class BrainAgent {
   readonly #turns: TurnRunner;
   readonly #children: ChildRuns;
   readonly #maintenance: Maintenance;
+  readonly #prefetch: ReadPrefetch | undefined;
   #turnsQueued = 0;
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
@@ -315,9 +342,33 @@ export class BrainAgent {
       ...(options.flushMarker ? { flushMarker: options.flushMarker } : undefined),
       holdTurnInFlight: (held) => this.#turns.holdInFlight(held),
     });
+    this.#prefetch = options.prefetch
+      ? new ReadPrefetch(
+          {
+            model: options.prefetch.model,
+            conversationId: options.conversationId,
+            roster: options.roster,
+            readTranscript: (identity, signal) =>
+              readWholeTranscript(identity, {
+                read: (session) => options.readTranscript(session),
+                signal,
+                maximumChars: PREFETCH_BOUNDS.TRANSCRIPT_CHARS,
+              }),
+            ...(options.memory ? { memory: options.memory } : undefined),
+            now: this.#now,
+            schedule: this.#schedule,
+            cancel: this.#cancel,
+            createId: options.createRunId,
+            report: this.#report,
+            ...(options.prefetch.trace ? { trace: options.prefetch.trace } : undefined),
+          },
+          planReadsToolSchema(),
+        )
+      : undefined;
     this.#turns = new TurnRunner({
       seam,
       conversationId: options.conversationId,
+      ...(this.#prefetch ? { prefetch: this.#prefetch } : undefined),
       runtime: options.runtime,
       actions: options.actions,
       roster: options.roster,
@@ -470,6 +521,26 @@ export class BrainAgent {
   }
 
   /**
+   * The developer's ask as far as it has been said, for the reads its turn
+   * will need to begin now. Nothing is recorded and nothing is promised: the
+   * spoken ask that follows takes what was read, or it expires.
+   */
+  anticipateAsk(anticipation: BrainAnticipation): void {
+    if (this.#stopped) return;
+    this.#prefetch?.anticipate(anticipation);
+  }
+
+  /** Whatever was read ahead is forgotten: the session that was speaking is gone. */
+  dropAnticipation(): void {
+    this.#prefetch?.drop();
+  }
+
+  /** Hears the summary of each read made ahead, for the voice to be handed as data; nothing without a prefetch. */
+  onAnticipationFacts(listener: (facts: BrainAnticipationFacts) => void): () => void {
+    return this.#prefetch?.onFacts(listener) ?? (() => undefined);
+  }
+
+  /**
    * Answers the record once the run ends, or as it stands when the wait runs
    * out first. A wait that runs out changes nothing about the run, and a run
    * this generation does not know answers nothing.
@@ -606,6 +677,7 @@ export class BrainAgent {
     this.#unsubscribeStore = undefined;
     this.#generations.standing()?.abort.abort();
     this.#asks.abortAll();
+    this.#prefetch?.drop();
     // An acceptance whose write is still out settles before the stop does:
     // its caller hears the durable answer, its run is recorded interrupted,
     // and nothing of it is left to land on the agent that comes next.
@@ -759,6 +831,7 @@ export class BrainAgent {
       void this.#asks.settleWaiting(this.#asks.takeWaiting());
       if (previous) retireGeneration(previous);
       this.#asks.revokeAll();
+      this.#prefetch?.drop();
       // Wakes coalesced against the old memory — including a quiet retry's —
       // are that generation's work, and go with it.
       this.#wakes.clear();

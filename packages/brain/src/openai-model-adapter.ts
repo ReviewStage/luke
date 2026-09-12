@@ -42,6 +42,14 @@ const OPENAI_ENVIRONMENT = {
   MODEL: "LUKE_BRAIN_MODEL",
 } as const;
 
+/**
+ * The small model the read prefetch plans and summarizes on: it sees the words
+ * so far and the roster the turn would see anyway, and decides only which
+ * reads to begin, so a fast low-effort model is the right one and the same
+ * model serves the keyed tier and the hosted service's default.
+ */
+export const BRAIN_PREFETCH_MODEL = "gpt-5.6-luna";
+
 export const BRAIN_OPENAI_DEFAULTS = {
   BASE_URL: "https://api.openai.com/v1",
   MODEL: "gpt-5.6-terra",
@@ -53,6 +61,7 @@ export const BRAIN_OPENAI_DEFAULTS = {
 const OPENAI_PATH = {
   [RESPONSES_OPERATION.RESPOND]: BRAIN_RESPONSES_PATH,
   [RESPONSES_OPERATION.COUNT_TOKENS]: BRAIN_RESPONSES_INPUT_TOKENS_PATH,
+  [RESPONSES_OPERATION.PREFETCH]: BRAIN_RESPONSES_PATH,
 } as const satisfies Record<ResponsesOperation, string>;
 
 export interface OpenAiModelAdapterOptions {
@@ -118,6 +127,7 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
         ...(options.promptCacheKey !== undefined
           ? { promptCacheKey: options.promptCacheKey }
           : undefined),
+        ...(options.toolChoice !== undefined ? { toolChoice: options.toolChoice } : undefined),
       }),
       (payload) =>
         responsesModelAnswer(payload) ??

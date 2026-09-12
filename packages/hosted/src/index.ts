@@ -45,8 +45,11 @@ export {
 export {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_EMBED_BOUNDS,
+  HOSTED_BRAIN_LISTED_OPERATIONS,
   HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_OPTION_BOUNDS,
+  HOSTED_BRAIN_PREFETCH_BOUNDS,
+  HOSTED_BRAIN_PREFETCH_KIND,
   HOSTED_BRAIN_PROMPT_BOUNDS,
   HOSTED_BRAIN_REQUEST_REFUSAL,
   HOSTED_BRAIN_TOOL_BOUNDS,
@@ -57,6 +60,9 @@ export {
   type HostedBrainEmbedAnswer,
   type HostedBrainEmbedRequest,
   type HostedBrainOperation,
+  type HostedBrainPrefetchCapability,
+  type HostedBrainPrefetchKind,
+  type HostedBrainPrefetchRequest,
   type HostedBrainRequestOptions,
   type HostedBrainRequestRead,
   type HostedBrainRequestRefusal,
@@ -67,6 +73,8 @@ export {
   hostedBrainCountTokensRequestFromWire,
   hostedBrainEmbedAnswerFromWire,
   hostedBrainEmbedRequestFromWire,
+  hostedBrainPrefetchRequestFromWire,
+  hostedBrainPrefetchRequestSchema,
   hostedBrainRespondRequestFromWire,
 } from "./brain-contract.js";
 export { HostedChangesClient, type HostedChangesClientOptions } from "./changes-client.js";

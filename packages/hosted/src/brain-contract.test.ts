@@ -4,8 +4,11 @@ import type { WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
+  HOSTED_BRAIN_LISTED_OPERATIONS,
   HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_OPTION_BOUNDS,
+  HOSTED_BRAIN_PREFETCH_BOUNDS,
+  HOSTED_BRAIN_PREFETCH_KIND,
   HOSTED_BRAIN_PROMPT_BOUNDS,
   HOSTED_BRAIN_REQUEST_REFUSAL,
   hostedBrainBounds,
@@ -13,6 +16,7 @@ import {
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
   hostedBrainEmbedAnswerFromWire,
+  hostedBrainPrefetchRequestFromWire,
   hostedBrainRespondRequestFromWire,
 } from "./brain-contract.js";
 
@@ -168,6 +172,73 @@ test("capabilities read whole, and any field off the contract reads as no capabi
     hostedBrainCapabilitiesFromWire({ ...capabilities, reasoningEfforts: ["max"] }),
     undefined,
   );
+});
+
+test("the prefetch is advertised by its own optional field: capabilities without it still read, and the field names the model", () => {
+  const capabilities: WireRecord = {
+    contract: 2,
+    model: "gpt-test",
+    operations: HOSTED_BRAIN_LISTED_OPERATIONS,
+    tools: ["announce"],
+    bounds: { ...hostedBrainBounds() },
+    reasoningEfforts: Object.values(REASONING_EFFORT),
+  };
+  const read = hostedBrainCapabilitiesFromWire(capabilities);
+  assert.ok(read);
+  assert.equal(read.prefetch, undefined);
+  const advertised = hostedBrainCapabilitiesFromWire({
+    ...capabilities,
+    prefetch: { model: "gpt-small", later: true },
+  });
+  assert.deepEqual(advertised?.prefetch, { model: "gpt-small" });
+  assert.equal(
+    hostedBrainCapabilitiesFromWire({ ...capabilities, prefetch: { model: "" } }),
+    undefined,
+  );
+  assert.equal(HOSTED_BRAIN_LISTED_OPERATIONS.includes(HOSTED_BRAIN_OPERATION.PREFETCH), false);
+});
+
+test("a prefetch request names its kind and carries a bounded prompt and at most two items; nothing else reads as one", () => {
+  const input = [{ type: "message", role: "user", content: "so far" }];
+  const request: WireRecord = {
+    contract: 2,
+    kind: HOSTED_BRAIN_PREFETCH_KIND.PLAN,
+    prompt: "plan",
+    options: { maximumOutputTokens: HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_OUTPUT_TOKENS },
+    input,
+  };
+  const read = hostedBrainPrefetchRequestFromWire(request);
+  assert.ok(read.ok);
+  assert.equal(read.request.kind, HOSTED_BRAIN_PREFETCH_KIND.PLAN);
+  assert.equal(read.request.input.length, 1);
+  const summarize = hostedBrainPrefetchRequestFromWire({
+    ...request,
+    kind: HOSTED_BRAIN_PREFETCH_KIND.SUMMARIZE,
+    options: {},
+    input: [...input, ...input],
+  });
+  assert.ok(summarize.ok && summarize.request.input.length === 2);
+  const tooLarge = hostedBrainPrefetchRequestFromWire({
+    ...request,
+    prompt: "x".repeat(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_PROMPT_CHARS + 1),
+  });
+  assert.ok(!tooLarge.ok && tooLarge.refusal === HOSTED_BRAIN_REQUEST_REFUSAL.PROMPT_TOO_LARGE);
+  const threeItems = hostedBrainPrefetchRequestFromWire({
+    ...request,
+    input: [...input, ...input, ...input],
+  });
+  assert.ok(!threeItems.ok && threeItems.refusal === HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+  const overBudget = hostedBrainPrefetchRequestFromWire({
+    ...request,
+    options: { maximumOutputTokens: HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_OUTPUT_TOKENS + 1 },
+  });
+  assert.ok(
+    !overBudget.ok && overBudget.refusal === HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS,
+  );
+  const withTools = hostedBrainPrefetchRequestFromWire({ ...request, tools: ["plan_reads"] });
+  assert.ok(!withTools.ok && withTools.refusal === HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+  const unknownKind = hostedBrainPrefetchRequestFromWire({ ...request, kind: "respond" });
+  assert.ok(!unknownKind.ok && unknownKind.refusal === HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
 });
 
 test("a text of nothing but whitespace carries nothing, wherever the contract reads one", () => {

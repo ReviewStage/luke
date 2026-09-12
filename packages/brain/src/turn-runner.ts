@@ -2,6 +2,7 @@ import type { ChildPolicyContext, EffectiveToolPolicy } from "@sidecar/runtime";
 import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
+  type ContextInput,
   type ContextMark,
   type MemoryDefinition,
   type ReasoningEffort,
@@ -34,12 +35,14 @@ import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import type { CompactionRefused } from "./maintenance.js";
 import { inboxEvents } from "./observation-inbox.js";
 import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
+import type { PrefetchedRead, TurnReadPrefetch } from "./read-prefetch.js";
 import {
   addModelUsage,
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
 } from "./requests.js";
+import { functionCallItem } from "./responses-api.js";
 import {
   answerOnlyReads,
   type BrainRunEvent,
@@ -156,6 +159,8 @@ export interface TurnRunnerOptions {
   children?: BrainChildAccess;
   /** The memory provider bound to this conversation's scope: recalled into every turn, and asked for the memory tools. */
   memory?: MemoryDefinition;
+  /** The reads begun while the developer was still speaking, taken once by the spoken ask's turn; absent, every turn reads for itself. */
+  prefetch?: TurnReadPrefetch;
   inheritedContext?: readonly WireRecord[];
   child?: ChildPolicyContext;
   createRunId: () => string;
@@ -593,6 +598,7 @@ export class TurnRunner {
           // a failed turn still reads them again.
           contextMark = context.mark();
           const recalled = await this.#recall(turnContext);
+          const prefetched = await this.#prefetched(plan, policy, turnContext);
           notes = this.#options.openingNotes?.take() ?? [];
           const notices = notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : [];
           const words = plan.open(events, startedAt);
@@ -613,6 +619,7 @@ export class TurnRunner {
             plan,
             riders,
             opening: [...recalled.opening, ...notices, ...words],
+            prefetched,
             steered: metadata,
             recalled: recalled.standing,
             advanceMark,
@@ -791,6 +798,30 @@ export class TurnRunner {
   }
 
   /**
+   * The reads begun while the developer was still speaking, for the turn that
+   * answers them: a spoken ask's turn alone takes the slot, filtered by the
+   * tools its own policy offers, and every other turn reads for itself. A
+   * turn revoked while it waited on the reads enters none of them.
+   */
+  async #prefetched(
+    plan: TurnPlan,
+    policy: EffectiveToolPolicy,
+    turnContext: TurnContext,
+  ): Promise<readonly PrefetchedRead[]> {
+    const prefetch = this.#options.prefetch;
+    if (
+      !prefetch ||
+      plan.trigger !== BRAIN_TURN_TRIGGER.ASK ||
+      plan.askOrigin !== BRAIN_REQUEST_ORIGIN.SPOKEN ||
+      this.#revoked(turnContext)
+    ) {
+      return [];
+    }
+    const taken = await prefetch.take(policy, turnContext.signal);
+    return this.#revoked(turnContext) ? [] : taken.reads;
+  }
+
+  /**
    * The one resolution of a turn's tools: the host's configured layers over
    * the catalog it named, then the turn's own layer. The same policy fixes
    * the schemas the model is offered and the gate every dispatch meets.
@@ -823,6 +854,8 @@ export class TurnRunner {
       plan: TurnPlan;
       riders: RunControl[];
       opening: readonly string[];
+      /** The reads made ahead of the ask, entered after the opening words as the calls and answers they stand for. */
+      prefetched: readonly PrefetchedRead[];
       /** What an ask steered into this run says about itself: the turn's own kind, since only an ask's turn takes one. */
       steered: UserMessageMetadata;
       /** What the memory provider recalled for every inference of the turn, after the standing context. */
@@ -919,13 +952,48 @@ export class TurnRunner {
           return;
       }
     };
+    // A read made ahead of the ask enters the context as the call the model
+    // would have made and its answer, paired by the id, so the first
+    // inference already holds it; the record hears both as it hears any call,
+    // and the trace marks them as read ahead. Nothing about them is
+    // journaled or checkpointed apart: they are reads, and they ride into the
+    // turn's own checkpoint with the rest of its opening.
+    const prefetchedInput: ContextInput[] = turn.prefetched.flatMap((read) => {
+      const invocation = {
+        callId: read.callId,
+        name: read.name,
+        argumentsJson: read.argumentsJson,
+      };
+      const result = {
+        outputJson: read.outputJson,
+        ...(read.status !== undefined ? { status: read.status } : undefined),
+      };
+      events.heard({ kind: RUNTIME_EVENT.TOOL_CALL, invocation });
+      events.heard({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation, result });
+      gathering.toolCalls.push({
+        name: read.name,
+        argumentsChars: read.argumentsJson.length,
+        outcomeStatus: read.status ?? TOOL_RESULT_STATUS.ANSWERED,
+        prefetched: true,
+      });
+      return [
+        {
+          kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
+          items: [functionCallItem(read.callId, read.name, read.argumentsJson)],
+        },
+        { kind: CONTEXT_INPUT_KIND.TOOL_RESULT, callId: read.callId, outputJson: read.outputJson },
+      ];
+    });
     const started = this.#options.runtime.start({
       runId,
       context,
       tools,
       toolSchemas: brainToolSchemas(turn.policy),
       prompt: turn.prompt,
-      input: turn.opening.map((text) => ({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })),
+      input: [
+        ...turn.opening.map((text) => ({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })),
+        ...prefetchedInput,
+      ],
       ephemeral: () => [
         standingContextText(
           this.#options.roster().text,

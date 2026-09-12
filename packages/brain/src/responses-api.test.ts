@@ -6,6 +6,7 @@ import {
   BRAIN_REASONING_SUMMARY,
   brainResponsesOutput,
   brainResponsesRequest,
+  functionCallItem,
   functionCallOutputItem,
   responsesModelAnswer,
   userMessageItem,
@@ -37,6 +38,41 @@ test("the request asks the API for no compaction of its own, leaves storage at t
     { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
   ]);
   assert.ok(request.tools.some((tool) => tool.name === BRAIN_TOOL.ANNOUNCE));
+});
+
+test("a forced tool choice names the one function the model must call and turns parallel calls off; without one the request is unchanged", () => {
+  const base = {
+    model: "gpt-test",
+    instructions: "plan",
+    tools: [...hostedBrainToolCatalog().values()].filter((tool) => tool.name === "plan_reads"),
+    maximumOutputTokens: 600,
+    reasoningEffort: BRAIN_REASONING_EFFORT.LOW,
+  };
+  const forced = brainResponsesRequest([userMessageItem("so far")], {
+    ...base,
+    toolChoice: "plan_reads",
+  });
+  assert.deepEqual(forced.tool_choice, { type: "function", name: "plan_reads" });
+  assert.equal(forced.parallel_tool_calls, false);
+  assert.equal(forced.tools.length, 1);
+  const free = brainResponsesRequest([userMessageItem("so far")], base);
+  assert.equal(free.tool_choice, "auto");
+  assert.equal(free.parallel_tool_calls, true);
+});
+
+test("a minted function call carries exactly the three fields the API documents and the hosted admission replays", () => {
+  assert.deepEqual(functionCallItem("call_1", "read_transcript", '{"provider_id":"p"}'), {
+    type: "function_call",
+    call_id: "call_1",
+    name: "read_transcript",
+    arguments: '{"provider_id":"p"}',
+  });
+  assert.deepEqual(Object.keys(functionCallItem("c", "n", "{}")), [
+    "type",
+    "call_id",
+    "name",
+    "arguments",
+  ]);
 });
 
 test("the output reading keeps every item verbatim, an item it does not read included, and picks out calls, text, and usage", () => {

@@ -25,6 +25,8 @@ export const HOSTED_OPENAI_ENVIRONMENT = {
   /** The same override names the desktop honours, so one convention configures both. */
   REALTIME_MODEL: "LUKE_REALTIME_MODEL",
   BRAIN_MODEL: "LUKE_BRAIN_MODEL",
+  /** The read prefetch's small model, under the same convention; the build's own default otherwise. */
+  PREFETCH_MODEL: "LUKE_BRAIN_PREFETCH_MODEL",
 } as const;
 
 export const HOSTED_OPENAI_DEFAULTS = {

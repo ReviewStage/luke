@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { BRAIN_PREFETCH_MODEL } from "@sidecar/brain";
 import { LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import { test } from "vitest";
@@ -118,13 +119,16 @@ test("a wrapped brain model stands where the built one would, and only when one 
 
   await assembler.apply();
   assert.ok(assembler.brainModel);
-  assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
+  assert.ok(assembler.prefetchModel);
+  // The brain's model and the prefetch's small one are each wrapped once, in that order.
+  assert.deepEqual(wrapped, ["gpt-5.6-terra", BRAIN_PREFETCH_MODEL]);
 
   // No client, nothing to decorate: the wrapper must not conjure one.
   key = undefined;
   await assembler.apply();
   assert.equal(assembler.brainModel, undefined);
-  assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
+  assert.equal(assembler.prefetchModel, undefined);
+  assert.deepEqual(wrapped, ["gpt-5.6-terra", BRAIN_PREFETCH_MODEL]);
 });
 
 test("the assembler keeps fixture runs credential-free without reading a key", async () => {

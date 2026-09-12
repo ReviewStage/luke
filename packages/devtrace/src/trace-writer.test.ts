@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
+import {
+  BRAIN_PREFETCH_OUTCOME,
+  BRAIN_PREFETCH_TAKE,
+  BRAIN_TURN_TRIGGER,
+  hostedBrainToolCatalog,
+} from "@sidecar/brain";
 import { LIVE_SERVER_EVENT } from "@sidecar/live";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
@@ -49,10 +54,23 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     iterations: 1,
   });
   writer.recordSpeechDecision({ kind: "briefing", decision: "offered", pendingCount: 2 });
+  writer.recordBrainPrefetch({
+    outcome: BRAIN_PREFETCH_OUTCOME.PLANNED,
+    chars: 24,
+    reads: 1,
+    elapsedMs: 300,
+  });
+  writer.recordBrainPrefetch({ take: BRAIN_PREFETCH_TAKE.HIT_WAITED, reads: 1, waitedMs: 120 });
   await writer.settled();
   const lines = (await readFile(writer.file, "utf8")).split("\n").filter((line) => line.length > 0);
   const entries = lines.map(recordFromJsonLine);
-  assert.equal(entries.length, 4);
+  assert.equal(entries.length, 6);
+  assert.equal(entries[4]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
+  assert.equal(entries[4]?.outcome, BRAIN_PREFETCH_OUTCOME.PLANNED);
+  assert.equal(entries[4]?.reads, 1);
+  assert.equal(entries[5]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
+  assert.equal(entries[5]?.take, BRAIN_PREFETCH_TAKE.HIT_WAITED);
+  assert.equal(entries[5]?.waitedMs, 120);
   assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
   assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
   assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);

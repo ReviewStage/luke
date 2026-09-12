@@ -15,6 +15,7 @@
       "apps/ios/*.test.mjs",
       "!apps/web/fixtures",
       "!packages/actions/fixtures",
+      "!packages/brain/fixtures",
       "!packages/gateway/fixtures",
       "!packages/hosted/fixtures",
       "!packages/live/fixtures",

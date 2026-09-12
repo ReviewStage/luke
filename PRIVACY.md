@@ -485,7 +485,14 @@ Send.
   the bounded transcript excerpts described above, the session fields, the 20
   most recent lines of your conversation, and the things he remembers about
   you — directly to OpenAI on your own key if you entered one, or through our
-  own service on our key when you use Luke through your account. Either way
+  own service on our key when you use Luke through your account. While you
+  are still speaking, a small model on the same key or service may be sent
+  the words you have said so far, the recent lines of the conversation, and
+  the session fields, to decide whether the answer will need one session's
+  recent messages or one notebook search; that read, if it is made, is the
+  same read a turn would make, is held only in memory for thirty seconds,
+  and a short summary of it may be sent to the voice session as data.
+  Either way
   OpenAI stores the request and its reply under its own retention policy, and
   our service performs one model call per request and stores and logs none of
   the request, the reply, or the encrypted reasoning that travels in it; the

@@ -232,7 +232,10 @@ export const composeBrain = (
       createId,
       report,
       ...(account.agentTrace
-        ? { traceTurn: (record) => account.agentTrace?.recordBrainTurn(record) }
+        ? {
+            traceTurn: (record) => account.agentTrace?.recordBrainTurn(record),
+            tracePrefetch: (record) => account.agentTrace?.recordBrainPrefetch(record),
+          }
         : undefined),
       broadcastRequests: (snapshots) => kernel.service().runsReported(snapshots),
       onGenerationReplaced: (sessionKey) => {
@@ -259,6 +262,7 @@ export const composeBrain = (
       session: observation.session,
       deliver: announcements.deliverBriefing,
       model: () => account.voiceCapabilities.brainModel,
+      prefetchModel: () => account.voiceCapabilities.prefetchModel,
       credential: () =>
         account.voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
           ? {
