@@ -120,10 +120,9 @@ export const composeObservation = (
     const { settings, account, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
     const { runMode, report, now } = kernel;
-    // The runtime this composition is built on: what the poke forks onto, and
-    // what the settings store's own effects are run to a promise on for the
-    // two collaborators still promise-shaped — the session action performer's
-    // one field read, and its own remembered defaults.
+    // The runtime this composition is built on: what the brain's own
+    // workspace-defaults read is run to a promise on while that collaborator
+    // is promise-shaped, and what a roster listener forks its broadcast onto.
     const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<ObservationLinks>();
     const links = (): ObservationLinks => {
@@ -148,15 +147,12 @@ export const composeObservation = (
       ...account.token,
     });
     /**
-     * The redraw a landed write earns, as a synchronous caller can ask for
-     * it. A row's press and the brain's carried act both settle inside a
-     * promise the tool seam still holds, so the poke is forked onto the
-     * runtime this composition is being built on rather than awaited there;
-     * building a runtime here would be a second one.
+     * The redraw a landed write earns. A row's press and the brain's carried
+     * act each settle on their own fiber now, so the poke is a fork from
+     * there rather than a run: the write's answer goes back the moment the
+     * pass is started, exactly as the detached run it replaces did.
      */
-    const pokeRefresh = (): void => {
-      Runtime.runFork(runtime)(loop.refresh);
-    };
+    const pokeRefresh = Effect.asVoid(Effect.forkDaemon(Effect.suspend(() => loop.refresh)));
 
     const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
     let unsubscribeSessions: (() => void) | undefined;
@@ -305,16 +301,6 @@ export const composeObservation = (
         Effect.catchAll(() => Effect.void),
       );
 
-    function rememberWorkspaceDefaults(
-      providerId: CloudAgentProviderId,
-      providerProjectId: string,
-      namedSelection: WorkspaceAgentSelection | undefined,
-    ): Promise<void> {
-      return Runtime.runPromise(runtime)(
-        rememberWorkspaceDefaultsEffect(providerId, providerProjectId, namedSelection),
-      );
-    }
-
     function openCreatedWorkspaces(sessions: readonly Session[]): void {
       for (const created of createdWorkspaceOpens.claim(sessions, now())) {
         const link = created.detail.link;
@@ -331,12 +317,8 @@ export const composeObservation = (
       actions: actionClient,
       refreshSessions: pokeRefresh,
       sendsNetwork: runMode.sendsNetwork,
-      // The one field this collaborator still awaits, run to a promise on
-      // this composition's own runtime until it answers effects itself.
-      settingsStore: {
-        get: (field) => Runtime.runPromise(runtime)(settings.store.get(field)),
-      },
-      rememberWorkspaceDefaults,
+      settingsStore: settings.store,
+      rememberWorkspaceDefaults: rememberWorkspaceDefaultsEffect,
       expectCreatedWorkspace: (identity, at) => createdWorkspaceOpens.expect(identity, at),
       openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
       recordProductEvent: settings.recordProductEvent,
@@ -480,10 +462,7 @@ export const composeObservation = (
       [GATEWAY_METHOD.SESSION_OPEN]: (params) => {
         const identity = params.identity;
         if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-        return Effect.map(
-          Effect.promise(() => sessionActions.openSession(identity)),
-          (answer) => carried(answer),
-        );
+        return Effect.map(sessionActions.openSession(identity), (answer) => carried(answer));
       },
       [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: (params) => {
         const identity = params.identity;
@@ -493,36 +472,29 @@ export const composeObservation = (
           return invalid("applicationId is not one this build knows");
         }
         return Effect.map(
-          Effect.promise(() => sessionActions.openSessionApplication(identity, applicationId)),
+          sessionActions.openSessionApplication(identity, applicationId),
           (answer) => carried(answer),
         );
       },
       [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: (params) => {
         const identity = params.identity;
         if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-        return Effect.map(
-          Effect.promise(() => sessionActions.openSessionChange(identity)),
-          (answer) => carried(answer),
-        );
+        return Effect.map(sessionActions.openSessionChange(identity), (answer) => carried(answer));
       },
       [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: (params) => {
         const identity = params.identity;
         const text = params.text;
         if (!isSessionIdentity(identity)) return invalid("identity must name a session");
         if (!isWireString(text)) return invalid("text must be a string");
-        return Effect.map(
-          Effect.promise(() => rowActions.sendMessage(identity, text)),
-          (answer) => carried(answer),
-        );
+        return Effect.map(rowActions.sendMessage(identity, text), (answer) => carried(answer));
       },
       [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: (params) => {
         const identity = params.identity;
         const controlId = params.controlId;
         if (!isSessionIdentity(identity)) return invalid("identity must name a session");
         if (!isWireString(controlId)) return invalid("controlId must be a string");
-        return Effect.map(
-          Effect.promise(() => rowActions.executeControl(identity, controlId)),
-          (answer) => carried(answer),
+        return Effect.map(rowActions.executeControl(identity, controlId), (answer) =>
+          carried(answer),
         );
       },
       [GATEWAY_METHOD.WORKSPACE_PROJECTS]: () =>

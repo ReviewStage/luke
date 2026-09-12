@@ -251,6 +251,10 @@ export const composeBrain = (
         // here, on the host's own runtime; it goes when those reads are
         // effects.
         refreshSessions: () => Runtime.runPromise(execution)(observation.loop.refresh),
+        // The performer's own act is an effect since P12-15e, and the carrier
+        // above it is not, so the act is carried on the same runtime; it goes
+        // when `BrainActionPerformer.carry` answers an effect.
+        carry: (effect) => Runtime.runPromise(execution)(effect),
         workspaceProjects: observation.workspaceProjects,
         workspaceDefaults: observation.workspaceDefaults,
         appGuide: () => appGuide,

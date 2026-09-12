@@ -263,26 +263,29 @@ the queued pass behind it as a daemon, which is exactly what the detached
 `Deferred` the pass settles rather than a promise it held.
 
 `composeObservation` in `packages/host/src/compose-observation.ts` is on the
-handed-runtime list: `settleHostedWrite` pokes a redraw after every landed
-session write, and both its callers — the session action performer the brain
-carries an admitted act through, and a row's own press — settle inside
-`SessionActionPerformer.perform`'s own promise rather than in a fiber. So the
-composer reads
-`Effect.runtime<never>()` out of its own build and hands those two a
-`pokeRefresh` that is `Runtime.runFork` of `loop.refresh` on it; it forks onto
-the runtime it was handed and never builds one, and `settleHostedWrite` itself
-runs nothing. It goes when that performer and the carrier above it answer
-effects; the `ToolExecutor` seam between them stopped being the blocker in
-P12-15c.
+handed-runtime list for what the brain still awaits of it. `pokeRefresh` is no
+longer one of those reasons: P12-15e made `SessionActionPerformer.perform`,
+the row's own two writes, and `settleHostedWrite` effects, so the redraw a
+landed write earns is a `yield*` of a poke that forks `loop.refresh` as a
+daemon, on the fiber the write itself is carried on, and nothing runs it. What
+is left is the brain's own promise-shaped reads: `workspaceDefaults`, which
+`ActionAdmissionReads` waits on as a promise, is run to one on the
+`Effect.runtime<never>()` this composer reads out of its own build, and
+`broadcastWorkspaceProjects` is forked onto the same runtime from the one
+place it still fires from a plain callback, `sessionRegistry.subscribe`'s
+listener. Both go when those reads and that listener answer effects.
 
 `composeBrain` in `packages/host/src/compose-brain.ts` is on the same list
-for the other half of the same seam: the roster and projects reads
-`admitEffect`'s `ActionAdmissionReads` waits on are still `Promise`s, and the
-pass admission asks for before every session action is one of them, so the
-brain action performer's `refreshSessions` is `Runtime.runPromise` of
-`loop.refresh` on the host's own runtime — the same `execution` runtime the
-store's asks and every turn already run on. It goes with `admit()`'s own
-Promise door, when those reads are effects.
+for the other half of the same seam, and runs two things on the `execution`
+runtime the store's asks and every turn already run on. The roster and
+projects reads `admitEffect`'s `ActionAdmissionReads` waits on are still
+`Promise`s, and the pass admission asks for before every session action is one
+of them, so the brain action performer's `refreshSessions` is
+`Runtime.runPromise` of `loop.refresh` there. The carrier below it is the
+other: `SessionActionPerformer.perform` answers an effect since P12-15e while
+`BrainActionPerformer.carry` is still a promise the action tool awaits, so the
+host's carrier is handed a `carry` that runs the performer's effect on that
+same runtime. Both go when those reads and that carrier answer effects.
 
 `compose-live.ts`'s entry covers a second run beside the timer bridge named
 above: `requestOnboardingBeat` decides whether to speak from the roster a
@@ -552,23 +555,16 @@ so it runs `arrivalBeat` to a promise on the same captured runtime beside its
 existing `gateOfferable` run, one line above where that already stood. Neither
 changes what file this is: `compose-live.ts` was already on the list.
 
-`composeObservation`'s entry above gains a second reason in P12-14f, beside
-`pokeRefresh`: every one of its nine `awaitedSettingsStore` reads moved onto
+`composeObservation`'s entry above was widened in P12-14f and narrowed again
+in P12-15e: every one of its nine `awaitedSettingsStore` reads moved onto
 `settings.store`, and `readWorkspaceDefaults`, `pruneWorkspaceProjectDefaults`,
-`rememberWorkspaceDefaults`, and `broadcastWorkspaceProjects` are effects now,
-but two collaborators outside this composer still hold what those effects used
-to be. `session-action-performer.ts` reads one field
-(`Pick<AwaitedSettingsStore, "get">`) and calls
-`rememberWorkspaceDefaults` as a promise, neither converted by this PR, so both
-are run to a promise on the same `Effect.runtime<never>()` `pokeRefresh` already
-reads, right where they are handed to `createSessionActionPerformer` — the
-same shape `awaitedSettingsStore` used, just answered locally instead of
-through that shim. `broadcastWorkspaceProjects` is forked onto the same
-runtime from the one place it still fires from a plain callback,
-`sessionRegistry.subscribe`'s listener, exactly as `void
-broadcastWorkspaceProjects()` fired it before. This half of the row goes once
-`session-action-performer.ts` answers effects itself; the file stays on the
-list regardless, for `pokeRefresh`'s own reason above.
+`rememberWorkspaceDefaults`, and `broadcastWorkspaceProjects` became effects,
+but the session action performer held two of them as promises — one field read
+(`Pick<AwaitedSettingsStore, "get">`) and `rememberWorkspaceDefaults` — which
+were run to promises where they were handed to
+`createSessionActionPerformer`. Both runs are gone: that performer takes
+`Pick<SettingsStore, "get">` and the remembering effect itself, and yields each
+on its own fiber.
 
 `compose-settings.ts` never joins this list: the observation composer's
 `broadcastWorkspaceProjects` is an effect since P12-14f, and its one caller
@@ -748,10 +744,11 @@ methods as the promises their unmigrated callers still hold, run on the
 runtime the host is composed on. The callers are the reason it exists rather
 than the store, and one by one they have moved off the face onto
 `settings.store` directly, each its own conversion: the observation and live
-composers in P12-14f (which still hand a runtime of their own to what they
-could not convert — `session-action-performer.ts`'s one field read and its
-`rememberWorkspaceDefaults` call, below — rather than reaching back through
-this face for it); `@sidecar/voice`'s `VoiceSettings` in P12-14g, an
+composers in P12-14f (which handed a runtime of their own to what they could
+not convert then — `session-action-performer.ts`'s one field read and its
+`rememberWorkspaceDefaults` call, both effects since P12-15e — rather than
+reaching back through this face for it); `@sidecar/voice`'s `VoiceSettings` in
+P12-14g, an
 Effect-returning interface now, the same shape `SettingsStore`'s own methods
 answer, so `compose-account.ts` hands `VoiceCapabilityAssembler` the store
 directly; and the settings composer's own account-preferences and
@@ -1256,7 +1253,7 @@ design decision stated as such:
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f, P12-14g, and P12-14h) |
-| `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | P12-14i — the calendars composer's own account-preferences hydration reads left with P12-14e, the observation and live composers with P12-14f, `@sidecar/voice`'s `VoiceSettings` with P12-14g, and the settings composer's own chains with P12-14h; what still holds it is `compose-calendars.ts`'s two readers and the type `session-action-performer.ts` still names |
+| `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | P12-14i — the calendars composer's own account-preferences hydration reads left with P12-14e, the observation and live composers with P12-14f, `@sidecar/voice`'s `VoiceSettings` with P12-14g, and the settings composer's own chains with P12-14h; what still holds it is `compose-calendars.ts`'s two readers, the session action performer having left in P12-15e |
 | `compose-account.ts`'s fork of `emitSessionReplay` onto the host's own runtime, from `AccountSessionManager`'s plain `onChange` callback | P12-14f | once `onChange` answers an effect a subscriber yields instead |
 | `compose-observation.ts`'s runs of `session-action-performer.ts`'s one field read and its `rememberWorkspaceDefaults` call, and its fork of `broadcastWorkspaceProjects` from `sessionRegistry.subscribe`'s callback, each on the composition's own runtime | P12-14f | once `session-action-performer.ts` answers effects itself |
 | `compose-account.ts`'s run of `transitionVoiceSource` on the host's own runtime, for `applyVoiceCredential`'s still-`Promise<void>` callers | P12-14g | once `applyVoiceCredential` itself answers an effect |

@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
-import type { SessionRowActions } from "@sidecar/host";
-import type { SessionIdentity } from "@sidecar/session";
+import type { SessionIdentity, SessionWriteResult } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { ActRefused, type ActSender, createActRouter } from "../act-router";
-import { ROW_WRITE_REFUSAL, sessionActRows, WRITE_REFUSAL } from "./session-acts";
+import {
+  ROW_WRITE_REFUSAL,
+  type SessionActsDependencies,
+  sessionActRows,
+  WRITE_REFUSAL,
+} from "./session-acts";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
@@ -24,9 +28,9 @@ interface Asked {
 }
 
 /** The host's row writes as this process reaches them, recording what crossed and answering as told. */
-function fixture(answer: () => Promise<Awaited<ReturnType<SessionRowActions["sendMessage"]>>>) {
+function fixture(answer: () => Promise<SessionWriteResult>) {
   const asked: Asked = { messages: [], controls: [] };
-  const writes: SessionRowActions = {
+  const writes: SessionActsDependencies["writes"] = {
     sendMessage: async (identity, text) => {
       asked.messages.push({ identity, text });
       return answer();

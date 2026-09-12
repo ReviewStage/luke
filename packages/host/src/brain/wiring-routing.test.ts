@@ -211,11 +211,13 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
+      carry: (effect) => Effect.runPromise(effect),
       sessionActions: {
-        perform: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not in test" }),
-        openSession: () => Promise.reject(new Error("not in test")),
-        openSessionApplication: () => Promise.reject(new Error("not in test")),
-        openSessionChange: () => Promise.reject(new Error("not in test")),
+        perform: () =>
+          Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not in test" }),
+        openSession: () => Effect.die(new Error("not in test")),
+        openSessionApplication: () => Effect.die(new Error("not in test")),
+        openSessionChange: () => Effect.die(new Error("not in test")),
       },
       sessions: () => roster,
       refreshSessions: async () => undefined,

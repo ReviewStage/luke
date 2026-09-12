@@ -27,11 +27,10 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
-import { Effect } from "effect";
-import { test } from "vitest";
+import { Effect, Fiber } from "effect";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import { createSessionActionPerformer } from "./session-action-performer.js";
-import type { AwaitedSettingsStore } from "./settings-store-awaited.js";
+import type { SettingsStore } from "./settings-store.js";
 
 /** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
 function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
@@ -108,14 +107,16 @@ function heldSettings(stored?: Readonly<Record<string, WorkspaceAgentSelection>>
   // SAFETY: the performer reads one field here, workspaceAgentDefaults, and
   // the pairing table is a legal value of it; the generic signature is
   // satisfied for that one field.
-  const store: Pick<AwaitedSettingsStore, "get"> = {
-    get: (async () => {
-      reads += 1;
-      await new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      return stored;
-    }) as AwaitedSettingsStore["get"],
+  const store: Pick<SettingsStore, "get"> = {
+    get: (() =>
+      Effect.promise(() => {
+        reads += 1;
+        return new Promise<Readonly<Record<string, WorkspaceAgentSelection>> | undefined>(
+          (resolve) => {
+            release = () => resolve(stored);
+          },
+        );
+      })) as SettingsStore["get"],
   };
   return { store, release: () => release?.(), reads: () => reads };
 }
@@ -123,7 +124,7 @@ function heldSettings(stored?: Readonly<Record<string, WorkspaceAgentSelection>>
 interface FixtureOptions {
   outcome?: HostedActionOutcome;
   creation?: HostedActionWorkspaceOutcome;
-  settingsStore?: Pick<AwaitedSettingsStore, "get">;
+  settingsStore?: Pick<SettingsStore, "get">;
   openExternal?: (url: string, kind: HostNodeOpenKind) => Promise<void>;
   sendsNetwork?: boolean;
 }
@@ -163,19 +164,20 @@ function fixture(options: FixtureOptions = {}) {
       renameSession: async (target, name) => carry("rename-session", target, name),
       renameWorkspace: async (target, name) => carry("rename-workspace", target, name),
     },
-    refreshSessions: async () => {
+    refreshSessions: Effect.sync(() => {
       recorded.refreshes += 1;
-    },
+    }),
     sendsNetwork: options.sendsNetwork ?? true,
     // SAFETY: the performer reads one field here, workspaceAgentDefaults, and
     // an undefined answer is a legal value of it; the generic signature is
     // satisfied for that one field.
     settingsStore: options.settingsStore ?? {
-      get: (async () => undefined) as AwaitedSettingsStore["get"],
+      get: (() => Effect.succeed(undefined)) as SettingsStore["get"],
     },
-    rememberWorkspaceDefaults: async (...remembered) => {
-      recorded.remembered.push(remembered);
-    },
+    rememberWorkspaceDefaults: (...remembered) =>
+      Effect.sync(() => {
+        recorded.remembered.push(remembered);
+      }),
     expectCreatedWorkspace: (identity) => {
       recorded.expected.push(identity);
     },
@@ -233,13 +235,13 @@ it.effect(
       const settings = heldSettings();
       const { performer, recorded } = fixture({ settingsStore: settings.store });
       let revoked = false;
-      const pending = performer.perform(CREATE, { isRevoked: () => revoked });
+      const pending = yield* Effect.fork(performer.perform(CREATE, { isRevoked: () => revoked }));
       yield* waitFor(() => settings.reads() === 1);
       assert.equal(settings.reads(), 1);
       assert.deepEqual(recorded.carried, []);
       revoked = true;
       settings.release();
-      const result = yield* Effect.promise(() => pending);
+      const result = yield* Fiber.join(pending);
       assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
       assert.equal(result.reason, ACTION_REFUSAL.TURN_OVER);
       assert.deepEqual(recorded.carried, []);
@@ -253,12 +255,12 @@ it.effect(
       const settings = heldSettings();
       const { performer, recorded } = fixture({ settingsStore: settings.store });
       let revoked = false;
-      const pending = performer.perform(SPAWN, { isRevoked: () => revoked });
+      const pending = yield* Effect.fork(performer.perform(SPAWN, { isRevoked: () => revoked }));
       yield* waitFor(() => settings.reads() === 1);
       assert.equal(settings.reads(), 1);
       revoked = true;
       settings.release();
-      const result = yield* Effect.promise(() => pending);
+      const result = yield* Fiber.join(pending);
       assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
       assert.equal(result.reason, ACTION_REFUSAL.TURN_OVER);
       assert.deepEqual(recorded.carried, []);
@@ -272,24 +274,26 @@ it.effect(
       const settings = heldSettings();
       const { performer, recorded } = fixture({ settingsStore: settings.store });
       const controller = new AbortController();
-      const pending = performer.perform(CREATE, {
-        isRevoked: () => controller.signal.aborted,
-        signal: controller.signal,
-      });
+      const pending = yield* Effect.fork(
+        performer.perform(CREATE, {
+          isRevoked: () => controller.signal.aborted,
+          signal: controller.signal,
+        }),
+      );
       yield* waitFor(() => settings.reads() === 1);
       assert.equal(settings.reads(), 1);
       controller.abort();
       // Settles without the read being released.
-      const result = yield* Effect.promise(() => pending);
+      const result = yield* Fiber.join(pending);
       assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
       settings.release();
       yield* settleMicrotasks();
       assert.deepEqual(recorded.carried, []);
       // A call with no signal waits the read out, as before.
-      const direct = performer.perform(CREATE, { isRevoked: () => false });
+      const direct = yield* Effect.fork(performer.perform(CREATE, { isRevoked: () => false }));
       yield* waitFor(() => settings.reads() === 2);
       settings.release();
-      assert.equal((yield* Effect.promise(() => direct)).status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal((yield* Fiber.join(direct)).status, ACTION_RESULT_STATUS.ACCEPTED);
       assert.equal(recorded.carried.length, 1);
     }),
 );
@@ -308,10 +312,10 @@ it.effect(
         },
       });
 
-      const creating = performer.perform(CREATE, { isRevoked: () => false });
+      const creating = yield* Effect.fork(performer.perform(CREATE, { isRevoked: () => false }));
       yield* waitFor(() => settings.reads() === 1);
       settings.release();
-      const result = yield* Effect.promise(() => creating);
+      const result = yield* Fiber.join(creating);
 
       assert.deepEqual(result, {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -361,14 +365,18 @@ it.effect("a spawn carries the stored model only for the very agent it pairs wit
     const withPair = fixture({ settingsStore: paired.store });
     const withOther = fixture({ settingsStore: other.store });
 
-    const spawning = withPair.performer.perform(SPAWN, { isRevoked: () => false });
+    const spawning = yield* Effect.fork(
+      withPair.performer.perform(SPAWN, { isRevoked: () => false }),
+    );
     yield* waitFor(() => paired.reads() === 1);
     paired.release();
-    assert.equal((yield* Effect.promise(() => spawning)).status, ACTION_RESULT_STATUS.ACCEPTED);
-    const unpaired = withOther.performer.perform(SPAWN, { isRevoked: () => false });
+    assert.equal((yield* Fiber.join(spawning)).status, ACTION_RESULT_STATUS.ACCEPTED);
+    const unpaired = yield* Effect.fork(
+      withOther.performer.perform(SPAWN, { isRevoked: () => false }),
+    );
     yield* waitFor(() => other.reads() === 1);
     other.release();
-    assert.equal((yield* Effect.promise(() => unpaired)).status, ACTION_RESULT_STATUS.ACCEPTED);
+    assert.equal((yield* Fiber.join(unpaired)).status, ACTION_RESULT_STATUS.ACCEPTED);
 
     assert.deepEqual(withPair.recorded.carried, [
       {
@@ -393,125 +401,147 @@ it.effect("a spawn carries the stored model only for the very agent it pairs wit
   }),
 );
 
-test("a message, a control, and the two renames each name the session and carry the ask to the service", async () => {
-  const { performer, recorded } = fixture();
+it.effect(
+  "a message, a control, and the two renames each name the session and carry the ask to the service",
+  () =>
+    Effect.gen(function* () {
+      const { performer, recorded } = fixture();
 
-  await performer.perform(MESSAGE);
-  await performer.perform(
-    admittedForTest({
-      kind: ACTION_KIND.CONTROL,
-      identity: WORKSPACE_IDENTITY,
-      control: { kind: ACTION_KIND.CONTROL, id: "cancel-run", label: "Stop" },
-      origin: RUN_ORIGIN.USER,
+      yield* performer.perform(MESSAGE);
+      yield* performer.perform(
+        admittedForTest({
+          kind: ACTION_KIND.CONTROL,
+          identity: WORKSPACE_IDENTITY,
+          control: { kind: ACTION_KIND.CONTROL, id: "cancel-run", label: "Stop" },
+          origin: RUN_ORIGIN.USER,
+        }),
+      );
+      yield* performer.perform(
+        admittedForTest({
+          kind: ACTION_KIND.RENAME_SESSION,
+          identity: WORKSPACE_IDENTITY,
+          name: "Flaky test",
+          origin: RUN_ORIGIN.USER,
+        }),
+      );
+      yield* performer.perform(
+        admittedForTest({
+          kind: ACTION_KIND.RENAME_WORKSPACE,
+          identity: WORKSPACE_IDENTITY,
+          name: "flaky-test",
+          origin: RUN_ORIGIN.USER,
+        }),
+      );
+
+      assert.deepEqual(recorded.carried, [
+        { route: "message", ...WORKSPACE_IDENTITY, ask: "ship it" },
+        { route: "control", ...WORKSPACE_IDENTITY, ask: "cancel-run" },
+        { route: "rename-session", ...WORKSPACE_IDENTITY, ask: "Flaky test" },
+        { route: "rename-workspace", ...WORKSPACE_IDENTITY, ask: "flaky-test" },
+      ]);
+      assert.equal(recorded.refreshes, 4);
+      assert.equal(recorded.events.length, 4);
     }),
-  );
-  await performer.perform(
-    admittedForTest({
-      kind: ACTION_KIND.RENAME_SESSION,
-      identity: WORKSPACE_IDENTITY,
-      name: "Flaky test",
-      origin: RUN_ORIGIN.USER,
+);
+
+it.effect(
+  "a session behind no cloud provider is refused before any call, and a fixture run creates nothing",
+  () =>
+    Effect.gen(function* () {
+      const { performer, recorded } = fixture({ sendsNetwork: false });
+
+      const local = yield* performer.perform(
+        admittedForTest({
+          kind: ACTION_KIND.MESSAGE,
+          identity: LOCAL_IDENTITY,
+          text: "hello",
+          origin: RUN_ORIGIN.USER,
+        }),
+      );
+      const offline = yield* performer.perform(CREATE);
+
+      assert.equal(local.status, ACTION_RESULT_STATUS.UNSUPPORTED);
+      assert.equal(offline.status, ACTION_RESULT_STATUS.UNSUPPORTED);
+      assert.deepEqual(recorded.carried, []);
+      assert.equal(recorded.refreshes, 0);
+      assert.deepEqual(recorded.events, []);
     }),
-  );
-  await performer.perform(
-    admittedForTest({
-      kind: ACTION_KIND.RENAME_WORKSPACE,
-      identity: WORKSPACE_IDENTITY,
-      name: "flaky-test",
-      origin: RUN_ORIGIN.USER,
+);
+
+it.effect(
+  "what the service answers reaches the brain as the result it means, and only a landed write is counted",
+  () =>
+    Effect.gen(function* () {
+      const lost = fixture({ outcome: { failure: HOSTED_ACTION_FAILURE.LOST } });
+      const refused = fixture({
+        outcome: {
+          answer: { result: ACTION_RESULT_STATUS.REJECTED, reason: "That run has ended." },
+        },
+      });
+      const unsupported = fixture({
+        outcome: { answer: { result: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "No way in." } },
+      });
+
+      const uncertain = yield* lost.performer.perform(MESSAGE);
+      const rejected = yield* refused.performer.perform(MESSAGE);
+      const untaken = yield* unsupported.performer.perform(MESSAGE);
+
+      // An answer lost may have landed: the roster is drawn again, and nothing is counted.
+      assert.equal(uncertain.status, UNKNOWN_ACTION_STATUS);
+      assert.equal(lost.recorded.refreshes, 1);
+      assert.deepEqual(lost.recorded.events, []);
+      assert.deepEqual(rejected, {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "That run has ended.",
+      });
+      assert.equal(refused.recorded.refreshes, 1);
+      // A write the provider cannot take at all moved nothing, so nothing is redrawn.
+      assert.equal(untaken.status, ACTION_RESULT_STATUS.UNSUPPORTED);
+      assert.equal(unsupported.recorded.refreshes, 0);
     }),
-  );
+);
 
-  assert.deepEqual(recorded.carried, [
-    { route: "message", ...WORKSPACE_IDENTITY, ask: "ship it" },
-    { route: "control", ...WORKSPACE_IDENTITY, ask: "cancel-run" },
-    { route: "rename-session", ...WORKSPACE_IDENTITY, ask: "Flaky test" },
-    { route: "rename-workspace", ...WORKSPACE_IDENTITY, ask: "flaky-test" },
-  ]);
-  assert.equal(recorded.refreshes, 4);
-  assert.equal(recorded.events.length, 4);
-});
-
-test("a session behind no cloud provider is refused before any call, and a fixture run creates nothing", async () => {
-  const { performer, recorded } = fixture({ sendsNetwork: false });
-
-  const local = await performer.perform(
-    admittedForTest({
-      kind: ACTION_KIND.MESSAGE,
-      identity: LOCAL_IDENTITY,
-      text: "hello",
-      origin: RUN_ORIGIN.USER,
+it.effect(
+  "an open the brain carries tells the node it was asked of Luke, and a row press hands it an address",
+  () =>
+    Effect.gen(function* () {
+      const node = recordingOpens();
+      const { performer } = fixture({ openExternal: node.openExternal });
+      assert.equal((yield* performer.perform(OPEN)).status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(
+        (yield* performer.openSession(WORKSPACE_IDENTITY)).status,
+        ACTION_RESULT_STATUS.ACCEPTED,
+      );
+      assert.deepEqual(
+        node.opens.map((open) => open.kind),
+        [HOST_NODE_OPEN_KIND.ASKED_SESSION, HOST_NODE_OPEN_KIND.ADDRESS],
+      );
+      assert.ok(node.opens.every((open) => open.url === WORKSPACE_LINK));
     }),
-  );
-  const offline = await performer.perform(CREATE);
+);
 
-  assert.equal(local.status, ACTION_RESULT_STATUS.UNSUPPORTED);
-  assert.equal(offline.status, ACTION_RESULT_STATUS.UNSUPPORTED);
-  assert.deepEqual(recorded.carried, []);
-  assert.equal(recorded.refreshes, 0);
-  assert.deepEqual(recorded.events, []);
-});
+it.effect(
+  "an open refused before the node, or lost at it, is answered without the node opening anything of its own",
+  () =>
+    Effect.gen(function* () {
+      const node = recordingOpens();
+      const { performer } = fixture({ openExternal: node.openExternal });
+      const absent = admittedForTest({
+        kind: ACTION_KIND.OPEN,
+        identity: {
+          providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
+          providerSessionId: "workspace-gone",
+        },
+        origin: RUN_ORIGIN.USER,
+      });
+      assert.equal((yield* performer.perform(absent)).status, ACTION_RESULT_STATUS.UNSUPPORTED);
+      assert.equal(node.opens.length, 0);
 
-test("what the service answers reaches the brain as the result it means, and only a landed write is counted", async () => {
-  const lost = fixture({ outcome: { failure: HOSTED_ACTION_FAILURE.LOST } });
-  const refused = fixture({
-    outcome: { answer: { result: ACTION_RESULT_STATUS.REJECTED, reason: "That run has ended." } },
-  });
-  const unsupported = fixture({
-    outcome: { answer: { result: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "No way in." } },
-  });
-
-  const uncertain = await lost.performer.perform(MESSAGE);
-  const rejected = await refused.performer.perform(MESSAGE);
-  const untaken = await unsupported.performer.perform(MESSAGE);
-
-  // An answer lost may have landed: the roster is drawn again, and nothing is counted.
-  assert.equal(uncertain.status, UNKNOWN_ACTION_STATUS);
-  assert.equal(lost.recorded.refreshes, 1);
-  assert.deepEqual(lost.recorded.events, []);
-  assert.deepEqual(rejected, {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: "That run has ended.",
-  });
-  assert.equal(refused.recorded.refreshes, 1);
-  // A write the provider cannot take at all moved nothing, so nothing is redrawn.
-  assert.equal(untaken.status, ACTION_RESULT_STATUS.UNSUPPORTED);
-  assert.equal(unsupported.recorded.refreshes, 0);
-});
-
-test("an open the brain carries tells the node it was asked of Luke, and a row press hands it an address", async () => {
-  const node = recordingOpens();
-  const { performer } = fixture({ openExternal: node.openExternal });
-  assert.equal((await performer.perform(OPEN)).status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.equal(
-    (await performer.openSession(WORKSPACE_IDENTITY)).status,
-    ACTION_RESULT_STATUS.ACCEPTED,
-  );
-  assert.deepEqual(
-    node.opens.map((open) => open.kind),
-    [HOST_NODE_OPEN_KIND.ASKED_SESSION, HOST_NODE_OPEN_KIND.ADDRESS],
-  );
-  assert.ok(node.opens.every((open) => open.url === WORKSPACE_LINK));
-});
-
-test("an open refused before the node, or lost at it, is answered without the node opening anything of its own", async () => {
-  const node = recordingOpens();
-  const { performer } = fixture({ openExternal: node.openExternal });
-  const absent = admittedForTest({
-    kind: ACTION_KIND.OPEN,
-    identity: {
-      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-      providerSessionId: "workspace-gone",
-    },
-    origin: RUN_ORIGIN.USER,
-  });
-  assert.equal((await performer.perform(absent)).status, ACTION_RESULT_STATUS.UNSUPPORTED);
-  assert.equal(node.opens.length, 0);
-
-  const failing = fixture({
-    openExternal: async () => {
-      throw new Error("no application claims that address");
-    },
-  });
-  assert.equal((await failing.performer.perform(OPEN)).status, ACTION_RESULT_STATUS.REJECTED);
-});
+      const failing = fixture({
+        openExternal: async () => {
+          throw new Error("no application claims that address");
+        },
+      });
+      assert.equal((yield* failing.performer.perform(OPEN)).status, ACTION_RESULT_STATUS.REJECTED);
+    }),
+);

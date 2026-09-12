@@ -134,14 +134,16 @@ function performer(
   const appActions: BrainAppActionRequest["action"][] = [];
   let facts: readonly RememberedFact[] = [];
   const dependencies: BrainActionPerformerDependencies = {
+    carry: (effect) => Effect.runPromise(effect),
     sessionActions: {
-      perform: async (action) => {
-        performed.push(action);
-        return answer(action);
-      },
-      openSession: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      openSessionApplication: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      openSessionChange: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      perform: (action) =>
+        Effect.sync(() => {
+          performed.push(action);
+          return answer(action);
+        }),
+      openSession: () => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionApplication: () => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+      openSessionChange: () => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     },
     sessions: (): readonly Session[] => [observed],
     refreshSessions: async () => {},

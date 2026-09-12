@@ -11,6 +11,7 @@ import {
 } from "@sidecar/hosted";
 import type { CloudAgentProviderId, SessionWriteResult } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
+import { Effect } from "effect";
 
 /** What a caller hears of a service call that ended short of the provider's own answer. */
 export const HOSTED_ACTION_ANSWER = {
@@ -74,23 +75,28 @@ export function hostedActionResult(
  * it may have already taken; only a write the service says its provider
  * cannot take at all moved nothing.
  *
- * The redraw is a poke and never a wait: `refresh` starts the observation
- * pass on the runtime the composition handed its caller and answers at once,
- * exactly as the detached promise it replaces did.
+ * The redraw is a poke and never a wait: `refresh` is the composition's own
+ * poke effect, which forks the observation pass and answers at once, so the
+ * write's answer reaches its caller no later than it did when the poke was a
+ * detached promise.
  */
 export function settleHostedWrite<Result extends SessionWriteResult>(
   result: Result,
   providerId: CloudAgentProviderId,
   counted: ProductSessionAction,
-  refresh: () => void,
+  refresh: Effect.Effect<void>,
   recordProductEvent: RecordProductEvent,
-): Result {
-  if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) refresh();
-  if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
-    recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
-      provider_id: providerId,
-      session_action: counted,
-    });
-  }
-  return result;
+): Effect.Effect<Result> {
+  return Effect.gen(function* () {
+    if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) yield* refresh;
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
+      yield* Effect.sync(() =>
+        recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
+          provider_id: providerId,
+          session_action: counted,
+        }),
+      );
+    }
+    return result;
+  });
 }

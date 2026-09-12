@@ -1,21 +1,38 @@
-import { OPEN_REFUSAL, type SessionActionPerformer, type SessionRowActions } from "@sidecar/host";
-import type { SessionOpenResult, SessionWriteResult } from "@sidecar/session";
+import { OPEN_REFUSAL } from "@sidecar/host";
+import type {
+  SessionApplicationId,
+  SessionIdentity,
+  SessionOpenResult,
+  SessionWriteResult,
+} from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
+/**
+ * The host's own session acts as this process reaches them: through the
+ * Gateway client, which answers promises, and never the host's in-process
+ * performer, whose acts are effects on the fiber that carries them.
+ */
 export interface SessionActsDependencies {
   /** The opens alone: a press is not a write, and reaches the roster's address without admission. */
-  performer: Pick<
-    SessionActionPerformer,
-    "openSession" | "openSessionApplication" | "openSessionChange"
-  >;
+  performer: {
+    openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
+    openSessionApplication(
+      identity: SessionIdentity,
+      applicationId: SessionApplicationId,
+    ): Promise<SessionOpenResult>;
+    openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
+  };
   /**
    * The two writes a row asks for, carried to the host, whose `admit()`
    * decides each against the roster it reads for itself; nothing here decides
    * whether a session takes them.
    */
-  writes: SessionRowActions;
+  writes: {
+    sendMessage(identity: SessionIdentity, text: string): Promise<SessionWriteResult>;
+    executeControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
+  };
 }
 
 type SessionActKind =
