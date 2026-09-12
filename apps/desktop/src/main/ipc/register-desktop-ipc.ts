@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
@@ -108,12 +109,19 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: () => operator.host.completeCalendarOnboarding(),
     // The takeover's own session, answered only while it holds the panel and
     // only on a run that reaches the network at all: the offer goes to the
-    // accountless voice service naming nothing observed, and
-    // the hang-up closes the connection the service reads as the end.
-    [ACT_KIND.INTRODUCTION_CREATE_SESSION]: ({ sdp, titles }, { introduction }) =>
-      introduction && runMode.sendsNetwork
-        ? introductionSession.open({ sdp, titles })
-        : Promise.resolve(undefined),
+    // accountless voice service with the signed-in developer's first name as
+    // its one observed value, read here from the account this process holds
+    // and never from the window, and the hang-up closes the connection the
+    // service reads as the end.
+    [ACT_KIND.INTRODUCTION_CREATE_SESSION]: ({ sdp, titles }, { introduction }) => {
+      if (!introduction || !runMode.sendsNetwork) return Promise.resolve(undefined);
+      const account = state.snapshot().account;
+      return introductionSession.open({
+        sdp,
+        titles,
+        name: account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined,
+      });
+    },
     [ACT_KIND.INTRODUCTION_END_SESSION]: (_payload, { introduction }) => {
       if (introduction) introductionSession.end();
     },

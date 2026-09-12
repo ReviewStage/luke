@@ -61,6 +61,19 @@ test("an offer seeds the session with the bounded titles and holds the connectio
   assert.deepEqual(closes, ["sess_1"]);
 });
 
+test("the account's name rides the seed as its first word, and a blank one is not seeded", async () => {
+  const { source, creates } = fakeSource([true, true]);
+  const session = new IntroductionSession({ source, recordProductEvent: () => undefined });
+
+  await session.open({ sdp: SDP, titles: [], name: "Ada Lovelace" });
+  assert.equal(creates[0]?.input.length, 1);
+  assert.equal(creates[0]?.input[0]?.role, SEED_ROLE.DEVELOPER);
+  assert.deepEqual(creates[0]?.input[0]?.content[0].text.split("\n").slice(-1), ["Ada"]);
+
+  await session.open({ sdp: SDP, titles: [], name: "   " });
+  assert.deepEqual(creates[1]?.input, []);
+});
+
 test("a second offer hangs up the first session, and a refusal holds and counts nothing", async () => {
   const { source, closes } = fakeSource([true, true, false]);
   const counted: string[] = [];

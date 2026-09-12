@@ -6,7 +6,7 @@ import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
-import { shouldRunIntroduction } from "./introduction-flow.js";
+import { introductionOwed } from "./introduction-flow.js";
 import { ONBOARDING_STATE_FILE, onboardingStateFile } from "./onboarding-state.js";
 
 const SIGNED_IN_AT = "2026-08-24T00:00:00.000Z";
@@ -18,6 +18,7 @@ async function fileIn(t: TestContext) {
 }
 
 const MOMENTS = {
+  introductionRequiredAt: SIGNED_IN_AT,
   introductionCompletedAt: SIGNED_IN_AT,
   arrivalSignedInAt: SIGNED_IN_AT,
   arrivalSpokenAt: LATER,
@@ -152,17 +153,8 @@ test("the calendar gate is owed until a Done or a decline answers it", () => {
   assert.equal(calendarOnboardingOwed({ calendarOnboardingSettledAt: LATER }), false);
 });
 
-test("the introduction plays only on an interactive launch with no account and no completion", () => {
-  for (const [requiresAccount, signedIn, completed, expected] of [
-    [true, false, false, true],
-    [true, true, false, false],
-    [false, false, false, false],
-    [true, false, true, false],
-  ] as const) {
-    assert.equal(
-      shouldRunIntroduction({ requiresAccount, signedIn, completed }),
-      expected,
-      `${requiresAccount} ${signedIn} ${completed}`,
-    );
-  }
+test("the introduction's own moments round-trip beside the beats', and decide it alone", () => {
+  assert.equal(introductionOwed(MOMENTS), false);
+  const { introductionCompletedAt: _completed, ...uncompleted } = MOMENTS;
+  assert.equal(introductionOwed(uncompleted), true);
 });

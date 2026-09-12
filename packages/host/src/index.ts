@@ -17,10 +17,7 @@ export { REJECTED_SUBMISSION } from "./brain/publication.js";
 export type { ConversationOperations } from "./conversation-operations.js";
 export type { MachinePresence } from "./device-presence.js";
 export type { HostSeams } from "./host-kernel.js";
-export {
-  INTRODUCTION_HANDOFF_READY_MS,
-  shouldRunIntroduction,
-} from "./introduction-flow.js";
+export { INTRODUCTION_HANDOFF_READY_MS } from "./introduction-flow.js";
 export { jsonStateFile } from "./json-state-file.js";
 export {
   HOST_NATIVE_NODE_ID,

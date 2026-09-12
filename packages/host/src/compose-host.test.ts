@@ -77,6 +77,7 @@ it.effect(
           assert.ok(response.ok);
           assert.ok(isRecord(response.result));
           assert.equal(response.result.calendarOnboardingOwed, false);
+          assert.equal(response.result.introductionOwed, false);
           assert.equal(response.result.voiceAvailable, false);
           const first = yield* host.drain({ deadlineMs: 0 });
           // A second drain is the quit arriving twice; it must answer the first outcome rather than throw.

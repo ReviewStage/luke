@@ -93,6 +93,8 @@ const GATEWAY_METHODS = {
   ONBOARDING_STATE: { name: "onboarding.state", mutates: false },
   ONBOARDING_SKIP_CALENDAR: { name: "onboarding.skipCalendar", mutates: true },
   ONBOARDING_COMPLETE_CALENDAR: { name: "onboarding.completeCalendar", mutates: true },
+  /** The spoken introduction was given to its end; the host records the moment and stands the introduction down for good. */
+  ONBOARDING_COMPLETE_INTRODUCTION: { name: "onboarding.completeIntroduction", mutates: true },
 } as const satisfies Record<string, MethodEntry>;
 
 export const GATEWAY_METHOD =
@@ -572,6 +574,8 @@ export const GATEWAY_EVENT = {
   CALENDARS_CHANGED: "calendars.changed",
   ANNOUNCEMENTS_HELD_CHANGED: "announcementsHeld.changed",
   CALENDAR_ONBOARDING_CHANGED: "calendarOnboarding.changed",
+  /** Whether the spoken introduction is owed moved: the first sign-in this install observed put it up, or its completion took it down. */
+  INTRODUCTION_CHANGED: "introduction.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
 } as const;

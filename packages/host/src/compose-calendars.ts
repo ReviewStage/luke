@@ -37,6 +37,7 @@ import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { quietUntilFrom } from "./device-presence.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
+import { introductionOwed } from "./introduction-flow.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateFile } from "./onboarding-state.js";
 import { reporterOf } from "./wire-helpers.js";
@@ -86,6 +87,8 @@ export interface CalendarsComposer extends Composer {
   /** Whether the calendar step of onboarding still stands over the panel. */
   gateOwed: () => boolean;
   gateOfferable: () => Promise<boolean>;
+  /** Whether the spoken introduction is owed to the signed-in developer, as the onboarding record has it. */
+  introductionOwed: () => boolean;
   /** The onboarding record as it stands, for the beats that read their own moments out of it. */
   onboarding: () => OnboardingState | undefined;
   writeOnboarding: (moment: OnboardingState) => void;
@@ -180,24 +183,37 @@ export const composeCalendars = (
     const onboarding = onboardingStateFile(() => kernel.stateRoot, report);
     let onboardingState: OnboardingState | undefined;
     let announcedCalendarGateOwed: boolean | undefined;
+    let announcedIntroductionOwed: boolean | undefined;
 
     function calendarOnboardingGateOwed(): boolean {
       return runMode.requiresAccount && calendarOnboardingOwed(onboardingState);
     }
 
+    function spokenIntroductionOwed(): boolean {
+      return runMode.requiresAccount && introductionOwed(onboardingState);
+    }
+
     /**
      * The one onboarding write, taking the moment it records and merging it over
-     * the record as it stands on disk — the client writes the
-     * introduction's own moment into the same file. Every moment lives in one
-     * record, so each write reconciles both beats; the gate event stays fenced
-     * on a changed answer, so writing an arrival moment cannot tell the renderer
-     * about a gate that did not move.
+     * the record as it stands on disk. Every moment lives in one record, so
+     * each write reconciles every beat and the introduction; each event stays
+     * fenced on a changed answer, so writing an arrival moment cannot tell the
+     * client about a gate or an introduction that did not move.
      */
     function writeOnboardingState(moment: OnboardingState): void {
       onboardingState = onboarding.update((current) => ({ ...current, ...moment }));
       if (moment.arrivalSpokenAt !== undefined) links().withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
       const owed = calendarOnboardingGateOwed();
       if (!owed) links().withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
+      const introduction = spokenIntroductionOwed();
+      if (introduction !== announcedIntroductionOwed) {
+        announcedIntroductionOwed = introduction;
+        kernel.emit(GATEWAY_EVENT.INTRODUCTION_CHANGED, { owed: introduction });
+        // The introduction is an announcement hold of its own, and the live
+        // service learns a hold only by re-reading it: raised here so nothing
+        // speaks over the greeting, dropped here so what waited is re-decided.
+        links().reconcileSpeech();
+      }
       if (owed === announcedCalendarGateOwed) return;
       announcedCalendarGateOwed = owed;
       kernel.emit(GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED, { owed });
@@ -223,8 +239,12 @@ export const composeCalendars = (
         !paused &&
         calendarMeetings !== undefined &&
         activeMeetingEnd(calendarMeetings, at) !== undefined;
+      // The introduction owed is a hold of its own: nothing else of Luke's
+      // speaks over the greeting, and what was held is re-decided once the
+      // completion takes the hold down, like a meeting's end.
       const holding =
         paused ||
+        spokenIntroductionOwed() ||
         (inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)));
       if (holding !== announcementsHeld) {
         announcementsHeld = holding;
@@ -578,7 +598,21 @@ export const composeCalendars = (
           return carried(result);
         }),
       [GATEWAY_METHOD.ONBOARDING_STATE]: () =>
-        Effect.sync(() => ({ calendarOnboardingOwed: calendarOnboardingGateOwed() })),
+        Effect.sync(() => ({
+          calendarOnboardingOwed: calendarOnboardingGateOwed(),
+          introductionOwed: spokenIntroductionOwed(),
+        })),
+      // The completion is the host's write, so the record has one writer and
+      // the hold above comes down on the same event the client learns from;
+      // the beats that waited behind the greeting are asked for again here.
+      [GATEWAY_METHOD.ONBOARDING_COMPLETE_INTRODUCTION]: () =>
+        Effect.sync(() => {
+          if (introductionOwed(onboardingState)) {
+            writeOnboardingState({ introductionCompletedAt: new Date(now()).toISOString() });
+            links().requestOnboardingBeat();
+          }
+          return {};
+        }),
       [GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR]: () =>
         Effect.sync(() => {
           if (calendarOnboardingOwed(onboardingState)) {
@@ -605,14 +639,18 @@ export const composeCalendars = (
       meetingQuietUntil,
       gateOwed: calendarOnboardingGateOwed,
       gateOfferable: calendarGateOfferable,
+      introductionOwed: spokenIntroductionOwed,
       onboarding: () => onboardingState,
       writeOnboarding: writeOnboardingState,
       recordFirstSignIn: () => {
-        // The first sign-in ever observed is also where the calendar step of
-        // onboarding goes up: recorded on disk rather than derived, so quitting
-        // at the gate and relaunching finds it standing.
+        // The first sign-in ever observed is where the spoken introduction and
+        // the calendar step of onboarding go up, in that order: recorded on
+        // disk rather than derived, so quitting at either and relaunching
+        // finds it standing, and an install signed in before this edge was
+        // recorded has none to record.
         if (onboardingState?.calendarOnboardingRequiredAt !== undefined) return;
-        writeOnboardingState({ calendarOnboardingRequiredAt: new Date(now()).toISOString() });
+        const at = new Date(now()).toISOString();
+        writeOnboardingState({ introductionRequiredAt: at, calendarOnboardingRequiredAt: at });
         void settleCalendarOnboardingIfConnected();
       },
       armObservation: observation.arm,

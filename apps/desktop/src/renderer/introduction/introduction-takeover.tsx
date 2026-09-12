@@ -18,7 +18,6 @@ import { PANEL_PRESENTATION } from "../panel-state";
 import { rendererRuntimeNow } from "../renderer-runtime";
 import { sessionTally } from "../session-model";
 import { parseMilliseconds } from "../session-motion";
-import { useSignInFaceCycle } from "../sign-in-gate";
 import { appStateNow } from "../use-app-state";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
 import { LiveCall } from "../voice/live-call";
@@ -167,8 +166,8 @@ const PRE_FLIGHT_BEATS: ReadonlySet<IntroductionBeat> = new Set([
 /**
  * The next beat. One event cuts across the table: the voice failing ends the
  * introduction honestly and gracefully — the quiet glide while the stage has
- * not flown, the stand-down once it has — because the real signed-out gate
- * needs no voice, and a takeover cut mid-note would make a refused quota
+ * not flown, the stand-down once it has — because the signed-in panel behind
+ * it needs no voice, and a takeover cut mid-note would make a refused quota
  * feel like a crash.
  */
 export function nextIntroductionBeat(
@@ -266,16 +265,6 @@ const LANDED_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.DONE,
 ]);
 
-/**
- * The two closing beats: the capsule gated — the real sign-in Luke at the
- * wing spot — which is exactly the compact signed-out panel the handoff
- * draws in its place.
- */
-const STANDING_DOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
-  INTRODUCTION_BEAT.STAND_DOWN,
-  INTRODUCTION_BEAT.DONE,
-]);
-
 /** The beats a session stands or is coming up in, where its ending is news. */
 const SESSION_BEATS: ReadonlySet<IntroductionBeat> = new Set([
   INTRODUCTION_BEAT.CONNECT,
@@ -296,8 +285,8 @@ const ASKING_BEATS: ReadonlySet<IntroductionBeat> = new Set([
  * rather than a surface that follows state, so it subscribes to nothing — a
  * roster arriving mid-beat must not re-run the beat it arrived during. A panel
  * always stands on a display, so a state naming none is the read having
- * failed rather than a state worth drawing, and the ordinary signed-out panel
- * stands in its place rather than a fullscreen surface with nothing on it.
+ * failed rather than a state worth drawing, and the ordinary panel stands in
+ * its place rather than a fullscreen surface with nothing on it.
  */
 export function IntroductionTakeover(): React.JSX.Element | null {
   const { tell } = useAct();
@@ -313,20 +302,21 @@ export function IntroductionTakeover(): React.JSX.Element | null {
 }
 
 /**
- * The one-time fullscreen introduction. Entirely spoken by the voice
- * service's greeting: no line is drawn, and the one text beside the sign-in
- * controls is the caption strip, forced on exactly where the app itself
- * forces it — when the machine's output is silent, where the caption is the
- * speech. The session behind it is the introduction's own: created with no
- * account through the voice service, which holds its trusted side and sends
- * the greeting, carrying nothing but the detected sessions' titles as data.
- * This window is a peer of it and nothing more — the same `LiveCall` the
- * conversation runs on, opened with the peer's own silence in the device's
- * place and never unmuted, sending only the hang-up — so nothing is heard
- * here, and nothing said or shown here can become an action. What lands at
- * the top of the screen is the app's own furniture — the capsule, the wings,
- * the sign-in gate — so the handoff to the real panel changes nothing the
- * developer can see.
+ * The one-time fullscreen introduction, given to the developer who just
+ * signed in. Entirely spoken by the voice service's greeting: no line is
+ * drawn, and the one text beside the capsule is the caption strip, forced on
+ * exactly where the app itself forces it — when the machine's output is
+ * silent, where the caption is the speech. The session behind it is the
+ * introduction's own: created through the voice service's accountless
+ * endpoint, which holds its trusted side and sends the greeting, seeded by
+ * the main process with the developer's first name and nothing else
+ * observed, as data. This window is a peer of it and nothing more — the
+ * same `LiveCall` the conversation runs on, opened with the peer's own
+ * silence in the device's place and never unmuted, sending only the hang-up
+ * — so nothing is heard here, and nothing said or shown here can become an
+ * action. What lands at the top of the screen is the app's own furniture —
+ * the capsule and the wings the signed-in panel draws — so the handoff to
+ * the real panel changes nothing the developer can see.
  */
 function IntroductionFlight({
   state,
@@ -655,8 +645,8 @@ function IntroductionFlight({
       case INTRODUCTION_BEAT.DONE: {
         if (callRef.current) void runCallEffect(callRef.current.close());
         audioRef.current?.dispose();
-        // What the stand-down leaves drawn is the identical compact signed-out
-        // capsule the app itself draws, so reporting the ending here — and
+        // What the stand-down leaves drawn is the identical compact capsule
+        // the signed-in panel draws, so reporting the ending here — and
         // handing this window back to the panel it always was — changes
         // nothing on screen.
         void act(ACT_KIND.INTRODUCTION_COMPLETE, { given: givenRef.current });
@@ -704,7 +694,6 @@ function IntroductionFlight({
   }, [flown]);
 
   const landed = LANDED_BEATS.has(beat);
-  const standingDown = STANDING_DOWN_BEATS.has(beat);
   // The introduction draws no session rows — a session Luke cannot observe
   // yet is not one to picture — so the surface he lands in is the capsule,
   // the pose the greeting is captioned under and the handoff leaves standing.
@@ -728,7 +717,6 @@ function IntroductionFlight({
       : voiceStatus === LIVE_STATUS.SPEAKING
         ? { motion: FACE_MOTION.TALKING, repeat: true, play: "talking" }
         : { repeat: false, play: "rest" };
-  const gateFace = useSignInFaceCycle(reducedMotion || !standingDown);
   const caption = lukeCaption(captionRows);
   const showCaptions = caption !== undefined && outputSilent(state.audio.outputAudio);
 
@@ -762,8 +750,8 @@ function IntroductionFlight({
       {flown ? <div className="panel-surface" aria-hidden="true" /> : null}
       {/* The real wings, the moment there is a strip to stand in: the same
           face and meter the app draws in its capsule, over a desk with
-          nothing on it yet. At the gate the strip goes deliberately bare,
-          exactly as the app's own signed-out strip does. */}
+          nothing on it yet, and the same capsule the signed-in panel draws
+          the moment the introduction ends. */}
       {landed ? (
         <NotchWings
           tally={emptyTally}
@@ -773,26 +761,15 @@ function IntroductionFlight({
           speakers={speakers}
           fixtureSpeaking={false}
           voiceOpening={beat === INTRODUCTION_BEAT.CONNECT}
-          // The introduction runs before any account, so no run of Luke's can
-          // be under way behind its strip.
+          // Every run and briefing of Luke's is held while the introduction
+          // is owed, so nothing is under way behind its strip.
           thinking={false}
           announcementsHeld={false}
           sessionsSettled={true}
           presentation={presentation}
           housingWidth={display.notch.housingWidth}
-          accountGated={standingDown}
+          accountGated={false}
         />
-      ) : null}
-      {/* The app's own signed-out Luke, at the wing spot the capsule pose
-          puts him in — the identical element the real compact panel draws
-          beneath, so the handoff's fade changes nothing on screen. */}
-      {standingDown ? (
-        <span className="sign-in-luke" aria-hidden="true">
-          <LukeFace
-            key={gateFace.play}
-            {...(gateFace.motion ? { motion: gateFace.motion } : undefined)}
-          />
-        </span>
       ) : null}
       {/* The flight's own Luke: centre stage under the dark, landing on the
           exact spot the wings' face takes over. Gone once the wings stand. */}
