@@ -533,14 +533,20 @@ since that PR, and the two readers of them that are not — `LiveSessionService`
 until each answers effects itself. Both files were already on this list for
 their own reasons, so neither is a new row.
 
-`compose-account.ts` is off the handed-runtime list since P12-14b: the three
-`Runtime.runPromise` calls that ran the account gate's links for a session
-manager awaiting promises are gone, because `AccountSessionManager` answers
-effects itself now. The composer still captures `Effect.runtime<never>()`,
-because P12-04d threads that runtime through `VoiceCapabilityAssembler` to
-`BrainTransport` and `tracedModelAdapter`, each of which runs on it under its
-own permanent row above; what this file no longer holds is a run of its own.
-`startCapabilities` and `stopCapabilities` are the links' own effects behind
+`compose-account.ts` was off the handed-runtime list from P12-14b to
+P12-14g: the three `Runtime.runPromise` calls that ran the account gate's
+links for a session manager awaiting promises were gone, because
+`AccountSessionManager` answers effects itself now. The composer still
+captures `Effect.runtime<never>()`, because P12-04d threads that runtime
+through `VoiceCapabilityAssembler` to `BrainTransport` and
+`tracedModelAdapter`, each of which runs on it under its own permanent row
+above. P12-14g put one run back: `VoiceCapabilityAssembler#apply` answers an
+effect now, so `applyVoiceCredential` — still a `Promise<void>` its own
+callers hold, the settings side effects and the account gate in
+`compose-host.ts` — runs `transitionVoiceSource`'s effect on the captured
+runtime rather than the ambient default one. It is deleted once
+`applyVoiceCredential` itself answers an effect and its callers yield it
+instead of awaiting it. `startCapabilities` and `stopCapabilities` are the links' own effects behind
 an `Effect.suspend`, which is what keeps a link read no earlier than the call
 that needs it, and `onSignOut` is `releaseDevice` directly. The three account reads and
 writes it lifted at that seam are lifted no longer: P12-14c took the store
@@ -679,12 +685,13 @@ in P12-14e, and what it still reads through the face is the one setting each
 of its two readers takes as a promise option (`GoogleCalendarReader`'s
 `readAccounts` and `AppleCalendarReader`'s `readConnection`), until each
 reader answers effects itself — the settings composer's account-preferences and provider-key-vault chains are
-promise queues,
-`session-action-performer.ts` reads one field inside a promise, and
-`@sidecar/voice`'s `VoiceSettings` is a promise-shaped interface the
-capability assembler awaits — each its own conversion, and each one's landing
-takes rows out of this face. It is deleted by P12-14d..g, when the last of
-them yields the store directly.
+promise queues, and
+`session-action-performer.ts` reads one field inside a promise —
+each its own conversion, and each one's landing takes rows out of this face.
+`@sidecar/voice`'s `VoiceSettings` left in P12-14g: it is an Effect-returning
+interface now, the same shape `SettingsStore`'s own methods answer, so
+`compose-account.ts` hands `VoiceCapabilityAssembler` the store directly. It
+is deleted by P12-14h, when the last of them yields the store directly.
 
 `tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is on the same
 terms as `runCall`, permanently: the traced `respond` still answers the
@@ -1164,8 +1171,9 @@ design decision stated as such:
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face the four promise-shaped contracts above `apps/web`'s effects are handed (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | once eve's tool and stream contracts, the turn event stream, and the voice service's socket-driven compositions answer effects themselves |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
-| `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b |
-| `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | P12-14d..g — the calendars, observation, and live composers, the settings composer's promise chains, the session action performer, and `@sidecar/voice`'s `VoiceSettings` |
+| `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14g for `applyVoiceCredential`) |
+| `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | P12-14h — the calendars, observation, and live composers (P12-14e), the settings composer's promise chains (P12-14d), the session action performer, and `@sidecar/voice`'s `VoiceSettings` (P12-14g) have each left; P12-14h deletes the file |
+| `compose-account.ts`'s run of `transitionVoiceSource` on the host's own runtime, for `applyVoiceCredential`'s still-`Promise<void>` callers | P12-14g | once `applyVoiceCredential` itself answers an effect |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |

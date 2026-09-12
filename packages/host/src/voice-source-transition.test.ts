@@ -65,17 +65,19 @@ class HeldSettings implements VoiceSettings {
     });
   }
 
-  readVoiceSource(): Promise<VoiceSource> {
-    return this.#maybeHold(HELD_READ.SOURCE, () => this.source);
+  readVoiceSource(): Effect.Effect<VoiceSource, never> {
+    return Effect.promise(() => this.#maybeHold(HELD_READ.SOURCE, () => this.source));
   }
 
-  readApiKey(): Promise<string | undefined> {
-    return this.#maybeHold(HELD_READ.KEY, () => this.key);
+  readApiKey(): Effect.Effect<string | undefined, never> {
+    return Effect.promise(() => this.#maybeHold(HELD_READ.KEY, () => this.key));
   }
 
   get<Field extends keyof typeof APP_SETTING_SCHEMA>(field: Field) {
     // SAFETY: the schema's own default for the field being read.
-    return this.#maybeHold(HELD_READ.PREFERENCE, () => APP_SETTING_SCHEMA[field].default as never);
+    return Effect.promise(() =>
+      this.#maybeHold(HELD_READ.PREFERENCE, () => APP_SETTING_SCHEMA[field].default as never),
+    );
   }
 
   /** How many reads are currently held open, waiting for `release()`. */
@@ -83,8 +85,8 @@ class HeldSettings implements VoiceSettings {
     return this.#gates.length;
   }
 
-  readAccount(): Promise<{ accessToken: string } | undefined> {
-    return Promise.resolve({ accessToken: "account-token" });
+  readAccount(): Effect.Effect<{ accessToken: string } | undefined, never> {
+    return Effect.succeed({ accessToken: "account-token" });
   }
 
   /** Releases the oldest held read. */
@@ -174,11 +176,13 @@ function composition() {
       });
     });
   const transition = () =>
-    transitionVoiceSource({
-      retire: () => host.retire(),
-      apply: () => assembler.apply(),
-      rebuild,
-    });
+    Effect.runPromise(
+      transitionVoiceSource({
+        retire: () => host.retire(),
+        apply: () => assembler.apply(),
+        rebuild,
+      }),
+    );
   /** Runs `hook` once, at the assembler's next report: the boundary after publication and before the caller's continuation. */
   const atNextReport = (hook: () => void) => {
     onReport = () => {
@@ -227,11 +231,9 @@ test("a newer transition begun between publication and the caller's continuation
   // settings continuation chooses the account and begins B, whose source read
   // is held: exactly the moment a copied "latest" would be wrong.
   c.atNextReport(() => {
-    queueMicrotask(() => {
-      c.settings.source = VOICE_SOURCE.ACCOUNT;
-      c.settings.holdNext = HELD_READ.SOURCE;
-      newer = c.transition();
-    });
+    c.settings.source = VOICE_SOURCE.ACCOUNT;
+    c.settings.holdNext = HELD_READ.SOURCE;
+    newer = c.transition();
   });
   const olderInstalled = await c.transition();
   await c.host.settled();
@@ -252,12 +254,10 @@ test("a newer transition that removes every capability at that boundary leaves n
   const c = composition();
   let newer: Promise<boolean> | undefined;
   c.atNextReport(() => {
-    queueMicrotask(() => {
-      c.settings.key = undefined;
-      c.gate.accountSignedIn = false;
-      c.settings.holdNext = HELD_READ.SOURCE;
-      newer = c.transition();
-    });
+    c.settings.key = undefined;
+    c.gate.accountSignedIn = false;
+    c.settings.holdNext = HELD_READ.SOURCE;
+    newer = c.transition();
   });
   const olderInstalled = await c.transition();
   await c.host.settled();

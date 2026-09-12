@@ -24,7 +24,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { Config, Effect, Option } from "effect";
+import { Config, Effect, Option, Runtime } from "effect";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -196,7 +196,7 @@ export const composeAccount = (
     };
 
     const voiceCapabilities = new VoiceCapabilityAssembler({
-      settings: settings.awaitedStore,
+      settings: settings.store,
       credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
       fixtureRun: () => !runMode.sendsNetwork,
       accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
@@ -246,15 +246,26 @@ export const composeAccount = (
       kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
     }
 
+    /**
+     * @deprecated Runs the transition on the runtime this composer was built
+     * on because `applyVoiceCredential`'s own callers — the settings side
+     * effects and the account gate in `compose-host.ts` — still hold it as a
+     * `Promise<void>`; each is a promise-shaped collaborator of its own, not
+     * this PR's voice-settings slice. The run allowlist entry
+     * (`docs/adr/0001-effect.md`) is deleted with this comment when
+     * `applyVoiceCredential` itself answers an Effect.
+     */
     async function applyVoiceCredential(): Promise<void> {
-      await transitionVoiceSource({
-        retire: () => links().retireBrain(),
-        apply: () => voiceCapabilities.apply(),
-        rebuild: async () => {
-          await links().rebuildBrain();
-          links().syncMemory();
-        },
-      });
+      await Runtime.runPromise(runtime)(
+        transitionVoiceSource({
+          retire: () => links().retireBrain(),
+          apply: () => voiceCapabilities.apply(),
+          rebuild: async () => {
+            await links().rebuildBrain();
+            links().syncMemory();
+          },
+        }),
+      );
     }
 
     const methods: GatewayMethodTable = {

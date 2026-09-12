@@ -1,3 +1,4 @@
+import type { PlatformError } from "@effect/platform/Error";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   BRAIN_PREFETCH_MODEL,
@@ -58,16 +59,20 @@ export function resolveVoiceCapability(input: VoiceCapabilityInput): VoiceCapabi
 }
 
 export interface VoiceSettings {
-  readVoiceSource(): Promise<VoiceSource>;
-  readApiKey(providerId: typeof VOICE_CREDENTIAL_PROVIDER_ID): Promise<string | undefined>;
-  get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;
+  readVoiceSource(): Effect.Effect<VoiceSource, PlatformError>;
+  readApiKey(
+    providerId: typeof VOICE_CREDENTIAL_PROVIDER_ID,
+  ): Effect.Effect<string | undefined, PlatformError>;
+  get<Field extends AppSettingField>(
+    field: Field,
+  ): Effect.Effect<AppSettingValue<Field>, PlatformError>;
   /**
    * The signed-in account, as the hosted callers need it: the token every
    * attempt is authorized with, and the identity that token answers for, so a
    * refreshed one is never carried on behalf of an account that signed in
    * behind it.
    */
-  readAccount(): Promise<{ accessToken: string; email?: string } | undefined>;
+  readAccount(): Effect.Effect<{ accessToken: string; email?: string } | undefined, PlatformError>;
 }
 
 export interface VoiceCapabilityAssemblerOptions {
@@ -214,100 +219,101 @@ export class VoiceCapabilityAssembler {
    * each application takes its number before its first await and checks it
    * after its last, and one that has been overtaken installs nothing.
    */
-  async apply(): Promise<VoiceCapabilityApplication> {
-    const application = ++this.#applications;
-    const isCurrent = () => application === this.#applications;
-    const credentialsUsable = this.#options.credentialsUsable();
-    const voiceSource = await this.#options.settings.readVoiceSource();
-    const apiKey =
-      credentialsUsable && voiceSource === VOICE_SOURCE.KEY
-        ? await this.#options.settings.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
-        : undefined;
-    const policy = resolveVoiceCapability({
-      credentialsUsable,
-      keyConfigured: apiKey !== undefined,
-      accountSignedIn: this.#options.accountSignedIn(),
-      chosenSource: voiceSource,
-    });
-    const readAccount = () =>
-      Effect.tryPromise(() => this.#options.settings.readAccount()).pipe(
-        Effect.orElseSucceed(() => undefined),
-      );
-    const httpClient = this.#options.httpClient;
-    const seams = {
-      serviceBaseUrl: this.#options.hostedServiceBaseUrl,
-      readAccessToken: () => Effect.map(readAccount(), (account) => account?.accessToken),
-      refreshAccount: this.#options.refreshAccount,
-      readAccountKey: () => Effect.map(readAccount(), (account) => account?.email),
-      ...(httpClient ? { httpClient } : undefined),
-      ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
-    };
-    const voice = await this.#options.settings
-      .get(APP_SETTING_SCHEMA.voice.field)
-      .catch(() => undefined);
-    if (!isCurrent()) return { latest: false, isCurrent };
+  apply(): Effect.Effect<VoiceCapabilityApplication, PlatformError> {
+    return Effect.gen(this, function* () {
+      const application = ++this.#applications;
+      const isCurrent = () => application === this.#applications;
+      const credentialsUsable = this.#options.credentialsUsable();
+      const voiceSource = yield* this.#options.settings.readVoiceSource();
+      const apiKey =
+        credentialsUsable && voiceSource === VOICE_SOURCE.KEY
+          ? yield* this.#options.settings.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
+          : undefined;
+      const policy = resolveVoiceCapability({
+        credentialsUsable,
+        keyConfigured: apiKey !== undefined,
+        accountSignedIn: this.#options.accountSignedIn(),
+        chosenSource: voiceSource,
+      });
+      const readAccount = () =>
+        this.#options.settings.readAccount().pipe(Effect.orElseSucceed(() => undefined));
+      const httpClient = this.#options.httpClient;
+      const seams = {
+        serviceBaseUrl: this.#options.hostedServiceBaseUrl,
+        readAccessToken: () => Effect.map(readAccount(), (account) => account?.accessToken),
+        refreshAccount: this.#options.refreshAccount,
+        readAccountKey: () => Effect.map(readAccount(), (account) => account?.email),
+        ...(httpClient ? { httpClient } : undefined),
+        ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
+      };
+      const voice = yield* this.#options.settings
+        .get(APP_SETTING_SCHEMA.voice.field)
+        .pipe(Effect.orElseSucceed(() => undefined));
+      if (!isCurrent()) return { latest: false, isCurrent };
 
-    const builtBrainModel = policy.useKey
-      ? openAiModelAdapter(apiKey, {
-          ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
-        })
-      : policy.useHosted
-        ? new HostedModelAdapter(seams)
-        : undefined;
-    this.#brainModel =
-      builtBrainModel && this.#options.wrapBrainModel
-        ? this.#options.wrapBrainModel(builtBrainModel)
-        : builtBrainModel;
-    const builtPrefetchModel = policy.useKey
-      ? openAiModelAdapter(apiKey, {
-          model: BRAIN_PREFETCH_MODEL,
-          ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
-        })
-      : policy.useHosted
-        ? new HostedModelAdapter({ ...seams, respondOperation: RESPONSES_OPERATION.PREFETCH })
-        : undefined;
-    this.#prefetchModel =
-      builtPrefetchModel && this.#options.wrapBrainModel
-        ? this.#options.wrapBrainModel(builtPrefetchModel)
-        : builtPrefetchModel;
-    this.#embeddingAdapter =
-      policy.useKey && apiKey
-        ? new OpenAiEmbeddingAdapter({
-            apiKey,
-            ...(httpClient ? { httpClient } : undefined),
+      const builtBrainModel = policy.useKey
+        ? openAiModelAdapter(apiKey, {
             ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
           })
         : policy.useHosted
-          ? new HostedEmbeddingAdapter(seams)
+          ? new HostedModelAdapter(seams)
           : undefined;
-    const openSocket = this.#options.openSocket;
-    this.#liveSessions = !openSocket
-      ? undefined
-      : apiKey
-        ? keyedLiveSessions(apiKey, {
-            openSocket,
-            ...(voice ? { voice } : undefined),
-            ...(httpClient ? { httpClient } : undefined),
+      this.#brainModel =
+        builtBrainModel && this.#options.wrapBrainModel
+          ? this.#options.wrapBrainModel(builtBrainModel)
+          : builtBrainModel;
+      const builtPrefetchModel = policy.useKey
+        ? openAiModelAdapter(apiKey, {
+            model: BRAIN_PREFETCH_MODEL,
+            ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
           })
         : policy.useHosted
-          ? new HostedLiveSessionSource({
-              serviceOrigin: this.#options.hostedVoiceServiceOrigin ?? HOSTED_VOICE_SERVICE_ORIGIN,
-              openSocket,
-              readAccessToken: seams.readAccessToken,
-              refreshAccount: seams.refreshAccount,
-              readAccountKey: seams.readAccountKey,
-              ...(this.#options.deviceId ? { deviceId: this.#options.deviceId } : undefined),
-              ...(voice ? { voice } : undefined),
-            })
+          ? new HostedModelAdapter({ ...seams, respondOperation: RESPONSES_OPERATION.PREFETCH })
           : undefined;
-    this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
-      fixtureMode: this.#options.fixtureRun(),
-      apiKeyConfigured: apiKey !== undefined,
+      this.#prefetchModel =
+        builtPrefetchModel && this.#options.wrapBrainModel
+          ? this.#options.wrapBrainModel(builtPrefetchModel)
+          : builtPrefetchModel;
+      this.#embeddingAdapter =
+        policy.useKey && apiKey
+          ? new OpenAiEmbeddingAdapter({
+              apiKey,
+              ...(httpClient ? { httpClient } : undefined),
+              ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
+            })
+          : policy.useHosted
+            ? new HostedEmbeddingAdapter(seams)
+            : undefined;
+      const openSocket = this.#options.openSocket;
+      this.#liveSessions = !openSocket
+        ? undefined
+        : apiKey
+          ? keyedLiveSessions(apiKey, {
+              openSocket,
+              ...(voice ? { voice } : undefined),
+              ...(httpClient ? { httpClient } : undefined),
+            })
+          : policy.useHosted
+            ? new HostedLiveSessionSource({
+                serviceOrigin:
+                  this.#options.hostedVoiceServiceOrigin ?? HOSTED_VOICE_SERVICE_ORIGIN,
+                openSocket,
+                readAccessToken: seams.readAccessToken,
+                refreshAccount: seams.refreshAccount,
+                readAccountKey: seams.readAccountKey,
+                ...(this.#options.deviceId ? { deviceId: this.#options.deviceId } : undefined),
+                ...(voice ? { voice } : undefined),
+              })
+            : undefined;
+      this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
+        fixtureMode: this.#options.fixtureRun(),
+        apiKeyConfigured: apiKey !== undefined,
+      });
+      this.#voiceSource = policy.source;
+      this.#report(apiKey !== undefined);
+      for (const listener of this.#applied) listener();
+      return { latest: true, isCurrent };
     });
-    this.#voiceSource = policy.source;
-    this.#report(apiKey !== undefined);
-    for (const listener of this.#applied) listener();
-    return { latest: true, isCurrent };
   }
 
   #report(apiKeyConfigured: boolean): void {
