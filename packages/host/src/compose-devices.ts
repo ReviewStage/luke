@@ -30,6 +30,7 @@ import {
   type DevicePresenceReport,
 } from "./device-presence.js";
 import { HostKernelTag } from "./effect/kernel.js";
+import { MachinePresenceReader } from "./effect/seams.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
 
@@ -306,10 +307,11 @@ export interface DevicesDependencies {
  */
 export const composeDevices = (
   dependencies: DevicesDependencies,
-): Effect.Effect<DevicesComposer, never, HostKernelTag | Scope.Scope> =>
+): Effect.Effect<DevicesComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> =>
   Effect.gen(function* () {
     const { account, calendars } = dependencies;
     const kernel: HostKernel = yield* HostKernelTag;
+    const machinePresence = yield* MachinePresenceReader;
     const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
 
@@ -328,7 +330,7 @@ export const composeDevices = (
       presence: async () => {
         const at = now();
         return {
-          activeUntil: activeUntilFrom(kernel.options.machinePresence?.(), at),
+          activeUntil: activeUntilFrom(machinePresence.read?.(), at),
           quietUntil: await calendars.meetingQuietUntil(at),
         };
       },

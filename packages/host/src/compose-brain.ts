@@ -48,6 +48,7 @@ import type { ObservationComposer } from "./compose-observation.js";
 import type { Composer } from "./composer.js";
 import { conversationOperations, startConversationMaintenance } from "./conversation-operations.js";
 import { HostKernelTag } from "./effect/kernel.js";
+import { StoreWorker } from "./effect/seams.js";
 import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
 import { wireMemoryDefinitions } from "./memory-definition.js";
 import { wireMemoryMaintenance } from "./memory-maintenance.js";
@@ -83,10 +84,11 @@ export interface BrainDependencies {
 
 export const composeBrain = (
   dependencies: BrainDependencies,
-): Effect.Effect<BrainComposer, never, HostKernelTag | Scope.Scope> =>
+): Effect.Effect<BrainComposer, never, HostKernelTag | StoreWorker | Scope.Scope> =>
   Effect.gen(function* () {
     const { account, observation, announcements } = dependencies;
     const kernel = yield* HostKernelTag;
+    const storeWorker = yield* StoreWorker;
     const home = yield* cadenceHome;
     // The runtime the store's asks and every run of the tool loop are fibers
     // of: the host's own, so a turn and the host that cancels it stand on one
@@ -103,7 +105,7 @@ export const composeBrain = (
      */
     const store = wireStore({
       persistent: runMode.observesProviders,
-      transport: workerStoreTransport(kernel.options.createWorker),
+      transport: workerStoreTransport(storeWorker.create),
       execution,
       agentRoot: () => agentRootPath(kernel.stateRoot),
       workspaceDirectory: kernel.agentWorkspacePath,

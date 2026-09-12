@@ -14,7 +14,6 @@
  * client does not reach yet is added when one arrives.
  */
 export { REJECTED_SUBMISSION } from "./brain/publication.js";
-export { composeHost, type Host } from "./compose-host.js";
 export type { ConversationOperations } from "./conversation-operations.js";
 export type { MachinePresence } from "./device-presence.js";
 export type { HostSeams } from "./host-kernel.js";

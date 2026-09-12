@@ -25,7 +25,6 @@ export interface HostSeams {
   cipher: SecretCipher;
   /** Spawns the brain store's worker thread; the host's store wiring connects its client to it. */
   createWorker: () => Worker;
-  now: () => number;
   createId: () => string;
   report: (message: string) => void;
   /**
@@ -54,7 +53,6 @@ const AGENT_SKILLS_DIRECTORY = "skills";
  * nothing a composer owns can be reached through it by another.
  */
 export interface HostKernel {
-  readonly options: HostSeams;
   readonly runMode: RunMode;
   readonly stateRoot: string;
   readonly now: () => number;
@@ -123,7 +121,6 @@ function hostedServiceBaseUrlFor(accountBaseUrl: string): string {
 
 /** Everything the kernel is built over, once each seam has been read for itself. */
 export interface HostKernelParts {
-  readonly options: HostSeams;
   readonly stateRoot: string;
   readonly runMode: RunMode;
   readonly accountBaseUrl: string;
@@ -134,12 +131,11 @@ export interface HostKernelParts {
 }
 
 export function hostKernelOver(parts: HostKernelParts): HostKernel {
-  const { options, stateRoot, runMode, accountBaseUrl, now, createId, report, service } = parts;
+  const { stateRoot, runMode, accountBaseUrl, now, createId, report, service } = parts;
   const nodes = new NodeRegistry();
   const agentWorkspacePath = () => path.join(agentRootPath(stateRoot), AGENT_WORKSPACE_DIRECTORY);
 
   return {
-    options,
     runMode,
     stateRoot,
     now,
@@ -169,35 +165,4 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
     agentWorkspacePath,
     agentSkillsPath: () => path.join(agentWorkspacePath(), AGENT_SKILLS_DIRECTORY),
   };
-}
-
-/**
- * @deprecated The kernel is `hostKernelLayer` in `./effect/kernel.js`, built
- * from the seam tags rather than from one object. This adaptor is what keeps
- * every composer compiling while they are converted one at a time; P12-05
- * deletes it.
- */
-export function createHostKernel(options: HostSeams): HostKernel {
-  let held: GatewayService | undefined;
-  return hostKernelOver({
-    options,
-    stateRoot: options.stateRoot,
-    runMode: options.runMode,
-    accountBaseUrl: accountBaseUrlFor({
-      packaged: options.packaged,
-      override: options.environment[ACCOUNT_BASE_URL_VARIABLE],
-    }),
-    now: options.now,
-    createId: options.createId,
-    report: options.report,
-    service: {
-      read: () => {
-        if (!held) throw new Error(SERVICE_READ_BEFORE_MERGE);
-        return held;
-      },
-      set: (next) => {
-        held = next;
-      },
-    },
-  });
 }

@@ -15,7 +15,6 @@ import {
   ACCOUNT_BASE_URL_VARIABLE,
   accountBaseUrlFor,
   type HostKernel,
-  type HostSeams,
   hostKernelOver,
   SERVICE_READ_BEFORE_MERGE,
 } from "../host-kernel.js";
@@ -23,9 +22,7 @@ import type { GatewayService } from "../service.js";
 import {
   AppIdentity,
   Environment,
-  HostSeamsObject,
   type HostSeamTags,
-  hostSeamLayers,
   IdSource,
   Reporter,
   RunMode,
@@ -41,11 +38,12 @@ export interface LateService<A> {
   /** What stands now, for a reader that must not suspend. */
   readonly peek: Effect.Effect<Option.Option<A>>;
   /**
-   * @deprecated The sync faces the unconverted callers hold; P12-05 deletes
-   * them with `createHostKernel`.
+   * The sync write a caller still built as a plain object holds: a concern
+   * that answers `link()` synchronously sets its late reference through this
+   * face rather than through the effect.
    */
   readonly unsafeSet: (value: A) => boolean;
-  /** @deprecated The sync read; P12-05 deletes it with `createHostKernel`. */
+  /** The sync read beside it, for the same plain-object caller. */
   readonly unsafePeek: () => Option.Option<A>;
 }
 
@@ -98,7 +96,6 @@ const hostServiceLayer = Layer.effect(HostService, lateService<GatewayService>()
 const kernelLayer = Layer.effect(
   HostKernelTag,
   Effect.gen(function* () {
-    const options = yield* HostSeamsObject;
     const stateRoot = yield* StateRoot;
     const runMode = yield* RunMode;
     const identity = yield* AppIdentity;
@@ -109,7 +106,6 @@ const kernelLayer = Layer.effect(
     const clock = yield* Effect.clock;
 
     return hostKernelOver({
-      options,
       stateRoot,
       runMode,
       accountBaseUrl: accountBaseUrlFor({
@@ -143,15 +139,3 @@ const kernelLayer = Layer.effect(
  */
 export const hostKernelLayer: Layer.Layer<HostKernelTag | HostService, never, HostSeamTags> =
   Layer.provideMerge(kernelLayer, hostServiceLayer);
-
-/**
- * The kernel and every seam beneath it, from the one object the desktop builds
- * today.
- *
- * @deprecated The `Layer.succeed(oldObject)` shim; P12-05 deletes it with
- * `createHostKernel`.
- */
-export const hostKernelLayerFromSeams = (
-  options: HostSeams,
-): Layer.Layer<HostKernelTag | HostService | HostSeamTags> =>
-  Layer.provideMerge(hostKernelLayer, hostSeamLayers(options));

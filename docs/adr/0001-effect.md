@@ -261,8 +261,13 @@ runs them, or the edge rule records this boundary as one.
 Two faces beside it run on the same runtime for the same reason and are on
 the allowlist too: `createGatewayService`'s own `emit` and `closeAdmissions`
 in `packages/host/src/service.ts`, because a change is reported to that
-service from a composer's callback rather than from an effect and P12-05
-deletes that face, and
+service from a composer's callback rather than from an effect — pending,
+since every composer still answers `Composer`'s own `start()`/`stop()`
+promises rather than appending to the log itself; P12-05 deleted the host's
+own composition adaptors (`composeHost`, `hostSeamLayers`,
+`hostKernelLayerFromSeams`, `createHostKernel`, `mergeMethods`) but left the
+`Composer` promise face standing, so this one waits for whichever PR converts
+it — and
 `gatewayTestHost` (`packages/gateway/src/testing.ts`) with
 `scopedGatewayService` (`packages/host/src/testing/gateway-service.ts`),
 which are the test's own edge while those suites are plain `test` bodies
@@ -274,28 +279,28 @@ a host is the server's own layer options, which `GatewayService` hands out as
 `layerOptions` — `GatewayServerLayerOptions` now rather than the deleted
 class's own, so it is the layer's own contract and no longer a shim.
 
-`composeHost`'s `start()`/`stop()` in `packages/host/src/compose-host.ts` is
-on the same allowlist. Nothing of the product operates it any more — P8-01
-took `hostAssemblyLayer` and `hostStandingLayer` onto the desktop's own
-runtime, so `compose-host.test.ts` is its one caller left — and the face it
-answers is this: the host is `hostStandingLayer` over `hostAssemblyLayer`,
-and the adaptor builds the assembly and a `Scope` of its own on a
-`ManagedRuntime` it makes, so the server stands before the start as it always
-has; `start` is `Layer.buildWithScope` of the standing layer into that scope,
-forked as a fiber, and `stop` interrupts that fiber if it is still under way,
-runs the drain under the caller's deadline, and then closes the scope,
-bounded, forking the close as a daemon and reporting what did not close in
-time rather than waiting on it. `hostLayerFromSeams(options)` beside
-it is `hostKernelLayerFromSeams` one level up, and the desktop reaches that
-shim still: `apps/desktop/src/main/services/host-layer.ts` builds the one
-`HostSeams` object this process answers for, merges in `NodeFileSystem.layer`
-for the `FileSystem.FileSystem` the settings composer now reaches through its
-own tag, and provides both to the assembly; P12-05 deletes the adaptor with
-`createHostKernel`. `settingsOverridesFromEnvironment`, the record face beside
-the effect at the settings store's own door, is gone with its last caller:
-`compose-settings.ts` is now the effect over the `Environment` seam directly,
-and the store's own tests read the same `settingsOverrides` effect through a
-`ConfigProvider` built from the environment record they still pass around.
+`composeHost`'s `start()`/`stop()` in `packages/host/src/compose-host.ts`,
+`hostLayerFromSeams(options)` beside it, `hostSeamLayers(options)` and
+`hostKernelLayerFromSeams(options)` one level down in
+`packages/host/src/effect/{seams,kernel}.ts`, `createHostKernel` beside them
+in `host-kernel.ts`, and `mergeMethods`'s throwing fold over `foldMethods`
+were the last of the host's own composition adaptors, and P12-05 deleted all
+five once every caller held what they stood in for directly: P8-01 had
+already taken `hostAssemblyLayer` and `hostStandingLayer` onto the desktop's
+own runtime, so `composeHost`'s only caller left was `compose-host.test.ts`,
+which now builds `hostLayer` over `@sidecar/host/testing`'s fixture seam
+layers the same way a live launch does; and
+`apps/desktop/src/main/services/host-layer.ts` now stands each seam up as its
+own `Layer.succeed` — `StateRoot`, `RunMode`, `AppIdentity`, `Environment`,
+`SecretCipher`, `StoreWorker`, `IdSource`, the reporter, the new
+`MachinePresenceReader` and `ShutdownSignal` tags for the two seams that only
+`kernel.options` and a bootstrap method read before — rather than building
+one `HostSeams` object for an adaptor to take apart. `settingsOverridesFromEnvironment`,
+the record face beside the effect at the settings store's own door, is gone
+with its last caller: `compose-settings.ts` is now the effect over the
+`Environment` seam directly, and the store's own tests read the same
+`settingsOverrides` effect through a `ConfigProvider` built from the
+environment record they still pass around.
 
 `startConversationMaintenance` in `packages/host/src/conversation-operations.ts`
 is on the same allowlist and for the same reason: the hourly pass is now
@@ -919,9 +924,6 @@ design decision stated as such:
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-15 |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-02 |
-| `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |
-| `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
-| `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
 | `startConversationMaintenance`'s stop, over a scope the host now owns | P7-05 | with the brain composer's own promises; P7-10 made the scope the host's |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `deviceCadence`'s `start`/`stop`, the arming the account gate calls | P7-09 | with the gate's own promises; P7-10 made the scope the host's |

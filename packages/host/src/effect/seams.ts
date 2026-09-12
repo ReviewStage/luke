@@ -4,18 +4,10 @@
  * seam is asked for by name out of the context the composition was built with,
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
- *
- * `hostSeamLayers` is the strangler shim that stands every tag up from the one
- * `HostSeams` object the desktop already builds, and `HostSeamsObject` carries
- * what has no tag yet — the two optional machine signals, and the record the
- * unconverted composers read through `kernel.options`. The kernel's own clock
- * reading is Effect's ambient `Clock` rather than a field of this object, so
- * `HostSeamsObject`'s own `now` reaches only `createHostKernel`'s non-Effect
- * adaptor. P12-05 deletes both with `createHostKernel`.
  */
 import type { Worker } from "node:worker_threads";
-import { ConfigProvider, Context, Layer, Logger } from "effect";
-import type { HostSeams } from "../host-kernel.js";
+import { type ConfigProvider, Context, Layer, Logger } from "effect";
+import type { MachinePresence } from "../device-presence.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
@@ -97,15 +89,32 @@ export const reporterLayer = (report: (message: string) => void): Layer.Layer<Re
   );
 
 /**
- * The seams object itself, for what has no tag of its own yet: the two
- * optional machine signals and `kernel.options`.
- *
- * @deprecated The shim that carries the whole record; P12-05 deletes it with
- * `createHostKernel`.
+ * The machine's own idle time and lock state, read by the client that runs
+ * on it, for the presence this installation's device row reports. A host
+ * with no client on the machine (`read` undefined) reports no presence.
  */
-export class HostSeamsObject extends Context.Tag("@sidecar/host/HostSeams")<
-  HostSeamsObject,
-  HostSeams
+export interface MachinePresenceSeam {
+  readonly read: (() => MachinePresence) | undefined;
+}
+
+export class MachinePresenceReader extends Context.Tag("@sidecar/host/MachinePresenceReader")<
+  MachinePresenceReader,
+  MachinePresenceSeam
+>() {}
+
+/**
+ * Hears the protocol's shutdown method: the client's explicit Quit, or a
+ * newer build draining this one. The process hosting the runtime leaves in
+ * the coordinator's order; a host with no process to leave (a fixture run,
+ * `notify` undefined) hears nothing.
+ */
+export interface ShutdownSignalSeam {
+  readonly notify: (() => void) | undefined;
+}
+
+export class ShutdownSignal extends Context.Tag("@sidecar/host/ShutdownSignal")<
+  ShutdownSignal,
+  ShutdownSignalSeam
 >() {}
 
 /** Every seam tag a host composition stands on. */
@@ -118,35 +127,5 @@ export type HostSeamTags =
   | StoreWorker
   | IdSource
   | Reporter
-  | HostSeamsObject;
-
-/**
- * Every seam, stood up from the one object the desktop builds today.
- *
- * @deprecated The `Layer.succeed(oldObject)` shim; P12-05 deletes it with
- * `createHostKernel`.
- */
-export const hostSeamLayers = (options: HostSeams): Layer.Layer<HostSeamTags> =>
-  Layer.mergeAll(
-    Layer.succeed(StateRoot, options.stateRoot),
-    Layer.succeed(RunMode, options.runMode),
-    Layer.succeed(AppIdentity, {
-      appVersion: options.appVersion,
-      packaged: options.packaged,
-    }),
-    Layer.succeed(
-      Environment,
-      ConfigProvider.fromMap(
-        new Map(
-          Object.entries(options.environment).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
-        ),
-      ),
-    ),
-    Layer.succeed(SecretCipher, options.cipher),
-    Layer.succeed(StoreWorker, { create: options.createWorker }),
-    Layer.succeed(IdSource, { create: options.createId }),
-    reporterLayer(options.report),
-    Layer.succeed(HostSeamsObject, options),
-  );
+  | MachinePresenceReader
+  | ShutdownSignal;

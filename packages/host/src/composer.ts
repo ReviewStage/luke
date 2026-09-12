@@ -40,14 +40,3 @@ export function foldMethods(
   }
   return Either.right(merged);
 }
-
-/**
- * The fold as the throwing call its remaining callers hold.
- *
- * @deprecated The host folds its method tables inside its own `Layer`
- * (`mergedMethods` in `./effect/composer.js`), where a collision fails the
- * build; P12-05 deletes this with `composeHost`'s adaptor.
- */
-export function mergeMethods(composers: readonly Composer[]): GatewayMethodTable {
-  return Either.getOrThrowWith(foldMethods(composers), (refusal) => refusal);
-}

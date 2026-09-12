@@ -4,7 +4,6 @@ export {
   type HostConcern,
   hostAssemblyLayer,
   hostLayer,
-  hostLayerFromSeams,
 } from "../compose-host.js";
 export { DuplicateGatewayMethod, foldMethods } from "../composer.js";
 export { composerLayer, layersInOrder, mergedMethods } from "./composer.js";
@@ -27,7 +26,6 @@ export {
   HostKernelTag,
   HostService,
   hostKernelLayer,
-  hostKernelLayerFromSeams,
   type LateService,
   lateService,
 } from "./kernel.js";
@@ -36,15 +34,17 @@ export {
   type AppIdentityFacts,
   Environment,
   type HostReporter,
-  HostSeamsObject,
   type HostSeamTags,
-  hostSeamLayers,
   IdSource,
   type IdSourceSeam,
+  MachinePresenceReader,
+  type MachinePresenceSeam,
   Reporter,
   RunMode,
   reporterLayer,
   SecretCipher,
+  ShutdownSignal,
+  type ShutdownSignalSeam,
   StateRoot,
   StoreWorker,
   type StoreWorkerSource,

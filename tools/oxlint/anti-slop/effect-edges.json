@@ -41,7 +41,6 @@
     "packages/gateway/src/testing.ts",
     "packages/gateway/src/transport.ts",
     "packages/host/src/compose-calendars.ts",
-    "packages/host/src/compose-host.ts",
     "packages/host/src/service.ts",
     "packages/host/src/settings-store.ts",
     "packages/host/src/testing/gateway-service.ts",

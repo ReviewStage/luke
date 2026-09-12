@@ -3,12 +3,22 @@ import { Worker } from "node:worker_threads";
 import { NodeFileSystem } from "@effect/platform-node";
 import { type HostSeams, storeWorkerPath } from "@sidecar/host";
 import {
+  AppIdentity,
   type DuplicateGatewayMethod,
+  Environment,
   type HostAssemblyTag,
   hostAssemblyLayer,
-  hostKernelLayerFromSeams,
+  hostKernelLayer,
+  IdSource,
+  MachinePresenceReader,
+  RunMode,
+  reporterLayer,
+  SecretCipher,
+  ShutdownSignal,
+  StateRoot,
+  StoreWorker,
 } from "@sidecar/host/effect";
-import { Layer } from "effect";
+import { ConfigProvider, Layer } from "effect";
 import type { DesktopConfig } from "./desktop-config";
 
 export interface HostSeamDependencies {
@@ -19,34 +29,40 @@ export interface HostSeamDependencies {
   machinePresence?: HostSeams["machinePresence"];
 }
 
-/** Everything of this process the host is told, given explicitly so it reads no Electron global of its own. */
-function hostSeamsFor(dependencies: HostSeamDependencies): HostSeams {
+/** Every seam tag this process answers for, each stood up from what the launch already established. */
+function hostSeamLayersFor(dependencies: HostSeamDependencies) {
   const { config, cipher, machinePresence } = dependencies;
   const { runMode } = config;
-  const seams: HostSeams = {
-    stateRoot: config.stateRoot,
-    runMode,
-    appVersion: config.appVersion,
-    packaged: config.packaged,
-    environment: config.environment,
-    cipher,
-    createWorker: () => {
-      if (!runMode.observesProviders) {
-        throw new Error("a fixture run keeps nothing on disk and starts no store worker");
-      }
-      return new Worker(storeWorkerPath(config.resourceDirectory), { name: "brain-store" });
-    },
-    now: Date.now,
-    createId: () => randomUUID(),
-    report: config.report,
+  return Layer.mergeAll(
+    Layer.succeed(StateRoot, config.stateRoot),
+    Layer.succeed(RunMode, runMode),
+    Layer.succeed(AppIdentity, { appVersion: config.appVersion, packaged: config.packaged }),
+    Layer.succeed(
+      Environment,
+      ConfigProvider.fromMap(
+        new Map(
+          Object.entries(config.environment).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined,
+          ),
+        ),
+      ),
+    ),
+    Layer.succeed(SecretCipher, cipher),
+    Layer.succeed(StoreWorker, {
+      create: () => {
+        if (!runMode.observesProviders) {
+          throw new Error("a fixture run keeps nothing on disk and starts no store worker");
+        }
+        return new Worker(storeWorkerPath(config.resourceDirectory), { name: "brain-store" });
+      },
+    }),
+    Layer.succeed(IdSource, { create: () => randomUUID() }),
+    reporterLayer(config.report),
+    Layer.succeed(MachinePresenceReader, { read: machinePresence }),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.
-    onShutdownRequested: () => config.quit(),
-  };
-  if (machinePresence) {
-    seams.machinePresence = machinePresence;
-  }
-  return seams;
+    Layer.succeed(ShutdownSignal, { notify: () => config.quit() }),
+  );
 }
 
 /**
@@ -65,8 +81,9 @@ function hostSeamsFor(dependencies: HostSeamDependencies): HostSeams {
 export function hostAssemblyLayerFor(
   dependencies: HostSeamDependencies,
 ): Layer.Layer<HostAssemblyTag, DuplicateGatewayMethod> {
+  const seams = hostSeamLayersFor(dependencies);
   return Layer.provide(
     hostAssemblyLayer,
-    Layer.merge(hostKernelLayerFromSeams(hostSeamsFor(dependencies)), NodeFileSystem.layer),
+    Layer.merge(Layer.provideMerge(hostKernelLayer, seams), NodeFileSystem.layer),
   );
 }

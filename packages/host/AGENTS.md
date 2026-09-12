@@ -2,7 +2,7 @@
 
 ## Everything of the machine arrives as a seam
 
-`composeHost` is handed the state root, the version, the environment, the
+The desktop is handed the state root, the version, the environment, the
 cipher, the store worker, the clock, and the id source, and derives none of
 them. Nothing here reads the hosting process's own profile, so a validation
 run on a temporary state root is the same composition as a live one, and a
@@ -13,19 +13,23 @@ the one thing that would make this package the desktop's again.
 Each of those seams is a `Context.Tag` behind `@sidecar/host/effect`, and the
 kernel is a `Layer` over them: the state root, the run mode, this build's
 identity, the environment as a `ConfigProvider` a development override is read
-out of by the variable's own name, the cipher, the store worker, the id source,
-and the reporter, whose `Logger` writes where a reported line goes so an
-`Effect.log*` and a `report(line)` land in one sink. A composition states the
-seams it reaches and cannot build without them. `hostSeamLayers` stands every
-tag up from the one `HostSeams` object the desktop builds today,
-`createHostKernel` is the adaptor beside it, and `hostLayerFromSeams` and
-`composeHost`'s `start()`/`stop()` face are the same shim one level up, each
-a named shim the migration's last host PR deletes. The kernel's clock is not
-one of these seams: `kernel.now` reads Effect's own `Clock`, the real one at
-every edge and a `TestClock` under `@effect/vitest`'s `it.effect`, so
-`@sidecar/host/testing`'s `testKernelLayer` stands a fixture host up over
-whichever `Clock` the test itself is running on, with no clock of its own to
-keep in step.
+out of by the variable's own name, the cipher, the store worker, the id
+source, the machine-presence reader, the shutdown signal, and the reporter,
+whose `Logger` writes where a reported line goes so an `Effect.log*` and a
+`report(line)` land in one sink. A composition states the seams it reaches
+and cannot build without them, and each is stood up as its own `Layer.succeed`
+at the one place that reads the machine — `apps/desktop/src/main/services/host-layer.ts`
+for a live launch, `@sidecar/host/testing`'s fixture seams for a test — rather
+than through a single `HostSeams` object the kernel takes apart: every prior
+host PR's own `@deprecated` adaptor over such an object (`createHostKernel`,
+`hostSeamLayers`, `hostKernelLayerFromSeams`, `hostLayerFromSeams`,
+`composeHost`'s `start()`/`stop()` face, and `mergeMethods`'s throwing fold)
+is gone now that `hostAssemblyLayer` and `hostLayer` take the tags directly
+and every caller builds them the same way. The kernel's clock is not one of these seams:
+`kernel.now` reads Effect's own `Clock`, the real one at every edge and a
+`TestClock` under `@effect/vitest`'s `it.effect`, so `@sidecar/host/testing`'s
+`testKernelLayer` stands a fixture host up over whichever `Clock` the test
+itself is running on, with no clock of its own to keep in step.
 
 Every override that seam holds is a `Config` read of the variable's own name,
 and the settings store's are read together (`effect/settings-overrides.ts`):
