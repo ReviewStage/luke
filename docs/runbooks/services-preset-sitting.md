@@ -6,6 +6,21 @@ leaving production on a build that serves no API. Read this at the moment it
 is needed; every identifier in it is an example of a shape unless the text
 says otherwise.
 
+## What survives this sitting, and what goes with it
+
+This file describes one migration on one project, and most of it is expected
+to be deleted once the sitting is done: the preset flip, the two log facts,
+the nested-layout path, the `EVE_INTERNAL` line, the `api_dir_ignored`
+warning, and the four disagreement cases are all about that one event, and a
+live document about a dead migration is the kind nobody feels entitled to
+remove. Three parts are general to any change in how production is built and
+are written down here for the first time, so they are kept when the rest goes,
+under a new name or in `WORKFLOW.md`: the eight probes as a table with why
+each code is the right answer and the sentence that a 404 anywhere is the
+failure; the rollback anchor read as a record at the moment it is needed and
+never trusted from a document, with its two commands; and the read of
+production after a merge with a stall said aloud.
+
 ## Why the order is fixed
 
 Vercel builds a project as services only when **both** the project's Framework
