@@ -38,7 +38,7 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Schema as EffectSchema, Either } from "effect";
 import { afterAll, test } from "vitest";
-import type { StoredUIMessage } from "../server/core";
+import { ASK_ORIGIN, type StoredUIMessage } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { handleChanges } from "../server/hosted/change-signal";
@@ -48,7 +48,9 @@ import {
   handleConversationMessages,
   type ResourceReadOptions,
 } from "../server/hosted/resource-reads";
+import { storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation as insertConversationRow,
   insertEvent as insertEventRow,
@@ -71,6 +73,9 @@ import {
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
+const writer = await database.run(
+  storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
+);
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const SESSION = {
@@ -271,9 +276,10 @@ function parse<Value, Encoded>(
 
 /**
  * A device's own picture of the Conversation, kept the way a client keeps
- * it: groups merged by turn, messages kept by sequence, conversations an
- * answer no longer lists dropped, and the whole ordered as the view orders
- * it — earliest message, then the turn's queue instant, then the id.
+ * it: groups merged by turn, each message held once by id at the sequence
+ * its latest delivery gave it, conversations an answer no longer lists
+ * dropped, and the whole ordered as the view orders it — earliest message,
+ * then the turn's queue instant, then the id.
  */
 interface ClientGroup {
   conversationId: string;
@@ -284,6 +290,8 @@ interface ClientGroup {
 
 class Device {
   readonly groups = new Map<string, ClientGroup>();
+  /** Where each message held stands, by id: the one place a message has on this device. */
+  readonly places = new Map<string, { turnId: string; seq: number }>();
   cursor: string | undefined;
 
   constructor(
@@ -312,7 +320,19 @@ class Device {
         messages: new Map<number, ConversationReadMessage>(),
       };
       if (group.turn) held.turn = group.turn;
-      for (const message of group.messages) held.messages.set(message.seq, message);
+      for (const message of group.messages) {
+        const id = String(message.message.id);
+        const place = this.places.get(id);
+        if (place && (place.turnId !== group.turnId || place.seq !== message.seq)) {
+          const previous = place.turnId === group.turnId ? held : this.groups.get(place.turnId);
+          previous?.messages.delete(place.seq);
+          if (previous && previous !== held && previous.messages.size === 0) {
+            this.groups.delete(place.turnId);
+          }
+        }
+        held.messages.set(message.seq, message);
+        this.places.set(id, { turnId: group.turnId, seq: message.seq });
+      }
       this.groups.set(group.turnId, held);
     }
     this.cursor = answer.next;
@@ -446,13 +466,8 @@ test("a spoken ask's transcript row tied to its turn is answered inside the turn
   const userId = await database.createUser();
   const main = await insertConversation(userId);
   const spoken = await insertTurn(userId, main, { origin: TURN_ORIGIN.SPOKEN });
-  const reply = await insertMessage(userId, main, 1, {
-    turnId: spoken,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
-  });
-  const transcript = await insertMessage(userId, main, 2, {
+  // The writer places the developer's line ahead of the turn's work; the view keeps the store's sequence.
+  const transcript = await insertMessage(userId, main, 1, {
     clientId: "dl_1",
     turnId: spoken,
     metadata: {
@@ -464,6 +479,12 @@ test("a spoken ask's transcript row tied to its turn is answered inside the turn
       to_ms: 2500,
     },
     parts: [{ type: "text", text: "What needs me?" }],
+  });
+  const reply = await insertMessage(userId, main, 2, {
+    turnId: spoken,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
   });
   const unowned = await insertMessage(userId, main, 3, {
     clientId: "dl_2",
@@ -482,18 +503,77 @@ test("a spoken ask's transcript row tied to its turn is answered inside the turn
     await database.run(handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)))),
     conversationMessagesAnswerSchema,
   );
-  // Membership, never order: the row's place inside its group follows the store's sequence today.
   assert.deepEqual(
     answer.groups.map((group) => [
       group.turnId,
       group.turn?.id,
-      new Set(group.messages.map((row) => String(row.message.id))),
+      group.messages.map((row) => String(row.message.id)),
     ]),
     [
-      [spoken, spoken, new Set([reply, transcript])],
-      [unowned, undefined, new Set([unowned])],
+      [spoken, spoken, [transcript, reply]],
+      [unowned, undefined, [unowned]],
     ],
   );
+});
+
+test("a device that read a spoken line before its turn took it reads the line again, in the turn's group ahead of the reply, and lets the standalone group go", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(userId);
+  const target = { userId, conversationId: main };
+  const delegationId = "dl_early";
+  const asks = promisedAsks(database.run);
+  const ask = await asks.record({
+    userId,
+    conversationId: main,
+    clientId: delegationId,
+    origin: ASK_ORIGIN.SPOKEN,
+    question: "what needs me?",
+    createdAt: new Date(NOW),
+  });
+  // The voice writer's cut of the transcript lands while the ask still waits for its turn.
+  const line = await database.run(
+    writer.recordUserMessage(target, {
+      clientId: delegationId,
+      turnOfAsk: true,
+      text: "What needs me?",
+      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+    }),
+  );
+  assert.ok(line.ok);
+  const early = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+  await early.catchUp();
+  assert.deepEqual(early.ordered(), [[line.id, line.id]]);
+  const passed = parse(sequenceReadCursorSchema, early.cursor ?? "");
+  assert.deepEqual(passed, { positions: [{ conversationId: main, seq: 1 }] });
+
+  // The turn starts and takes the ask's line, then writes its reply.
+  const turn = await insertTurn(userId, main, {
+    origin: TURN_ORIGIN.SPOKEN,
+    status: TURN_STATUS.RUNNING,
+    queuedAt: new Date(NOW + 1000),
+  });
+  await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
+  const attached = await database.run(writer.attachAskLines(target, turn));
+  assert.deepEqual(attached, { ok: true, attached: [line.id] });
+  const reply = await insertMessage(userId, main, 3, {
+    clientId: turn,
+    turnId: turn,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
+  });
+
+  const expected: readonly [string, string][] = [
+    [turn, line.id],
+    [turn, reply],
+  ];
+  await early.catchUp();
+  assert.deepEqual(early.ordered(), expected);
+  assert.equal(early.groups.has(line.id), false);
+  const late = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+  await late.catchUp();
+  assert.deepEqual(late.ordered(), expected);
+  assert.equal(late.cursor, early.cursor);
 });
 
 test("a message's replay slot never leaves the service, and the stored row keeps it", async () => {

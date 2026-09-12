@@ -30,7 +30,9 @@ import { EpochMillisColumnSchema, optionalField } from "./database.js";
  * point reads a rating needs, a message's authorship and its latest rating. There is no feed;
  * every device keeps its own cursors, and the unique `(conversation_id, seq)`
  * pairs are what make every device converge on the same rows in the same
- * order. A conversation Clear soft-deleted is read by nothing here: each
+ * order: a row the writer moves takes a fresh position past every cursor
+ * and is answered again there, so a device holds each message once, where
+ * its latest delivery placed it. A conversation Clear soft-deleted is read by nothing here: each
  * read joins the conversation row and skips one stamped `deleted_at`, so a
  * cleared conversation is gone from every read from the call after the Clear.
  *

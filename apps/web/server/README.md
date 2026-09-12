@@ -693,11 +693,28 @@ so the relay consults the table rather than a branch. The line and the ask
 share one id, the delegation's, which the service submits the ask under, so
 the line is tied to the turn the ask ran whichever write lands second: the
 voice writer reads the ask's turn under the conversation's lock as it writes
-the row, and the relay, at a spoken turn's received message, ties to the turn
-any row of the turn's asks still standing without one, under the same lock.
-The race is removed rather than won, and the line stands in the device's view
-inside the turn's group; its place within the group follows the store's
-sequence.
+the row, and the relay, at a spoken turn's received message, takes into the
+turn any row of the turn's asks still standing without one, under the same
+lock. The race is removed rather than won. The store owns the order inside
+the group as it owns the order of the conversation: the sequence a device
+pages by is the sequence a group is drawn in, so the writer places the
+developer's line ahead of the turn's work by that sequence rather than
+leaving a renderer to sort it there. A line the turn takes at its received
+message moves to a fresh position — past every device's cursor and ahead of
+the journal the first step is about to open — so a device that read the line
+early, as its own group, reads it again in the turn's group and lets the
+copy it held go; a line that lands after the first step, the voice writer's
+cut racing eve, is placed at a fresh position and the journal moved behind it
+to another, so a device that previewed the journal reads it again where it
+now stands. Every device holds a message once, by its id, where its latest
+delivery placed it; `reads-wire.ts` states the rule and the desktop's
+`conversation-view-sync.ts` and the phone's `ConversationThread.swift` keep
+it. A device from before this rule holds the line where it first read it and
+reads it again where it moved, so it draws the line twice until it reads the
+conversation from its beginning; that is the cost of re-delivering by the
+one cursor every device already pages by, against the alternative — a new
+event kind on the events resource — which such a device's fixed reading of
+the kinds would refuse whole, taking every rating and speech mark with it.
 
 ### Briefings claimed before they are spoken
 

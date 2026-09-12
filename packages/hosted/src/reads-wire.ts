@@ -424,12 +424,18 @@ const conversationReadMessageSchema = tolerantRecord({
  * The messages one turn wrote that the view selected, in sequence, under
  * the turn row where the store holds one. A group may continue on a later
  * page — a turn still running writes rows after a page was cut — so a device
- * merges groups by `turnId`, keeps messages by `seq`, and orders groups by
- * their earliest message, then the turn's queue instant, then the id, the
- * order the view itself keeps. A message still being written is answered on
- * every read until it is finished, its parts as they then stand, and the
- * cursor passes it only then; a device replaces the message it holds at that
- * sequence rather than keeping the first copy.
+ * merges groups by `turnId`, holds each message once by its id at the `seq`
+ * and in the group its latest delivery gave it, and orders groups by their
+ * earliest message, then the turn's queue instant, then the id, the order
+ * the view itself keeps. The sequence is the store's order and the device's
+ * cursor both, so a row the store moves — a spoken ask's line taken into
+ * the turn that ran it, a turn's own rows placed behind the line that
+ * arrived after them — takes a fresh sequence and is answered again past
+ * every cursor; the device lets go of the copy it held at the old sequence,
+ * a group emptied that way going with it. A message still being written is
+ * answered on every read until it is finished, its parts as they then
+ * stand, and the cursor passes it only then; a device replaces the message
+ * it holds rather than keeping the first copy.
  */
 export interface ConversationReadTurnGroup {
   readonly turnId: string;

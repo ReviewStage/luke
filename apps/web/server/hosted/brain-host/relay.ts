@@ -426,8 +426,9 @@ export class StreamRelay {
     const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
     if (receivedLine === RECEIVED_LINE.TRANSCRIPT) {
       // The developer's line is the transcript's, under the ask's own id; a row
-      // written before the ask learned this turn is tied to it here, and one
-      // written after lands tied by the writer's own read of the ask.
+      // written before the ask learned this turn is taken into it here, moved to
+      // a fresh place ahead of the journal the first step is about to open, and
+      // one written after lands attached by the writer's own read of the ask.
       const attached = await this.#seams.writer.attachAskLines(
         standing.target,
         hostTurnId(standing.sessionId, eveTurnId),

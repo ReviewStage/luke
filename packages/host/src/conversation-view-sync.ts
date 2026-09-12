@@ -32,8 +32,12 @@ import { Either } from "effect";
  * asks a client to keep it. The service answers each resource behind a cursor
  * this device holds and hands back unchanged; what arrives is folded in here
  * and nothing is appended blindly: a group is merged by its turn, a message is
- * replaced at its sequence (a row still being written is answered on every
- * read until it finishes, so the copy held is always the latest), a turn is
+ * held once by its id at the sequence and in the group its latest delivery
+ * gave it (a row still being written is answered on every read until it
+ * finishes, so the copy held is always the latest, and a row the store moved
+ * — a spoken line taken into its turn, a turn's work placed behind the line
+ * it answers — arrives again at a fresh sequence and leaves the place it
+ * held, an emptied group going with it), a turn is
  * replaced by its id whenever a stamp on it moves, the rows of a
  * conversation an answer no longer lists are dropped, and an observed
  * conversation's rows from before the current main opened are dropped with
@@ -112,6 +116,12 @@ interface HeldTurn {
   readonly turn: ConversationViewTurn;
 }
 
+/** Where one message stands in this picture: the group holding it and the sequence it is held at. */
+interface HeldPlace {
+  readonly turnId: string;
+  readonly seq: number;
+}
+
 /** Where the current main opened, as the answer's main entry carries it; nothing where no main is listed. */
 function mainOpenedAt(conversations: readonly ConversationReadConversation[]): number | undefined {
   for (const conversation of conversations) {
@@ -155,6 +165,8 @@ function sameRating(a: RatingEventPayload | undefined, b: RatingEventPayload | u
 export class ConversationViewSync {
   readonly #groups = new Map<string, HeldGroup>();
   readonly #turns = new Map<string, HeldTurn>();
+  /** Where each message held stands, by the message's id: the one place a message has in this picture. */
+  readonly #places = new Map<string, HeldPlace>();
   /** The latest speech event on each message, by the message's id; a rating is not one. */
   readonly #speech = new Map<string, HeldSpeechEvent>();
   /** The latest rating event on each message, by the message's id. */
@@ -223,6 +235,8 @@ export class ConversationViewSync {
         // rating it folds onto the row is newer than any mark read back from
         // the events; a walk cut short cannot leave an older one standing over it.
         if (this.#forgetReadBackRating(message.message.id)) moved = true;
+        if (this.#leavePlace(message.message.id, group.turnId, message.seq, held)) moved = true;
+        this.#places.set(message.message.id, { turnId: group.turnId, seq: message.seq });
         if (isDeepStrictEqual(held.messages.get(message.seq), message)) continue;
         held.messages.set(message.seq, message);
         moved = true;
@@ -388,6 +402,7 @@ export class ConversationViewSync {
   reset(): void {
     this.#groups.clear();
     this.#turns.clear();
+    this.#places.clear();
     this.#speech.clear();
     this.#ratings.clear();
     this.#eventsCaughtUp = false;
@@ -495,23 +510,42 @@ export class ConversationViewSync {
     return this.#eventsCaughtUp;
   }
 
-  /** The marks about messages this picture no longer holds go with them. */
+  /** The marks about messages this picture no longer holds go with them, and so does the place each stood at. */
   #forgetMarks(messageIds: Iterable<string>): void {
     for (const messageId of messageIds) {
       this.#speech.delete(messageId);
       this.#ratings.delete(messageId);
+      this.#places.delete(messageId);
     }
+  }
+
+  /**
+   * A message arriving somewhere other than where it is held leaves the old
+   * place first, so it stands once: the store moved it, by taking a spoken
+   * line into its turn or by placing a turn's work behind the line it
+   * answers, and answered it again at a fresh sequence. A group left with
+   * nothing goes; one that is the group being merged into is amended in
+   * place. Answers whether anything moved.
+   */
+  #leavePlace(messageId: string, turnId: string, seq: number, into: HeldGroup): boolean {
+    const held = this.#places.get(messageId);
+    if (held === undefined || (held.turnId === turnId && held.seq === seq)) return false;
+    const group = held.turnId === turnId ? into : this.#groups.get(held.turnId);
+    if (group === undefined) return false;
+    group.messages.delete(held.seq);
+    if (group.messages.size === 0 && group !== into) this.#groups.delete(held.turnId);
+    return true;
   }
 
   #findMessage(
     messageId: string,
   ): { readonly group: HeldGroup; readonly message: ConversationViewMessage } | undefined {
-    for (const group of this.#groups.values()) {
-      for (const message of group.messages.values()) {
-        if (message.message.id === messageId) return { group, message };
-      }
-    }
-    return undefined;
+    const place = this.#places.get(messageId);
+    if (place === undefined) return undefined;
+    const group = this.#groups.get(place.turnId);
+    const message = group?.messages.get(place.seq);
+    if (group === undefined || message === undefined) return undefined;
+    return { group, message };
   }
 
   /**
@@ -548,6 +582,7 @@ export class ConversationViewSync {
     for (const [turnId, group] of this.#groups) {
       if (standing.has(group.conversationId)) continue;
       this.#groups.delete(turnId);
+      for (const message of group.messages.values()) this.#places.delete(message.message.id);
       dropped = true;
     }
     for (const [id, turn] of this.#turns) {

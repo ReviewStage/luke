@@ -185,6 +185,19 @@ async function rows(target: ConversationTarget) {
   return { turnRows, messageRows };
 }
 
+/** The rows a device would take past the position it holds: the store's own cursor read, in sequence. */
+async function pastCursor(target: ConversationTarget, after: number) {
+  const read = await database.run(
+    database.store.messages.list(target.userId, target.conversationId, CATALOG_TOOL_SET, { after }),
+  );
+  assert.ok(read.ok);
+  return read.value;
+}
+
+function readMessageSeqs(records: readonly { readonly seq: number }[]): number[] {
+  return records.map((record) => record.seq);
+}
+
 test("a typed ask lands as one turn and its messages through the writer: the words, then the answer with its parts in step order", async () => {
   const target = await conversation();
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
@@ -263,6 +276,14 @@ test("a spoken turn's received message writes no user row: the developer's line 
     }),
   );
   assert.ok(transcript.ok);
+  // A device that read the conversation to its end before the turn: the line stands
+  // outside any turn, and the cursor it holds is the line's own position.
+  const early = await pastCursor(spoken, 0);
+  assert.deepEqual(
+    early.map((row) => [row.id, row.turnId]),
+    [[transcript.id, undefined]],
+  );
+  const earlyCursor = early.at(-1)?.seq ?? 0;
   await play(spokenTurn("turn_0", NOW, ["delivery-1"]), spokenStanding);
   await play(typedTurn("turn_0", 0), standingFor(typed, BRAIN_HOST_TURN.TYPED));
 
@@ -281,6 +302,26 @@ test("a spoken turn's received message writes no user row: the developer's line 
       [MESSAGE_ROLE.ASSISTANT, spokenTurnId, spokenTurnId, true],
     ],
   );
+  // The turn took the line to a fresh place past the early reader's cursor, ahead of its
+  // own reply, so that reader's next page carries the line again, in the turn's group and
+  // first in it; a reader who never passed the old place reads the same rows in the same order.
+  const late = await pastCursor(spoken, earlyCursor);
+  assert.deepEqual(
+    late.map((row) => [row.id, row.turnId]),
+    [
+      [transcript.id, spokenTurnId],
+      [spokenRows.messageRows[1]?.id, spokenTurnId],
+    ],
+  );
+  assert.deepEqual(
+    (await pastCursor(spoken, 0)).map((row) => row.id),
+    late.map((row) => row.id),
+  );
+  assert.deepEqual(
+    readMessageSeqs(late),
+    readMessageSeqs(late).toSorted((a, b) => a - b),
+  );
+  assert.ok((late[0]?.seq ?? 0) > earlyCursor);
   assert.deepEqual(
     typedRows.messageRows.map((row) => [row.role, row.finishedAt !== null]),
     [
@@ -320,6 +361,65 @@ test("a spoken turn's received message writes no user row: the developer's line 
     (row) => row.id === laterRow.id,
   );
   assert.equal(written?.turnId, spokenTurnId);
+  assert.deepEqual(refusals, []);
+});
+
+test("a spoken line that lands after the turn's first step is still placed ahead of the reply: the journal moves behind it to a fresh place, and a device that previewed the journal reads it again there", async () => {
+  const spoken = await conversation();
+  const standing = standingFor(spoken, BRAIN_HOST_TURN.SPOKEN);
+  const delegationId = `dl_${randomUUID()}`;
+  const record = promisedAsks(database.run);
+  const ask = await record.record({
+    userId: spoken.userId,
+    conversationId: spoken.conversationId,
+    clientId: delegationId,
+    origin: ASK_ORIGIN.SPOKEN,
+    question: "what changed?",
+    createdAt: new Date(NOW),
+  });
+  await record.dispatchOnce(spoken, ask.id, async () => ({
+    sessionId: standing.sessionId,
+    deliveryId: "delivery-1",
+  }));
+  const turn = spokenTurn("turn_0", NOW, ["delivery-1"]);
+  const firstStep = turn.findIndex((event) => event.type === "step.started");
+  // eve's turn starts, receives the ask, and opens its first step — the journal row — before
+  // the voice writer's cut of the transcript lands.
+  await play(turn.slice(0, firstStep + 1), standing);
+  const turnId = hostTurnId(standing.sessionId, "turn_0");
+  const previewed = await pastCursor(spoken, 0);
+  assert.deepEqual(
+    previewed.map((row) => [row.clientId, row.finishedAt === undefined]),
+    [[turnId, true]],
+  );
+  const journalSeq = previewed[0]?.seq ?? 0;
+  const transcript = await database.run(
+    writer.recordUserMessage(spoken, {
+      clientId: delegationId,
+      turnOfAsk: true,
+      text: "What changed?",
+      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+    }),
+  );
+  assert.ok(transcript.ok);
+  await play(turn.slice(firstStep + 1), standing);
+
+  const { messageRows } = await rows(spoken);
+  assert.deepEqual(
+    messageRows.map((row) => [row.role, row.turnId, row.finishedAt !== null]),
+    [
+      [MESSAGE_ROLE.USER, turnId, true],
+      [MESSAGE_ROLE.ASSISTANT, turnId, true],
+    ],
+  );
+  // The journal's place moved past the line's, both past where the preview stood, so a
+  // device holding the journal at its old place reads it again where it now stands.
+  assert.ok((messageRows[0]?.seq ?? 0) > journalSeq);
+  assert.ok((messageRows[1]?.seq ?? 0) > (messageRows[0]?.seq ?? 0));
+  assert.deepEqual(
+    (await pastCursor(spoken, journalSeq - 1)).map((row) => row.id),
+    [transcript.id, messageRows[1]?.id],
+  );
   assert.deepEqual(refusals, []);
 });
 

@@ -116,6 +116,48 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.turnGroups[0].messages.map(\.seq), [1, 2])
     }
 
+    func testAMessageAnsweredAgainAtAFreshSequenceStandsOnceWhereItsLatestDeliveryPlacedIt() {
+        var thread = ConversationThread()
+        let running = turn("t1", origin: .spoken, status: .running, queuedAt: 100)
+        // Read early: the developer's line stands as a group of its own under its message id,
+        // and the turn's journal, still being written, was previewed in the turn's group.
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly,
+                groups: [
+                    group(turnId: "m1", turn: nil, messages: [row("m1", seq: 1, at: 100)]),
+                    group(turnId: "t1", turn: running, messages: [row("m2", seq: 2, at: 101, parts: [.text("One")])]),
+                ],
+                next: "c1",
+                hasMore: false
+            )
+        )
+        XCTAssertEqual(thread.turnGroups.map(\.turnId), ["m1", "t1"])
+        XCTAssertEqual(thread.turnGroups.map { $0.messages.map(\.seq) }, [[1], [2]])
+        // The store placed the line into the turn at a fresh sequence and moved the journal behind it.
+        let settled = turn("t1", origin: .spoken, status: .settled, queuedAt: 100)
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly,
+                groups: [
+                    group(
+                        turnId: "t1",
+                        turn: settled,
+                        messages: [row("m1", seq: 3, at: 100), row("m2", seq: 4, at: 101, parts: [.text("One agent finished.")])]
+                    ),
+                ],
+                next: "c2",
+                hasMore: false
+            )
+        )
+        let groups = thread.turnGroups
+        XCTAssertEqual(groups.map(\.turnId), ["t1"])
+        XCTAssertEqual(groups[0].messages.map(\.message.id), ["m1", "m2"])
+        XCTAssertEqual(groups[0].messages.map(\.seq), [3, 4])
+        XCTAssertEqual(groups[0].messages[1].message.parts, [.text("One agent finished.")])
+        XCTAssertEqual(groups[0].turn, settled)
+    }
+
     func testRowsOfAConversationNoLongerListedAreDropped() {
         var thread = ConversationThread()
         let both = mainOnly + [
