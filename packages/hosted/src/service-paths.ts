@@ -41,18 +41,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
   /**
-   * Run one turn of Luke's brain on Luke's key (POST), for a developer with
-   * none of their own. The desktop sends the brain's own input array — its
-   * memory from the latest fold onward, the standing context, and
-   * the turn's new items — and the service holds the instructions, the tool
-   * schemas, and the model fixed by its own build, answering with the raw
-   * Responses payload for the desktop to append and act on. Kept for the
-   * installed desktops through 0.5.0 that speak only this contract; retire it
-   * once none remain.
-   */
-  BRAIN_RESPOND: "/api/brain/respond",
-  /**
-   * The second brain contract (see `brain-contract.ts`). GET the
+   * The brain contract (see `brain-contract.ts`). GET the
    * capabilities to learn the model, the operations, the registered tool
    * names, and the bounds before sending anything; POST the two Responses
    * operations with a prepared prompt and tool names, and the same admitted
@@ -61,10 +50,9 @@ export const HOSTED_SERVICE_PATH = {
   BRAIN_CAPABILITIES: "/api/brain/capabilities",
   BRAIN_RESPOND_V2: "/api/brain/v2/respond",
   BRAIN_COUNT_TOKENS: "/api/brain/v2/count-tokens",
-  /** Embeddings for the notebook index on Luke's key (POST), the third operation of the second contract. */
+  /** Embeddings for the notebook index on Luke's key (POST), the third operation of the contract. */
   BRAIN_EMBED: "/api/brain/v2/embed",
   ACCOUNT_DELETE: "/api/account/delete",
-  USAGE: "/api/usage",
   EVENTS: "/api/events",
   /**
    * Store and read account preferences (GET, PUT). Only settings named by
