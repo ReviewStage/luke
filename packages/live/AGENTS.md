@@ -1,165 +1,59 @@
 # `@sidecar/live`
 
-## The wire grammar of a GPT Live session, and nothing that runs one
+The vocabulary a GPT Live session is created, driven, and read with, declared once
+so no consumer re-encodes it, and Node-free so it rides into the renderer bundle,
+the host, and a web function alike.
 
-This package is the vocabulary a Live session (`gpt-live-1`) is created,
-driven, and read with, declared once so no consumer re-encodes it, and it is
-Node-free: every module here can ride into the renderer bundle, the host, the
-hosted voice service, and a web function alike. Nothing here opens a socket,
-creates a session, or holds one; the host and the voice service do that, and
-they import their shapes from here.
+**Nothing here opens a socket, creates a session, or holds one.**
 
-`events.ts` is the grammar: `LIVE_STATUS`, both sides' event names, the
-close reasons and delegation targets, one Effect `Schema` per server event
-composed directly with `Schema.Struct`, `Schema.Literal`, and `Schema.Union`
-and unioned into `liveServerEventSchema` behind `parseLiveServerEvent`, and
-the builders for the six client events this build sends. Every declaration
-reads through `readEither` and shows what `emitJsonSchema` walks out of the
-same AST, both from `@sidecar/wire/effect`, so the bytes a model or a client
-is shown are the same bytes the goldens under `fixtures/json-schema/` hold. An
-append carries a required `delegation_id`, `null` included, because the API
-requires the field on every append and a builder that defaulted it would hide
-the one decision an append turns on: whether it answers a delegation or
-speaks session-wide. A transcript delta is admitted untrimmed and may be
-whitespace, since the captions recipe forbids trimming a fragment. Reflected
-audio parses to its type alone, so a sideband drops it by type before
-anything reads it.
-`RENDERER_CLIENT_EVENTS` and `RENDERER_SERVER_EVENTS` are what an untrusted
-window's data channel may send and is shown: the microphone switch, the
-hang-up, the lifecycle, both captions, usage, error, and info; every append
-and every delegation stays with the trusted side. The phase (`LIVE_STATUS`)
-and the transport-level vocabularies (`LIVE_CLIENT_EVENT`, `LIVE_SERVER_EVENT`,
-`LIVE_CLOSE_REASON`, `LIVE_DELEGATION_TARGET`) each carry an Effect
-`Schema.Literal` beside the `as const` object they derive from
-(`LiveStatusSchema`, `LiveClientEventTypeSchema`, and so on), spread from
-`Object.values` like every vocabulary in this migration; nothing here parses
-an inbound value against them yet, since the wire grammar's own parsing runs
-through the server-event union above, which reads through the same
-`readEither` these vocabularies would if a caller asked.
+## Rules that are not visible in the types
 
-`session.ts` is the creation contract: the sessions path and the attach
-path, `liveSessionConfig`, which sets the client delegation, `store: false`,
-the renderer's channel restrictions, and no field the API does not document
-for WebRTC (no `audio.format`, no tools, no speed, no truncation), the
-`liveCreateRequest` body, the `liveCreateAnswerSchema` — composed directly
-with Effect's `Schema.Struct`, read through `readEither` and shown through
-`emitJsonSchema` — that reads the id and SDP answer back, and the outcome set
-and `LiveDiagnostics` shape the host reports voice's availability with. A
-diagnostics document carries no credential material. `LIVE_TRANSPORT_TYPE`
-and `LIVE_DELEGATION_TYPE` are each a schema of their own single value
-(`LiveTransportTypeSchema`, `LiveDelegationTypeSchema`). Every non-attempt,
-non-success member of `LIVE_SESSION_OUTCOME` also has its own
-`Schema.TaggedError` class
-(`NoApiKeyRefusal`, `HttpErrorRefusal`, and so on, listed whole as
-`LIVE_SESSION_REFUSALS`), each carrying the legacy string as its `code` field
-so a caller that throws or yields the class and one still comparing
-`LIVE_SESSION_OUTCOME`'s string with `===` agree on the same wire value; the
-plain enum and every caller's existing `{ outcome, ... }` union are
-unchanged, since converting those callers to the typed error is its own,
-later PR.
+- An append carries a required `delegation_id`, `null` included, because the API
+  requires the field and a builder that defaulted it would hide the one decision
+  an append turns on: whether it answers a delegation or speaks session-wide.
+- A transcript delta is admitted untrimmed and may be whitespace — the captions
+  recipe forbids trimming a fragment.
+- `RENDERER_CLIENT_EVENTS` and `RENDERER_SERVER_EVENTS` are what an untrusted
+  window may send and is shown. **Every append and every delegation stays with the
+  trusted side.**
+- `liveSessionConfig` sets **no field the API does not document for WebRTC** — no
+  `audio.format`, no tools, no speed, no truncation.
+- `instructions.ts` is the Live prompting guide's starter template with its
+  brackets filled in and nothing beside them. **Every optional control from the
+  guide's appendix is absent until listening shows a behavior it would change.**
+  `INTRODUCTION` names no delegation capability and says never, because the
+  accountless endpoint wires no carrier.
 
-`instructions.ts` is the prompt a session is created with: the Live prompting
-guide's starter template with its brackets filled in and nothing beside them.
-Both scenes share one body — the template's three identity sentences,
-`Backchannel policy:`, and `Interruption policy:` — and differ only in the
-`Delegation policy:` block, whose capabilities and concrete conditions are
-what the guide's Delegation section asks for. `DESKTOP` names the brain's;
-`INTRODUCTION` names none and says never, because the accountless endpoint
-wires no carrier, so a model told it had backend tools would emit a
-delegation nobody reads. Only one line departs from the words the guide
-prints: the identity reads "chief of staff" where the template reads "voice
-assistant". Every optional control from the guide's appendix is absent until
-listening shows a behavior it would change, and no persona stands here at
-all: `@sidecar/guide`'s is the brain's, whose words the voice says.
-`greetingInstruction` is the introduction's opening, carrying the exact
-welcome text, sent as one instructions append after `session.started` by the
-voice service, from the trusted side, and `greetingCue` is the guide's own
-sentence the service sends as one commentary append once that append is
-acknowledged; `introductionSeedItems` is the one developer message the
-introduction's `input` may carry, the detected titles under
-`INTRODUCTION_SEED_BOUNDS`, composed by the takeover and admitted by the
-service against the same bound. The desktop policy's line about answering
-from a still-current result is the template's own, and it stands on
-`roster-seed.ts` below: a session that holds a summary of the desk can answer
-which agents run, wait, finished, or failed without a delegation. The docs'
-backend preamble is not here: it is a prompt section
-of `@sidecar/brain`, and the brain's own roster — its identities, transcript
-reads, and everything an action names — is not here and never reaches the
-voice; neither package depends on this one and this one depends on neither.
+No persona stands here — `@sidecar/guide`'s is the brain's, whose words the voice
+says — and the backend preamble is a prompt section of `@sidecar/brain`.
 
-`roster-seed.ts` is the one thing of the desk the voice does know, and it is
-a summary rather than a roster: `rosterSeedText` and `rosterSeedItem` build
-the single developer message a session's `input` opens with, and
-`rosterUpdateText` the diff a refresh carries. A session line is a bounded
-title, the provider's display name, the status worded per status, the held
-tool of a wait its provider reported as holding for the developer, and a
-coarse age bucket off `lastActivityAt` — the only timestamp any provider
-reports, so a bucket says how long since the session was written about and
-never how long it has been working. `RosterSeedSession` is a narrow input
-the host maps its own `Session` to, so this package reaches no registry and
-the fields a line may not carry — the error, branch, repository, model,
-address, workspace — are absent from the type rather than dropped in the
-rendering; the identity it does carry is the diff's and never enters a line.
-The list is ordered so a session holding for the developer leads, capped at
-`ROSTER_SEED_BOUNDS.SESSIONS`, and cut from the end until the whole text is
-inside one append's bound, so a desk of fifty reads the size of a desk of
-two. A refresh whose every line reads the same produces nothing, which is
-what keeps a conversation's cached prefix warm across a pass that observed
-no change.
+## What the voice knows of the desk, and what it must not
 
-What a session knows is `RosterTold`: the lines it was actually given, held
-by identity, and never the roster it was meant to have. That is what makes
-the diff honest under everything that can go wrong between deciding a
-refresh and delivering it — a refusal, a summary the append bound cut short,
-a change arriving while the last one is still in flight — since each leaves
-the rows it never carried exactly as they stood, to be said again. A
-departure leads an update for the same reason: a line the voice never hears
-leaves it uninformed, where a withdrawal it never hears leaves it offering an
-agent that is not on the desk.
+`roster-seed.ts` is the one thing of the desk the voice knows, and **it is a
+summary, not a roster**, so a session can answer which agents run, wait, finished,
+or failed without a delegation. The brain's own roster — its identities, transcript
+reads, and everything an action names — is not here and never reaches the voice.
 
-`seed.ts` is the rest of what a session is told as it opens: the recent
-Conversation lines as `input` messages in their own roles (developer and
-user as `input_text`, assistant as `output_text`, no `system`), and nothing
-addressed to the model beside them, held under the API's 128
-messages and 8,192 estimated tokens by dropping the oldest lines first; the
-roster message above rides ahead of them under the same bounds, and the
-conversation is what gives way when both will not fit. No
-instruction about that history stands in `instructions.ts` either: telling the
-model to read it as memory rather than as a fresh ask is exactly the kind of
-rule the guide says to add only once listening shows it is needed.
-`transcript.ts` is the record of what was said on one
-session: `TranscriptLedger` keeps every fragment exactly as received with its
-place on the session timeline, groups them into utterances by
-`UTTERANCE_GAP_MS` per speaker with overlap allowed and late fragments
-revising the row they belong to, and answers the captions, the ask context a
-delegation is composed from, and the last instant anything was said.
-`anticipationOf` and `PREFETCH_DEBOUNCE_MS` are the one thing the ledger says
-before an utterance settles: the developer's row and words so far, for the
-live session service to hand the brain to read ahead of after a 400 ms pause
-in the fragments, shorter than the gap that ends an utterance on purpose;
-nothing here decides what is read, the vocabulary only names the moment.
-`chunks.ts` cuts a text into appends at sentence ends under the 500-token
-bound against `tokens.ts`'s one estimate. `proactive.ts` is what Luke says
-first — a briefing the brain decided, the arrival beat, the calendar beat —
-as the commentary appends that speak it, observed values bounded and
-flattened before they enter one.
+`RosterSeedSession` is a narrow input the host maps its own `Session` onto, so
+this package reaches no registry and **the fields a line may not carry — the
+error, branch, repository, model, address, workspace — are absent from the type
+rather than dropped in the rendering.**
 
-## What stays elsewhere
+The age bucket comes off `lastActivityAt`, the only timestamp any provider
+reports, so it says how long since the session was *written about* and never how
+long it has been working.
 
-`ConversationEntry` and the retained thread are `@sidecar/session`'s. The
-hosted voice service's socket frames and the service paths are
-`@sidecar/hosted`'s. The sideband over `ws`, the session service that owns
-the one session, and the renderer's peer are the host's and the desktop's.
-The phone's Realtime mint document is `@sidecar/actions`'s
-`remote-mint-legacy.ts`, beside the phone's own action tools, until the phone
-moves.
+`RosterTold` is what a session was actually given, held by identity, and never the
+roster it was meant to have. That is what keeps a diff honest under everything
+that can go wrong between deciding a refresh and delivering it — a refusal, a
+summary the append bound cut short, a change arriving mid-flight — since each
+leaves the rows it never carried exactly as they stood, to be said again. A
+departure leads an update, because a line the voice never hears leaves it
+uninformed where a withdrawal it never hears leaves it offering something gone.
+
+A refresh whose every line reads the same produces nothing, which is what keeps a
+conversation's cached prefix warm across a pass that observed no change.
 
 ## Tests
 
-The tests here cover only what this package owns, as values and structure:
-event type membership, `delegation_id` present-and-null against an id,
-`client_event_id` correlation, config keys present and absent, the permission
-arrays, seed roles and bounds, ledger grouping and ask context since an
-offset, chunk bounds and round trips, and an identity block bounded to the
-template's three lines over scenes that differ in their delegation policy
-alone. No test reads the prose.
+The tests here assert values and structure only. **No test reads the prose.**
