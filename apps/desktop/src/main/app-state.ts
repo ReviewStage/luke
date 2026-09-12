@@ -115,7 +115,10 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
     voice: held.voice,
     conversation: boot.conversationView,
     announcements: { held: boot.announcementsHeld },
-    onboarding: { calendarOwed: boot.calendarOnboardingOwed },
+    onboarding: {
+      calendarOwed: boot.calendarOnboardingOwed,
+      conductorKeyOwed: boot.conductorKeyOnboardingOwed,
+    },
     sessionReplay: { ...boot.sessionReplay, halted: held.sessionReplay.halted },
   };
 }
@@ -163,7 +166,7 @@ export function initialAppState(
     // A run that sends nothing reads no Conversation, so its empty thread is settled from the start.
     conversation: { groups: [], settled: !runMode.sendsNetwork },
     announcements: { held: false },
-    onboarding: { calendarOwed: false },
+    onboarding: { calendarOwed: false, conductorKeyOwed: false },
     // Nothing plays until the launch's own gate says so; the window service
     // is the one writer of this slice.
     introduction: { playing: false },

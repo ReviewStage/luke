@@ -194,6 +194,7 @@ const BOOT: HostBootstrap = {
   calendars: [],
   calendarOnboardingOwed: false,
   introductionOwed: false,
+  conductorKeyOnboardingOwed: false,
   sessionReplay: { permitted: true, accountId: "person" },
   voiceAvailable: true,
   agentTraceEnabled: true,

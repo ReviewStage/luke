@@ -39,10 +39,33 @@ export function WorkspaceGlyph(): React.JSX.Element {
   );
 }
 
-export function EmptyState(): React.JSX.Element {
+/**
+ * The empty desk, told apart by a fact the panel holds rather than a
+ * placeholder: with no cloud provider connected, no session can ever arrive,
+ * so the honest state names that and offers the one thing that changes it;
+ * with a provider connected, the desk is simply quiet.
+ */
+export function EmptyState({
+  providerConnected,
+  onConnectProvider,
+}: {
+  providerConnected: boolean;
+  onConnectProvider: () => void;
+}): React.JSX.Element {
+  if (providerConnected) {
+    return (
+      <div className="empty-state">
+        <strong>Nothing to watch yet</strong>
+      </div>
+    );
+  }
   return (
     <div className="empty-state">
-      <strong>Nothing to watch yet</strong>
+      <strong>No coding agent provider is connected</strong>
+      <small>Connect Conductor and your sessions appear here.</small>
+      <button type="button" className="empty-state-action" onClick={onConnectProvider}>
+        Connect Conductor
+      </button>
     </div>
   );
 }
