@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import type { Layer } from "effect";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import {
-  type CloudFetch,
   HOSTED_API_ERROR,
   type HostedApiError,
   HTTP_STATUS,
@@ -142,7 +143,7 @@ export interface VoiceServiceOptions {
   exchange?: ExchangeAttachment;
   /** The OpenAI `/v1` base; a test points it at a fake. */
   openAiBaseUrl?: string;
-  fetch?: CloudFetch;
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   log?: Log;
   closeTimeoutMs?: number;
   /** How long the greeting's acknowledgment is waited on before the cue is abandoned. */
@@ -246,7 +247,7 @@ export class VoiceService {
       ? createLiveUpstream({
           apiKey,
           baseUrl: options.openAiBaseUrl,
-          fetch: options.fetch,
+          httpClient: options.httpClient,
           createTimeoutMs: options.createTimeoutMs,
           attachTimeoutMs: options.attachTimeoutMs,
         })

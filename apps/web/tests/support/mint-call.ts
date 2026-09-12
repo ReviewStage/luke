@@ -1,7 +1,6 @@
-import { HttpApp } from "@effect/platform";
-import type { CloudFetch } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Effect, Redacted } from "effect";
+import { FetchHttpClient, HttpApp } from "@effect/platform";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { Effect, type Layer, Redacted } from "effect";
 import { HostedEnvironment } from "../../server/hosted/environment.js";
 import {
   type IntroductionMintSeams,
@@ -13,17 +12,16 @@ import { type VoiceMintSeams, voiceMintApp } from "../../server/voice-mint-app.j
  * The mint group answered the way a function answers it, with the
  * deployment's environment handed in rather than read: a test names the key
  * and the Realtime model override the same way `hostedEnvironment` resolves
- * them from `Config`, and reaches no runtime of its own. `fetch` is the
- * test's own upstream double, carried as the `HttpClient` layer the group's
- * OpenAI mint now runs its request over, where the deployment always runs the
- * platform's own.
+ * them from `Config`, and reaches no runtime of its own. `httpClient` is the
+ * test's own upstream double, the layer the group's OpenAI mint runs its
+ * request over, where the deployment always runs the platform's own.
  */
 export interface MintCall extends Partial<VoiceMintSeams>, Partial<IntroductionMintSeams> {
   request: Request;
   /** Absent, or blank, means the hosted tier is off, the way the environment's own absence does. */
   apiKey?: string | undefined;
   model?: string | undefined;
-  fetch?: CloudFetch | undefined;
+  httpClient?: Layer.Layer<HttpClient.HttpClient> | undefined;
 }
 
 /** Which group a test's request is for, which is the path it names. */
@@ -62,7 +60,7 @@ export function mintAnswer(call: MintCall): Promise<Response> {
         cronSecret: undefined,
         apnsCredentials: undefined,
       }),
-      Effect.provide(layerFromCloudFetch(call.fetch ?? ((input, init) => fetch(input, init)))),
+      Effect.provide(call.httpClient ?? FetchHttpClient.layer),
     ),
   );
   return handler(call.request);

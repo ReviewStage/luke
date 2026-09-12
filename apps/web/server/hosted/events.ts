@@ -1,5 +1,6 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
+import type { Layer } from "effect";
 import {
-  type CloudFetch,
   PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_EVENT_CLIENT_LIB,
   type ProductEventBatch,
@@ -70,7 +71,7 @@ export interface EventsOptions {
    * deployment that would rather PostHog held neither; the counts still land.
    */
   readPerson?: (userId: string) => Promise<PosthogPerson | undefined>;
-  fetch?: CloudFetch;
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   timeoutMs?: number;
 }
@@ -167,7 +168,7 @@ export async function handleEvents(options: EventsOptions): Promise<Response> {
 
   const upstream: PosthogUpstreamOptions = {};
   if (options.host !== undefined) upstream.host = options.host;
-  if (options.fetch) upstream.fetch = options.fetch;
+  if (options.httpClient) upstream.httpClient = options.httpClient;
   if (options.timeoutMs !== undefined) upstream.timeoutMs = options.timeoutMs;
   // A failed read costs the person's name, never the counts.
   const person = await options.readPerson?.(userId).catch(() => undefined);

@@ -19,8 +19,7 @@ import {
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { fakeHttpClientLayer, type ParsedJsonObject } from "@sidecar/wire/testing";
 import { Effect, TestClock } from "effect";
 import { test } from "vitest";
 import {
@@ -88,7 +87,7 @@ function keyed(fetchLike: (url: string, init: RequestInit) => Promise<Response>)
   const script = scriptedOpenSocket([() => undefined]);
   const source = new KeyedLiveSessionSource({
     apiKey: "sk-test",
-    httpClient: layerFromCloudFetch(fetchLike),
+    httpClient: fakeHttpClientLayer(fetchLike),
     openSocket: script.openSocket,
     now: () => NOW,
   });
@@ -171,7 +170,7 @@ test("the keyed source records a sideband that would not open and rejects the at
   const script = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 403 })]);
   const source = new KeyedLiveSessionSource({
     apiKey: "sk-test",
-    httpClient: layerFromCloudFetch(fetchLike),
+    httpClient: fakeHttpClientLayer(fetchLike),
     openSocket: script.openSocket,
   });
   const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
@@ -839,7 +838,7 @@ test("a close that lands in the keyed attach's open gap reaches the sideband tha
   ]);
   const source = new KeyedLiveSessionSource({
     apiKey: "sk-test",
-    httpClient: layerFromCloudFetch(fetchLike),
+    httpClient: fakeHttpClientLayer(fetchLike),
     openSocket: script.openSocket,
     now: () => NOW,
   });

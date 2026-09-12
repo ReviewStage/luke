@@ -1,8 +1,8 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import type { ProviderSessionObservation, SessionProviderPlugin } from "@sidecar/session";
-import type { CloudFetch } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
-import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
+import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
+import type { Layer } from "effect";
 import { conductorPlugin } from "../conductor/index.js";
 
 /**
@@ -122,7 +122,7 @@ function sessionPayload(session: TestSession) {
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
 export function fakeConductorApi(api: TestApi) {
   const createdSessionIds = new Set<string>();
-  return recordingFetch((request) => {
+  return recordingHttpClient((request) => {
     const { pathname, method, body: rawBody } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
     if (method === "POST") {
@@ -306,7 +306,7 @@ export function fakeConductorApi(api: TestApi) {
 }
 
 export function pluginFor(
-  fetch: CloudFetch,
+  httpClient: Layer.Layer<HttpClient.HttpClient>,
   overrides: {
     apiKey?: string | undefined;
     readApiKey?: () => Promise<string | undefined>;
@@ -320,7 +320,7 @@ export function pluginFor(
   return conductorPlugin({
     readApiKey: overrides.readApiKey ?? (async () => apiKey),
     baseUrl: TEST_BASE_URL,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.reported ? { reported: overrides.reported } : undefined),

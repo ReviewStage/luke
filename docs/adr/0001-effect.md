@@ -46,8 +46,8 @@ a runtime requirement of a dependency the function bundles keep external.
 
 `@sidecar/wire` reaches both and declares them as dependencies rather than
 development ones, because the bridge under `packages/wire/src/effect/` is
-product code: `http.ts` offers an `HttpClient` over a `CloudFetch` and a
-`CloudFetch` over an `HttpClient`. The spike test at
+product code: `http.ts` offers the web `Response` a client's answer carries,
+for the callers whose own vocabulary is still `Response`'s. The spike test at
 `packages/wire/src/effect-spike.test.ts`, which
 exercises `Schema.Struct` decoding, `Effect.gen`, `Layer`, and `Context.Tag`
 under the repository's own test runner, stands beside them. `@sidecar/runtime`
@@ -164,11 +164,10 @@ decide. The migration enforces this by review until the lint rule
 allowlist.
 
 The strangler shims in the table below are on that allowlist for as long as they live.
-`cloudFetchFromHttpClient` in `packages/wire/src/effect/http.ts` answers a
-promise, because that is what the `CloudFetch` seam its callers still hold
-answers, so the bridge is where the effect is run until every one of them takes
-a client instead. It is the migration's own scaffolding rather than a second
-runtime for the product to live on, and it goes in P12-04b with the seam.
+`packages/wire/src/effect/http.ts` is on it no longer: P12-04e deleted
+`cloudFetchFromHttpClient`, the one thing in that file that ran an effect, with
+the `CloudFetch` seam its callers held, so the file runs nothing and is off the
+allowlist rather than standing on it with nothing to answer for.
 
 `timerSeamFromRuntime` answered the `now`/`schedule`/`cancel` seam a caller
 still injected with those closures read from an Effect runtime's own
@@ -632,9 +631,9 @@ both still answer their callers — `AccountClient`, `deleteHostedAccount`, and
 each runs its request to a promise in place. `AccountClient`'s and
 `deleteHostedAccount`'s own `httpClient` option is a `Layer` a test hands over
 in place of `FetchHttpClient.layer` since P12-04 deleted the `CloudFetch`
-seam it used to build that layer from; `LinearIssueTracker#post` still builds
-its layer from a `CloudFetch`-shaped `fetch` option. Both go in P12-04b, once
-each answers a fiber instead of a promise.
+seam it used to build that layer from. `timedRequest` goes in P12-04b, once it
+answers a fiber instead of a promise; `LinearIssueTracker` is gone from the
+tree entirely, with the Linear integration it served.
 
 `LoopbackConsent`'s `signIn` in
 `packages/credentials/src/loopback-consent.ts` runs nothing any more, and is
@@ -647,14 +646,10 @@ the trip as a fiber every concurrent ask joins, so the held promise that used
 to be the de-duplication is a `Fiber` and the scope is the asking run's rather
 than a door's own — and the calendars composer had already moved in P7-06,
 calling `signInEffect()` through `Runtime.runPromise` on the runtime its own
-layer runs on. `timedRequest` in
-`packages/credentials/src/linear/oauth.ts` is beside its namesake in
-`account/client.ts` and on exactly the same terms, unmigrated: Linear's three
-OAuth calls — the code exchange, the refresh, and the revocation — each build
-a request over the ambient `HttpClient` from a `CloudFetch`-shaped `fetch`
-option and each still answer their callers a Promise, so the request is run
-to one in place. It goes with `CloudFetch` and `layerFromCloudFetch` in
-P12-04b.
+layer runs on. `timedRequest` in `packages/credentials/src/linear/oauth.ts`
+stood here on exactly the terms its namesake in `account/client.ts` does; the
+Linear integration and its files are gone from the tree, so the entry names a
+file this repository no longer holds.
 
 `packages/credentials/src/single-flight.ts` is on the allowlist for one
 `Effect.runSync`, and no longer for a promise door over it: P7-13c deleted
@@ -1051,7 +1046,7 @@ design decision stated as such:
 | --- | --- | --- |
 | `s.*` facade over Effect Schema | P1-02 | P12-08 |
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
-| `cloudFetchFromHttpClient` | P1-07 | P12-04b |
+| `cloudFetchFromHttpClient` | P1-07 | P12-04e |
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `admit()` Promise door over `admitEffect()` | P4-01 | P12-15 — blocked on the `ToolExecutor` seam answering an effect; P12-04 turned out to be the CloudFetch/HttpClient family alone |
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
@@ -1069,8 +1064,8 @@ design decision stated as such:
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |
-| `LinearIssueTracker#post` | P4-03 | P12-04b |
-| `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04b |
+| `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
+| `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | P7-13c — the calendars composer's methods answer effects since P7-13 |
 | `timerSeamFromRuntime` (`packages/brain/src/effect/harness.ts`) | P12-03 | once `BrainAgent` answers `Clock`/`Scope` directly |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |

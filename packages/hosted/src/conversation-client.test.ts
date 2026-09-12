@@ -4,8 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { MESSAGE_RATING, type WireValue } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
+import {
+  fakeCloudApi,
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  recordedRoutes,
+} from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import {
   CONVERSATION_RATE_REFUSAL,
@@ -112,7 +116,7 @@ it.effect(
       assert.deepEqual(
         yield* Effect.provide(
           client().turns(),
-          layerFromCloudFetch(() => {
+          fakeHttpClientLayer(() => {
             throw new TypeError("offline");
           }),
         ),

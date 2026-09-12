@@ -1,8 +1,11 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { Layer } from "effect";
-import { layerFromCloudFetch } from "../effect/http.js";
-import type { CloudFetch } from "../json.js";
-import { HTTP_STATUS, jsonResponse, type RecordedRequest, recordingFetch } from "./http-fake.js";
+import {
+  HTTP_STATUS,
+  jsonResponse,
+  type RecordedRequest,
+  recordingHttpClient,
+} from "./http-fake.js";
 import type { JsonValue } from "./json.js";
 
 /**
@@ -19,11 +22,10 @@ export interface FakeCloudRoute {
 const FAKE_FAILURE_STATUS = HTTP_STATUS.SERVER_ERROR;
 
 export interface FakeCloudApi {
-  readonly fetch: CloudFetch;
   /**
-   * The same fake as the `HttpClient` an Effect caller takes, so a test over a
-   * migrated client hands the layer where it used to hand the fetch and reads
-   * the requests back from the same recorder.
+   * The fake as the `HttpClient` its caller takes, so a test hands the layer
+   * where production reads the tag and reads the requests back from the same
+   * recorder.
    */
   readonly layer: Layer.Layer<HttpClient.HttpClient>;
   /** Every request the fake saw, in order. */
@@ -54,7 +56,7 @@ function routeKey(method: string, pathname: string): string {
  */
 export function fakeCloudApi(routes: Readonly<Record<string, FakeCloudRoute>>): FakeCloudApi {
   let failureStatus: number | undefined;
-  const recording = recordingFetch((request) => {
+  const recording = recordingHttpClient((request) => {
     const key = routeKey(request.method, request.pathname);
     const route = routes[key];
     if (route === undefined) {
@@ -64,8 +66,7 @@ export function fakeCloudApi(routes: Readonly<Record<string, FakeCloudRoute>>): 
     return jsonResponse(route.answer(request), route.status ?? HTTP_STATUS.OK);
   });
   return {
-    fetch: recording.fetch,
-    layer: layerFromCloudFetch(recording.fetch),
+    layer: recording.layer,
     requests: () => recording.requests,
     credentials: () =>
       recording.requests

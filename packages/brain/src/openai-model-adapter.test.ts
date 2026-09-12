@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { BRAIN_RATE_LIMIT_COOLDOWN_MS } from "./model-adapter-shared.js";
 import { OpenAiModelAdapter, openAiModelAdapter } from "./openai-model-adapter.js";
@@ -45,7 +45,7 @@ function adapter(
     apiKey: "sk-test",
     model: "gpt-test",
     baseUrl: "https://example.test/v1/",
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
     now,
     report: () => undefined,
   });

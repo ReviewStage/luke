@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { OBSERVE_QUERY, observeAnswerFromWire } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
   fakeConductorApi,
@@ -120,7 +121,7 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
       observeOptions({
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: api.fetch,
+        httpClient: api.layer,
         now: () => TEST_TIME,
       }),
     ),
@@ -138,9 +139,9 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
       observeOptions({
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: async () => {
+        httpClient: fakeHttpClientLayer(async () => {
           throw new Error("a stored roster is not re-observed");
-        },
+        }),
         now: () => TEST_TIME + 60_000,
       }),
     ),
@@ -159,7 +160,7 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
       observeOptions({
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: conductorApi().fetch,
+        httpClient: conductorApi().layer,
         now: () => TEST_TIME,
       }),
     ),
@@ -174,7 +175,7 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
       observeOptions({
         readVaultKeys: async () => replaced,
         store: () => store,
-        fetch: api.fetch,
+        httpClient: api.layer,
         now: () => TEST_TIME + 1_000,
       }),
     ),
@@ -196,7 +197,7 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
       observeOptions({
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: working.fetch,
+        httpClient: working.layer,
         now: () => TEST_TIME,
       }),
     ),
@@ -209,7 +210,7 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
         request: observeRequest({}, true),
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: idle.fetch,
+        httpClient: idle.layer,
         now: () => TEST_TIME + 1_000,
       }),
     ),
@@ -233,7 +234,7 @@ test("a pass the provider refuses answers what stood before, and stores no roste
       observeOptions({
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: api.fetch,
+        httpClient: api.layer,
         now: () => TEST_TIME,
       }),
     ),
@@ -245,7 +246,7 @@ test("a pass the provider refuses answers what stood before, and stores no roste
         request: observeRequest({}, true),
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: async () => new Response(null, { status: 401 }),
+        httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 401 })),
         now: () => TEST_TIME + 1_000,
       }),
     ),
@@ -266,7 +267,7 @@ test("a first pass the provider refuses answers an empty roster and stores none"
       observeOptions({
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
-        fetch: async () => new Response(null, { status: 401 }),
+        httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 401 })),
       }),
     ),
   );
@@ -535,7 +536,7 @@ test("fresh reads return 429 after too many in the same window, while stored rea
       resolveUserId: async () => userId,
       readVaultKeys: async () => KEY_ROWS,
       store: () => store,
-      fetch: api.fetch,
+      httpClient: api.layer,
       now,
     });
 

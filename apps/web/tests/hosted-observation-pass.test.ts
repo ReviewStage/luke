@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { SESSION_STATUS } from "@sidecar/session";
-import { Effect } from "effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect, Layer } from "effect";
 import { test } from "vitest";
 import {
   fakeConductorApi,
@@ -43,6 +46,34 @@ function sessions(status: string): TestSession[] {
   ];
 }
 
+/**
+ * The fake's own client, behind one interception: a request `intercept`
+ * answers is answered with that, and every other is delegated whole, so a
+ * test can hold a pass open or refuse one route without restating the API.
+ */
+function interceptedClient(
+  base: Layer.Layer<HttpClient.HttpClient>,
+  intercept: (url: string) => Promise<Response | undefined>,
+): Layer.Layer<HttpClient.HttpClient> {
+  return Layer.provide(
+    Layer.effect(
+      HttpClient.HttpClient,
+      Effect.map(HttpClient.HttpClient, (client) =>
+        HttpClient.make((request, url) =>
+          Effect.flatMap(
+            Effect.promise(() => intercept(url.toString())),
+            (answer) =>
+              answer === undefined
+                ? client.execute(request)
+                : Effect.succeed(HttpClientResponse.fromWeb(request, answer)),
+          ),
+        ),
+      ),
+    ),
+    base,
+  );
+}
+
 function api(status: string = TEST_CONDUCTOR_STATUS.WORKING) {
   return fakeConductorApi({
     userId: TEST_USER_ID,
@@ -72,7 +103,7 @@ test("a whole pass stores the roster with its projects, dated by the pass", asyn
       rows: KEY_ROWS,
       secret: SECRET,
       store,
-      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      seams: { httpClient: api().layer, now: () => TEST_TIME },
       now: TEST_TIME,
     }),
   );
@@ -103,7 +134,7 @@ test("a changed roster moves the snapshot and says so; an unchanged one moves on
         rows: KEY_ROWS,
         secret: SECRET,
         store,
-        seams: { fetch: api(status).fetch, now: () => now },
+        seams: { httpClient: api(status).layer, now: () => now },
         now,
       }),
     );
@@ -135,7 +166,7 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
       rows: KEY_ROWS,
       secret: SECRET,
       store,
-      seams: { fetch: healthy.fetch, now: () => TEST_TIME },
+      seams: { httpClient: healthy.layer, now: () => TEST_TIME },
       now: TEST_TIME,
     }),
   );
@@ -148,13 +179,11 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
       secret: SECRET,
       store,
       seams: {
-        fetch: async (url, init) => {
-          const { pathname } = new URL(url);
-          if (pathname.endsWith("/status")) {
-            return new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS });
-          }
-          return limited.fetch(url, init);
-        },
+        httpClient: interceptedClient(limited.layer, async (url) =>
+          new URL(url).pathname.endsWith("/status")
+            ? new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS })
+            : undefined,
+        ),
         now: () => TEST_TIME + 60_000,
       },
       now: TEST_TIME + 60_000,
@@ -175,39 +204,46 @@ test("a pass the provider rate limits past its backoff leaves the previous snaps
 
 test("a refused key, an unreachable provider, and an unreadable key each fail the pass by name", async () => {
   const store = memoryObservationStore();
-  const attempt = (
-    rows: VaultKeyRow[],
-    fetch: (url: string, init: RequestInit) => Promise<Response>,
-  ) =>
+  const attempt = (rows: VaultKeyRow[], httpClient: Layer.Layer<HttpClient.HttpClient>) =>
     runWithoutDatabase(
       observeAndSnapshot({
         userId: "user-1",
         rows,
         secret: SECRET,
         store,
-        seams: { fetch },
+        seams: { httpClient },
         now: TEST_TIME,
       }),
     );
 
   assert.equal(
-    (await attempt(KEY_ROWS, async () => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED })))
-      .failure,
+    (
+      await attempt(
+        KEY_ROWS,
+        fakeHttpClientLayer(() => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED })),
+      )
+    ).failure,
     CLOUD_OBSERVE_FAILURE.UNAUTHORIZED,
   );
   assert.equal(
     (
-      await attempt(KEY_ROWS, async () => {
-        throw new Error("connection refused");
-      })
+      await attempt(
+        KEY_ROWS,
+        fakeHttpClientLayer(() => {
+          throw new Error("connection refused");
+        }),
+      )
     ).failure,
     CLOUD_OBSERVE_FAILURE.TRANSIENT,
   );
   assert.equal(
     (
-      await attempt([{ providerId: "conductor", ciphertext: "not-a-ciphertext" }], async () => {
-        throw new Error("no request may be made without a key");
-      })
+      await attempt(
+        [{ providerId: "conductor", ciphertext: "not-a-ciphertext" }],
+        fakeHttpClientLayer(() => {
+          throw new Error("no request may be made without a key");
+        }),
+      )
     ).failure,
     CLOUD_OBSERVE_FAILURE.KEY_UNREADABLE,
   );
@@ -235,10 +271,10 @@ test("the attempt is on record as unfinished before the provider is asked, and t
       secret: SECRET,
       store,
       seams: {
-        fetch: () => {
+        httpClient: fakeHttpClientLayer(() => {
           asked = true;
           return hanging;
-        },
+        }),
       },
       now: TEST_TIME,
     }),
@@ -258,7 +294,7 @@ test("the attempt is on record as unfinished before the provider is asked, and t
       rows: KEY_ROWS,
       secret: SECRET,
       store: finished,
-      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      seams: { httpClient: api().layer, now: () => TEST_TIME },
       now: TEST_TIME,
     }),
   );
@@ -278,10 +314,10 @@ test("two passes racing over one user record one transition once, and the later 
         secret: SECRET,
         store,
         seams: {
-          fetch: async (url, init) => {
+          httpClient: interceptedClient(api(status).layer, async () => {
             await gate;
-            return api(status).fetch(url, init);
-          },
+            return undefined;
+          }),
           now: () => now,
         },
         now,
@@ -325,10 +361,10 @@ test("when the earlier-started pass wins, the later one closes its own unfinishe
         secret: SECRET,
         store,
         seams: {
-          fetch: async (url, init) => {
+          httpClient: interceptedClient(api(status).layer, async () => {
             await gate;
-            return api(status).fetch(url, init);
-          },
+            return undefined;
+          }),
           now: () => now,
         },
         now,
@@ -365,7 +401,7 @@ test("a snapshot observed under a key since replaced is another key's roster: no
       rows: KEY_ROWS,
       secret: SECRET,
       store,
-      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      seams: { httpClient: api().layer, now: () => TEST_TIME },
       now: TEST_TIME,
     }),
   );
@@ -401,7 +437,7 @@ test("a snapshot observed under a key since replaced is another key's roster: no
       rows: replaced,
       secret: SECRET,
       store,
-      seams: { fetch: api(TEST_CONDUCTOR_STATUS.ERROR).fetch, now: () => TEST_TIME + 1_000 },
+      seams: { httpClient: api(TEST_CONDUCTOR_STATUS.ERROR).layer, now: () => TEST_TIME + 1_000 },
       now: TEST_TIME + 1_000,
     }),
   );
@@ -424,7 +460,7 @@ test("a snapshot this build cannot open or read is replaced by the next whole pa
         rows: KEY_ROWS,
         secret: SECRET,
         store,
-        seams: { fetch: api().fetch, now: () => TEST_TIME },
+        seams: { httpClient: api().layer, now: () => TEST_TIME },
         now: TEST_TIME,
       }),
     );
@@ -453,7 +489,7 @@ test("a store that cannot take the snapshot is a failed pass, never an unrecorde
       rows: KEY_ROWS,
       secret: SECRET,
       store,
-      seams: { fetch: api().fetch, now: () => TEST_TIME },
+      seams: { httpClient: api().layer, now: () => TEST_TIME },
       now: TEST_TIME,
     }),
   );

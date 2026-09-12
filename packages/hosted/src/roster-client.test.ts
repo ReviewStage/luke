@@ -7,8 +7,12 @@ import {
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
+import {
+  fakeCloudApi,
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  recordedRoutes,
+} from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import type { ObservedSession } from "./observe-wire.js";
@@ -82,7 +86,7 @@ it.effect("a read that answers nothing is nothing, not an empty roster", () =>
   Effect.gen(function* () {
     const answer = yield* Effect.provide(
       client({ readAccessToken: () => Effect.succeed(undefined) }).observe(),
-      layerFromCloudFetch(() => {
+      fakeHttpClientLayer(() => {
         throw new Error("must not travel without an account");
       }),
     );
@@ -224,7 +228,7 @@ it.effect(
       assert.equal(
         yield* Effect.provide(
           client().projects(),
-          layerFromCloudFetch(() => {
+          fakeHttpClientLayer(() => {
             throw new TypeError("fetch failed");
           }),
         ),

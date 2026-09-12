@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { HOSTED_BRAIN_DEFAULTS } from "../server/brain-app";
 import {
@@ -78,7 +79,7 @@ interface UpstreamCall {
 function upstream(answers: readonly (() => Response)[]) {
   const calls: UpstreamCall[] = [];
   const queue = [...answers];
-  const fetch = async (url: string, init: RequestInit): Promise<Response> => {
+  const layer = fakeHttpClientLayer((url, init) => {
     // SAFETY: every upstream body the handler sends is JSON.stringify output.
     const body = JSON.parse(String(init.body)) as UnparsedWireValue;
     assert.ok(isRecord(body));
@@ -86,8 +87,8 @@ function upstream(answers: readonly (() => Response)[]) {
     const answer = queue.shift();
     assert.ok(answer, "an unexpected upstream call was made");
     return answer();
-  };
-  return { fetch, calls };
+  });
+  return { layer, calls };
 }
 
 function options(overrides: Partial<BrainCall> & { request: Request }): BrainCall {
@@ -157,7 +158,7 @@ test("capabilities name the contract, the model, the operations, the registered 
 
 test("a respond request runs the prepared prompt over the schemas its names select, within the build's fixed settings", async () => {
   const output = [message("Nothing needs you.")];
-  const { fetch, calls } = upstream([
+  const { layer, calls } = upstream([
     () => Response.json({ id: "resp_1", status: "completed", output, usage: { input_tokens: 42 } }),
   ]);
   let spent = 0;
@@ -167,7 +168,7 @@ test("a respond request runs the prepared prompt over the schemas its names sele
         HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
         respondBody({ options: { maximumOutputTokens: 900, reasoningEffort: "low" } }),
       ),
-      fetch,
+      httpClient: layer,
       spend: async () => {
         spent += 1;
         return OPEN_SPEND;
@@ -207,7 +208,7 @@ test("a prefetch plan runs the one registered planning tool, forced, on the pref
     arguments: '{"reads":[]}',
     status: "completed",
   };
-  const { fetch, calls } = upstream([
+  const { layer, calls } = upstream([
     () => Response.json({ id: "resp_1", status: "completed", output: [plan] }),
     () => Response.json({ id: "resp_2", status: "completed", output: [message("Facts.")] }),
   ]);
@@ -226,7 +227,7 @@ test("a prefetch plan runs the one registered planning tool, forced, on the pref
         HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
         prefetchBody(HOSTED_BRAIN_PREFETCH_KIND.PLAN),
       ),
-      fetch,
+      httpClient: layer,
       spend: async () => {
         spent += 1;
         return OPEN_SPEND;
@@ -255,7 +256,7 @@ test("a prefetch plan runs the one registered planning tool, forced, on the pref
           options: { maximumOutputTokens: 350 },
         }),
       ),
-      fetch,
+      httpClient: layer,
     }),
   );
   assert.equal(summarized.status, 200);
@@ -280,7 +281,7 @@ test("a prefetch plan runs the one registered planning tool, forced, on the pref
 });
 
 test("a request's prompt cache key is forwarded upstream and kept nowhere", async () => {
-  const { fetch, calls } = upstream([
+  const { layer, calls } = upstream([
     () => Response.json({ id: "resp_1", status: "completed", output: [message("ok")] }),
   ]);
   const response = await brainAnswer(
@@ -289,7 +290,7 @@ test("a request's prompt cache key is forwarded upstream and kept nowhere", asyn
         HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
         respondBody({ options: { promptCacheKey: "9f86d0818" } }),
       ),
-      fetch,
+      httpClient: layer,
     }),
   );
   assert.equal(response.status, 200);
@@ -307,9 +308,9 @@ test("each refusal answers its own error before anything is spent: prompt envelo
           spent += 1;
           return OPEN_SPEND;
         },
-        fetch: async () => {
+        httpClient: fakeHttpClientLayer(async () => {
           throw new Error("nothing may reach upstream");
-        },
+        }),
       }),
     );
     return { status: response.status, error: await errorOf(response) };
@@ -378,7 +379,7 @@ test("a spent allowance answers 429 with the quota, and an upstream fault or an 
   const failed = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
-      fetch: failing.fetch,
+      httpClient: failing.layer,
     }),
   );
   assert.equal(failed.status, 502);
@@ -389,14 +390,14 @@ test("a spent allowance answers 429 with the quota, and an upstream fault or an 
   const refused = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
-      fetch: unreplayable.fetch,
+      httpClient: unreplayable.layer,
     }),
   );
   assert.equal(refused.status, 502);
 });
 
 test("count-tokens posts the prepared request without an output budget and answers the count alone", async () => {
-  const { fetch, calls } = upstream([
+  const { layer, calls } = upstream([
     () => Response.json({ object: "response.input_tokens", input_tokens: 1_234 }),
   ]);
   const response = await brainAnswer(
@@ -407,7 +408,7 @@ test("count-tokens posts the prepared request without an output budget and answe
         tools: [BRAIN_TOOL.ANNOUNCE],
         input: INPUT,
       }),
-      fetch,
+      httpClient: layer,
     }),
   );
   assert.equal(response.status, 200);
@@ -431,20 +432,23 @@ test("count-tokens posts the prepared request without an output budget and answe
         tools: [],
         input: INPUT,
       }),
-      fetch: malformed.fetch,
+      httpClient: malformed.layer,
     }),
   );
   assert.equal(bad.status, 502);
 });
 
 test("a provider rate limit behind the service answers 429 as the provider's throttle with a bounded Retry-After, apart from a spent allowance", async () => {
-  const { fetch } = upstream([
+  const { layer } = upstream([
     () => new Response("", { status: 429, headers: { "retry-after": "12" } }),
     () => new Response("", { status: 429, headers: { "retry-after": "86400" } }),
     () => new Response("", { status: 429 }),
   ]);
   const throttled = await brainAnswer(
-    options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
+    options({
+      request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
+      httpClient: layer,
+    }),
   );
   assert.equal(throttled.status, 429);
   assert.equal(throttled.headers.get("retry-after"), "12");
@@ -455,14 +459,20 @@ test("a provider rate limit behind the service answers 429 as the provider's thr
   assert.equal(body.upstreamStatus, 429);
   assert.ok(!("quota" in body));
   const bounded = await brainAnswer(
-    options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
+    options({
+      request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
+      httpClient: layer,
+    }),
   );
   assert.equal(
     bounded.headers.get("retry-after"),
     String(BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS / 1000),
   );
   const bare = await brainAnswer(
-    options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
+    options({
+      request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
+      httpClient: layer,
+    }),
   );
   assert.equal(bare.headers.get("retry-after"), String(BRAIN_RATE_LIMIT_COOLDOWN_MS / 1000));
 });

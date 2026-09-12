@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import {
   fakeCloudApi,
   HTTP_STATUS,
   jsonResponse,
   recordedRoutes,
-  recordingFetch,
+  recordingHttpClient,
 } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedDeviceClient } from "./device-client.js";
@@ -125,14 +124,14 @@ it.effect("a 401 refreshes the account and retries once on the new token", () =>
     let refreshes = 0;
     // The status moves between the two attempts, which a fake route's own
     // fixed status cannot express, so this one recording answers by hand.
-    const { requests, fetch } = recordingFetch((request) =>
+    const { requests, layer } = recordingHttpClient((request) =>
       request.authorization === "Bearer token-2"
         ? jsonResponse({ deviceId: DEVICE_ID })
         : jsonResponse({ error: "invalid-token" }, HTTP_STATUS.UNAUTHORIZED),
     );
 
     const answer = yield* Effect.promise(() =>
-      client(layerFromCloudFetch(fetch), {
+      client(layer, {
         readAccessToken: () => Effect.succeed(tokens.shift()),
         refreshAccount: () =>
           Effect.sync(() => {

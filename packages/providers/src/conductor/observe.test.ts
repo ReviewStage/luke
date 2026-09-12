@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
+import * as HttpClient from "@effect/platform/HttpClient";
+import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
   ACTION_KIND,
   advertisedActionFor,
   advertisedControls,
   SESSION_STATUS,
 } from "@sidecar/session";
-import type { CloudFetch } from "@sidecar/wire";
-import { HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
+import {
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  jsonResponse,
+  type RecordingHttpClient,
+} from "@sidecar/wire/testing";
+import { Effect, Layer } from "effect";
 import { test } from "vitest";
 import {
   ERRORED_SESSION_UUID,
@@ -31,7 +38,7 @@ import {
 import { CONDUCTOR_PROVIDER } from "./vocabulary.js";
 
 test("names every action Conductor documents, and none it does not", () => {
-  const plugin = pluginFor(async () => new Response("{}", { status: 200 }));
+  const plugin = pluginFor(fakeHttpClientLayer(() => jsonResponse({})));
 
   assert.deepEqual(Object.keys(plugin.actions ?? {}).sort(), [
     "control",
@@ -68,7 +75,7 @@ test("observes cloud sessions the signed-in user created, under their own names"
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(CONDUCTOR_PROVIDER, { id: "conductor", displayName: "Conductor" });
   assert.equal(observations.length, 1);
@@ -133,7 +140,7 @@ test("reports an idle session as waiting and an errored session with its reason"
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.equal(observations.length, 2);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -165,7 +172,7 @@ test("words a workspace still being built onto its rows, ready and asleep say no
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // A workspace being stood up or rebuilt is why its chat sits quiet, so the
@@ -213,7 +220,7 @@ test("reports the failure that kept a workspace from coming up, behind the chat'
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(
@@ -245,7 +252,7 @@ test("a failed lifecycle read costs the workspace's words, never the pass", asyn
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(observations.length, 1);
@@ -284,7 +291,7 @@ test("reads each chat's agent kind from the transcripts view, and nothing else",
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.equal(observations.length, 2);
   const idle = observations.find((candidate) => candidate.providerSessionId === IDLE_SESSION_UUID);
@@ -342,7 +349,7 @@ test("reports the agent kind whatever state the chat is in", async () => {
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.equal(observations.length, 2);
   // The agent kind is configuration, not conversation, so it rides regardless.
@@ -379,7 +386,7 @@ test("keeps a session id that is not a UUID out of the read document", async () 
     ],
   });
 
-  await pluginFor(api.fetch).observe();
+  await pluginFor(api.layer).observe();
 
   const reads = api.requests.filter((request) => request.pathname === "/v0/sql");
   assert.equal(reads.length, 1);
@@ -399,7 +406,7 @@ test("keeps a session id that is not a UUID out of the read document", async () 
       },
     ],
   });
-  await pluginFor(uuidlessApi.fetch).observe();
+  await pluginFor(uuidlessApi.layer).observe();
   assert.equal(
     uuidlessApi.requests.every((request) => request.method === "GET"),
     true,
@@ -425,7 +432,7 @@ test("a refused transcripts read costs the agent kind, never the pass", async ()
     sqlHttpStatus: HTTP_STATUS.SERVER_ERROR,
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -451,7 +458,7 @@ test("a refused transcripts read costs the agent kind, never the pass", async ()
     sqlHttpStatus: HTTP_STATUS.UNAUTHORIZED,
   });
 
-  const scopedKeyObservations = await pluginFor(scopedKeyApi.fetch).observe();
+  const scopedKeyObservations = await pluginFor(scopedKeyApi.layer).observe();
 
   assert.equal(scopedKeyObservations.length, 1);
   assert.equal(scopedKeyObservations[0]?.status, SESSION_STATUS.WAITING);
@@ -486,7 +493,7 @@ test("reports every chat in a workspace, each grouped under it", async () => {
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   assert.equal(observations.length, 2);
@@ -538,7 +545,7 @@ test("does not carry a past failure into a session that recovered", async () => 
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   // `lastError` is the last failure a session ever had, not its current state,
   // and the row puts an error ahead of everything else on it.
@@ -562,7 +569,7 @@ test("keeps an errored session errored after it goes stale", async () => {
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   // A failure does not heal by going stale, unlike an idle chat.
   assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
@@ -594,7 +601,7 @@ test("titles each chat by its own name and its group by the workspace's", async 
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.title),
@@ -634,7 +641,7 @@ test("leaves a filed-away chat off the roster while its workspace stays", async 
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -674,7 +681,7 @@ test("keeps reporting a long turn as working", async () => {
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
@@ -712,7 +719,7 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.equal(observations[0]?.providerSessionId, "session-abandoned");
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -738,7 +745,7 @@ test("adopts the provider's timestamp again the moment the chat's work moves", a
     sessions: [chat],
   });
   let now = TEST_TIME;
-  const plugin = pluginFor(api.fetch, { now: () => now });
+  const plugin = pluginFor(api.layer, { now: () => now });
   await plugin.observe();
 
   // The user sends the woken chat a message: the status itself moves.
@@ -784,7 +791,7 @@ test("a whole turn between passes reads as unmoved", async () => {
     sessions: [chat],
   });
   let now = TEST_TIME;
-  const plugin = pluginFor(api.fetch, { now: () => now });
+  const plugin = pluginFor(api.layer, { now: () => now });
   await plugin.observe();
 
   const settledAt = TEST_TIME + 60_000;
@@ -818,7 +825,7 @@ test("a chat with no readable status falls back to its workspace's moment", asyn
     sessions: [chat],
   });
   let now = TEST_TIME;
-  const plugin = pluginFor(api.fetch, { now: () => now });
+  const plugin = pluginFor(api.layer, { now: () => now });
 
   const unreadable = await plugin.observe();
   assert.equal(unreadable[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -860,7 +867,7 @@ test("ignores workspaces created by another user and workspaces without a creato
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(observations, []);
 });
@@ -875,7 +882,7 @@ test("keeps a workspace untouched since the day before yesterday", async () => {
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -900,7 +907,7 @@ test("observes every workspace and chat the pages hold", async () => {
     })),
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -934,7 +941,7 @@ test("keeps an old open workspace that newer pages would have crowded out", asyn
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -979,7 +986,7 @@ test("lets a crowded workspace keep every chat beside its quiet neighbour", asyn
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const observedIds = observations.map((observation) => observation.providerSessionId);
   assert.equal(observedIds.includes("quiet-session"), true);
   assert.equal(observations.length, 9);
@@ -1007,7 +1014,7 @@ test("keeps only the open chats of a workspace that also holds filed-away ones",
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   // The filed-away chats earn no rows; the one still open is the workspace's
   // only voice, and it reports its own state.
@@ -1017,6 +1024,31 @@ test("keeps only the open chats of a workspace that also holds filed-away ones",
   );
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
+
+/**
+ * The fake's own client until the gate closes, and a refused key after it, so
+ * one plugin sees its key stop working mid-life.
+ */
+function refusingWhen(
+  api: RecordingHttpClient,
+  rejecting: () => boolean,
+): Layer.Layer<HttpClient.HttpClient> {
+  return Layer.provide(
+    Layer.effect(
+      HttpClient.HttpClient,
+      Effect.map(HttpClient.HttpClient, (client) =>
+        HttpClient.make((request) =>
+          rejecting()
+            ? Effect.succeed(
+                HttpClientResponse.fromWeb(request, jsonResponse({}, HTTP_STATUS.UNAUTHORIZED)),
+              )
+            : client.execute(request),
+        ),
+      ),
+    ),
+    api.layer,
+  );
+}
 
 test("clears observations when Conductor rejects the API key", async () => {
   const api = fakeConductorApi({
@@ -1034,9 +1066,7 @@ test("clears observations when Conductor rejects the API key", async () => {
     ],
   });
   let rejectRequests = false;
-  const gatedFetch: CloudFetch = async (url, init) =>
-    rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
-  const plugin = pluginFor(gatedFetch);
+  const plugin = pluginFor(refusingWhen(api, () => rejectRequests));
 
   const authorized = await plugin.observe();
   rejectRequests = true;
@@ -1068,7 +1098,7 @@ test("keeps observing when one session's status cannot be read", async () => {
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // One chat's unreadable status costs nobody a row: the readable sibling
@@ -1117,7 +1147,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   const takesMessage = (sessionId: string): boolean =>
@@ -1171,7 +1201,7 @@ test("keeps the archive off every chat of a workspace while a sibling works", as
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // The idle chat's own turn is settled, but the workspace an archive acts on
@@ -1198,7 +1228,7 @@ test("keeps the archive off a workspace whose chat's state could not be read", a
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   // An unread status is not a settled one: the chat stands as unknown rather
   // than being dropped, and a workspace not positively seen settled offers no
@@ -1249,7 +1279,7 @@ test("leaves a filed-away workspace and its chats off the roster entirely", asyn
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -1288,7 +1318,7 @@ test("leaves a workspace whose lifecycle stands archived off the roster", async 
     ],
   });
 
-  const observations = await pluginFor(api.fetch).observe();
+  const observations = await pluginFor(api.layer).observe();
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),

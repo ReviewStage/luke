@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { HttpApp } from "@effect/platform";
 import { PROVIDER_ID } from "@sidecar/session";
-import type { CloudFetch, WireBoundaryInput } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import type { WireBoundaryInput } from "@sidecar/wire";
+import { type FakeResponder, fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Redacted } from "effect";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
@@ -95,8 +95,8 @@ function forgetAnalytics(state: Backing) {
   };
 }
 
-/** The group's analytics transport: the same success or failure, reached through the injected `fetch` seam instead. */
-function forgetAnalyticsFetch(state: Backing): CloudFetch {
+/** The group's analytics transport: the same success or failure, reached through the injected client instead. */
+function forgetAnalyticsResponder(state: Backing): FakeResponder {
   return async () => {
     if (state.forgetAnalyticsFails) throw new Error("processor unreachable");
     state.forgotten.push(USER_ID);
@@ -130,7 +130,7 @@ function groupAnswer(state: Backing, request: Request): Promise<Response> {
   const handler = HttpApp.toWebHandler(
     accountApp(groupSeams(state)).pipe(
       Effect.provideService(HostedEnvironment, ENVIRONMENT),
-      Effect.provide(layerFromCloudFetch(forgetAnalyticsFetch(state))),
+      Effect.provide(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
     ),
   );
   return handler(request);

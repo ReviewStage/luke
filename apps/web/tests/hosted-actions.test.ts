@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import type { Layer } from "effect";
 import { test } from "vitest";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
 import { ACTION_KIND, ACTION_REFUSAL, type WireRecord } from "../server/core";
@@ -302,7 +305,7 @@ function conductorApi(status: string) {
   const posts: Array<{ url: string; body: string }> = [];
   const reads: string[] = [];
   const json = (value: JsonObject) => new Response(JSON.stringify(value), { status: 200 });
-  const fetch = async (url: string, init: RequestInit) => {
+  const layer = fakeHttpClientLayer((url, init) => {
     const { pathname } = new URL(url);
     if (init.method === "POST") {
       if (pathname.endsWith("/v0/sql")) {
@@ -380,11 +383,11 @@ function conductorApi(status: string) {
       return json(statusPayload);
     }
     return new Response("{}", { status: 500 });
-  };
-  return { fetch, posts, reads };
+  });
+  return { layer, posts, reads };
 }
 
-/** The fake API one case runs against: its fetch, and what the action posted through it. */
+/** The fake API one case runs against: its client, and what the action posted through it. */
 type ConductorApi = ReturnType<typeof conductorApi>;
 
 const KEY_ROWS: VaultKeyRow[] = [
@@ -404,7 +407,7 @@ async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
       rows: KEY_ROWS,
       secret: SECRET,
       store,
-      seams: { fetch: api.fetch },
+      seams: { httpClient: api.layer },
       now: NOW,
     }),
   );
@@ -419,9 +422,9 @@ async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
       // the provider itself is never asked while a matching snapshot stands.
       readVaultKeys: async () => KEY_ROWS,
       seams: {
-        fetch: async () => {
+        httpClient: fakeHttpClientLayer(async () => {
           throw new Error("no pass runs for a user with a snapshot");
-        },
+        }),
       },
       now: NOW + 1,
     }),
@@ -442,7 +445,7 @@ async function ask(
     fields: { provider_id: "conductor", ...fields },
     apiKey: "key-1",
     roster,
-    seams: { fetch: api.fetch },
+    seams: { httpClient: api.layer },
   });
   // No read runs on an action: the snapshot is the roster, and the provider
   // sees only the write itself.
@@ -502,7 +505,7 @@ test("a message to a session the snapshot does not hold is rejected", async () =
  * A user no pass has reached yet: the action's roster is the pass that seeds
  * the snapshot, and when that pass fails the roster is empty and says why.
  */
-async function seededRoster(fetch: (url: string, init: RequestInit) => Promise<Response>) {
+async function seededRoster(httpClient: Layer.Layer<HttpClient.HttpClient>) {
   const store = memoryObservationStore();
   const roster = await runWithoutDatabase(
     rosterForAction({
@@ -511,7 +514,7 @@ async function seededRoster(fetch: (url: string, init: RequestInit) => Promise<R
       secret: SECRET,
       store,
       readVaultKeys: async () => KEY_ROWS,
-      seams: { fetch },
+      seams: { httpClient },
       now: NOW,
     }),
   );
@@ -519,7 +522,8 @@ async function seededRoster(fetch: (url: string, init: RequestInit) => Promise<R
 }
 
 test("a key the provider refuses is named as the reason, not a missing session, and seeds no snapshot", async () => {
-  const { roster, store } = await seededRoster(async () => new Response("{}", { status: 401 }));
+  const refusedKey = fakeHttpClientLayer(() => new Response("{}", { status: 401 }));
+  const { roster, store } = await seededRoster(refusedKey);
   const answer = await executeSessionAction({
     kind: ACTION_KIND.MESSAGE,
     providerId: "conductor",
@@ -530,7 +534,7 @@ test("a key the provider refuses is named as the reason, not a missing session, 
     },
     apiKey: "key-1",
     roster,
-    seams: { fetch: async () => new Response("{}", { status: 401 }) },
+    seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
   });
 
   assert.equal(answer.result, "rejected");
@@ -539,9 +543,9 @@ test("a key the provider refuses is named as the reason, not a missing session, 
 });
 
 test("a provider that cannot be reached is named as the reason", async () => {
-  const unreachable = async () => {
+  const unreachable = fakeHttpClientLayer(() => {
     throw new Error("connection refused");
-  };
+  });
   const { roster } = await seededRoster(unreachable);
   const answer = await executeSessionAction({
     kind: ACTION_KIND.MESSAGE,
@@ -553,7 +557,7 @@ test("a provider that cannot be reached is named as the reason", async () => {
     },
     apiKey: "key-1",
     roster,
-    seams: { fetch: unreachable },
+    seams: { httpClient: unreachable },
   });
 
   assert.equal(answer.result, "rejected");
@@ -569,7 +573,7 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
       secret: SECRET,
       store,
       readVaultKeys: async () => KEY_ROWS,
-      seams: { fetch: api.fetch },
+      seams: { httpClient: api.layer },
       now: NOW,
     }),
   );
@@ -584,7 +588,7 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
       secret: SECRET,
       store,
       readVaultKeys: async () => KEY_ROWS,
-      seams: { fetch: api.fetch },
+      seams: { httpClient: api.layer },
       now: NOW + 1,
     }),
   );
@@ -602,7 +606,7 @@ test("an action under a replaced key is admitted against a fresh pass, not the o
       secret: SECRET,
       store,
       readVaultKeys: async () => KEY_ROWS,
-      seams: { fetch: api.fetch },
+      seams: { httpClient: api.layer },
       now: NOW,
     }),
   );
@@ -618,7 +622,7 @@ test("an action under a replaced key is admitted against a fresh pass, not the o
       secret: SECRET,
       store,
       readVaultKeys: async () => replaced,
-      seams: { fetch: api.fetch },
+      seams: { httpClient: api.layer },
       now: NOW + 1,
     }),
   );

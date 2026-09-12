@@ -141,7 +141,7 @@ function conversationApi(overrides: Partial<TestSession> = {}, api: Partial<Test
 
 test("reads an observed chat's conversation as the attributed words alone", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
@@ -186,7 +186,7 @@ test("reads an observed chat's conversation as the attributed words alone", asyn
 
 test("continues a conversation read behind the cursor its last answer handed back", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchConversation(plugin, {
@@ -211,7 +211,7 @@ test("continues a conversation read behind the cursor its last answer handed bac
 
 test("a poll walks the store's pages to the fixed bounds and answers hasMore honestly", async () => {
   const api = conversationApi(undefined, { messagesPageSize: 3 });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchConversation(plugin, {
@@ -241,7 +241,7 @@ test("a poll walks the store's pages to the fixed bounds and answers hasMore hon
 
 test("refuses a conversation read for anything the latest pass did not stand behind", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -300,7 +300,7 @@ function longConversationApi() {
 
 test("an opening read walks to the end of a long transcript one page at a time", async () => {
   const api = longConversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -330,7 +330,7 @@ test("an opening read walks to the end of a long transcript one page at a time",
 
 test("a re-opened chat costs one request, from where the last read reached", async () => {
   const api = longConversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
   const requestsBefore = api.requests.length;
@@ -352,11 +352,11 @@ test("a re-opened chat costs one request, from where the last read reached", asy
 
 test("a transcript cleared behind the cached end is walked again from its start", async () => {
   const api = longConversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   await dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID });
   const emptied = conversationApi({ storedMessages: [] });
-  const restarted = pluginFor(emptied.fetch);
+  const restarted = pluginFor(emptied.layer);
   await restarted.observe();
 
   // A cached offset past a transcript the developer cleared on Conductor's
@@ -370,7 +370,7 @@ test("a transcript cleared behind the cached end is walked again from its start"
 
 test("a scroll to the top reads the history just before what the screen holds", async () => {
   const api = longConversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchConversation(plugin, {
@@ -408,7 +408,7 @@ test("refuses a conversation read for an observed id that is not a UUID", async 
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -423,7 +423,7 @@ test("refuses a conversation read for an observed id that is not a UUID", async 
 
 test("a conversation read names what refused it without echoing the provider", async () => {
   const refusedKey = conversationApi({ messagesHttpStatus: HTTP_STATUS.UNAUTHORIZED });
-  const refusedKeyAdapter = pluginFor(refusedKey.fetch);
+  const refusedKeyAdapter = pluginFor(refusedKey.layer);
   await refusedKeyAdapter.observe();
   const unauthorized = await dispatchConversation(refusedKeyAdapter, {
     providerSessionId: IDLE_SESSION_UUID,
@@ -436,7 +436,7 @@ test("a conversation read names what refused it without echoing the provider", a
   // A cursor the store no longer holds answers 404, which reads as the same
   // transient refusal any unreadable answer does — never a fresh guess.
   const staleCursor = conversationApi();
-  const staleCursorAdapter = pluginFor(staleCursor.fetch);
+  const staleCursorAdapter = pluginFor(staleCursor.layer);
   await staleCursorAdapter.observe();
   const stale = await dispatchConversation(staleCursorAdapter, {
     providerSessionId: IDLE_SESSION_UUID,
@@ -450,7 +450,7 @@ test("a conversation read names what refused it without echoing the provider", a
 
 test("the brain's transcript read renders the attributed words one line each, in the shared vocabulary", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -493,7 +493,7 @@ test("a transcript read renders a long message whole, with its line breaks", asy
       ),
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
@@ -510,7 +510,7 @@ test("a transcript read renders a long message whole, with its line breaks", asy
 
 test("a transcript read of a chat longer than one page reaches the stored newest message", async () => {
   const api = longConversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
@@ -524,7 +524,7 @@ test("a transcript read of a chat longer than one page reaches the stored newest
 
 test("a transcript read refuses a session the latest pass did not report and reaches nothing", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -540,7 +540,7 @@ test("a transcript read of a chat with no attributed words is not found rather t
       storedAgentEvent(STORED_MESSAGE_UUIDS[7], { type: "system", subtype: "init" }, TEST_TIME),
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
@@ -553,7 +553,7 @@ test("a transcript read of a chat with no attributed words is not found rather t
 
 test("a transcript read that Conductor refuses is rejected with the reason, never thrown", async () => {
   const api = conversationApi({ messagesHttpStatus: HTTP_STATUS.UNAUTHORIZED });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
@@ -564,7 +564,7 @@ test("a transcript read that Conductor refuses is rejected with the reason, neve
 
 test("the brain's incremental read with no cursor answers the newest page, says the front was cut only when history precedes it, and hands back the newest stored id", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const read = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined);
@@ -584,7 +584,7 @@ test("the brain's incremental read with no cursor answers the newest page, says 
 
 test("the brain's incremental read behind a cursor answers only what is newer and moves the cursor past lifecycle noise", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -613,7 +613,7 @@ test("the brain's incremental read behind a cursor answers only what is newer an
 
 test("the brain's incremental read refuses a cursor Conductor never handed back and a session the pass did not report", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -631,7 +631,7 @@ test("the brain's incremental read refuses a cursor Conductor never handed back 
 
 test("the brain's reads answer for a roster the host hands in, not only the pass's own", async () => {
   const api = conversationApi();
-  const plugin = pluginFor(api.fetch, { reported: () => [] });
+  const plugin = pluginFor(api.layer, { reported: () => [] });
   await plugin.observe();
 
   const read = await dispatchRead(plugin, "transcript", IDLE_SESSION_UUID);
@@ -640,7 +640,7 @@ test("the brain's reads answer for a roster the host hands in, not only the pass
 
 test("the brain's first incremental read of a long chat answers one page's worth from the end and says the front was cut", async () => {
   const api = longConversationApi();
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const read = await dispatchRead(plugin, "transcriptSince", IDLE_SESSION_UUID, undefined);

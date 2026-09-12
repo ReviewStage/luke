@@ -1,7 +1,8 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
+import type { Layer } from "effect";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
-  type CloudFetch,
   type SessionProviderPlugin,
 } from "../core.js";
 import { cloudSessionPluginFor } from "./cloud-adapters.js";
@@ -35,8 +36,8 @@ export function readApiKeyFor(
 }
 
 export interface ProviderPassSeams {
-  /** Injected in tests; production uses the global fetch. */
-  fetch?: CloudFetch | undefined;
+  /** Injected in tests; production uses the platform's own fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient> | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -63,7 +64,7 @@ export async function observeProviders<Answer>(options: {
       options.read(
         cloudSessionPluginFor(providerId, {
           readApiKey: options.readApiKey(providerId),
-          ...(options.seams.fetch ? { fetch: options.seams.fetch } : undefined),
+          ...(options.seams.httpClient ? { httpClient: options.seams.httpClient } : undefined),
           ...(options.seams.now ? { now: options.seams.now } : undefined),
         }),
       ),

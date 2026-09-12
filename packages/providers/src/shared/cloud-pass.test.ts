@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type * as HttpClient from "@effect/platform/HttpClient";
 import { describe, it } from "@effect/vitest";
 import {
   ACTION_KIND,
@@ -13,10 +14,15 @@ import {
   SESSION_STATUS,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
-import { type CloudFetch, isWireString } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { admittedForTest, HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
-import { Duration, Effect, Exit, Fiber, TestClock } from "effect";
+import { isWireString } from "@sidecar/wire";
+import {
+  admittedForTest,
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  jsonResponse,
+  recordingHttpClient,
+} from "@sidecar/wire/testing";
+import { Duration, Effect, Exit, Fiber, type Layer, TestClock } from "effect";
 import { test } from "vitest";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import { ADAPTER_FAILURE } from "./adapter-failure.js";
@@ -45,8 +51,8 @@ const STUB_PROVIDER = { id: "stub", displayName: "Stub" };
 /** A read document the build would fix, standing in for a provider's own. */
 const STUB_READ_DOCUMENT = "query Transcript { messages { id } }";
 
-function stubFetch(status: () => number = () => HTTP_STATUS.OK) {
-  return recordingFetch(() => jsonResponse({}, status()));
+function stubClient(status: () => number = () => HTTP_STATUS.OK) {
+  return recordingHttpClient(() => jsonResponse({}, status()));
 }
 
 function observation(
@@ -110,7 +116,10 @@ interface StubOptions {
   routesNothing?: boolean;
 }
 
-function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubCloudPlugin {
+function stubPluginFor(
+  httpClient: Layer.Layer<HttpClient.HttpClient>,
+  overrides: StubOptions = {},
+): StubCloudPlugin {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   const state: StubState = {
     passes: 0,
@@ -125,7 +134,7 @@ function stubPluginFor(fetch: CloudFetch, overrides: StubOptions = {}): StubClou
     ...(overrides.requestHeaders ? { requestHeaders: overrides.requestHeaders } : undefined),
     readApiKey: overrides.readApiKey ?? (async () => apiKey),
     baseUrl: TEST_BASE_URL,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
@@ -225,8 +234,8 @@ test("answers unsupported explicitly when no observed route exists", async () =>
   // A provider that routes a message and one whose actions are all absent answer
   // the same way for a session no pass reported: what the observation does
   // not hold, no handler is reached for.
-  const routed = stubPluginFor(stubFetch().fetch);
-  const observesOnly = stubPluginFor(stubFetch().fetch, { routesNothing: true });
+  const routed = stubPluginFor(stubClient().layer);
+  const observesOnly = stubPluginFor(stubClient().layer, { routesNothing: true });
   for (const plugin of [routed, observesOnly]) {
     assert.deepEqual(
       await dispatchAction(
@@ -255,8 +264,8 @@ test("accepts only a state this build knows", () => {
 });
 
 test("authenticates a bounded read and encodes the route a subclass asked for", async () => {
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch);
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [observation("session-one")];
 
   const observations = await plugin.observe();
@@ -274,8 +283,8 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
 });
 
 test("lets a provider pin its own request headers without touching the credential", async () => {
-  const { fetch, requests } = recordingFetch(() => jsonResponse({}));
-  const plugin = stubPluginFor(fetch, {
+  const { layer, requests } = recordingHttpClient(() => jsonResponse({}));
+  const plugin = stubPluginFor(layer, {
     requestHeaders: { Accept: "application/vnd.stub+json", "X-Stub-Api-Version": "2026-03-10" },
   });
 
@@ -290,8 +299,8 @@ test("lets a provider pin its own request headers without touching the credentia
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports every session it serves as running in the cloud", async () => {
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch);
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer);
   // Neither observation says where it runs: the base knows, because nothing
   // reaches it except over the network.
   plugin.collected = [observation("session-one"), observation("session-two")];
@@ -305,8 +314,8 @@ test("reports every session it serves as running in the cloud", async () => {
 });
 
 test("drops a session a subclass reported twice in one pass", async () => {
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch);
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [
     observation("session-repeated", { status: SESSION_STATUS.WORKING }),
     observation("session-repeated", { status: SESSION_STATUS.COMPLETE }),
@@ -323,8 +332,8 @@ test("drops a session a subclass reported twice in one pass", async () => {
 });
 
 test("leaves a stopped session unknown once its timestamp goes stale", async () => {
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch);
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [
     observation("session-recent", { lastActivityAt: TEST_TIME - 60_000 }),
     observation("session-stale", { lastActivityAt: TEST_TIME - 60 * 60 * 1000 }),
@@ -337,9 +346,9 @@ test("leaves a stopped session unknown once its timestamp goes stale", async () 
 });
 
 test("forgets cached identity when the credential changes, and reports nothing without one", async () => {
-  const stub = stubFetch();
+  const stub = stubClient();
   let apiKey: string | undefined = TEST_API_KEY;
-  const plugin = stubPluginFor(stub.fetch, { readApiKey: async () => apiKey });
+  const plugin = stubPluginFor(stub.layer, { readApiKey: async () => apiKey });
   plugin.collected = [observation("session-one")];
 
   await plugin.observe();
@@ -360,8 +369,8 @@ test("forgets cached identity when the credential changes, and reports nothing w
 test("clears observations when the provider rejects the credential", async () => {
   let rejectRequests = false;
   const diagnostics: unknown[] = [];
-  const stub = stubFetch(() => (rejectRequests ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.OK));
-  const plugin = stubPluginFor(stub.fetch, {
+  const stub = stubClient(() => (rejectRequests ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.OK));
+  const plugin = stubPluginFor(stub.layer, {
     onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
   });
   plugin.collected = [observation("session-one")];
@@ -392,17 +401,17 @@ function deferred() {
  */
 function accountBoundPlugin(options: {
   readApiKey: () => Promise<string | undefined>;
-  fetch: CloudFetch;
+  httpClient: Layer.Layer<HttpClient.HttpClient>;
   minimumRefreshIntervalMs: number;
 }) {
-  const { fetch, ...rest } = options;
+  const { httpClient, ...rest } = options;
   return cloudPass({
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     now: () => TEST_TIME,
     ...rest,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient,
     collect: (request) =>
       Effect.map(
         Effect.all([request(["sessions", "first"]), request(["sessions", "second"])]),
@@ -421,13 +430,13 @@ function accountBoundPlugin(options: {
 const OLD_ACCOUNT_SESSION = "session-from-old-account";
 const NEW_ACCOUNT_SESSION = "session-from-new-account";
 
-function accountBoundFetch(options: { oldKeyGate: Promise<void>; oldKeyStatus?: number }) {
+function accountBoundClient(options: { oldKeyGate: Promise<void>; oldKeyStatus?: number }) {
   const sessionByAuthorization = new Map<string, string>([
     ["Bearer first-key", OLD_ACCOUNT_SESSION],
     ["Bearer second-key", NEW_ACCOUNT_SESSION],
   ]);
   const authorizations: string[] = [];
-  const fetch: CloudFetch = async (_url, init) => {
+  const layer = fakeHttpClientLayer(async (_url, init) => {
     const authorization = new Headers(init.headers).get("authorization") ?? "";
     authorizations.push(authorization);
     let status: number = HTTP_STATUS.OK;
@@ -436,8 +445,8 @@ function accountBoundFetch(options: { oldKeyGate: Promise<void>; oldKeyStatus?: 
       status = options.oldKeyStatus ?? HTTP_STATUS.OK;
     }
     return jsonResponse({ session: sessionByAuthorization.get(authorization) }, status);
-  };
-  return { fetch, authorizations };
+  });
+  return { layer, authorizations };
 }
 
 function sessionIds(observations: readonly ProviderSessionObservation[]): string[] {
@@ -450,11 +459,11 @@ test("a pass superseded by a key rotation neither lands nor keeps using the old 
   // served under the new credential, and the replaced key must not be used for
   // the rest of the superseded pass.
   const oldKeyRequest = deferred();
-  const { fetch, authorizations } = accountBoundFetch({ oldKeyGate: oldKeyRequest.promise });
+  const { layer, authorizations } = accountBoundClient({ oldKeyGate: oldKeyRequest.promise });
   let apiKey = "first-key";
   const plugin = accountBoundPlugin({
     readApiKey: async () => apiKey,
-    fetch,
+    httpClient: layer,
     minimumRefreshIntervalMs: 0,
   });
 
@@ -477,14 +486,14 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
   // The old key is often rotated out precisely because it was revoked, so its
   // rejection arrives after the new key has already observed sessions.
   const oldKeyRequest = deferred();
-  const { fetch } = accountBoundFetch({
+  const { layer } = accountBoundClient({
     oldKeyGate: oldKeyRequest.promise,
     oldKeyStatus: HTTP_STATUS.UNAUTHORIZED,
   });
   let apiKey = "first-key";
   const plugin = accountBoundPlugin({
     readApiKey: async () => apiKey,
-    fetch,
+    httpClient: layer,
     minimumRefreshIntervalMs: 60_000,
   });
 
@@ -505,8 +514,8 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
 test("a transient provider failure keeps the previous snapshot", async () => {
   let status: number = HTTP_STATUS.OK;
   const diagnostics: unknown[] = [];
-  const stub = stubFetch(() => status);
-  const plugin = stubPluginFor(stub.fetch, {
+  const stub = stubClient(() => status);
+  const plugin = stubPluginFor(stub.layer, {
     onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
   });
   plugin.collected = [observation("session-one")];
@@ -524,8 +533,8 @@ test("a transient provider failure keeps the previous snapshot", async () => {
 test("a programming error during observation is reported rather than swallowed", async () => {
   const diagnostics: unknown[] = [];
   let now = TEST_TIME;
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch, {
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer, {
     now: () => now,
     minimumRefreshIntervalMs: 60_000,
     onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
@@ -551,8 +560,8 @@ test("a programming error during observation is reported rather than swallowed",
 });
 
 test("issues no request at all when the credential cannot be read", async () => {
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch, {
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer, {
     readApiKey: async () => {
       throw new Error("settings are unreadable");
     },
@@ -565,8 +574,8 @@ test("issues no request at all when the credential cannot be read", async () => 
 });
 
 test("sends a user message through the route and body the provider documents", async () => {
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch);
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
@@ -588,9 +597,9 @@ test("sends a user message through the route and body the provider documents", a
 });
 
 test("refuses to send once the credential is gone, whatever was observed with it", async () => {
-  const stub = stubFetch();
+  const stub = stubClient();
   let apiKey: string | undefined = TEST_API_KEY;
-  const plugin = stubPluginFor(stub.fetch, { readApiKey: async () => apiKey });
+  const plugin = stubPluginFor(stub.layer, { readApiKey: async () => apiKey });
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
   const observationRequests = stub.requests.length;
@@ -612,8 +621,8 @@ test("refuses to send once the credential is gone, whatever was observed with it
 
 test("reports what became of a send the provider refused", async () => {
   let status: number = HTTP_STATUS.OK;
-  const stub = stubFetch(() => status);
-  const plugin = stubPluginFor(stub.fetch);
+  const stub = stubClient(() => status);
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
   const message = { providerSessionId: "session-one", text: "go on" };
@@ -635,11 +644,11 @@ test("reports what became of a send the provider refused", async () => {
 
 test("reports an unanswered send as indeterminate and makes the next refresh ask", async () => {
   let failWrites = false;
-  const { fetch } = recordingFetch((request) => {
+  const { layer } = recordingHttpClient((request) => {
     if (failWrites && request.method === "POST") throw new Error("connection reset");
     return jsonResponse({});
   });
-  const plugin = stubPluginFor(fetch, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(layer, { minimumRefreshIntervalMs: 60_000 });
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
@@ -650,7 +659,7 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
     admittedForTest({ providerSessionId: "session-one", text: "go on" }),
   );
 
-  // A thrown fetch cannot say whether the request landed — the provider may
+  // A thrown request cannot say whether it landed — the provider may
   // have taken it and only the answer was lost — so the refusal must hedge
   // rather than claim nothing was sent.
   assert.equal(result.status, "rejected");
@@ -662,8 +671,8 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
 
 test("a write answered with an unnamed status makes the next refresh ask", async () => {
   let status: number = HTTP_STATUS.OK;
-  const stub = stubFetch(() => status);
-  const plugin = stubPluginFor(stub.fetch, { minimumRefreshIntervalMs: 60_000 });
+  const stub = stubClient(() => status);
+  const plugin = stubPluginFor(stub.layer, { minimumRefreshIntervalMs: 60_000 });
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
@@ -682,7 +691,7 @@ test("a write answered with an unnamed status makes the next refresh ask", async
 });
 
 test("a write runs on the deadline its own route asked for", async () => {
-  const { fetch } = recordingFetch((request) => {
+  const { layer } = recordingHttpClient((request) => {
     if (request.method !== "POST") return jsonResponse({});
     // An action still in progress at the deadline: the response arrives only as
     // the refusal the route's own signal raises.
@@ -690,7 +699,7 @@ test("a write runs on the deadline its own route asked for", async () => {
       request.init.signal?.addEventListener("abort", () => reject(new Error("deadline")));
     });
   });
-  const plugin = stubPluginFor(fetch, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(layer, { minimumRefreshIntervalMs: 60_000 });
   plugin.collected = [observation("session-slow", { advertises: [STUB_SLOW_ACTION_CONTROL] })];
   await plugin.observe();
 
@@ -728,8 +737,8 @@ test("no route can widen a request past the slow bound", () => {
 });
 
 test("runs an advertised control through its documented route, sending no body", async () => {
-  const stub = stubFetch();
-  const plugin = stubPluginFor(stub.fetch);
+  const stub = stubClient();
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [
     observation("session-plan", { advertises: [STUB_APPROVE_CONTROL] }),
     observation("session-quiet"),
@@ -780,10 +789,10 @@ test("runs an advertised control through its documented route, sending no body",
   assert.equal(stub.requests.length, observationRequests + 1);
 });
 
-/** A fetch that answers 429 for the first `limited` reads and 200 after, recording every call. */
-function rateLimitedFetch(limited: number, retryAfter?: string) {
+/** A client that answers 429 for the first `limited` reads and 200 after, recording every call. */
+function rateLimitedClient(limited: number, retryAfter?: string) {
   let answered = 0;
-  return recordingFetch(() => {
+  return recordingHttpClient(() => {
     answered += 1;
     if (answered <= limited) {
       return new Response("{}", {
@@ -816,8 +825,8 @@ it.effect(
   "a 429 is retried on a doubling wait and the pass completes once the provider answers",
   () =>
     Effect.gen(function* () {
-      const stub = rateLimitedFetch(2);
-      const plugin = stubPluginFor(stub.fetch);
+      const stub = rateLimitedClient(2);
+      const plugin = stubPluginFor(stub.layer);
       plugin.collected = [observation("session-one")];
 
       const observations = yield* forkAndSettle(plugin);
@@ -830,8 +839,8 @@ it.effect(
 
 it.effect("a Retry-After in seconds is honoured in place of the doubled wait", () =>
   Effect.gen(function* () {
-    const stub = rateLimitedFetch(1, "3");
-    const plugin = stubPluginFor(stub.fetch);
+    const stub = rateLimitedClient(1, "3");
+    const plugin = stubPluginFor(stub.layer);
     plugin.collected = [observation("session-one")];
 
     const observations = yield* forkAndSettle(plugin);
@@ -846,12 +855,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let limited = 0;
-      const stub = recordingFetch(() =>
+      const stub = recordingHttpClient(() =>
         limited > 0
           ? new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS })
           : jsonResponse({}),
       );
-      const plugin = stubPluginFor(stub.fetch);
+      const plugin = stubPluginFor(stub.layer);
       plugin.collected = [observation("session-one")];
       const first = yield* forkAndSettle(plugin);
       assert.equal(first.length, 1);
@@ -869,8 +878,8 @@ it.effect(
 
 it.effect("a Retry-After past a single wait's maximum gives the request up at once", () =>
   Effect.gen(function* () {
-    const stub = rateLimitedFetch(1, String(RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS / 1000 + 1));
-    const plugin = stubPluginFor(stub.fetch);
+    const stub = rateLimitedClient(1, String(RATE_LIMIT_BACKOFF.MAXIMUM_DELAY_MS / 1000 + 1));
+    const plugin = stubPluginFor(stub.layer);
     plugin.collected = [observation("session-one")];
 
     yield* forkAndSettle(plugin);
@@ -915,18 +924,18 @@ test("the backoff budget is the pass's, spent by every request in it", () => {
 });
 
 test("a pass with no credential reports it has nothing to observe with, and a whole pass reports no failure", async () => {
-  const stub = stubFetch();
-  const keyed = stubPluginFor(stub.fetch);
+  const stub = stubClient();
+  const keyed = stubPluginFor(stub.layer);
   keyed.collected = [observation("session-one")];
   await keyed.observe();
   assert.equal(keyed.lastObservationFailure(), undefined);
 
-  const keyless = stubPluginFor(stub.fetch, { apiKey: undefined });
+  const keyless = stubPluginFor(stub.layer, { apiKey: undefined });
   await keyless.observe();
   assert.equal(keyless.lastObservationFailure(), ADAPTER_FAILURE.UNAVAILABLE);
 
   let status: number = HTTP_STATUS.OK;
-  const failing = stubPluginFor(stubFetch(() => status).fetch);
+  const failing = stubPluginFor(stubClient(() => status).layer);
   failing.collected = [observation("session-one")];
   await failing.observe();
   status = HTTP_STATUS.SERVER_ERROR;
@@ -1010,13 +1019,13 @@ describe("the 429 cadence", () => {
 });
 
 test("sends a POSTed read as the document the build fixed and nothing else", async () => {
-  const stub = stubFetch();
+  const stub = stubClient();
   const pass = cloudPass({
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     readApiKey: async () => TEST_API_KEY,
-    httpClient: layerFromCloudFetch(stub.fetch),
+    httpClient: stub.layer,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
     collect: (request) =>
@@ -1037,8 +1046,8 @@ test("sends a POSTed read as the document the build fixed and nothing else", asy
 });
 
 /** Answers headers and then a body that never arrives. */
-function stallingBodyFetch() {
-  return recordingFetch(
+function stallingBodyClient() {
+  return recordingHttpClient(
     () =>
       new Response(new ReadableStream({ start: () => undefined }), {
         headers: { "content-type": "application/json" },
@@ -1050,13 +1059,13 @@ function stallingBodyFetch() {
 const STUB_STALLED_DEADLINE_MS = 25;
 
 test("a body that never arrives ends the read on its own deadline", async () => {
-  const stub = stallingBodyFetch();
+  const stub = stallingBodyClient();
   const pass = cloudPass({
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     readApiKey: async () => TEST_API_KEY,
-    httpClient: layerFromCloudFetch(stub.fetch),
+    httpClient: stub.layer,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
     collect: (request) =>
@@ -1074,13 +1083,13 @@ test("a body that never arrives ends the read on its own deadline", async () => 
 });
 
 test("a write whose answer never arrives hedges on its own deadline", async () => {
-  const stub = stallingBodyFetch();
+  const stub = stallingBodyClient();
   const pass = cloudPass({
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
     readApiKey: async () => TEST_API_KEY,
-    httpClient: layerFromCloudFetch(stub.fetch),
+    httpClient: stub.layer,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
     collect: () => Effect.succeed([]),

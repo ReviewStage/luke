@@ -11,7 +11,7 @@ import {
   REASONING_EFFORT,
 } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { HostedModelAdapter, type HostedModelAdapterOptions } from "./hosted-model-adapter.js";
@@ -86,7 +86,7 @@ function adapter(
       Effect.sync(() => {
         current = queue.shift() ?? current;
       }),
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
     now: () => NOW,
     report: () => undefined,
     ...options,

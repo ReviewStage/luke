@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
   ACTION_TOOL,
@@ -125,7 +126,7 @@ function prefetchBody(overrides: WireRecord = {}): WireRecord {
 }
 
 function upstream(answer: () => Response) {
-  return async (): Promise<Response> => answer();
+  return fakeHttpClientLayer(() => answer());
 }
 
 function answering(call: Partial<BrainCall> & { request: Request }): () => Promise<Response> {
@@ -162,7 +163,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
     "respond",
     answering({
       request: posted(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
-      fetch: upstream(() => Response.json(RESPONDED)),
+      httpClient: upstream(() => Response.json(RESPONDED)),
     }),
   ],
   [
@@ -216,14 +217,16 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
     "respond-upstream-throttled",
     answering({
       request: posted(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
-      fetch: upstream(() => new Response("", { status: 429, headers: { "retry-after": "12" } })),
+      httpClient: upstream(
+        () => new Response("", { status: 429, headers: { "retry-after": "12" } }),
+      ),
     }),
   ],
   [
     "respond-upstream-error",
     answering({
       request: posted(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
-      fetch: upstream(() => new Response("upstream secret words", { status: 500 })),
+      httpClient: upstream(() => new Response("upstream secret words", { status: 500 })),
     }),
   ],
   [
@@ -235,7 +238,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
         tools: [BRAIN_TOOL.ANNOUNCE],
         input: INPUT,
       }),
-      fetch: upstream(() =>
+      httpClient: upstream(() =>
         Response.json({ object: "response.input_tokens", input_tokens: 1_234 }),
       ),
     }),
@@ -249,7 +252,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
         tools: [],
         input: INPUT,
       }),
-      fetch: upstream(() => Response.json({ input_tokens: -1 })),
+      httpClient: upstream(() => Response.json({ input_tokens: -1 })),
     }),
   ],
   [
@@ -259,7 +262,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
         contract: HOSTED_BRAIN_CONTRACT_VERSION,
         texts: ["one", "two"],
       }),
-      fetch: upstream(() =>
+      httpClient: upstream(() =>
         Response.json({
           object: "list",
           model: BRAIN_EMBEDDING_MODEL,
@@ -275,7 +278,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
     "prefetch-plan",
     answering({
       request: posted(HOSTED_SERVICE_PATH.BRAIN_PREFETCH, prefetchBody()),
-      fetch: upstream(() => Response.json(PLANNED)),
+      httpClient: upstream(() => Response.json(PLANNED)),
     }),
   ],
   [
@@ -285,7 +288,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
         HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
         prefetchBody({ kind: HOSTED_BRAIN_PREFETCH_KIND.SUMMARIZE }),
       ),
-      fetch: upstream(() => Response.json(RESPONDED)),
+      httpClient: upstream(() => Response.json(RESPONDED)),
     }),
   ],
   [

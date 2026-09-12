@@ -9,7 +9,7 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { LOOK_SUBJECT } from "./agent.js";
 import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
@@ -548,14 +548,14 @@ test("a brain call is addressed to the developer's own key or to Luke's own serv
   const keyed = keyedBrainTransport({
     baseUrl: "https://api.openai.test/v1",
     apiKey: "sk-secret",
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
     now: () => NOW,
   });
   const service = hostedBrainTransport({
     baseUrl: "https://luke.test",
     readAccessToken: () => Effect.succeed("account-secret"),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
     now: () => NOW,
   });
   await keyed.send("/responses", HTTP_METHOD.POST, TRANSCRIPT_SECRET);

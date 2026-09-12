@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { HTTP_METHOD, type UnparsedWireValue } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import {
   fakeCloudApi,
+  fakeHttpClientLayer,
   HTTP_STATUS,
   jsonResponse,
   type RecordedRequest,
   recordedRequest,
-  recordingFetch,
+  recordingHttpClient,
 } from "@sidecar/wire/testing";
 import { Deferred, Duration, Effect, Fiber, Schema, TestClock } from "effect";
 import { test } from "vitest";
@@ -62,7 +62,7 @@ function callOn(
   respond: (request: RecordedRequest) => Response | Promise<Response>,
   requestTimeoutMs?: number,
 ) {
-  const recording = recordingFetch(respond);
+  const recording = recordingHttpClient(respond);
   return {
     requests: recording.requests,
     call: accountCall({
@@ -70,7 +70,7 @@ function callOn(
       credential,
       ...(requestTimeoutMs === undefined ? undefined : { requestTimeoutMs }),
     }),
-    client: layerFromCloudFetch(recording.fetch),
+    client: recording.layer,
   };
 }
 
@@ -375,7 +375,7 @@ it.effect(
       const sending = yield* Effect.fork(
         Effect.provide(
           held.send({ method: HTTP_METHOD.GET, path: PATH }),
-          layerFromCloudFetch(() => {
+          fakeHttpClientLayer(() => {
             Deferred.unsafeDone(asked, Effect.void);
             return new Promise<Response>(() => undefined);
           }),
@@ -391,11 +391,11 @@ it.effect(
 );
 
 test("the promise the migration keeps answers a validated body over the caller's own fetch", async () => {
-  const recording = recordingFetch(() => jsonResponse({ voice: "marin" }));
+  const recording = recordingHttpClient(() => jsonResponse({ voice: "marin" }));
   const call = createAccountCall({
     baseUrl: BASE_URL,
     credential: fixedBearer("sk-test"),
-    httpClient: layerFromCloudFetch(recording.fetch),
+    httpClient: recording.layer,
   });
 
   const answer = await call.ask({ method: HTTP_METHOD.GET, path: PATH }, (payload) => payload);
@@ -410,7 +410,7 @@ test("the caller's own cancellation ends the request, named by the reason it car
   const call = createAccountCall({
     baseUrl: BASE_URL,
     credential: fixedBearer("sk-test"),
-    httpClient: layerFromCloudFetch(
+    httpClient: fakeHttpClientLayer(
       () =>
         new Promise<Response>((_settle, reject) => {
           cancellation.abort();

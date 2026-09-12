@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, type CloudFetch } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { fakeCloudApi, HTTP_STATUS, recordedRoutes, recordingFetch } from "@sidecar/wire/testing";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import {
+  fakeCloudApi,
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  recordedRoutes,
+  recordingHttpClient,
+} from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HOSTED_ACTION_FAILURE, HostedActionClient } from "./action-client.js";
 
@@ -13,14 +18,14 @@ const TARGET = {
 } as const;
 
 function client(
-  fetch: CloudFetch,
+  httpClient: ReturnType<typeof fakeCloudApi>["layer"],
   options: Partial<ConstructorParameters<typeof HostedActionClient>[0]> = {},
 ) {
   return new HostedActionClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient,
     ...options,
   });
 }
@@ -31,7 +36,7 @@ it.effect("a message is a bearer POST naming the session and carrying the words"
       "POST /api/actions/message": { answer: () => ({ result: ACTION_RESULT_STATUS.ACCEPTED }) },
     });
 
-    const outcome = yield* Effect.promise(() => client(api.fetch).sendMessage(TARGET, "ship it"));
+    const outcome = yield* Effect.promise(() => client(api.layer).sendMessage(TARGET, "ship it"));
 
     assert.deepEqual(outcome, { answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
     assert.deepEqual(recordedRoutes(api.requests()), ["POST /api/actions/message"]);
@@ -60,7 +65,7 @@ it.effect(
       });
 
       const outcome = yield* Effect.promise(() =>
-        client(api.fetch).executeControl(TARGET, "cancel-run"),
+        client(api.layer).executeControl(TARGET, "cancel-run"),
       );
 
       assert.deepEqual(outcome, {
@@ -77,12 +82,12 @@ it.effect(
 
 it.effect("each way a call ends short of an answer says whether the action may have landed", () =>
   Effect.gen(function* () {
-    const unsent = recordingFetch(() => {
+    const unsent = recordingHttpClient(() => {
       throw new Error("must not travel without an account");
     });
     assert.deepEqual(
       yield* Effect.promise(() =>
-        client(unsent.fetch, { readAccessToken: () => Effect.succeed(undefined) }).sendMessage(
+        client(unsent.layer, { readAccessToken: () => Effect.succeed(undefined) }).sendMessage(
           TARGET,
           "hello",
         ),
@@ -91,9 +96,11 @@ it.effect("each way a call ends short of an answer says whether the action may h
     );
     assert.equal(unsent.requests.length, 0);
 
-    const lost = client(() => {
-      throw new TypeError("fetch failed");
-    });
+    const lost = client(
+      fakeHttpClientLayer(() => {
+        throw new TypeError("fetch failed");
+      }),
+    );
     assert.deepEqual(yield* Effect.promise(() => lost.sendMessage(TARGET, "hello")), {
       failure: HOSTED_ACTION_FAILURE.LOST,
     });
@@ -101,7 +108,7 @@ it.effect("each way a call ends short of an answer says whether the action may h
     const refused = client(
       fakeCloudApi({
         "POST /api/actions/control": { answer: () => ({}), status: HTTP_STATUS.SERVER_ERROR },
-      }).fetch,
+      }).layer,
     );
     assert.deepEqual(yield* Effect.promise(() => refused.executeControl(TARGET, "cancel-run")), {
       failure: HOSTED_ACTION_FAILURE.REFUSED,
@@ -110,7 +117,7 @@ it.effect("each way a call ends short of an answer says whether the action may h
     const unreadable = client(
       fakeCloudApi({
         "POST /api/actions/control": { answer: () => ({ result: "maybe" }) },
-      }).fetch,
+      }).layer,
     );
     assert.deepEqual(yield* Effect.promise(() => unreadable.executeControl(TARGET, "cancel-run")), {
       failure: HOSTED_ACTION_FAILURE.UNREADABLE,
@@ -132,7 +139,7 @@ it.effect(
       });
 
       const outcome = yield* Effect.promise(() =>
-        client(api.fetch).createWorkspace(TARGET.providerId, {
+        client(api.layer).createWorkspace(TARGET.providerId, {
           providerProjectId: "project-1",
           agent: "claude",
           model: "fable-5",
@@ -166,7 +173,7 @@ it.effect("an agent addition and the two renames each name the session and carry
         answer: () => ({ result: ACTION_RESULT_STATUS.REJECTED, reason: "Name too long." }),
       },
     });
-    const carrier = client(api.fetch);
+    const carrier = client(api.layer);
 
     const added = yield* Effect.promise(() =>
       carrier.addAgent(TARGET, { agent: "codex", model: "gpt-5", effort: "high" }),

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { HTTP_STATUS as BOUNDARY_HTTP_STATUS, type CloudFetch } from "../json.js";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import type { Layer } from "effect";
+import { HTTP_STATUS as BOUNDARY_HTTP_STATUS } from "../json.js";
+import { fakeHttpClientLayer } from "./http-client-fake.js";
 import type { JsonValue } from "./json.js";
 
 /**
@@ -55,18 +58,21 @@ export function requestBody(body: BodyInit | null | undefined): string | undefin
   return body as string;
 }
 
+/** A recorded log behind the `HttpClient` a test hands its caller. */
+export interface RecordingHttpClient {
+  readonly layer: Layer.Layer<HttpClient.HttpClient>;
+  readonly requests: readonly RecordedRequest[];
+}
+
 /**
- * A fetch that records every call, then answers through `respond`. The
- * per-provider route table is `respond`; this only keeps the log.
- *
- * @deprecated Superseded by `fakeCloudApi`'s `layer`, which records the same
- * requests behind an `HttpClient`; deleted with `CloudFetch` in P12-04.
+ * An `HttpClient` that records every request, then answers through `respond`.
+ * The per-provider route table is `respond`; this only keeps the log.
  */
-export function recordingFetch(
+export function recordingHttpClient(
   respond: (request: RecordedRequest) => Response | Promise<Response>,
-) {
+): RecordingHttpClient {
   const requests: RecordedRequest[] = [];
-  const fetch: CloudFetch = async (url, init) => {
+  const layer = fakeHttpClientLayer((url, init) => {
     const parsed = new URL(url);
     const headers = new Headers(init.headers);
     const request: RecordedRequest = {
@@ -84,8 +90,8 @@ export function recordingFetch(
     };
     requests.push(request);
     return respond(request);
-  };
-  return { fetch, requests };
+  });
+  return { layer, requests };
 }
 
 /**
