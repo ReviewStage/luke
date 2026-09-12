@@ -172,10 +172,11 @@ function harness(tools?: Partial<ToolExecutor>): Harness {
   context.bootstrap(undefined, UNKNOWN_ACTION_RESULT);
   const abort = new AbortController();
   const executor: ToolExecutor = {
-    execute: async (invocation) => {
-      executed.push(invocation);
-      return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
-    },
+    execute: (invocation) =>
+      Effect.sync(() => {
+        executed.push(invocation);
+        return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
+      }),
     ...tools,
   };
   return {
@@ -350,12 +351,13 @@ test("a cancel between two calls still reaches the executor for the second, whic
   const h = harness();
   let run: RuntimeRun | undefined;
   const executor: ToolExecutor = {
-    execute: async (invocation, context) => {
-      h.executed.push(invocation);
-      const status = context.isRevoked() ? "rejected" : "accepted";
-      if (invocation.callId === "c1") run?.cancel();
-      return { outputJson: JSON.stringify({ status }) };
-    },
+    execute: (invocation, context) =>
+      Effect.sync(() => {
+        h.executed.push(invocation);
+        const status = context.isRevoked() ? "rejected" : "accepted";
+        if (invocation.callId === "c1") run?.cancel();
+        return { outputJson: JSON.stringify({ status }) };
+      }),
   };
   h.model.answers.push(
     answered({
@@ -394,10 +396,11 @@ test("steered words are read at the next safe boundary: after the tool that was 
   const h = harness();
   let run: RuntimeRun | undefined;
   const steering: ToolExecutor = {
-    execute: async (invocation) => {
-      assert.equal(run?.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "also this" }), true);
-      return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
-    },
+    execute: (invocation) =>
+      Effect.sync(() => {
+        assert.equal(run?.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "also this" }), true);
+        return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
+      }),
   };
   h.model.answers.push(
     answered({
@@ -426,9 +429,10 @@ test("steered words are read at the next safe boundary: after the tool that was 
 
 test("an executor that throws leaves an unknown answer paired to the call rather than a dangling call", async () => {
   const h = harness({
-    execute: async () => {
-      throw new Error("boom");
-    },
+    execute: () =>
+      Effect.sync(() => {
+        throw new Error("boom");
+      }),
   });
   h.model.answers.push(
     answered({
@@ -462,7 +466,7 @@ test("with the guard enabled, a critical verdict pairs every remaining call and 
     });
   for (let index = 0; index < 40; index += 1) h.model.answers.push(repeated());
   const executor: ToolExecutor = {
-    execute: async () => ({ outputJson: '{"status":"running"}' }),
+    execute: () => Effect.succeed({ outputJson: '{"status":"running"}' }),
   };
   const end = await runtime(h.model, { enabled: true }).start(h.request({ tools: executor })).done;
   assert.equal(end.reason, RUN_END_REASON.LOOP_GUARD);
@@ -505,10 +509,11 @@ test("every context handed to an executor is revoked once the run ends, on compl
   const completed = harness();
   const contexts: ToolExecutionContext[] = [];
   const capturing: ToolExecutor = {
-    execute: async (invocation, context) => {
-      contexts.push(context);
-      return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
-    },
+    execute: (invocation, context) =>
+      Effect.sync(() => {
+        contexts.push(context);
+        return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
+      }),
   };
   const oneCall = () =>
     answered({
@@ -662,11 +667,12 @@ test("a cancel inside a batch parts no call from the result its host records, an
   let run: RuntimeRun | undefined;
   const recorded: string[] = [];
   const executor: ToolExecutor = {
-    execute: async (invocation) => {
-      h.executed.push(invocation);
-      if (invocation.callId === "c1") run?.cancel();
-      return { outputJson: JSON.stringify({ status: "accepted" }) };
-    },
+    execute: (invocation) =>
+      Effect.sync(() => {
+        h.executed.push(invocation);
+        if (invocation.callId === "c1") run?.cancel();
+        return { outputJson: JSON.stringify({ status: "accepted" }) };
+      }),
   };
   h.model.answers.push(
     answered({

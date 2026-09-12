@@ -18,6 +18,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "./envelope.js";
 import { BRAIN_MAXIMUM_OUTPUT_TOKENS, failed } from "./model-adapter-shared.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
@@ -245,18 +246,20 @@ export function fakeActionPerformer(options: FakeActionPerformerOptions = {}): F
  * over the performer's two halves. A name no module answers, or arguments
  * that are not a record, refuse before anything is admitted.
  */
-export async function performCall(
+export function performCall(
   actions: BrainActionPerformer,
   call: ActionFunctionCall,
   execution: BrainActionExecution,
-): Promise<ActionOutputEnvelope> {
-  const tool = actionToolNamed(call.name);
-  if (!tool) return refusedActionOutput(ACTION_REFUSAL.NO_TOOL);
-  const input = toolArguments(call.argumentsJson);
-  if (input === undefined) return refusedActionOutput(ACTION_REFUSAL.UNREADABLE);
-  return tool.execute(input, {
-    ...execution,
-    admission: actions.admission(execution),
-    carry: (action) => actions.carry(action, execution),
+): Effect.Effect<ActionOutputEnvelope> {
+  return Effect.suspend(() => {
+    const tool = actionToolNamed(call.name);
+    if (!tool) return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.NO_TOOL));
+    const input = toolArguments(call.argumentsJson);
+    if (input === undefined) return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.UNREADABLE));
+    return tool.execute(input, {
+      ...execution,
+      admission: actions.admission(execution),
+      carry: (action) => actions.carry(action, execution),
+    });
   });
 }

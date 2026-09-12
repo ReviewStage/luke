@@ -265,12 +265,15 @@ the queued pass behind it as a daemon, which is exactly what the detached
 `composeObservation` in `packages/host/src/compose-observation.ts` is on the
 handed-runtime list: `settleHostedWrite` pokes a redraw after every landed
 session write, and both its callers — the session action performer the brain
-carries an admitted act through, and a row's own press — settle inside the
-`ToolExecutor` seam's promise rather than in a fiber. So the composer reads
+carries an admitted act through, and a row's own press — settle inside
+`SessionActionPerformer.perform`'s own promise rather than in a fiber. So the
+composer reads
 `Effect.runtime<never>()` out of its own build and hands those two a
 `pokeRefresh` that is `Runtime.runFork` of `loop.refresh` on it; it forks onto
 the runtime it was handed and never builds one, and `settleHostedWrite` itself
-runs nothing. It goes when that seam answers an effect.
+runs nothing. It goes when that performer and the carrier above it answer
+effects; the `ToolExecutor` seam between them stopped being the blocker in
+P12-15c.
 
 `composeBrain` in `packages/host/src/compose-brain.ts` is on the same list
 for the other half of the same seam: the roster and projects reads
@@ -292,13 +295,13 @@ goes when that link answers an effect.
 `admitEffect()`, an Effect failing with an `AdmitRefusal`, and `admit()` runs it
 to the `Promise<ValidatedAction | Refusal>` its callers still hold, answering
 the refusal as the `Refusal` the action journal records and rethrowing a roster
-read's own failure. Its callers reach it across the `ToolExecutor` seam and
-the web's action endpoint, neither of which answers an effect yet — a turn is
-a fiber from P12-02 on, but the tool call it dispatches still crosses a
-promise. P12-04 turned out to be the CloudFetch/HttpClient family alone; this
-door waits on the `ToolExecutor` seam in `@sidecar/runtime/vocabulary`
-answering an effect, a change to the tool-dispatch shape rather than a
-transport, so it is re-pointed at P12-15 instead.
+read's own failure. The brain's action tools left it in P12-15c and admit the
+call as an effect, since the `ToolExecutor` seam they run under answers one;
+what still holds the door is the web's action endpoint, which is a promise
+from `executeSessionAction` up, and the two testing doors over it
+(`@sidecar/actions`'s `tool-call.ts` and the provider contract's oracle).
+P12-04 turned out to be the CloudFetch/HttpClient family alone, so the door
+waits on those three answering effects instead.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is the fifth: every caller of the brain's model transport still holds a
@@ -931,25 +934,40 @@ whose value must be owned by exactly one party.
 
 What keeps this one door is what the brain is still asked for in promises:
 `BrainAgent`'s own public surface — an ask, a wake, a child's task, a stop —
-and the `ToolExecutor` seam the tool loop dispatches through, which is why
-the read tool's whole-transcript read and the housekeeping turn the memory
-provider's `capture` seam asks for are carried here too. A defect is squashed
-back to the error that caused it, so a store, a listener, or an engine that
-threw reaches the caller as the error it threw rather than as the fiber
-failure that carried it. P12-04 deletes it with those seams.
+and the housekeeping turn the memory provider's `capture` seam asks for. The
+`ToolExecutor` seam left that list in P12-15c and the read tool's
+whole-transcript read went with it into the tool loop's own fiber; what
+carries a read here now is the prefetch, whose slots are a promise memo until
+P12-02's own row moves them. A defect is squashed back to the error that
+caused it, so a store, a listener, or an engine that threw reaches the caller
+as the error it threw rather than as the fiber failure that carried it.
+P12-04 deletes it with those seams.
 
-What the door does not carry is the other three seams. `ModelAdapter`,
-`ContextEngine`, and `ToolExecutor` stay as the host hands them in, because
-each is owned above the runtime by identity rather than by shape: the host
-marks, rolls back, and checkpoints the very engine `openContext` answered and
-compares it by reference, and it folds the context through the same adapter
-inside `compaction.ts`, which is an OpenClaw port and so imports nothing from
-`effect`. An Effect-shaped counterpart for any of the three would therefore
-need a promise view built back out of it inside the brain, which is the same
-run in another file rather than one less — so `ModelAdapter` stays
-Promise-shaped permanently, like the other two, and the two shims that stand
-on it — `BrainTransport#send`'s `runCall` and `tracedModelAdapter`'s traced
-`respond` — are permanent rows for the same reason, named below.
+What the door does not carry is the other two seams. `ModelAdapter` and
+`ContextEngine` stay as the host hands them in, because each is owned above
+the runtime by identity rather than by shape: the host marks, rolls back, and
+checkpoints the very engine `openContext` answered and compares it by
+reference, and it folds the context through the same adapter inside
+`compaction.ts`, which is an OpenClaw port and so imports nothing from
+`effect`. An Effect-shaped counterpart for either would therefore need a
+promise view built back out of it inside the brain, which is the same run in
+another file rather than one less — so `ModelAdapter` stays Promise-shaped
+permanently, like `ContextEngine`, and the two shims that stand on it —
+`BrainTransport#send`'s `runCall` and `tracedModelAdapter`'s traced `respond`
+— are permanent rows for the same reason, named below.
+
+`ToolExecutor` was on that list until P12-15c and is not owned that way: the
+brain builds the executor a turn hands its runtime, and no port consumes one,
+so `execute` answers an `Effect<ToolResult>` and the loop dispatches a call
+on its own fiber rather than across `Effect.tryPromise`. Every tool of the
+brain answers an effect with it — the action modules, the reads, the
+briefing, delegation, the workspace writes — so the journal that records a
+call before it runs and settles it after is one effect around another, and
+the batch the runtime already held uninterruptible is still what keeps a
+dispatched effect from being parted from its result. What stays a promise
+inside the executor is what the host hands it: the turn's checkpoint, the
+whole-transcript read, the child and workspace access, the memory provider's
+own tools, and the carrier an admitted action reaches.
 
 The rest of this package's Promise faces turned out to stand on
 `BrainAgent`'s own public surface rather than on the vocabulary's: a wake, an
@@ -1152,12 +1170,12 @@ design decision stated as such:
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
 | `cloudFetchFromHttpClient` | P1-07 | P12-04e |
 | `timersFromRuntime` | P2-01 | P12-03 |
-| `admit()` Promise door over `admitEffect()` | P4-01 | P12-15 — blocked on the `ToolExecutor` seam answering an effect; P12-04 turned out to be the CloudFetch/HttpClient family alone |
+| `admit()` Promise door over `admitEffect()` | P4-01 | pending — the brain's action tools stopped using it in P12-15c; blocked now on the web's `executeSessionAction` and the two testing doors over it answering effects |
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
-| `composeObservation`'s `pokeRefresh`, the redraw a landed session write earns, forked on the runtime the composer was built on | P12-15a | with the `ToolExecutor` seam answering an effect |
+| `composeObservation`'s `pokeRefresh`, the redraw a landed session write earns, forked on the runtime the composer was built on | P12-15a | with `SessionActionPerformer.perform` and the carrier above it answering effects |
 | `composeBrain`'s `refreshSessions`, the admission pass run to a promise on the host's own runtime | P12-15a | with `admit()`'s Promise door |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |

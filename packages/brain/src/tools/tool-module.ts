@@ -1,6 +1,6 @@
 import type { RunOrigin, SessionKey, ToolExecutionContext } from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import type { Schema } from "effect";
+import type { Effect, Schema } from "effect";
 
 /**
  * The shape every tool of the brain is declared in: what it is called, what
@@ -22,7 +22,7 @@ import type { Schema } from "effect";
  * The standing a tool's call runs under: which conversation and turn it
  * belongs to, which run, who opened it, and whether it still stands. The
  * origin is attribution, never a permission; `isRevoked()` is asked again
- * after every await and once more before an effect.
+ * after every read the call waited on and once more before an effect.
  */
 export interface ToolContext extends ToolExecutionContext {
   readonly conversationId: SessionKey;
@@ -47,6 +47,9 @@ export interface ToolModule<Output extends WireRecord, Context extends ToolConte
   readonly description: string;
   /** The tool's fields as the model is offered them and as a call is read; declared once, as an Effect `Schema`. */
   readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
-  /** Carries one call whose arguments parsed as a record; everything the call may do runs inside. */
-  execute(input: WireRecord, context: Context): Promise<Output>;
+  /**
+   * Carries one call whose arguments parsed as a record; everything the call
+   * may do runs inside, on the fiber of the loop that dispatched it.
+   */
+  execute(input: WireRecord, context: Context): Effect.Effect<Output>;
 }

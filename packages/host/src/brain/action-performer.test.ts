@@ -29,7 +29,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Effect, Either, Fiber, Option } from "effect";
 import { test } from "vitest";
 import {
   type BrainActionPerformerDependencies,
@@ -187,13 +187,15 @@ test("a session action reaches the performer only for a session the roster holds
   const { actions, performed, recorded } = performer();
   const identity = '"provider_id":"claude-code","provider_session_id":"session-a"';
 
-  const landed = await performCall(
-    actions,
-    {
-      name: ACTION_TOOL.SEND_SESSION_MESSAGE,
-      argumentsJson: `{${identity},"text":"go ahead"}`,
-    },
-    LIVE,
+  const landed = await Effect.runPromise(
+    performCall(
+      actions,
+      {
+        name: ACTION_TOOL.SEND_SESSION_MESSAGE,
+        argumentsJson: `{${identity},"text":"go ahead"}`,
+      },
+      LIVE,
+    ),
   );
   assert.equal(landed.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(performed.length, 1);
@@ -202,21 +204,21 @@ test("a session action reaches the performer only for a session the roster holds
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0]?.kind, "action");
 
-  const stranger = await performCall(
-    actions,
-    {
-      name: ACTION_TOOL.SEND_SESSION_MESSAGE,
-      argumentsJson: '{"provider_id":"claude-code","provider_session_id":"ghost","text":"hi"}',
-    },
-    LIVE,
+  const stranger = await Effect.runPromise(
+    performCall(
+      actions,
+      {
+        name: ACTION_TOOL.SEND_SESSION_MESSAGE,
+        argumentsJson: '{"provider_id":"claude-code","provider_session_id":"ghost","text":"hi"}',
+      },
+      LIVE,
+    ),
   );
   assert.equal(stranger.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(performed.length, 1);
 
-  const unknown = await performCall(
-    actions,
-    { name: "delete_everything", argumentsJson: "{}" },
-    LIVE,
+  const unknown = await Effect.runPromise(
+    performCall(actions, { name: "delete_everything", argumentsJson: "{}" }, LIVE),
   );
   assert.deepEqual(unknown, {
     status: ACTION_OUTPUT_STATUS.REFUSED,
@@ -234,7 +236,7 @@ test("every answer is the envelope: a session action's target as the roster held
       : { status: ACTION_RESULT_STATUS.ACCEPTED },
   );
 
-  const sent = await performCall(actions, MESSAGE_CALL, LIVE);
+  const sent = await Effect.runPromise(performCall(actions, MESSAGE_CALL, LIVE));
   assert.deepEqual(sent, {
     status: ACTION_OUTPUT_STATUS.ACCEPTED,
     target: {
@@ -245,7 +247,7 @@ test("every answer is the envelope: a session action's target as the roster held
     },
   });
 
-  const stopped = await performCall(actions, CONTROL_CALL, LIVE);
+  const stopped = await Effect.runPromise(performCall(actions, CONTROL_CALL, LIVE));
   assert.deepEqual(stopped, {
     status: ACTION_OUTPUT_STATUS.ACCEPTED,
     target: {
@@ -258,7 +260,7 @@ test("every answer is the envelope: a session action's target as the roster held
     },
   });
 
-  const created = await performCall(actions, CREATE_CALL, LIVE);
+  const created = await Effect.runPromise(performCall(actions, CREATE_CALL, LIVE));
   assert.deepEqual(created, {
     status: ACTION_OUTPUT_STATUS.ACCEPTED,
     target: { providerId: "conductor" },
@@ -287,17 +289,17 @@ test("a carried action's refusal and lost answer keep their words apart: refused
     title: "Fix the flaky test",
     agentId: "cursor",
   };
-  assert.deepEqual(await performCall(actions, MESSAGE_CALL, LIVE), {
+  assert.deepEqual(await Effect.runPromise(performCall(actions, MESSAGE_CALL, LIVE)), {
     status: ACTION_OUTPUT_STATUS.REFUSED,
     reason: "the provider said no",
     target,
   });
-  assert.deepEqual(await performCall(actions, MESSAGE_CALL, LIVE), {
+  assert.deepEqual(await Effect.runPromise(performCall(actions, MESSAGE_CALL, LIVE)), {
     status: ACTION_OUTPUT_STATUS.REFUSED,
     reason: "no documented way in",
     target,
   });
-  assert.deepEqual(await performCall(actions, MESSAGE_CALL, LIVE), {
+  assert.deepEqual(await Effect.runPromise(performCall(actions, MESSAGE_CALL, LIVE)), {
     status: ACTION_OUTPUT_STATUS.UNKNOWN,
     reason: "the node went away",
     target,
@@ -318,7 +320,8 @@ test("a panel's answer is read in its own dialect: an acceptance keeps its note 
     performAppAction: async () => answers.shift() ?? {},
   });
   const outcomes = [];
-  while (answers.length > 0) outcomes.push(await performCall(actions, SETTING_CALL, LIVE));
+  while (answers.length > 0)
+    outcomes.push(await Effect.runPromise(performCall(actions, SETTING_CALL, LIVE)));
   const unreadable = {
     status: ACTION_OUTPUT_STATUS.REFUSED,
     reason: "The panel answered in a shape this build cannot read.",
@@ -336,26 +339,30 @@ test("a panel's answer is read in its own dialect: an acceptance keeps its note 
 test("memory actions are the main process's own, and the store's answer is the report", async () => {
   const { actions, facts, appActions } = performer();
 
-  const saved = await performCall(
-    actions,
-    {
-      name: ACTION_TOOL.REMEMBER_FACT,
-      argumentsJson: '{"words":"prefers concise answers"}',
-    },
-    LIVE,
+  const saved = await Effect.runPromise(
+    performCall(
+      actions,
+      {
+        name: ACTION_TOOL.REMEMBER_FACT,
+        argumentsJson: '{"words":"prefers concise answers"}',
+      },
+      LIVE,
+    ),
   );
   assert.equal(saved.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(facts().length, 1);
   const id = facts()[0]?.id;
   assert.ok(id);
 
-  const forgotten = await performCall(
-    actions,
-    {
-      name: ACTION_TOOL.FORGET_FACT,
-      argumentsJson: JSON.stringify({ id }),
-    },
-    LIVE,
+  const forgotten = await Effect.runPromise(
+    performCall(
+      actions,
+      {
+        name: ACTION_TOOL.FORGET_FACT,
+        argumentsJson: JSON.stringify({ id }),
+      },
+      LIVE,
+    ),
   );
   assert.equal(forgotten.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(facts().length, 0);
@@ -381,8 +388,8 @@ it.effect(
           forget: async () => false,
         },
       });
-      const [first, second] = yield* Effect.promise(() =>
-        Promise.all([
+      const [first, second] = yield* Effect.all(
+        [
           performCall(
             actions,
             { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread one"}' },
@@ -393,7 +400,8 @@ it.effect(
             { name: ACTION_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread two"}' },
             LIVE,
           ),
-        ]),
+        ],
+        { concurrency: "unbounded" },
       );
       assert.equal(first.status, ACTION_RESULT_STATUS.ACCEPTED);
       assert.equal(second.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -422,25 +430,29 @@ test("an app action is validated against the reported guide before a renderer ca
   };
   const { actions, appActions } = performer({ appGuide: () => guide });
 
-  const changed = await performCall(
-    actions,
-    {
-      name: ACTION_TOOL.CHANGE_APP_SETTING,
-      argumentsJson: '{"setting_id":"voice_captions","value":"on"}',
-    },
-    LIVE,
+  const changed = await Effect.runPromise(
+    performCall(
+      actions,
+      {
+        name: ACTION_TOOL.CHANGE_APP_SETTING,
+        argumentsJson: '{"setting_id":"voice_captions","value":"on"}',
+      },
+      LIVE,
+    ),
   );
   assert.equal(changed.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(appActions.length, 1);
   assert.equal(appActions[0]?.kind, "setting");
 
-  const unlisted = await performCall(
-    actions,
-    {
-      name: ACTION_TOOL.CHANGE_APP_SETTING,
-      argumentsJson: '{"setting_id":"launch_codes","value":"on"}',
-    },
-    LIVE,
+  const unlisted = await Effect.runPromise(
+    performCall(
+      actions,
+      {
+        name: ACTION_TOOL.CHANGE_APP_SETTING,
+        argumentsJson: '{"setting_id":"launch_codes","value":"on"}',
+      },
+      LIVE,
+    ),
   );
   assert.equal(unlisted.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(appActions.length, 1);
@@ -448,7 +460,7 @@ test("an app action is validated against the reported guide before a renderer ca
 
 test("an action in a turn Luke opened himself runs under the same validators and is recorded as his own", async () => {
   const { actions, performed, recorded } = performer();
-  const outcome = await performCall(actions, MESSAGE_CALL, observationTurn());
+  const outcome = await Effect.runPromise(performCall(actions, MESSAGE_CALL, observationTurn()));
   assert.equal(outcome.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(performed.length, 1);
   assert.equal(recorded.length, 1);
@@ -521,10 +533,12 @@ test("a turn revoked while the roster refreshed is refused before the effect, an
       revoked = true;
     },
   });
-  const refused = await performCall(
-    actions,
-    MESSAGE_CALL,
-    developerTurn(() => revoked),
+  const refused = await Effect.runPromise(
+    performCall(
+      actions,
+      MESSAGE_CALL,
+      developerTurn(() => revoked),
+    ),
   );
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(refused.reason, ACTION_REFUSAL.TURN_OVER);
@@ -541,10 +555,12 @@ test("a turn revoked while the creation defaults were read is refused before the
       return {};
     },
   });
-  const refused = await performCall(
-    actions,
-    CREATE_CALL,
-    developerTurn(() => revoked),
+  const refused = await Effect.runPromise(
+    performCall(
+      actions,
+      CREATE_CALL,
+      developerTurn(() => revoked),
+    ),
   );
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(performed, []);
@@ -554,10 +570,10 @@ test("a turn revoked while the creation defaults were read is refused before the
 test("a revoked turn reaches no memory write and no renderer action", async () => {
   const { actions, facts, appActions } = performer({ appGuide: () => CAPTIONS_GUIDE });
   const over = developerTurn(() => true);
-  const notSaved = await performCall(actions, REMEMBER_CALL, over);
+  const notSaved = await Effect.runPromise(performCall(actions, REMEMBER_CALL, over));
   assert.equal(notSaved.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(facts(), []);
-  const notChanged = await performCall(actions, SETTING_CALL, over);
+  const notChanged = await Effect.runPromise(performCall(actions, SETTING_CALL, over));
   assert.equal(notChanged.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(appActions, []);
 });
@@ -571,7 +587,7 @@ test("an action is validated against the roster as refreshed inside the turn, no
       sessions = [];
     },
   });
-  const refused = await performCall(actions, MESSAGE_CALL, LIVE);
+  const refused = await Effect.runPromise(performCall(actions, MESSAGE_CALL, LIVE));
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(performed, []);
 });
@@ -587,7 +603,7 @@ test("a creation is admitted against the projects the same pass reported, and th
       projects = [LISTED_PROJECT];
     },
   });
-  const created = await performCall(actions, CREATE_CALL, LIVE);
+  const created = await Effect.runPromise(performCall(actions, CREATE_CALL, LIVE));
   assert.equal(created.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(passes, 1);
   assert.deepEqual(
@@ -627,19 +643,17 @@ it.effect(
         };
         // Only a creation reads the defaults, so each held read is exercised by the
         // act that actually waits on it.
-        const pending = performCall(
-          h.actions,
-          held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,
-          execution,
+        const pending = yield* Effect.fork(
+          performCall(
+            h.actions,
+            held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,
+            execution,
+          ),
         );
-        let settled = false;
-        void pending.then(() => {
-          settled = true;
-        });
         yield* waitFor(() => invoked);
-        assert.equal(settled, false);
+        assert.equal(Option.isNone(yield* pending.poll), true);
         controller.abort();
-        const outcome = yield* Effect.promise(() => pending);
+        const outcome = yield* Fiber.join(pending);
         assert.equal(outcome.status, ACTION_OUTPUT_STATUS.REFUSED);
         assert.deepEqual(h.performed, []);
         release?.();

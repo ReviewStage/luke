@@ -22,7 +22,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON, SPAWN_REFUSAL_REASON } from "./refusals.js";
@@ -89,7 +89,7 @@ export interface SessionToolContext extends ToolContext {
   /** This conversation's active context as a fork would take it, read only if the host decides on one. */
   fork(): ForkSnapshot | undefined;
   /** Records an effect before it runs and its result before the model reads it; the executor's journal. */
-  journal(effect: () => Promise<WireRecord>): Promise<WireRecord>;
+  journal(effect: Effect.Effect<WireRecord>): Effect.Effect<WireRecord>;
 }
 
 export type SessionToolModule = ToolModule<WireRecord, SessionToolContext>;
@@ -277,32 +277,39 @@ const SESSIONS_SPAWN: SessionToolModule = {
     'conversation as its own item. Children start isolated unless context is "fork", ' +
     "which branches this conversation's current context into the child when it fits the cap.",
   inputSchema: SESSIONS_SPAWN_INPUT,
-  async execute(input: WireRecord, context: SessionToolContext): Promise<WireRecord> {
-    const children = context.children;
-    if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
-    if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    const task = text(input.task)?.trim().slice(0, maximumChildTaskLength);
-    if (!task) return rejection(REFUSAL_REASON.EMPTY_TASK);
-    const label = text(input.label)?.trim();
-    const seconds = input.run_timeout_seconds;
-    const timeoutMs =
-      isWireNumber(seconds) && Number.isInteger(seconds) && seconds >= 0
-        ? seconds * 1000
-        : undefined;
-    const ask: BrainChildSpawnAsk = {
-      task,
-      ...(label ? { label } : undefined),
-      ...(isChildContextMode(input.context) ? { context: input.context } : undefined),
-      ...(isChildCleanup(input.cleanup) ? { cleanup: input.cleanup } : undefined),
-      ...(timeoutMs !== undefined ? { timeoutMs } : undefined),
-      ...(isWireBoolean(input.expects_completion)
-        ? { expectsCompletion: input.expects_completion }
-        : undefined),
-      requesterRunId: context.runId,
-      policy: context.policy,
-      fork: () => context.fork(),
-    };
-    return context.journal(async () => spawnOutcomeRecord(await children.spawn(ask)));
+  execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+    return Effect.suspend(() => {
+      const children = context.children;
+      if (!children) return Effect.succeed(rejection(REFUSAL_REASON.NO_CHILDREN));
+      if (context.isRevoked()) return Effect.succeed(rejection(REFUSAL_REASON.RUN_REVOKED));
+      const task = text(input.task)?.trim().slice(0, maximumChildTaskLength);
+      if (!task) return Effect.succeed(rejection(REFUSAL_REASON.EMPTY_TASK));
+      const label = text(input.label)?.trim();
+      const seconds = input.run_timeout_seconds;
+      const timeoutMs =
+        isWireNumber(seconds) && Number.isInteger(seconds) && seconds >= 0
+          ? seconds * 1000
+          : undefined;
+      const ask: BrainChildSpawnAsk = {
+        task,
+        ...(label ? { label } : undefined),
+        ...(isChildContextMode(input.context) ? { context: input.context } : undefined),
+        ...(isChildCleanup(input.cleanup) ? { cleanup: input.cleanup } : undefined),
+        ...(timeoutMs !== undefined ? { timeoutMs } : undefined),
+        ...(isWireBoolean(input.expects_completion)
+          ? { expectsCompletion: input.expects_completion }
+          : undefined),
+        requesterRunId: context.runId,
+        policy: context.policy,
+        fork: () => context.fork(),
+      };
+      return context.journal(
+        Effect.map(
+          Effect.promise(() => children.spawn(ask)),
+          spawnOutcomeRecord,
+        ),
+      );
+    });
   },
 };
 
@@ -313,26 +320,30 @@ const SUBAGENTS: SessionToolModule = {
     "when it was accepted and settled — or cancel one by id. Cancelling reaches every child " +
     "it spawned in turn. Check status only when debugging; completions arrive on their own.",
   inputSchema: SUBAGENTS_INPUT,
-  async execute(input: WireRecord, context: SessionToolContext): Promise<WireRecord> {
-    const children = context.children;
-    if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
-    if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    if (input.action === SUBAGENTS_ACTION.CANCEL) {
-      const childId = text(input.child_id);
-      if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
-      return context.journal(async () => {
-        const cancelled = await children.cancel(childId);
-        return cancelled
-          ? cancellationRecord(childId, cancelled)
-          : rejection(REFUSAL_REASON.UNKNOWN_CHILD);
-      });
-    }
-    return {
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      children: (await children.list()).map(({ record, completion }) =>
-        childSummaryRecord(record, completion),
-      ),
-    };
+  execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+    return Effect.gen(function* () {
+      const children = context.children;
+      if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
+      if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+      if (input.action === SUBAGENTS_ACTION.CANCEL) {
+        const childId = text(input.child_id);
+        if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
+        return yield* context.journal(
+          Effect.map(
+            Effect.promise(() => children.cancel(childId)),
+            (cancelled) =>
+              cancelled
+                ? cancellationRecord(childId, cancelled)
+                : rejection(REFUSAL_REASON.UNKNOWN_CHILD),
+          ),
+        );
+      }
+      const listed = yield* Effect.promise(() => children.list());
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        children: listed.map(({ record, completion }) => childSummaryRecord(record, completion)),
+      };
+    });
   },
 };
 
@@ -343,11 +354,14 @@ const SESSIONS_LIST: SessionToolModule = {
     "conversations, and child conversations — by key, kind, name, and last activity. These " +
     "are your own conversations, not the coding agents the roster lists.",
   inputSchema: SESSIONS_LIST_INPUT,
-  async execute(_input: WireRecord, context: SessionToolContext): Promise<WireRecord> {
-    const children = context.children;
-    if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
-    if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    return conversationListingRecord(await children.conversations(), children.sessionKey);
+  execute(_input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+    return Effect.gen(function* () {
+      const children = context.children;
+      if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
+      if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+      const directory = yield* Effect.promise(() => children.conversations());
+      return conversationListingRecord(directory, children.sessionKey);
+    });
   },
 };
 
@@ -357,19 +371,21 @@ const SESSIONS_HISTORY: SessionToolModule = {
     "Read the recent history of one child this conversation asked for, most recent last, " +
     `bounded to ${maximumSessionsConversationLines} lines. Only a child of this conversation answers.`,
   inputSchema: SESSIONS_HISTORY_INPUT,
-  async execute(input: WireRecord, context: SessionToolContext): Promise<WireRecord> {
-    const children = context.children;
-    if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
-    if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    const childId = text(input.child_id);
-    if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
-    const limit =
-      isWireNumber(input.limit) && input.limit > 0
-        ? Math.min(Math.floor(input.limit), maximumSessionsConversationLines)
-        : maximumSessionsConversationLines;
-    const lines = await children.lines(childId, limit);
-    if (!lines) return rejection(REFUSAL_REASON.UNKNOWN_CHILD);
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, lines: [...lines] };
+  execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+    return Effect.gen(function* () {
+      const children = context.children;
+      if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
+      if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+      const childId = text(input.child_id);
+      if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
+      const limit =
+        isWireNumber(input.limit) && input.limit > 0
+          ? Math.min(Math.floor(input.limit), maximumSessionsConversationLines)
+          : maximumSessionsConversationLines;
+      const lines = yield* Effect.promise(() => children.lines(childId, limit));
+      if (!lines) return rejection(REFUSAL_REASON.UNKNOWN_CHILD);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, lines: [...lines] };
+    });
   },
 };
 

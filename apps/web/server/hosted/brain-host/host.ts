@@ -364,25 +364,23 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           apiKey: (providerId) => seams.providerKey(userId, providerId),
           execute: seams.executeAction,
         });
-        return yield* Effect.promise(() =>
-          runHostedTool(
-            name,
-            input,
-            context,
-            {
-              conversation: binding.target,
-              roster,
-              carrier,
-              transcripts,
-              workspace: hostedWorkspaceAccess(run, seams.store(), userId, seams.now),
-              now: seams.now,
-            },
-            {
-              trigger: binding.turn.trigger,
-              turnId: binding.turn.turnId,
-              runId: binding.turn.turnId,
-            },
-          ),
+        return yield* runHostedTool(
+          name,
+          input,
+          context,
+          {
+            conversation: binding.target,
+            roster,
+            carrier,
+            transcripts,
+            workspace: hostedWorkspaceAccess(run, seams.store(), userId, seams.now),
+            now: seams.now,
+          },
+          {
+            trigger: binding.turn.trigger,
+            turnId: binding.turn.turnId,
+            runId: binding.turn.turnId,
+          },
         );
       }),
 
