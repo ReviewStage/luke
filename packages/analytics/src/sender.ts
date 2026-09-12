@@ -279,14 +279,24 @@ export class ProductEventSender {
     return this.#sends && this.#armed;
   }
 
+  /**
+   * The hold is written ahead of the request, never behind it: what leaves
+   * the queue for the wire leaves the disk first, so a quit between the post
+   * and a write could only lose the batch, never post it twice — the direction
+   * this whole pipeline already takes. A refusal that requeues writes the
+   * hold again with the batch back in it.
+   */
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
     return Effect.zipRight(
       this.#adoptHold(),
       Effect.suspend(() => {
         if (this.#queue.length === 0) return this.#persistHold();
-        return Effect.zipRight(
-          this.#send(),
-          Effect.suspend(() => this.#persistHold()),
+        // Gone whatever becomes of the request, save for the one end that never
+        // authenticated at all.
+        const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
+        return this.#persistHold().pipe(
+          Effect.zipRight(this.#send(events)),
+          Effect.flatMap((requeued) => (requeued ? this.#persistHold() : Effect.void)),
         );
       }),
     );
@@ -328,9 +338,9 @@ export class ProductEventSender {
   }
 
   /**
-   * The hold follows the queue: written whenever a flush leaves events
-   * standing, and written empty once when a hold that stood has nothing left
-   * behind it, so a quiet signed-in run writes nothing at all.
+   * The hold follows the queue: written whenever the queue holds events, and
+   * written empty once when a hold that stood has nothing left behind it, so
+   * a quiet signed-in run writes nothing at all.
    */
   #persistHold(): Effect.Effect<void> {
     const held = this.#held;
@@ -344,12 +354,10 @@ export class ProductEventSender {
     return held.write(record);
   }
 
-  #send(): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.suspend(() => {
-      // Gone whatever becomes of the request, save for the one end that never
-      // authenticated at all.
-      const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
-      return Effect.map(
+  /** Posts one batch, answering whether it went back on the queue. */
+  #send(events: ProductEvent[]): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return Effect.suspend(() =>
+      Effect.map(
         this.#call.send({
           method: HTTP_METHOD.POST,
           path: HOSTED_SERVICE_PATH.EVENTS,
@@ -369,10 +377,12 @@ export class ProductEventSender {
           if (!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL) {
             this.#queue.unshift(...events);
             this.#trimQueue();
+            return true;
           }
+          return false;
         },
-      );
-    });
+      ),
+    );
   }
 
   #trimQueue(): void {

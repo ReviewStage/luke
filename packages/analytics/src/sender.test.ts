@@ -416,7 +416,7 @@ test("a later run posts the hold ahead of its own events and then clears it", as
   assert.equal(hold.writes.length, 1);
 });
 
-test("a hold waits through a run that never signs in, and is read from disk only once", async () => {
+test("a hold waits through a run that never signs in, emptied ahead of each attempt and refilled by its refusal", async () => {
   const hold = memoryHold(
     heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),
   );
@@ -432,10 +432,28 @@ test("a hold waits through a run that never signs in, and is read from disk only
   assert.deepEqual(
     hold.writes.map((record) => record.events.map((event) => event.name)),
     [
+      [],
       [PRODUCT_EVENT.INTRODUCTION_COMPLETE, PRODUCT_EVENT.APP_LAUNCH],
+      [],
       [PRODUCT_EVENT.INTRODUCTION_COMPLETE, PRODUCT_EVENT.APP_LAUNCH],
     ],
   );
+});
+
+test("the hold is emptied before the request leaves, so a quit after the post cannot replay it", async () => {
+  const hold = memoryHold(
+    heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),
+  );
+  const heldWhenPosted: number[] = [];
+  const { sender, requests } = sharingSender({ held: hold.seam }, () => {
+    heldWhenPosted.push(hold.current()?.events.length ?? 0);
+    return new Response("{}");
+  });
+  await sender.flush();
+
+  assert.equal(requests.length, 1);
+  assert.deepEqual(heldWhenPosted, [0]);
+  assert.deepEqual(hold.writes, [heldRecord([])]);
 });
 
 test("a held event older than the service's age window is dropped, one inside it stays", async () => {
