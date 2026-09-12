@@ -11,20 +11,11 @@ import {
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { ACTION_RESULT_STATUS, isRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Layer } from "effect";
+import { Effect, Either, Layer } from "effect";
 import { hostLayer } from "./compose-host.js";
-import { type Composer, mergeMethods } from "./composer.js";
+import { type Composer, DuplicateGatewayMethod, foldMethods } from "./composer.js";
 import { HostTag } from "./effect/host.js";
-import { createHostKernel } from "./host-kernel.js";
-import { runModeFor } from "./run-mode.js";
-import type { SecretCipher } from "./settings-store.js";
 import { testKernelLayer } from "./testing/test-kernel.js";
-
-const CIPHER: SecretCipher = {
-  isAvailable: () => false,
-  encrypt: (plainText) => Buffer.from(plainText, "utf8"),
-  decrypt: (cipherText) => cipherText.toString("utf8"),
-};
 
 function stubComposer(methods: readonly GatewayMethod[]): Composer {
   return {
@@ -48,41 +39,22 @@ function operatorTransport(gateway: GatewayInProcessHost): InProcessTransport {
 }
 
 it("a method two composers claim is a construction failure, not a last writer", () => {
-  assert.throws(
-    () =>
-      mergeMethods([
-        stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
-        stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
-      ]),
-    /two composers answer settings\.snapshot/,
-  );
   assert.deepEqual(
-    Object.keys(
-      mergeMethods([
-        stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
-        stubComposer([GATEWAY_METHOD.ACCOUNT_SNAPSHOT]),
-      ]),
-    ).sort(),
+    foldMethods([
+      stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
+      stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
+    ]),
+    Either.left(new DuplicateGatewayMethod({ method: GATEWAY_METHOD.SETTINGS_SNAPSHOT })),
+  );
+  const merged = foldMethods([
+    stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
+    stubComposer([GATEWAY_METHOD.ACCOUNT_SNAPSHOT]),
+  ]);
+  assert.ok(Either.isRight(merged));
+  assert.deepEqual(
+    Object.keys(merged.right).sort(),
     [GATEWAY_METHOD.ACCOUNT_SNAPSHOT, GATEWAY_METHOD.SETTINGS_SNAPSHOT].sort(),
   );
-});
-
-it("the kernel's service is a named failure before the merge composed it", () => {
-  const kernel = createHostKernel({
-    stateRoot: "/nowhere",
-    runMode: runModeFor({ capture: false, fixture: true }),
-    appVersion: "0.0.0-test",
-    packaged: false,
-    environment: {},
-    cipher: CIPHER,
-    createWorker: () => {
-      throw new Error("unused");
-    },
-    now: () => 0,
-    createId: () => "id",
-    report: () => undefined,
-  });
-  assert.throws(() => kernel.service(), /before the merge composed it/);
 });
 
 it.effect(

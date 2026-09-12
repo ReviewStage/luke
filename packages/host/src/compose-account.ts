@@ -28,7 +28,7 @@ import { Config, Effect, Option } from "effect";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { Environment } from "./effect/seams.js";
+import { AppIdentity, Environment } from "./effect/seams.js";
 import { openSocketOverWs } from "./voice/socket-over-ws.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
 
@@ -88,12 +88,13 @@ export interface AccountDependencies {
  */
 export const composeAccount = (
   dependencies: AccountDependencies,
-): Effect.Effect<AccountComposer, never, HostKernelTag | Environment> =>
+): Effect.Effect<AccountComposer, never, HostKernelTag | Environment | AppIdentity> =>
   Effect.gen(function* () {
     const { settings } = dependencies;
     const kernel = yield* HostKernelTag;
     const environment = yield* Environment;
-    const { runMode, report, options } = kernel;
+    const identity = yield* AppIdentity;
+    const { runMode, report } = kernel;
     const late = yield* lateService<AccountLinks>();
     const links = (): AccountLinks => {
       const standing = late.unsafePeek();
@@ -143,7 +144,7 @@ export const composeAccount = (
      * tap and constructs no writer.
      */
     const traceDirectory =
-      options.packaged || !runMode.sendsNetwork
+      identity.packaged || !runMode.sendsNetwork
         ? Option.none<string>()
         : yield* Effect.orDie(environment.load(agentTraceDirectory));
     const agentTrace = Option.isSome(traceDirectory)
@@ -180,7 +181,7 @@ export const composeAccount = (
       // development override reaches them too; a voice override of its own stands
       // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
       hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
-        packaged: options.packaged,
+        packaged: identity.packaged,
         override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
       }),
       openSocket: openSocketOverWs,

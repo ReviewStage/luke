@@ -36,7 +36,7 @@ import { Effect, Option } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { type Environment, SecretCipher } from "./effect/seams.js";
+import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
@@ -93,14 +93,15 @@ export interface SettingsComposer extends Composer {
 export const composeSettings = (): Effect.Effect<
   SettingsComposer,
   never,
-  HostKernelTag | Environment | SecretCipher | FileSystem.FileSystem
+  HostKernelTag | Environment | SecretCipher | AppIdentity | FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
     const kernel = yield* HostKernelTag;
     const cipher = yield* SecretCipher;
+    const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
     const runtime = yield* Effect.runtime<FileSystem.FileSystem>();
-    const { runMode, report, options } = kernel;
+    const { runMode, report } = kernel;
     const late = yield* lateService<SettingsLinks>();
     const links = (): SettingsLinks => {
       const standing = late.unsafePeek();
@@ -122,7 +123,7 @@ export const composeSettings = (): Effect.Effect<
 
     const productEvents = new ProductEventSender({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      appVersion: options.appVersion,
+      appVersion: identity.appVersion,
       sends: runMode.sendsNetwork,
       readAccessToken: async () => (await store.readAccount())?.accessToken,
       refreshAccount: () => links().refreshAccount(),
@@ -530,7 +531,7 @@ export const composeSettings = (): Effect.Effect<
       start: async () => {
         void store.snapshot();
         productEvents.arm();
-        productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: options.appVersion });
+        productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
         productEvents.markDayActive();
         if (runMode.sendsNetwork) productEvents.start();
       },

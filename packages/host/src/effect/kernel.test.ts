@@ -1,24 +1,22 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { describe, it } from "@effect/vitest";
-import { Config, Duration, Effect, Fiber, Option, TestClock } from "effect";
-import {
-  ACCOUNT_BASE_URL_VARIABLE,
-  type HostSeams,
-  SERVICE_READ_BEFORE_MERGE,
-} from "../host-kernel.js";
+import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option, TestClock } from "effect";
+import { ACCOUNT_BASE_URL_VARIABLE, SERVICE_READ_BEFORE_MERGE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
 import type { GatewayService } from "../service.js";
 import type { SecretCipher } from "../settings-store.js";
-import { HostKernelTag, HostService, hostKernelLayerFromSeams, lateService } from "./kernel.js";
+import { HostKernelTag, HostService, hostKernelLayer, lateService } from "./kernel.js";
 import {
   AppIdentity,
   Environment,
   IdSource,
+  MachinePresenceReader,
   Reporter,
   RunMode,
   reporterLayer,
   SecretCipher as SecretCipherTag,
+  ShutdownSignal,
   StateRoot,
   StoreWorker,
 } from "./seams.js";
@@ -29,23 +27,52 @@ const CIPHER: SecretCipher = {
   decrypt: (cipherText) => cipherText.toString("utf8"),
 };
 
-const seams = (overrides: Partial<HostSeams> = {}): HostSeams =>
-  Object.assign<HostSeams, Partial<HostSeams>>(
-    {
-      stateRoot: "/nowhere",
-      runMode: runModeFor({ capture: false, fixture: true }),
-      appVersion: "0.0.0-test",
-      packaged: false,
-      environment: {},
-      cipher: CIPHER,
-      createWorker: () => {
-        throw new Error("a fixture run keeps nothing on disk");
-      },
-      now: () => 7,
-      createId: () => "id",
-      report: () => undefined,
-    },
-    overrides,
+interface TestSeams {
+  readonly stateRoot: string;
+  readonly runMode: ReturnType<typeof runModeFor>;
+  readonly appVersion: string;
+  readonly packaged: boolean;
+  readonly environment: Record<string, string>;
+  readonly cipher: SecretCipher;
+  readonly createWorker: () => never;
+  readonly createId: () => string;
+  readonly report: (message: string) => void;
+}
+
+const seams = (overrides: Partial<TestSeams> = {}): TestSeams => ({
+  stateRoot: "/nowhere",
+  runMode: runModeFor({ capture: false, fixture: true }),
+  appVersion: "0.0.0-test",
+  packaged: false,
+  environment: {},
+  cipher: CIPHER,
+  createWorker: () => {
+    throw new Error("a fixture run keeps nothing on disk");
+  },
+  createId: () => "id",
+  report: () => undefined,
+  ...overrides,
+});
+
+/** The kernel layer over one test's own seam values, built the way a real composition builds it. */
+const kernelLayerOver = (input: TestSeams) =>
+  Layer.provideMerge(
+    hostKernelLayer,
+    Layer.mergeAll(
+      Layer.succeed(StateRoot, input.stateRoot),
+      Layer.succeed(RunMode, input.runMode),
+      Layer.succeed(AppIdentity, { appVersion: input.appVersion, packaged: input.packaged }),
+      Layer.succeed(
+        Environment,
+        ConfigProvider.fromMap(new Map(Object.entries(input.environment))),
+      ),
+      Layer.succeed(SecretCipherTag, input.cipher),
+      Layer.succeed(StoreWorker, { create: input.createWorker }),
+      Layer.succeed(IdSource, { create: input.createId }),
+      reporterLayer(input.report),
+      Layer.succeed(MachinePresenceReader, { read: undefined }),
+      Layer.succeed(ShutdownSignal, { notify: undefined }),
+    ),
   );
 
 // SAFETY: these tests hold the late service and hand it back; none of them calls a method on it.
@@ -69,7 +96,7 @@ describe("the seam tags", () => {
           idSource: IdSource,
           reporter: Reporter,
         }),
-        hostKernelLayerFromSeams(
+        kernelLayerOver(
           seams({
             stateRoot: "/state",
             appVersion: "1.2.3",
@@ -98,7 +125,7 @@ describe("the seam tags", () => {
     Effect.gen(function* () {
       const environment = yield* Effect.provide(
         Environment,
-        hostKernelLayerFromSeams(seams({ environment: { LUKE_TRACE_DIR: "/traces" } })),
+        kernelLayerOver(seams({ environment: { LUKE_TRACE_DIR: "/traces" } })),
       );
 
       assert.equal(yield* environment.load(Config.string("LUKE_TRACE_DIR")), "/traces");
@@ -114,15 +141,15 @@ describe("the seam tags", () => {
       const override = "http://127.0.0.1:3000/api/auth";
       const development = yield* Effect.provide(
         HostKernelTag,
-        hostKernelLayerFromSeams(seams({ environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } })),
+        kernelLayerOver(seams({ environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } })),
       );
       const packaged = yield* Effect.provide(
         HostKernelTag,
-        hostKernelLayerFromSeams(
+        kernelLayerOver(
           seams({ packaged: true, environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } }),
         ),
       );
-      const none = yield* Effect.provide(HostKernelTag, hostKernelLayerFromSeams(seams()));
+      const none = yield* Effect.provide(HostKernelTag, kernelLayerOver(seams()));
 
       assert.equal(development.accountBaseUrl, override);
       assert.equal(development.hostedServiceBaseUrl, "http://127.0.0.1:3000");
@@ -148,7 +175,7 @@ describe("the seam tags", () => {
     Effect.gen(function* () {
       const kernel = yield* Effect.provide(
         HostKernelTag,
-        hostKernelLayerFromSeams(seams({ stateRoot: "/state" })),
+        kernelLayerOver(seams({ stateRoot: "/state" })),
       );
 
       assert.equal(kernel.stateRoot, "/state");
@@ -161,7 +188,7 @@ describe("the seam tags", () => {
     "the kernel's clock is Effect's own, a `TestClock` under this test rather than the seam's own reading",
     () =>
       Effect.gen(function* () {
-        const kernel = yield* Effect.provide(HostKernelTag, hostKernelLayerFromSeams(seams()));
+        const kernel = yield* Effect.provide(HostKernelTag, kernelLayerOver(seams()));
 
         assert.equal(kernel.now(), 0);
         yield* TestClock.adjust(Duration.millis(1_000));
@@ -201,7 +228,7 @@ describe("the late service", () => {
     Effect.gen(function* () {
       const held = yield* Effect.provide(
         Effect.all({ kernel: HostKernelTag, late: HostService }),
-        hostKernelLayerFromSeams(seams()),
+        kernelLayerOver(seams()),
       );
       const service = stubService();
 

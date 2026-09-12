@@ -436,8 +436,9 @@ Canonical commands:
   or what a node may be asked is a product decision, not an implementation
   detail.
 - The host is what composes and owns the runtime, and it draws nothing. It is
-  `packages/host` (`composeHost`), which imports no `electron`, `react`, or
-  DOM API: everything of the machine arrives as a seam it is handed rather
+  `packages/host` (`hostAssemblyLayer`, `hostLayer`), which imports no
+  `electron`, `react`, or DOM API: everything of the machine arrives as a seam
+  it is handed rather
   than reads, and the two files that needed one were split at that line — the
   `ipcMain` registrations stayed in `apps/desktop/src/main/ipc/`, and
   resolving this Mac's EventKit helper bundle stayed in

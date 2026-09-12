@@ -12,4 +12,4 @@ export {
 } from "./brain-harness.js";
 export { type ScopedGatewayService, scopedGatewayService } from "./gateway-service.js";
 export { operatorOverBrain } from "./operator-over-brain.js";
-export { type TestKernelOptions, testKernelLayer, testKernelSeams } from "./test-kernel.js";
+export { type TestKernelOptions, testKernelLayer } from "./test-kernel.js";

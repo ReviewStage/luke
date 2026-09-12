@@ -1,14 +1,11 @@
 import type * as FileSystem from "@effect/platform/FileSystem";
-import { NodeFileSystem } from "@effect/platform-node";
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   carried,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  type GatewayShutdownOptions,
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
-import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationSupervisor } from "@sidecar/runtime";
@@ -21,18 +18,7 @@ import {
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
-import {
-  Cause,
-  type Context,
-  Duration,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  ManagedRuntime,
-  Option,
-  Scope,
-} from "effect";
+import { Effect, Layer } from "effect";
 import { composeAccount } from "./compose-account.js";
 import { type BrainComposer, composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
@@ -50,44 +36,21 @@ import {
   hostDrain,
   hostStandingLayer,
 } from "./effect/host.js";
-import { HostKernelTag, HostService, hostKernelLayerFromSeams } from "./effect/kernel.js";
+import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
+  type AppIdentity,
   type Environment,
-  HostSeamsObject,
+  type MachinePresenceReader,
   Reporter,
   RunMode,
   type SecretCipher,
+  ShutdownSignal,
+  type StoreWorker,
 } from "./effect/seams.js";
-import type { HostSeams } from "./host-kernel.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
 import { conversationLiveRecord } from "./voice/conversation-live-record.js";
 import { brainAgentLiveBrain } from "./voice/live-brain-adapter.js";
-
-/**
- * How long the quit waits for the store to close after the drain has
- * settled. A close that hangs on a disk must not hold the process open past
- * its quit: what it could not write is what the next launch marks
- * interrupted, which is the same answer an unsettled drain leaves.
- */
-const HOST_CLOSE_WAIT_MS = 5_000;
-
-export interface Host {
-  /** The one boundary a client reaches this host through: the in-process host every transport here is bound to. */
-  readonly gateway: GatewayInProcessHost;
-  /** Opens the store, seeds the workspace, starts maintenance, scheduling, hooks, and observation. */
-  start: () => Promise<void>;
-  /**
-   * The whole quit, in the coordinator's fixed order: admissions closed,
-   * everything under way cancelled, a bounded wait for it to settle,
-   * whatever did not settle written down as unresolved for the next launch's
-   * recovery, and only then the store closed. A caller that ran the steps
-   * itself would be a second order for the same quit, so there is none to
-   * run: what became of it is reported, never answered, because nothing a
-   * client could do with the answer is left to do.
-   */
-  stop: (options?: GatewayShutdownOptions) => Promise<void>;
-}
 
 /** The eight concerns, by the name each is built under. */
 export const HOST_CONCERN = {
@@ -133,18 +96,21 @@ export const hostAssemblyLayer: Layer.Layer<
   DuplicateGatewayMethod,
   | HostKernelTag
   | HostService
-  | HostSeamsObject
   | RunMode
   | Reporter
   | Environment
   | SecretCipher
+  | AppIdentity
+  | MachinePresenceReader
+  | StoreWorker
+  | ShutdownSignal
   | FileSystem.FileSystem
 > = Layer.scoped(
   HostAssemblyTag,
   Effect.gen(function* () {
     const kernel = yield* HostKernelTag;
     const hostService = yield* HostService;
-    const options = yield* HostSeamsObject;
+    const shutdownSignal = yield* ShutdownSignal;
     const runMode = yield* RunMode;
     const { report } = yield* Reporter;
     const home = yield* cadenceHome;
@@ -286,7 +252,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const bootstrapMethods: GatewayMethodTable = {
       [GATEWAY_METHOD.SHUTDOWN]: () =>
         Effect.sync(() => {
-          options.onShutdownRequested?.();
+          shutdownSignal.notify?.();
           return { accepted: true };
         }),
       [GATEWAY_METHOD.CLIENT_BOOTSTRAP]: () =>
@@ -452,106 +418,13 @@ export const hostLayer: Layer.Layer<
   DuplicateGatewayMethod,
   | HostKernelTag
   | HostService
-  | HostSeamsObject
   | RunMode
   | Reporter
   | Environment
   | SecretCipher
+  | AppIdentity
+  | MachinePresenceReader
+  | StoreWorker
+  | ShutdownSignal
   | FileSystem.FileSystem
 > = Layer.provide(hostStandingLayer, hostAssemblyLayer);
-
-/**
- * The host and the kernel beneath it, from the one object the desktop builds
- * today.
- *
- * @deprecated The `Layer.succeed(oldObject)` shim over `hostLayer`; P12-05
- * deletes it with `createHostKernel`.
- */
-export const hostLayerFromSeams = (
-  options: HostSeams,
-): Layer.Layer<HostTag, DuplicateGatewayMethod> =>
-  Layer.provide(hostLayer, Layer.merge(hostKernelLayerFromSeams(options), NodeFileSystem.layer));
-
-/**
- * What the composers' stops left when the scope closed, one line each: a
- * concern that could not stop stranded none of its siblings, and the scope's
- * own close is what says so.
- */
-const reportUncleanStops = (exit: Exit.Exit<void>, report: (message: string) => void): void => {
-  if (Exit.isSuccess(exit)) return;
-  for (const failure of Cause.defects(exit.cause)) {
-    report(
-      `a composer did not stop cleanly: ${failure instanceof Error ? failure.message : String(failure)}`,
-    );
-  }
-};
-
-/**
- * The `start()`/`stop()` face the desktop still operates, over `hostLayer`
- * built in one scope on a `ManagedRuntime` of the adaptor's own. The assembly
- * is built at once, so the server stands before the start as it always has;
- * `start` builds the standing layer into the scope on a fiber of its own, and
- * `stop` interrupts that fiber if it is still under way, runs the drain under
- * the caller's deadline, and then closes the scope, bounded, reporting what
- * did not close in time and leaving it to the exit. The runs here are the
- * strangler shim's own and on the ADR's allowlist.
- *
- * @deprecated P8-01 takes `hostLayer` on the desktop's own runtime; P12-05
- * deletes this adaptor with `createHostKernel`.
- */
-export function composeHost(options: HostSeams): Host {
-  const runtime = ManagedRuntime.make(
-    Layer.provideMerge(
-      hostAssemblyLayer,
-      Layer.merge(hostKernelLayerFromSeams(options), NodeFileSystem.layer),
-    ),
-  );
-  const assembly = runtime.runSync(HostAssemblyTag);
-  const standing = runtime.runSync(Scope.make());
-  const { report } = options;
-
-  let standup: Fiber.RuntimeFiber<Context.Context<HostTag>, DuplicateGatewayMethod> | undefined;
-
-  const quit = (shutdown: GatewayShutdownOptions) =>
-    Effect.gen(function* () {
-      // A standup still under way is interrupted first, so no composer after
-      // the one starting begins and nothing is armed behind the quit; the
-      // composer mid-start runs to its end, since a start is uninterruptible,
-      // and one that never ends is left, bounded, for the drain to leave behind.
-      if (standup !== undefined) {
-        const interrupted = yield* Effect.timeoutOption(
-          Fiber.interrupt(standup),
-          Duration.millis(HOST_CLOSE_WAIT_MS),
-        );
-        if (Option.isNone(interrupted)) report("the standup did not stop in time; draining anyway");
-      }
-      // A drain that cannot finish still says so and still closes the store:
-      // what it could not settle is what the next launch marks interrupted, and
-      // a quit must leave either way rather than on an unhandled failure.
-      yield* Effect.ignore(assembly.drain(shutdown));
-      const closing = yield* Effect.forkDaemon(Effect.exit(Scope.close(standing, Exit.void)));
-      const closed = yield* Effect.timeoutOption(
-        Fiber.join(closing),
-        Duration.millis(HOST_CLOSE_WAIT_MS),
-      );
-      Option.match(closed, {
-        onNone: () => report("the runtime did not close in time; leaving it to the exit"),
-        onSome: (exit) => reportUncleanStops(exit, report),
-      });
-    });
-
-  let stopping: Promise<void> | undefined;
-  return {
-    gateway: assembly.gateway,
-    start: async () => {
-      const fiber = runtime.runFork(Layer.buildWithScope(hostStandingLayer, standing));
-      standup = fiber;
-      const built = await runtime.runPromise(Fiber.await(fiber));
-      if (Exit.isFailure(built)) throw Cause.squash(built.cause);
-    },
-    stop: (shutdown = {}) => {
-      stopping ??= runtime.runPromise(quit(shutdown)).then(() => runtime.dispose());
-      return stopping;
-    },
-  };
-}
