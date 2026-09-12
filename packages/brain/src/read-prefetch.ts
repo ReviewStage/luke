@@ -267,7 +267,10 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * The spoken turn's one look at the slot: what stands is handed over and
    * the slot is spent, reads still under way are waited for inside the
    * turn's own bound and abandoned past it, and a read the turn's policy does
-   * not offer is dropped here rather than entered.
+   * not offer is dropped here rather than entered. The take is bound to the
+   * slot standing when it began: a slot the developer's next words superseded
+   * meanwhile is neither handed over nor torn down, and the newer plan stands
+   * for the turn that follows.
    */
   async take(policy: EffectiveToolPolicy, signal: AbortSignal): Promise<PrefetchTake> {
     const slot = this.#slot;
@@ -282,15 +285,21 @@ export class ReadPrefetch implements TurnReadPrefetch {
         return this.#took(BRAIN_PREFETCH_TAKE.MISS_REVOKED, [], this.#elapsed(startedAt));
       }
       if (outcome === TAKE_WAIT.TIMEOUT) {
-        this.drop();
+        // Only the slot this turn waited on is abandoned: words said since
+        // may have superseded it with a plan of their own, which stands, and
+        // the memo stands with it.
+        slot.abort.abort();
+        if (this.#slot === slot) this.#slot = undefined;
         return this.#took(BRAIN_PREFETCH_TAKE.MISS_TIMEOUT, [], this.#elapsed(startedAt));
       }
       reads = outcome;
     } else {
       reads = await slot.ready;
     }
-    if (this.#slot === slot) this.#slot = undefined;
-    this.#memo = new Map();
+    if (this.#slot === slot) {
+      this.#slot = undefined;
+      this.#memo = new Map();
+    }
     const waitedMs = this.#elapsed(startedAt);
     if (reads === undefined) return this.#took(BRAIN_PREFETCH_TAKE.MISS_NONE, [], waitedMs);
     if (slot.readyAt !== undefined && this.#options.now() - slot.readyAt > PREFETCH_BOUNDS.TTL_MS) {

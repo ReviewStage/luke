@@ -335,6 +335,42 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a take bound to a slot the next words superseded is a miss that hands nothing over and tears nothing down: the newer plan and the memo stand for the turn that follows",
+  () =>
+    Effect.gen(function* () {
+      const r = yield* rig();
+      r.prefetch.anticipate(anticipation("what is"));
+      yield* drained;
+      const taking = r.prefetch.take(ASK_POLICY, new AbortController().signal);
+      r.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* drained;
+      const superseded = yield* Effect.promise(() => taking);
+      assert.equal(superseded.take, BRAIN_PREFETCH_TAKE.MISS_NONE);
+      const replanned = r.model.requests[1];
+      assert.ok(replanned);
+      assert.equal(replanned.options.signal?.aborted, false);
+      // The superseded planner's late answer reaches nothing; the newer plan's is what stands.
+      r.model.answer(plan(TRANSCRIPT_OF_ABC));
+      r.model.answer(plan(TRANSCRIPT_OF_ABC));
+      yield* drained;
+      assert.deepEqual(r.transcriptReads, [ABC]);
+      const taken = yield* Effect.promise(() =>
+        r.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
+      assert.equal(taken.take, BRAIN_PREFETCH_TAKE.HIT);
+      assert.equal(taken.reads.length, 1);
+      // The memo went with the slot that was taken, not with the wait that lost.
+      r.prefetch.anticipate(anticipation("what is abc doing", "2"));
+      yield* drained;
+      // The taken slot's summary is still waiting ahead of the new planner; it is answered first.
+      while (r.model.waiting > 1) r.model.answer(answered([message("facts")]));
+      r.model.answer(plan(TRANSCRIPT_OF_ABC));
+      yield* drained;
+      assert.deepEqual(r.transcriptReads, [ABC, ABC]);
+    }),
+);
+
 it.effect("a ready slot older than its life is an expired miss", () =>
   Effect.gen(function* () {
     const r = yield* rig();
