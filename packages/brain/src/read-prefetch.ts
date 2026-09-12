@@ -7,7 +7,6 @@ import {
   memoryToolNamed,
   REASONING_EFFORT,
   RUN_ORIGIN,
-  type ScheduledTimer,
   type SessionKey,
   type ToolSchema,
 } from "@sidecar/runtime/vocabulary";
@@ -16,6 +15,7 @@ import { ACTION_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
 import { anticipatedAskInputText, prefetchedReadsInputText } from "./input-items.js";
 import type { BrainRoster } from "./performer.js";
 import { userMessageItem } from "./responses-api.js";
+import type { ScheduledTimer } from "./scheduled-timer.js";
 import { settledUnlessAborted } from "./settled.js";
 import { BRAIN_TOOL } from "./tools/names.js";
 import {

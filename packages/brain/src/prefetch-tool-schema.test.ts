@@ -1,3 +1,4 @@
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import {
   jsonSchemaGoldenRoot,
   settleJsonSchemaGolden,
@@ -22,7 +23,7 @@ test(`${GOLDEN} emits the recorded JSON Schema`, async () => {
     type: "function",
     name: PLAN_READS_TOOL.name,
     description: PLAN_READS_TOOL.description,
-    parameters: PLAN_READS_TOOL.inputSchema.jsonSchema(),
+    parameters: emitJsonSchema(PLAN_READS_TOOL.inputSchema),
   });
 });
 

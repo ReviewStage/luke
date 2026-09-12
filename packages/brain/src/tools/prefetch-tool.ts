@@ -1,6 +1,8 @@
 import { maximumMemoryQueryLength, NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import type { Session, SessionIdentity } from "@sidecar/session";
-import { RECORD_EXTRA_KEYS, type Schema, s } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { describeWire, readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { toolArguments } from "./tool-module.js";
 
@@ -30,45 +32,66 @@ export const PREFETCH_READ_KIND = {
 
 type PrefetchReadKind = (typeof PREFETCH_READ_KIND)[keyof typeof PREFETCH_READ_KIND];
 
-const TRANSCRIPT_READ = s.record(
-  {
-    kind: s.literal(PREFETCH_READ_KIND.TRANSCRIPT),
-    session: s.wholeNumber({
-      minimum: 1,
-      description: "The option number of the session in the list you were shown.",
-    }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** A text trimmed, refused when left with nothing, and bounded to `max` characters. */
+function boundedText(description: string, max: number): EffectSchema.Schema<string, string> {
+  return describeWire(
+    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+      strict: true,
+      decode: (value) => value.trim(),
+      encode: (value) => value,
+    }).pipe(
+      EffectSchema.filter((value) => value.trim().length > 0, {
+        schemaId: EffectSchema.MinLengthSchemaId,
+        jsonSchema: { minLength: 1 },
+      }),
+      EffectSchema.maxLength(max),
+    ),
+    description,
+  );
+}
+
+const TRANSCRIPT_READ = tolerantRecord({
+  kind: EffectSchema.Literal(PREFETCH_READ_KIND.TRANSCRIPT),
+  session: describeWire(
+    EffectSchema.Number.pipe(
+      EffectSchema.finite(),
+      EffectSchema.int(),
+      EffectSchema.greaterThanOrEqualTo(1),
+    ),
+    "The option number of the session in the list you were shown.",
+  ),
+});
+
+const MEMORY_READ = tolerantRecord({
+  kind: EffectSchema.Literal(PREFETCH_READ_KIND.MEMORY),
+  query: boundedText("What to search the notebook for.", maximumMemoryQueryLength),
+});
+
+const PLAN_READS_FIELDS = tolerantRecord({
+  reads: describeWire(
+    EffectSchema.Array(EffectSchema.Union(TRANSCRIPT_READ, MEMORY_READ)).pipe(
+      EffectSchema.maxItems(PLAN_READS_MAXIMUM),
+    ),
+    "The reads the answer will certainly need: at most one session transcript and one " +
+      "notebook search. Empty when none is needed.",
+  ),
+});
+
+/** Effect's `Schema` is invariant in its decoded type, so the concrete struct is erased to the module shape's type. */
+export const PLAN_READS_INPUT: EffectSchema.Schema<unknown, UnparsedWireValue> = EffectSchema.make(
+  PLAN_READS_FIELDS.ast,
 );
 
-const MEMORY_READ = s.record(
-  {
-    kind: s.literal(PREFETCH_READ_KIND.MEMORY),
-    query: s.text({
-      max: maximumMemoryQueryLength,
-      description: "What to search the notebook for.",
-    }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
-
-export const PLAN_READS_INPUT = s.record(
-  {
-    reads: s.array(s.union([TRANSCRIPT_READ, MEMORY_READ]), {
-      max: PLAN_READS_MAXIMUM,
-      description:
-        "The reads the answer will certainly need: at most one session transcript and one " +
-        "notebook search. Empty when none is needed.",
-    }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const readPlan = readEither(PLAN_READS_FIELDS);
 
 /** The planner's tool as a registry carries it: its name, its words, and the schema its fields are declared in. */
 export interface PlanReadsTool {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: Schema<unknown>;
+  readonly inputSchema: EffectSchema.Schema<unknown, UnparsedWireValue>;
 }
 
 export const PLAN_READS_TOOL = {
@@ -126,7 +149,7 @@ export function planReadsFromCall(
   argumentsJson: string,
   offered: readonly SessionIdentity[],
 ): readonly PlannedRead[] | undefined {
-  const parsed = PLAN_READS_INPUT.parse(toolArguments(argumentsJson));
+  const parsed = Either.getOrUndefined(readPlan(toolArguments(argumentsJson)));
   if (!parsed) return undefined;
   const planned: PlannedRead[] = [];
   const named = new Set<PrefetchReadKind>();

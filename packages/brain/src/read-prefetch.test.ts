@@ -16,8 +16,8 @@ import {
   REASONING_EFFORT,
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, RECORD_EXTRA_KEYS, s, type WireRecord } from "@sidecar/wire";
-import { Effect, TestClock } from "effect";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { Effect, Schema as EffectSchema, TestClock } from "effect";
 import { ambientTimers } from "./effect/harness.js";
 import {
   ABC,
@@ -120,6 +120,11 @@ function anticipation(partialAsk: string, id = "1"): BrainAnticipation {
   return { id, partialAsk, recentTurns: `Developer: ${partialAsk}` };
 }
 
+/** A record of any fields, as a fake tool's declared input. */
+const ANY_RECORD: EffectSchema.Schema<unknown, UnparsedWireValue> = EffectSchema.make(
+  EffectSchema.Struct({}).annotations({ parseOptions: { onExcessProperty: "ignore" } }).ast,
+);
+
 /** A notebook whose search answers, standing in for an index that holds something. */
 function answeringMemory(searches: WireRecord[]): MemoryDefinition {
   const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
@@ -129,7 +134,7 @@ function answeringMemory(searches: WireRecord[]): MemoryDefinition {
       {
         name: PREFETCH_READ_KIND.MEMORY,
         description: "search",
-        inputSchema: s.record({}, { extraKeys: RECORD_EXTRA_KEYS.IGNORE }),
+        inputSchema: ANY_RECORD,
         effect: TOOL_EFFECT.READ,
         execute: async (input) => {
           searches.push(input);
