@@ -43,6 +43,7 @@ import {
   ReadPrefetch,
 } from "./read-prefetch.js";
 import {
+  BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
   type BrainSubmission,
@@ -55,10 +56,11 @@ import type { AgentSeam, ScheduledTimer } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 import type { BrainChildAccess, BrainWorkspaceAccess } from "./tool-executor.js";
-import { planReadsToolSchema } from "./tools.js";
+import { brainToolCatalog, planReadsToolSchema, resolveTurnToolPolicy } from "./tools.js";
 import type { BrainPrefetchTraceRecord, BrainTurnTraceRecord } from "./trace.js";
 import { readWholeTranscript } from "./transcript-reads.js";
 import {
+  BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,
   type BrainTurnDescription,
   type BrainTurnPreparation,
@@ -354,6 +356,21 @@ export class BrainAgent {
                 signal,
                 maximumChars: PREFETCH_BOUNDS.TRANSCRIPT_CHARS,
               }),
+            // The policy a spoken ask's turn would resolve, resolved the same
+            // way ahead of it, so a denied read is never begun.
+            policy: async () => {
+              const preparation = await options.prepareTurn({
+                kind: BRAIN_TURN_KIND.TURN,
+                trigger: BRAIN_TURN_TRIGGER.ASK,
+                askOrigin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+              });
+              return resolveTurnToolPolicy(
+                preparation.catalog ?? brainToolCatalog(),
+                preparation.layers,
+                BRAIN_TURN_TRIGGER.ASK,
+                options.child,
+              );
+            },
             ...(options.memory ? { memory: options.memory } : undefined),
             now: this.#now,
             schedule: this.#schedule,

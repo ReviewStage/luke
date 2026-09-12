@@ -201,9 +201,12 @@ Canonical commands:
   refusals, cut from the front to 20,000 characters, journaled nowhere, and
   held in memory for 30 seconds; the next words supersede the plan, and a
   stop, a session's close, or a generation's replacement drops it. The
+  reads are gated by the effective tool policy the spoken turn would run
+  under, resolved before the planner is asked, so a denied read is never
+  begun, never summarized, and costs no planner when nothing is offered. The
   spoken ask's turn takes the slot once (waiting at most 1.5 seconds for
-  reads still under way), drops any read its own tool policy does not
-  offer, and enters each as the tool call and answer the model would
+  reads still under way), checks its own policy again over what was read,
+  and enters each as the tool call and answer the model would
   otherwise have asked for, ahead of its first inference; a slot no turn
   takes expires unread. A wrong plan wastes a read and acts on nothing.
   The same small model then writes a few factual sentences about what the

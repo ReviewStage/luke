@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { notebookMemoryProvider } from "@sidecar/memory";
-import { TOOL_EFFECT } from "@sidecar/runtime";
+import { type EffectiveToolPolicy, TOOL_EFFECT } from "@sidecar/runtime";
 import {
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
@@ -103,6 +103,12 @@ const NO_TRANSCRIPT_POLICY = resolveTurnToolPolicy(
   BRAIN_TURN_TRIGGER.ASK,
 );
 
+const NO_READS_POLICY = resolveTurnToolPolicy(
+  brainToolCatalog(),
+  { agent: { deny: [BRAIN_TOOL.READ_TRANSCRIPT, PREFETCH_READ_KIND.MEMORY] } },
+  BRAIN_TURN_TRIGGER.ASK,
+);
+
 function plan(...reads: readonly WireRecord[]): ModelResponse {
   return answered([call("plan_1", PLAN_READS_TOOL_NAME, { reads })]);
 }
@@ -158,7 +164,9 @@ interface Rig {
   transcriptStatus: { value: string };
 }
 
-const rig = (options: { memory?: MemoryDefinition; listen?: boolean } = {}): Effect.Effect<Rig> =>
+const rig = (
+  options: { memory?: MemoryDefinition; listen?: boolean; policy?: EffectiveToolPolicy } = {},
+): Effect.Effect<Rig> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
     const timers = yield* ambientTimers;
@@ -185,6 +193,7 @@ const rig = (options: { memory?: MemoryDefinition; listen?: boolean } = {}): Eff
             : { status: transcriptStatus.value, reason: "no read" };
         },
         memory: options.memory ?? answeringMemory(searches),
+        policy: async () => options.policy ?? ASK_POLICY,
         now: timers.now,
         schedule: timers.schedule,
         cancel: timers.cancel,
@@ -446,7 +455,45 @@ it.effect(
 );
 
 it.effect(
-  "a read the turn's policy does not offer is dropped at the take, and a read that answered a refusal is never held at all",
+  "a read the spoken turn's policy does not offer is never begun: the plan is filtered before any read runs, and with nothing offered no planner is spent",
+  () =>
+    Effect.gen(function* () {
+      const denied = yield* rig({ policy: NO_TRANSCRIPT_POLICY });
+      denied.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* drained;
+      denied.model.answer(plan(TRANSCRIPT_OF_ABC, MEMORY_SEARCH));
+      yield* drained;
+      assert.deepEqual(denied.transcriptReads, []);
+      assert.equal(denied.searches.length, 1);
+      const taken = yield* Effect.promise(() =>
+        denied.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
+      assert.deepEqual(
+        taken.reads.map((read) => read.name),
+        [PREFETCH_READ_KIND.MEMORY],
+      );
+
+      const nothing = yield* rig({ policy: NO_READS_POLICY });
+      nothing.prefetch.anticipate(anticipation("what is abc doing"));
+      yield* drained;
+      assert.equal(nothing.model.requests.length, 0);
+      const empty = yield* Effect.promise(() =>
+        nothing.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
+      assert.equal(empty.take, BRAIN_PREFETCH_TAKE.HIT);
+      assert.deepEqual(empty.reads, []);
+      assert.deepEqual(
+        nothing.traces.map((trace) => [trace.outcome, trace.reads]),
+        [
+          [BRAIN_PREFETCH_OUTCOME.PLANNED, 0],
+          [undefined, 0],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "a read the turn's own policy does not offer is dropped at the take as well, and a read that answered a refusal is never held at all",
   () =>
     Effect.gen(function* () {
       const r = yield* rig();

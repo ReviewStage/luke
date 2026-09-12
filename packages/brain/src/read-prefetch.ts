@@ -147,6 +147,14 @@ export interface ReadPrefetchOptions {
   roster: () => BrainRoster;
   /** One observed session's whole tail, bounded to the prefetch's own bound, through the host; the identity is one the roster holds. */
   readTranscript: (identity: SessionIdentity, signal: AbortSignal) => Promise<WireRecord>;
+  /**
+   * The effective tool policy a spoken ask's turn would run under, resolved
+   * now: a read that policy does not offer is never planned for, never run,
+   * and never summarized, so the deny-wins gate stands ahead of the read as
+   * it does ahead of a turn's dispatch. The take checks the turn's own
+   * policy again when it enters what was read.
+   */
+  policy: () => Promise<EffectiveToolPolicy>;
   memory?: MemoryDefinition;
   now: () => number;
   schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
@@ -352,6 +360,20 @@ export class ReadPrefetch implements TurnReadPrefetch {
     slot: Slot,
     anticipation: BrainAnticipation,
   ): Promise<readonly HeldRead[] | undefined> {
+    const chars = anticipation.partialAsk.length;
+    const resolved = await settledUnlessAborted(this.#options.policy(), slot.abort.signal);
+    if (resolved.aborted) {
+      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
+      return undefined;
+    }
+    const policy = resolved.value;
+    const offeredKinds = Object.values(PREFETCH_READ_KIND).filter((kind) => policy.allows(kind));
+    if (offeredKinds.length === 0) {
+      // Nothing the policy offers could be read ahead, so no planner is spent.
+      slot.readyAt = this.#options.now();
+      this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.PLANNED, chars, 0);
+      return [];
+    }
     const roster = this.#options.roster();
     const sessions = roster.sessions ?? [];
     const offered = offeredSessions(sessions);
@@ -383,7 +405,6 @@ export class ReadPrefetch implements TurnReadPrefetch {
       slot.abort.signal,
     );
     this.#options.cancel(deadline);
-    const chars = anticipation.partialAsk.length;
     if (planned.aborted) {
       this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
       return undefined;
@@ -409,7 +430,9 @@ export class ReadPrefetch implements TurnReadPrefetch {
       return undefined;
     }
     const held = await Promise.all(
-      reads.map((read) => this.#read(read, roster, sessions, offered.options)),
+      reads
+        .filter((read) => policy.allows(read.kind))
+        .map((read) => this.#read(read, roster, sessions, offered.options)),
     );
     if (slot.abort.signal.aborted) {
       this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
