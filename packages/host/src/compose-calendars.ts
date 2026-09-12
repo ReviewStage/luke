@@ -21,12 +21,22 @@ import {
 } from "@sidecar/gateway";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationLoop } from "@sidecar/runtime";
-import { cadenceGate, cadenceHome, forkIntoCadence } from "@sidecar/runtime/effect";
+import { cadenceGate } from "@sidecar/runtime/effect";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Either, Fiber, Option, Runtime, Schedule, type Scope } from "effect";
+import {
+  type Cause,
+  Duration,
+  Effect,
+  Either,
+  Fiber,
+  Option,
+  Runtime,
+  Schedule,
+  Scope,
+} from "effect";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -60,6 +70,10 @@ const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
  * the longest consent taken back keeps holding anything.
  */
 const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
+
+/** What a rejected provider read says for itself, read off the exception the promise was lifted into. */
+const causeOf = (failure: Cause.UnknownException): string =>
+  failure.error instanceof Error ? failure.error.message : String(failure.error);
 
 /** What the calendars reach in the speech the meetings hold. */
 interface CalendarsLinks {
@@ -120,7 +134,6 @@ export const composeCalendars = (
     const { settings, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
     const runtime = yield* Effect.runtime<never>();
-    const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
     // The two readers below still take a promise for the one setting each
@@ -280,64 +293,75 @@ export const composeCalendars = (
      * observation scope only where one still stands and a next boundary
      * exists.
      */
-    function armQuietBoundaryTimer(): void {
+    const armQuietBoundaryTimer: Effect.Effect<void> = Effect.gen(function* () {
       if (boundaryFiber !== undefined) {
         const fiber = boundaryFiber;
         boundaryFiber = undefined;
-        Runtime.runFork(runtime)(Fiber.interrupt(fiber));
+        // Dropped rather than waited for, the way cancelling a timer never
+        // waited: what an interruption has to guarantee is that the wake does
+        // not fire, never that its fiber has already ended.
+        yield* Effect.forkDaemon(Fiber.interrupt(fiber));
       }
       if (!calendarMeetings || observationScope === undefined) return;
       const at = now();
       const boundary = nextMeetingBoundary(calendarMeetings, at);
       if (boundary === undefined) return;
-      const scope = observationScope;
-      boundaryFiber = forkIntoCadence(
-        home,
-        scope,
+      boundaryFiber = yield* Effect.provideService(
         Effect.forkScoped(
           Effect.sleep(Duration.millis(boundary - at + 1)).pipe(
             Effect.zipRight(
-              Effect.sync(() => {
+              Effect.suspend(() => {
                 boundaryFiber = undefined;
                 links().reconcileSpeech();
-                armQuietBoundaryTimer();
+                return armQuietBoundaryTimer;
               }),
             ),
           ),
         ),
+        Scope.Scope,
+        observationScope,
       );
-    }
+    });
 
-    async function refreshCalendarMeetings(generation: number): Promise<void> {
-      try {
-        const [observations, appleObservation] = await Promise.all([
-          googleCalendar.observe(),
-          appleCalendar.observe(),
-        ]);
-        if (!loop.isCurrent(generation)) return;
-        const accounts = [...(observations ?? []), ...(appleObservation ? [appleObservation] : [])];
-        // Both readers answer nothing for a calendar that is not connected, so
-        // a machine with none observed holds no meetings; only a run whose
-        // first observation has not resolved yet holds nothing at all.
-        calendarMeetings = accounts.flatMap((held) => [...held.meetings]);
-        observedCalendars = accounts.map(({ accountId, calendars, failure, revoked }) => ({
-          accountId,
-          calendars,
-          ...(failure ? { failure } : undefined),
-          ...(revoked ? { revoked } : undefined),
-        }));
-        kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: carried(observedCalendars) });
-        for (const held of accounts) {
-          if (held.failure) report(`Calendar observation failed: ${held.failure}`);
-        }
-      } catch (error) {
-        report(
-          `Calendar observation failed: ${error instanceof Error ? error.message : String(error)}`,
+    function refreshCalendarMeetings(generation: number): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        const observed = yield* Effect.either(
+          Effect.all(
+            [
+              Effect.tryPromise(() => googleCalendar.observe()),
+              Effect.tryPromise(() => appleCalendar.observe()),
+            ],
+            { concurrency: "unbounded" },
+          ),
         );
-      }
-      if (!loop.isCurrent(generation)) return;
-      links().reconcileSpeech();
-      armQuietBoundaryTimer();
+        if (Either.isRight(observed)) {
+          const [observations, appleObservation] = observed.right;
+          if (!loop.isCurrent(generation)) return;
+          const accounts = [
+            ...(observations ?? []),
+            ...(appleObservation ? [appleObservation] : []),
+          ];
+          // Both readers answer nothing for a calendar that is not connected, so
+          // a machine with none observed holds no meetings; only a run whose
+          // first observation has not resolved yet holds nothing at all.
+          calendarMeetings = accounts.flatMap((held) => [...held.meetings]);
+          observedCalendars = accounts.map(({ accountId, calendars, failure, revoked }) => ({
+            accountId,
+            calendars,
+            ...(failure ? { failure } : undefined),
+            ...(revoked ? { revoked } : undefined),
+          }));
+          kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: carried(observedCalendars) });
+          for (const held of accounts) {
+            if (held.failure) report(`Calendar observation failed: ${held.failure}`);
+          }
+        } else {
+          report(`Calendar observation failed: ${causeOf(observed.left)}`);
+        }
+        if (!loop.isCurrent(generation)) return;
+        links().reconcileSpeech();
+        yield* armQuietBoundaryTimer;
+      });
     }
 
     const loop = new ObservationLoop({
@@ -345,6 +369,14 @@ export const composeCalendars = (
       intervalMs: CALENDAR_REFRESH_INTERVAL_MS,
       run: refreshCalendarMeetings,
     });
+
+    /**
+     * The pass a calendar write earns, started and never waited for: the
+     * write's own answer must not sit behind two providers' reads. A daemon
+     * because the fiber outlives the request that asked for it, exactly as
+     * the detached promise it replaces did.
+     */
+    const pokeRefresh = Effect.asVoid(Effect.forkDaemon(loop.refresh));
 
     const pollAppleCalendarAccess = (): Effect.Effect<void> =>
       Effect.gen(function* () {
@@ -370,7 +402,7 @@ export const composeCalendars = (
         const probeRevoked = access !== APPLE_CALENDAR_ACCESS.FULL;
         if (probeRevoked !== drawnRevoked) {
           report(`Calendar access now reads ${access}; running a pass.`);
-          void loop.refresh();
+          yield* loop.refresh;
         }
       });
 
@@ -439,9 +471,9 @@ export const composeCalendars = (
                 ]);
               }),
             (saved) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 if (saved.reason) return;
-                void loop.refresh();
+                yield* pokeRefresh;
                 settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
                   calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
                 });
@@ -468,9 +500,9 @@ export const composeCalendars = (
           settings.settingsWrite(
             () => settingsStore.removeCalendarAccount(accountId),
             (saved) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 if (saved.reason) return;
-                void loop.refresh();
+                yield* pokeRefresh;
                 settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
                   calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
                 });
@@ -516,9 +548,9 @@ export const composeCalendars = (
                   return yield* settingsStore.connectAppleCalendar(seed ? [seed] : []);
                 }),
               (saved) =>
-                Effect.sync(() => {
+                Effect.gen(function* () {
                   if (saved.reason) return;
-                  void loop.refresh();
+                  yield* pokeRefresh;
                   if (stored) {
                     settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
                       calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
@@ -536,9 +568,9 @@ export const composeCalendars = (
           settings.settingsWrite(
             () => settingsStore.disconnectAppleCalendar(),
             (saved) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 if (saved.reason) return;
-                void loop.refresh();
+                yield* pokeRefresh;
                 settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
                   calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
                 });
@@ -561,11 +593,7 @@ export const composeCalendars = (
           appleConnectGeneration += 1;
           return {};
         }),
-      [GATEWAY_METHOD.CALENDAR_REFRESH]: () =>
-        Effect.as(
-          Effect.promise(() => loop.refresh()),
-          {},
-        ),
+      [GATEWAY_METHOD.CALENDAR_REFRESH]: () => Effect.as(loop.refresh, {}),
       [GATEWAY_METHOD.CALENDAR_SET_SELECTED]: (params) =>
         Effect.gen(function* () {
           const { accountId, calendarId, selected } = params;
@@ -588,9 +616,9 @@ export const composeCalendars = (
           const result = yield* settings.settingsWrite(
             () => settingsStore.setCalendarSelected(accountId, calendarId, selected),
             (saved) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 if (saved.reason) return;
-                void loop.refresh();
+                yield* pokeRefresh;
                 settings.recordProductEvent(PRODUCT_EVENT.SETTING_UPDATE, {
                   setting_id: APP_SETTING_ID.CALENDAR_SELECTED,
                   setting_value: selected ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,

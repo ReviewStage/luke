@@ -31,7 +31,7 @@ import type {
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Deferred, Effect, Either } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { DevicesComposer } from "./compose-devices.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -99,20 +99,6 @@ function rateAnswer(status: ConversationRateStatus) {
 }
 
 /**
- * Runs one of the reads/writes' client effects to a promise, over the
- * ambient `HttpClient`: the poll, the pager, and the two Gateway methods
- * below are still promises and callbacks a plain `ObservationLoop`/`Effect.gen`
- * awaits rather than fibers of their own, so this is where the request
- * effect is run; on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`.
- */
-function runClientEffect<Answer>(
-  effect: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-): Promise<Answer> {
-  return Effect.runPromise(Effect.provide(effect, FetchHttpClient.layer));
-}
-
-/**
  * The Conversation read from the service, for the panel to draw: the
  * per-resource reads behind cursors of this device's own, folded into one
  * picture and told to every client whenever a poll moved it, and the one
@@ -170,48 +156,52 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * not read back, so the thread stands as last read and says so rather than
    * stopping quietly at the last good page; the cursor does not pass the row.
    */
-  async function readPage(
+  function readPage(
     answer: ConversationMessagesAnswer,
-  ): Promise<{ readonly page: ReadMessagesPage } | { readonly unreadable: UnreadableRow }> {
-    const groups: ReadTurnGroup[] = [];
-    for (const group of answer.groups) {
-      const read = await readStoredUIMessages(
-        group.messages.map((message) => message.message),
-        registry,
-      );
-      if (!read.ok) {
-        // The reader's path begins with the index of the row it refused.
-        const refused = group.messages.find((_, position) => position === read.path[0]);
-        const row: UnreadableRow = {
-          conversationId: group.conversationId,
-          seq: refused?.seq ?? group.messages[0]?.seq ?? 0,
-        };
-        report(
-          `a Conversation page could not be read under this build's registry: ${read.refusal} at ${read.path.join(".")}`,
+  ): Effect.Effect<{ readonly page: ReadMessagesPage } | { readonly unreadable: UnreadableRow }> {
+    return Effect.gen(function* () {
+      const groups: ReadTurnGroup[] = [];
+      for (const group of answer.groups) {
+        const read = yield* Effect.promise(() =>
+          readStoredUIMessages(
+            group.messages.map((message) => message.message),
+            registry,
+          ),
         );
-        return { unreadable: row };
+        if (!read.ok) {
+          // The reader's path begins with the index of the row it refused.
+          const refused = group.messages.find((_, position) => position === read.path[0]);
+          const row: UnreadableRow = {
+            conversationId: group.conversationId,
+            seq: refused?.seq ?? group.messages[0]?.seq ?? 0,
+          };
+          report(
+            `a Conversation page could not be read under this build's registry: ${read.refusal} at ${read.path.join(".")}`,
+          );
+          return { unreadable: row };
+        }
+        const messages: ConversationViewMessage[] = group.messages.map((message, index) => {
+          const stored = read.value[index];
+          if (stored === undefined)
+            throw new Error("the registry read answered fewer rows than it took");
+          return {
+            message: stored,
+            seq: message.seq,
+            createdAt: message.createdAt,
+            tools: message.tools,
+            ...(message.rating !== undefined ? { rating: message.rating } : undefined),
+          };
+        });
+        groups.push({
+          turnId: group.turnId,
+          conversationId: group.conversationId,
+          source: group.source,
+          ...(group.turn !== undefined ? { turn: group.turn } : undefined),
+          messages,
+        });
       }
-      const messages: ConversationViewMessage[] = group.messages.map((message, index) => {
-        const stored = read.value[index];
-        if (stored === undefined)
-          throw new Error("the registry read answered fewer rows than it took");
-        return {
-          message: stored,
-          seq: message.seq,
-          createdAt: message.createdAt,
-          tools: message.tools,
-          ...(message.rating !== undefined ? { rating: message.rating } : undefined),
-        };
-      });
-      groups.push({
-        turnId: group.turnId,
-        conversationId: group.conversationId,
-        source: group.source,
-        ...(group.turn !== undefined ? { turn: group.turn } : undefined),
-        messages,
-      });
-    }
-    return { page: { conversations: answer.conversations, groups, next: answer.next } };
+      return { page: { conversations: answer.conversations, groups, next: answer.next } };
+    });
   }
 
   /**
@@ -220,101 +210,123 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * the one refusal a device acts on, an unreadable row, is written on the
    * picture where the walk stops rather than passed over.
    */
-  async function pageResource<Answer extends { readonly hasMore: boolean }>(
+  function pageResource<Answer extends { readonly hasMore: boolean }>(
     generation: number,
-    read: (after: string | undefined) => Promise<ConversationReadResult<Answer>>,
+    read: (
+      after: string | undefined,
+    ) => Effect.Effect<ConversationReadResult<Answer>, never, HttpClient.HttpClient>,
     cursor: () => string | undefined,
-    apply: (answer: Answer, epoch: number) => Promise<boolean>,
-  ): Promise<void> {
-    for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
-      const epoch = sync.clearEpoch;
-      const result = await read(cursor());
-      if (!loop.isCurrent(generation)) return;
-      if (!result.ok) {
-        // A refusal names a row of the thread as it stood when the read went
-        // out; a Clear taken meanwhile stamped that thread, and the notice is not written over the new one.
-        if (
-          result.failure === CONVERSATION_READ_FAILURE.UNREADABLE_ROW &&
-          sync.clearEpoch === epoch
-        ) {
-          sync.markUnreadable(result.row);
+    apply: (answer: Answer, epoch: number) => Effect.Effect<boolean>,
+  ): Effect.Effect<void, never, HttpClient.HttpClient> {
+    return Effect.gen(function* () {
+      for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
+        const epoch = sync.clearEpoch;
+        const result = yield* read(cursor());
+        if (!loop.isCurrent(generation)) return;
+        if (!result.ok) {
+          // A refusal names a row of the thread as it stood when the read went
+          // out; a Clear taken meanwhile stamped that thread, and the notice is not written over the new one.
+          if (
+            result.failure === CONVERSATION_READ_FAILURE.UNREADABLE_ROW &&
+            sync.clearEpoch === epoch
+          ) {
+            sync.markUnreadable(result.row);
+          }
+          return;
         }
-        return;
+        if (!(yield* apply(result.answer, epoch)) || !result.answer.hasMore) return;
       }
-      if (!(await apply(result.answer, epoch)) || !result.answer.hasMore) return;
-    }
+    });
   }
 
   const pageMessages = (generation: number) =>
     pageResource(
       generation,
-      (after) => runClientEffect(client.messages({ after })),
+      (after) => client.messages({ after }),
       () => sync.cursors().messages,
-      async (answer, epoch) => {
-        const read = await readPage(answer);
-        if (!loop.isCurrent(generation)) return false;
-        if ("unreadable" in read) {
-          if (sync.clearEpoch === epoch) sync.markUnreadable(read.unreadable);
-          return false;
-        }
-        sync.applyMessages(read.page);
-        return true;
-      },
+      (answer, epoch) =>
+        Effect.gen(function* () {
+          const read = yield* readPage(answer);
+          if (!loop.isCurrent(generation)) return false;
+          if ("unreadable" in read) {
+            if (sync.clearEpoch === epoch) sync.markUnreadable(read.unreadable);
+            return false;
+          }
+          sync.applyMessages(read.page);
+          return true;
+        }),
     );
 
   const pageEvents = (generation: number) =>
     pageResource(
       generation,
-      (after) => runClientEffect(client.events({ after })),
+      (after) => client.events({ after }),
       () => sync.cursors().events,
-      async (answer) => {
-        sync.applyEvents(answer.events, answer.next, answer.hasMore);
-        return true;
-      },
+      (answer) =>
+        Effect.sync(() => {
+          sync.applyEvents(answer.events, answer.next, answer.hasMore);
+          return true;
+        }),
     );
 
   const pageTurns = (generation: number) =>
     pageResource(
       generation,
-      (after) => runClientEffect(client.turns({ after })),
+      (after) => client.turns({ after }),
       () => sync.cursors().turns,
-      async (answer) => {
-        sync.applyTurns(answer.turns, answer.next);
-        return true;
-      },
+      (answer) =>
+        Effect.sync(() => {
+          sync.applyTurns(answer.turns, answer.next);
+          return true;
+        }),
     );
 
-  async function poll(generation: number): Promise<void> {
-    const deviceId = devices.deviceId();
-    // A heads poll names the device and nothing else, so it moves the row's
-    // last-seen instant alone and touches neither presence instant the devices
-    // composer restates on its own poll.
-    const signal =
-      deviceId === undefined ? undefined : await runClientEffect(heads.poll({ deviceId }));
-    if (!loop.isCurrent(generation)) return;
-    const cursors = sync.cursors();
-    // A signal that could not be had reads everything: each resource answers an empty page when nothing moved.
-    const readMessages = signal === undefined || signal.messages !== cursors.messages;
-    const readEvents = signal === undefined || signal.events !== cursors.events;
-    const readTurns = signal === undefined || signal.turns !== cursors.turns;
-    // Messages before turns within a poll, so the turn a group carries is never
-    // older than the row the turns resource answered a moment before it.
-    if (readMessages) await pageMessages(generation);
-    if (readEvents) await pageEvents(generation);
-    if (readTurns) await pageTurns(generation);
-    if (loop.isCurrent(generation)) publish();
+  function poll(generation: number): Effect.Effect<void, never, HttpClient.HttpClient> {
+    return Effect.gen(function* () {
+      const deviceId = devices.deviceId();
+      // A heads poll names the device and nothing else, so it moves the row's
+      // last-seen instant alone and touches neither presence instant the devices
+      // composer restates on its own poll.
+      const signal = deviceId === undefined ? undefined : yield* heads.poll({ deviceId });
+      if (!loop.isCurrent(generation)) return;
+      const cursors = sync.cursors();
+      // A signal that could not be had reads everything: each resource answers an empty page when nothing moved.
+      const readMessages = signal === undefined || signal.messages !== cursors.messages;
+      const readEvents = signal === undefined || signal.events !== cursors.events;
+      const readTurns = signal === undefined || signal.turns !== cursors.turns;
+      // Messages before turns within a poll, so the turn a group carries is never
+      // older than the row the turns resource answered a moment before it.
+      if (readMessages) yield* pageMessages(generation);
+      if (readEvents) yield* pageEvents(generation);
+      if (readTurns) yield* pageTurns(generation);
+      if (loop.isCurrent(generation)) publish();
+    });
   }
 
-  /** The pass under way, so a caller can wait for one that began after its own write. */
-  let inFlight: Promise<void> = Promise.resolve();
+  /**
+   * The pass under way, so a caller can wait for one that began after its own
+   * write. A `Deferred` and not a promise: the pass is a fiber of whoever
+   * runs the loop, and what a waiter needs is the instant it settled,
+   * however it settled.
+   */
+  let inFlight: Deferred.Deferred<void> | undefined;
+
+  const settledInFlight = Effect.suspend(() =>
+    inFlight === undefined ? Effect.void : Deferred.await(inFlight),
+  );
 
   const loop = new ObservationLoop({
     gate,
     intervalMs: CONVERSATION_POLL_INTERVAL_MS,
-    run: (generation) => {
-      inFlight = poll(generation);
-      return inFlight;
-    },
+    run: (generation) =>
+      Effect.gen(function* () {
+        const settled = yield* Deferred.make<void>();
+        inFlight = settled;
+        yield* Effect.ensuring(
+          Effect.provide(poll(generation), FetchHttpClient.layer),
+          Deferred.succeed(settled, undefined),
+        );
+      }),
   });
 
   /**
@@ -325,11 +337,11 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * answers at once, and that queued pass — which began after the write — is
    * what the last wait is for.
    */
-  async function pollAfter(): Promise<void> {
-    await inFlight.catch(() => undefined);
-    await loop.refresh();
-    await inFlight.catch(() => undefined);
-  }
+  const pollAfter: Effect.Effect<void> = Effect.gen(function* () {
+    yield* settledInFlight;
+    yield* loop.refresh;
+    yield* settledInFlight;
+  });
 
   function reset(): void {
     sync.reset();
@@ -350,7 +362,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         // follows moves the cursors onto the new main.
         sync.applyClear(answer.openedAt);
         publish();
-        yield* Effect.promise(() => pollAfter());
+        yield* pollAfter;
         return { cleared: true };
       }),
     [GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE]: (params) =>

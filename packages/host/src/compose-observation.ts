@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import { PRODUCT_EVENT, productSessionCountBucket } from "@sidecar/analytics";
 import type { BrainRoster } from "@sidecar/brain";
 import { sessionContextText } from "@sidecar/brain";
@@ -33,7 +34,7 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Option, type Scope } from "effect";
+import { Effect, Option, Runtime, type Scope } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -128,6 +129,7 @@ export const composeObservation = (
       return standing.value;
     };
 
+    const runtime = yield* Effect.runtime<never>();
     const sessionRegistry = new SessionRoster();
     const rosterClient = new HostedRosterClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -141,6 +143,17 @@ export const composeObservation = (
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       ...account.token,
     });
+    /**
+     * The redraw a landed write earns, as a synchronous caller can ask for
+     * it. A row's press and the brain's carried act both settle inside a
+     * promise the tool seam still holds, so the poke is forked onto the
+     * runtime this composition is being built on rather than awaited there;
+     * building a runtime here would be a second one.
+     */
+    const pokeRefresh = (): void => {
+      Runtime.runFork(runtime)(loop.refresh);
+    };
+
     const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
     let unsubscribeSessions: (() => void) | undefined;
     let lastWorkspaceProjects: string | undefined;
@@ -293,7 +306,7 @@ export const composeObservation = (
       sessionRegistry,
       openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
       actions: actionClient,
-      refreshSessions: () => loop.refresh(),
+      refreshSessions: pokeRefresh,
       sendsNetwork: runMode.sendsNetwork,
       settingsStore,
       rememberWorkspaceDefaults,
@@ -315,7 +328,7 @@ export const composeObservation = (
     const rowActions = createSessionRowActions({
       drawn: actableSessions,
       client: actionClient,
-      refresh: () => loop.refresh(),
+      refresh: pokeRefresh,
       recordProductEvent: settings.recordProductEvent,
     });
 
@@ -324,17 +337,25 @@ export const composeObservation = (
       intervalMs: SESSION_REFRESH_INTERVAL_MS,
       // The projects are drawn before the roster, so the broadcast the roster's
       // commit fires already reads the list the same pass listed.
-      run: async (generation) => {
-        const isCurrent = () => loop.isCurrent(generation);
-        const projects = await drawSnapshotProjects({ client: rosterClient, isCurrent, report });
-        if (projects) heldWorkspaceProjects = projects;
-        await drawSnapshotRoster({
-          client: rosterClient,
-          registry: sessionRegistry,
-          isCurrent,
-          report,
-        });
-      },
+      run: (generation) =>
+        Effect.provide(
+          Effect.gen(function* () {
+            const isCurrent = () => loop.isCurrent(generation);
+            const projects = yield* drawSnapshotProjects({
+              client: rosterClient,
+              isCurrent,
+              report,
+            });
+            if (projects) heldWorkspaceProjects = projects;
+            yield* drawSnapshotRoster({
+              client: rosterClient,
+              registry: sessionRegistry,
+              isCurrent,
+              report,
+            });
+          }),
+          FetchHttpClient.layer,
+        ),
       afterRun: () => {
         links().rosterLook();
       },

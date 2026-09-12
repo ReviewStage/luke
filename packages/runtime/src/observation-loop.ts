@@ -6,6 +6,13 @@
  * they were: a caller reads `isCurrent` synchronously from inside its own
  * pass.
  *
+ * A pass is an `Effect` and so is `refresh`, so the cadence's fiber and a
+ * caller's own poke are the same work on the same runtime and nothing here
+ * bridges to a promise. The one thing a pass still does outside its own fiber
+ * is the follow-up a coalesced poke earns: `refresh` answers as soon as the
+ * pass it waited on is done, and the queued pass behind it is a daemon,
+ * exactly as the detached promise it replaces was.
+ *
  * The loop no longer arms itself. `cadence` is what an arming stands up, and
  * whoever owns the edge that arms it — the account gate opening and closing,
  * which is not the loop's own lifetime — holds it in a `CadenceGate` of its
@@ -19,12 +26,12 @@ import { scheduleRepeat } from "./effect/timers.js";
 export interface ObservationLoopOptions {
   gate: () => boolean;
   intervalMs: number;
-  run: (generation: number) => Promise<void>;
+  run: (generation: number) => Effect.Effect<void>;
   afterRun?: () => void;
   /**
    * Where a pass the cadence started reports its own failure. The interval
    * before it kept running whatever a pass threw, so the schedule may not end
-   * on one either, and a rejection nobody wrote down would be the loop going
+   * on one either, and a defect nobody wrote down would be the loop going
    * quiet for the rest of the run.
    */
   report?: (message: string) => void;
@@ -38,8 +45,21 @@ export class ObservationLoop {
   #queued = false;
   #armed = false;
 
-  readonly #pass = Effect.suspend(() =>
-    this.#armed ? Effect.promise(() => this.#reportedPass()) : Effect.void,
+  /**
+   * One pass of the cadence's own, and what a pass nobody awaits owes the
+   * loop: a defect written down rather than a cadence gone quiet for the rest
+   * of the run.
+   */
+  readonly #pass: Effect.Effect<void> = Effect.suspend(() =>
+    this.#armed
+      ? Effect.catchAllDefect(this.refresh, (defect) =>
+          Effect.sync(() => {
+            this.#report(
+              `Observation pass failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+            );
+          }),
+        )
+      : Effect.void,
   );
 
   /**
@@ -74,16 +94,6 @@ export class ObservationLoop {
     this.#report = options.report ?? ((message) => void process.stderr.write(`${message}\n`));
   }
 
-  async #reportedPass(): Promise<void> {
-    try {
-      await this.refresh();
-    } catch (error) {
-      this.#report(
-        `Observation pass failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
   get generation(): number {
     return this.#generation;
   }
@@ -92,29 +102,29 @@ export class ObservationLoop {
     return generation === this.#generation && this.#options.gate();
   }
 
-  async refresh(): Promise<void> {
-    if (!this.#options.gate()) return;
+  readonly refresh: Effect.Effect<void> = Effect.suspend(() => {
+    if (!this.#options.gate()) return Effect.void;
     if (this.#running) {
       this.#queued = true;
-      return;
+      return Effect.void;
     }
     const generation = this.#generation;
     this.#running = true;
-    try {
-      await this.#options.run(generation);
-    } finally {
-      this.#running = false;
-      // The hook re-checks what the clock alone changes, so it belongs to a
-      // pass the loop still owns. A pass that outlived its stop has no clock
-      // behind it — running the hook there would draw the roster again over
-      // the empty one the stop just published.
-      if (this.isCurrent(generation)) this.#options.afterRun?.();
-      if (this.#queued) {
+    return Effect.ensuring(
+      this.#options.run(generation),
+      Effect.suspend(() => {
+        this.#running = false;
+        // The hook re-checks what the clock alone changes, so it belongs to a
+        // pass the loop still owns. A pass that outlived its stop has no clock
+        // behind it — running the hook there would draw the roster again over
+        // the empty one the stop just published.
+        if (this.isCurrent(generation)) this.#options.afterRun?.();
+        if (!this.#queued) return Effect.void;
         this.#queued = false;
-        void this.refresh();
-      }
-    }
-  }
+        return Effect.asVoid(Effect.forkDaemon(this.refresh));
+      }),
+    );
+  });
 }
 
 /**

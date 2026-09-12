@@ -33,7 +33,7 @@ built as a scoped layer whose build runs `start` and whose scope closing runs
   sides concurrently and closes them in parallel; a start that fails must release
   what began, in reverse, at once.
 - **A cadence forks its scope from the one its composer was built in**
-  (`cadenceHome`), so its fibers run on the host's own runtime and the host's
+  (`cadenceGate`), so its fibers run on the host's own runtime and the host's
   close ends them whatever became of the stop.
 
 A method two composers claim fails the build with `DuplicateGatewayMethod`, so

@@ -1,60 +1,57 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Effect, Exit, Scope, TestClock } from "effect";
-import { test } from "vitest";
+import { Deferred, Effect, Exit, Scope, TestClock } from "effect";
 import { cadenceGate } from "./effect/cadence.js";
 import { ObservationLoop, observationSupervisor } from "./observation-loop.js";
 
-function deferred() {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
-}
+it.effect("coalesces overlapping refreshes into one immediate follow-up", () =>
+  Effect.gen(function* () {
+    const first = yield* Deferred.make<void>();
+    const generations: number[] = [];
+    const loop = new ObservationLoop({
+      gate: () => true,
+      intervalMs: 60_000,
+      run: (generation) =>
+        Effect.suspend(() => {
+          generations.push(generation);
+          return generations.length === 1 ? Deferred.await(first) : Effect.void;
+        }),
+    });
 
-test("coalesces overlapping refreshes into one immediate follow-up", async () => {
-  const first = deferred();
-  const generations: number[] = [];
-  const loop = new ObservationLoop({
-    gate: () => true,
-    intervalMs: 60_000,
-    run: async (generation) => {
-      generations.push(generation);
-      if (generations.length === 1) await first.promise;
-    },
-  });
-
-  const running = loop.refresh();
-  await loop.refresh();
-  await loop.refresh();
-  assert.deepEqual(generations, [0]);
-  first.resolve();
-  await running;
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(generations, [0, 0]);
-});
+    const running = yield* Effect.fork(loop.refresh);
+    yield* Effect.yieldNow();
+    yield* loop.refresh;
+    yield* loop.refresh;
+    assert.deepEqual(generations, [0]);
+    yield* Deferred.succeed(first, undefined);
+    yield* running.await;
+    // The follow-up the coalesced pokes earned is a daemon, so it begins on
+    // the scheduler's next turn rather than inside the pass that queued it.
+    yield* Effect.yieldNow();
+    assert.deepEqual(generations, [0, 0]);
+  }),
+);
 
 it.scoped("a disarm invalidates work already in flight and prevents gated work", () =>
   Effect.gen(function* () {
     let enabled = true;
-    const pending = deferred();
+    const pending = yield* Deferred.make<void>();
     const loop = new ObservationLoop({
       gate: () => enabled,
       intervalMs: 60_000,
-      run: () => pending.promise,
+      run: () => Deferred.await(pending),
     });
     const gate = yield* cadenceGate(loop.cadence);
     yield* gate.arm;
 
     const generation = loop.generation;
-    const running = loop.refresh();
+    const running = yield* Effect.fork(loop.refresh);
     yield* gate.disarm;
     enabled = false;
     assert.equal(loop.isCurrent(generation), false);
-    pending.resolve();
-    yield* Effect.promise(() => running);
-    yield* Effect.promise(() => loop.refresh());
+    yield* Deferred.succeed(pending, undefined);
+    yield* running.await;
+    yield* loop.refresh;
     assert.equal(loop.generation, generation + 1);
   }),
 );
@@ -67,9 +64,10 @@ it.scoped("the supervisor arms and disarms every loop as one lifecycle", () =>
         new ObservationLoop({
           gate: () => true,
           intervalMs: 60_000,
-          run: async () => {
-            events.push(name);
-          },
+          run: () =>
+            Effect.sync(() => {
+              events.push(name);
+            }),
         }),
     );
     const supervisor = yield* observationSupervisor(loops);
@@ -94,9 +92,10 @@ it.scoped("a loop behind a closed gate arms nothing and is disarmed all the same
     const loop = new ObservationLoop({
       gate: () => false,
       intervalMs: 60_000,
-      run: async () => {
-        events.push("pass");
-      },
+      run: () =>
+        Effect.sync(() => {
+          events.push("pass");
+        }),
     });
     const supervisor = yield* observationSupervisor([loop]);
 
@@ -110,26 +109,26 @@ it.scoped("a loop behind a closed gate arms nothing and is disarmed all the same
 it.scoped("a pass that outlives its disarm does not run the after-run hook", () =>
   Effect.gen(function* () {
     let enabled = true;
-    const pending = deferred();
+    const pending = yield* Deferred.make<void>();
     const hooks: number[] = [];
     const loop = new ObservationLoop({
       gate: () => enabled,
       intervalMs: 60_000,
-      run: () => pending.promise,
+      run: () => Deferred.await(pending),
       afterRun: () => hooks.push(1),
     });
     const gate = yield* cadenceGate(loop.cadence);
     yield* gate.arm;
 
-    const running = loop.refresh();
+    const running = yield* Effect.fork(loop.refresh);
     yield* gate.disarm;
     enabled = false;
-    pending.resolve();
-    yield* Effect.promise(() => running);
+    yield* Deferred.succeed(pending, undefined);
+    yield* running.await;
     assert.deepEqual(hooks, []);
 
     enabled = true;
-    yield* Effect.promise(() => loop.refresh());
+    yield* loop.refresh;
     assert.deepEqual(hooks, [1]);
   }),
 );
@@ -142,9 +141,10 @@ describe("the cadence", () => {
       const loop = new ObservationLoop({
         gate: () => true,
         intervalMs: 30_000,
-        run: async () => {
-          passes.push(clock.unsafeCurrentTimeMillis());
-        },
+        run: () =>
+          Effect.sync(() => {
+            passes.push(clock.unsafeCurrentTimeMillis());
+          }),
       });
       const gate = yield* cadenceGate(loop.cadence);
 
@@ -169,10 +169,11 @@ describe("the cadence", () => {
       const loop = new ObservationLoop({
         gate: () => true,
         intervalMs: 30_000,
-        run: async () => {
-          passes.push(passes.length);
-          if (passes.length === 2) throw new Error("provider unreachable");
-        },
+        run: () =>
+          Effect.sync(() => {
+            passes.push(passes.length);
+            if (passes.length === 2) throw new Error("provider unreachable");
+          }),
         report: (message) => reports.push(message),
       });
       const gate = yield* cadenceGate(loop.cadence);
@@ -181,7 +182,7 @@ describe("the cadence", () => {
       yield* TestClock.adjust("30 seconds");
       yield* TestClock.adjust("30 seconds");
 
-      assert.equal(reports.length, 1);
+      assert.deepEqual(reports, ["Observation pass failed: provider unreachable"]);
       assert.deepEqual(passes, [0, 1, 2]);
       yield* gate.disarm;
     }),
@@ -194,9 +195,10 @@ describe("the cadence", () => {
       const loop = new ObservationLoop({
         gate: () => true,
         intervalMs: 30_000,
-        run: async () => {
-          passes.push(passes.length);
-        },
+        run: () =>
+          Effect.sync(() => {
+            passes.push(passes.length);
+          }),
       });
       const gate = yield* Effect.provideService(cadenceGate(loop.cadence), Scope.Scope, scope);
 

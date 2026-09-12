@@ -1,4 +1,4 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type HostedProjectsAnswer,
   type HostedRosterClient,
@@ -29,29 +29,32 @@ export interface SnapshotRosterDependencies {
  * did, and says so; the next tick is the retry. A pass stopped while its
  * read was out draws nothing over the empty roster the stop published.
  *
- * `client.observe()` answers an effect over the ambient `HttpClient`, run to
- * a promise here over `FetchHttpClient.layer` because `ObservationLoop`'s own
- * `run` callback is still a promise; on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md` until that loop's callback is a fiber.
+ * `client.observe()` answers an effect over the ambient `HttpClient`, and so
+ * does this: the observation loop's own pass is a fiber now, so the read is
+ * yielded where the pass runs rather than run to a promise here.
  */
-export async function drawSnapshotRoster(dependencies: SnapshotRosterDependencies): Promise<void> {
+export function drawSnapshotRoster(
+  dependencies: SnapshotRosterDependencies,
+): Effect.Effect<void, never, HttpClient.HttpClient> {
   const { client, registry, isCurrent, report } = dependencies;
-  const answer = await Effect.runPromise(Effect.provide(client.observe(), FetchHttpClient.layer));
-  if (!isCurrent()) return;
-  if (!answer) {
-    report("Roster snapshot could not be read; the last roster stands.");
-    return;
-  }
-  for (const [providerId, observations] of snapshotRoster(answer)) {
-    const { id, displayName } = PROVIDER_IDENTITY_BY_ID[providerId];
-    try {
-      registry.replaceProvider({ id, displayName }, observations);
-    } catch (error) {
-      report(
-        `Roster snapshot could not be drawn (${providerId}): ${error instanceof Error ? error.message : String(error)}`,
-      );
+  return Effect.gen(function* () {
+    const answer = yield* client.observe();
+    if (!isCurrent()) return;
+    if (!answer) {
+      report("Roster snapshot could not be read; the last roster stands.");
+      return;
     }
-  }
+    for (const [providerId, observations] of snapshotRoster(answer)) {
+      const { id, displayName } = PROVIDER_IDENTITY_BY_ID[providerId];
+      try {
+        registry.replaceProvider({ id, displayName }, observations);
+      } catch (error) {
+        report(
+          `Roster snapshot could not be drawn (${providerId}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  });
 }
 
 export interface SnapshotProjectsDependencies {
@@ -86,18 +89,20 @@ export function snapshotProjects(
  * the settings rows offer exactly what a creation is admitted against. A
  * read that answers nothing leaves the last list standing and says so; a
  * pass stopped while its read was out replaces nothing. `client.projects()`
- * is run to a promise the same way `drawSnapshotRoster` runs `observe()`,
- * and for the same reason.
+ * is yielded the same way `drawSnapshotRoster` yields `observe()`, and for
+ * the same reason.
  */
-export async function drawSnapshotProjects(
+export function drawSnapshotProjects(
   dependencies: SnapshotProjectsDependencies,
-): Promise<readonly ObservedWorkspaceProject[] | undefined> {
+): Effect.Effect<readonly ObservedWorkspaceProject[] | undefined, never, HttpClient.HttpClient> {
   const { client, isCurrent, report } = dependencies;
-  const answer = await Effect.runPromise(Effect.provide(client.projects(), FetchHttpClient.layer));
-  if (!isCurrent()) return undefined;
-  if (!answer) {
-    report("Workspace projects could not be read; the last list stands.");
-    return undefined;
-  }
-  return snapshotProjects(answer);
+  return Effect.gen(function* () {
+    const answer = yield* client.projects();
+    if (!isCurrent()) return undefined;
+    if (!answer) {
+      report("Workspace projects could not be read; the last list stands.");
+      return undefined;
+    }
+    return snapshotProjects(answer);
+  });
 }

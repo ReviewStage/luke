@@ -73,15 +73,19 @@ export function hostedActionResult(
  * roster must catch up with the provider rather than keep advertising what
  * it may have already taken; only a write the service says its provider
  * cannot take at all moved nothing.
+ *
+ * The redraw is a poke and never a wait: `refresh` starts the observation
+ * pass on the runtime the composition handed its caller and answers at once,
+ * exactly as the detached promise it replaces did.
  */
 export function settleHostedWrite<Result extends SessionWriteResult>(
   result: Result,
   providerId: CloudAgentProviderId,
   counted: ProductSessionAction,
-  refresh: () => Promise<void>,
+  refresh: () => void,
   recordProductEvent: RecordProductEvent,
 ): Result {
-  if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) void refresh().catch(() => undefined);
+  if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) refresh();
   if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
     recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
       provider_id: providerId,

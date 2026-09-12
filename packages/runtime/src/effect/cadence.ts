@@ -7,60 +7,14 @@
  * outlives the close, and an arming after it forks from a scope already
  * closed, which interrupts what it forked at once.
  *
- * `cadenceGate` below is that shape said as two effects, for an owner whose
- * arming is one; the three calls beside it run an effect outside an edge,
- * exactly as the armings they were factored out of already did, and stand for
- * as long as an arming is still made from inside a promise.
+ * Nothing here runs an effect any more. The three calls that did —
+ * `openCadenceScope`, `forkIntoCadence`, and `closeCadenceScope`, with the
+ * `CadenceHome` they took a runtime from — stood for the one arming still
+ * made from inside a promise, the calendars' meeting-boundary wake re-armed
+ * by an observation pass; that pass is an effect now, so the wake forks into
+ * the observation's own scope where it is armed and the three calls are gone.
  */
-import { Effect, ExecutionStrategy, Exit, Option, Runtime, Scope, SynchronizedRef } from "effect";
-
-export interface CadenceHome {
-  /** The runtime the cadence's fibers are forked on. */
-  readonly runtime: Runtime.Runtime<never>;
-  /** The scope each arming forks its own from. */
-  readonly scope: Scope.Scope;
-}
-
-/** The home as it stands where the effect asking for it is being built. */
-export const cadenceHome: Effect.Effect<CadenceHome, never, Scope.Scope> = Effect.gen(function* () {
-  const runtime = yield* Effect.runtime<never>();
-  const scope = yield* Effect.scope;
-  return { runtime, scope };
-});
-
-const runtimeOf = (home: CadenceHome | undefined): Runtime.Runtime<never> =>
-  home?.runtime ?? Runtime.defaultRuntime;
-
-/**
- * The scope one arming's fibers are forked into: a child of the home's own,
- * or, for a caller that was handed no home, an orphan nothing but that
- * caller's own disarm ever closes.
- */
-export const openCadenceScope = (home: CadenceHome | undefined): Scope.CloseableScope =>
-  Runtime.runSync(runtimeOf(home))(
-    home === undefined ? Scope.make() : Scope.fork(home.scope, ExecutionStrategy.sequential),
-  );
-
-/**
- * Forks `work` into a scope an arming made, on the home's own runtime rather
- * than the ambient default one, and answers what the fork answered.
- */
-export const forkIntoCadence = <A>(
-  home: CadenceHome | undefined,
-  scope: Scope.Scope,
-  work: Effect.Effect<A, never, Scope.Scope>,
-): A => Runtime.runSync(runtimeOf(home))(Effect.provideService(work, Scope.Scope, scope));
-
-/**
- * Closes a scope an arming made, without waiting: what a disarm must
- * guarantee is that nothing more fires, never that a fiber has already ended.
- */
-export const closeCadenceScope = (
-  home: CadenceHome | undefined,
-  scope: Scope.CloseableScope,
-): void => {
-  Runtime.runFork(runtimeOf(home))(Scope.close(scope, Exit.void));
-};
+import { Effect, ExecutionStrategy, Exit, Option, Scope, SynchronizedRef } from "effect";
 
 /**
  * A cadence the owner arms and disarms by hand, as a pair of effects rather

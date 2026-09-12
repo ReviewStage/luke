@@ -239,11 +239,53 @@ account composer's `startCapabilities`/`stopCapabilities` links are that
 gate's `arm` and `disarm`, the devices cadence and the calendars composer's
 observation each hold a gate of their own, and the hourly conversation
 maintenance is armed by the brain composer's own lifetime, in the scope that
-lifetime is. `openCadenceScope`, `forkIntoCadence`,
-and `closeCadenceScope` stay on the allowlist for the one arming left that is
-not an effect: the calendars composer's meeting-boundary wake, re-armed from
-inside an observation pass the loop runs as a promise, so the fork and the
-interruption are runs there until that pass is an effect too.
+lifetime is. `openCadenceScope`, `forkIntoCadence`, `closeCadenceScope`, and
+the `CadenceHome` they took a runtime from are gone, and
+`packages/runtime/src/effect/cadence.ts` is off the allowlist with them:
+P12-15a made `ObservationLoop`'s `run` and `refresh` effects, so the one
+arming left that was not one — the calendars composer's meeting-boundary
+wake, re-armed from inside an observation pass — is armed from inside an
+effect now and forks into the observation's own `Scope` through
+`Effect.provideService`, with the fiber it replaces dropped by a
+`Effect.forkDaemon(Fiber.interrupt(...))` rather than a `Runtime.runFork`.
+`cadenceGate` is the whole of that module.
+
+`ObservationLoop`'s `run` is `Effect<void>` and so is `refresh`, so a
+cadence's own pass and a caller's poke are the same work on the same runtime.
+A pass may still be poked by a synchronous caller, and that is what the two
+new `runOnHandedRuntime` entries below are; the loop itself runs nothing. The
+one thing a pass does outside its own fiber is the follow-up a coalesced poke
+earns: `refresh` answers as soon as the pass it waited on is done and forks
+the queued pass behind it as a daemon, which is exactly what the detached
+`void this.refresh()` it replaces did, and which is what
+`compose-conversation.ts`'s `pollAfter` still waits out — through a
+`Deferred` the pass settles rather than a promise it held.
+
+`composeObservation` in `packages/host/src/compose-observation.ts` is on the
+handed-runtime list: `settleHostedWrite` pokes a redraw after every landed
+session write, and both its callers — the session action performer the brain
+carries an admitted act through, and a row's own press — settle inside the
+`ToolExecutor` seam's promise rather than in a fiber. So the composer reads
+`Effect.runtime<never>()` out of its own build and hands those two a
+`pokeRefresh` that is `Runtime.runFork` of `loop.refresh` on it; it forks onto
+the runtime it was handed and never builds one, and `settleHostedWrite` itself
+runs nothing. It goes when that seam answers an effect.
+
+`composeBrain` in `packages/host/src/compose-brain.ts` is on the same list
+for the other half of the same seam: the roster and projects reads
+`admitEffect`'s `ActionAdmissionReads` waits on are still `Promise`s, and the
+pass admission asks for before every session action is one of them, so the
+brain action performer's `refreshSessions` is `Runtime.runPromise` of
+`loop.refresh` on the host's own runtime — the same `execution` runtime the
+store's asks and every turn already run on. It goes with `admit()`'s own
+Promise door, when those reads are effects.
+
+`compose-live.ts`'s entry covers a second run beside the timer bridge named
+above: `requestOnboardingBeat` decides whether to speak from the roster a
+fresh pass just drew, so it waits on `observation.loop.refresh` — and the
+link that asks for a beat is a synchronous callback the calendars composer
+holds, so the pass is run to a promise on this composition's own runtime. It
+goes when that link answers an effect.
 
 `admit()` in `packages/actions/src/admit.ts` is the fourth: the gauntlet is
 `admitEffect()`, an Effect failing with an `AdmitRefusal`, and `admit()` runs it
@@ -287,15 +329,17 @@ hosted PostHog batch and its voice session mint — and deleted once both take
 `roster-client.ts`, and `conversation-client.ts` were the seventh; P12-04b
 deleted it, so `observe`, `projects`, `poll`, `messages`, `events`, `turns`,
 `clear`, and `rate` now answer the effect over the ambient `HttpClient`
-directly rather than a promise each class ran to itself. Their callers —
-`@sidecar/host`'s `snapshot-roster.ts`, `compose-devices.ts`, and
-`compose-conversation.ts` — are new entries on this same allowlist instead:
-`ObservationLoop`'s `run` callback, `deviceCadence`'s beat, and the
-Conversation poll's pager are each still a promise or a plain async callback
-rather than a fiber of their own, so `drawSnapshotRoster`, `drawSnapshotProjects`,
-the device poll, and `compose-conversation.ts`'s `runClientEffect` each run
-the client's effect to a promise over `FetchHttpClient.layer` right where the
-work is needed, and are deleted once their own callback is a fiber instead.
+directly rather than a promise each class ran to itself. Their callers were
+new entries on this same allowlist instead, and P12-15a deleted two of the
+three: `ObservationLoop`'s `run` is a fiber now, so `drawSnapshotRoster` and
+`drawSnapshotProjects` in `snapshot-roster.ts` answer
+`Effect<..., never, HttpClient>` and `compose-conversation.ts`'s
+`runClientEffect` is gone with the poll, the pager, and `readPage` that
+awaited it — each provides `FetchHttpClient.layer` once, where the loop's
+pass is built, rather than running the client's effect where the work is
+needed. `compose-devices.ts` stays: `deviceCadence`'s beat is still a plain
+async callback rather than a fiber of its own, and it is deleted when that
+callback is one.
 
 `ProductEventSender`'s `start`, `stop`, and `flush` in
 `packages/analytics/src/sender.ts` are the eighth, on the same terms as
@@ -471,13 +515,14 @@ calendars composer's `startObservation` and `stopObservation` in
 `disarmObservation` over a gate of the same shape, so the held-notice release
 and the Apple access poll are fibers in the scope an arming runs in and what
 the disarm gives back is a finalizer registered before them. That file stays
-on the allowlist for what the gate does not reach, which P12-14e changed the
-shape of: the Google consent trip is yielded inside its own handler now, and
-what is run there instead is the meeting-boundary wake, forked and
-interrupted from inside an observation pass the loop still runs as a promise,
-and the two effects the composer's own promise-shaped edges start — the
+on the allowlist for what the gate does not reach, which P12-14e and P12-15a
+each changed the shape of: the Google consent trip is yielded inside its own
+handler, and the meeting-boundary wake — the one thing that used to be forked
+and interrupted from inside an observation pass run as a promise — is armed
+from inside an effect since the loop's pass became one, so what is left run
+here is the two effects the composer's own promise-shaped edges start: the
 announcement hold refreshed from the arming's finalizer, and the onboarding
-settle decided from a Gateway handler's synchronous body — each forked onto
+settle decided from a Gateway handler's synchronous body, each forked onto
 the runtime the layer was built on rather than an ambient default one.
 
 `compose-live.ts` and `compose-devices.ts` each gained one such run in
@@ -1089,7 +1134,9 @@ design decision stated as such:
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
-| `@sidecar/host`'s `snapshot-roster.ts`, `compose-devices.ts`, and `compose-conversation.ts`'s `runClientEffect`, over the three clients above | P12-04b | pending — once `ObservationLoop`'s `run`, `deviceCadence`'s beat, and the Conversation poll's pager are each a fiber |
+| `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
+| `composeObservation`'s `pokeRefresh`, the redraw a landed session write earns, forked on the runtime the composer was built on | P12-15a | with the `ToolExecutor` seam answering an effect |
+| `composeBrain`'s `refreshSessions`, the admission pass run to a promise on the host's own runtime | P12-15a | with `admit()`'s Promise door |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |
