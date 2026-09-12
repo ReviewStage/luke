@@ -216,6 +216,9 @@ export const composeLive = (
       // The greeting comes first and speaks in its own session; the beats are
       // asked for again by the completion that takes the introduction down.
       if (calendars.introductionOwed()) return;
+      // The key step has no beat of its own: the gate says on screen what it
+      // asks, and the calendar beat waits its turn behind it.
+      if (calendars.keyGateOwed()) return;
       if (await calendars.gateOfferable()) {
         service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
         return;

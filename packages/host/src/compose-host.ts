@@ -227,6 +227,7 @@ export const hostAssemblyLayer: Layer.Layer<
     // this has run throws by name rather than answering nothing.
     settings.link({
       refreshAccount: account.session.refreshOnce,
+      cloudKeyHeld: () => calendars.settleKeyGate(),
       applyVoiceCredential: account.applyVoiceCredential,
       setVoice: (voice) => account.voiceCapabilities.liveSessions?.setVoice(voice),
       reconcileSpeech: () => {
@@ -313,6 +314,7 @@ export const hostAssemblyLayer: Layer.Layer<
             calendars: carried(account.capabilitiesActive() ? calendars.observedCalendars() : []),
             calendarOnboardingOwed: calendars.gateOwed(),
             introductionOwed: calendars.introductionOwed(),
+            conductorKeyOnboardingOwed: calendars.keyGateOwed(),
             sessionReplay: carried(replay),
             voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
             agentTraceEnabled: account.agentTrace !== undefined,

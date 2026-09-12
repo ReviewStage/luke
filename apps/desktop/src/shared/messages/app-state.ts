@@ -156,7 +156,8 @@ export interface AppState {
   brain: { runs: readonly BrainRequestSnapshot[] };
   conversation: AppConversationSlice;
   announcements: { held: boolean };
-  onboarding: { calendarOwed: boolean };
+  /** The onboarding gates the host says stand: the key step ahead of the calendar's, both after the introduction. */
+  onboarding: { calendarOwed: boolean; conductorKeyOwed: boolean };
   /**
    * Whether the one-time spoken introduction holds a panel, true from the
    * launch's own decision until the ending is taken. It is the takeover's

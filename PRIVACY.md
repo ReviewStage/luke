@@ -341,7 +341,10 @@ message is shown there and cannot be given from the wrist.
 **Provider API keys (server-side vault).** The Conductor key you enter into
 Luke is held by our service, not by your Mac. Saving it sends it, in the same
 press, to our vault under your signed-in account, and nothing of it is written
-to this Mac: no settings file, no Keychain entry, no cache. Its row reads
+to this Mac: no settings file, no Keychain entry, no cache. Luke asks for it
+right after your first sign-in, before showing any sessions; if you skip, the
+list stays empty and says so, and the row in Settings > Connections is the way
+to connect later. Its row reads
 "Held by Luke's service" from the vault's own list of which providers hold a
 key, never from anything stored here, and you have to be signed in to save
 one. Deleting it from its row deletes it from the vault. A key an earlier
