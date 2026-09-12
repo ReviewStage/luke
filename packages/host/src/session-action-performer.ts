@@ -35,7 +35,7 @@ import {
   settleHostedWrite,
 } from "./hosted-action-result.js";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
-import type { SettingsStore } from "./settings-store.js";
+import type { AwaitedSettingsStore } from "./settings-store-awaited.js";
 
 /**
  * An open that was handed to the native node and whose answer was lost with
@@ -82,7 +82,7 @@ export interface SessionActionPerformerDependencies {
   /** Draws the roster again, so a write that moved a session is seen rather than remembered. */
   refreshSessions: () => Promise<void>;
   sendsNetwork: boolean;
-  settingsStore: Pick<SettingsStore, "get">;
+  settingsStore: Pick<AwaitedSettingsStore, "get">;
   rememberWorkspaceDefaults: (
     providerId: CloudAgentProviderId,
     providerProjectId: string,

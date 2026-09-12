@@ -31,7 +31,7 @@ import { Effect } from "effect";
 import { test } from "vitest";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import { createSessionActionPerformer } from "./session-action-performer.js";
-import type { SettingsStore } from "./settings-store.js";
+import type { AwaitedSettingsStore } from "./settings-store-awaited.js";
 
 /** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
 function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
@@ -108,14 +108,14 @@ function heldSettings(stored?: Readonly<Record<string, WorkspaceAgentSelection>>
   // SAFETY: the performer reads one field here, workspaceAgentDefaults, and
   // the pairing table is a legal value of it; the generic signature is
   // satisfied for that one field.
-  const store: Pick<SettingsStore, "get"> = {
+  const store: Pick<AwaitedSettingsStore, "get"> = {
     get: (async () => {
       reads += 1;
       await new Promise<void>((resolve) => {
         release = resolve;
       });
       return stored;
-    }) as SettingsStore["get"],
+    }) as AwaitedSettingsStore["get"],
   };
   return { store, release: () => release?.(), reads: () => reads };
 }
@@ -123,7 +123,7 @@ function heldSettings(stored?: Readonly<Record<string, WorkspaceAgentSelection>>
 interface FixtureOptions {
   outcome?: HostedActionOutcome;
   creation?: HostedActionWorkspaceOutcome;
-  settingsStore?: Pick<SettingsStore, "get">;
+  settingsStore?: Pick<AwaitedSettingsStore, "get">;
   openExternal?: (url: string, kind: HostNodeOpenKind) => Promise<void>;
   sendsNetwork?: boolean;
 }
@@ -171,7 +171,7 @@ function fixture(options: FixtureOptions = {}) {
     // an undefined answer is a legal value of it; the generic signature is
     // satisfied for that one field.
     settingsStore: options.settingsStore ?? {
-      get: (async () => undefined) as SettingsStore["get"],
+      get: (async () => undefined) as AwaitedSettingsStore["get"],
     },
     rememberWorkspaceDefaults: async (...remembered) => {
       recorded.remembered.push(remembered);

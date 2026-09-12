@@ -118,7 +118,7 @@ export const composeObservation = (
     const { settings, account, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
     const { runMode, report, now } = kernel;
-    const settingsStore = settings.store;
+    const settingsStore = settings.awaitedStore;
     const late = yield* lateService<ObservationLinks>();
     const links = (): ObservationLinks => {
       const standing = late.unsafePeek();

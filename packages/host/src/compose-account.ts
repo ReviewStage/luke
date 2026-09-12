@@ -119,15 +119,14 @@ export const composeAccount = (
 
     const session = new AccountSessionManager({
       client,
-      // The store answers promises still, so each of the session's three
-      // reads and writes of it is one lifted here rather than a run made
-      // there; the lateness of the links below is an `Effect.suspend` for the
-      // same reason, since a link read at construction would be read before
-      // `link()` has run.
+      // The store's own effects, with an I/O failure read as the defect the
+      // rejected promise behind each of these already was. The lateness of
+      // the links below is an `Effect.suspend` because a link read at
+      // construction would be read before `link()` has run.
       store: {
-        readAccount: () => Effect.promise(() => settings.store.readAccount()),
-        setAccount: (stored) => Effect.promise(() => settings.store.setAccount(stored)),
-        clearAccount: () => Effect.promise(() => settings.store.clearAccount()),
+        readAccount: () => Effect.orDie(settings.store.readAccount()),
+        setAccount: (stored) => Effect.orDie(settings.store.setAccount(stored)),
+        clearAccount: () => Effect.orDie(settings.store.clearAccount()),
       },
       hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
       requiresAccount: runMode.requiresAccount,
@@ -177,15 +176,11 @@ export const composeAccount = (
     }
 
     /**
-     * One account read, lifted from the store's own Promise into a
-     * never-failing Effect: a store that could not be read is an account
-     * this attempt cannot name, exactly as a rejected promise already read
-     * here before `accountBearer` gained an Effect of its own.
+     * One account read: a store that could not be read is an account this
+     * attempt cannot name, exactly as a rejected read already was here.
      */
     const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
-      Effect.tryPromise(() => settings.store.readAccount()).pipe(
-        Effect.orElseSucceed(() => undefined),
-      );
+      settings.store.readAccount().pipe(Effect.orElseSucceed(() => undefined));
 
     // The holder is the account's own address, so a call's one retry after a
     // 401 can tell a renewed token from a different person's: a sign-out and
@@ -201,7 +196,7 @@ export const composeAccount = (
     };
 
     const voiceCapabilities = new VoiceCapabilityAssembler({
-      settings: settings.store,
+      settings: settings.awaitedStore,
       credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
       fixtureRun: () => !runMode.sendsNetwork,
       accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
@@ -233,7 +228,7 @@ export const composeAccount = (
 
     async function sessionReplayState(): Promise<{ permitted: boolean; accountId?: string }> {
       const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-      const accountId = signedIn ? (await settings.store.readAccount())?.id : undefined;
+      const accountId = signedIn ? (await settings.awaitedStore.readAccount())?.id : undefined;
       return {
         permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
         ...(accountId ? { accountId } : undefined),
@@ -328,7 +323,7 @@ export const composeAccount = (
       // its start alone and registers nothing to give back.
       lifetime: Effect.gen(function* () {
         account = runMode.requiresAccount
-          ? yield* Effect.promise(() => settings.store.accountSnapshot())
+          ? yield* Effect.orDie(settings.store.accountSnapshot())
           : { status: ACCOUNT_STATUS.SIGNED_OUT };
         session.initialize(account);
       }),

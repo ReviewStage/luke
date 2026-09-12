@@ -277,9 +277,9 @@ export const hostAssemblyLayer: Layer.Layer<
         }),
       [GATEWAY_METHOD.CLIENT_BOOTSTRAP]: () =>
         Effect.gen(function* () {
-          const [snapshot, quiet, replay] = yield* Effect.promise(() =>
+          const snapshot = yield* Effect.orDie(settings.store.snapshot());
+          const [quiet, replay] = yield* Effect.promise(() =>
             Promise.all([
-              settings.store.snapshot(),
               account.capabilitiesActive()
                 ? calendars.announcementsQuietNow(now())
                 : Promise.resolve(false),
@@ -287,7 +287,7 @@ export const hostAssemblyLayer: Layer.Layer<
             ]),
           );
           const workspaceProjectDefaults = account.capabilitiesActive()
-            ? yield* Effect.promise(() =>
+            ? yield* Effect.orDie(
                 settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
               )
             : undefined;
