@@ -26,17 +26,7 @@ import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import {
-  type Cause,
-  Duration,
-  Effect,
-  Either,
-  Fiber,
-  Option,
-  Runtime,
-  Schedule,
-  Scope,
-} from "effect";
+import { Duration, Effect, Either, Fiber, Option, Runtime, Schedule, Scope } from "effect";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -71,10 +61,6 @@ const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
  * the longest consent taken back keeps holding anything.
  */
 const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
-
-/** What a rejected provider read says for itself, read off the exception the promise was lifted into. */
-const causeOf = (failure: Cause.UnknownException): string =>
-  failure.error instanceof Error ? failure.error.message : String(failure.error);
 
 /** What the calendars reach in the speech the meetings hold. */
 interface CalendarsLinks {
@@ -151,8 +137,7 @@ export const composeCalendars = (
     };
 
     const googleCalendar = new GoogleCalendarReader({
-      readAccounts: () => Runtime.runPromise(runtime)(settingsStore.readCalendarAccounts()),
-      runtime,
+      readAccounts: () => Effect.orDie(settingsStore.readCalendarAccounts()),
     });
     const googleCalendarConsent = googleCalendarSignIn({
       openExternal: (url) =>
@@ -177,8 +162,7 @@ export const composeCalendars = (
       return result.value;
     };
     const appleCalendar = new AppleCalendarReader({
-      readConnection: () =>
-        Runtime.runPromise(runtime)(settingsStore.readAppleCalendarConnection()),
+      readConnection: () => Effect.orDie(settingsStore.readAppleCalendarConnection()),
       runHelper: runAppleCalendarHelper,
       now,
     });
@@ -343,38 +327,25 @@ export const composeCalendars = (
 
     function refreshCalendarMeetings(generation: number): Effect.Effect<void> {
       return Effect.gen(function* () {
-        const observed = yield* Effect.either(
-          Effect.all(
-            [
-              Effect.tryPromise(() => googleCalendar.observe()),
-              Effect.tryPromise(() => appleCalendar.observe()),
-            ],
-            { concurrency: "unbounded" },
-          ),
+        const [observations, appleObservation] = yield* Effect.all(
+          [googleCalendar.observe(), appleCalendar.observe()],
+          { concurrency: "unbounded" },
         );
-        if (Either.isRight(observed)) {
-          const [observations, appleObservation] = observed.right;
-          if (!loop.isCurrent(generation)) return;
-          const accounts = [
-            ...(observations ?? []),
-            ...(appleObservation ? [appleObservation] : []),
-          ];
-          // Both readers answer nothing for a calendar that is not connected, so
-          // a machine with none observed holds no meetings; only a run whose
-          // first observation has not resolved yet holds nothing at all.
-          calendarMeetings = accounts.flatMap((held) => [...held.meetings]);
-          observedCalendars = accounts.map(({ accountId, calendars, failure, revoked }) => ({
-            accountId,
-            calendars,
-            ...(failure ? { failure } : undefined),
-            ...(revoked ? { revoked } : undefined),
-          }));
-          kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: carried(observedCalendars) });
-          for (const held of accounts) {
-            if (held.failure) report(`Calendar observation failed: ${held.failure}`);
-          }
-        } else {
-          report(`Calendar observation failed: ${causeOf(observed.left)}`);
+        if (!loop.isCurrent(generation)) return;
+        const accounts = [...(observations ?? []), ...(appleObservation ? [appleObservation] : [])];
+        // Both readers answer nothing for a calendar that is not connected, so
+        // a machine with none observed holds no meetings; only a run whose
+        // first observation has not resolved yet holds nothing at all.
+        calendarMeetings = accounts.flatMap((held) => [...held.meetings]);
+        observedCalendars = accounts.map(({ accountId, calendars, failure, revoked }) => ({
+          accountId,
+          calendars,
+          ...(failure ? { failure } : undefined),
+          ...(revoked ? { revoked } : undefined),
+        }));
+        kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: carried(observedCalendars) });
+        for (const held of accounts) {
+          if (held.failure) report(`Calendar observation failed: ${held.failure}`);
         }
         if (!loop.isCurrent(generation)) return;
         links().reconcileSpeech();
@@ -403,9 +374,7 @@ export const composeCalendars = (
         // than caught around the yield: a rejection lifted into a fiber is a
         // defect no `try` here would see, and one failed probe must not end
         // the poll the schedule is repeating.
-        const probed = yield* Effect.either(
-          Effect.tryPromise({ try: () => appleCalendar.status(), catch: (error) => error }),
-        );
+        const probed = yield* Effect.either(appleCalendar.status());
         const access = Either.getOrUndefined(probed);
         if (Either.isLeft(probed) && !appleAccessProbeFailing) {
           const error = probed.left;
@@ -474,8 +443,9 @@ export const composeCalendars = (
               Effect.gen(function* () {
                 const outcome = yield* Effect.scoped(googleCalendarConsent.signInEffect());
                 if ("reason" in outcome) return yield* settings.refusedSettings(outcome.reason);
-                const calendars = yield* Effect.promise(() =>
-                  googleCalendar.listCalendars(outcome.accessToken).catch(() => []),
+                const calendars = yield* Effect.orElseSucceed(
+                  googleCalendar.listCalendars(outcome.accessToken),
+                  () => [],
                 );
                 const primaryId = (calendars.find((candidate) => candidate.primary) ?? calendars[0])
                   ?.id;
@@ -541,15 +511,13 @@ export const composeCalendars = (
                 Effect.gen(function* () {
                   // The system's own consent is the whole connect flow, raised by the
                   // helper on the desktop at this press and nowhere else.
-                  const outcome = yield* Effect.promise(() =>
-                    appleCalendar.obtainAccess({
-                      openSystemSettings: () =>
-                        void kernel
-                          .openExternalThroughNode(CALENDAR_PRIVACY_PANE_URL)
-                          .catch(kernel.reportOpenFailure),
-                      superseded: () => appleConnectGeneration !== generation,
-                    }),
-                  );
+                  const outcome = yield* appleCalendar.obtainAccess({
+                    openSystemSettings: () =>
+                      void kernel
+                        .openExternalThroughNode(CALENDAR_PRIVACY_PANE_URL)
+                        .catch(kernel.reportOpenFailure),
+                    superseded: () => appleConnectGeneration !== generation,
+                  });
                   if (appleConnectGeneration !== generation) {
                     return {
                       status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -599,13 +567,10 @@ export const composeCalendars = (
           (result) => carried(result),
         ),
       [GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS]: () =>
-        Effect.match(
-          Effect.tryPromise(() => appleCalendar.status()),
-          {
-            onFailure: () => ({ access: APPLE_CALENDAR_ACCESS.NOT_DETERMINED }),
-            onSuccess: (access) => ({ access }),
-          },
-        ),
+        Effect.match(appleCalendar.status(), {
+          onFailure: () => ({ access: APPLE_CALENDAR_ACCESS.NOT_DETERMINED }),
+          onSuccess: (access) => ({ access }),
+        }),
       [GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT]: () =>
         Effect.sync(() => {
           appleConnectGeneration += 1;

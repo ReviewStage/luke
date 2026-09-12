@@ -739,14 +739,19 @@ in P12-14g, the settings composer's own account-preferences and
 provider-key-vault chains in P12-14h — until only `compose-calendars.ts`'s two
 readers were left, each still taking the one setting it reads as a promise
 option (`GoogleCalendarReader`'s `readAccounts` and `AppleCalendarReader`'s
-`readConnection`). Neither reader answers effects itself yet — that is
-`@sidecar/calendar`'s own migration, not scheduled by this plan — so
-`compose-calendars.ts` now runs `settings.store.readCalendarAccounts()` and
-`settings.store.readAppleCalendarConnection()` to a promise directly, on the
-same captured runtime its own `refreshAnnouncementHold` and
-`settleCalendarOnboardingIfConnected` runs already use; the file was already
-on the allowlist for those, so this is not a new row. `applyVoiceCredential`
-answers an Effect since the same PR, which deleted the row below for it too.
+`readConnection`). A `@sidecar/calendar` change unscheduled by this plan closed
+that last gap: `GoogleCalendarReader` and `AppleCalendarReader` now answer
+effects themselves — `observe`, `listCalendars`, `status`, `requestAccess`, and
+`obtainAccess` are each an `Effect` a caller yields rather than a `Promise` it
+awaits — so `compose-calendars.ts` hands both readers `readAccounts`/
+`readConnection` options that are themselves `Effect.orDie(settingsStore...)`
+calls, run on the calling fiber directly rather than to a promise on a handed
+runtime. `applyVoiceCredential` answers an Effect since the earlier PR that
+deleted the row below for it too. `compose-calendars.ts` stays on the
+allowlist regardless — its `refreshAnnouncementHold` and
+`settleCalendarOnboardingIfConnected` runs from synchronous callbacks (a
+finalizer, the composer's own `lifetime`) are a separate, still-standing
+reason.
 
 `tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is on the same
 terms as `runCall`, permanently: the traced `respond` still answers the
@@ -810,22 +815,18 @@ rotation the others are waiting on with it. The refresh token rotates when
 spent, so two flights racing would have the loser spend an already-rotated
 token and read the endpoint's `invalid_grant` as a revocation.
 
-`GoogleCalendarReader`'s `#run` in `packages/calendar/src/reader.ts` and
-`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are on the allowlist
-too, reworked in P7-06 rather than deleted outright as this document once
-planned: `packages/host/src/compose-calendars.ts` is built as an effect now
-and hands both a `Runtime.Runtime<never>` — its own, obtained inside the
-`Effect.gen` as `Effect.runtime<never>()` — through a `runtime` option each
-reads exactly as `DeviceRegistration`'s does, so each runs its request effect
-there instead of on the ambient default runtime. Full deletion did not follow,
-because the premise this document stated for it was wrong on contact:
-`compose-calendars.ts`'s own `GatewayMethodTable` handlers stayed promises
-regardless of how the composer itself was built — the Gateway was not
-Rpc-shaped until Phase 6's server work reached this host — so a bridge from a
-promise-returning method to the reader's own request effect was still
-necessary, just onto a real runtime instead of a default one. Those methods
-answer effects since P7-13, and both doors go in P7-13b, which takes each
-handler onto the reader's own request effect.
+`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` is on the allowlist:
+`googleCalendarSignIn`'s `exchange` callback still answers a promise, not a
+fiber, so the exchange effect is run to one on the runtime the caller handed
+in — the calendars composer's own kernel runtime in production,
+`Runtime.defaultRuntime` for a caller that gave none. `GoogleCalendarReader`'s
+own `#run`, once on this same row, is gone: `GoogleCalendarReader` and
+`AppleCalendarReader` (`packages/host/src/apple-calendar.ts`) answer effects
+themselves now, a `@sidecar/calendar` change this document never scheduled, so
+neither reader takes a runtime at all any more — `compose-calendars.ts` yields
+`observe()`, `listCalendars()`, `status()`, `requestAccess()`, and
+`obtainAccess()` directly inside its own `Effect.gen`, and
+`packages/calendar/src/reader.ts` is off the allowlist.
 
 `LiveVoiceOrchestrator` in
 `packages/voice/src/orchestrator/live-voice-orchestrator.ts` runs nothing of a
@@ -1258,7 +1259,7 @@ design decision stated as such:
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |
 | `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
-| `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | P7-13c — the calendars composer's methods answer effects since P7-13 |
+| `exchangeGoogleCode`'s internal run, over a handed-in `Runtime` (`GoogleCalendarReader#run` was on this row too, deleted once the reader answered effects itself, a `@sidecar/calendar` change unscheduled by this plan) | P4-05 | pending — once `googleCalendarSignIn`'s `exchange` callback answers an effect its one caller yields instead of awaits |
 | `timerSeamFromRuntime` (`packages/brain/src/effect/harness.ts`) | P12-03 | once `BrainAgent` answers `Clock`/`Scope` directly |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
@@ -1274,7 +1275,6 @@ design decision stated as such:
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h) |
 | `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | deleted by P12-14i |
-| `compose-calendars.ts`'s run of `settingsStore.readCalendarAccounts()`/`readAppleCalendarConnection()` on the host's own runtime, for `GoogleCalendarReader`/`AppleCalendarReader`'s still-`Promise`-shaped options | P12-14i | once each reader answers effects itself, a `@sidecar/calendar` change unscheduled by this plan |
 | `compose-account.ts`'s fork of `emitSessionReplay` onto the host's own runtime, from `AccountSessionManager`'s plain `onChange` callback | P12-14f | once `onChange` answers an effect a subscriber yields instead |
 | `compose-account.ts`'s fork of `settings.emitSettings()` on the host's own runtime, from the session manager's synchronous `onChange` | P12-14h | once `AccountSessionManager`'s `onChange` answers an effect |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
