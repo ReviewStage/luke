@@ -500,9 +500,22 @@ failure itself. What P7-08 changed is whose runtime that is: the face takes
 an `ExecutionRuntime` and the brain composer hands it the host's own, so an
 ask is a fiber of the one runtime the host holds rather than of a default one
 built where the work lives. The face itself stands for as long as the three
-interfaces it answers do — `BrainStateRepository`, `NotebookMemoryStore`, and
-`ChildStore` are each declared as promises in packages below the store — and
-no PR in this plan is the one that turns those into effects.
+interfaces it answers do, and P12-13 measured that rather than scheduling it:
+two of the three are the ports' reach. `BrainStateRepository` is read by
+`packages/brain/src/state-store.ts` and `ChildStore` by
+`packages/runtime/src/children.ts`, both of them ports of OpenClaw
+`b7528507` that `scripts/repository-checks.sh` forbids an `effect` import in,
+so neither interface can be stated as effects while its port stands —
+`StoreDatabase#run` above is the same reach from the other side, the ports
+holding a handle where everything else holds a client. The third,
+`NotebookMemoryStore`, has no port behind it and could move on its own, which
+would delete no promise from this face. So this row is permanent in the sense
+the two wire rows are: not unfinished work, but a shape another rule fixes.
+What would end it is a decision about the ports themselves — a `*.effect.ts`
+sibling that owns each port's store reach, or a later port of upstream that
+retires them — and that is a product decision about how faithfully this
+repository tracks `b7528507`, not an implementation detail of this
+migration.
 
 `AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is on the same
 terms: its callers are the host's composers, which still hold a plain object
@@ -961,7 +974,7 @@ design decision stated as such:
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
-| `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | with `BrainStateRepository`, `NotebookMemoryStore`, and `ChildStore`; unscheduled |
+| `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-15 |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-04 |
@@ -971,10 +984,16 @@ design decision stated as such:
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
-The two permanent entries are not unfinished work. A `GATEWAY_ERROR` code and
-the envelope shape in `packages/gateway/src/protocol.ts` are what a client
+The three permanent entries are not unfinished work. A `GATEWAY_ERROR` code
+and the envelope shape in `packages/gateway/src/protocol.ts` are what a client
 speaks, and a client is not upgraded by this repository's merge queue; the
-goldens in `packages/gateway/fixtures/protocol` are what keeps both byte-stable.
+goldens in `packages/gateway/fixtures/protocol` are what keeps both
+byte-stable. The third is `storeClient`'s face, above: the promises it answers
+are the shape the OpenClaw ports beneath it read, and a port imports nothing
+from `effect` by a rule of this repository's own. A permanent row stays on
+`effect-edges.json`'s `runShims` list like any other, because the lint reads
+that list for what a file may do rather than for what is still owed; it is
+this table that says which rows are owed.
 
 ## What Effect costs the renderer bundles
 
