@@ -617,8 +617,11 @@ what took the store's place on the allowlist, and it is the store's own
 methods as the promises their unmigrated callers still hold, run on the
 runtime the host is composed on. The callers are the reason it exists rather
 than the store: the calendars, observation, and live composers reach the
-store from promise-shaped bodies of their own, the settings composer's
-account-preferences and provider-key-vault chains are promise queues,
+store from promise-shaped bodies of their own — the calendars composer's five
+write handlers moved in P12-14d with `settingsWrite` and read it through
+`Effect.promise` at each seam until P12-14e takes the rest of that file — the
+settings composer's account-preferences and provider-key-vault chains are
+promise queues,
 `session-action-performer.ts` reads one field inside a promise, and
 `@sidecar/voice`'s `VoiceSettings` is a promise-shaped interface the
 capability assembler awaits — each its own conversion, and each one's landing
