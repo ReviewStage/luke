@@ -1,14 +1,15 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import {
-  type AccountCall,
+  type AccountCallEffects,
   type AccountToken,
   accountBearer,
-  createAccountCall,
+  accountCall,
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
 import { HTTP_METHOD, isRecord, isWireNumber, type UnparsedWireValue } from "@sidecar/wire";
-import type { Layer } from "effect";
+import { Effect, type Layer } from "effect";
 
 export interface AccountPreferencesAnswer {
   preferences: AccountPreferences;
@@ -43,35 +44,48 @@ function accountPreferencesAnswerFromWire(
  * makes its requests through.
  */
 export class AccountPreferencesClient {
-  readonly #call: AccountCall;
+  readonly #call: AccountCallEffects;
+  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: AccountPreferencesClientOptions) {
-    this.#call = createAccountCall({
+    this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
-      httpClient: options.httpClient,
       requestTimeoutMs: options.requestTimeoutMs,
     });
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  readPreferences(): Promise<AccountPreferencesAnswer | undefined> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES },
-      accountPreferencesAnswerFromWire,
+  readPreferences(): Effect.Effect<AccountPreferencesAnswer | undefined> {
+    return this.#over(
+      this.#call.read(
+        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES },
+        accountPreferencesAnswerFromWire,
+      ),
     );
   }
 
-  writePreferences(preferences: AccountPreferences): Promise<AccountPreferencesAnswer | undefined> {
+  writePreferences(
+    preferences: AccountPreferences,
+  ): Effect.Effect<AccountPreferencesAnswer | undefined> {
     // SAFETY: AccountPreferences is JSON-compatible; the strict parser protects this runtime boundary.
     const parsed = accountPreferencesFromWire(preferences as UnparsedWireValue);
-    if (parsed === undefined) return Promise.resolve(undefined);
-    return this.#call.ask(
-      {
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
-        body: JSON.stringify({ preferences: parsed }),
-      },
-      accountPreferencesAnswerFromWire,
+    if (parsed === undefined) return Effect.succeed(undefined);
+    return this.#over(
+      this.#call.read(
+        {
+          method: HTTP_METHOD.PUT,
+          path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
+          body: JSON.stringify({ preferences: parsed }),
+        },
+        accountPreferencesAnswerFromWire,
+      ),
     );
+  }
+
+  #over<Answer>(
+    effect: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer> {
+    return Effect.provide(effect, this.#client);
   }
 }

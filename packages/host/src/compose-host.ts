@@ -197,13 +197,13 @@ export const hostAssemblyLayer: Layer.Layer<
      * this opened.
      */
     const openCapabilities = Effect.gen(function* () {
-      if (account.signedIn()) void settings.reconcileAccountPreferences();
+      if (account.signedIn()) yield* settings.reconcileAccountPreferences();
       yield* Effect.promise(() => account.applyVoiceCredential());
-      yield* Effect.promise(() => settings.emitSettings());
+      yield* settings.emitSettings();
       if (!account.capabilitiesActive()) return;
       observation.startObservation();
       yield* capabilities.arm;
-      if (account.signedIn()) settings.reconcileProviderKeyVault();
+      if (account.signedIn()) yield* settings.reconcileProviderKeyVault();
       void live.requestOnboardingBeat();
     });
 
@@ -215,7 +215,7 @@ export const hostAssemblyLayer: Layer.Layer<
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
       yield* Effect.promise(() => account.applyVoiceCredential());
-      yield* Effect.promise(() => settings.emitSettings());
+      yield* settings.emitSettings();
     });
 
     // Every edge a composer could not take as a constructor argument, in one
