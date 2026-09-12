@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { HTTP_METHOD } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { fakeCloudApi, jsonResponse, recordedRequest, recordingFetch } from "@sidecar/wire/testing";
+import {
+  fakeCloudApi,
+  fakeHttpClientLayer,
+  jsonResponse,
+  recordedRequest,
+  recordingHttpClient,
+} from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { feedbackDelivery, feedbackDeliveryFromEnvironment } from "./delivery.js";
@@ -36,13 +41,10 @@ it.effect("a landed send answers delivered, and the submission travels whole", (
 
 it.effect("a refusing endpoint comes back as a reason, not a failure", () =>
   Effect.gen(function* () {
-    const recording = recordingFetch(() => jsonResponse({}, 503));
+    const recording = recordingHttpClient(() => jsonResponse({}, 503));
     const delivery = feedbackDelivery({ url: URL });
 
-    const result = yield* Effect.provide(
-      delivery.deliver(SUBMISSION),
-      layerFromCloudFetch(recording.fetch),
-    );
+    const result = yield* Effect.provide(delivery.deliver(SUBMISSION), recording.layer);
 
     assert.equal(result.delivered, false);
     assert.ok(result.reason);
@@ -51,13 +53,10 @@ it.effect("a refusing endpoint comes back as a reason, not a failure", () =>
 
 it.effect("an unreachable endpoint comes back as a reason, not a failure", () =>
   Effect.gen(function* () {
-    const recording = recordingFetch(() => Promise.reject(new Error("connection refused")));
+    const recording = recordingHttpClient(() => Promise.reject(new Error("connection refused")));
     const delivery = feedbackDelivery({ url: URL });
 
-    const result = yield* Effect.provide(
-      delivery.deliver(SUBMISSION),
-      layerFromCloudFetch(recording.fetch),
-    );
+    const result = yield* Effect.provide(delivery.deliver(SUBMISSION), recording.layer);
 
     assert.equal(result.delivered, false);
     assert.ok(result.reason);
@@ -68,7 +67,7 @@ test("the promise face carries a submission over the caller's own fetch", async 
   const requests: { input: string; body: string }[] = [];
   const courier = feedbackDeliveryFromEnvironment({
     url: URL,
-    httpClient: layerFromCloudFetch((input, init) => {
+    httpClient: fakeHttpClientLayer((input, init) => {
       requests.push({ input, body: String(init.body) });
       return Promise.resolve(new Response("{}", { status: 200 }));
     }),

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
   BRAIN_EMBEDDING_MODEL,
@@ -30,14 +31,14 @@ function request(body: WireRecord | null): Request {
 
 function upstream(answer: () => Response) {
   const calls: { url: string; body: WireRecord }[] = [];
-  const fetch = async (url: string, init: RequestInit): Promise<Response> => {
+  const layer = fakeHttpClientLayer((url, init) => {
     // SAFETY: every upstream body the handler sends is JSON.stringify output.
     const body = JSON.parse(String(init.body)) as UnparsedWireValue;
     assert.ok(isRecord(body));
     calls.push({ url, body });
     return answer();
-  };
-  return { fetch, calls };
+  });
+  return { layer, calls };
 }
 
 function options(overrides: Partial<BrainCall> & { request: Request }): BrainCall {
@@ -50,7 +51,7 @@ function options(overrides: Partial<BrainCall> & { request: Request }): BrainCal
 }
 
 test("an embed request posts the texts under the build-fixed model, spends the allowance, and answers one vector per text", async () => {
-  const { fetch, calls } = upstream(() =>
+  const { layer, calls } = upstream(() =>
     Response.json({
       object: "list",
       model: BRAIN_EMBEDDING_MODEL,
@@ -64,7 +65,7 @@ test("an embed request posts the texts under the build-fixed model, spends the a
   const response = await brainAnswer(
     options({
       request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["a", "b"] }),
-      fetch,
+      httpClient: layer,
       spend: async () => {
         spent += 1;
         return OPEN_SPEND;
@@ -108,11 +109,11 @@ test("a malformed embed request, a spent allowance, and a malformed upstream ans
     }),
   );
   assert.equal(exhausted.status, 429);
-  const { fetch } = upstream(() => Response.json({ object: "list", model: "m", data: [] }));
+  const { layer } = upstream(() => Response.json({ object: "list", model: "m", data: [] }));
   const empty = await brainAnswer(
     options({
       request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["a"] }),
-      fetch,
+      httpClient: layer,
     }),
   );
   assert.equal(empty.status, 502);

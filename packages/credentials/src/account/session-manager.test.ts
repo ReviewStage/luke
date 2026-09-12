@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
+import { fakeHttpClientLayer, HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
 import { Effect, Exit, Fiber } from "effect";
 import { test } from "vitest";
 import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
@@ -131,7 +130,7 @@ function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>
   return new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    httpClient: layerFromCloudFetch(fetchStub),
+    httpClient: fakeHttpClientLayer(fetchStub),
   });
 }
 

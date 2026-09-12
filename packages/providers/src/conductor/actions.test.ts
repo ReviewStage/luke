@@ -36,7 +36,7 @@ test("hands a user prompt to Conductor's documented message endpoint", async () 
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchAction(
@@ -73,7 +73,7 @@ test("stops a working turn through Conductor's cancel endpoint, sending no body"
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchAction(
@@ -114,7 +114,7 @@ test("archives the workspace the user saw through Conductor's archive endpoint, 
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   // Deliberately without a target: the route must be built from the control
@@ -166,7 +166,7 @@ test("refuses to archive a workspace no row advertised, before any request exist
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -209,7 +209,7 @@ test("renames the workspace behind an observed row through Conductor's rename en
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   const observations = await plugin.observe();
 
   // Every open workspace is renameable, so the target rides every chat's
@@ -251,7 +251,7 @@ test("renames an observed chat itself through Conductor's session rename endpoin
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   const observations = await plugin.observe();
 
   // Any open chat is renameable, whatever its turn is doing.
@@ -291,7 +291,7 @@ test("refuses a chat rename for a session no pass observed, before any request e
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -326,7 +326,7 @@ test("refuses a rename for a session no pass observed, before any request exists
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -354,7 +354,7 @@ test("offers the projects the last pass listed as places a workspace can be crea
     workspaces: [],
     sessions: [],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
 
   // Nothing is offered before observation, or after the credential goes: the
   // offer is the last pass's own project list and nothing longer-lived.
@@ -373,7 +373,7 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
     workspaces: [],
     sessions: [],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const named = await dispatchAction(
@@ -417,7 +417,7 @@ test("an acceptance whose response names no session stays a plain acceptance", a
     sessions: [],
     createWithoutSessionId: true,
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchAction(
@@ -438,7 +438,7 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
     workspaces: [],
     sessions: [],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -517,7 +517,7 @@ test("refuses a creation ask for a project the last pass did not list", async ()
     workspaces: [],
     sessions: [],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
@@ -542,7 +542,7 @@ test("hands an opening task to the first session the creation response names", a
     workspaces: [],
     sessions: [],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchAction(
@@ -576,7 +576,7 @@ test("reports a workspace whose task could not be delivered as exactly that", as
     sessions: [],
     createWithoutSessionId: true,
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   const result = await dispatchAction(
@@ -615,7 +615,7 @@ test("starts another agent in the workspace behind an observed row", async () =>
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   const observations = await plugin.observe();
 
   // The roster row says which agents its workspace can take, exactly as the
@@ -668,7 +668,7 @@ test("a stored model rides a new agent only as the pairing the table lists", asy
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
 
   // A model documented for the asked-for agent kind rides along, its effort
@@ -731,7 +731,7 @@ test("refuses to start an agent the row never listed, before any request exists"
       },
     ],
   });
-  const plugin = pluginFor(api.fetch);
+  const plugin = pluginFor(api.layer);
   await plugin.observe();
   const requestsBefore = api.requests.length;
 

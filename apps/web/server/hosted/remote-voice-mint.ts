@@ -1,9 +1,6 @@
-import {
-  type CloudFetch,
-  CONTEXT_ITEM_KIND,
-  contextItemId,
-  type ObservedSession,
-} from "../core.js";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import type { Layer } from "effect";
+import { CONTEXT_ITEM_KIND, contextItemId, type ObservedSession } from "../core.js";
 import { observedSessionForResponse } from "./observe.js";
 import { remoteSessionContextText } from "./remote-context.js";
 import { observeProviders, readApiKeyFor } from "./vault-keys.js";
@@ -27,7 +24,7 @@ export const MOBILE_MINT_STRICT_FIELDS: readonly string[] = ["voice", "speed"];
 /** What a roster read needs of the deployment: the vault secret and the caller's stored keys. */
 export interface RemoteObserveSeams
   extends Pick<HostedVaultRoute, "encryptionSecret" | "readVaultKeys"> {
-  fetch?: CloudFetch | undefined;
+  httpClient?: Layer.Layer<HttpClient.HttpClient> | undefined;
 }
 
 /**

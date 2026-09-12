@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
   CONTEXT_ITEM_KIND,
@@ -58,11 +59,11 @@ test("a phone or watch mint keeps its own narrowed session document on the share
   const call: UpstreamCall = {};
   const response = await mintAnswer(
     options({
-      fetch: async (url, init) => {
+      httpClient: fakeHttpClientLayer(async (url, init) => {
         call.url = url;
         call.init = init;
         return mintedPayload();
-      },
+      }),
     }),
   );
 
@@ -91,27 +92,29 @@ test("a phone or watch mint keeps its own narrowed session document on the share
 
 test("the remote mint gate order is method, kill switch, token, body, quota", async () => {
   let upstreamCalls = 0;
-  const fetch = async (): Promise<Response> => {
+  const httpClient = fakeHttpClientLayer(() => {
     upstreamCalls += 1;
     return mintedPayload();
-  };
+  });
   const method = await mintAnswer(
     options({
-      fetch,
+      httpClient,
       request: new Request("https://luke.test/api/voice/remote-mint", { method: "GET" }),
     }),
   );
   assert.equal(method.status, 405);
-  const off = await mintAnswer(options({ fetch, apiKey: "  " }));
+  const off = await mintAnswer(options({ httpClient, apiKey: "  " }));
   assert.equal(off.status, 503);
   assert.deepEqual(await off.json(), { error: HOSTED_API_ERROR.UNAVAILABLE });
-  const anonymous = await mintAnswer(options({ fetch, resolveUserId: async () => undefined }));
+  const anonymous = await mintAnswer(options({ httpClient, resolveUserId: async () => undefined }));
   assert.equal(anonymous.status, 401);
-  const malformed = await mintAnswer(options({ fetch, request: mintRequest({ voice: "nobody" }) }));
+  const malformed = await mintAnswer(
+    options({ httpClient, request: mintRequest({ voice: "nobody" }) }),
+  );
   assert.equal(malformed.status, 400);
   const quota = { used: 5_000, limit: 5_000, resetsAt: NOW + 1_000 };
   const spent = await mintAnswer(
-    options({ fetch, spend: async () => ({ allowed: false, quota }) }),
+    options({ httpClient, spend: async () => ({ allowed: false, quota }) }),
   );
   assert.equal(spent.status, 429);
   assert.deepEqual(await spent.json(), { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota });

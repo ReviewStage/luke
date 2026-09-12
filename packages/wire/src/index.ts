@@ -34,7 +34,6 @@ export {
   type SpeechSpokenEventPayload,
 } from "./conversation-event.js";
 export {
-  type CloudFetch,
   HTTP_METHOD,
   HTTP_STATUS,
   type HttpMethod,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { HOSTED_BRAIN_CONTRACT_VERSION, HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
 import { HTTP_METHOD } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
@@ -52,7 +52,7 @@ function keyed(answers: readonly (() => Response)[], baseUrl = `${BASE}/v1/`) {
     transport: keyedBrainTransport({
       baseUrl,
       apiKey: "sk-test",
-      httpClient: layerFromCloudFetch(fetch),
+      httpClient: fakeHttpClientLayer(fetch),
       now: () => NOW,
     }),
   };
@@ -79,7 +79,7 @@ function hosted(
         holder = holders?.shift() ?? holder;
       }),
     ...(holders ? { readAccountKey: () => Effect.succeed(holder) } : undefined),
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
     now: () => NOW,
   });
   return { calls, refreshes, transport };
@@ -106,7 +106,7 @@ test("the run's own cancellation ends the request it was handed to", async () =>
   const transport = keyedBrainTransport({
     baseUrl: BASE,
     apiKey: "sk-test",
-    httpClient: layerFromCloudFetch(
+    httpClient: fakeHttpClientLayer(
       () =>
         new Promise<Response>((_settle, reject) => {
           cancellation.abort();
@@ -128,7 +128,7 @@ test("a fetch that throws is a network failure named by the error's kind alone, 
   const transport = keyedBrainTransport({
     baseUrl: BASE,
     apiKey: "sk-secret-key",
-    httpClient: layerFromCloudFetch(() =>
+    httpClient: fakeHttpClientLayer(() =>
       Promise.reject(new TypeError("sk-secret-key was refused by dns")),
     ),
     now: () => NOW,

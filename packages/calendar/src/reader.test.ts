@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import type { JsonValue } from "@sidecar/wire/testing";
-import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
+import { HTTP_STATUS, type RecordedRequest, recordingHttpClient } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { CALENDAR_LOOKAHEAD_MS, MAXIMUM_MEETING_LENGTH_MS } from "./calendar.js";
 import { type CalendarAccountCredential, GoogleCalendarReader } from "./reader.js";
@@ -60,14 +59,14 @@ function readerWith(
   respond: (request: RecordedRequest) => Response,
   accounts: readonly CalendarAccountCredential[],
 ) {
-  const { fetch, requests } = recordingFetch(respond);
+  const { layer, requests } = recordingHttpClient(respond);
   const reader = new GoogleCalendarReader({
     readAccounts: async () => accounts,
     signInConfig: () => ({
       clientId: "test-client.apps.googleusercontent.com",
       clientSecret: "GOCSPX-test-secret",
     }),
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: layer,
     now: () => NOW,
   });
   return { reader, requests };

@@ -1,7 +1,8 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
+import type { Layer } from "effect";
 import { ADAPTER_FAILURE } from "../../../../packages/providers/src/shared/adapter-failure.js";
 import type {
   CloudAgentProviderId,
-  CloudFetch,
   ProviderSessionObservation,
   WorkspaceProject,
 } from "../core.js";
@@ -41,8 +42,8 @@ const FAILURE_BY_ADAPTER_FAILURE = {
 >;
 
 export interface CloudObserveSeams {
-  /** Injected in tests; production uses the global fetch. */
-  fetch?: CloudFetch;
+  /** Injected in tests; production uses the platform's own fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
 }
 
@@ -70,7 +71,7 @@ export async function observeCloudProviders(options: {
   const plugins = options.providerIds.map((providerId) =>
     cloudSessionPluginFor(providerId, {
       readApiKey: options.readApiKey(providerId),
-      ...(options.seams.fetch ? { fetch: options.seams.fetch } : undefined),
+      ...(options.seams.httpClient ? { httpClient: options.seams.httpClient } : undefined),
       ...(options.seams.now ? { now: options.seams.now } : undefined),
     }),
   );

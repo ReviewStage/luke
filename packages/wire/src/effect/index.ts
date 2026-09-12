@@ -1,9 +1,4 @@
-export {
-  cloudFetchFromHttpClient,
-  httpClientFromCloudFetch,
-  layerFromCloudFetch,
-  webResponseFromClientResponse,
-} from "./http.js";
+export { webResponseFromClientResponse } from "./http.js";
 export {
   declareReader,
   describeWire,

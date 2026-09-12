@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import {
   forgetPosthogPersonEffect,
@@ -18,11 +18,11 @@ interface Sent {
 
 function upstream(status = 200) {
   const sent: Sent[] = [];
-  const fetch = async (url: string, init: RequestInit) => {
+  const layer = fakeHttpClientLayer((url, init) => {
     sent.push({ url, init });
     return new Response("{}", { status });
-  };
-  return { fetch, sent };
+  });
+  return { layer, sent };
 }
 
 function onlySent(sent: readonly Sent[]): Sent {
@@ -39,9 +39,7 @@ function options(overrides: Partial<PosthogForgetOptions> = {}): PosthogForgetOp
 it.effect("erasure asks the documented bulk delete for the one person and their events", () =>
   Effect.gen(function* () {
     const posthog = upstream();
-    yield* forgetPosthogPersonEffect("user-1", options()).pipe(
-      Effect.provide(layerFromCloudFetch(posthog.fetch)),
-    );
+    yield* forgetPosthogPersonEffect("user-1", options()).pipe(Effect.provide(posthog.layer));
 
     const { url, init } = onlySent(posthog.sent);
     assert.equal(
@@ -60,7 +58,7 @@ it.effect("a configured private API host is used as given, without its trailing 
   Effect.gen(function* () {
     const posthog = upstream();
     yield* forgetPosthogPersonEffect("user-1", options({ host: "https://eu.posthog.com/" })).pipe(
-      Effect.provide(layerFromCloudFetch(posthog.fetch)),
+      Effect.provide(posthog.layer),
     );
 
     const { url } = onlySent(posthog.sent);
@@ -75,7 +73,7 @@ it.effect("a refusal fails with the status alone, never anything that could name
   Effect.gen(function* () {
     const posthog = upstream(401);
     const error = yield* forgetPosthogPersonEffect("user-1", options()).pipe(
-      Effect.provide(layerFromCloudFetch(posthog.fetch)),
+      Effect.provide(posthog.layer),
       Effect.flip,
     );
 
@@ -87,7 +85,7 @@ it.effect("a network fault reaches the caller, which owns deciding the delete pr
   Effect.gen(function* () {
     const error = yield* forgetPosthogPersonEffect("user-1", options()).pipe(
       Effect.provide(
-        layerFromCloudFetch(async () => {
+        fakeHttpClientLayer(async () => {
           throw new Error("processor unreachable");
         }),
       ),

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { HOSTED_SERVICE_PATH } from "../server/core";
 import type { HostedSpend, IntroductionSpend } from "../server/hosted/quota";
@@ -51,7 +52,7 @@ function mintRequest(servicePath: string, body?: MintRequestBody, method = "POST
 }
 
 function upstream(answer: () => Response) {
-  return async (): Promise<Response> => answer();
+  return fakeHttpClientLayer(() => answer());
 }
 
 const minted = () => Response.json({ value: "eph-secret", expires_at: (NOW + 60_000) / 1000 });
@@ -63,7 +64,7 @@ function voice(overrides: Partial<MintCall> = {}) {
     resolveUserId: async () => "user-1",
     spend: async () => OPEN_SPEND,
     now: () => NOW,
-    fetch: upstream(minted),
+    httpClient: upstream(minted),
     ...overrides,
   };
 }
@@ -76,7 +77,7 @@ function remote(overrides: Partial<MintCall> = {}) {
     spend: async () => OPEN_SPEND,
     readVaultKeys: async () => [],
     now: () => NOW,
-    fetch: upstream(minted),
+    httpClient: upstream(minted),
     ...overrides,
   };
 }
@@ -87,7 +88,7 @@ function introduction(overrides: Partial<MintCall> = {}) {
     apiKey: API_KEY,
     spendIntroduction: async () => OPEN_INTRODUCTION,
     now: () => NOW,
-    fetch: upstream(minted),
+    httpClient: upstream(minted),
     ...overrides,
   };
 }
@@ -111,7 +112,8 @@ const CASES: [string, () => Promise<Response>][] = [
   ["mint-quota-exhausted", () => mintAnswer(voice({ spend: async () => SPENT }))],
   [
     "mint-upstream-error",
-    () => mintAnswer(voice({ fetch: upstream(() => new Response("secret", { status: 500 })) })),
+    () =>
+      mintAnswer(voice({ httpClient: upstream(() => new Response("secret", { status: 500 })) })),
   ],
   ["remote-mint", () => mintAnswer(remote())],
   [

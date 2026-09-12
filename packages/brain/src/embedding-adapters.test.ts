@@ -5,7 +5,7 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import {
@@ -77,7 +77,7 @@ test("the keyed adapter posts the build-fixed model on the key and reports its i
   );
   const adapter = new OpenAiEmbeddingAdapter({
     apiKey: "sk-test",
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
   });
   const batch = await adapter.embed(["a", "b"]);
   assert.equal(batch.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
@@ -105,7 +105,7 @@ test("the keyed adapter names a throttle, a refused key, and an upstream failure
   );
   const adapter = new OpenAiEmbeddingAdapter({
     apiKey: "sk-test",
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
     now: () => 1_000,
   });
   const throttledAnswer = await adapter.embed(["a"]);
@@ -143,7 +143,7 @@ test("the hosted adapter reads the capabilities once and embeds through the cont
     serviceBaseUrl: "https://luke.test/",
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
   });
   const batch = await adapter.embed(["a"]);
   assert.equal(batch.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
@@ -173,7 +173,7 @@ test("a hosted service without the embed operation is a compatibility failure, n
     serviceBaseUrl: "https://luke.test",
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
   });
   const batch = await adapter.embed(["a"]);
   assert.equal(
@@ -185,7 +185,7 @@ test("a hosted service without the embed operation is a compatibility failure, n
     serviceBaseUrl: "https://luke.test",
     readAccessToken: () => Effect.succeed(undefined),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: fakeHttpClientLayer(fetch),
   });
   const unsigned = await noToken.embed(["a"]);
   assert.equal(

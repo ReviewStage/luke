@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
+import {
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  type RecordedRequest,
+  recordingHttpClient,
+} from "@sidecar/wire/testing";
 import { Effect, Fiber } from "effect";
 import { test } from "vitest";
 import {
@@ -90,11 +94,11 @@ it.effect("the consent page is Google's own, asking for availability alone, with
 );
 
 test("the exchange carries the desktop client's secret and the verifier", async () => {
-  const { fetch: fakeFetch, requests } = recordingFetch(() => tokenResponse());
+  const { layer, requests } = recordingHttpClient(() => tokenResponse());
   const grant = await exchangeGoogleCode(
     { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET },
     { code: "auth-code", redirectUri: "http://127.0.0.1:4321/oauth/callback", codeVerifier: "v" },
-    layerFromCloudFetch(fakeFetch),
+    layer,
   );
   assert.deepEqual(grant, { refreshToken: "1//refresh-token", accessToken: "at-1" });
 
@@ -119,26 +123,26 @@ test("every way the exchange can fail is a sentence, never a throw", async () =>
     codeVerifier: "v",
   };
 
-  const { fetch: refusing } = recordingFetch(
+  const { layer: refusing } = recordingHttpClient(
     () => new Response("no", { status: HTTP_STATUS.UNAUTHORIZED }),
   );
-  assert.deepEqual(await exchangeGoogleCode(config, input, layerFromCloudFetch(refusing)), {
+  assert.deepEqual(await exchangeGoogleCode(config, input, refusing), {
     reason: "Google refused the sign-in exchange.",
   });
 
-  const { fetch: tokenless } = recordingFetch(
+  const { layer: tokenless } = recordingHttpClient(
     () =>
       new Response(JSON.stringify({ access_token: "at-1" }), {
         status: HTTP_STATUS.OK,
         headers: { "content-type": "application/json" },
       }),
   );
-  assert.deepEqual(await exchangeGoogleCode(config, input, layerFromCloudFetch(tokenless)), {
+  assert.deepEqual(await exchangeGoogleCode(config, input, tokenless), {
     reason: "Google answered the sign-in without a token.",
   });
 
   const offline = () => Promise.reject(new Error("offline"));
-  assert.deepEqual(await exchangeGoogleCode(config, input, layerFromCloudFetch(offline)), {
+  assert.deepEqual(await exchangeGoogleCode(config, input, fakeHttpClientLayer(offline)), {
     reason: "The sign-in exchange with Google did not complete.",
   });
 });

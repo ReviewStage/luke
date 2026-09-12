@@ -315,15 +315,6 @@ export type HttpStatus = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS];
 export const HttpStatusSchema = Schema.Literal(...Object.values(HTTP_STATUS));
 
 /**
- * The fetch a caller is given, so a test can answer for the network.
- *
- * @deprecated Superseded by `@effect/platform`'s `HttpClient`, which the
- * bridge in `effect/http.ts` offers over one of these; deleted in P12-04 once
- * every caller takes a client instead.
- */
-export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;
-
-/**
  * A base address with no trailing separator, so a path joined to it cannot
  * produce a doubled slash the upstream reads as a different route.
  */

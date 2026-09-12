@@ -18,7 +18,6 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect, type Layer } from "effect";
 import {
   HostedLiveSessionSource,
@@ -96,7 +95,8 @@ export interface VoiceCapabilityAssemblerOptions {
   refreshAccount: () => Effect.Effect<void, unknown>;
   /** This installation's device row id, for the hosted session's handshake; absent or answering nothing, the handshake names no device. */
   deviceId?: () => string | undefined;
-  fetch?: typeof fetch;
+  /** The `HttpClient` the brain's own request effects run over; the platform's own when absent. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   /** The runtime a brain model's own request effects are run on; `Runtime.defaultRuntime` for a caller that gave none. */
   execution?: ExecutionRuntime;
   report?: (message: string) => void;
@@ -233,9 +233,7 @@ export class VoiceCapabilityAssembler {
       Effect.tryPromise(() => this.#options.settings.readAccount()).pipe(
         Effect.orElseSucceed(() => undefined),
       );
-    const httpClient: Layer.Layer<HttpClient.HttpClient> | undefined = this.#options.fetch
-      ? layerFromCloudFetch(this.#options.fetch)
-      : undefined;
+    const httpClient = this.#options.httpClient;
     const seams = {
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
       readAccessToken: () => Effect.map(readAccount(), (account) => account?.accessToken),

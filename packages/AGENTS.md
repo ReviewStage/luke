@@ -271,7 +271,7 @@ field it holds and not a service it reads, and the adaptor that stood here
 for one was deleted rather than adopted.
 
 `@sidecar/wire/effect` is the same door for what still bridges a hand-rolled
-base to Effect's own — the `HttpClient` bridge over `CloudFetch`, and the
+base to Effect's own — the web `Response` a client's answer carries, and the
 JSON Schema emitter with its `readEither` — kept off
 the main barrel so a caller that only wants the wire vocabulary never
 resolves `@effect/platform`. `@sidecar/runtime/effect` is

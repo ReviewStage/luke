@@ -21,6 +21,7 @@ import { MAIN_SESSION_KEY, REASONING_EFFORT } from "@sidecar/runtime/vocabulary"
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { scriptedOpenSocket } from "@sidecar/voice/testing";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./brain/host.js";
@@ -96,7 +97,7 @@ class HeldSettings implements VoiceSettings {
 
 /**
  * The real assembler, host, and agent builds, composed as main composes them.
- * The hosted fetch holds every brain turn until the test releases it, so a
+ * The hosted HTTP client holds every brain turn until the test releases it, so a
  * run can be left outstanding on an installed agent while other work drains.
  */
 function composition() {
@@ -116,8 +117,7 @@ function composition() {
     // is scripted to answer no opening at all.
     openSocket: scriptedOpenSocket([]).openSocket,
     refreshAccount: () => Effect.void,
-    fetch: async (input) => {
-      const url = String(input);
+    httpClient: fakeHttpClientLayer(async (url) => {
       // The hosted adapter speaks the brain contract: it reads the
       // capabilities and then posts each turn, which this fake holds.
       if (url.endsWith(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES)) {
@@ -136,7 +136,7 @@ function composition() {
       }
       warms.push(url);
       return new Response(null, { status: 204 });
-    },
+    }),
     report: (message) => {
       reports.push(message);
       onReport?.(reports.length);

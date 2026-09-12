@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import {
   HTTP_STATUS,
   type RecordedRequest,
   recordedRequest,
-  recordingFetch,
+  recordingHttpClient,
 } from "@sidecar/wire/testing";
 import { Effect, TestClock } from "effect";
 import { test } from "vitest";
@@ -33,14 +32,14 @@ function senderWith(
   overrides: Partial<ProductEventSenderOptions> = {},
   respond: (request: RecordedRequest) => Response = () => new Response("{}"),
 ) {
-  const { fetch, requests } = recordingFetch(respond);
+  const { layer, requests } = recordingHttpClient(respond);
   const sender = new ProductEventSender({
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: layer,
     now: () => NOON,
     ...overrides,
   });
@@ -107,11 +106,11 @@ test("a sender that was never armed sends nothing", async () => {
 test("a batch queued under one account is never posted under another's bearer", async () => {
   let account = "ada@luke.test";
   let token = "stale";
-  const { fetch, requests } = recordingFetch(
+  const { layer, requests } = recordingHttpClient(
     () => new Response("{}", { status: HTTP_STATUS.UNAUTHORIZED }),
   );
   const { sender } = sharingSender({
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: layer,
     readAccessToken: () => Effect.succeed(token),
     readAccountKey: () => Effect.succeed(account),
     // The sign-out and sign-in the refusal was the first sign of: the token
@@ -137,7 +136,7 @@ test("a batch queued under one account is never posted under another's bearer", 
 });
 
 test("a failed send drops its batch rather than retrying it behind the next one", async () => {
-  const { fetch, requests } = recordingFetch(() => {
+  const { layer, requests } = recordingHttpClient(() => {
     throw new Error("network down");
   });
   const sender = new ProductEventSender({
@@ -146,7 +145,7 @@ test("a failed send drops its batch rather than retrying it behind the next one"
     sends: true,
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: layer,
     now: () => NOON,
   });
   sender.arm();
@@ -164,14 +163,14 @@ test("a failed send drops its batch rather than retrying it behind the next one"
 
 test("signed out the queue waits rather than being spent", async () => {
   let token: string | undefined;
-  const { fetch, requests } = recordingFetch(() => new Response("{}"));
+  const { layer, requests } = recordingHttpClient(() => new Response("{}"));
   const sender = new ProductEventSender({
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
     readAccessToken: () => Effect.succeed(token),
     refreshAccount: () => Effect.void,
-    httpClient: layerFromCloudFetch(fetch),
+    httpClient: layer,
     now: () => NOON,
   });
   sender.arm();

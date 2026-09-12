@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import type { RealtimeVoice, RealtimeVoiceSpeed } from "../server/core";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core";
@@ -40,11 +41,11 @@ interface UpstreamCall {
 }
 
 function upstream(call: UpstreamCall, response: () => Response) {
-  return async (url: string, init: RequestInit): Promise<Response> => {
+  return fakeHttpClientLayer((url, init) => {
     call.url = url;
     call.init = init;
     return response();
-  };
+  });
 }
 
 function mintedPayload() {
@@ -69,7 +70,7 @@ test("a mint hands back an ephemeral credential aimed at OpenAI's own calls endp
   const response = await mintAnswer(
     options({
       request: mintRequest({ voice: REALTIME_VOICE.MARIN, speed: REALTIME_VOICE_SPEED.QUICK }),
-      fetch: upstream(call, mintedPayload),
+      httpClient: upstream(call, mintedPayload),
     }),
   );
 
@@ -94,7 +95,7 @@ test("a mint hands back an ephemeral credential aimed at OpenAI's own calls endp
 
 test("the wsUrl is pinned to the build's websocket base and carries the session's model", async () => {
   const response = await mintAnswer(
-    options({ model: "gpt-realtime-next", fetch: upstream({}, mintedPayload) }),
+    options({ model: "gpt-realtime-next", httpClient: upstream({}, mintedPayload) }),
   );
   assert.equal(response.status, 200);
   const body = await response.json();
@@ -104,7 +105,7 @@ test("the wsUrl is pinned to the build's websocket base and carries the session'
 
 test("an empty body mints the build's own defaults", async () => {
   const call: UpstreamCall = {};
-  const response = await mintAnswer(options({ fetch: upstream(call, mintedPayload) }));
+  const response = await mintAnswer(options({ httpClient: upstream(call, mintedPayload) }));
 
   assert.equal(response.status, 200);
   const sent = JSON.parse(String(call.init?.body));
@@ -115,7 +116,7 @@ test("an empty body mints the build's own defaults", async () => {
 test("a configured model labels the credential even when the payload omits its own", async () => {
   const call: UpstreamCall = {};
   const response = await mintAnswer(
-    options({ model: "gpt-realtime-next", fetch: upstream(call, mintedPayload) }),
+    options({ model: "gpt-realtime-next", httpClient: upstream(call, mintedPayload) }),
   );
 
   assert.equal(response.status, 200);
@@ -127,7 +128,7 @@ test("a configured model labels the credential even when the payload omits its o
 test("a blank model override is no override at all", async () => {
   const call: UpstreamCall = {};
   const response = await mintAnswer(
-    options({ model: "   ", fetch: upstream(call, mintedPayload) }),
+    options({ model: "   ", httpClient: upstream(call, mintedPayload) }),
   );
 
   assert.equal(response.status, 200);
@@ -180,7 +181,7 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
 test("an upstream refusal answers with its status and never the key", async () => {
   const call: UpstreamCall = {};
   const response = await mintAnswer(
-    options({ fetch: upstream(call, () => new Response("denied", { status: 401 })) }),
+    options({ httpClient: upstream(call, () => new Response("denied", { status: 401 })) }),
   );
 
   assert.equal(response.status, 502);
@@ -192,14 +193,14 @@ test("an upstream refusal answers with its status and never the key", async () =
 test("a credential that is malformed or already dead is refused rather than served", async () => {
   const malformed = await mintAnswer(
     options({
-      fetch: upstream({}, () => new Response(JSON.stringify({ odd: true }), { status: 200 })),
+      httpClient: upstream({}, () => new Response(JSON.stringify({ odd: true }), { status: 200 })),
     }),
   );
   assert.equal(malformed.status, 502);
 
   const expired = await mintAnswer(
     options({
-      fetch: upstream(
+      httpClient: upstream(
         {},
         () =>
           new Response(JSON.stringify({ value: "eph-secret", expires_at: (NOW - 1_000) / 1000 }), {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { BRAIN_PREFETCH_MODEL } from "@sidecar/brain";
 import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import {
@@ -214,7 +215,7 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: () => Effect.void,
     report: () => undefined,
-    fetch: async () => new Response(null, { status: 204 }),
+    httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 204 })),
   };
   const hosted = new VoiceCapabilityAssembler({
     ...seams,
@@ -260,7 +261,7 @@ test("live sessions follow the voice source, and stand only where a socket seam 
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: () => Effect.void,
     report: () => undefined,
-    fetch: async () => new Response(null, { status: 204 }),
+    httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 204 })),
   };
 
   const keyed = new VoiceCapabilityAssembler({
@@ -314,7 +315,7 @@ test("live sessions follow the voice source, and stand only where a socket seam 
   assert.equal(withoutSeam.liveSessions, undefined);
 });
 
-test("the assembler's own fetch reaches the keyed live session it builds, not the real network", async () => {
+test("the assembler's own HTTP client reaches the keyed live session it builds, not the real network", async () => {
   const { openSocket } = scriptedOpenSocket([]);
   const { requests, fetchLike } = recordingOpenAi();
 
@@ -325,7 +326,7 @@ test("the assembler's own fetch reaches the keyed live session it builds, not th
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: () => Effect.void,
     report: () => undefined,
-    fetch: fetchLike,
+    httpClient: fakeHttpClientLayer(fetchLike),
     openSocket,
     settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
   });

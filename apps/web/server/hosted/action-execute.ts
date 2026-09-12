@@ -1,3 +1,6 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
+import * as HttpClient from "@effect/platform/HttpClient";
+import { Effect, Layer } from "effect";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -8,12 +11,12 @@ import {
   admit,
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
-  type CloudFetch,
   dispatchAction,
   dispatchByKind,
   dispatchConversation,
   type HostedConversationAnswer,
   type HostedConversationMessage,
+  HTTP_STATUS,
   normalizeSession,
   PROVIDER_IDENTITY_BY_ID,
   type ProviderActionResult,
@@ -101,8 +104,8 @@ export interface ActionExecutionAnswer {
 }
 
 export interface ActionExecuteSeams {
-  /** Injected in tests; production uses the global fetch. */
-  fetch?: CloudFetch;
+  /** Injected in tests; production uses the platform's own fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
 }
 
@@ -154,7 +157,7 @@ export function actionRosterFor(
  * re-observe-before-read discipline the desktop keeps in its observation
  * registry, here as a fresh pass on a request-scoped instance. The pass
  * swallows credential and network failures into an empty roster, so the pass
- * watches its own fetch to tell "the provider refused the key" and "the
+ * watches its own client to tell "the provider refused the key" and "the
  * provider could not be reached" apart from "the session is gone" when the
  * read's target is missing.
  */
@@ -165,26 +168,51 @@ interface ObservedActionPass {
   unreachable: boolean;
 }
 
+/**
+ * The same client the pass would have used, reporting to `pass` what it saw:
+ * a refused status is the provider refusing the key, and a failed request is
+ * the provider not being reachable. It only watches — every answer and every
+ * failure is handed on exactly as it came.
+ */
+function watchingHttpClient(
+  base: Layer.Layer<HttpClient.HttpClient>,
+  pass: { unauthorized: boolean; unreachable: boolean },
+): Layer.Layer<HttpClient.HttpClient> {
+  return Layer.provide(
+    Layer.effect(
+      HttpClient.HttpClient,
+      Effect.map(HttpClient.HttpClient, (client) =>
+        HttpClient.tapError(
+          HttpClient.tap(client, (response) =>
+            Effect.sync(() => {
+              if (
+                response.status === HTTP_STATUS.UNAUTHORIZED ||
+                response.status === HTTP_STATUS.FORBIDDEN
+              ) {
+                pass.unauthorized = true;
+              }
+            }),
+          ),
+          () =>
+            Effect.sync(() => {
+              pass.unreachable = true;
+            }),
+        ),
+      ),
+    ),
+    base,
+  );
+}
+
 async function observeForAction(
   providerId: CloudAgentProviderId,
   apiKey: string,
   seams: ActionExecuteSeams,
 ): Promise<ObservedActionPass> {
   const pass = { unauthorized: false, unreachable: false };
-  const inner: CloudFetch = seams.fetch ?? ((url, init) => fetch(url, init));
-  const watchingFetch: CloudFetch = async (url, init) => {
-    try {
-      const response = await inner(url, init);
-      if (response.status === 401 || response.status === 403) pass.unauthorized = true;
-      return response;
-    } catch (error) {
-      pass.unreachable = true;
-      throw error;
-    }
-  };
   const plugin = cloudSessionPluginFor(providerId, {
     readApiKey: async () => apiKey,
-    fetch: watchingFetch,
+    httpClient: watchingHttpClient(seams.httpClient ?? FetchHttpClient.layer, pass),
     ...(seams.now ? { now: seams.now } : undefined),
   });
   const observations = await plugin.observe();
@@ -206,7 +234,7 @@ function pluginOverRoster(
 ): SessionProviderPlugin {
   const plugin = cloudSessionPluginFor(providerId, {
     readApiKey: async () => apiKey,
-    ...(seams.fetch ? { fetch: seams.fetch } : undefined),
+    ...(seams.httpClient ? { httpClient: seams.httpClient } : undefined),
     ...(seams.now ? { now: seams.now } : undefined),
   });
   return {

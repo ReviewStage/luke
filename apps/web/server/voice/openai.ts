@@ -1,8 +1,8 @@
-import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Either, type Layer } from "effect";
 import { WebSocket } from "ws";
 import {
-  type CloudFetch,
   callAnswered,
   createAccountCall,
   fixedBearer,
@@ -43,7 +43,7 @@ export interface LiveUpstreamOptions {
   apiKey: string;
   /** The API's `/v1` base; a test points it at a fake. The attach socket derives from the same base. */
   baseUrl?: string | undefined;
-  fetch?: CloudFetch | undefined;
+  httpClient?: Layer.Layer<HttpClient.HttpClient> | undefined;
   createTimeoutMs?: number | undefined;
   attachTimeoutMs?: number | undefined;
 }
@@ -69,7 +69,7 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
   const call = createAccountCall({
     baseUrl,
     credential,
-    ...(options.fetch ? { httpClient: layerFromCloudFetch(options.fetch) } : undefined),
+    ...(options.httpClient ? { httpClient: options.httpClient } : undefined),
     requestTimeoutMs: options.createTimeoutMs ?? OPENAI_DEFAULTS.CREATE_TIMEOUT_MS,
   });
   const attachTimeoutMs = options.attachTimeoutMs ?? OPENAI_DEFAULTS.ATTACH_TIMEOUT_MS;

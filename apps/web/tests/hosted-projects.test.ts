@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { hostedProjectsAnswerFromWire } from "@sidecar/hosted";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -38,7 +39,7 @@ const KEY_ROWS: VaultKeyRow[] = [
 /** Conductor answering one project, and one more once `connected` is set, recording how often it was asked. */
 function conductorProjects() {
   const state = { connected: false, reads: 0 };
-  const fetch = async (url: string) => {
+  const layer = fakeHttpClientLayer((url) => {
     state.reads += 1;
     if (url.endsWith("/me")) {
       return new Response(JSON.stringify({ userId: "u1" }), { status: 200 });
@@ -51,8 +52,8 @@ function conductorProjects() {
       return new Response(JSON.stringify({ data }), { status: 200 });
     }
     return new Response(JSON.stringify({ data: [] }), { status: 200 });
-  };
-  return { state, fetch };
+  });
+  return { state, layer };
 }
 
 function projectIds(body: { projects: Array<{ providerProjectId: string }> }): string[] {
@@ -66,7 +67,7 @@ test("projects are listed from the stored snapshot, seeded once, and a project c
     projectsOptions({
       readVaultKeys: async () => KEY_ROWS,
       store: () => store,
-      fetch: conductor.fetch,
+      httpClient: conductor.layer,
     });
 
   assert.deepEqual(projectIds(await (await runWithoutDatabase(handleProjects(options()))).json()), [
@@ -89,7 +90,7 @@ test("projects are listed from the stored snapshot, seeded once, and a project c
       rows: KEY_ROWS,
       secret: SECRET,
       store,
-      seams: { fetch: conductor.fetch },
+      seams: { httpClient: conductor.layer },
       now: Date.now(),
     }),
   );
@@ -125,9 +126,9 @@ test("with no vault keys stored the response is 200 with an empty projects array
   const response = await runWithoutDatabase(
     handleProjects(
       projectsOptions({
-        fetch: async () => {
+        httpClient: fakeHttpClientLayer(async () => {
           throw new Error("no provider may be observed without a key");
-        },
+        }),
       }),
     ),
   );
@@ -145,9 +146,9 @@ test("a provider that fails its pass does not fail the whole answer", async () =
         readVaultKeys: async (): Promise<VaultKeyRow[]> => [
           { providerId: "conductor", ciphertext },
         ],
-        fetch: async () => {
+        httpClient: fakeHttpClientLayer(async () => {
           throw new Error("connection refused");
-        },
+        }),
       }),
     ),
   );
@@ -211,7 +212,7 @@ test("a provider that offered a project carries its agent table on the answer", 
         readVaultKeys: async (): Promise<VaultKeyRow[]> => [
           { providerId: "conductor", ciphertext },
         ],
-        fetch: async (url) => {
+        httpClient: fakeHttpClientLayer(async (url) => {
           if (url.endsWith("/me")) {
             return new Response(JSON.stringify({ userId: "u1" }), { status: 200 });
           }
@@ -224,7 +225,7 @@ test("a provider that offered a project carries its agent table on the answer", 
             );
           }
           return new Response(JSON.stringify({ data: [] }), { status: 200 });
-        },
+        }),
       }),
     ),
   );

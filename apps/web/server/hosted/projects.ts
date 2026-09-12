@@ -1,10 +1,10 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import type { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Layer, type ParseResult } from "effect";
 import {
   ACTION_KIND,
   type CloudAgentProviderId,
-  type CloudFetch,
   type HostedProjectsAnswer,
   type HostedWorkspaceAgentModels,
   type HostedWorkspaceProject,
@@ -42,8 +42,8 @@ export interface ProjectsOptions
   > {
   /** The store the snapshot is read from and, on a live pass, written to. */
   store: (secret: string) => ObservationStore;
-  /** Injected in tests; production uses the global fetch. */
-  fetch?: CloudFetch;
+  /** Injected in tests; production uses the platform's own fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
 }
 

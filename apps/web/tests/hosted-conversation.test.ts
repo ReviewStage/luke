@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import type * as HttpClient from "@effect/platform/HttpClient";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import type { Layer } from "effect";
 import { test } from "vitest";
-import { CLOUD_AGENT_PROVIDER_ID, type CloudFetch, type WireRecord } from "../server/core";
+import { CLOUD_AGENT_PROVIDER_ID, type WireRecord } from "../server/core";
 import {
   executeConversationRead,
   providerReadsConversation,
@@ -249,12 +252,12 @@ test("only Conductor's adapter carries the conversation read today", () => {
 // --- The executor re-observes and reads through the provider's adapter ---
 
 /** The read-only Conductor answers one conversation read needs. */
-function conductorFetch(options: {
+function conductorClient(options: {
   messages: readonly WireRecord[];
   hasMore?: boolean;
   recordReads?: Array<string>;
-}): CloudFetch {
-  return async (url) => {
+}): Layer.Layer<HttpClient.HttpClient> {
+  return fakeHttpClientLayer((url) => {
     const parsed = new URL(url);
     const answer = (body: WireRecord) => new Response(JSON.stringify(body), { status: 200 });
     if (parsed.pathname === "/me") return answer({ userId: "user-1" });
@@ -308,7 +311,7 @@ function conductorFetch(options: {
       });
     }
     return new Response("{}", { status: 500 });
-  };
+  });
 }
 
 /** One stored developer send, for fixtures where only attribution matters. */
@@ -331,7 +334,7 @@ test("a conversation read re-observes, reads the documented endpoint, and maps t
     afterMessageId: MESSAGE_UUIDS[0],
     apiKey: "key-1",
     seams: {
-      fetch: conductorFetch({
+      httpClient: conductorClient({
         recordReads: reads,
         messages: [
           storedSend(MESSAGE_UUIDS[0], "First ask"),
@@ -385,7 +388,7 @@ test("an opening read answers the latest page with the positions to continue fro
     providerSessionId: SESSION_UUID,
     apiKey: "key-1",
     seams: {
-      fetch: conductorFetch({
+      httpClient: conductorClient({
         messages: [
           storedSend(MESSAGE_UUIDS[0], "First ask"),
           storedSend(MESSAGE_UUIDS[1], "Second ask"),
@@ -414,7 +417,7 @@ test("a history read rides its offset to the adapter and back", async () => {
     beforeOffset: 2,
     apiKey: "key-1",
     seams: {
-      fetch: conductorFetch({
+      httpClient: conductorClient({
         recordReads: reads,
         messages: [
           storedSend(MESSAGE_UUIDS[0], "First ask"),
@@ -443,7 +446,7 @@ test("a conversation read for a session the fresh pass did not observe refuses",
     providerId: "conductor",
     providerSessionId: "99999999-9999-4999-8999-999999999999",
     apiKey: "key-1",
-    seams: { fetch: conductorFetch({ messages: [] }) },
+    seams: { httpClient: conductorClient({ messages: [] }) },
   });
   assert.ok("refused" in answer);
   assert.equal(answer.refused, "Session not found.");
@@ -454,7 +457,7 @@ test("a key the provider refuses is named as the reason, not a missing session",
     providerId: "conductor",
     providerSessionId: SESSION_UUID,
     apiKey: "key-1",
-    seams: { fetch: async () => new Response("{}", { status: 401 }) },
+    seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
   });
   assert.ok("refused" in answer);
 });

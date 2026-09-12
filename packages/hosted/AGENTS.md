@@ -79,8 +79,8 @@ project token travels in the document itself.
 
 `accountCall` is that call as effects over `@effect/platform`'s `HttpClient`
 tag, so what carries a request is a layer a caller provides and a test hands
-the same fake behind (`fakeCloudApi`'s own `layer`, or `layerFromCloudFetch`
-over a recorder for a route whose status moves between attempts). The
+the same fake behind (`fakeCloudApi`'s own `layer`, or `recordingHttpClient`'s
+own `layer` for a route whose status moves between attempts). The
 deadline is the runtime's own timeout rather than an `AbortSignal.timeout`,
 and it ends a request under the name that signal's reason carried, so a
 caller reporting an end reports the word it always did. `createAccountCall`
