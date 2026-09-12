@@ -266,6 +266,7 @@ function routeRoster(route: HostedVaultRoute): SessionActionOptions["roster"] {
       userId,
       providerId,
       secret,
+      run: route.run,
       store: route.store(secret),
       readVaultKeys: route.readVaultKeys,
       seams: {},

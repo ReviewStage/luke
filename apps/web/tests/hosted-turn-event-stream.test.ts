@@ -192,7 +192,13 @@ function options(
   req: Request,
   bounds: TurnEventStreamOptions["bounds"] = QUICK,
 ): TurnEventStreamOptions {
-  return { request: req, resolveUserId: async () => userId, store: database.store, bounds };
+  return {
+    request: req,
+    resolveUserId: async () => userId,
+    run: database.run,
+    store: database.store,
+    bounds,
+  };
 }
 
 interface StreamReading {

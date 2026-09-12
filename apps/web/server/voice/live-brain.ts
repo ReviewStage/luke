@@ -156,11 +156,13 @@ export function hostedLiveBrain(options: HostedLiveBrainOptions): HostedLiveBrai
     }
     const { turn } = standing;
     if (turn === undefined) return false;
-    const journal = await options.store.messages.byClientId(
-      options.userId,
-      turn.conversationId,
-      CATALOG_TOOL_SET,
-      turn.id,
+    const journal = await options.asks.run(
+      options.store.messages.byClientId(
+        options.userId,
+        turn.conversationId,
+        CATALOG_TOOL_SET,
+        turn.id,
+      ),
     );
     if (!journal.ok) {
       options.report("A spoken ask's journal could not be read; its turn is told as failed");

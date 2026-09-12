@@ -12,7 +12,7 @@ import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { askRecord } from "../hosted/store/asks.js";
-import type { HostedStoreContext } from "../hosted/store/database.js";
+import type { HostedStoreContext, HostedStoreRun } from "../hosted/store/database.js";
 import {
   type HostedStore,
   hostedStore,
@@ -53,6 +53,8 @@ export interface HostedLiveExchangeOptions {
   /** The account's standing main, which the spoken asks and the record land in. */
   readonly conversationId: string;
   readonly context: HostedStoreContext;
+  /** The runner this composition's own effects — the store's reads, the ask record, the voice writer — are answered through. */
+  readonly run: HostedStoreRun;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
   /**
@@ -134,21 +136,21 @@ const findVoiceSessionDeviceId = SqlSchema.findOne({
 });
 
 export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLiveExchange {
-  const { userId, liveSessionId, conversationId, context, writer, report } = options;
+  const { userId, liveSessionId, conversationId, context, run, writer, report } = options;
   const store = hostedStore(context);
   const target: VoiceTarget = {
     userId,
     liveSessionId,
     conversation: { userId, conversationId },
   };
-  const voice = voiceWriter({ run: context.run, store: writer });
+  const voice = voiceWriter({ run, store: writer });
   const record = hostedLiveRecord({ writer: voice, target });
   const brain = hostedLiveBrain({
     userId,
     conversationId,
     asks: {
-      run: context.run,
-      asks: askRecord(context.run),
+      run,
+      asks: askRecord(run),
       eve: options.eve,
       now: options.now,
     },
@@ -158,7 +160,7 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
 
   /** The device the session's row names now, read at each look so a row completed after creation is seen. */
   function deviceId(): Promise<string | undefined> {
-    return context.run(
+    return run(
       Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
         Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullable(found.deviceId))),
       ),
@@ -167,7 +169,7 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
 
   const briefings = hostedBriefings({
     userId,
-    speech: { run: context.run, writer },
+    speech: { run, writer },
     offers: store.speech,
     tools: CATALOG_TOOL_SET,
     deviceId,

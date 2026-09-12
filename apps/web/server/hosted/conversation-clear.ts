@@ -1,6 +1,7 @@
 import type { ConversationClearAnswer } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
+import type { HostedStoreRun } from "./store/database.js";
 import type { HostedStore } from "./store/index.js";
 
 /**
@@ -33,6 +34,8 @@ const CLEAR_METHOD = "POST";
 export interface ConversationClearOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
+  /** The runner the Clear's one transaction is answered through. */
+  run: HostedStoreRun;
   store: Pick<HostedStore, "main">;
   now?: () => number;
 }
@@ -40,7 +43,7 @@ export interface ConversationClearOptions {
 export async function handleConversationClear(
   options: ConversationClearOptions,
 ): Promise<Response> {
-  const { request, resolveUserId, store } = options;
+  const { request, resolveUserId, run, store } = options;
   const now = options.now ?? Date.now;
   if (request.method !== CLEAR_METHOD) {
     return errorResponse(
@@ -56,7 +59,7 @@ export async function handleConversationClear(
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
   const openedAt = now();
-  const outcome = await store.main.clear(userId, new Date(openedAt));
+  const outcome = await run(store.main.clear(userId, new Date(openedAt)));
   const answer: ConversationClearAnswer = {
     opened: outcome.opened,
     openedAt,

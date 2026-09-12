@@ -41,7 +41,13 @@ function request(url: string, method: string, authorized = true): Request {
 
 /** The options both handlers take: the whole store, so one call shape serves the Clear and the read that follows it. */
 function options(userId: string | undefined, req: Request) {
-  return { request: req, resolveUserId: async () => userId, store: database.store, now: () => NOW };
+  return {
+    request: req,
+    resolveUserId: async () => userId,
+    run: database.run,
+    store: database.store,
+    now: () => NOW,
+  };
 }
 
 async function body(response: Response): Promise<UnparsedWireValue> {

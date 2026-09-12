@@ -29,6 +29,7 @@ import {
   type HostedSessionActionKind,
 } from "../action-execute.js";
 import type { ObservedRoster } from "../observed-roster.js";
+import type { HostedStoreRun } from "../store/database.js";
 import type { HostedStore } from "../store/index.js";
 import type { HostedWorkspaceDefaults } from "./defaults.js";
 import type { HostedRoster } from "./roster.js";
@@ -217,35 +218,38 @@ function serially<Value>(userId: string, write: () => Promise<Value>): Promise<V
 
 /** The facts table as the carrier writes it: the same bounds the desktop's notebook keeps, one account's rows. */
 export function hostedFactsWriter(
+  run: HostedStoreRun,
   store: Pick<HostedStore, "facts">,
   userId: string,
   now: () => number,
 ): HostedFactsWriter {
   return {
-    list: () => store.facts.list(userId),
+    list: () => run(store.facts.list(userId)),
     remember: (ask) =>
       serially(userId, async () => {
         const words = rememberedFactText(ask.words);
         if (!words) return false;
-        const standing = await store.facts.list(userId);
+        const standing = await run(store.facts.list(userId));
         const kept = standing.filter((fact) => fact.id !== ask.replaces);
         const next = kept.some((fact) => fact.words === words)
           ? kept
           : [...kept, { id: ask.id, words }];
         if (next.length > maximumRememberedFacts) return false;
         if (next.length !== standing.length || next !== kept) {
-          await store.facts.replace(userId, next, now());
+          await run(store.facts.replace(userId, next, now()));
         }
         return true;
       }),
     forget: (id) =>
       serially(userId, async () => {
-        const standing = await store.facts.list(userId);
+        const standing = await run(store.facts.list(userId));
         if (!standing.some((fact) => fact.id === id)) return false;
-        await store.facts.replace(
-          userId,
-          standing.filter((fact) => fact.id !== id),
-          now(),
+        await run(
+          store.facts.replace(
+            userId,
+            standing.filter((fact) => fact.id !== id),
+            now(),
+          ),
         );
         return true;
       }),

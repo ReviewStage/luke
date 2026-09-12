@@ -107,10 +107,12 @@ async function passed(
   observedAt: number,
   previousObservedAt: number | undefined,
 ): Promise<void> {
-  const landed = await database.store.roster.advance(
-    userId,
-    { body: JSON.stringify(to), observedAt },
-    previousObservedAt,
+  const landed = await database.run(
+    database.store.roster.advance(
+      userId,
+      { body: JSON.stringify(to), observedAt },
+      previousObservedAt,
+    ),
   );
   assert.equal(landed, true);
 }
@@ -273,7 +275,7 @@ function insertSettledTurn(userId: string, conversationId: string, at: Date): Pr
 async function bookmarkOf(
   userId: string,
 ): Promise<{ observedAt: number; sessions: string[] } | undefined> {
-  const bookmark = await database.store.roster.consumed(userId);
+  const bookmark = await database.run(database.store.roster.consumed(userId));
   if (bookmark.state !== CONSUMED_ROSTER.STANDING) return undefined;
   const decoded = decodeObservedRoster(bookmark.roster.body);
   assert.ok(decoded);
@@ -381,7 +383,9 @@ test("three passes about one session before one visit become one turn: one eve m
 
 test("a conversation already running in an eve session is sent to, not reopened; one eve has retired is opened again", async () => {
   const { userId } = await threePassesAboutOneSession();
-  const conversationId = await database.store.directory.observed(userId, identity("s-1"), NOW);
+  const conversationId = await database.run(
+    database.store.directory.observed(userId, identity("s-1"), NOW),
+  );
   assert.ok(conversationId);
   await setConversationRuntimeSessionId(conversationId, SESSION_ID);
   const current = fakeEve();
@@ -393,10 +397,8 @@ test("a conversation already running in an eve session is sent to, not reopened;
   );
 
   const { userId: retiredUser } = await threePassesAboutOneSession();
-  const retiredConversation = await database.store.directory.observed(
-    retiredUser,
-    identity("s-1"),
-    NOW,
+  const retiredConversation = await database.run(
+    database.store.directory.observed(retiredUser, identity("s-1"), NOW),
   );
   assert.ok(retiredConversation);
   await setConversationRuntimeSessionId(retiredConversation, SESSION_ID);
@@ -604,7 +606,10 @@ test("a bookmark this build cannot open is replaced by the snapshot over its own
       undefined,
     ),
   );
-  assert.equal((await database.store.roster.consumed(userId)).state, CONSUMED_ROSTER.UNREADABLE);
+  assert.equal(
+    (await database.run(database.store.roster.consumed(userId))).state,
+    CONSUMED_ROSTER.UNREADABLE,
+  );
 
   const { eve, handed } = fakeEve();
   const first = seams({ eve, roster: hostedRosterFrom(before, NOW) });
@@ -646,7 +651,7 @@ test("a change no wake is derived from, a workspace coming or going, settles the
   assert.equal(handed.length, 0);
   assert.equal((await bookmarkOf(userId))?.observedAt, NOW + 1_000);
   // The bookmark now holds the change: the next visit derives nothing and writes nothing.
-  const bookmark = await database.store.roster.consumed(userId);
+  const bookmark = await database.run(database.store.roster.consumed(userId));
   assert.equal(bookmark.state, CONSUMED_ROSTER.STANDING);
   assert.deepEqual(
     bookmark.state === CONSUMED_ROSTER.STANDING
@@ -889,7 +894,9 @@ async function releasedConversation(
     rows: 1,
   },
 ): Promise<Released> {
-  const conversationId = await database.store.directory.observed(userId, identity(sessionId), NOW);
+  const conversationId = await database.run(
+    database.store.directory.observed(userId, identity(sessionId), NOW),
+  );
   assert.ok(conversationId);
   const target = { userId, conversationId };
   const decided: { briefing: string; decidedAt: number }[] = [];

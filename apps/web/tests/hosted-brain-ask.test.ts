@@ -758,7 +758,7 @@ test("a Stop on a running turn is eve's cancel of the conversation's recorded se
   const answer = parse(hostedBrainTurnAnswerSchema, await body(cancelled));
   assert.equal(answer?.cancelRequestedAt, NOW);
   assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId }]);
-  const [row] = await database.store.turns.named(userId, [turnId]);
+  const [row] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
 
   const asked = parse(
@@ -839,7 +839,7 @@ test("the in-process Stop answers what the cancel route answers: for a running t
     ok: false,
     refusal: STOP_REFUSAL.NOT_RUNNING,
   });
-  const [row] = await database.store.turns.named(unrecordedOwner, [orphan]);
+  const [row] = await database.run(database.store.turns.named(unrecordedOwner, [orphan]));
   assert.equal(row?.cancelRequestedAt, null);
 });
 
@@ -856,7 +856,7 @@ test("the writer stamps a Stop on a turn the conversation holds once, and refuse
     ok: true,
     effect: STORE_WRITE_EFFECT.REPEATED,
   });
-  const [row] = await database.store.turns.named(userId, [turnId]);
+  const [row] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
   assert.deepEqual(
     await writer.requestTurnCancel(target, { turnId: randomUUID(), at: new Date(NOW) }),

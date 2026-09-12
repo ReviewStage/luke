@@ -199,7 +199,8 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
     userId: target.userId,
     liveSessionId,
     conversationId: target.conversationId,
-    context: { run: database.run, keys: KEYS },
+    context: { keys: KEYS },
+    run: database.run,
     writer,
     eve,
     source: () => source,
@@ -263,9 +264,9 @@ test("a spoken ask runs a turn through the ask door and is spoken from the servi
   });
   const diagnosis = async () => {
     const ask = (await asks.latestSession(target.userId, target.conversationId)) ?? "none";
-    const turn = await database.store.turns.named(target.userId, [
-      hostTurnId(recorded, FIRST_EVE_TURN),
-    ]);
+    const turn = await database.run(
+      database.store.turns.named(target.userId, [hostTurnId(recorded, FIRST_EVE_TURN)]),
+    );
     const rows = (await readMessagesByConversationTyped(database.run, target.conversationId)).map(
       (row) => ({ clientId: row.clientId, role: row.role }),
     );
@@ -313,7 +314,7 @@ test("a briefing on offer is claimed as the session's device before it is append
     state: memoryRelayState(),
   };
   await play(announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW), standing);
-  const [offer] = await database.store.speech.open(target.userId);
+  const [offer] = await database.run(database.store.speech.open(target.userId));
   assert.ok(offer);
 
   await f.exchange.briefings.look();
@@ -364,7 +365,7 @@ test("a session whose row names no device appends no briefing: the offer stands 
     model: "scripted-model",
     state: memoryRelayState(),
   });
-  const [offer] = await database.store.speech.open(target.userId);
+  const [offer] = await database.run(database.store.speech.open(target.userId));
   assert.ok(offer);
   await f.exchange.briefings.look();
   await sleep(30);
@@ -377,7 +378,7 @@ test("a session whose row names no device appends no briefing: the offer stands 
 test("after a Clear, a spoken ask is refused at the door and eve is not reached: the record and the ask name one conversation, never the record's old main and eve's new one", async () => {
   const target = await account();
   const f = await stand(target, await device(target.userId));
-  const cleared = await database.store.main.clear(target.userId, new Date(NOW));
+  const cleared = await database.run(database.store.main.clear(target.userId, new Date(NOW)));
   assert.deepEqual(cleared.cleared, [target.conversationId]);
 
   const refused = await f.exchange.brain.submitAsk({

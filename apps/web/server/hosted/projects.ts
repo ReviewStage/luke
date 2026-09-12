@@ -18,6 +18,7 @@ import {
 } from "./observation-pass.js";
 import type { ObservedRoster } from "./observed-roster.js";
 import { createRateBrake } from "./rate-brake.js";
+import type { HostedStoreRun } from "./store/database.js";
 import type { HostedVaultRoute } from "./vault-route.js";
 
 const PROJECTS_RATE_LIMIT = {
@@ -38,6 +39,7 @@ export interface ProjectsOptions
     "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
   > {
   /** The store the snapshot is read from and, on a live pass, written to. */
+  run: HostedStoreRun;
   store: (secret: string) => ObservationStore;
   /** Injected in tests; production uses the global fetch. */
   fetch?: CloudFetch;
@@ -82,14 +84,23 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
     return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(undefined, creating));
 
   const store = options.store(secret);
-  let roster = (await storedRoster(store, userId, rows, secret))?.roster;
+  let roster = (await storedRoster(options.run, store, userId, rows, secret))?.roster;
   if (!roster) {
     const now = (options.now ?? Date.now)();
     if (await projectsRateLimited(userId)) {
       return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
     }
-    roster = (await observeAndSnapshot({ userId, rows, secret, store, seams: options, now }))
-      .roster;
+    roster = (
+      await observeAndSnapshot({
+        userId,
+        rows,
+        secret,
+        run: options.run,
+        store,
+        seams: options,
+        now,
+      })
+    ).roster;
   }
   return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(roster, creating));
 }

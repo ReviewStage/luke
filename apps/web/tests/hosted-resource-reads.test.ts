@@ -243,7 +243,12 @@ function request(path: string, query: ReadQuery = {}, method = "GET", authorized
 }
 
 function options(userId: string, req: Request): ResourceReadOptions {
-  return { request: req, resolveUserId: async () => userId, store: database.store };
+  return {
+    request: req,
+    resolveUserId: async () => userId,
+    run: database.run,
+    store: database.store,
+  };
 }
 
 async function answered<Value, Encoded>(
@@ -782,7 +787,7 @@ test("a cleared main is absent from the next read: its groups leave the device, 
   await device.catchUp();
   assert.equal(device.groups.has(ids.typed), true);
 
-  const { opened } = await database.store.main.clear(userId, new Date(NOW + 60_000));
+  const { opened } = await database.run(database.store.main.clear(userId, new Date(NOW + 60_000)));
   const answer = await device.poll();
   assert.deepEqual(
     answer.conversations.map((conversation) => conversation.id).sort(),
@@ -840,7 +845,7 @@ test("a Clear empties the thread of observed rows from before the new main and k
   assert.equal(before.messages.length, 3);
 
   const clearedAt = NOW + 60_000;
-  const { opened } = await database.store.main.clear(userId, new Date(clearedAt));
+  const { opened } = await database.run(database.store.main.clear(userId, new Date(clearedAt)));
   const laterTurn = await insertTurn(userId, observed, {
     origin: TURN_ORIGIN.ROSTER_DIFF,
     queuedAt: new Date(clearedAt + 10_000),
@@ -861,6 +866,7 @@ test("a Clear empties the thread of observed rows from before the new main and k
   assert.equal(mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt, clearedAt);
 
   const heads = await handleChanges({
+    run: database.run,
     request: new Request("https://luke.test/api/changes", {
       method: "POST",
       headers: { authorization: "Bearer token-1", "content-type": "application/json" },
@@ -896,7 +902,9 @@ test("a Clear empties the thread of observed rows from before the new main and k
     )(after.conversation[0]?.next_message_seq),
     5,
   );
-  const whole = await database.store.messages.list(userId, observed, CATALOG_TOOL_SET);
+  const whole = await database.run(
+    database.store.messages.list(userId, observed, CATALOG_TOOL_SET),
+  );
   assert.equal(whole.ok, true);
   assert.deepEqual(whole.ok ? whole.value.map((record) => record.seq) : [], [1, 2, 3, 4]);
 });
@@ -953,7 +961,7 @@ test("a message carries its latest rating on a device's first page, a re-rating 
       [second, 2, { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." }],
     ],
   );
-  const listed = await database.store.events.list(userId, main);
+  const listed = await database.run(database.store.events.list(userId, main));
   assert.deepEqual(
     listed.map((event) => [event.id, event.kind]),
     [
@@ -1123,23 +1131,32 @@ test("the latest turn position stops at a given cursor, so an empty page never m
   const userId = await database.createUser();
   const { main, turns: ids } = await populate(userId);
   const extra = await insertTurn(userId, main, { queuedAt: new Date(NOW + 15_000) });
-  const all = await database.store.turns.list(userId);
+  const all = await database.run(database.store.turns.list(userId));
   assert.deepEqual(
     all.map((turn) => turn.id),
     [ids.typed, ids.roster, extra, ids.later, ids.idle],
   );
   const [, roster, gone, later, idle] = all;
   assert.ok(roster && gone && later && idle);
-  assert.deepEqual(await database.store.turns.latest(userId), idle.cursor);
-  assert.deepEqual(await database.store.turns.latest(userId, gone.cursor), gone.cursor);
+  assert.deepEqual(await database.run(database.store.turns.latest(userId)), idle.cursor);
+  assert.deepEqual(
+    await database.run(database.store.turns.latest(userId, gone.cursor)),
+    gone.cursor,
+  );
   await database.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`delete from turns where id = ${extra}`;
     }),
   );
-  assert.deepEqual(await database.store.turns.latest(userId, gone.cursor), roster.cursor);
-  assert.deepEqual(await database.store.turns.latest(userId, later.cursor), later.cursor);
+  assert.deepEqual(
+    await database.run(database.store.turns.latest(userId, gone.cursor)),
+    roster.cursor,
+  );
+  assert.deepEqual(
+    await database.run(database.store.turns.latest(userId, later.cursor)),
+    later.cursor,
+  );
 });
 
 test("a queued turn is the opener's inbox and not the record: the turns read and its head skip it until the relay moves it to running", async () => {
@@ -1149,14 +1166,14 @@ test("a queued turn is the opener's inbox and not the record: the turns read and
     status: TURN_STATUS.QUEUED,
     queuedAt: new Date(NOW + 60_000),
   });
-  const listed = await database.store.turns.list(userId);
+  const listed = await database.run(database.store.turns.list(userId));
   assert.deepEqual(
     listed.map((turn) => turn.id),
     [ids.typed, ids.roster, ids.later, ids.idle],
   );
   const head = listed.at(-1);
   assert.ok(head);
-  assert.deepEqual(await database.store.turns.latest(userId), head.cursor);
+  assert.deepEqual(await database.run(database.store.turns.latest(userId)), head.cursor);
 
   await database.run(
     Effect.gen(function* () {
@@ -1167,12 +1184,12 @@ test("a queued turn is the opener's inbox and not the record: the turns read and
       `;
     }),
   );
-  const started = await database.store.turns.list(userId, { after: head.cursor });
+  const started = await database.run(database.store.turns.list(userId, { after: head.cursor }));
   assert.deepEqual(
     started.map((turn) => [turn.id, turn.status]),
     [[queued, TURN_STATUS.RUNNING]],
   );
-  assert.deepEqual(await database.store.turns.latest(userId), started[0]?.cursor);
+  assert.deepEqual(await database.run(database.store.turns.latest(userId)), started[0]?.cursor);
 });
 
 test("a turns cursor naming a turn a Clear took moves back to the last turn at or before it, and to nothing when no turn stands", async () => {
@@ -1191,7 +1208,7 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
   assert.equal(all.turns.at(-1)?.id, ids.typed);
   const stale = all.next ?? "";
 
-  await database.store.main.clear(userId, new Date(NOW + 100_000));
+  await database.run(database.store.main.clear(userId, new Date(NOW + 100_000)));
   const moved = await answered(
     await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: stale }))),
     brainTurnsAnswerSchema,
@@ -1199,7 +1216,7 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
   assert.deepEqual(moved.turns, []);
   assert.equal(moved.hasMore, false);
   assert.equal(parse(turnReadCursorSchema, moved.next ?? "")?.id, ids.idle);
-  const head = await database.store.turns.latest(userId);
+  const head = await database.run(database.store.turns.latest(userId));
   assert.deepEqual(parse(turnReadCursorSchema, moved.next ?? ""), head);
   const settled = await answered(
     await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),

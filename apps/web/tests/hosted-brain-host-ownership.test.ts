@@ -454,7 +454,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   assert.equal(await start(host, seat, SESSION.OLDER), true);
   const landed = await call(SESSION.OLDER, seat);
   assert.equal(landed.status, ACTION_OUTPUT_STATUS.ACCEPTED);
-  const remembered = await database.store.facts.list(userA);
+  const remembered = await database.run(database.store.facts.list(userA));
   assert.equal(remembered.length, 1);
   const readsOnceAdmitted = storeReads();
   assert.ok(readsOnceAdmitted > 0);
@@ -482,5 +482,5 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   });
 
   assert.equal(storeReads(), readsOnceAdmitted);
-  assert.deepEqual(await database.store.facts.list(userA), remembered);
+  assert.deepEqual(await database.run(database.store.facts.list(userA)), remembered);
 });

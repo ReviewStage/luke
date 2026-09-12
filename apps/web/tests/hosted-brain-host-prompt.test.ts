@@ -236,11 +236,13 @@ test("a workspace file edited between two sessions yields a new hash", async () 
   const target = await ownedConversation();
   const before = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
 
-  await database.store.workspace.write(
-    target.userId,
-    WORKSPACE_FILE.USER,
-    "# User\n\n- Remembered: prefers short replies\n",
-    NOW + 1,
+  await database.run(
+    database.store.workspace.write(
+      target.userId,
+      WORKSPACE_FILE.USER,
+      "# User\n\n- Remembered: prefers short replies\n",
+      NOW + 1,
+    ),
   );
   const after = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
 

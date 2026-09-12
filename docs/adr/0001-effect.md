@@ -649,20 +649,23 @@ wraps answers effects itself; the orchestrator's conversion above did not
 reach it, since the two share only a package.
 
 `HostedStoreRun` in `apps/web/server/hosted/store/database.ts` is on the
-allowlist as the door rather than as a runtime: a module of the hosted store
-moved onto `@effect/sql` answers an `Effect<A, SqlError | ParseError,
-SqlClient>`, while the `HostedStore` methods above it answer the promises the
-routes still hold, so the store is handed the runner of whichever edge composed
-it — `runWeb` in a web function, the store tests' own runtime over the same
-connection — and builds nothing itself. The store writer,
-the voice writer, the speech module, and the brain host's own seams take the
-same runner directly rather than through the store's context, because a route
-composes each of them apart from the store: it is the one door either way, and the transaction a write runs
-under is the client's own. Every module beneath it is already an effect as of
-P10-14a, and P10-14d has deleted the Drizzle handle this door never
-depended on; P10-15 deletes this door itself, once `HostedStore`'s own
-public interface moves from promises to Effects across every brain-host and
-route caller.
+allowlist as the door rather than as a runtime: it is the type of whichever
+edge's runner a caller was handed — `runWeb` in a web function, the store
+tests' own runtime over the same connection — and it builds nothing itself.
+P10-15 has moved `HostedStore`'s own public interface onto effects, so the
+store no longer holds a runner at all: `hostedStore({ keys })` answers
+`Effect<A, SqlError | ParseError, SqlClient>` from every method, and each
+caller composes that into what it already runs. What still takes this type is
+everything around the store that a route composes apart from it and that still
+hands a promise up: the store writer, the voice writer, the speech module, the
+ask record, the device seams, `BrainHostSeams.run` (which answers the brain
+host's own conversation statements as much as the store's), and the handlers
+those seams reach. P10-16 deletes this type and that field together: it is the
+PR that carries the web's route handlers and the modules they call from
+promises to effects end to end, so nothing above them awaits one here. The
+route groups of P10-05..10 have already merged and do not reach this — they
+compose the handlers rather than run their statements — so naming them as the
+deletion would be a row nothing retires.
 
 `HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
 carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
@@ -899,14 +902,20 @@ door on the same terms: a suite still written on `node:assert` outside
 the caller supplied or none. It goes when the last such suite is an
 `it.effect`; no PR in this plan is that one yet.
 
-Two entries are a suite's edge and a command's rather than the product's.
+Some entries are a suite's edge or a command's rather than the product's.
 `openMigratedPglite` in `apps/web/tests/support/sql-client.ts` builds a
 `ManagedRuntime` over a PGlite for the length of one migration and disposes it,
 which is what lets the store's suites run the web's own migrations against a
 database that did not exist before the test. `apps/web/eve/evals/brain-host.eval.ts`
 does the same for one eval's Postgres pool and hands the runner it makes to the
-fixtures that read through it. Each is the edge of the run it is in, and each
-stands while that suite does.
+fixtures that read through it. `runWithoutDatabase` in
+`apps/web/tests/support/no-database.ts` is the same edge with no database
+behind it at all: since P10-15 the hosted store answers effects, so the handler
+suites that stand a memory fake in its place still need a runner to hand the
+modules that take one, and this runs those effects over a `SqlClient` that
+refuses every statement — a test that reached a connection it never opened
+fails there rather than reading nothing. Each is the edge of the run it is in,
+and each stands while that suite does.
 
 The list above is also data. `tools/oxlint/anti-slop/effect-edges.json` is its
 machine-readable twin: the same paths under `runtimeEdges`, `runShims`, and
@@ -975,7 +984,7 @@ design decision stated as such:
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
-| `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-15 |
+| `HostedStoreRun`, the edge runner the hosted store's still-promise-shaped callers are handed, and `BrainHostSeams.run` beside it | P10-11a | P10-16 — P10-15 took `HostedStore` itself off it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-04 |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | with `LoopbackConsent`'s `signIn` door, once `AccountSessionManager` answers effects |

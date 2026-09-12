@@ -177,7 +177,7 @@ async function settledChange(
   // the visit wakes nothing from it and says so, rather than failing the account's whole opening.
   let snapshot: RosterSnapshotRecord | undefined;
   try {
-    snapshot = await seams.store.roster.read(userId);
+    snapshot = await seams.run(seams.store.roster.read(userId));
   } catch {
     seams.report(
       `The roster snapshot of account ${userId} cannot be opened; nothing is woken from it.`,
@@ -192,7 +192,7 @@ async function settledChange(
     );
     return undefined;
   }
-  const bookmark = await seams.store.roster.consumed(userId);
+  const bookmark = await seams.run(seams.store.roster.consumed(userId));
   if (bookmark.state === CONSUMED_ROSTER.ABSENT) {
     await seams.run(seams.store.roster.keepConsumed(userId, snapshot, undefined));
     return undefined;
@@ -366,10 +366,8 @@ async function wakeFrom(
   let observation = 0;
   let failed = 0;
   for (const opening of planned.openings) {
-    const conversationId = await seams.store.directory.observed(
-      userId,
-      opening.identity,
-      seams.now(),
+    const conversationId = await seams.run(
+      seams.store.directory.observed(userId, opening.identity, seams.now()),
     );
     if (conversationId === undefined) {
       seams.report(

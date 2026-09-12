@@ -42,7 +42,7 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
   return {
     sql: opened.sql,
     run,
-    store: hostedStore({ keys, run }),
+    store: hostedStore({ keys }),
     createUser() {
       const id = `user-${randomUUID()}`;
       return run(
