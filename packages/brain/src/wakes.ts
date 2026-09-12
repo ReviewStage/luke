@@ -70,9 +70,11 @@ export class WakeCapture {
   readonly #subject: LookSubject;
   /**
    * Each session as it last looked when an observation was captured, for the
-   * unchanged-look suppression. Held in memory alone: the first look after a
-   * launch is captured even with no transcript gained, because a status that
-   * changed while Luke was closed is still a change worth one look.
+   * unchanged-edge suppression: a wake or a look over a session standing
+   * exactly as it last stood, with no transcript gained, is not captured.
+   * Held in memory alone: the first observation after a launch is captured
+   * even with no transcript gained, because a status that changed while Luke
+   * was closed is still a change worth one look.
    */
   readonly #lastLook = new NestedMap<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
@@ -142,7 +144,7 @@ export class WakeCapture {
    * the brain reads its one: what the session's transcript gained since the
    * last look where the provider answers an incremental read, and its roster
    * fields alone where it does not. Skipped while a turn is in flight or the
-   * model is quiet, because the next look reads the same deltas; pending hook
+   * model is quiet, because the next look reads the same deltas; pending
    * wakes ride along rather than waiting for their own.
    */
   rosterLook(): Promise<void> {
@@ -150,7 +152,7 @@ export class WakeCapture {
     const generation = this.#seam.generation();
     if (!generation) return this.#seam.ready().then(() => this.rosterLook());
     const looks = this.#ownLooks(this.#options.roster(), this.#seam.now());
-    // The look is captured before anything opens, like a hook: what each
+    // The look is captured before anything opens, like a wake: what each
     // session gained stands in the inbox with its cursor, and the turn that
     // follows — now, or the next one if the model is quiet or a turn is in
     // flight — consumes it from there.
@@ -184,9 +186,9 @@ export class WakeCapture {
 
   /**
    * The capture itself, one batch at a time. Each distinct session in the
-   * batch is read once from its capture cursor; an event that names a hook
-   * the inbox already holds — the same hook, session, and instant delivered
-   * twice — is not captured again; a roster edge that gained nothing over a
+   * batch is read once from its capture cursor; an event the inbox already
+   * holds — the same kind, session, and instant delivered twice — is not
+   * captured again; a roster edge that gained nothing over a
    * session standing exactly as it last stood is not captured at all; and an
    * event on a session the developer is speaking with moves its cursor past
    * what was read and leaves no entry. What remains is written with the
@@ -357,7 +359,7 @@ export class WakeCapture {
  * A session the developer is speaking with first-hand wakes nothing: its turn
  * boundaries are the rhythm of a conversation being heard as it happens, and a
  * briefing read over them would talk over the very exchange it reports. Its
- * hooks and looks still read what the transcript gained, so the capture cursor
+ * wakes and looks still read what the transcript gained, so the capture cursor
  * moves past the exchange, but they write no entry and open no turn — the text
  * is read past rather than read out, and the exchange ending never replays
  * what happened inside it. The session stays on the roster and in the standing

@@ -4,15 +4,14 @@ import type { ActionResultStatus, WireRecord } from "@sidecar/wire";
 import type { BrainTurnTrigger } from "./turn.js";
 
 /**
- * What wakes the brain, and what it hands back. A wake is a provider's hook
- * firing, or the scheduled look at the whole roster the brain takes on its
- * own clock; a delivery is one briefing the brain decided to give, for the
- * host to speak or hold. Nothing here detects a change: the brain notices
- * changes itself, against its own memory.
+ * What wakes the brain, and what it hands back. A wake is a roster edge for
+ * one session, handed in by the host or read on the scheduled look the brain
+ * takes on its own clock; a delivery is one briefing the brain decided to
+ * give, for the host to speak or hold. Nothing here detects a change: the
+ * brain notices changes itself, against its own memory.
  */
 
 export const BRAIN_WAKE_KIND = {
-  HOOK: "hook",
   ROSTER: "roster",
 } as const;
 
@@ -33,8 +32,6 @@ export interface BrainTranscriptDelta {
 export interface BrainWakeEvent {
   kind: BrainWakeKind;
   identity: SessionIdentity;
-  /** The provider's own name for the hook that fired, when the wake is one. */
-  hookEvent?: string;
   /** The session as the roster held it at the wake, when it still held it. */
   session?: Session;
   /** The session's fields as an inbox entry kept them, for a wake replayed from the durable inbox. */

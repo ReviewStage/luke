@@ -17,11 +17,11 @@ import {
 } from "./wake-events.js";
 
 /**
- * The durable observation inbox. An observation — a provider's hook, or the
- * roster look's edge for a session — is captured before any turn is
- * scheduled: what the session's transcript gained since the capture cursor
- * is read, the entry and the advanced capture cursor are written in one
- * save, and only then is a turn opened. A turn consumes the entries it opens
+ * The durable observation inbox. An observation — a roster edge for a
+ * session, handed in as a wake or read on the look — is captured before any
+ * turn is scheduled: what the session's transcript gained since the capture
+ * cursor is read, the entry and the advanced capture cursor are written in
+ * one save, and only then is a turn opened. A turn consumes the entries it opens
  * with at its checkpoint boundary, and the consumed cursor moves there and
  * only there; so a throttled or failed inference leaves every entry standing
  * for the next turn, a crash between capture and run loses nothing and reads
@@ -35,7 +35,6 @@ export interface BrainObservationEntry {
   readonly kind: BrainWakeKind;
   readonly providerId: string;
   readonly providerSessionId: string;
-  readonly hookEvent?: string;
   /** When the observation happened, as the wake said. */
   readonly atMs: number;
   readonly capturedAt: number;
@@ -94,7 +93,6 @@ export function brainObservationEntryFromWire(
   if (!isWireString(value.id) || value.id.length === 0 || !isWakeKind(value.kind)) return undefined;
   if (!isWireString(value.providerId) || !isWireString(value.providerSessionId)) return undefined;
   if (!isInstant(value.atMs) || !isInstant(value.capturedAt)) return undefined;
-  if (value.hookEvent !== undefined && !isWireString(value.hookEvent)) return undefined;
   if (value.session !== undefined && !isRecord(value.session)) return undefined;
   if (value.cursor !== undefined && !isWireString(value.cursor)) return undefined;
   const delta = deltaFromWire(value.delta);
@@ -104,7 +102,6 @@ export function brainObservationEntryFromWire(
     kind: value.kind,
     providerId: value.providerId,
     providerSessionId: value.providerSessionId,
-    ...(value.hookEvent !== undefined ? { hookEvent: value.hookEvent } : undefined),
     atMs: value.atMs,
     capturedAt: value.capturedAt,
     ...(value.session !== undefined ? { session: value.session } : undefined),
@@ -142,7 +139,6 @@ export function entryFromEvent(
     kind: event.kind,
     providerId: event.identity.providerId,
     providerSessionId: event.identity.providerSessionId,
-    ...(event.hookEvent !== undefined ? { hookEvent: event.hookEvent } : undefined),
     atMs: event.atMs,
     capturedAt,
     ...(event.session
@@ -164,7 +160,6 @@ function eventFromEntry(entry: BrainObservationEntry): BrainWakeEvent {
   return {
     kind: entry.kind,
     identity,
-    ...(entry.hookEvent !== undefined ? { hookEvent: entry.hookEvent } : undefined),
     ...(entry.session ? { sessionSummary: entry.session } : undefined),
     transcriptDelta: entry.delta ?? {
       text: "",
@@ -176,10 +171,9 @@ function eventFromEntry(entry: BrainObservationEntry): BrainWakeEvent {
   };
 }
 
-/** What makes two observations the same one: the same hook for the same session at the same instant. */
+/** What makes two observations the same one: the same kind for the same session at the same instant. */
 export interface ObservationMark {
   readonly kind: BrainWakeKind;
-  readonly hookEvent?: string | undefined;
   readonly atMs: number;
   readonly identity: SessionIdentity;
 }
@@ -188,17 +182,15 @@ export interface ObservationMark {
 export function entryMark(entry: BrainObservationEntry): ObservationMark {
   return {
     kind: entry.kind,
-    hookEvent: entry.hookEvent,
     atMs: entry.atMs,
     identity: { providerId: entry.providerId, providerSessionId: entry.providerSessionId },
   };
 }
 
-/** Whether two observations are the one observation, so a hook delivered twice is captured once. */
+/** Whether two observations are the one observation, so an edge delivered twice is captured once. */
 export function sameObservation(first: ObservationMark, second: ObservationMark): boolean {
   return (
     first.kind === second.kind &&
-    first.hookEvent === second.hookEvent &&
     first.atMs === second.atMs &&
     first.identity.providerId === second.identity.providerId &&
     first.identity.providerSessionId === second.identity.providerSessionId

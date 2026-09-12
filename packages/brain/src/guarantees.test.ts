@@ -60,6 +60,7 @@ import { BrainStateStore } from "./state-store.js";
 import { fakeBrainStateRepository } from "./testing.js";
 import { BRAIN_TOOL } from "./tools.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
+import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
  * One test per sentence of `AGENTS.md` the brain is the enforcer of, each
@@ -158,11 +159,13 @@ it.effect(
  */
 it.effect("an action in a turn the developer did not open is Luke's own", () =>
   Effect.gen(function* () {
+    // The look finds the session busier than the wake said, so it is an edge
+    // of its own rather than the unchanged look, which captures nothing.
     const h = yield* effectHarness({
       roster: () => ({
         text: "one",
         identities: [ABC],
-        sessions: [session(ABC.providerSessionId)],
+        sessions: [session(ABC.providerSessionId, { detail: { activity: "running tests" } })],
       }),
     });
     yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
@@ -253,12 +256,12 @@ it.effect(
 
 /**
  * "A repeated look that finds nothing gained and the session unchanged
- * captures nothing and opens no inference, a hook delivered twice is one
+ * captures nothing and opens no inference, an edge delivered twice is one
  * entry, and the inbox holds at most 20 entries." — `wakes.ts`'s look
  * fingerprint and `observation-inbox.ts`.
  */
 it.effect(
-  "a repeated unchanged look captures nothing, a hook delivered twice is one entry, and the inbox holds at most 20",
+  "a repeated unchanged look captures nothing, an edge delivered twice is one entry, and the inbox holds at most 20",
   () =>
     Effect.gen(function* () {
       assert.equal(INBOX_CAPACITY, 20);
@@ -281,13 +284,18 @@ it.effect(
         "a look over an unchanged session captures nothing",
       );
 
-      const twice = edge(ABC, NOW + 100);
+      // The edge carries a change, so it is captured; its second delivery is
+      // the same observation and adds no entry.
+      const twice: BrainWakeEvent = {
+        ...edge(ABC, NOW + 100),
+        session: session(ABC.providerSessionId, { detail: { activity: "running tests" } }),
+      };
       yield* Effect.promise(() => h.agent.wake([twice, { ...twice }]));
       const entries = h.persisted.at(-1)?.inbox ?? [];
       assert.equal(
         entries.filter((entry) => entry.atMs === NOW + 100).length,
         1,
-        "one hook, delivered twice",
+        "one edge, delivered twice",
       );
       yield* Effect.promise(() => h.agent.stop());
     }),

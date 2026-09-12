@@ -5,9 +5,9 @@ import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The wakes waiting for a turn. Nothing opens at once: wakes inside the
- * coalescing window open one turn together — a hook and the poll's edge for
- * the same stop — and wakes during a model's quiet wait for it to end rather
- * than being dropped. The queue owns the events and the timer; the host owns
+ * coalescing window open one turn together — two edges landing for the same
+ * change — and wakes during a model's quiet wait for it to end rather than
+ * being dropped. The queue owns the events and the timer; the host owns
  * what a flush does with them, and hands events back when the turn they
  * opened sent nothing, so they open again once the quiet ends.
  */
@@ -51,7 +51,7 @@ export class WakeQueue {
   }
 
   /**
-   * Queues wakes and arms the coalescing window, once. The same hook for the
+   * Queues wakes and arms the coalescing window, once. The same edge for the
    * same session at the same instant, delivered twice before the turn opened,
    * is one wake: the delta read covers both, and two entries would only say
    * the same thing twice. Past the capacity the oldest go, since the delta

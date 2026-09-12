@@ -8,7 +8,7 @@ import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
 import { WakeQueue } from "./wake-queue.js";
 
 const wake = (providerSessionId: string, atMs = 0): BrainWakeEvent => ({
-  kind: BRAIN_WAKE_KIND.HOOK,
+  kind: BRAIN_WAKE_KIND.ROSTER,
   identity: { providerId: "claude-code", providerSessionId },
   atMs,
 });

@@ -17,6 +17,7 @@ import {
 } from "../envelope.js";
 import { BRAIN_REQUEST_STATUS } from "../requests.js";
 import { BrainStateStore } from "../state-store.js";
+import { BRAIN_WAKE_KIND } from "../wake-events.js";
 import { deleteConversation } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import {
@@ -830,10 +831,9 @@ test("the observation inbox and capture cursors round-trip, amend whole, and cas
   const state = populatedState("gen-inbox");
   const entry = {
     id: "entry-1",
-    kind: "hook" as const,
+    kind: BRAIN_WAKE_KIND.ROSTER,
     providerId: "claude-code",
     providerSessionId: "abc",
-    hookEvent: "Stop",
     atMs: NOW,
     capturedAt: NOW + 1,
     session: { title: "synthetic session", status: "waiting" },

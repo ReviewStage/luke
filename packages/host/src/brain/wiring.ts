@@ -162,7 +162,7 @@ export interface BrainWiring {
   /** The lanes every conversation's turns run under. */
   readonly lanes: LaneScheduler;
   /**
-   * Routes provider hooks to the conversations of the sessions they name:
+   * Routes wakes to the conversations of the sessions they name:
    * each observed session has a conversation of its own, opened here on its
    * first wake, and main is handed none of them.
    */
@@ -281,7 +281,7 @@ const NO_OPENING_NOTES = {
   restore: () => {},
 };
 
-/** The lane a turn runs under, by what opened it: hooks on their own lane, children on theirs, the rest the agent's. */
+/** The lane a turn runs under, by what opened it: wakes on the hook-dispatch lane, children on theirs, the rest the agent's. */
 function laneFor(trigger: BrainTurnTrigger): Lane {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.WAKE:
@@ -299,7 +299,7 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
 
 /**
  * The brains: one long-lived agent per open conversation. Each observed
- * coding session has a conversation of its own, opened on its first hook or
+ * coding session has a conversation of its own, opened on its first wake or
  * roster look, which reads that session's transcript, briefs the developer
  * about it directly, and leaves main a compact notice of what it did; main
  * is asked things by the developer and never reads a provider's transcript
@@ -707,7 +707,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    * The one way a conversation of any kind is opened for a brain: its row in
    * the directory, its store, and — when a model stands — its brain, with a
    * child's inherited fork as its opening history. Openings of one key are
-   * serialized so two hooks, two completions, or a hook and a completion
+   * serialized so two wakes, two completions, or a wake and a completion
    * landing together build one conversation, not two; a conversation still
    * standing down finishes first, so its store is let go of before another is
    * built on the same envelope and two writers never hold one repository.

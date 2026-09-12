@@ -256,7 +256,7 @@ it.effect("a failed turn rolls the memory and cursors back and persists nothing"
     assert.deepEqual(h.repository.state?.cursors, {});
     assert.equal(h.traces[0]?.error, "boom");
 
-    // The same hook again is one observation, read once: the standing entry is
+    // The same edge again is one observation, read once: the standing entry is
     // tried again rather than the transcript read twice.
     yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
     yield* advanceHarness(NOW + 6_000);

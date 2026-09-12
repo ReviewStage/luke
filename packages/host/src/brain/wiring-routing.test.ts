@@ -402,7 +402,7 @@ test("a roster look opens a cloud session's conversation like a local one, reads
 });
 
 it.effect(
-  "hooks route to the session's own conversation, main is never woken by one, and a held briefing returns to its source",
+  "wakes route to the session's own conversation, main is never woken by one, and a held briefing returns to its source",
   (t) =>
     Effect.gen(function* () {
       const c = yield* Effect.promise(() => composed(t));
@@ -410,8 +410,7 @@ it.effect(
       const abcKey = observedSessionKey(ABC);
       c.wiring.wake([
         {
-          kind: BRAIN_WAKE_KIND.HOOK,
-          hookEvent: "Stop",
+          kind: BRAIN_WAKE_KIND.ROSTER,
           identity: ABC,
           session: session("abc"),
           atMs: 1_800_000_000_000,
@@ -533,7 +532,7 @@ it.effect(
       yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 2));
       yield* Effect.promise(() => until(() => !(c.wiring.current(abcKey)?.busy() ?? true)));
       assert.equal(c.repositories.get(abcKey), 1);
-      // abc leaves the roster: the look stands its conversation down, and a hook
+      // abc leaves the roster: the look stands its conversation down, and a wake
       // for it lands in the same tick, while the close is still draining.
       c.roster.splice(
         c.roster.findIndex((held) => held.providerSessionId === "abc"),
@@ -542,8 +541,7 @@ it.effect(
       c.wiring.rosterLook();
       c.wiring.wake([
         {
-          kind: BRAIN_WAKE_KIND.HOOK,
-          hookEvent: "Stop",
+          kind: BRAIN_WAKE_KIND.ROSTER,
           identity: ABC,
           session: session("abc"),
           atMs: 2,
@@ -585,12 +583,11 @@ it.effect(
       yield* waitFor(() => c.builds() - buildsBefore === 2);
       assert.equal(c.builds() - buildsBefore, 2);
       assert.equal(c.writes.get(abcKey) ?? 0, writesBefore);
-      // Reopened for a hook, the session's conversation stands on a second store
+      // Reopened for a wake, the session's conversation stands on a second store
       // built after the first was let go, and it is the only one.
       c.wiring.wake([
         {
-          kind: BRAIN_WAKE_KIND.HOOK,
-          hookEvent: "Stop",
+          kind: BRAIN_WAKE_KIND.ROSTER,
           identity: ABC,
           session: session("abc"),
           atMs: 2,
@@ -623,7 +620,7 @@ test("a conversation reopened while it stands down waits for the close and stand
   await c.wiring.rebuild();
 });
 
-test("two opens of one key landing in the same tick, a hook and a held briefing, build one store and list the conversation once", async (t) => {
+test("two opens of one key landing in the same tick, a wake and a held briefing, build one store and list the conversation once", async (t) => {
   const c = await composed(t);
   await c.wiring.rebuild();
   const abcKey = observedSessionKey(ABC);
@@ -631,8 +628,7 @@ test("two opens of one key landing in the same tick, a hook and a held briefing,
   // Nothing stands for abc yet; both paths reach the same opening.
   c.wiring.wake([
     {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      hookEvent: "Stop",
+      kind: BRAIN_WAKE_KIND.ROSTER,
       identity: ABC,
       session: session("abc"),
       atMs: 1,
