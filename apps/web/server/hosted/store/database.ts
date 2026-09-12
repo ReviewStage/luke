@@ -1,29 +1,14 @@
 import type { SqlClient } from "@effect/sql";
-import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { type Effect, Schema } from "effect";
-import type * as schema from "../../db/schema.js";
 import { openPayload, type PayloadKeyRing, sealPayload } from "../encryption.js";
-
-/**
- * The Drizzle database no table module under `hosted/store/` still runs a
- * query over: every one of them now reads the ambient `SqlClient` and is
- * answered through `HostedStoreRun` below. `HostedStoreContext.db` and this
- * type stay only because the routes that build a context (`store-route.ts`,
- * `brain-host/production.ts`) and the store's own test harness still hand
- * one in; P10-14d deletes both together with the Drizzle handle itself in
- * `server/db/index.ts`.
- */
-type HostedSchema = typeof schema;
-
-export type HostedStoreDatabase = PgDatabase<PgQueryResultHKT, HostedSchema>;
 
 /**
  * How a store method built on `@effect/sql` is answered to a caller still
  * holding a promise. The implementation is the edge's own runner — `runWeb`
- * in a function, the test harness's runtime over the database its Drizzle
- * handle stands on — so nothing here builds a runtime of its own; the door
- * exists because the `HostedStore` methods answer promises rather than the
- * Effects every module beneath them now builds.
+ * in a function, the test harness's runtime over the same connection — so
+ * nothing here builds a runtime of its own; the door exists because the
+ * `HostedStore` methods answer promises rather than the Effects every module
+ * beneath them now builds.
  *
  * The writers and the speech module are handed the same runner directly
  * rather than through a store context, because a route composes them apart
@@ -32,13 +17,11 @@ export type HostedStoreDatabase = PgDatabase<PgQueryResultHKT, HostedSchema>;
  * @deprecated A strangler shim. Every module here already answers an Effect;
  * this is what still turns it into the promise `HostedStore` answers. P10-15
  * deletes it, once `HostedStore`'s own public interface moves from promises
- * to Effects across every brain-host and route caller — a separate change
- * from P10-14's Drizzle deletion, which this door does not depend on.
+ * to Effects across every brain-host and route caller.
  */
 export type HostedStoreRun = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
 
 export interface HostedStoreContext {
-  readonly db: HostedStoreDatabase;
   readonly keys: PayloadKeyRing;
   readonly run: HostedStoreRun;
 }

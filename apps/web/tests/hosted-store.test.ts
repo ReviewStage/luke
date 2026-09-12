@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { CONSUMED_ROSTER } from "../server/hosted/store";
 import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";

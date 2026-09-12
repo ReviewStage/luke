@@ -1,6 +1,4 @@
-import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "./schema.js";
 
 /** Bounded so one warm function instance cannot monopolize Neon's pooler. */
 export const POOL_LIMITS = {
@@ -17,17 +15,12 @@ export function createPool(connectionString: string): Pool {
   return new Pool({ connectionString, ...POOL_LIMITS });
 }
 
-/** A database over an explicit connection string: the testable seam. */
-export function createDatabase(connectionString: string) {
-  return drizzle(createPool(connectionString), { schema });
-}
+let pool: Pool | undefined;
 
-let database: ReturnType<typeof createDatabase> | undefined;
-
-/** The process-wide database, read from `DATABASE_URL` on first request. */
-export function getDatabase(): ReturnType<typeof createDatabase> {
-  if (database) {
-    return database;
+/** The process-wide pool, read from `DATABASE_URL` on first request. */
+export function getPool(): Pool {
+  if (pool) {
+    return pool;
   }
 
   const connectionString = process.env.DATABASE_URL;
@@ -35,6 +28,6 @@ export function getDatabase(): ReturnType<typeof createDatabase> {
     throw new Error("DATABASE_URL is required to connect to the database.");
   }
 
-  database = createDatabase(connectionString);
-  return database;
+  pool = createPool(connectionString);
+  return pool;
 }

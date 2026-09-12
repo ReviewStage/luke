@@ -2,7 +2,7 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import type { VoiceCloseReason } from "../../server/db/voice-schema";
+import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";

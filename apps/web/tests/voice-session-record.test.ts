@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
 import { test } from "vitest";
-import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-schema";
+import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { registerDevice } from "../server/hosted/device-store";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

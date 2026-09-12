@@ -1,13 +1,12 @@
 import * as Reactivity from "@effect/experimental/Reactivity";
+import { NodeContext } from "@effect/platform-node";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type * as SqlConnection from "@effect/sql/SqlConnection";
 import { SqlError } from "@effect/sql/SqlError";
 import { PgClient } from "@effect/sql-pg";
 import { PGlite } from "@electric-sql/pglite";
-import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
-import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
-import { Effect, Layer, Stream } from "effect";
-import { DRIZZLE_MIGRATIONS_FOLDER } from "../../server/db/effect-migrator.js";
+import { Effect, Layer, ManagedRuntime, Stream } from "effect";
+import { runWebMigrations } from "../../server/db/effect-migrator.js";
 import { createPool } from "../../server/db/index.js";
 
 /**
@@ -91,7 +90,14 @@ export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlCl
 /** A PGlite carrying the same generated migrations the store's tests run against. */
 async function openMigratedPglite(): Promise<PGlite> {
   const client = new PGlite();
-  await migratePglite(drizzlePglite(client), { migrationsFolder: DRIZZLE_MIGRATIONS_FOLDER });
+  const migrationRuntime = ManagedRuntime.make(
+    Layer.mergeAll(sqlClientOverPglite(client), NodeContext.layer),
+  );
+  try {
+    await migrationRuntime.runPromise(runWebMigrations());
+  } finally {
+    await migrationRuntime.dispose();
+  }
   return client;
 }
 
@@ -113,10 +119,6 @@ const pgliteSqlClient = pgliteSqlClientOver(openMigratedPglite);
  */
 export const unmigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlError> =
   pgliteSqlClientOver(async () => new PGlite());
-
-/** A PGlite the Drizzle runner migrated, so its history is Drizzle's own. */
-export const drizzleMigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlError> =
-  pgliteSqlClient;
 
 function postgresSqlClient(connectionString: string) {
   return PgClient.layerFromPool({

@@ -26,8 +26,6 @@ required_files=(
     apps/desktop/scripts/prepare-builder-assets.mjs
     apps/desktop/native/macos/ScreenGeometry.swift
     apps/desktop/native/macos/TalkKey.swift
-    apps/web/drizzle.config.ts
-    apps/web/server/db/schema.ts
     packages/wire/package.json
     scripts/release-macos.sh
     scripts/verify.sh

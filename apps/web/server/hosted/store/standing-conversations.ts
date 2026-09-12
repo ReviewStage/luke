@@ -1,7 +1,7 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult, Schema } from "effect";
-import { CONVERSATION_KIND } from "../../db/schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { EpochMillisColumnSchema } from "./database.js";
 
 /**

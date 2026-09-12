@@ -27,7 +27,7 @@ export const DRIZZLE_MIGRATIONS_TABLE = {
   NAME: "__drizzle_migrations",
 } as const;
 
-export const DRIZZLE_MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
+const DRIZZLE_MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
 
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 

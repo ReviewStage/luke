@@ -13,7 +13,7 @@ import { type ToolSet, tool } from "ai";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
-import { CONVERSATION_KIND } from "../server/db/schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   CLEARED_CONVERSATION_RETENTION_MS,
   type StoredMessageRecord,

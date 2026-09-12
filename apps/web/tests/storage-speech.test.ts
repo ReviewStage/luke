@@ -23,7 +23,7 @@ import {
   type WireRecord,
   wakeInputText,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   claimSpeech,

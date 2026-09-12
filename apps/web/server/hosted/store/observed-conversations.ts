@@ -2,7 +2,7 @@ import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import type { SessionIdentity } from "../../core.js";
-import { CONVERSATION_KIND } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 
 /**
  * The conversation the brain keeps for one observed session: a row of kind

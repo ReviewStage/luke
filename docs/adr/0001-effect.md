@@ -539,34 +539,34 @@ allowlist as the door rather than as a runtime: a module of the hosted store
 moved onto `@effect/sql` answers an `Effect<A, SqlError | ParseError,
 SqlClient>`, while the `HostedStore` methods above it answer the promises the
 routes still hold, so the store is handed the runner of whichever edge composed
-it — `runWeb` in a web function, the store tests' own runtime over the database
-their Drizzle handle stands on — and builds nothing itself. The store writer,
+it — `runWeb` in a web function, the store tests' own runtime over the same
+connection — and builds nothing itself. The store writer,
 the voice writer, the speech module, and the brain host's own seams take the
 same runner directly rather than through the store's context, because a route
 composes each of them apart from the store: it is the one door either way, and the transaction a write runs
 under is the client's own. Every module beneath it is already an effect as of
-P10-14a; P10-14 (the rest of it) deletes the Drizzle half this door never
-depended on, and P10-15 deletes this door itself, once `HostedStore`'s own
+P10-14a, and P10-14d has deleted the Drizzle handle this door never
+depended on; P10-15 deletes this door itself, once `HostedStore`'s own
 public interface moves from promises to Effects across every brain-host and
-route caller — a distinct change from removing Drizzle.
+route caller.
 
-`HostedStoreTestDatabase.db` in `apps/web/tests/support/hosted-store-database.ts`
-is on the allowlist for the same reason `HostedStoreRun` is, one layer up: the
-harness's PGlite is migrated through `runWebMigrations` rather than Drizzle's
-own migrator as of P10-14c, and every store test file now reaches `sql`
-directly (through `tests/support/store-rows.ts`) rather than the harness's
-Drizzle handle, save three `BrainHostSeams`/`HostedStoreContext` wiring sites
-P10-14c3/c4/c5 found (`hosted-brain-host-ownership.test.ts`,
-`hosted-brain-host-prompt.test.ts`, `voice-live-exchange.test.ts`) that
-construct a production seams object under test and so still name the field
-by design. The field and the handle behind it therefore stay, narrowed to
-those three call sites, until `BrainHostSeams.db`/`HostedStoreContext.db`
-themselves are deleted, the distinct P10-15 change; P10-14c5 is the slice
-that finishes the remaining-drizzle test inventory otherwise, having found a
-fourth file P10-14c4's own count missed (`voice-session-record.test.ts`,
-which read the same deprecated field under a differently named local
-variable) beside the two largest files (`storage-schema.test.ts` and
-`hosted-resource-reads.test.ts`).
+`HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
+carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
+test harness's own Drizzle handle in `apps/web/tests/support/hosted-store-database.ts`)
+are gone as of P10-14d rather than deferred to P10-15 as an earlier slice of
+this lane recorded: P10-14c3/c4/c5 found three `BrainHostSeams`/`HostedStoreContext`
+wiring sites (`hosted-brain-host-ownership.test.ts`, `hosted-brain-host-prompt.test.ts`,
+`voice-live-exchange.test.ts`) that still constructed a production seams
+object under test naming the field, and reasoned the field would stay until
+P10-15 deleted it together with `HostedStore`'s promise-to-Effect move. But
+`hostedStore()` and the harness's PGlite migration path had already stopped
+reading `db` by then (`store/index.ts` destructures only `{ keys, run }`),
+so once P10-14d deletes `drizzle-orm` itself the field's type has nothing left
+to be — `HostedStoreDatabase` was `PgDatabase<PgQueryResultHKT, HostedSchema>`,
+a type that cannot exist without the package. Deleting the unused field now,
+ahead of P10-15's own promise-to-Effect move, is the smaller and more honest
+change, and the three wiring sites and the harness lost only the field they
+never read.
 
 `createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
 for the same reason `HostedStoreRun` is: `RateBrake.check` is an
@@ -802,7 +802,6 @@ design decision stated as such:
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | with `BrainStateRepository`, `NotebookMemoryStore`, and `ChildStore`; unscheduled |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-15 |
-| `HostedStoreTestDatabase.db`, the store test harness's Drizzle handle beside its `sql` client, narrowed by P10-14c5 to the three `BrainHostSeams`/`HostedStoreContext` wiring sites | P10-14c | P10-15 |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-02 |
 | `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |

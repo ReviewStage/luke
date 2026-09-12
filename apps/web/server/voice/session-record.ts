@@ -4,7 +4,7 @@ import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   type VoiceCloseReason,
-} from "../db/voice-schema.js";
+} from "../db/voice-vocabulary.js";
 import { findHeldDevice } from "../hosted/device-store.js";
 import type { HostedStoreRun } from "../hosted/store/database.js";
 

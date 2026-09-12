@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { getTableName } from "drizzle-orm";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import { test } from "vitest";
 import {
   ACCOUNT_TOKEN_STORAGE,
@@ -7,22 +9,12 @@ import {
   JWT_KEY_STORAGE,
 } from "../server/auth-policy";
 import {
-  account,
-  jwks,
-  oauthAccessToken,
-  oauthClient,
-  oauthConsent,
-  oauthRefreshToken,
-  session,
-  user,
-  verification,
-} from "../server/db/auth-schema";
-import {
   DESKTOP_OAUTH_CLIENT,
   MOBILE_OAUTH_CLIENT,
   oauthClientRecord,
 } from "../server/oauth-clients";
 import { seedOAuthClient } from "../server/seed-clients";
+import { testSqlClient } from "./support/sql-client";
 
 const AUTH_TABLE_NAME = {
   ACCOUNT: "account",
@@ -36,20 +28,108 @@ const AUTH_TABLE_NAME = {
   VERIFICATION: "verification",
 } as const;
 
-test("the generated schema carries every table the auth service uses", () => {
-  assert.deepEqual(
-    [
-      account,
-      jwks,
-      oauthAccessToken,
-      oauthClient,
-      oauthConsent,
-      oauthRefreshToken,
-      session,
-      user,
-      verification,
-    ].map(getTableName),
-    Object.values(AUTH_TABLE_NAME),
+const NameRowSchema = Schema.Struct({ name: Schema.String });
+
+const OAuthClientRowSchema = Schema.Struct({
+  id: Schema.String,
+  client_id: Schema.String,
+  disabled: Schema.Boolean,
+  skip_consent: Schema.Boolean,
+  enable_end_session: Schema.Boolean,
+  scopes: Schema.Array(Schema.String),
+  name: Schema.String,
+  redirect_uris: Schema.Array(Schema.String),
+  token_endpoint_auth_method: Schema.String,
+  grant_types: Schema.Array(Schema.String),
+  response_types: Schema.Array(Schema.String),
+  public: Schema.Boolean,
+  type: Schema.String,
+  require_pkce: Schema.Boolean,
+});
+
+function readOAuthClient(clientId: string) {
+  return Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const rows = yield* sql`select * from oauth_client where client_id = ${clientId}`;
+    return rows.map((row) => Schema.decodeUnknownSync(OAuthClientRowSchema)(row));
+  });
+}
+
+it.layer(testSqlClient)("the auth service's own tables", (it) => {
+  it.effect("every table the auth service uses stands in the migrated schema", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        select table_name as name from information_schema.tables
+        where table_schema = 'public' and table_name = any(${Object.values(AUTH_TABLE_NAME)})
+      `;
+      assert.deepEqual(
+        rows.map((row) => Schema.decodeUnknownSync(NameRowSchema)(row).name).sort(),
+        Object.values(AUTH_TABLE_NAME).sort(),
+      );
+    }),
+  );
+
+  it.effect("seeding updates the one client identity instead of creating another", () =>
+    Effect.gen(function* () {
+      const opened = new Date("2026-08-17T00:00:00.000Z");
+      yield* seedOAuthClient(DESKTOP_OAUTH_CLIENT, opened);
+      const [seeded] = yield* readOAuthClient(DESKTOP_OAUTH_CLIENT.id);
+      assert.ok(seeded);
+      assert.deepEqual(seeded, {
+        id: DESKTOP_OAUTH_CLIENT.id,
+        client_id: DESKTOP_OAUTH_CLIENT.id,
+        disabled: false,
+        skip_consent: true,
+        enable_end_session: false,
+        scopes: ["openid", "profile", "email", "offline_access"],
+        name: "Luke for macOS",
+        redirect_uris: ["http://127.0.0.1/callback"],
+        token_endpoint_auth_method: "none",
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        public: true,
+        type: "native",
+        require_pkce: true,
+      });
+
+      const updated = new Date("2026-08-18T00:00:00.000Z");
+      yield* seedOAuthClient(DESKTOP_OAUTH_CLIENT, updated);
+      const rows = yield* readOAuthClient(DESKTOP_OAUTH_CLIENT.id);
+      assert.equal(rows.length, 1);
+    }),
+  );
+
+  it.effect(
+    "mobile client seeding updates the one client identity instead of creating another",
+    () =>
+      Effect.gen(function* () {
+        const opened = new Date("2026-08-17T00:00:00.000Z");
+        yield* seedOAuthClient(MOBILE_OAUTH_CLIENT, opened);
+        const [seeded] = yield* readOAuthClient(MOBILE_OAUTH_CLIENT.id);
+        assert.ok(seeded);
+        assert.deepEqual(seeded, {
+          id: MOBILE_OAUTH_CLIENT.id,
+          client_id: MOBILE_OAUTH_CLIENT.id,
+          disabled: false,
+          skip_consent: true,
+          enable_end_session: false,
+          scopes: ["openid", "profile", "email", "offline_access"],
+          name: "Luke for iOS",
+          redirect_uris: ["dev.tryluke.ios://oauth/callback"],
+          token_endpoint_auth_method: "none",
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+          public: true,
+          type: "native",
+          require_pkce: true,
+        });
+
+        const updated = new Date("2026-08-18T00:00:00.000Z");
+        yield* seedOAuthClient(MOBILE_OAUTH_CLIENT, updated);
+        const rows = yield* readOAuthClient(MOBILE_OAUTH_CLIENT.id);
+        assert.equal(rows.length, 1);
+      }),
   );
 });
 
@@ -76,51 +156,6 @@ test("the desktop client stays public, secretless, trusted, and bound to PKCE", 
   assert.equal(record.updatedAt, now);
 });
 
-test("seeding updates the one client identity instead of creating another", async () => {
-  let insertedTable: typeof oauthClient | undefined;
-  let insertedRecord: ReturnType<typeof oauthClientRecord> | undefined;
-  let conflict: { target?: unknown; set?: unknown } | undefined;
-  type SeedDatabase = Parameters<typeof seedOAuthClient>[0];
-  // SAFETY: Test double implements only the insert chain seedOAuthClient exercises.
-  const database = {
-    insert(table: typeof oauthClient) {
-      insertedTable = table;
-      return {
-        values(record: ReturnType<typeof oauthClientRecord>) {
-          insertedRecord = record;
-          return {
-            async onConflictDoUpdate(input: { target?: unknown; set?: unknown }) {
-              conflict = input;
-            },
-          };
-        },
-      };
-    },
-  } as unknown as SeedDatabase;
-
-  const now = new Date("2026-08-17T00:00:00.000Z");
-  await seedOAuthClient(database, DESKTOP_OAUTH_CLIENT, now);
-
-  assert.equal(insertedTable, oauthClient);
-  assert.deepEqual(insertedRecord, oauthClientRecord(DESKTOP_OAUTH_CLIENT, now));
-  assert.equal(conflict?.target, oauthClient.clientId);
-  assert.deepEqual(conflict?.set, {
-    disabled: false,
-    skipConsent: true,
-    enableEndSession: false,
-    scopes: ["openid", "profile", "email", "offline_access"],
-    updatedAt: now,
-    name: "Luke for macOS",
-    redirectUris: ["http://127.0.0.1/callback"],
-    tokenEndpointAuthMethod: "none",
-    grantTypes: ["authorization_code", "refresh_token"],
-    responseTypes: ["code"],
-    public: true,
-    type: "native",
-    requirePKCE: true,
-  });
-});
-
 test("the mobile client stays public, secretless, trusted, and bound to PKCE", () => {
   const now = new Date("2026-08-17T00:00:00.000Z");
   const record = oauthClientRecord(MOBILE_OAUTH_CLIENT, now);
@@ -143,49 +178,4 @@ test("mobile client uses a custom URI scheme, not a loopback address", () => {
   const url = new URL(redirectUri);
   assert.notEqual(url.protocol, "http:");
   assert.notEqual(url.protocol, "https:");
-});
-
-test("mobile client seeding updates the one client identity instead of creating another", async () => {
-  let insertedTable: typeof oauthClient | undefined;
-  let insertedRecord: ReturnType<typeof oauthClientRecord> | undefined;
-  let conflict: { target?: unknown; set?: unknown } | undefined;
-  type SeedDatabase = Parameters<typeof seedOAuthClient>[0];
-  // SAFETY: Test double implements only the insert chain seedOAuthClient exercises.
-  const database = {
-    insert(table: typeof oauthClient) {
-      insertedTable = table;
-      return {
-        values(record: ReturnType<typeof oauthClientRecord>) {
-          insertedRecord = record;
-          return {
-            async onConflictDoUpdate(input: { target?: unknown; set?: unknown }) {
-              conflict = input;
-            },
-          };
-        },
-      };
-    },
-  } as unknown as SeedDatabase;
-
-  const now = new Date("2026-08-17T00:00:00.000Z");
-  await seedOAuthClient(database, MOBILE_OAUTH_CLIENT, now);
-
-  assert.equal(insertedTable, oauthClient);
-  assert.deepEqual(insertedRecord, oauthClientRecord(MOBILE_OAUTH_CLIENT, now));
-  assert.equal(conflict?.target, oauthClient.clientId);
-  assert.deepEqual(conflict?.set, {
-    disabled: false,
-    skipConsent: true,
-    enableEndSession: false,
-    scopes: ["openid", "profile", "email", "offline_access"],
-    updatedAt: now,
-    name: "Luke for iOS",
-    redirectUris: ["dev.tryluke.ios://oauth/callback"],
-    tokenEndpointAuthMethod: "none",
-    grantTypes: ["authorization_code", "refresh_token"],
-    responseTypes: ["code"],
-    public: true,
-    type: "native",
-    requirePKCE: true,
-  });
 });

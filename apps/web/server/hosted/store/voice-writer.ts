@@ -2,7 +2,7 @@ import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, type SpokenAskMetadata } from "../../core.js";
-import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-schema.js";
+import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-vocabulary.js";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../../live.js";
 import type { HostedStoreRun } from "./database.js";
 import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";

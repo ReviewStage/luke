@@ -32,7 +32,7 @@ import {
   type WireBoundaryInput,
   type WireValue,
 } from "../core.js";
-import { CONVERSATION_KIND } from "../db/schema.js";
+import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET, CATALOG_VIEW_TOOL_KINDS } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";

@@ -1,55 +1,71 @@
 import { pathToFileURL } from "node:url";
-import { oauthClient } from "./db/auth-schema.js";
-import { getDatabase } from "./db/index.js";
+import * as SqlClient from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect } from "effect";
 import {
   DESKTOP_OAUTH_CLIENT,
   MOBILE_OAUTH_CLIENT,
   type OAuthClient,
   oauthClientRecord,
 } from "./oauth-clients.js";
-
-type SeedDatabase = Pick<ReturnType<typeof getDatabase>, "insert">;
+import { disposeWebRuntime, runWeb } from "./runtime.js";
 
 /**
  * Writes one client's row, or brings an existing one back to what this build
  * says it is. Every field but the id and the creation instant is set on
  * conflict, so a row edited by hand converges rather than standing.
  */
-export async function seedOAuthClient(
-  database: SeedDatabase,
+export function seedOAuthClient(
   client: OAuthClient,
   now = new Date(),
-): Promise<void> {
+): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
   const record = oauthClientRecord(client, now);
-  await database
-    .insert(oauthClient)
-    .values(record)
-    .onConflictDoUpdate({
-      target: oauthClient.clientId,
-      set: {
-        disabled: record.disabled,
-        skipConsent: record.skipConsent,
-        enableEndSession: record.enableEndSession,
-        scopes: record.scopes,
-        updatedAt: record.updatedAt,
-        name: record.name,
-        redirectUris: record.redirectUris,
-        tokenEndpointAuthMethod: record.tokenEndpointAuthMethod,
-        grantTypes: record.grantTypes,
-        responseTypes: record.responseTypes,
-        public: record.public,
-        type: record.type,
-        requirePKCE: record.requirePKCE,
-      },
-    });
+  return Effect.asVoid(
+    Effect.flatMap(
+      SqlClient.SqlClient,
+      (sql) => sql`
+        insert into oauth_client (
+          id, client_id, disabled, skip_consent, enable_end_session, scopes,
+          created_at, updated_at, name, redirect_uris, token_endpoint_auth_method,
+          grant_types, response_types, public, type, require_pkce
+        )
+        values (
+          ${record.id}, ${record.clientId}, ${record.disabled}, ${record.skipConsent},
+          ${record.enableEndSession}, ${[...record.scopes]}, ${record.createdAt},
+          ${record.updatedAt}, ${record.name}, ${[...record.redirectUris]},
+          ${record.tokenEndpointAuthMethod}, ${[...record.grantTypes]},
+          ${[...record.responseTypes]}, ${record.public}, ${record.type}, ${record.requirePKCE}
+        )
+        on conflict (client_id) do update set
+          disabled = excluded.disabled,
+          skip_consent = excluded.skip_consent,
+          enable_end_session = excluded.enable_end_session,
+          scopes = excluded.scopes,
+          updated_at = excluded.updated_at,
+          name = excluded.name,
+          redirect_uris = excluded.redirect_uris,
+          token_endpoint_auth_method = excluded.token_endpoint_auth_method,
+          grant_types = excluded.grant_types,
+          response_types = excluded.response_types,
+          public = excluded.public,
+          type = excluded.type,
+          require_pkce = excluded.require_pkce
+      `,
+    ),
+  );
 }
 
-export async function seedOAuthClients(database: SeedDatabase, now = new Date()): Promise<void> {
-  await seedOAuthClient(database, DESKTOP_OAUTH_CLIENT, now);
-  await seedOAuthClient(database, MOBILE_OAUTH_CLIENT, now);
+export function seedOAuthClients(
+  now = new Date(),
+): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
+  return Effect.zipRight(
+    seedOAuthClient(DESKTOP_OAUTH_CLIENT, now),
+    seedOAuthClient(MOBILE_OAUTH_CLIENT, now),
+  );
 }
 
 const executedPath = process.argv[1];
 if (executedPath && import.meta.url === pathToFileURL(executedPath).href) {
-  await seedOAuthClients(getDatabase());
+  await runWeb(seedOAuthClients());
+  await disposeWebRuntime();
 }

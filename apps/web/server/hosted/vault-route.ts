@@ -1,7 +1,6 @@
 import { Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
-import { getDatabase } from "../db/index.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
@@ -59,7 +58,7 @@ function storeFor(secret: string): HostedStore {
   if (storeUnderSecret?.secret !== secret) {
     storeUnderSecret = {
       secret,
-      store: hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret), run: runWeb }),
+      store: hostedStore({ keys: payloadKeyRing(secret), run: runWeb }),
     };
   }
   return storeUnderSecret.store;

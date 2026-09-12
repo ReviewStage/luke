@@ -17,7 +17,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,

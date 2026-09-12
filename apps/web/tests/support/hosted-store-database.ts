@@ -3,20 +3,12 @@ import { NodeContext } from "@effect/platform-node";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { PGlite } from "@electric-sql/pglite";
-import { drizzle as drizzleNodePostgres } from "drizzle-orm/node-postgres";
-import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { Pool } from "pg";
 import { runWebMigrations } from "../../server/db/effect-migrator";
-import * as schema from "../../server/db/schema";
 import { sqlClientOverPool } from "../../server/db/sql-client";
 import { payloadKeyRing } from "../../server/hosted/encryption";
-import {
-  type HostedStore,
-  type HostedStoreDatabase,
-  type HostedStoreRun,
-  hostedStore,
-} from "../../server/hosted/store";
+import { type HostedStore, type HostedStoreRun, hostedStore } from "../../server/hosted/store";
 import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-client";
 
 /**
@@ -27,21 +19,8 @@ import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-clie
  * PGlite is migrated here, through the same `runWebMigrations` the production
  * runner applies, because it is opened empty; a Postgres is not, because
  * `db:migrate` is the one runner that records what it applied.
- *
- * The Drizzle handle stands over the same connection for the three
- * `BrainHostSeams`/`HostedStoreContext` wiring sites (`docs/adr/0001-effect.md`
- * names them) that construct a production seams object under test and so
- * still take a `HostedStoreDatabase`; every other test file reaches
- * `@effect/sql` directly instead, as of P10-14c5. It runs no migration of its
- * own and reads whatever `runWebMigrations` already applied.
- *
- * @deprecated The `db` field and the Drizzle handle behind it are what
- * P10-15 removes, once `BrainHostSeams.db`/`HostedStoreContext.db` themselves
- * are deleted and the three wiring sites above move onto `HostedStoreRun`
- * alone.
  */
 export interface HostedStoreTestDatabase {
-  readonly db: HostedStoreDatabase;
   readonly store: HostedStore;
   /** The same client the store's effects run against, for a test that reads one itself. */
   readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
@@ -61,10 +40,9 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
   const runtime = ManagedRuntime.make(opened.sql);
   const run: HostedStoreRun = (effect) => runtime.runPromise(effect);
   return {
-    db: opened.db,
     sql: opened.sql,
     run,
-    store: hostedStore({ db: opened.db, keys, run }),
+    store: hostedStore({ keys, run }),
     createUser() {
       const id = `user-${randomUUID()}`;
       return run(
@@ -85,7 +63,6 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
 }
 
 interface OpenedDatabase {
-  readonly db: HostedStoreDatabase;
   readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
   close(): Promise<void>;
 }
@@ -99,15 +76,11 @@ async function openPglite(): Promise<OpenedDatabase> {
   } finally {
     await migrationRuntime.dispose();
   }
-  return { db: drizzlePglite(client, { schema }), sql, close: () => client.close() };
+  return { sql, close: () => client.close() };
 }
 
 /** Migrates nothing: `db:migrate` is what applies the migrations to a Postgres. */
 async function openNodePostgres(connectionString: string): Promise<OpenedDatabase> {
   const pool = new Pool({ connectionString, max: 1 });
-  return {
-    db: drizzleNodePostgres(pool, { schema }),
-    sql: sqlClientOverPool(pool),
-    close: () => pool.end(),
-  };
+  return { sql: sqlClientOverPool(pool), close: () => pool.end() };
 }

@@ -19,7 +19,7 @@ import {
 } from "@sidecar/wire";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND } from "../server/db/schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { type ChangeSignalOptions, handleChanges } from "../server/hosted/change-signal";
 import { deviceSeams } from "../server/hosted/device-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
