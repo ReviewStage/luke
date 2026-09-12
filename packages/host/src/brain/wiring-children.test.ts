@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
@@ -16,7 +17,8 @@ import {
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
-import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
+import { timersFromRuntime } from "@sidecar/runtime/effect";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -34,8 +36,8 @@ import {
 import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Runtime } from "effect";
-import { type TestContext, test } from "vitest";
+import { Chunk, Duration, Effect, Runtime, TestClock } from "effect";
+import type { TestContext } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -64,13 +66,20 @@ function offeredTools(options: { tools?: readonly { name: string }[] }): readonl
   return (options.tools ?? []).map((tool) => tool.name);
 }
 
-/** Polls until the condition holds, so a slow prompt read under a loaded run is waited for rather than raced. */
-async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error("the condition did not hold in time");
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+/**
+ * Polls until the condition holds, letting queued microtasks and immediates
+ * run between checks, so a slow prompt read under a loaded run is waited for
+ * rather than raced. Rounds bound the wait rather than a real deadline,
+ * since nothing here runs on a wall clock any more.
+ */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      yield* Effect.promise(() => drainMicrotasks());
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
 }
 
 function textAnswer(text: string) {
@@ -129,8 +138,16 @@ interface Composed {
   ensured: { sessionKey: SessionKey; name: string }[];
   archived: SessionKey[];
   history: Map<SessionKey, ConversationEntry[]>;
-  /** The child service's clock, its timers held rather than fired, so an archive delay never outlives the test. */
-  clock: FakeClock;
+}
+
+/**
+ * The child service's timer seam, over whichever runtime a test is running
+ * on — the ambient `TestClock` under `it.effect` — so an archive delay
+ * advances on the same clock a test drives rather than firing on its own.
+ */
+function childTimersOn(runtime: Runtime.Runtime<never>) {
+  const { schedule, cancel } = timersFromRuntime(runtime);
+  return { schedule, cancel };
 }
 
 async function composed(
@@ -187,11 +204,9 @@ async function composed(
   const archived: SessionKey[] = [];
   const history = new Map<SessionKey, ConversationEntry[]>();
   let ids = 0;
-  const clock = new FakeClock();
   const workspace = await temporaryDirectory(t, "luke-children-");
   const wiring = wireBrain({
     execution: Runtime.defaultRuntime,
-    childTimers: { schedule: clock.schedule, cancel: clock.cancel },
     repositoryFor: (sessionKey) => {
       let repository = repositories.get(sessionKey);
       if (!repository) {
@@ -276,7 +291,6 @@ async function composed(
     ensured,
     archived,
     history,
-    clock,
   };
 }
 
@@ -308,191 +322,232 @@ async function ask(c: Composed, question: string, submissionId = "s-1"): Promise
   return accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
 }
 
-test("a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn", async (t) => {
-  const c = await composed(t, delegatingScript());
-  await c.wiring.rebuild();
-  const runId = await ask(c, "look into the last commit");
-  await waitFor(() =>
-    [...c.completions.values()].some(
-      (completion) => completion.delivery === COMPLETION_DELIVERY_STATUS.DELIVERED,
-    ),
-  );
-  const main = c.wiring.current();
-  assert.ok(main);
-  const record = await main.waitAsk(runId, 1);
-  assert.equal(record?.status, "succeeded");
-  const child = [...c.children.values()][0];
-  assert.ok(child);
-  assert.equal(child.requesterSessionKey, MAIN_SESSION_KEY);
-  assert.equal(child.depth, 1);
-  assert.equal(child.status, CHILD_RUN_STATUS.COMPLETED);
-  assert.equal(child.resultText, "the change renamed one module");
-  assert.equal(conversationKindOf(child.childSessionKey), CONVERSATION_KIND.CHILD);
-  assert.equal(childIdOf(child.childSessionKey), child.childId);
-  assert.ok(c.ensured.some((entry) => entry.sessionKey === child.childSessionKey));
-  // The child's own turn: the task behind its marker, no announce, no delegation
-  // tools beyond what its depth allows, and the minimal profile's prompt.
-  const childTurn = c.seen.find((seen) => seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK));
-  assert.ok(childTurn);
-  assert.ok(!childTurn.tools.includes(BRAIN_TOOL.ANNOUNCE));
-  assert.ok(childTurn.tools.includes(BRAIN_TOOL.SESSIONS_SPAWN));
-  // The completion was persisted, then delivered to main as a turn of its own.
-  const completion = c.completions.get(`completion:${child.childId}`);
-  assert.ok(completion);
-  assert.equal(completion.destination, MAIN_SESSION_KEY);
-  assert.equal(completion.delivery, COMPLETION_DELIVERY_STATUS.DELIVERED);
-  const completionTurn = c.seen.find((seen) =>
-    seen.texts.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
-  );
-  assert.ok(completionTurn);
-  assert.ok(completionTurn.tools.includes(BRAIN_TOOL.ANNOUNCE));
-  // Only main was handed the completion; the child's conversation was not.
-  const completionTurns = c.seen.filter((seen) =>
-    seen.texts.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
-  );
-  assert.equal(completionTurns.length, 1);
-  // The child's conversation stands for an hour after its end, then archives.
-  const hour = 60 * 60 * 1000;
-  const archive = [...c.clock.timers.values()].find(
-    (timer) => timer.delayMs > hour - 10_000 && timer.delayMs <= hour,
-  );
-  assert.ok(archive, "the archive is armed for an hour after the end");
-  assert.deepEqual(c.archived, []);
-  archive.callback();
-  await drainMicrotasks(180);
-  assert.deepEqual(c.archived, [child.childSessionKey]);
-  assert.equal(c.wiring.current(child.childSessionKey), undefined);
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn",
+  (t) =>
+    Effect.gen(function* () {
+      const runtime = yield* Effect.runtime<never>();
+      const c = yield* Effect.promise(() =>
+        composed(t, delegatingScript(), { childTimers: childTimersOn(runtime) }),
+      );
+      yield* Effect.promise(() => c.wiring.rebuild());
+      const runId = yield* Effect.promise(() => ask(c, "look into the last commit"));
+      yield* waitFor(() =>
+        [...c.completions.values()].some(
+          (completion) => completion.delivery === COMPLETION_DELIVERY_STATUS.DELIVERED,
+        ),
+      );
+      const main = c.wiring.current();
+      assert.ok(main);
+      const record = yield* Effect.promise(() => main.waitAsk(runId, 1));
+      assert.equal(record?.status, "succeeded");
+      const child = [...c.children.values()][0];
+      assert.ok(child);
+      assert.equal(child.requesterSessionKey, MAIN_SESSION_KEY);
+      assert.equal(child.depth, 1);
+      assert.equal(child.status, CHILD_RUN_STATUS.COMPLETED);
+      assert.equal(child.resultText, "the change renamed one module");
+      assert.equal(conversationKindOf(child.childSessionKey), CONVERSATION_KIND.CHILD);
+      assert.equal(childIdOf(child.childSessionKey), child.childId);
+      assert.ok(c.ensured.some((entry) => entry.sessionKey === child.childSessionKey));
+      // The child's own turn: the task behind its marker, no announce, no delegation
+      // tools beyond what its depth allows, and the minimal profile's prompt.
+      const childTurn = c.seen.find((seen) =>
+        seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK),
+      );
+      assert.ok(childTurn);
+      assert.ok(!childTurn.tools.includes(BRAIN_TOOL.ANNOUNCE));
+      assert.ok(childTurn.tools.includes(BRAIN_TOOL.SESSIONS_SPAWN));
+      // The completion was persisted, then delivered to main as a turn of its own.
+      const completion = c.completions.get(`completion:${child.childId}`);
+      assert.ok(completion);
+      assert.equal(completion.destination, MAIN_SESSION_KEY);
+      assert.equal(completion.delivery, COMPLETION_DELIVERY_STATUS.DELIVERED);
+      const completionTurn = c.seen.find((seen) =>
+        seen.texts.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
+      );
+      assert.ok(completionTurn);
+      assert.ok(completionTurn.tools.includes(BRAIN_TOOL.ANNOUNCE));
+      // Only main was handed the completion; the child's conversation was not.
+      const completionTurns = c.seen.filter((seen) =>
+        seen.texts.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
+      );
+      assert.equal(completionTurns.length, 1);
+      // The child's conversation stands for an hour after its end, then archives.
+      const hour = 60 * 60 * 1000;
+      const sleeps = Chunk.toReadonlyArray(yield* TestClock.sleeps());
+      assert.ok(
+        sleeps.some((instant) => instant > hour - 10_000 && instant <= hour),
+        "the archive is armed for an hour after the end",
+      );
+      assert.deepEqual(c.archived, []);
+      yield* TestClock.adjust(Duration.millis(hour));
+      yield* Effect.promise(() => drainMicrotasks(180));
+      assert.deepEqual(c.archived, [child.childSessionKey]);
+      assert.equal(c.wiring.current(child.childSessionKey), undefined);
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone", async (t) => {
-  // Every child spawns another until refused; the last child answers text.
-  const script: Script = (seen) => {
-    if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
-      return callAnswer("call-spawn", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
-    }
-    if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
-      if (seen.outputs.length === 0 && seen.tools.includes(BRAIN_TOOL.SESSIONS_SPAWN)) {
-        return callAnswer("call-nested", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
+it.effect(
+  "a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone",
+  (t) =>
+    Effect.gen(function* () {
+      const runtime = yield* Effect.runtime<never>();
+      // Every child spawns another until refused; the last child answers text.
+      const script: Script = (seen) => {
+        if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
+          return callAnswer("call-spawn", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
+        }
+        if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
+          if (seen.outputs.length === 0 && seen.tools.includes(BRAIN_TOOL.SESSIONS_SPAWN)) {
+            return callAnswer("call-nested", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
+          }
+          return textAnswer("leaf");
+        }
+        return textAnswer("ok");
+      };
+      const c = yield* Effect.promise(() =>
+        composed(t, script, { childTimers: childTimersOn(runtime) }),
+      );
+      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* Effect.promise(() => ask(c, "go deep"));
+      yield* waitFor(
+        () =>
+          c.children.size === 5 &&
+          [...c.children.values()].every((record) => record.status === CHILD_RUN_STATUS.COMPLETED),
+      );
+      const depths = [...c.children.values()].map((record) => record.depth).sort();
+      assert.deepEqual(depths, [1, 2, 3, 4, 5]);
+      const deepest = [...c.children.values()].find((record) => record.depth === 5);
+      assert.ok(deepest);
+      const deepestTurn = c.seen.find(
+        (seen) =>
+          seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK) &&
+          !seen.tools.includes(BRAIN_TOOL.SESSIONS_SPAWN),
+      );
+      assert.ok(deepestTurn, "the child at the cap is offered no delegation tool");
+      assert.ok(!deepestTurn.tools.includes(BRAIN_TOOL.SUBAGENTS));
+      assert.ok(!deepestTurn.tools.includes(BRAIN_TOOL.SESSIONS_HISTORY));
+      for (const record of c.children.values()) {
+        assert.equal(record.status, CHILD_RUN_STATUS.COMPLETED);
       }
-      return textAnswer("leaf");
-    }
-    return textAnswer("ok");
-  };
-  const c = await composed(t, script);
-  await c.wiring.rebuild();
-  await ask(c, "go deep");
-  await waitFor(
-    () =>
-      c.children.size === 5 &&
-      [...c.children.values()].every((record) => record.status === CHILD_RUN_STATUS.COMPLETED),
-  );
-  const depths = [...c.children.values()].map((record) => record.depth).sort();
-  assert.deepEqual(depths, [1, 2, 3, 4, 5]);
-  const deepest = [...c.children.values()].find((record) => record.depth === 5);
-  assert.ok(deepest);
-  const deepestTurn = c.seen.find(
-    (seen) =>
-      seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK) &&
-      !seen.tools.includes(BRAIN_TOOL.SESSIONS_SPAWN),
-  );
-  assert.ok(deepestTurn, "the child at the cap is offered no delegation tool");
-  assert.ok(!deepestTurn.tools.includes(BRAIN_TOOL.SUBAGENTS));
-  assert.ok(!deepestTurn.tools.includes(BRAIN_TOOL.SESSIONS_HISTORY));
-  for (const record of c.children.values()) {
-    assert.equal(record.status, CHILD_RUN_STATUS.COMPLETED);
-  }
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("a fork carries the requester's context into the child and an isolated child sees none of it", async (t) => {
-  const script: Script = (seen) => {
-    if (seen.answeringTool) return textAnswer("ok");
-    if (seen.lastInput.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION)) return textAnswer("reviewed");
-    if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) return textAnswer("child done");
-    if (seen.lastAsk.includes("fork a child")) {
-      return callAnswer("call-fork", BRAIN_TOOL.SESSIONS_SPAWN, {
-        ...SPAWN_ARGS,
-        context: CHILD_CONTEXT_MODE.FORK,
-      });
-    }
-    if (seen.lastAsk.includes("isolated child")) {
-      return callAnswer("call-iso", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
-    }
-    return textAnswer(MAIN_SECRET);
-  };
-  const c = await composed(t, script);
-  await c.wiring.rebuild();
-  // Main first says something memorable, so its context holds a secret to fork.
-  const first = await ask(c, "remember this", "s-0");
-  await drainMicrotasks(180);
-  await c.wiring.current()?.waitAsk(first, 1);
-  await ask(c, "now fork a child", "s-fork");
-  await waitFor(() =>
-    [...c.children.values()].some((record) => record.status === CHILD_RUN_STATUS.COMPLETED),
-  );
-  await ask(c, "now an isolated child", "s-iso");
-  await waitFor(
-    () =>
-      c.children.size === 2 &&
-      [...c.children.values()].every((record) => record.status === CHILD_RUN_STATUS.COMPLETED),
-  );
-  const records = [...c.children.values()];
-  const forked = records.find((record) => record.context === CHILD_CONTEXT_MODE.FORK);
-  const isolated = records.find((record) => record.context === CHILD_CONTEXT_MODE.ISOLATED);
-  assert.ok(forked && isolated);
-  assert.equal(forked.requestedContext, CHILD_CONTEXT_MODE.FORK);
-  const childTurns = c.seen.filter((seen) => seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK));
-  assert.equal(childTurns.length, 2);
-  const forkedTurn = childTurns.find((seen) => seen.texts.includes(MAIN_SECRET));
-  const isolatedTurn = childTurns.find((seen) => !seen.texts.includes(MAIN_SECRET));
-  assert.ok(forkedTurn, "the forked child read the requester's earlier words");
-  assert.ok(isolatedTurn, "the isolated child read none of them");
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "a fork carries the requester's context into the child and an isolated child sees none of it",
+  (t) =>
+    Effect.gen(function* () {
+      const runtime = yield* Effect.runtime<never>();
+      const script: Script = (seen) => {
+        if (seen.answeringTool) return textAnswer("ok");
+        if (seen.lastInput.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION)) {
+          return textAnswer("reviewed");
+        }
+        if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) return textAnswer("child done");
+        if (seen.lastAsk.includes("fork a child")) {
+          return callAnswer("call-fork", BRAIN_TOOL.SESSIONS_SPAWN, {
+            ...SPAWN_ARGS,
+            context: CHILD_CONTEXT_MODE.FORK,
+          });
+        }
+        if (seen.lastAsk.includes("isolated child")) {
+          return callAnswer("call-iso", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
+        }
+        return textAnswer(MAIN_SECRET);
+      };
+      const c = yield* Effect.promise(() =>
+        composed(t, script, { childTimers: childTimersOn(runtime) }),
+      );
+      yield* Effect.promise(() => c.wiring.rebuild());
+      // Main first says something memorable, so its context holds a secret to fork.
+      const first = yield* Effect.promise(() => ask(c, "remember this", "s-0"));
+      yield* Effect.promise(() => drainMicrotasks(180));
+      yield* Effect.promise(
+        () => c.wiring.current()?.waitAsk(first, 1) ?? Promise.resolve(undefined),
+      );
+      yield* Effect.promise(() => ask(c, "now fork a child", "s-fork"));
+      yield* waitFor(() =>
+        [...c.children.values()].some((record) => record.status === CHILD_RUN_STATUS.COMPLETED),
+      );
+      yield* Effect.promise(() => ask(c, "now an isolated child", "s-iso"));
+      yield* waitFor(
+        () =>
+          c.children.size === 2 &&
+          [...c.children.values()].every((record) => record.status === CHILD_RUN_STATUS.COMPLETED),
+      );
+      const records = [...c.children.values()];
+      const forked = records.find((record) => record.context === CHILD_CONTEXT_MODE.FORK);
+      const isolated = records.find((record) => record.context === CHILD_CONTEXT_MODE.ISOLATED);
+      assert.ok(forked && isolated);
+      assert.equal(forked.requestedContext, CHILD_CONTEXT_MODE.FORK);
+      const childTurns = c.seen.filter((seen) =>
+        seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK),
+      );
+      assert.equal(childTurns.length, 2);
+      const forkedTurn = childTurns.find((seen) => seen.texts.includes(MAIN_SECRET));
+      const isolatedTurn = childTurns.find((seen) => !seen.texts.includes(MAIN_SECRET));
+      assert.ok(forkedTurn, "the forked child read the requester's earlier words");
+      assert.ok(isolatedTurn, "the isolated child read none of them");
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it", async (t) => {
-  let releaseChild: (() => void) | undefined;
-  const script: Script = (seen) => {
-    if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
-      return callAnswer("call-spawn", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
-    }
-    return textAnswer("ok");
-  };
-  const c = await composed(t, (seen, calls) => {
-    if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
-      // The child's model call never answers until released: the child stays running.
-      return new Promise<ScriptedAnswer>((_resolve, reject) => {
-        releaseChild = () => reject(new Error("aborted"));
-      });
-    }
-    return script(seen, calls);
-  });
-  await c.wiring.rebuild();
-  await ask(c, "start something long");
-  await waitFor(() =>
-    [...c.children.values()].some((record) => record.status === CHILD_RUN_STATUS.RUNNING),
-  );
-  const child = [...c.children.values()][0];
-  assert.ok(child);
-  assert.equal(child.status, CHILD_RUN_STATUS.RUNNING);
-  const reset = await c.wiring.resetConversation(MAIN_SESSION_KEY);
-  assert.equal(reset, true);
-  await waitFor(() => c.children.get(child.childId)?.status === CHILD_RUN_STATUS.CANCELLED);
-  assert.equal(c.children.get(child.childId)?.status, CHILD_RUN_STATUS.CANCELLED);
-  // The cancelled child's completion is still recorded and owed to main.
-  const completion = c.completions.get(`completion:${child.childId}`);
-  assert.ok(completion);
-  assert.equal(completion.status, CHILD_RUN_STATUS.CANCELLED);
-  releaseChild?.();
-  c.wiring.retire();
-  await c.wiring.rebuild();
-});
+it.effect(
+  "Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it",
+  (t) =>
+    Effect.gen(function* () {
+      const runtime = yield* Effect.runtime<never>();
+      let releaseChild: (() => void) | undefined;
+      const script: Script = (seen) => {
+        if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
+          return callAnswer("call-spawn", BRAIN_TOOL.SESSIONS_SPAWN, SPAWN_ARGS);
+        }
+        return textAnswer("ok");
+      };
+      const c = yield* Effect.promise(() =>
+        composed(
+          t,
+          (seen, calls) => {
+            if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
+              // The child's model call never answers until released: the child stays running.
+              return new Promise<ScriptedAnswer>((_resolve, reject) => {
+                releaseChild = () => reject(new Error("aborted"));
+              });
+            }
+            return script(seen, calls);
+          },
+          { childTimers: childTimersOn(runtime) },
+        ),
+      );
+      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* Effect.promise(() => ask(c, "start something long"));
+      yield* waitFor(() =>
+        [...c.children.values()].some((record) => record.status === CHILD_RUN_STATUS.RUNNING),
+      );
+      const child = [...c.children.values()][0];
+      assert.ok(child);
+      assert.equal(child.status, CHILD_RUN_STATUS.RUNNING);
+      const reset = yield* Effect.promise(() => c.wiring.resetConversation(MAIN_SESSION_KEY));
+      assert.equal(reset, true);
+      yield* waitFor(() => c.children.get(child.childId)?.status === CHILD_RUN_STATUS.CANCELLED);
+      assert.equal(c.children.get(child.childId)?.status, CHILD_RUN_STATUS.CANCELLED);
+      // The cancelled child's completion is still recorded and owed to main.
+      const completion = c.completions.get(`completion:${child.childId}`);
+      assert.ok(completion);
+      assert.equal(completion.status, CHILD_RUN_STATUS.CANCELLED);
+      releaseChild?.();
+      c.wiring.retire();
+      yield* Effect.promise(() => c.wiring.rebuild());
+    }),
+);
 
-test("a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way", async (t) => {
+it("a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way", async (t) => {
   for (const [outcome] of [
     [MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED, false],
     [MEMORY_HOUSEKEEPING_OUTCOME.FAILED, true],

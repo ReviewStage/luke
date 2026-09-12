@@ -7,9 +7,11 @@
  *
  * `hostSeamLayers` is the strangler shim that stands every tag up from the one
  * `HostSeams` object the desktop already builds, and `HostSeamsObject` carries
- * what has no tag yet — the clock reading, the two optional machine signals,
- * and the record the unconverted composers read through `kernel.options`.
- * P12-05 deletes both with `createHostKernel`.
+ * what has no tag yet — the two optional machine signals, and the record the
+ * unconverted composers read through `kernel.options`. The kernel's own clock
+ * reading is Effect's ambient `Clock` rather than a field of this object, so
+ * `HostSeamsObject`'s own `now` reaches only `createHostKernel`'s non-Effect
+ * adaptor. P12-05 deletes both with `createHostKernel`.
  */
 import type { Worker } from "node:worker_threads";
 import { ConfigProvider, Context, Layer, Logger } from "effect";
@@ -95,9 +97,8 @@ export const reporterLayer = (report: (message: string) => void): Layer.Layer<Re
   );
 
 /**
- * The seams object itself, for what has no tag of its own yet: the clock
- * reading a `FakeClock` test still drives, the two optional machine signals,
- * and `kernel.options`.
+ * The seams object itself, for what has no tag of its own yet: the two
+ * optional machine signals and `kernel.options`.
  *
  * @deprecated The shim that carries the whole record; P12-05 deletes it with
  * `createHostKernel`.
