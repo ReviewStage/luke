@@ -68,8 +68,8 @@ Canonical commands:
   winning at every layer) over the registered catalog, before the model reads
   a word: the same policy fixes the schemas the model is offered and the gate
   every emitted call meets at dispatch, so nothing the model reads can widen
-  either. Who opened a turn — the developer's ask, a provider's hook, the
-  roster look, a hold's release — is its origin, recorded on the
+  either. Who opened a turn — the developer's ask, the roster look, a hold's
+  release — is its origin, recorded on the
   run and in Conversation, and never by itself a permission: a turn Luke opened
   himself may carry the actions the policy allows, and an action it takes is
   journaled before its effect exactly as an ask's and narrated as Luke's own
@@ -100,8 +100,8 @@ Canonical commands:
   lands only in the workspace behind a roster row, as one of the agent kinds
   that row's latest observation listed, through the provider's documented
   endpoint; a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
-  documented for none, advertises nothing and is offered nothing; local
-  sessions have no such endpoint and stay entirely read-only. Opening a
+  documented for none, advertises nothing, is offered nothing, and stays
+  entirely read-only. Opening a
   session (its row pressed, or the same press asked of Luke in conversation)
   is not a write
   and needs no endpoint: the address its provider reported is handed to the
@@ -155,17 +155,17 @@ Canonical commands:
   threads, and one conversation per observed coding session
   (`agent:main:observed:<provider>:<session>`, each provider id run through
   the reversible component encoder in the runtime's vocabulary
-  (`@sidecar/runtime/vocabulary`), never concatenated raw). A provider's hook
-  and the roster look on the observation pass route to the observed session's
-  own conversation, which keeps its own transcript cursor, context, and
-  generation; main is woken by
+  (`@sidecar/runtime/vocabulary`), never concatenated raw). The roster look
+  on the observation pass routes to the observed session's own conversation,
+  which keeps its own transcript cursor, context, and generation; main is
+  woken by
   a developer's ask and by a hold's release of a briefing it decided, and
   is handed no transcript on any look. Nothing else wakes it: there is no
   scheduled review, and an observed conversation announces its own session's
   news itself. What main learns of the observed
   conversations is a compact notice in the host's own counts and Luke's own
   briefing words, consumed on its next turn and never a transcript's text.
-  An observed conversation's wake or roster look reads only what its one
+  An observed conversation's roster look reads at most what its one
   session's transcript gained since the capture cursor it last kept, cut
   from the front to 20,000 characters, and writes it down before any turn is
   scheduled: the observation entry and the advanced capture cursor land in
@@ -174,17 +174,19 @@ Canonical commands:
   cursor there and only there. Which sessions are looked at is the host's
   decision: every session working or waiting now, and
   every one whose conversation already stands. A session whose provider
-  answers no incremental read (a Conductor chat today) is looked at from its
-  roster fields alone — the look itself reads no message of it — and the
-  turn it opens may read that chat's tail only through the same
-  `read_transcript` tool a developer's ask is offered, under the rule above. The two cursors are two on purpose: a
+  answers no incremental read is looked at from its roster fields alone — the
+  look itself reads no message of it — and today every session is that
+  session, since Conductor, the one provider this build observes, answers
+  none: no look reads a transcript, and the turn a look opens may read that
+  chat's tail only through the same `read_transcript` tool a developer's ask
+  is offered, under the rule above. The two cursors are two on purpose: a
   throttled or failed inference leaves every entry standing for the next
   turn, a crash between capture and run loses nothing and reads nothing
   twice, and a relaunch runs what was captured without touching a
   transcript. A repeated look that finds nothing gained and the session
-  unchanged captures nothing and opens no inference, a hook delivered twice
-  is one entry, and the inbox holds at most 20 entries. The conversation
-  may also read one observed session's whole
+  unchanged captures nothing and opens no inference, the same observation
+  captured twice is one entry, and the inbox holds at most 20 entries. The
+  conversation may also read one observed session's whole
   tail, cut from the front to 60,000 characters, through the same read tool
   a developer's ask is offered; a cloud session whose provider documents no
   transcript read is read from roster fields alone.
@@ -1113,11 +1115,13 @@ Canonical commands:
   for the introduction's duration, because the service reads its close as
   the hang-up. No credential reaches the desktop at any point, no backend
   listens, and no carrier is wired behind it, so nothing said, heard, or
-  shown during the introduction can become an action. What travels on it is
-  one observed thing: the detected sessions' titles, as one developer message
-  in the session's `input`, at most eight titles each cut to eighty characters
-  (`INTRODUCTION_SEED_BOUNDS`, mirrored by the service's own admission), and
-  nothing for pretend rows.
+  shown during the introduction can become an action. No observed value
+  travels on it today: the desktop fills the offer's seed with nothing, since
+  no session is detected before an account exists. The wire still admits a
+  bounded title list — as one developer message in the session's `input`, at
+  most eight titles each cut to eighty characters (`INTRODUCTION_SEED_BOUNDS`,
+  mirrored by the service's own admission) — so filling it again is a product
+  decision, not an implementation detail.
   The microphone is unmuted the moment the session starts, since the greeting
   is meant to be answered, and the talk key routed to the takeover for the
   introduction's duration is the same unmute; the introduction ends when
@@ -1200,9 +1204,11 @@ Canonical commands:
   unbidden in exactly two places, each with its own narrower rule; the
   analytics, replay, and crash streams above are disclosed on their own terms
   and are not counted here. The brain's own turns are the first, under the
-  transcript-read rule above: what a local session's transcript gained since
-  the brain last looked, bounded and behind a marker, on the developer's own
-  key or through Luke's own service. The second is a briefing the brain
+  transcript-read rule above: a session's roster fields and, when a turn
+  calls the read tool, the tail of that session's transcript as Luke's own
+  service fetched it — only at the tool's call and never on an observation
+  pass — each bounded and behind a marker, on the developer's own key or
+  through Luke's own service. The second is a briefing the brain
   decided to give — its own words about what changed, under the briefing
   bound — which reaches the voice session so it can be said aloud, travelling
   as commentary appends with no delegation id over the host's own trusted
@@ -1272,9 +1278,9 @@ Canonical commands:
   its own. The phone's call keeps the older Realtime shape: it carries the
   roster it was shown as context and the session actions as its own tools,
   and no Conversation. A
-  briefing's trigger is an observation turn of the brain — a provider's hook,
-  the brain's own look at the roster on the observation pass, or a hold's
-  release — and the brain's `announce` call inside it, offered in no other
+  briefing's trigger is an observation turn of the brain — the brain's own
+  look at the roster on the observation pass, or a hold's release — and the
+  brain's `announce` call inside it, offered in no other
   kind of turn; an onboarding beat's trigger is its own deterministic one
   (the recorded sign-in edge, or the calendar gate standing). A briefing
   speaks whenever voice can, through the live session service's own hold,

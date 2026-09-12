@@ -516,11 +516,12 @@ Send.
   introduction on first launch of the Mac app. It asks for your microphone
   first, through macOS's own dialog at your press, and opens no session if
   you decline. With the microphone granted it opens one GPT Live session
-  through our voice service without an account: what travels is the titles
-  of the coding agent sessions found on your Mac (at most eight, each cut
-  short), our own fixed greeting instruction, and your voice for as long as
-  the introduction stands, since the microphone is live from the greeting on
-  so you can answer it. It plays once, can act on nothing, and our service
+  through our voice service without an account: what travels is our own fixed
+  greeting instruction and your voice for as long as the introduction stands,
+  since the microphone is live from the greeting on so you can answer it.
+  Nothing about your coding agent sessions travels: the offer keeps a seat for
+  their titles (at most eight, each cut short) and the app sends it empty. It
+  plays once, can act on nothing, and our service
   keeps only a hash of your network address for that day's rate limit, tied
   to nobody, and none of the conversation.
 - Coding agent providers you connect (Conductor), using the key or
