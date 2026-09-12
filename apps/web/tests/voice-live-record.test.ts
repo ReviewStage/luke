@@ -293,14 +293,7 @@ test("a spoken ask is the one message, cut from the segments including a delta t
     f.commentary().map((event) => [event.type, event.delegation_id, event.content]),
     [[LIVE_CLIENT_EVENT.COMMENTARY_APPEND, "dl_1", "Nothing yet."]],
   );
-  assert.deepEqual(await Promise.all(f.observed), [
-    IGNORED,
-    WRITTEN,
-    WRITTEN,
-    IGNORED,
-    WRITTEN,
-    IGNORED,
-  ]);
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, WRITTEN, IGNORED, WRITTEN]);
 });
 
 test("an utterance that settled before its delegation arrived is still the delegation's ask on record before its reply is spoken", async () => {
@@ -333,7 +326,7 @@ test("an utterance that settled before its delegation arrived is still the deleg
     f.commentary().map((event) => [event.delegation_id, event.content]),
     [["dl_late", "Opening it."]],
   );
-  assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, IGNORED, IGNORED]);
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, IGNORED]);
 });
 
 test("a delegation delivered ahead of the words it is about is held, and is the ask on record once the service composes it on the words", async () => {
@@ -359,7 +352,7 @@ test("a delegation delivered ahead of the words it is about is held, and is the 
     f.commentary().map((event) => [event.delegation_id, event.content]),
     [["dl_early", "Nothing yet."]],
   );
-  assert.deepEqual(await Promise.all(f.observed), [IGNORED, IGNORED, WRITTEN, IGNORED]);
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, IGNORED, WRITTEN]);
 });
 
 test("an ask the record refuses is answered with the unrecorded note alone, and its reply is dropped", async () => {
@@ -379,7 +372,7 @@ test("an ask the record refuses is answered with the unrecorded note alone, and 
   );
   assert.deepEqual(await messageRows(live.conversation), []);
   const refused = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION } as const;
-  assert.deepEqual(await Promise.all(f.observed), [IGNORED, refused, IGNORED, IGNORED]);
+  assert.deepEqual(await Promise.all(f.observed), [IGNORED, refused, IGNORED]);
 });
 
 test("the record door answers from the stream: a delegation is held until its ask is written, a repeated write is the same message, an unseen delegation is refused, and neither an undelegated utterance nor Luke's words reach a row", async () => {

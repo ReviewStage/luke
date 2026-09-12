@@ -96,7 +96,7 @@ function inference(
   text: string,
 ): RuntimeEvent[] {
   return [
-    { kind: RUNTIME_EVENT.ANSWERED, toolCalls: calls.length },
+    { kind: RUNTIME_EVENT.ANSWERED, toolNames: calls.map(([, name]) => name) },
     { kind: RUNTIME_EVENT.RESPONSE, responseId: `resp_${step}` },
     {
       kind: RUNTIME_EVENT.REASONING,

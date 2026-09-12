@@ -538,13 +538,9 @@ test("what the session speaks while the exchange is standing is read once both c
     context.eve.opened.map((message) => [message.conversationId, message.turn]),
     [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
   );
-  // What the exchange sends after the ask is its own: appends under the delegation, nothing else.
-  const afterAsk = await framesWithin(upstream, QUIET_MS);
-  assert.ok(afterAsk.length > 0);
-  assert.deepEqual(
-    afterAsk.map((frame) => ("delegation_id" in frame ? frame.delegation_id : undefined)),
-    afterAsk.map(() => "dl_1"),
-  );
+  // The acceptance itself sends nothing: until the brain answers, the exchange
+  // puts no frame of its own on the session.
+  assert.deepEqual(await framesWithin(upstream, QUIET_MS), []);
   await context.stop();
 });
 

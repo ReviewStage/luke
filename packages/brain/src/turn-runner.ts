@@ -40,7 +40,14 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
 } from "./requests.js";
-import { type BrainRunEvent, replySentences, slowStepOf, turnOriginOf } from "./run-events.js";
+import {
+  answerOnlyReads,
+  type BrainRunEvent,
+  replySentences,
+  slowStepOf,
+  toolCallOnlyReads,
+  turnOriginOf,
+} from "./run-events.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
 import type { AgentSeam } from "./seam.js";
 import { settledUnlessAborted } from "./settled.js";
@@ -115,8 +122,10 @@ interface TurnGathering {
   error?: string;
   /** Whether the run's slow step was already told; it is told once. */
   slowStepTold: boolean;
-  /** Whether the answer under way asked for tools, so its words wait for their results before they are relayed. */
-  answerCarriesCalls: boolean;
+  /** Whether the answer under way asked for anything but a read, so its words wait for that call's result before they are relayed. */
+  answerHoldsWords: boolean;
+  /** The calls that do more than read whose results are not yet journaled, by call id; while any stands, nothing of the reply is told. A refusal the guard answers without dispatching is not one of them. */
+  readonly writesInFlight: Set<string>;
   /** Whether the run's settle was already told; it is told once. */
   settledTold: boolean;
   /** How many of the reply's sentences have been relayed, so a later answer adds only the sentences after them. */
@@ -503,7 +512,8 @@ export class TurnRunner {
       said: [],
       outputText: "",
       slowStepTold: false,
-      answerCarriesCalls: false,
+      answerHoldsWords: false,
+      writesInFlight: new Set(),
       settledTold: false,
       sentencesTold: 0,
     };
@@ -642,7 +652,7 @@ export class TurnRunner {
       // earlier checkpoint failed waited for this one, and is relayed now
       // that the whole context is written.
       if (written && !this.#revoked(turnContext)) events.answered();
-      if (written) this.#relayReply(turnContext, gathering);
+      if (written) this.#relayReply(turnContext, gathering, { final: true });
       // A briefing leaves only from a turn that still stands: the stop or the
       // replacement that landed during the write — or during an earlier
       // briefing — withdraws every one not yet handed over, and a checkpoint
@@ -851,8 +861,8 @@ export class TurnRunner {
       events.heard(event);
       switch (event.kind) {
         case RUNTIME_EVENT.ANSWERED:
-          if (event.toolCalls > 0) gathering.iterations += 1;
-          gathering.answerCarriesCalls = event.toolCalls > 0;
+          if (event.toolNames.length > 0) gathering.iterations += 1;
+          gathering.answerHoldsWords = !answerOnlyReads(turn.policy, event.toolNames);
           return;
         case RUNTIME_EVENT.RESPONSE:
           run.responseIds.push(event.responseId);
@@ -860,12 +870,13 @@ export class TurnRunner {
         case RUNTIME_EVENT.TEXT:
           gathering.said.push(event.text);
           gathering.outputText = joinReplyMessages(gathering.said);
-          // Words of an answer that asked for no tool are the reply forming:
-          // every action before them has its result checkpointed, so they are
-          // relayed now rather than after the turn's final write. Words beside
-          // a tool call wait for that call's result to be on record.
-          if (!gathering.answerCarriesCalls && !run.checkpointFailed) {
-            this.#relayReply(turnContext, gathering);
+          // Words of an answer that asked for nothing, or for reads alone, are
+          // the reply forming: nothing they describe is still uncertain, so
+          // they are relayed now rather than after the turn's final write.
+          // Words beside a write or an act wait for that call's result to be
+          // on record.
+          if (!gathering.answerHoldsWords && !run.checkpointFailed) {
+            this.#relayReply(turnContext, gathering, { final: false });
           }
           return;
         case RUNTIME_EVENT.USAGE:
@@ -878,6 +889,9 @@ export class TurnRunner {
           turn.plan.deliveries.ingested();
           return;
         case RUNTIME_EVENT.TOOL_CALL: {
+          if (!toolCallOnlyReads(turn.policy, event.invocation.name)) {
+            gathering.writesInFlight.add(event.invocation.callId);
+          }
           if (!run.recorded || gathering.slowStepTold) return;
           const step = slowStepOf(turn.policy, event.invocation.name);
           if (step === undefined) return;
@@ -899,6 +913,7 @@ export class TurnRunner {
           if (run.recorded || journaledEffect(turn.policy, event.invocation.name)) {
             await turn.advanceMark();
           }
+          gathering.writesInFlight.delete(event.invocation.callId);
           return;
         default:
           return;
@@ -963,7 +978,8 @@ export class TurnRunner {
           turnContext.events.finalText(end.text);
         }
         gathering.outputText = joinReplyMessages(gathering.said);
-        if (!turnContext.run.checkpointFailed) this.#relayReply(turnContext, gathering);
+        if (!turnContext.run.checkpointFailed)
+          this.#relayReply(turnContext, gathering, { final: true });
         if (end.incomplete) gathering.incomplete = incompleteDetail(end.incomplete);
         return undefined;
       case RUN_END_REASON.THROTTLED:
@@ -990,20 +1006,34 @@ export class TurnRunner {
   /**
    * The reply as far as it has formed, relayed for a recorded run that still
    * stands: the settle told once, then each sentence not yet told, in order.
+   * A write whose result is not yet journaled holds both, whoever asked for
+   * the relay: the settle says every write so far has landed, and a sentence
+   * may be describing the one still out. Mid-run, a relay with no sentence to
+   * add says nothing at all — an answer that only asked for a read carries no
+   * words of its own — so the settle reaches a listener where it means
+   * something: just before the first words it releases, or at the run's own
+   * end, which relays whatever the reply came to, which is what `final`
+   * names.
    * The sentences are counted rather than remembered, because a later answer
    * only appends to the reply — the sentences before it are unchanged — so
    * the final words, told again at the run's end where the runtime's end
    * carried them, add nothing a listener already heard. A revoked turn
    * relays nothing more, and what waited on a call's result is dropped.
    */
-  #relayReply(turnContext: TurnContext, gathering: TurnGathering): void {
+  #relayReply(
+    turnContext: TurnContext,
+    gathering: TurnGathering,
+    moment: { final: boolean },
+  ): void {
     const { run, events } = turnContext;
     if (!run.recorded || this.#revoked(turnContext)) return;
+    const sentences = replySentences(gathering.outputText);
+    if (sentences.length === gathering.sentencesTold && !moment.final) return;
+    if (gathering.writesInFlight.size > 0) return;
     if (!gathering.settledTold) {
       gathering.settledTold = true;
       events.actionsSettled(run.runId);
     }
-    const sentences = replySentences(gathering.outputText);
     for (const sentence of sentences.slice(gathering.sentencesTold)) {
       events.replySentence(run.runId, sentence);
     }

@@ -436,7 +436,10 @@ function absorb(
   ingest: (input: ContextInput) => Effect.Effect<void>,
 ): Effect.Effect<boolean> {
   return Effect.gen(function* () {
-    yield* emit({ kind: RUNTIME_EVENT.ANSWERED, toolCalls: answer.toolCalls.length });
+    yield* emit({
+      kind: RUNTIME_EVENT.ANSWERED,
+      toolNames: answer.toolCalls.map((call) => call.name),
+    });
     if (answer.responseId !== undefined) {
       yield* emit({ kind: RUNTIME_EVENT.RESPONSE, responseId: answer.responseId });
     }

@@ -1258,8 +1258,12 @@ Canonical commands:
   since the previous one, submitted under the host's own submission id as a
   spoken ask through the same admission every ask uses; the reply streams
   back sentence by sentence as commentary under that delegation, only after
-  every action in the run has settled, so nothing is announced before it is
-  done. It is the brain whose standing context carries the recent exchange —
+  every action that writes has settled, so nothing is announced before it is
+  done; the words of a step that only read are spoken as they form, since a
+  read leaves nothing to be done. The ask's acceptance itself is announced
+  nowhere: nothing is appended for a request merely received, and the only
+  progress note an exchange earns is the one a slow step actually begun
+  writes. It is the brain whose standing context carries the recent exchange —
   the 20 most recent Conversation lines, each cut to its own length bound
   (the developer's asks as the session transcribed them, the words Luke
   spoke or announced as the same transcript carried them,
