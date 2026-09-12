@@ -31,8 +31,8 @@ judgment call is a reason to stop and ask, not to tick it.
 - [ ] Gateway envelope goldens unchanged. (CI)
 - [ ] No new `as` type assertion outside the allowlisted files; `as Admitted` only in `admit.ts` and wire's admitted files. (CI via anti-slop + new grep)
 - [ ] No `effect` import in an OpenClaw-ported file. (CI grep, added in P2-05)
-- [ ] No `Effect.runPromise`/`runSync`/`runFork` outside the runtime edges listed in the ground rules. (CI once P12-09 lands; manual before)
-- [ ] No new `setTimeout`/`setInterval`/`new Promise`/`AbortController` in a package already migrated. (CI once P12-09 lands; manual before)
+- [ ] No `Effect.runPromise`/`runSync`/`runFork` outside the runtime edges and the shims `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-run-promise-outside-edges`)
+- [ ] No new `setTimeout`/`setInterval`/`new Promise`/`AbortController`/`fs.watch` outside the files `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-raw-async-primitives`)
 - [ ] Test count equals the pre-PR count or the delta is listed. (manual: `vitest run --reporter=json`)
 - [ ] Each hand-rolled file the PR replaces is deleted or marked `@deprecated` with its deletion PR named.
 - [ ] Every `CLAUDE.md`/`AGENTS.md` sentence naming a changed part is edited; root pair stays byte-identical. (CI for pair existence; manual for wording)

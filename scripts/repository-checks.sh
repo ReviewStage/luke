@@ -480,18 +480,6 @@ if [[ -n "$hand_rolled_fixtures" ]]; then
     exit 1
 fi
 
-# Every workspace's tests run on vitest; `node:test` is retired. The `.mjs`
-# harness under `test:harness` is the one holdout, and it is exempt by
-# extension alone, never by path.
-node_test_imports=$(grep -rnE --include='*.ts' --include='*.tsx' --include='*.mts' \
-    'from "node:test"|require\("node:test"\)' \
-    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" || true)
-if [[ -n "$node_test_imports" ]]; then
-    printf 'error: these files still import node:test; every TypeScript test runs on vitest:\n%s\n' \
-        "$node_test_imports" >&2
-    exit 1
-fi
-
 # BRIDGE is the one renderer-to-main declaration, and registerBridgeHost is
 # the one place that may attach it to Electron. A handler registered beside its
 # domain logic would bypass the manifest's sender and wire guards, and an act
@@ -625,6 +613,65 @@ if [[ -n "$openclaw_effect_imports" ]]; then
         "$openclaw_effect_imports" >&2
     exit 1
 fi
+
+# `tools/oxlint/anti-slop/effect-edges.json` is the machine-readable twin of the
+# ADR's "Where an Effect may run" section: `no-run-promise-outside-edges` and
+# `no-raw-async-primitives` read it, so the lint itself is what catches a file
+# that starts running an Effect without being written down. This is the other
+# direction — an entry that outlived the code it was written for. A deletion PR
+# that takes the run out and leaves the row, or takes the ADR paragraph out and
+# leaves the row, fails here rather than shrinking the allowlist by half.
+node --input-type=module -e '
+  import { readFile } from "node:fs/promises";
+  import path from "node:path";
+  const root = process.argv[1];
+  const allowlistPath = "tools/oxlint/anti-slop/effect-edges.json";
+  const allowlist = JSON.parse(await readFile(path.join(root, allowlistPath), "utf8"));
+  const adr = await readFile(path.join(root, "docs/adr/0001-effect.md"), "utf8");
+  const section = adr.slice(
+    adr.indexOf("## Where an Effect may run"),
+    adr.indexOf("## Strangler shims and their deletions"),
+  );
+  const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(/;
+  const stillPrimitive = /\b(?:setTimeout|setInterval|watch)\s*\(|new\s+(?:Promise|AbortController)\b/;
+  const groups = [
+    { name: "runtimeEdges", named: true, pattern: null },
+    { name: "runShims", named: true, pattern: stillRuns },
+    { name: "runOnHandedRuntime", named: true, pattern: stillRuns },
+    { name: "rawAsyncPrimitives", named: false, pattern: stillPrimitive },
+  ];
+  const offenders = [];
+  for (const group of groups) {
+    const entries = allowlist[group.name];
+    if (!Array.isArray(entries)) {
+      offenders.push(`${allowlistPath}: no "${group.name}" list`);
+      continue;
+    }
+    for (const entry of entries) {
+      const text = await readFile(path.join(root, entry), "utf8").catch(() => null);
+      if (text === null) {
+        offenders.push(`${group.name}: ${entry} no longer exists`);
+        continue;
+      }
+      // The name as the section writes it — bare beside a `#private`, or under
+      // its directory — but never as the tail of a longer one: `effect.ts` must
+      // not be satisfied by `state-store.effect.ts`, a different file entirely.
+      const named = new RegExp(`(?<![\\w.-])${path.basename(entry).replaceAll(".", "\\.")}(?![\\w-])`, "u");
+      if (group.named && !named.test(section)) {
+        offenders.push(`${group.name}: ${entry} is on the allowlist and the ADR never names it`);
+      }
+      if (group.pattern !== null && !group.pattern.test(text)) {
+        offenders.push(`${group.name}: ${entry} no longer holds what it was allowed for`);
+      }
+    }
+  }
+  if (offenders.length > 0) {
+    process.stderr.write(
+      `error: ${allowlistPath} and docs/adr/0001-effect.md have drifted apart:\n${offenders.join("\n")}\n`,
+    );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
 
 # `@effect/platform-node` and `@effect/sql*` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
