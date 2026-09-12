@@ -606,6 +606,31 @@ settings change it asks for is a `Runtime.runFork` onto the same captured
 runtime beside `emitSessionReplay`'s own. That one goes when `onChange` itself
 answers an effect.
 
+P12-16d takes the file off the list for both reasons at once, this time for
+good: `AccountSessionManager` owns a `PubSub` of every snapshot it settles on
+and publishes to it everywhere `onChange` used to be called, exposing it as
+`changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>`
+over `Stream.fromPubSub(pubsub, { scoped: true })` — the subscribe is the
+scoped read itself. `compose-account.ts`'s `lifetime` is the subscriber: it
+forks `Stream.runForEach(changes, onAccountChange)` into its own scope with
+`Effect.forkScoped` rather than running anything on a captured runtime, and
+`onAccountChange` is what `onChange`'s body still is — the cache-forgetting,
+the first-sign-in hook, the `ACCOUNT_CHANGED` event, `settings.emitSettings()`,
+`emitSessionReplay`, and the arrival hook, in the same order, `yield*`ed
+rather than forked. Every reader in the file that used to mirror the account
+in a closure (`capabilitiesActive`, `signedIn`, `snapshot`,
+`voiceCapabilities`'s `accountSignedIn`, `sessionReplayState`) reads
+`session.snapshot` directly instead, which the manager already updates
+synchronously ahead of the publish, so nothing that gates on the current
+account waits on the subscriber's own fiber to catch up; only the transition
+comparison — was the account signed in a moment ago, under which key — still
+needs a previous value, and that lives in the subscriber's own closure now
+rather than the composer's. What this makes explicit is the trade the two
+forks already lived with: the cache invalidation, the first-sign-in hook, the
+`ACCOUNT_CHANGED` event, and the product event are now eventual relative to
+the fiber that changed the account, on the same terms `emitSessionReplay` and
+`settings.emitSettings()` already were.
+
 P7-13 finished the boundary those pairs sit behind: a `GatewayMethodTable`
 entry is an `Effect<WireValue | undefined, GatewayRefusal>` rather than a
 promise of an outcome record, so the server runs each handler as the
@@ -1073,6 +1098,23 @@ replaced — `eventFromStream` and the scope built at construction to hold it �
 is deleted with `packages/wire/src/effect/event.ts` itself, and this entry
 stands until a subscriber reads the stream directly.
 
+`AccountSessionManager` in `packages/credentials/src/account/session-manager.ts`
+is on the allowlist for the same reason its field needs the same
+`Effect.runSync(PubSub.unbounded())` `BrainAgent#onRunEvent`'s `#runEventsPubSub`
+already does: the class is constructed with a plain `new` outside any Effect —
+`compose-account.ts`'s `lifetime` builds one synchronously, the same seam
+`AccountSessionManagerOptions` always was — and Effect gives a `PubSub` no
+constructor that is not itself an effect. Nothing else in the class runs one:
+every snapshot it settles on is `yield* PubSub.publish(...)`, on the fiber
+already open for the store write or the token exchange that decided it, and
+the class exposes the subscription itself as `changes:
+Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>` over
+`Stream.fromPubSub(pubsub, { scoped: true })` rather than a callback a
+subscriber's own run drives, which is what let `compose-account.ts` come off
+this same list below. This entry stands until `AccountSessionManager` is
+itself built by an effect its owner runs, a larger change than the
+subscription this PR gave it.
+
 The coalescing timer the wake queue arms is untouched by that, since it is
 still the injected `schedule`/`cancel` seam a real elapsed-time wait stands
 behind rather than anything the queue runs.
@@ -1257,6 +1299,7 @@ design decision stated as such:
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |
+| `AccountSessionManager`'s `Effect.runSync(PubSub.unbounded())` field construction | P12-16d | once the class is itself built by an effect its owner runs |
 | `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
 | `exchangeGoogleCode`'s internal run, over a handed-in `Runtime` (`GoogleCalendarReader#run` was on this row too, deleted once the reader answered effects itself, a `@sidecar/calendar` change unscheduled by this plan) | P4-05 | pending — once `googleCalendarSignIn`'s `exchange` callback answers an effect its one caller yields instead of awaits |
@@ -1273,10 +1316,8 @@ design decision stated as such:
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face the four promise-shaped contracts above `apps/web`'s effects are handed (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | once eve's tool and stream contracts, the turn event stream, and the voice service's socket-driven compositions answer effects themselves |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
-| `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h) |
+| `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h, both deleted in P12-16d) |
 | `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | deleted by P12-14i |
-| `compose-account.ts`'s fork of `emitSessionReplay` onto the host's own runtime, from `AccountSessionManager`'s plain `onChange` callback | P12-14f | once `onChange` answers an effect a subscriber yields instead |
-| `compose-account.ts`'s fork of `settings.emitSettings()` on the host's own runtime, from the session manager's synchronous `onChange` | P12-14h | once `AccountSessionManager`'s `onChange` answers an effect |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |

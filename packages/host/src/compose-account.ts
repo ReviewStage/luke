@@ -24,7 +24,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { Config, Effect, Option, Runtime } from "effect";
+import { Config, Effect, Option, Stream } from "effect";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -99,9 +99,7 @@ export const composeAccount = (
     // The runtime the host is being built on, threaded through
     // `VoiceCapabilityAssembler` to every model adapter it builds, so the
     // promise each of those still answers is run on the host's own runtime
-    // rather than on an ambient default one, and what this composer runs on it
-    // itself: the settings change the account's own `onChange` asks for from a
-    // synchronous body that has no fiber to yield on.
+    // rather than on an ambient default one.
     const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<AccountLinks>();
     const links = (): AccountLinks => {
@@ -116,7 +114,6 @@ export const composeAccount = (
       baseUrl: kernel.accountBaseUrl,
       clientId: ACCOUNT_CLIENT_ID,
     });
-    let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
     const session = new AccountSessionManager({
       client,
@@ -135,32 +132,49 @@ export const composeAccount = (
       startCapabilities: Effect.suspend(() => links().startCapabilities),
       stopCapabilities: Effect.suspend(() => links().stopCapabilities),
       onSignOut: (stored) => links().releaseDevice(stored),
-      onChange: (next) => {
+    });
+
+    /**
+     * The previous snapshot, read by the subscriber alone: `session.snapshot`
+     * is always the manager's own current answer, so every other reader in
+     * this file reads that directly rather than a mirror that would only
+     * catch up once the subscription's fiber had run.
+     */
+    let previousAccount: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
+
+    /**
+     * What a session change means to the rest of the host, as the subscriber
+     * a fiber in this composer's own lifetime pumps from `session.changes`
+     * rather than a callback `AccountSessionManager` held and ran. The order
+     * within one turn is what the comments below still guarantee — the
+     * calendar step of onboarding lands before the account event a renderer
+     * reads it against — never that a turn lands before the fiber that
+     * changed it moves on, which is the same eventual guarantee the two
+     * forks this replaces already gave `emitSessionReplay` and
+     * `settings.emitSettings()`.
+     */
+    const onAccountChange = (next: AccountSnapshot): Effect.Effect<void> =>
+      Effect.gen(function* () {
         const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
-        const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+        const wasSignedIn = previousAccount.status === ACCOUNT_STATUS.SIGNED_IN;
         const previousAccountKey =
-          account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+          previousAccount.status === ACCOUNT_STATUS.SIGNED_IN ? previousAccount.email : undefined;
         const nextAccountKey = signedIn ? next.email : undefined;
-        account = next;
+        previousAccount = next;
         if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
         // The vault's list is the departing account's: emptied here, ahead of
         // the departure's own emit, so the very snapshot that reports the
         // sign-out reads every cloud provider as not connected.
         if (wasSignedIn && !signedIn) settings.forgetVaultKeys();
         if (signedIn && !wasSignedIn) links().onFirstSignIn();
-        kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(account));
-        // The settings change on the host's own runtime rather than an ambient
-        // default one, forked because nothing here waits for it, exactly as
-        // the promise it replaced was not waited for. The run allowlist entry
-        // (`docs/adr/0001-effect.md`) goes when `onChange` answers an Effect.
-        Runtime.runFork(runtime)(settings.emitSettings());
-        Runtime.runFork(runtime)(emitSessionReplay);
+        kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
+        yield* settings.emitSettings();
+        yield* emitSessionReplay;
         if (signedIn && !wasSignedIn) {
           settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
           links().onFirstSignInArrival();
         }
-      },
-    });
+      });
 
     /**
      * The development trace, gated so it cannot exist for a user: a packaged
@@ -181,7 +195,7 @@ export const composeAccount = (
     );
 
     function capabilitiesActive(): boolean {
-      return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
+      return accountGateOpen(runMode, session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN);
     }
 
     /**
@@ -208,7 +222,7 @@ export const composeAccount = (
       settings: settings.store,
       credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
       fixtureRun: () => !runMode.sendsNetwork,
-      accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
+      accountSignedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
       hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
       // The voice functions live on the account service's origin, so its
       // development override reaches them too; a voice override of its own stands
@@ -237,7 +251,7 @@ export const composeAccount = (
 
     const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> =
       Effect.gen(function* () {
-        const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+        const signedIn = session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN;
         const accountId = signedIn
           ? (yield* Effect.orDie(settings.store.readAccount()))?.id
           : undefined;
@@ -274,7 +288,8 @@ export const composeAccount = (
     );
 
     const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => Effect.succeed({ account: carried(account) }),
+      [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () =>
+        Effect.succeed({ account: carried(session.snapshot) }),
       [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>
         Effect.gen(function* () {
           const provider = params.provider;
@@ -329,8 +344,8 @@ export const composeAccount = (
       session,
       voiceCapabilities,
       agentTrace,
-      snapshot: () => account,
-      signedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
+      snapshot: () => session.snapshot,
+      signedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
       capabilitiesActive,
       token,
       applyVoiceCredential,
@@ -338,14 +353,19 @@ export const composeAccount = (
       link: (next) => {
         late.unsafeSet(next);
       },
-      // The session manager holds no timer this host started: what a sign-in
-      // began is stopped by the capabilities it started, so this lifetime is
-      // its start alone and registers nothing to give back.
+      // The session manager holds no timer this host started beyond its own
+      // subscription: what a sign-in began is stopped by the capabilities it
+      // started, and the subscription is forked into this same scope, so
+      // closing it is the whole of the stop and there is nothing else to give
+      // back.
       lifetime: Effect.gen(function* () {
-        account = runMode.requiresAccount
+        const initial = runMode.requiresAccount
           ? yield* Effect.orDie(settings.store.accountSnapshot())
           : { status: ACCOUNT_STATUS.SIGNED_OUT };
-        session.initialize(account);
+        previousAccount = initial;
+        session.initialize(initial);
+        const changes = yield* session.changes;
+        yield* Effect.forkScoped(Stream.runForEach(changes, onAccountChange));
       }),
     };
   });
