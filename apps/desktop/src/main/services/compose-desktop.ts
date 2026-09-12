@@ -70,7 +70,10 @@ export class DesktopTag extends Context.Tag("@luke/desktop/Desktop")<
  * the last-run-version mark, so a standup that failed or was quit must not
  * have spent it; then the windows, which are what a bootstrap that never
  * arrived must not be drawn over, and which read the updater's snapshot in
- * their own bootstrap.
+ * their own bootstrap. The updater's own scope is not one of these steps —
+ * `createUpdateServiceHost` already forked its fibers into the assembly's own
+ * scope and registered its stop as that scope's finalizer — only the one
+ * `start()` call the version mark's ordering still needs is here.
  */
 const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, HostAssemblyTag> => {
   const { config, state, telemetry, native, operator, updates, windows } = services;
@@ -106,7 +109,7 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
   );
   const throughWindows = layersInOrder([
     serviceLayer(operator, report),
-    serviceLayer(updates, report),
+    Layer.effectDiscard(Effect.sync(() => updates.start())),
     serviceLayer(windows, report),
   ]).pipe(Layer.provideMerge(hostStandingLayer), Layer.provideMerge(machine));
   return stateBroadcast.pipe(Layer.provideMerge(throughWindows));
@@ -135,7 +138,7 @@ export function composeDesktop(
     machinePresence: presence.read,
   });
 
-  const assembly = Layer.effect(
+  const assembly = Layer.scoped(
     DesktopTag,
     Effect.gen(function* () {
       const host = yield* HostAssemblyTag;
@@ -171,12 +174,13 @@ export function composeDesktop(
         operator,
         launchStanding: quit.launchStanding,
       });
-      const updates = createUpdateServiceHost({
+      const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,
         engine: updateEngine,
         beforeRestart: quit.teardown,
         state,
+        runtime,
       });
 
       // The two edges no service could take as a constructor argument, because
