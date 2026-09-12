@@ -557,7 +557,11 @@ Canonical commands:
   session has since closed, and the two onboarding beats are each appended
   into the standing session as
   commentary with no delegation id, or into the one session the voice window
-  opens muted when the service says it wants one. There is no other speech
+  opens muted when the service says it wants one; the launch greeting reaches
+  the same sink as the conversations guide's greeting before the caller
+  speaks, one instructions append with no delegation id acknowledged before
+  the one commentary cue that has the model begin, and no cue at all for an
+  instruction the session refused. There is no other speech
   path: the earlier reply-grant ledger, receiver epochs, and speech offers
   are gone, and the guarantee they carried is now the service's own, held by
   construction rather than by a ledger. A run's reply is spoken at most once:
@@ -1300,10 +1304,18 @@ Canonical commands:
   isolation. Nothing
   decides an announcement deterministically any
   more: no status edge speaks on its own, and no evaluator sentence stands
-  between the transcript and the voice. Two onboarding beats are the members
+  between the transcript and the voice. Two onboarding beats and the launch
+  greeting are the members
   of that set about no session, and each keeps the same terms:
   worded from a script fixed by the build, speak-only and tool-free like a
-  briefing, drawing no notice band and claiming none. The arrival
+  briefing, drawing no notice band and claiming none. The launch greeting is
+  spoken once per signed-in launch on an install the arrival beat has already
+  spoken to, in the docs' own greeting form, carrying as its one observed
+  value the signed-in account's first name as the account service reported
+  it, bounded and read from the snapshot the host already holds, and nothing
+  of any session; it is asked for once per run, remembered nowhere, held like
+  a briefing while a meeting or the Announce switch stands, and a launch that
+  cannot speak it is greeted by no substitute. The arrival
   beat is spoken once per install at the deterministic edge of the account's
   first sign-in, remembered in Luke's own state file, and carrying as
   observed values only one working session's title, read from the same roster
@@ -1363,7 +1375,8 @@ Canonical commands:
   the brain's own look at the roster on the observation pass, or a hold's
   release — and the brain's `announce` call inside it, offered in no other
   kind of turn; an onboarding beat's trigger is its own deterministic one
-  (the recorded sign-in edge, or the calendar gate standing). A briefing
+  (the recorded sign-in edge, or the calendar gate standing), and the launch
+  greeting's is the signed-in launch itself. A briefing
   speaks whenever voice can, through the live session service's own hold,
   which keeps it while a meeting or the pause stands and lets a held briefing
   be decided again against the roster as it then is rather than spoken stale.

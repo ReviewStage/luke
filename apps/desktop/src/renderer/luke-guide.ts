@@ -529,6 +529,18 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           },
           {
             // A behavior rather than a setting, on the arrival beat's terms:
+            // Luke must own having greeted and not offer to greet again.
+            label: "Launch greeting",
+            detail:
+              "On every signed-in launch after the arrival beat has played, Luke greets " +
+              "once, unprompted, by the developer's first name as their account reports " +
+              "it, and asks whether they need anything. It is spoken from a fixed script " +
+              "the moment the launch's voice session starts, names no session, can act on " +
+              "nothing, waits like an announcement while a meeting or the Announce switch " +
+              "holds it, and is not repeated within the same run.",
+          },
+          {
+            // A behavior rather than a setting, on the arrival beat's terms:
             // Luke must be able to say why the panel is asking for a calendar
             // and what answers it, and must not offer to replay the ask.
             label: "Calendar onboarding",

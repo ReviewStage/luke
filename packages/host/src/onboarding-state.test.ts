@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { type TestContext, test } from "vitest";
-import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
+import {
+  arrivalBeatOwed,
+  countsFirstAnnouncement,
+  firstNameOf,
+  launchGreetingOwed,
+} from "./arrival-flow.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { shouldRunIntroduction } from "./introduction-flow.js";
 import { ONBOARDING_STATE_FILE, onboardingStateFile } from "./onboarding-state.js";
@@ -111,6 +116,27 @@ test("the arrival beat is owed from an observed sign-in until its reply begins",
   );
   assert.equal(arrivalBeatOwed(undefined), false);
   assert.equal(arrivalBeatOwed({ arrivalSpokenAt: LATER }), false);
+});
+
+test("the launch greeting is owed once per run, only on an install the arrival beat has spoken to", () => {
+  assert.equal(
+    launchGreetingOwed({ arrivalSignedInAt: SIGNED_IN_AT, arrivalSpokenAt: LATER }, false),
+    true,
+  );
+  assert.equal(
+    launchGreetingOwed({ arrivalSignedInAt: SIGNED_IN_AT, arrivalSpokenAt: LATER }, true),
+    false,
+  );
+  assert.equal(launchGreetingOwed({ arrivalSignedInAt: SIGNED_IN_AT }, false), false);
+  assert.equal(launchGreetingOwed(undefined, false), false);
+});
+
+test("the greeting's first name is the display name's first word, or nothing", () => {
+  assert.equal(firstNameOf("Ada Lovelace"), "Ada");
+  assert.equal(firstNameOf("  Ada  "), "Ada");
+  assert.equal(firstNameOf("Ada"), "Ada");
+  assert.equal(firstNameOf("   "), undefined);
+  assert.equal(firstNameOf(undefined), undefined);
 });
 
 test("the first announcement counts once, and only against an observed sign-in", () => {
