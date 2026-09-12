@@ -46,19 +46,21 @@ export interface HeldSocket extends LiveSocket {
  * opens the same gap one layer up; in both a frame emitted to no listener is
  * gone without a trace. Here nothing is emitted to no listener.
  *
- * Release is per channel. Frames release at the first `onMessage` listener,
- * which is replayed what was held in order, once, and every listener then
- * hears frames as they arrive. The one held close waits for the first
- * `onClose` listener however late it comes: it is a single value, so keeping
- * it costs nothing, and a consumer that never asks for closes is one that was
+ * Release is per channel, and the two channels differ in kind. Frames are a
+ * stream: they release at the first `onMessage` listener, which is replayed
+ * what was held in order, once, and every listener then hears frames as they
+ * arrive. A close is a state: once the socket has closed, every `onClose`
+ * listener that registers afterwards is told at registration, however late
+ * it comes and however many there are, because a socket that ended in the
+ * gap is still ended for the sideband that subscribes after the flag that
+ * subscribed first. A consumer that never asks for closes is one that was
  * told of none before this hold existed either.
  */
 export function holdSocket(socket: LiveSocket): HeldSocket {
   const messageListeners = new Set<(data: string) => void>();
   const closeListeners = new Set<(close: SocketClose) => void>();
   let heldFrames: string[] | undefined = [];
-  let heldClose: SocketClose | undefined;
-  let closeReleased = false;
+  let closed: SocketClose | undefined;
   let overflowed = false;
   let waiting: ((arrival: HeldArrival) => void) | undefined;
 
@@ -81,19 +83,20 @@ export function holdSocket(socket: LiveSocket): HeldSocket {
     if (heldFrames.length >= HELD_SOCKET.FRAME_LIMIT) {
       overflowed = true;
       heldFrames = [];
-      heldClose ??= { code: HELD_SOCKET.OVERFLOW_CLOSE_CODE };
+      closed = { code: HELD_SOCKET.OVERFLOW_CLOSE_CODE };
+      for (const listener of [...closeListeners]) listener(closed);
       socket.close();
       return;
     }
     heldFrames.push(data);
   });
   socket.onClose((close) => {
-    if (closeReleased) {
-      for (const listener of [...closeListeners]) listener(close);
-      return;
-    }
-    heldClose ??= close;
-    arrive({ close: heldClose });
+    // A socket closes once; the first close is the state, and the close an overflow chose stands
+    // over the transport's own that follows it.
+    if (closed !== undefined) return;
+    closed = close;
+    for (const listener of [...closeListeners]) listener(close);
+    arrive({ close });
   });
 
   return {
@@ -112,10 +115,7 @@ export function holdSocket(socket: LiveSocket): HeldSocket {
     },
     onClose: (listener) => {
       closeListeners.add(listener);
-      if (!closeReleased) {
-        closeReleased = true;
-        if (heldClose !== undefined) listener(heldClose);
-      }
+      if (closed !== undefined) listener(closed);
       return () => {
         closeListeners.delete(listener);
       };
@@ -126,8 +126,8 @@ export function holdSocket(socket: LiveSocket): HeldSocket {
         listener({ frame: first });
         return () => undefined;
       }
-      if (heldClose !== undefined) {
-        listener({ close: heldClose });
+      if (closed !== undefined) {
+        listener({ close: closed });
         return () => undefined;
       }
       waiting = listener;

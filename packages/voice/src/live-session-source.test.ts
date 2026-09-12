@@ -825,3 +825,48 @@ test("a frame the service sends right behind session.attached, before the recove
     [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
   );
 });
+
+test("a close that lands in the keyed attach's open gap reaches the sideband that subscribes after the attached flag, and the flag reads false", async () => {
+  const { fetchLike } = openAi([created()]);
+  const script = scriptedOpenSocket([
+    (socket) => {
+      queueMicrotask(() => socket.closeFromServer({ code: 1006 }));
+      return undefined;
+    },
+  ]);
+  const source = new KeyedLiveSessionSource({
+    apiKey: "sk-test",
+    fetch: fetchLike,
+    openSocket: script.openSocket,
+    now: () => NOW,
+  });
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const closes: (number | undefined)[] = [];
+  sideband.onClose((close) => closes.push(close.code));
+  assert.deepEqual(closes, [1006]);
+  assert.equal(source.diagnostics().sidebandAttached, false);
+});
+
+test("a normal close right behind session.created ends the recovering socket, and the sideband that subscribes afterwards is told", async () => {
+  const script = scriptedOpenSocket([
+    (socket) => {
+      socket.onSent(() =>
+        queueMicrotask(() => {
+          socket.receive(createdFrame());
+          socket.closeFromServer({ code: 1000 });
+        }),
+      );
+      return undefined;
+    },
+  ]);
+  const source = hosted(script);
+  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+  assert.ok(opened);
+  const sideband = await opened.attach();
+  const closes: (number | undefined)[] = [];
+  sideband.onClose((close) => closes.push(close.code));
+  assert.deepEqual(closes, [1000]);
+  assert.equal(script.sockets.length, 1);
+});

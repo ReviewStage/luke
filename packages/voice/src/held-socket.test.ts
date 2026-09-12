@@ -17,7 +17,7 @@ test("frames that arrive before anyone listens are replayed to the first listene
   assert.deepEqual(second, ["three"]);
 });
 
-test("the hold releases per channel: a consumer that listens for frames alone is handed the held close when it asks for closes, however late", () => {
+test("the hold releases per channel: a consumer that listens for frames alone is handed the close when it asks for closes, however late, and so is every listener after it", () => {
   const inner = new FakeLiveSocket();
   const held = holdSocket(inner);
   inner.receiveText("only");
@@ -25,11 +25,15 @@ test("the hold releases per channel: a consumer that listens for frames alone is
   const frames: string[] = [];
   held.onMessage((data) => frames.push(data));
   assert.deepEqual(frames, ["only"]);
-  const closes: (number | undefined)[] = [];
-  held.onClose((close) => closes.push(close.code));
-  assert.deepEqual(closes, [1001]);
+  const first: (number | undefined)[] = [];
+  const second: (number | undefined)[] = [];
+  held.onClose((close) => first.push(close.code));
+  held.onClose((close) => second.push(close.code));
+  assert.deepEqual(first, [1001]);
+  assert.deepEqual(second, [1001]);
+  // A socket closes once: a second close event changes nothing.
   inner.closeFromServer({ code: 1000 });
-  assert.deepEqual(closes, [1001, 1000]);
+  assert.deepEqual(first, [1001]);
 });
 
 test("a handshake takes the first frame without releasing the hold, and the frames behind it wait for the consumer", () => {
@@ -66,8 +70,9 @@ test("a hold that reaches its bound gives up its frames, closes the socket, and 
   const codes: (number | undefined)[] = [];
   held.onClose((close) => codes.push(close.code));
   assert.deepEqual(codes, [HELD_SOCKET.OVERFLOW_CLOSE_CODE]);
+  // The transport's own close follows the one the overflow chose and changes nothing.
   inner.closeFromServer({ code: 1000 });
-  assert.deepEqual(codes, [HELD_SOCKET.OVERFLOW_CLOSE_CODE, 1000]);
+  assert.deepEqual(codes, [HELD_SOCKET.OVERFLOW_CLOSE_CODE]);
 });
 
 test("send and close pass through to the socket held", () => {

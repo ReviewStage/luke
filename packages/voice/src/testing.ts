@@ -1,4 +1,5 @@
 import type { WireRecord } from "@sidecar/wire";
+import { holdSocket } from "./held-socket.js";
 import type { LiveSocket, OpenSocket, SocketClose, SocketOpening } from "./live-socket.js";
 
 /**
@@ -82,7 +83,7 @@ export interface ScriptedSocketSeam {
   sockets: FakeLiveSocket[];
 }
 
-/** An `openSocket` seam that answers each open from a script and records what it was asked. */
+/** An `openSocket` seam that answers each open from a script and records what it was asked; the socket it answers with is held, as the seam's contract has it, and the script drives the raw socket beneath. */
 export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSeam {
   const opens: RecordedOpen[] = [];
   const sockets: FakeLiveSocket[] = [];
@@ -94,7 +95,7 @@ export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSe
     const answer = answers[Math.min(call, answers.length - 1)];
     call += 1;
     if (!answer) throw new Error("no scripted opening");
-    return answer(socket) ?? { socket };
+    return answer(socket) ?? { socket: holdSocket(socket) };
   };
   return { openSocket, opens, sockets };
 }

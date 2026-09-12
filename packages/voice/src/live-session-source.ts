@@ -47,7 +47,7 @@ import {
   withoutTrailingSlash,
 } from "@sidecar/wire";
 import { Data, Duration, Effect, Fiber, Runtime, Schedule } from "effect";
-import { type HeldSocket, holdSocket } from "./held-socket.js";
+import type { HeldSocket } from "./held-socket.js";
 import {
   type LiveSideband,
   type LiveSocket,
@@ -479,7 +479,7 @@ class ServiceLiveSessionSource {
       this.#refuse(outcome, detail);
       return undefined;
     }
-    const socket = holdSocket(opening.socket);
+    const { socket } = opening;
     const frame: SessionCreateFrame = {
       type: VOICE_SERVICE_FRAME.SESSION_CREATE,
       sdp: input.sdpOffer,
@@ -538,7 +538,7 @@ class ServiceLiveSessionSource {
             : REATTACH_ATTEMPT.FAILED,
       };
     }
-    const socket = holdSocket(opening.socket);
+    const { socket } = opening;
     const frame: SessionAttachFrame = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId };
     const answer = await this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
     if (answer === undefined) {
@@ -721,6 +721,8 @@ class ReattachingSocket implements LiveSocket {
   #held: string[] | undefined;
   #closedByClient = false;
   #ended = false;
+  /** The close this socket ended with, told to every close listener that registers after it. */
+  #endedWith: SocketClose | undefined;
   #recovery: Fiber.RuntimeFiber<void> | undefined;
 
   constructor(options: {
@@ -767,6 +769,7 @@ class ReattachingSocket implements LiveSocket {
 
   onClose(listener: (close: SocketClose) => void): () => void {
     this.#closeListeners.add(listener);
+    if (this.#endedWith !== undefined) listener(this.#endedWith);
     return () => {
       this.#closeListeners.delete(listener);
     };
@@ -850,6 +853,7 @@ class ReattachingSocket implements LiveSocket {
   #end(close: SocketClose): void {
     if (this.#ended) return;
     this.#ended = true;
+    this.#endedWith = close;
     for (const listener of [...this.#closeListeners]) listener(close);
   }
 }
