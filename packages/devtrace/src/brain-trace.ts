@@ -1,11 +1,13 @@
+import { runtimeExit } from "@sidecar/brain";
 import {
+  type ExecutionRuntime,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import { text, type WireRecord } from "@sidecar/wire";
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Option, Runtime } from "effect";
 import type { BrainRequestTraceRecord } from "./trace-writer.js";
 
 interface AnsweredSummary {
@@ -53,15 +55,18 @@ function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>
  * counts the JSONL record keeps.
  *
  * @deprecated The span is run to the promise `ModelAdapter#respond` answers
- * here, a strangler shim on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`: the turn that calls this adapter still holds a
- * promise, not a fiber. It goes with `BrainTransport#send`'s `runCall` in
- * P12-04: it can stop answering a promise only when the `ModelAdapter` it
- * wraps does.
+ * here, on the runtime the caller handed in, through `@sidecar/brain`'s
+ * shared `runtimeExit` — the same door `BrainTransport#send`'s `runCall`
+ * runs through — a strangler shim on the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md`, permanent alongside it: the turn that calls
+ * this adapter still holds a promise, not a fiber, because the
+ * `ModelAdapter` it wraps answers `compaction.ts` — an OpenClaw port that
+ * imports nothing from `effect` — and that port awaits a promise.
  */
 export function tracedModelAdapter(
   adapter: ModelAdapter,
   record: (record: BrainRequestTraceRecord) => void,
+  execution: ExecutionRuntime = Runtime.defaultRuntime,
   now: () => number = Date.now,
 ): ModelAdapter {
   const recordQuietly = (entry: BrainRequestTraceRecord): void => {
@@ -89,7 +94,7 @@ export function tracedModelAdapter(
         try: () => adapter.respond(input, options),
         catch: (error) => error,
       }).pipe(Effect.withSpan("brain.request", { attributes: about }));
-      const exit = await Effect.runPromiseExit(traced);
+      const exit = await runtimeExit(execution)(traced);
       let answer: ModelResponse;
       if (Exit.isSuccess(exit)) {
         answer = exit.value;

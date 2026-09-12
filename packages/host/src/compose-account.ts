@@ -206,10 +206,11 @@ export const composeAccount = (
       openSocket: openSocketOverWs,
       refreshAccount: session.refreshOnce,
       deviceId: () => links().deviceId(),
+      execution: runtime,
       ...(agentTrace
         ? {
             wrapBrainModel: (model) =>
-              tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record)),
+              tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record), runtime),
           }
         : undefined),
     });

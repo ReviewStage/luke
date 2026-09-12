@@ -1,12 +1,15 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import { BUILTIN_MODEL_ADAPTER } from "@sidecar/runtime";
 import {
+  type ExecutionRuntime,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelRequestOptions,
   REASONING_EFFORT,
   type ReasoningEffort,
 } from "@sidecar/runtime/vocabulary";
-import { type CloudFetch, HTTP_METHOD, HTTP_STATUS, text, type WireRecord } from "@sidecar/wire";
+import { HTTP_METHOD, HTTP_STATUS, text, type WireRecord } from "@sidecar/wire";
+import type { Layer } from "effect";
 import { type BrainTransport, keyedBrainTransport } from "./client.js";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
@@ -69,7 +72,10 @@ export interface OpenAiModelAdapterOptions {
   model?: string;
   baseUrl?: string;
   reasoningEffort?: ReasoningEffort;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
+  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;
   report?: (message: string) => void;

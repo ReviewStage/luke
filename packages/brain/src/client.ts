@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCallEffects,
@@ -16,9 +17,9 @@ import {
   hostedBrainCapabilitiesFromWire,
   hostedQuotaSchema,
 } from "@sidecar/hosted";
+import type { ExecutionRuntime } from "@sidecar/runtime/vocabulary";
 import { MODEL_FAILURE } from "@sidecar/runtime/vocabulary";
 import {
-  type CloudFetch,
   HTTP_METHOD,
   HTTP_STATUS,
   type HttpMethod,
@@ -27,8 +28,9 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
-import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
-import { Cause, Effect, Either, Exit, type Layer } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Cause, Effect, Either, Exit, type Layer, Runtime } from "effect";
+import { runtimeExit } from "./effect/carry.js";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
   type Failure,
@@ -45,7 +47,10 @@ import type { Quiet } from "./responses-model-adapter.js";
 export interface BrainTransportOptions {
   /** The origin the calls are addressed to; any trailing separator is trimmed. */
   baseUrl: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
+  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;
 }
@@ -57,23 +62,26 @@ function errorName(cause: unknown): string | undefined {
 
 /**
  * Runs a call effect to its promise answer, over the transport's own
- * `HttpClient`. The caller's cancellation is the run's own interruption
- * rather than a value in the request, so its end is read back here, named by
- * the reason their signal carried, exactly as an aborted fetch named it.
+ * `HttpClient`, on the runtime the transport was handed. The caller's
+ * cancellation is the run's own interruption rather than a value in the
+ * request, so its end is read back here, named by the reason their signal
+ * carried, exactly as an aborted fetch named it.
  *
  * @deprecated `BrainTransport#send` is a promise-facing strangler shim on the
- * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: it runs the
- * call effect here because every caller still holds a promise, not a fiber.
- * P12-04 deletes it with the rest of that door family; what keeps it until
- * then is the `ModelAdapter` promise above it, which `compaction.ts` — an
- * OpenClaw port that imports nothing from `effect` — awaits.
+ * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`, permanent
+ * alongside it: it runs the call effect here because every caller still
+ * holds a promise, not a fiber, and what keeps it there is the `ModelAdapter`
+ * promise above it, which `compaction.ts` — an OpenClaw port that imports
+ * nothing from `effect` — awaits, so this door never closes while that port
+ * stands.
  */
 async function runCall(
   effect: Effect.Effect<CallAnswer, never, HttpClient.HttpClient>,
   client: Layer.Layer<HttpClient.HttpClient>,
+  execution: ExecutionRuntime,
   signal: AbortSignal | undefined,
 ): Promise<CallAnswer> {
-  const exit = await Effect.runPromiseExit(Effect.provide(effect, client), {
+  const exit = await runtimeExit(execution)(Effect.provide(effect, client), {
     ...(signal === undefined ? undefined : { signal }),
   });
   if (Exit.isSuccess(exit)) return exit.value;
@@ -95,6 +103,7 @@ async function runCall(
 export class BrainTransport {
   readonly #call: AccountCallEffects;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
+  readonly #execution: ExecutionRuntime;
   readonly #label: string;
   readonly #now: () => number;
 
@@ -113,7 +122,8 @@ export class BrainTransport {
       // would wait.
       requestTimeoutMs: options.requestTimeoutMs ?? BRAIN_REQUEST_TIMEOUT_MS,
     });
-    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
+    this.#execution = options.execution ?? Runtime.defaultRuntime;
     this.#label = options.label;
     this.#now = options.now ?? Date.now;
   }
@@ -134,7 +144,12 @@ export class BrainTransport {
     body?: string,
     signal?: AbortSignal,
   ): Promise<Response | Failure> {
-    const answer = await runCall(this.#call.send({ path, method, body }), this.#client, signal);
+    const answer = await runCall(
+      this.#call.send({ path, method, body }),
+      this.#client,
+      this.#execution,
+      signal,
+    );
     if (callAnswered(answer)) return answer.response;
     switch (answer.fault) {
       case CALL_FAULT.NO_CREDENTIAL:

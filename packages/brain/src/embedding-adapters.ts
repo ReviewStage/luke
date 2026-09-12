@@ -1,3 +1,4 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountToken,
   HOSTED_BRAIN_CONTRACT_VERSION,
@@ -12,11 +13,11 @@ import {
   type EmbeddingAdapter,
   type EmbeddingBatch,
   type EmbeddingIdentity,
+  type ExecutionRuntime,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
 } from "@sidecar/runtime/vocabulary";
 import {
-  type CloudFetch,
   HTTP_METHOD,
   HTTP_STATUS,
   isRecord,
@@ -25,6 +26,7 @@ import {
   numberVectors,
   type UnparsedWireValue,
 } from "@sidecar/wire";
+import type { Layer } from "effect";
 import { type BrainTransport, hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import { failed, notServed, payloadOf, throttled } from "./model-adapter-shared.js";
 import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
@@ -78,7 +80,10 @@ export const EMBEDDING_BATCH_SIZE = HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS;
 
 export interface OpenAiEmbeddingAdapterOptions {
   apiKey: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
+  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;
 }
@@ -141,7 +146,10 @@ export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
 
 export interface HostedEmbeddingAdapterOptions extends AccountToken {
   serviceBaseUrl: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
+  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;
 }

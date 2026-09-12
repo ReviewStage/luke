@@ -55,6 +55,7 @@ test("an answered inference returns unchanged and records counts, kinds, and usa
   const adapter = tracedModelAdapter(
     adapterAnswering(ANSWERED),
     (record) => records.push(record),
+    undefined,
     steppingClock(40),
   );
   const answer = await adapter.respond(INPUT, OPTIONS);
@@ -90,6 +91,7 @@ test("a throttled answer records its outcome and nothing of a payload", async ()
   const adapter = tracedModelAdapter(
     adapterAnswering({ outcome: MODEL_RESPONSE_OUTCOME.THROTTLED, until: 5_000 }),
     (record) => records.push(record),
+    undefined,
     () => 7,
   );
   await adapter.respond([], OPTIONS);
@@ -107,6 +109,7 @@ test("a failed answer keeps the adapter's reason as the error", async () => {
       reason: "status 500",
     }),
     (record) => records.push(record),
+    undefined,
     () => 7,
   );
   await adapter.respond(INPUT, OPTIONS);
@@ -124,6 +127,7 @@ test("a thrown request still throws, and the trace keeps the failure", async () 
       quietUntil: () => undefined,
     }),
     (record) => records.push(record),
+    undefined,
     () => 7,
   );
   await assert.rejects(() => adapter.respond(INPUT, OPTIONS), /rate limited/u);
@@ -172,6 +176,7 @@ test("a keyed turn records that it asked for a prefix cache, and what the provid
   const adapter = tracedModelAdapter(
     adapterAnswering(cached),
     (record) => records.push(record),
+    undefined,
     steppingClock(40),
   );
   await adapter.respond(INPUT, { ...OPTIONS, promptCacheKey: "9f86d0818" });
