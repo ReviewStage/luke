@@ -1,3 +1,5 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
+import type * as HttpClient from "@effect/platform/HttpClient";
 import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import { catalogToolSet } from "@sidecar/brain/tool-set";
 import {
@@ -94,6 +96,20 @@ const RATE_REFUSAL_STATUS = {
 
 function rateAnswer(status: ConversationRateStatus) {
   return Effect.succeed(carried<ConversationRateMessageResult>({ status }));
+}
+
+/**
+ * Runs one of the reads/writes' client effects to a promise, over the
+ * ambient `HttpClient`: the poll, the pager, and the two Gateway methods
+ * below are still promises and callbacks a plain `ObservationLoop`/`Effect.gen`
+ * awaits rather than fibers of their own, so this is where the request
+ * effect is run; on the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md`.
+ */
+function runClientEffect<Answer>(
+  effect: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+): Promise<Answer> {
+  return Effect.runPromise(Effect.provide(effect, FetchHttpClient.layer));
 }
 
 /**
@@ -232,7 +248,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   const pageMessages = (generation: number) =>
     pageResource(
       generation,
-      (after) => client.messages({ after }),
+      (after) => runClientEffect(client.messages({ after })),
       () => sync.cursors().messages,
       async (answer, epoch) => {
         const read = await readPage(answer);
@@ -249,7 +265,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   const pageEvents = (generation: number) =>
     pageResource(
       generation,
-      (after) => client.events({ after }),
+      (after) => runClientEffect(client.events({ after })),
       () => sync.cursors().events,
       async (answer) => {
         sync.applyEvents(answer.events, answer.next, answer.hasMore);
@@ -260,7 +276,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   const pageTurns = (generation: number) =>
     pageResource(
       generation,
-      (after) => client.turns({ after }),
+      (after) => runClientEffect(client.turns({ after })),
       () => sync.cursors().turns,
       async (answer) => {
         sync.applyTurns(answer.turns, answer.next);
@@ -273,7 +289,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     // A heads poll names the device and nothing else, so it moves the row's
     // last-seen instant alone and touches neither presence instant the devices
     // composer restates on its own poll.
-    const signal = deviceId === undefined ? undefined : await heads.poll({ deviceId });
+    const signal =
+      deviceId === undefined ? undefined : await runClientEffect(heads.poll({ deviceId }));
     if (!loop.isCurrent(generation)) return;
     const cursors = sync.cursors();
     // A signal that could not be had reads everything: each resource answers an empty page when nothing moved.
@@ -323,7 +340,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     [GATEWAY_METHOD.CONVERSATION_CLEAR]: () =>
       Effect.gen(function* () {
         if (!gate()) return { cleared: false };
-        const answer = yield* Effect.promise(() => client.clear());
+        const answer = yield* Effect.provide(client.clear(), FetchHttpClient.layer);
         if (answer === undefined) return { cleared: false };
         // The service's own answer is what empties this Mac's thread: the
         // picture drops the stamped main's groups and the observed rows from
@@ -349,7 +366,10 @@ export function composeConversation(dependencies: ConversationDependencies): Con
           return yield* rateAnswer(CONVERSATION_RATE_STATUS.UNAVAILABLE);
         const target = sync.rateable(messageId);
         if (target === undefined) return yield* rateAnswer(CONVERSATION_RATE_STATUS.NOT_FOUND);
-        const written = yield* Effect.promise(() => client.rate(messageId, { rating, deviceId }));
+        const written = yield* Effect.provide(
+          client.rate(messageId, { rating, deviceId }),
+          FetchHttpClient.layer,
+        );
         if (!written.ok) return yield* rateAnswer(RATE_REFUSAL_STATUS[written.refusal]);
         sync.recordRating(messageId, written.answer.seq, { rating });
         publish();

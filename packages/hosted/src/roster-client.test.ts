@@ -48,15 +48,11 @@ const UNDATED: ObservedSession = {
   status: SESSION_STATUS.COMPLETE,
 };
 
-function client(
-  httpClient: ReturnType<typeof fakeCloudApi>["layer"],
-  options: Partial<ConstructorParameters<typeof HostedRosterClient>[0]> = {},
-) {
+function client(options: Partial<ConstructorParameters<typeof HostedRosterClient>[0]> = {}) {
   return new HostedRosterClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
-    httpClient,
     ...options,
   });
 }
@@ -70,7 +66,7 @@ it.effect("the roster is a bearer GET of the stored snapshot, never asked fresh"
       },
     });
 
-    const answer = yield* Effect.promise(() => client(api.layer).observe());
+    const answer = yield* Effect.provide(client().observe(), api.layer);
 
     assert.deepEqual(recordedRoutes(api.requests()), ["GET /api/observe"]);
     assert.deepEqual(api.credentials(), ["token-1"]);
@@ -84,13 +80,11 @@ it.effect("the roster is a bearer GET of the stored snapshot, never asked fresh"
 
 it.effect("a read that answers nothing is nothing, not an empty roster", () =>
   Effect.gen(function* () {
-    const answer = yield* Effect.promise(() =>
-      client(
-        layerFromCloudFetch(() => {
-          throw new Error("must not travel without an account");
-        }),
-        { readAccessToken: async () => undefined },
-      ).observe(),
+    const answer = yield* Effect.provide(
+      client({ readAccessToken: async () => undefined }).observe(),
+      layerFromCloudFetch(() => {
+        throw new Error("must not travel without an account");
+      }),
     );
     assert.equal(answer, undefined);
   }),
@@ -193,7 +187,7 @@ it.effect(
         },
       });
 
-      const answer = yield* Effect.promise(() => client(api.layer).projects());
+      const answer = yield* Effect.provide(client().projects(), api.layer);
 
       assert.deepEqual(answer, {
         projects: [
@@ -225,16 +219,19 @@ it.effect(
       const refused = fakeCloudApi({
         "GET /api/projects": { answer: () => ({}), status: HTTP_STATUS.SERVER_ERROR },
       });
-      assert.equal(yield* Effect.promise(() => client(refused.layer).projects()), undefined);
+      assert.equal(yield* Effect.provide(client().projects(), refused.layer), undefined);
 
-      const lost = client(
-        layerFromCloudFetch(() => {
-          throw new TypeError("fetch failed");
-        }),
+      assert.equal(
+        yield* Effect.provide(
+          client().projects(),
+          layerFromCloudFetch(() => {
+            throw new TypeError("fetch failed");
+          }),
+        ),
+        undefined,
       );
-      assert.equal(yield* Effect.promise(() => lost.projects()), undefined);
 
       const unreadable = fakeCloudApi({ "GET /api/projects": { answer: () => ({ projects: 1 }) } });
-      assert.equal(yield* Effect.promise(() => client(unreadable.layer).projects()), undefined);
+      assert.equal(yield* Effect.provide(client().projects(), unreadable.layer), undefined);
     }),
 );

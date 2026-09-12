@@ -1,9 +1,8 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { UnreadableRow } from "@sidecar/session";
 import { HTTP_METHOD, type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, type Layer } from "effect";
+import { Effect, Either } from "effect";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -37,8 +36,6 @@ import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
 export interface HostedConversationClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
-  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -130,7 +127,6 @@ function pagePath(path: string, page: ReadPageQuery): string {
  */
 export class HostedConversationClient {
   readonly #call: AccountCallEffects;
-  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedConversationClientOptions) {
     this.#call = accountCall({
@@ -138,40 +134,41 @@ export class HostedConversationClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  messages(page: ReadPageQuery = {}): Promise<ConversationReadResult<ConversationMessagesAnswer>> {
-    return this.#run(
-      this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page, (payload) =>
-        Either.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
-      ),
+  messages(
+    page: ReadPageQuery = {},
+  ): Effect.Effect<
+    ConversationReadResult<ConversationMessagesAnswer>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page, (payload) =>
+      Either.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
     );
   }
 
-  events(page: ReadPageQuery = {}): Promise<ConversationReadResult<ConversationEventsAnswer>> {
-    return this.#run(
-      this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page, (payload) =>
-        Either.getOrUndefined(readEither(conversationEventsAnswerSchema)(payload)),
-      ),
+  events(
+    page: ReadPageQuery = {},
+  ): Effect.Effect<ConversationReadResult<ConversationEventsAnswer>, never, HttpClient.HttpClient> {
+    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page, (payload) =>
+      Either.getOrUndefined(readEither(conversationEventsAnswerSchema)(payload)),
     );
   }
 
-  turns(page: ReadPageQuery = {}): Promise<ConversationReadResult<BrainTurnsAnswer>> {
-    return this.#run(
-      this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
-        Either.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
-      ),
+  turns(
+    page: ReadPageQuery = {},
+  ): Effect.Effect<ConversationReadResult<BrainTurnsAnswer>, never, HttpClient.HttpClient> {
+    return this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
+      Either.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
     );
   }
 
   /** The soft delete of the account's main conversation; nothing on this Mac moves for it. */
-  clear(): Promise<ConversationClearAnswer | undefined> {
-    return this.#run(
-      this.#call.ask(
-        { method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.CONVERSATION_CLEAR },
-        conversationClearAnswerSchema,
-      ),
+  clear(): Effect.Effect<ConversationClearAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.CONVERSATION_CLEAR },
+      conversationClearAnswerSchema,
     );
   }
 
@@ -184,8 +181,11 @@ export class HostedConversationClient {
    * its place in the conversation's event sequence, which is what lets the
    * caller show the verdict before the next read carries it back.
    */
-  rate(messageId: string, request: HostedMessageRatingRequest): Promise<ConversationRateResult> {
-    return this.#run(this.#rateEffect(messageId, request));
+  rate(
+    messageId: string,
+    request: HostedMessageRatingRequest,
+  ): Effect.Effect<ConversationRateResult, never, HttpClient.HttpClient> {
+    return this.#rateEffect(messageId, request);
   }
 
   #rateEffect(
@@ -243,9 +243,5 @@ export class HostedConversationClient {
         ? UNANSWERED
         : { ok: false, failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW, row };
     });
-  }
-
-  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
-    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }

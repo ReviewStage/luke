@@ -7,6 +7,7 @@ import {
   SessionRoster,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { drawSnapshotProjects, drawSnapshotRoster, snapshotProjects } from "./snapshot-roster.js";
 
@@ -34,10 +35,10 @@ function fixture(answers: readonly (ObserveAnswer | undefined)[]) {
   let call = 0;
   let current = true;
   const client = {
-    observe: async () => {
+    observe: () => {
       const answer = answers[call];
       call += 1;
-      return answer;
+      return Effect.succeed(answer);
     },
   };
   const draw = () =>
@@ -178,7 +179,7 @@ test("a projects read that answers nothing, or answers after the pass was stoppe
   ];
   const draw = () =>
     drawSnapshotProjects({
-      client: { projects: async () => answers.shift() },
+      client: { projects: () => Effect.succeed(answers.shift()) },
       isCurrent: () => current,
       report: (line) => reports.push(line),
     });

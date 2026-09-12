@@ -119,33 +119,39 @@ function fakeClient(): FakeClient {
     clearAnswer: { opened: "3c000000-0000-4000-8000-000000000009", openedAt: NOW + 1, cleared: 1 },
     rateAnswer: { ok: true, answer: { id: RATING_EVENT, seq: 4 } },
     rated: [],
-    rate: async (messageId, request) => {
-      client.calls.push(`rate:${messageId}`);
-      client.rated.push({ messageId, request });
-      return client.rateAnswer;
-    },
-    poll: async (request: ChangesRequest) => {
-      client.calls.push(`changes:${request.deviceId}`);
-      return client.changesAnswer;
-    },
-    messages: async (page: ReadPageQuery = {}) => {
-      client.calls.push(`messages:${page.after ?? ""}`);
-      const answer = client.messagesAnswer;
-      await client.messagesGate;
-      return answer;
-    },
-    events: async (page: ReadPageQuery = {}) => {
-      client.calls.push(`events:${page.after ?? ""}`);
-      return ok(EMPTY_EVENTS);
-    },
-    turns: async (page: ReadPageQuery = {}) => {
-      client.calls.push(`turns:${page.after ?? ""}`);
-      return ok(EMPTY_TURNS);
-    },
-    clear: async () => {
-      client.calls.push("clear");
-      return client.clearAnswer;
-    },
+    rate: (messageId, request) =>
+      Effect.sync(() => {
+        client.calls.push(`rate:${messageId}`);
+        client.rated.push({ messageId, request });
+        return client.rateAnswer;
+      }),
+    poll: (request: ChangesRequest) =>
+      Effect.sync(() => {
+        client.calls.push(`changes:${request.deviceId}`);
+        return client.changesAnswer;
+      }),
+    messages: (page: ReadPageQuery = {}) =>
+      Effect.promise(async () => {
+        client.calls.push(`messages:${page.after ?? ""}`);
+        const answer = client.messagesAnswer;
+        await client.messagesGate;
+        return answer;
+      }),
+    events: (page: ReadPageQuery = {}) =>
+      Effect.sync(() => {
+        client.calls.push(`events:${page.after ?? ""}`);
+        return ok(EMPTY_EVENTS);
+      }),
+    turns: (page: ReadPageQuery = {}) =>
+      Effect.sync(() => {
+        client.calls.push(`turns:${page.after ?? ""}`);
+        return ok(EMPTY_TURNS);
+      }),
+    clear: () =>
+      Effect.sync(() => {
+        client.calls.push("clear");
+        return client.clearAnswer;
+      }),
   };
   return client;
 }
