@@ -57,6 +57,21 @@ can open the window, which is why the sitting is scheduled rather than
 attempted: quiet the queue first, then rebase once, then flip. The rebase is
 the last thing done before the flip, not the first.
 
+Not every merge is a treadmill turn, and the two hazards in this file are
+different sizes. The treadmill hazard is narrow: a merge dirties the PR only
+if it touches one of three paths, `apps/web/vercel.json`, the route table
+`apps/web/server/api-rewrites.json` (or anything under `apps/web/server/routes/`
+that regenerates it), or `packages/AGENTS.md`. On 2026-09-12 a merge from
+another lane (#1242) landed at 05:41Z, inside the window between the rebase and
+the press, touched none of the three, and cost nothing: the PR stayed
+mergeable and the queue's merge commit absorbed it. So a lane freeze protects
+those three paths and need not stop work that cannot reach them. The
+production hazard is the wide one and is bounded in time instead: between the
+preset flip and the PR's merge, every merge to `main` fails its production
+build whatever it touches, because the preset is Services and `main` has no
+`services` key yet. Keep that window to minutes and it is a recoverable
+failure; the treadmill is the one that can eat a night.
+
 ## Who does what
 
 - **The flip is Dean's.** The Framework Preset is a dashboard setting nobody
