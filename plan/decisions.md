@@ -3223,3 +3223,41 @@ as a cost, not a risk.
 as settled and neither was recorded; one of them turned out to be a breaking change. **A ruling that
 is not in this file did not happen**, and the cost of the convention is exactly this: it catches the
 case where an agreement was assumed rather than made.
+
+
+## 2026-09-12 ~00:04Z — the allowlist and the tool catalog are append-only while clients are in the field
+
+**Second instance of one shape in one evening**, and the generalization is the entry.
+
+**The first** (recorded above): narrowing the hosted brain's registered tool names fails an installed
+desktop's every turn with `MODEL_FAILURE.COMPATIBILITY`. G3-4's research settled the blast radius —
+`packages/host/src/brain/wiring.ts:491-508` resolves each turn's policy over the whole catalog, the
+configured layers default to `{}` (`packages/runtime/src/registry.ts:407`), and
+`turn-runner.ts:675` sends `policy.allowed` by name, so **every installed desktop names
+`update_issue_state` and `comment_on_issue` on every turn whether or not a tracker is connected.** A
+connected tracker gates admission (`admit.ts` refuses `NO_TRACKER` at execute), not the offer. And
+`apps/web/server/brain-app.ts:95,136` builds both the service's catalog and its answered
+capabilities from the same `@sidecar/actions` rows the desktop's catalog is, so deleting the rows
+narrows both ends at once. **Resolved without a ruling being needed: the two rows stay registered on
+both ends and the performer answers the not-here refusal.** G3-4 deletes only the local integration.
+
+**The second, found while checking the first:** `packages/analytics/src/product-events.ts:656` —
+`productEventBatchFromWire` refuses **the whole batch** when any one event fails to read, deliberately
+(*"a partial acceptance would let a desktop bug show up as a quiet gap in the counts instead of a
+refusal somebody notices"*), and `productEventFromWire:635` refuses any name off the allowlist. So
+**retiring an event name refuses every batch an installed app sends that contains it**, taking the
+unrelated events with it. **#1184 already removed `superset:action` and has been live since 23:56Z.**
+Filed as **LUKE-188** (High). G3-4 is leaving `tracker:connect`, `tracker:disconnect` and
+`issue:action_send` and their property value sets in place, pointing at that ticket.
+
+### The rule
+
+**The product-event allowlist and the hosted tool catalog are append-only for as long as any client
+is in the field.** A name may stop being emitted or offered at any time; it may only be **removed**
+once nothing that could emit or offer it still runs. The desktop updates through electron-updater
+from this repo's releases, so "in the field" ends when installs have updated, not when a release is
+cut.
+
+**Both instances arrived described as bookkeeping**, in a PR whose subject was deleting an
+integration. That is the tell: a deletion PR's dangerous edges are not in what it deletes but in the
+*names* it retires, because a name is a contract with software that is not in this repository.
