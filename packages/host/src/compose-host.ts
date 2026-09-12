@@ -7,7 +7,6 @@ import {
   type GatewayMethodTable,
   type GatewayShutdownOptions,
   type GatewayShutdownSteps,
-  gatewayOk,
 } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
@@ -285,40 +284,49 @@ export const hostAssemblyLayer: Layer.Layer<
      * which is the coupling the split exists to remove.
      */
     const bootstrapMethods: GatewayMethodTable = {
-      [GATEWAY_METHOD.SHUTDOWN]: () => {
-        options.onShutdownRequested?.();
-        return gatewayOk({ accepted: true });
-      },
-      [GATEWAY_METHOD.CLIENT_BOOTSTRAP]: async () => {
-        const [snapshot, quiet, replay] = await Promise.all([
-          settings.store.snapshot(),
-          account.capabilitiesActive()
-            ? calendars.announcementsQuietNow(now())
-            : Promise.resolve(false),
-          account.sessionReplayState(),
-        ]);
-        return gatewayOk({
-          settings: carried(snapshot),
-          account: carried(account.snapshot()),
-          sessions: carried(observation.rosterForClients()),
-          sessionsSettled: observation.rosterSettled(),
-          announcementsHeld: quiet,
-          conversationView: carried(conversation.snapshot()),
-          workspaceProjects: carried(
-            account.capabilitiesActive()
-              ? normalizeObservedWorkspaceProjects(
-                  observation.offeredWorkspaceProjects(),
-                  await settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-                )
-              : [],
-          ),
-          calendars: carried(account.capabilitiesActive() ? calendars.observedCalendars() : []),
-          calendarOnboardingOwed: calendars.gateOwed(),
-          sessionReplay: carried(replay),
-          voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
-          agentTraceEnabled: account.agentTrace !== undefined,
-        });
-      },
+      [GATEWAY_METHOD.SHUTDOWN]: () =>
+        Effect.sync(() => {
+          options.onShutdownRequested?.();
+          return { accepted: true };
+        }),
+      [GATEWAY_METHOD.CLIENT_BOOTSTRAP]: () =>
+        Effect.gen(function* () {
+          const [snapshot, quiet, replay] = yield* Effect.promise(() =>
+            Promise.all([
+              settings.store.snapshot(),
+              account.capabilitiesActive()
+                ? calendars.announcementsQuietNow(now())
+                : Promise.resolve(false),
+              account.sessionReplayState(),
+            ]),
+          );
+          const workspaceProjectDefaults = account.capabilitiesActive()
+            ? yield* Effect.promise(() =>
+                settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+              )
+            : undefined;
+          return {
+            settings: carried(snapshot),
+            account: carried(account.snapshot()),
+            sessions: carried(observation.rosterForClients()),
+            sessionsSettled: observation.rosterSettled(),
+            announcementsHeld: quiet,
+            conversationView: carried(conversation.snapshot()),
+            workspaceProjects: carried(
+              workspaceProjectDefaults === undefined
+                ? []
+                : normalizeObservedWorkspaceProjects(
+                    observation.offeredWorkspaceProjects(),
+                    workspaceProjectDefaults,
+                  ),
+            ),
+            calendars: carried(account.capabilitiesActive() ? calendars.observedCalendars() : []),
+            calendarOnboardingOwed: calendars.gateOwed(),
+            sessionReplay: carried(replay),
+            voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
+            agentTraceEnabled: account.agentTrace !== undefined,
+          };
+        }),
     };
 
     const methods = yield* mergedMethods(Object.values(concerns));

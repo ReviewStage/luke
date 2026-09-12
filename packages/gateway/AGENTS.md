@@ -128,9 +128,12 @@ the identity back from that number, and a handler is handed it as its
 what the envelope said beside its own id — the id is the transport's to echo,
 never the handler's to read. A method of the group the host has no handler
 for is answered `unknown_method` by the server's own handler, so no tag
-without a handler reaches the runtime's defect, and a handler that throws is
-the request's own `internal` refusal. Hello and reconnect are the server's
-own handlers.
+without a handler reaches the runtime's defect, and a handler that throws
+rather than failing is the request's own `internal` refusal. A handler is an
+effect answering the method's wire value and failing with one of the protocol's
+own refusals, run as the request's own fiber with nothing wrapped around it,
+so a cancelled request interrupts the work it asked for. Hello and reconnect
+are the server's own handlers.
 
 `GatewayEventLog` is the event log: a `Ref` holding a `Chunk` ring of the
 newest events, bounded to the replay window, and a `PubSub` every emit
@@ -196,7 +199,7 @@ over.
 ## Five doors, because three of them reach beyond the vocabulary
 
 The barrel carries the protocol, the handler vocabulary (`./methods`: the
-outcome a handler answers, its context, and the table type), the client, the
+effect a handler answers, its context, and the table type), the client, the
 in-process transport, and the node registry — nothing that reaches a socket,
 and nothing that reaches `@effect/rpc`. `./websocket` is the binding that
 reaches a socket (`ws`, `node:http`, `node:crypto`, and `@effect/platform`'s

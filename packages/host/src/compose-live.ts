@@ -3,13 +3,11 @@ import type { BrainDelivery } from "@sidecar/brain";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   carried,
-  GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  gatewayError,
-  gatewayOk,
   invalid,
+  RefusedRefusal,
   voiceCreateLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
@@ -173,39 +171,43 @@ export const composeLive = (
       // The peer's offer becomes the one session, seeded and attached before
       // the answer leaves; the idempotency key on the method is what stops a
       // retried offer creating and billing a second one.
-      [GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION]: async (params) => {
-        const request = voiceCreateLiveSessionParamsSchema.parse(params);
-        if (!request) return invalid("sdp must be the peer's offer");
-        const created = await service.createSession(request.sdp);
-        if (!created)
-          return gatewayError(GATEWAY_ERROR.REFUSED, "no live session could be created");
-        return gatewayOk(carried(created));
-      },
-      [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: async () => {
-        await service.endSession();
-        return gatewayOk({});
-      },
+      [GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION]: (params) =>
+        Effect.gen(function* () {
+          const request = voiceCreateLiveSessionParamsSchema.parse(params);
+          if (!request) return yield* invalid("sdp must be the peer's offer");
+          const created = yield* Effect.promise(() => service.createSession(request.sdp));
+          if (!created)
+            return yield* Effect.fail(
+              new RefusedRefusal({ message: "no live session could be created" }),
+            );
+          return carried(created);
+        }),
+      [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () =>
+        Effect.as(
+          Effect.promise(() => service.endSession()),
+          {},
+        ),
       [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
         const report = voiceReportLiveTransportParamsSchema.parse(params);
         if (!report) return invalid("state is not one the peer connection reports");
         service.reportTransport(report.state);
-        return gatewayOk({});
+        return Effect.succeed({});
       },
       [GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY]: (params) => {
         const report = voiceReportLiveActivityParamsSchema.parse(params);
         if (!report) return invalid("idle must be a boolean");
         service.reportActivity(report.idle);
-        return gatewayOk({});
+        return Effect.succeed({});
       },
       // The stop key alone: the mute the peer sends on its own says nothing
       // about Luke's output, so this is the one ask that tells him to stop.
       [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
-        gatewayOk(carried({ stopped: service.stopSpeaking() })),
+        Effect.sync(() => carried({ stopped: service.stopSpeaking() })),
       // What the host knows about why voice is or is not available, carrying no
       // credential and no session's SDP: the source's own reading while one
       // stands, and the reason there is none otherwise.
       [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () =>
-        gatewayOk({
+        Effect.sync(() => ({
           diagnostics: carried(
             account.voiceCapabilities.liveSessions?.diagnostics() ??
               unavailableLiveDiagnostics({
@@ -213,15 +215,16 @@ export const composeLive = (
                 apiKeyConfigured: false,
               }),
           ),
-        }),
+        })),
       // One live event the renderer's tap saw cross the data channel, into the
       // development trace. Read again here for the shape the tap sends; on a
       // run without a writer — packaged, fixture, or simply untraced — it lands
       // here and stops.
       [GATEWAY_METHOD.VOICE_RECORD_TRACE]: (params) => {
-        if (!isAgentWireTrace(params.trace)) return invalid("trace is not one tapped wire event");
-        account.agentTrace?.recordWire(params.trace);
-        return gatewayOk({});
+        const trace = params.trace;
+        if (!isAgentWireTrace(trace)) return invalid("trace is not one tapped wire event");
+        account.agentTrace?.recordWire(trace);
+        return Effect.succeed({});
       },
     };
 

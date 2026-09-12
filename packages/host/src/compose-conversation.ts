@@ -9,7 +9,6 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  gatewayOk,
   invalid,
 } from "@sidecar/gateway";
 import {
@@ -30,6 +29,7 @@ import type {
 } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { unparsedWire } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { DevicesComposer } from "./compose-devices.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -95,7 +95,7 @@ const RATE_REFUSAL_STATUS = {
 } as const satisfies Record<ConversationRateRefusal, ConversationRateStatus>;
 
 function rateAnswer(status: ConversationRateStatus) {
-  return gatewayOk(carried<ConversationRateMessageResult>({ status }));
+  return Effect.succeed(carried<ConversationRateMessageResult>({ status }));
 }
 
 /**
@@ -323,44 +323,46 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   }
 
   const methods: GatewayMethodTable = {
-    [GATEWAY_METHOD.CONVERSATION_CLEAR]: async () => {
-      if (!gate()) return gatewayOk({ cleared: false });
-      const answer = await client.clear();
-      if (answer === undefined) return gatewayOk({ cleared: false });
-      // The service's own answer is what empties this Mac's thread: the
-      // picture drops the stamped main's groups and the observed rows from
-      // before the new main opened, and every client is told, before any read
-      // is waited on — a read that fails to land cannot leave the old thread
-      // standing behind an answer that said it was cleared. The pass that
-      // follows moves the cursors onto the new main.
-      sync.applyClear(answer.openedAt);
-      publish();
-      await pollAfter();
-      return gatewayOk({ cleared: true });
-    },
-    [GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE]: async (params) => {
-      const read = conversationRateMessageParamsSchema.read(unparsedWire(params));
-      if (!read.ok) return invalid("a rating names one message and one verdict");
-      const { messageId, rating } = read.value;
-      // A rating names the device it came from, so before this installation's
-      // row is registered there is nothing to send one as.
-      const deviceId = devices.deviceId();
-      if (!gate() || deviceId === undefined)
-        return rateAnswer(CONVERSATION_RATE_STATUS.UNAVAILABLE);
-      const target = sync.rateable(messageId);
-      if (target === undefined) return rateAnswer(CONVERSATION_RATE_STATUS.NOT_FOUND);
-      const written = await client.rate(messageId, { rating, deviceId });
-      if (!written.ok) return rateAnswer(RATE_REFUSAL_STATUS[written.refusal]);
-      sync.recordRating(messageId, written.answer.seq, { rating });
-      publish();
-      settings.recordProductEvent(PRODUCT_EVENT.CONVERSATION_RATED, {
-        rating,
-        message_kind: target.announcement
-          ? PRODUCT_RATED_MESSAGE_KIND.ANNOUNCEMENT
-          : PRODUCT_RATED_MESSAGE_KIND.REPLY,
-      });
-      return rateAnswer(CONVERSATION_RATE_STATUS.RATED);
-    },
+    [GATEWAY_METHOD.CONVERSATION_CLEAR]: () =>
+      Effect.gen(function* () {
+        if (!gate()) return { cleared: false };
+        const answer = yield* Effect.promise(() => client.clear());
+        if (answer === undefined) return { cleared: false };
+        // The service's own answer is what empties this Mac's thread: the
+        // picture drops the stamped main's groups and the observed rows from
+        // before the new main opened, and every client is told, before any read
+        // is waited on — a read that fails to land cannot leave the old thread
+        // standing behind an answer that said it was cleared. The pass that
+        // follows moves the cursors onto the new main.
+        sync.applyClear(answer.openedAt);
+        publish();
+        yield* Effect.promise(() => pollAfter());
+        return { cleared: true };
+      }),
+    [GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE]: (params) =>
+      Effect.gen(function* () {
+        const read = conversationRateMessageParamsSchema.read(unparsedWire(params));
+        if (!read.ok) return yield* invalid("a rating names one message and one verdict");
+        const { messageId, rating } = read.value;
+        // A rating names the device it came from, so before this installation's
+        // row is registered there is nothing to send one as.
+        const deviceId = devices.deviceId();
+        if (!gate() || deviceId === undefined)
+          return yield* rateAnswer(CONVERSATION_RATE_STATUS.UNAVAILABLE);
+        const target = sync.rateable(messageId);
+        if (target === undefined) return yield* rateAnswer(CONVERSATION_RATE_STATUS.NOT_FOUND);
+        const written = yield* Effect.promise(() => client.rate(messageId, { rating, deviceId }));
+        if (!written.ok) return yield* rateAnswer(RATE_REFUSAL_STATUS[written.refusal]);
+        sync.recordRating(messageId, written.answer.seq, { rating });
+        publish();
+        settings.recordProductEvent(PRODUCT_EVENT.CONVERSATION_RATED, {
+          rating,
+          message_kind: target.announcement
+            ? PRODUCT_RATED_MESSAGE_KIND.ANNOUNCEMENT
+            : PRODUCT_RATED_MESSAGE_KIND.REPLY,
+        });
+        return yield* rateAnswer(CONVERSATION_RATE_STATUS.RATED);
+      }),
   };
 
   return {

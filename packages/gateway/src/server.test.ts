@@ -13,12 +13,7 @@ import {
 } from "@sidecar/wire";
 import { Chunk, Context, Deferred, Effect, Either, Fiber, Layer, Option, Stream } from "effect";
 import { test } from "vitest";
-import {
-  type GatewayMethodContext,
-  type GatewayMethodTable,
-  gatewayError,
-  gatewayOk,
-} from "./methods.js";
+import type { GatewayMethodContext, GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -33,7 +28,10 @@ import {
   gatewayRequestToWire,
   gatewayResponseFromWire,
   isMutatingGatewayMethod,
+  NodeUnavailableRefusal,
   NotFoundRefusal,
+  RefusedRefusal,
+  UnknownCapabilityRefusal,
 } from "./protocol.js";
 import {
   GATEWAY_REQUEST_HEADER,
@@ -52,7 +50,6 @@ import {
   GatewayRevisionCheck,
   type GatewayServerLayerOptions,
   GatewayServerRpcs,
-  gatewayMethodEffects,
   layerGatewayAdmissions,
   layerGatewayClients,
   layerGatewayEventLog,
@@ -136,7 +133,7 @@ function redacted(answer: string): string {
 
 function answeringTable(): GatewayMethodTable {
   const table: GatewayMethodTable = {};
-  for (const method of METHODS) table[method] = () => gatewayOk({ answered: method });
+  for (const method of METHODS) table[method] = () => Effect.succeed({ answered: method });
   return table;
 }
 
@@ -150,7 +147,7 @@ interface Harness {
 function serverLayer(harness: Harness = {}) {
   let events = 0;
   const options: GatewayServerLayerOptions = {
-    methods: gatewayMethodEffects(harness.methods ?? answeringTable()),
+    methods: harness.methods ?? answeringTable(),
     configurationRevision: () => FIXTURE_CONFIGURATION_REVISION,
     sessionRevision: (key) => (key === FIXTURE_SESSION_KEY ? FIXTURE_SESSION_REVISION : undefined),
     snapshot: () => FIXTURE_SNAPSHOT,
@@ -276,16 +273,17 @@ it.effect("every error code's recorded request is answered with the recorded env
             ),
           ),
           [GATEWAY_METHOD.CONVERSATION_LINES]: () =>
-            gatewayError(GATEWAY_ERROR.NOT_FOUND, "no conversation stands under that key"),
+            Effect.fail(new NotFoundRefusal({ message: "no conversation stands under that key" })),
           [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
-            gatewayError(GATEWAY_ERROR.REFUSED, "that session advertises no message"),
+            Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
           [GATEWAY_METHOD.NODE_INVOKE]: () =>
-            gatewayError(
-              GATEWAY_ERROR.NODE_UNAVAILABLE,
-              "no connected node offers that capability",
+            Effect.fail(
+              new NodeUnavailableRefusal({ message: "no connected node offers that capability" }),
             ),
           [GATEWAY_METHOD.SESSION_OPEN]: () =>
-            gatewayError(GATEWAY_ERROR.UNKNOWN_CAPABILITY, "that capability is not registered"),
+            Effect.fail(
+              new UnknownCapabilityRefusal({ message: "that capability is not registered" }),
+            ),
           [GATEWAY_METHOD.RUN_SUBMIT]: () => {
             throw new Error("the handler failed");
           },
@@ -361,7 +359,10 @@ it.effect("a named revision and an empty answer cross as the recorded envelopes"
   }).pipe(
     Effect.provide(
       serverLayer({
-        methods: { ...answeringTable(), [GATEWAY_METHOD.GUIDE_REPORT]: () => gatewayOk() },
+        methods: {
+          ...answeringTable(),
+          [GATEWAY_METHOD.GUIDE_REPORT]: () => Effect.succeed(undefined),
+        },
       }),
     ),
   ),
@@ -387,11 +388,12 @@ it.effect(
       Effect.provide(
         serverLayer({
           methods: {
-            [GATEWAY_METHOD.RUN_SUBMIT]: async () => {
-              runs.push("submit");
-              await new Promise((resolve) => setImmediate(resolve));
-              return gatewayOk({ outcome: "accepted" });
-            },
+            [GATEWAY_METHOD.RUN_SUBMIT]: () =>
+              Effect.gen(function* () {
+                runs.push("submit");
+                yield* Effect.yieldNow();
+                return { outcome: "accepted" };
+              }),
           },
         }),
       ),
@@ -421,7 +423,7 @@ it.effect(
           methods: {
             [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
               capped.push(String(params.key));
-              return gatewayOk();
+              return Effect.succeed(undefined);
             },
           },
         }),
@@ -474,7 +476,7 @@ it.effect(
           methods: {
             [GATEWAY_METHOD.RUN_SUBMIT]: (_params, context) => {
               contexts.push(context);
-              return gatewayOk();
+              return Effect.succeed(undefined);
             },
           },
         }),

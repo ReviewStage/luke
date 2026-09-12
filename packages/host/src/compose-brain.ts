@@ -7,7 +7,6 @@ import {
   carried,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  gatewayOk,
   invalid,
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
@@ -286,29 +285,32 @@ export const composeBrain = (
 
     const methods: GatewayMethodTable = {
       [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
-        if (!isAppGuideSnapshot(params.guide))
-          return invalid("guide is not the shape a panel reports");
-        appGuide = params.guide;
-        return gatewayOk({});
+        const guide = params.guide;
+        if (!isAppGuideSnapshot(guide)) return invalid("guide is not the shape a panel reports");
+        appGuide = guide;
+        return Effect.succeed({});
       },
-      [GATEWAY_METHOD.CONVERSATION_APPEND]: async (params) => {
-        const sessionKey =
-          params.sessionKey === undefined
-            ? MAIN_SESSION_KEY
-            : isIdentifier(params.sessionKey)
-              ? toSessionKey(params.sessionKey)
-              : undefined;
-        if (!sessionKey) return invalid("sessionKey must be a non-empty string");
-        if (!Array.isArray(params.entries)) return invalid("entries must be a list");
-        const entries: ConversationEntry[] = [];
-        for (const entry of params.entries) {
-          const stored = storedConversationEntry(entry);
-          if (!stored) return invalid("an entry is not the shape Conversation keeps");
-          entries.push(stored);
-        }
-        const accepted = await store.thread(sessionKey).append(entries, reporterOf(params));
-        return gatewayOk({ accepted });
-      },
+      [GATEWAY_METHOD.CONVERSATION_APPEND]: (params) =>
+        Effect.gen(function* () {
+          const sessionKey =
+            params.sessionKey === undefined
+              ? MAIN_SESSION_KEY
+              : isIdentifier(params.sessionKey)
+                ? toSessionKey(params.sessionKey)
+                : undefined;
+          if (!sessionKey) return yield* invalid("sessionKey must be a non-empty string");
+          if (!Array.isArray(params.entries)) return yield* invalid("entries must be a list");
+          const entries: ConversationEntry[] = [];
+          for (const entry of params.entries) {
+            const stored = storedConversationEntry(entry);
+            if (!stored) return yield* invalid("an entry is not the shape Conversation keeps");
+            entries.push(stored);
+          }
+          const accepted = yield* Effect.promise(() =>
+            store.thread(sessionKey).append(entries, reporterOf(params)),
+          );
+          return { accepted };
+        }),
     };
 
     return {

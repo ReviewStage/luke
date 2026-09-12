@@ -5,9 +5,9 @@
  */
 
 import type { WireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { GatewayClient } from "./client.js";
-import { gatewayError } from "./methods.js";
-import { GATEWAY_ERROR, type GatewayEventKind } from "./protocol.js";
+import { type GatewayEventKind, InvalidParamsRefusal } from "./protocol.js";
 
 /** A value this build made, carried as the JSON it already is; every field of these shapes is a wire value. */
 export function carried<Value>(value: Value): WireValue {
@@ -17,8 +17,8 @@ export function carried<Value>(value: Value): WireValue {
 }
 
 /** A parameter that is not the shape its method takes, as the protocol's own refusal. */
-export function invalid(message: string) {
-  return gatewayError(GATEWAY_ERROR.INVALID_PARAMS, message);
+export function invalid(message: string): Effect.Effect<never, InvalidParamsRefusal> {
+  return Effect.fail(new InvalidParamsRefusal({ message }));
 }
 
 /**

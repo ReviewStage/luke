@@ -6,7 +6,6 @@ import {
   GATEWAY_METHOD,
   GATEWAY_PROTOCOL_VERSION,
   type GatewayMethod,
-  gatewayOk,
   InProcessTransport,
 } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
@@ -29,7 +28,7 @@ const CIPHER: SecretCipher = {
 
 function stubComposer(methods: readonly GatewayMethod[]): Composer {
   return {
-    methods: Object.fromEntries(methods.map((method) => [method, () => gatewayOk({})])),
+    methods: Object.fromEntries(methods.map((method) => [method, () => Effect.succeed({})])),
     start: async () => undefined,
     stop: async () => undefined,
   };

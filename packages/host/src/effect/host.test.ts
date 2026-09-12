@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import {
-  GATEWAY_METHOD,
-  type GatewayMethod,
-  type GatewayShutdownSteps,
-  gatewayOk,
-} from "@sidecar/gateway";
+import { GATEWAY_METHOD, type GatewayMethod, type GatewayShutdownSteps } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Cause, Chunk, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { HOST_CONCERN, HOST_START_ORDER } from "../compose-host.js";
@@ -38,7 +33,7 @@ interface Recorded {
 }
 
 const stubComposer = (methods: readonly GatewayMethod[]): Composer => ({
-  methods: Object.fromEntries(methods.map((method) => [method, () => gatewayOk({})])),
+  methods: Object.fromEntries(methods.map((method) => [method, () => Effect.succeed({})])),
   start: async () => undefined,
   stop: async () => undefined,
 });

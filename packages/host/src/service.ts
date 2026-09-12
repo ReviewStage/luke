@@ -9,26 +9,24 @@ import {
 } from "@sidecar/brain/requests";
 import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import {
-  GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayEventKind,
   type GatewayMethodContext,
   type GatewayMethodHandler,
-  type GatewayMethodOutcome,
   type GatewayMethodTable,
-  gatewayError,
-  gatewayOk,
+  type GatewayRefusal,
   invalid,
   NODE_CAPABILITY_STATUS,
   NodeRegistry,
+  NotFoundRefusal,
   nodeSnapshotToWire,
+  RefusedRefusal,
 } from "@sidecar/gateway";
 import {
   type GatewayInProcessHost,
   type GatewayServerLayerOptions,
   gatewayInProcessHost,
-  gatewayMethodEffects,
 } from "@sidecar/gateway/server";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
@@ -36,7 +34,6 @@ import {
   conversationRecordToWire,
   isIdentifier,
   MAIN_SESSION_KEY,
-  type MaybePromise,
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
@@ -210,16 +207,17 @@ class ParamReader {
 
 /** A handler that reads its parameters through the reader, answering a read's refusal as the method's. */
 function reading(
-  handle: (read: ParamReader, context: GatewayMethodContext) => MaybePromise<GatewayMethodOutcome>,
+  handle: (
+    read: ParamReader,
+    context: GatewayMethodContext,
+  ) => Effect.Effect<WireValue | undefined, GatewayRefusal>,
 ): GatewayMethodHandler {
-  return async (params, context) => {
-    try {
-      return await handle(new ParamReader(params), context);
-    } catch (error) {
-      if (error instanceof ParamRefusal) return invalid(error.message);
-      throw error;
-    }
-  };
+  return (params, context) =>
+    Effect.suspend(() => handle(new ParamReader(params), context)).pipe(
+      Effect.catchAllDefect((defect) =>
+        defect instanceof ParamRefusal ? invalid(defect.message) : Effect.die(defect),
+      ),
+    );
 }
 
 /**
@@ -313,24 +311,26 @@ export function createGatewayService(
     nodes: nodes.list().map(nodeSnapshotToWire),
   });
 
-  const submit = async (read: ParamReader): Promise<GatewayMethodOutcome> => {
-    const sessionKey = read.sessionKeyOrMain("sessionKey");
-    const submissionId = read.identifier("submissionId");
-    const question = read.string("question").trim().slice(0, maximumAskLength);
-    const origin = read.string("origin");
-    if (!isBrainRequestOrigin(origin)) return invalid("origin is not one this build knows");
-    const agent = brain.current(sessionKey);
-    if (!agent) {
-      return gatewayOk(
-        submissionResultToWire({
+  const submit = (read: ParamReader): Effect.Effect<WireValue, GatewayRefusal> =>
+    Effect.gen(function* () {
+      const sessionKey = read.sessionKeyOrMain("sessionKey");
+      const submissionId = read.identifier("submissionId");
+      const question = read.string("question").trim().slice(0, maximumAskLength);
+      const origin = read.string("origin");
+      if (!isBrainRequestOrigin(origin))
+        return yield* invalid("origin is not one this build knows");
+      const agent = brain.current(sessionKey);
+      if (!agent) {
+        return submissionResultToWire({
           outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
           reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
-        }),
+        });
+      }
+      const result = yield* Effect.promise(() =>
+        agent.submitAsk({ submissionId, origin, question }),
       );
-    }
-    const result = await agent.submitAsk({ submissionId, origin, question });
-    return gatewayOk(submissionResultToWire(result));
-  };
+      return submissionResultToWire(result);
+    });
 
   /** Which connection a remote node was last registered on, so only that connection's closing disconnects it. */
   const nodeOwners = new Map<string, string>();
@@ -340,41 +340,50 @@ export function createGatewayService(
     [GATEWAY_METHOD.CONVERSATION_LINES]: reading((read) => {
       const sessionKey = read.sessionKeyOrMain("sessionKey");
       if (!conversations.holds(sessionKey)) {
-        return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NOT_LISTED);
+        return Effect.fail(new NotFoundRefusal({ message: REFUSAL.NOT_LISTED }));
       }
-      return gatewayOk({ entries: conversations.lines(sessionKey).map(conversationEntryToWire) });
-    }),
-    [GATEWAY_METHOD.CONVERSATION_DELETE]: reading(async (read) =>
-      gatewayOk({
-        outcome: await conversations.deleteConversation(read.sessionKeyOrMain("sessionKey")),
-      }),
-    ),
-    [GATEWAY_METHOD.RUN_SUBMIT]: reading((read) => submit(read)),
-    [GATEWAY_METHOD.RUN_CANCEL]: reading(async (read) => {
-      const runId = read.identifier("runId");
-      const agent = brain.agentForRun(runId);
-      if (!agent) return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_RUN);
-      const cancelled = await agent.cancelAsk(runId);
-      return gatewayOk(cancelled ? { record: brainRequestRecordToWire(cancelled) } : {});
-    }),
-    // A wait answers the record and never the words: the live session speaks
-    // a reply from the run's own events, so no caller is granted them here.
-    [GATEWAY_METHOD.RUN_WAIT]: reading(async (read) => {
-      const runId = read.identifier("runId");
-      const waited = await brain.agentForRun(runId)?.waitAsk(runId, askWaitMs);
-      return gatewayOk({
-        ...(waited ? { record: brainRequestRecordToWire(waited) } : undefined),
-        speak: false,
+      return Effect.succeed({
+        entries: conversations.lines(sessionKey).map(conversationEntryToWire),
       });
     }),
+    [GATEWAY_METHOD.CONVERSATION_DELETE]: reading((read) =>
+      Effect.map(
+        Effect.promise(() => conversations.deleteConversation(read.sessionKeyOrMain("sessionKey"))),
+        (outcome) => ({ outcome }),
+      ),
+    ),
+    [GATEWAY_METHOD.RUN_SUBMIT]: reading((read) => submit(read)),
+    [GATEWAY_METHOD.RUN_CANCEL]: reading((read) =>
+      Effect.gen(function* () {
+        const runId = read.identifier("runId");
+        const agent = brain.agentForRun(runId);
+        if (!agent) return yield* Effect.fail(new NotFoundRefusal({ message: REFUSAL.NO_RUN }));
+        const cancelled = yield* Effect.promise(() => agent.cancelAsk(runId));
+        return cancelled ? { record: brainRequestRecordToWire(cancelled) } : {};
+      }),
+    ),
+    // A wait answers the record and never the words: the live session speaks
+    // a reply from the run's own events, so no caller is granted them here.
+    [GATEWAY_METHOD.RUN_WAIT]: reading((read) =>
+      Effect.gen(function* () {
+        const runId = read.identifier("runId");
+        const waited = yield* Effect.promise(async () =>
+          brain.agentForRun(runId)?.waitAsk(runId, askWaitMs),
+        );
+        return {
+          ...(waited ? { record: brainRequestRecordToWire(waited) } : undefined),
+          speak: false,
+        };
+      }),
+    ),
     [GATEWAY_METHOD.RUN_LIST]: () =>
-      gatewayOk({ runs: brain.allRequests().map(brainRequestRecordToWire) }),
+      Effect.succeed({ runs: brain.allRequests().map(brainRequestRecordToWire) }),
     [GATEWAY_METHOD.CHILD_LIST]: reading((read) => {
       const requester = read.optionalSessionKey("sessionKey");
       const records = requester ? brain.children.childrenOf(requester) : brain.children.children();
-      return gatewayOk({ children: records.map(childRecordToWire) });
+      return Effect.succeed({ children: records.map(childRecordToWire) });
     }),
-    [GATEWAY_METHOD.MEMORY_STATUS]: () => gatewayOk(dependencies.memory.status()),
+    [GATEWAY_METHOD.MEMORY_STATUS]: () => Effect.succeed(dependencies.memory.status()),
     [GATEWAY_METHOD.CONFIGURATION_UPDATE]: reading((read) => {
       const reasoningEffort = read.optionalString("reasoningEffort");
       const maximumOutputTokens = read.optionalNumber("maximumOutputTokens");
@@ -384,9 +393,9 @@ export function createGatewayService(
       };
       const refusals = brain.updateConfiguration(patch);
       if (refusals.length > 0) {
-        return gatewayError(GATEWAY_ERROR.REFUSED, refusals.join(", "));
+        return Effect.fail(new RefusedRefusal({ message: refusals.join(", ") }));
       }
-      return gatewayOk(configurationToWire(brain.configuration()));
+      return Effect.succeed(configurationToWire(brain.configuration()));
     }),
     // A registration names the capabilities the host may ask the registering
     // connection for. Each ask travels back on that connection alone, bound
@@ -403,11 +412,12 @@ export function createGatewayService(
       if (!connection) {
         if (nodes.has(nodeId)) {
           nodes.setConnected(nodeId, true);
-          return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
+          return Effect.succeed({ nodeId, connected: true, clientId: context.client.clientId });
         }
-        return gatewayError(
-          GATEWAY_ERROR.REFUSED,
-          "a node's capabilities are registered by the process that performs them",
+        return Effect.fail(
+          new RefusedRefusal({
+            message: "a node's capabilities are registered by the process that performs them",
+          }),
         );
       }
       nodeOwners.set(nodeId, connection.connectionId);
@@ -426,30 +436,29 @@ export function createGatewayService(
         if (nodeOwners.get(nodeId) !== connection.connectionId) return;
         nodes.setConnected(nodeId, false);
       });
-      return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
+      return Effect.succeed({ nodeId, connected: true, clientId: context.client.clientId });
     }),
     [GATEWAY_METHOD.NODE_UNREGISTER]: reading((read) =>
-      gatewayOk({ disconnected: nodes.setConnected(read.identifier("nodeId"), false) }),
+      Effect.succeed({ disconnected: nodes.setConnected(read.identifier("nodeId"), false) }),
     ),
-    [GATEWAY_METHOD.NODE_INVOKE]: reading(async (read) => {
+    [GATEWAY_METHOD.NODE_INVOKE]: reading((read) => {
       const capability = read.string("capability");
-      const result = await nodes.invoke(capability, read.optionalRecord("params") ?? {});
-      if (result.status === NODE_CAPABILITY_STATUS.OK) {
-        return gatewayOk({
-          status: result.status,
-          ...(result.value !== undefined ? { value: result.value } : undefined),
-        });
-      }
-      return gatewayOk({
-        status: result.status,
-        capability: result.capability,
-        reason: result.reason,
-      });
+      const params = read.optionalRecord("params") ?? {};
+      return Effect.map(
+        Effect.promise(() => nodes.invoke(capability, params)),
+        (result) =>
+          result.status === NODE_CAPABILITY_STATUS.OK
+            ? {
+                status: result.status,
+                ...(result.value !== undefined ? { value: result.value } : undefined),
+              }
+            : { status: result.status, capability: result.capability, reason: result.reason },
+      );
     }),
   };
 
   const layerOptions: GatewayServerLayerOptions = {
-    methods: gatewayMethodEffects(methods),
+    methods,
     configurationRevision: () => brain.configuration().revision,
     sessionRevision: (key) =>
       isIdentifier(key) ? brain.generationId(toSessionKey(key)) : undefined,

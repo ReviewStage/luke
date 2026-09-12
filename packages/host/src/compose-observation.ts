@@ -6,7 +6,6 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  gatewayOk,
   invalid,
 } from "@sidecar/gateway";
 import {
@@ -411,51 +410,69 @@ export const composeObservation = (
 
     const methods: GatewayMethodTable = {
       [GATEWAY_METHOD.SESSION_ROSTER]: () =>
-        gatewayOk({
+        Effect.sync(() => ({
           sessions: carried(rosterForClients()),
           settled: !runMode.observesProviders || rosterBroadcast,
-        }),
-      [GATEWAY_METHOD.SESSION_OPEN]: async (params) => {
-        if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-        return gatewayOk(carried(await sessionActions.openSession(params.identity)));
+        })),
+      [GATEWAY_METHOD.SESSION_OPEN]: (params) => {
+        const identity = params.identity;
+        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+        return Effect.map(
+          Effect.promise(() => sessionActions.openSession(identity)),
+          (answer) => carried(answer),
+        );
       },
-      [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: async (params) => {
-        if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-        if (!isWireString(params.applicationId) || !isSessionApplicationId(params.applicationId)) {
+      [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: (params) => {
+        const identity = params.identity;
+        const applicationId = params.applicationId;
+        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+        if (!isWireString(applicationId) || !isSessionApplicationId(applicationId)) {
           return invalid("applicationId is not one this build knows");
         }
-        return gatewayOk(
-          carried(
-            await sessionActions.openSessionApplication(params.identity, params.applicationId),
-          ),
+        return Effect.map(
+          Effect.promise(() => sessionActions.openSessionApplication(identity, applicationId)),
+          (answer) => carried(answer),
         );
       },
-      [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: async (params) => {
-        if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-        return gatewayOk(carried(await sessionActions.openSessionChange(params.identity)));
-      },
-      [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: async (params) => {
-        if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-        if (!isWireString(params.text)) return invalid("text must be a string");
-        return gatewayOk(carried(await rowActions.sendMessage(params.identity, params.text)));
-      },
-      [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: async (params) => {
-        if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-        if (!isWireString(params.controlId)) return invalid("controlId must be a string");
-        return gatewayOk(
-          carried(await rowActions.executeControl(params.identity, params.controlId)),
+      [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: (params) => {
+        const identity = params.identity;
+        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+        return Effect.map(
+          Effect.promise(() => sessionActions.openSessionChange(identity)),
+          (answer) => carried(answer),
         );
       },
-      [GATEWAY_METHOD.WORKSPACE_PROJECTS]: async () =>
-        gatewayOk({
-          projects: carried(
-            account.capabilitiesActive()
-              ? normalizeObservedWorkspaceProjects(
-                  offeredWorkspaceProjects(),
-                  await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-                )
-              : [],
-          ),
+      [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: (params) => {
+        const identity = params.identity;
+        const text = params.text;
+        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+        if (!isWireString(text)) return invalid("text must be a string");
+        return Effect.map(
+          Effect.promise(() => rowActions.sendMessage(identity, text)),
+          (answer) => carried(answer),
+        );
+      },
+      [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: (params) => {
+        const identity = params.identity;
+        const controlId = params.controlId;
+        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+        if (!isWireString(controlId)) return invalid("controlId must be a string");
+        return Effect.map(
+          Effect.promise(() => rowActions.executeControl(identity, controlId)),
+          (answer) => carried(answer),
+        );
+      },
+      [GATEWAY_METHOD.WORKSPACE_PROJECTS]: () =>
+        Effect.gen(function* () {
+          if (!account.capabilitiesActive()) return { projects: carried([]) };
+          const defaults = yield* Effect.promise(() =>
+            settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+          );
+          return {
+            projects: carried(
+              normalizeObservedWorkspaceProjects(offeredWorkspaceProjects(), defaults),
+            ),
+          };
         }),
     };
 

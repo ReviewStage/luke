@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { GatewayClient } from "./client.js";
-import { gatewayError, gatewayOk } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -17,6 +17,7 @@ import {
   gatewayRequestFromWire,
   gatewayRequestToWire,
   NODE_CAPABILITY_STATUS,
+  RefusedRefusal,
 } from "./protocol.js";
 import { type GatewayTestHost, gatewayTestHost, TextLoopbackTransport } from "./testing.js";
 import { type GatewayTransport, InProcessTransport } from "./transport.js";
@@ -53,26 +54,29 @@ async function harness(replayWindow = 500): Promise<Harness> {
     methods: {
       [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
         effects.push(`submit ${String(params.submissionId)}`);
-        return gatewayOk({ outcome: "accepted", runId: `run-${effects.length}` });
+        return Effect.succeed({ outcome: "accepted", runId: `run-${effects.length}` });
       },
-      [GATEWAY_METHOD.RUN_LIST]: () => gatewayOk({ runs: [] }),
+      [GATEWAY_METHOD.RUN_LIST]: () => Effect.succeed({ runs: [] }),
       [GATEWAY_METHOD.CONVERSATION_DELETE]: () => {
         effects.push("delete");
-        return gatewayOk({ outcome: "complete" });
+        return Effect.succeed({ outcome: "complete" });
       },
-      [GATEWAY_METHOD.NODE_INVOKE]: async (params) => {
-        const result = await nodes.invoke(String(params.capability), {});
-        if (result.status === NODE_CAPABILITY_STATUS.OK) {
-          effects.push(`invoked ${String(params.capability)}`);
-          return gatewayOk({ status: result.status });
-        }
-        return gatewayOk({ status: result.status, reason: result.reason });
-      },
+      [GATEWAY_METHOD.NODE_INVOKE]: (params) =>
+        Effect.map(
+          Effect.promise(() => nodes.invoke(String(params.capability), {})),
+          (result) => {
+            if (result.status === NODE_CAPABILITY_STATUS.OK) {
+              effects.push(`invoked ${String(params.capability)}`);
+              return { status: result.status };
+            }
+            return { status: result.status, reason: result.reason };
+          },
+        ),
       [GATEWAY_METHOD.MEMORY_STATUS]: () => {
         throw new Error("the index fell over");
       },
       [GATEWAY_METHOD.CONFIGURATION_UPDATE]: () =>
-        gatewayError(GATEWAY_ERROR.REFUSED, "nothing settable"),
+        Effect.fail(new RefusedRefusal({ message: "nothing settable" })),
     },
     configurationRevision: () => configurationRevision.value,
     sessionRevision: (key) => sessionRevision.get(key),

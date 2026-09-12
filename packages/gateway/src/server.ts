@@ -29,12 +29,7 @@ import {
   type Scope,
   Stream,
 } from "effect";
-import type {
-  GatewayMethodEffect,
-  GatewayMethodEffectTable,
-  GatewayMethodHandler,
-  GatewayMethodTable,
-} from "./methods.js";
+import type { GatewayMethodHandler, GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -52,7 +47,6 @@ import {
   type GatewayRevision,
   gatewayEventToWire,
   gatewayRefusal,
-  gatewayRefusalFromError,
   gatewayResponseToWire,
   gatewayVersionRefusal,
   IdempotencyConflictRefusal,
@@ -329,7 +323,7 @@ const NODE_METHODS: ReadonlySet<GatewayMethod> = new Set<GatewayMethod>([
 ]);
 
 export interface GatewayServerLayerOptions extends GatewayEventLogOptions {
-  methods: GatewayMethodEffectTable;
+  methods: GatewayMethodTable;
   /** The lifetime a conversation stands in now, or nothing for one the host does not hold. */
   sessionRevision: (sessionKey: string) => string | undefined;
   /** Whether a client of this identity may call the method; the operator may call everything by default. */
@@ -517,39 +511,13 @@ export function layerGatewayLedger(options: GatewayServerLayerOptions): Layer.La
 }
 
 /**
- * A result as the wire carries it: the host's promise handlers answer the
- * structured values they already hold, in which a field may stand undefined,
- * and JSON drops such a field on the way out, so the same round trip here
- * hands the Rpc runtime exactly what a socket would have carried.
+ * A result as the wire carries it: a handler answers the structured value it
+ * already holds, in which a field may stand undefined, and JSON drops such a
+ * field on the way out, so the same round trip here hands the Rpc runtime
+ * exactly what a socket would have carried.
  */
 function carriedResult(result: WireValue | undefined): WireValue | undefined {
   return result === undefined ? undefined : valueFromJsonText(JSON.stringify(result));
-}
-
-/** A host's promise-answering handler as the effect the server runs: a thrown handler is the request's own internal refusal. */
-function gatewayMethodEffect(handler: GatewayMethodHandler): GatewayMethodEffect {
-  return (params, context) =>
-    Effect.flatMap(
-      Effect.tryPromise({
-        try: () => Promise.resolve().then(() => handler(params, context)),
-        catch: (error) =>
-          new InternalRefusal({ message: error instanceof Error ? error.message : String(error) }),
-      }),
-      (outcome) =>
-        outcome.ok
-          ? Effect.succeed(carriedResult(outcome.result))
-          : Effect.fail(gatewayRefusalFromError(outcome.error)),
-    );
-}
-
-/** A host's whole table of promise-answering handlers as the effects the server runs. */
-export function gatewayMethodEffects(methods: GatewayMethodTable): GatewayMethodEffectTable {
-  const effects: GatewayMethodEffectTable = {};
-  for (const entry of GATEWAY_METHOD_ENTRIES) {
-    const handler = methods[entry.name];
-    if (handler) effects[entry.name] = gatewayMethodEffect(handler);
-  }
-  return effects;
 }
 
 function readLastSequence(params: WireRecord): Effect.Effect<number, InvalidParamsRefusal> {
@@ -572,14 +540,14 @@ function layerGatewayMethods(
     Effect.gen(function* () {
       const log = yield* GatewayEventLog;
       const clients = yield* GatewayClients;
-      const hello: GatewayMethodEffect = () =>
+      const hello: GatewayMethodHandler = () =>
         Effect.map(log.sequence, (sequence) => ({
           protocolVersion: GATEWAY_PROTOCOL_VERSION,
           sequence,
           configurationRevision: options.configurationRevision(),
           snapshot: options.snapshot(),
         }));
-      const reconnect: GatewayMethodEffect = (params) =>
+      const reconnect: GatewayMethodHandler = (params) =>
         Effect.flatMap(readLastSequence(params), (lastSequence) =>
           Effect.map(log.replayFrom(lastSequence), (answer) =>
             answer.kind === GATEWAY_RECONNECT_KIND.REPLAY
@@ -587,7 +555,7 @@ function layerGatewayMethods(
               : { kind: answer.kind, sequence: answer.sequence, snapshot: answer.snapshot },
           ),
         );
-      const methods: GatewayMethodEffectTable = {
+      const methods: GatewayMethodTable = {
         ...options.methods,
         [GATEWAY_METHOD.HELLO]: hello,
         [GATEWAY_METHOD.RECONNECT]: reconnect,
@@ -613,7 +581,7 @@ function layerGatewayMethods(
               );
             }
             const connection = client.value.connection;
-            return yield* handler(payload, {
+            const result = yield* handler(payload, {
               client: client.value.identity,
               request: {
                 ...gatewayHeaderFields(Object.entries(asked.headers)),
@@ -622,7 +590,19 @@ function layerGatewayMethods(
               },
               ...(connection ? { connection } : undefined),
             });
-          });
+            return carriedResult(result);
+          }).pipe(
+            // A handler that throws rather than failing is the request's own
+            // internal refusal, as it was when the table answered promises:
+            // one method's defect refuses that request and no other.
+            Effect.catchAllDefect((defect) =>
+              Effect.fail(
+                new InternalRefusal({
+                  message: defect instanceof Error ? defect.message : String(defect),
+                }),
+              ),
+            ),
+          );
       };
       return GATEWAY_METHOD_ENTRIES.map((entry) =>
         GatewayServerRpcs.toLayerHandler(entry.name, handlerFor(entry.name)),
