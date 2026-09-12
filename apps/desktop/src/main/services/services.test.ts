@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
 import { HostAssemblyTag, hostStandingLayer, layersInOrder } from "@sidecar/host/effect";
 import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
-import { Effect, Exit, Fiber, Layer, ManagedRuntime, Runtime, Stream } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, ManagedRuntime, Runtime, Stream } from "effect";
 import { test } from "vitest";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { UpdaterEngine, UpdaterEngineEvents } from "../update-service";
@@ -11,7 +11,10 @@ import { hostAssemblyLayerFor } from "./host-layer";
 import { desktopQuit, QUIT_STAGE } from "./quit";
 import type { DesktopService } from "./service";
 import { serviceLayer } from "./service-layer";
-import { createUpdateServiceHost } from "./update-service-host";
+import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
+
+/** The test's own handle on the updater Layer builds, to read the value a scoped Layer otherwise discards. */
+class UpdatesTag extends Context.Tag("test/services/updates")<UpdatesTag, UpdateServiceHost>() {}
 
 /**
  * The services that reach Electron cannot be constructed here at all:
@@ -244,14 +247,23 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
   quit.closesThrough(async () => {
     order.push("teardown");
   });
-  const updates = createUpdateServiceHost({
-    config,
-    recordProductEvent: () => undefined,
-    engine,
-    beforeRestart: quit.teardown,
-    state,
-  });
-  await updates.start();
+  const runtime = ManagedRuntime.make(
+    Layer.scoped(
+      UpdatesTag,
+      createUpdateServiceHost({
+        config,
+        recordProductEvent: () => undefined,
+        engine,
+        beforeRestart: quit.teardown,
+        state,
+        runtime: Runtime.defaultRuntime,
+      }),
+    ),
+  );
+  // Building the layer is what starts the service now, since it forks its
+  // fibers into this scope directly rather than answering a promise a caller
+  // starts separately.
+  const updates = await runtime.runPromise(UpdatesTag);
   assert.ok(events, "the engine was never wired");
   events.onDownloaded("9.9.9");
   updates.install();
@@ -261,8 +273,9 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
   // back first, so the installer's own quit is not the one held open.
   assert.deepEqual(order, ["teardown", "install"]);
   assert.ok(snapshots.length > 0, "no update state ever reached the windows");
-  await updates.stop();
-  await updates.stop();
+  // The scope's close is the stop, and a second one is not a second stop.
+  await runtime.dispose();
+  await runtime.dispose();
   await Effect.runPromise(Fiber.interrupt(watching));
 });
 

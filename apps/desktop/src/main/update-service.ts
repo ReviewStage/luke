@@ -174,8 +174,17 @@ export interface UpdateServiceOptions {
   intervalMs?: number;
   justUpdatedFirstCheckDelayMs?: number;
   publishingRetryDelaysMs?: readonly [number, ...number[]];
-  /** The runtime the service's own scope and schedules are run on, for a test's own. */
+  /** The runtime the service's schedules are run on, for a test's own. */
   runtime?: Runtime.Runtime<never>;
+  /**
+   * The scope every fiber the service forks — the timed check, the first
+   * check, and a publishing retry — is forked into. Handed in by
+   * `update-service-host.ts`'s own Layer in production, so the service's
+   * fibers are interrupted by the launch's own scope closing rather than one
+   * of this class's own; omitted, the service makes and owns one of its own
+   * for a test's convenience, and `stop()` closes it.
+   */
+  scope?: Scope.Scope;
   report?: (line: string) => void;
 }
 
@@ -203,18 +212,23 @@ export class UpdateService {
   readonly #publishingRetrySchedule: Schedule.Schedule<Duration.Duration>;
   readonly #report: (line: string) => void;
   readonly #runtime: Runtime.Runtime<never>;
-  /**
-   * Owns every fiber the service forks — the timed check, the first check,
-   * and a publishing retry — so `stop()` is this one scope closing rather
-   * than a handle collected and cleared per timer.
-   */
-  readonly #scope: Scope.CloseableScope;
+  /** Every fiber the service forks — the timed check, the first check, and a publishing retry — lands here. */
+  readonly #scope: Scope.Scope;
+  /** Set only when no scope was handed in, so `stop()` knows this is the one scope it owns and must close itself. */
+  readonly #ownedScope: Scope.CloseableScope | undefined;
   #snapshot: UpdateSnapshot;
   #latestVersion: string | undefined;
   #installing = false;
   #started = false;
   #stopped = false;
   #publishingRetry: Fiber.RuntimeFiber<void> | undefined;
+  /**
+   * The timed check and the first check `start()` forks, tracked so `stop()`
+   * can interrupt them directly when the scope they forked into is not this
+   * class's own to close.
+   */
+  #repeatingCheck: Fiber.RuntimeFiber<unknown> | undefined;
+  #firstCheck: Fiber.RuntimeFiber<unknown> | undefined;
   #publishingVersion: string | undefined;
   /** `#publishingRetrySchedule`'s own state, carried step to step for `#publishingVersion`. */
   #publishingScheduleState: unknown;
@@ -232,7 +246,14 @@ export class UpdateService {
     this.#engine = options.engine;
     this.#lastRunVersion = options.lastRunVersion;
     this.#runtime = options.runtime ?? Runtime.defaultRuntime;
-    this.#scope = Runtime.runSync(this.#runtime)(Scope.make());
+    if (options.scope) {
+      this.#scope = options.scope;
+      this.#ownedScope = undefined;
+    } else {
+      const owned = Runtime.runSync(this.#runtime)(Scope.make());
+      this.#scope = owned;
+      this.#ownedScope = owned;
+    }
     this.#intervalMs = options.intervalMs ?? UPDATE_CHECK_DEFAULTS.INTERVAL_MS;
     this.#justUpdatedFirstCheckDelayMs =
       options.justUpdatedFirstCheckDelayMs ??
@@ -365,7 +386,7 @@ export class UpdateService {
     // pushed back by one interval, so the cadence lands at `intervalMs`,
     // `2 * intervalMs`, ... exactly as the timer it replaces did, leaving the
     // very first check to the one below.
-    runSync(
+    this.#repeatingCheck = runSync(
       Effect.provideService(
         Effect.forkScoped(
           Effect.delay(
@@ -377,7 +398,7 @@ export class UpdateService {
         this.#scope,
       ),
     );
-    runSync(
+    this.#firstCheck = runSync(
       Effect.provideService(
         scheduleOnce(justUpdated ? this.#justUpdatedFirstCheckDelayMs : 0, work),
         Scope.Scope,
@@ -386,11 +407,24 @@ export class UpdateService {
     );
   }
 
+  /**
+   * Gives back every fiber `start()` forked: the owned scope closing does
+   * that at once when this service made its own, and the two tracked fibers
+   * are interrupted directly when the scope is the launch's own instead, so
+   * `stop()` still means the same thing on either side of that seam.
+   */
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
+    const publishingRetry = this.#publishingRetry;
     this.#publishingRetry = undefined;
-    Runtime.runFork(this.#runtime)(Scope.close(this.#scope, Exit.void));
+    if (this.#ownedScope) {
+      Runtime.runFork(this.#runtime)(Scope.close(this.#ownedScope, Exit.void));
+      return;
+    }
+    publishingRetry?.unsafeInterruptAsFork(FiberId.none);
+    this.#repeatingCheck?.unsafeInterruptAsFork(FiberId.none);
+    this.#firstCheck?.unsafeInterruptAsFork(FiberId.none);
   }
 
   /**
