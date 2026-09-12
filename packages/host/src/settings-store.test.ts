@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type * as FileSystem from "@effect/platform/FileSystem";
+import * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
 import { LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
+import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import {
   PROVIDER_ID,
   type ProviderId,
@@ -24,9 +26,14 @@ import {
 } from "@sidecar/settings";
 import { appSettingsView, SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireRecord,
+} from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { ConfigProvider, Effect, Layer, type Runtime } from "effect";
+import { ConfigProvider, Effect, Layer, Runtime } from "effect";
 import { test } from "vitest";
 import { Environment } from "./effect/seams.js";
 import {
@@ -39,6 +46,7 @@ import {
   SettingsStore,
   type SettingsStoreOptions,
 } from "./settings-store.js";
+import { type AwaitedSettingsStore, awaitedSettingsStore } from "./settings-store-awaited.js";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";
@@ -117,10 +125,18 @@ function expectedPersistedSettings(overrides: WireRecord = {}): UnparsedWireValu
   );
 }
 
-/** The runtime `#readPersisted`/`#write` run their `FileSystem` effects on, built once for every store this suite opens. */
-const FILE_SYSTEM_RUNTIME: Runtime.Runtime<FileSystem.FileSystem> = Effect.runSync(
-  Effect.provide(Effect.runtime<FileSystem.FileSystem>(), NodeFileSystem.layer),
+/** The file system every store this suite opens reads and writes through. */
+const FILE_SYSTEM: FileSystem.FileSystem = Effect.runSync(
+  Effect.provide(FileSystem.FileSystem, NodeFileSystem.layer),
 );
+
+/**
+ * The runtime the awaited face below runs the store's effects on. The store's
+ * own methods are effects; this suite holds them as the promises its
+ * assertions are written against, which is the same face the callers that
+ * have not migrated hold.
+ */
+const RUNTIME: Runtime.Runtime<never> = Runtime.defaultRuntime;
 
 function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverrides {
   const entries = Object.entries(environment).filter(
@@ -137,14 +153,14 @@ function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverri
 function storeIn(
   directory: string,
   options: { cipher?: SecretCipher; environment?: NodeJS.ProcessEnv } = {},
-): SettingsStore {
+): AwaitedSettingsStore {
   const config: SettingsStoreOptions = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
     overrides: overridesFor(options.environment ?? {}),
-    runtime: FILE_SYSTEM_RUNTIME,
+    fileSystem: FILE_SYSTEM,
   };
-  return new SettingsStore(config);
+  return awaitedSettingsStore(new SettingsStore(config), RUNTIME);
 }
 
 test("a failed first load is retried before a later write", async (t) => {
@@ -158,18 +174,21 @@ test("a failed first load is retried before a later write", async (t) => {
     }),
   );
   let directoryReads = 0;
-  const store = new SettingsStore({
-    directory: () => {
-      directoryReads += 1;
-      if (directoryReads === 1) {
-        throw Object.assign(new Error("permission denied"), { code: "EACCES" });
-      }
-      return directory;
-    },
-    cipher: testCipher(),
-    overrides: overridesFor({}),
-    runtime: FILE_SYSTEM_RUNTIME,
-  });
+  const store = awaitedSettingsStore(
+    new SettingsStore({
+      directory: () => {
+        directoryReads += 1;
+        if (directoryReads === 1) {
+          throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+        }
+        return directory;
+      },
+      cipher: testCipher(),
+      overrides: overridesFor({}),
+      fileSystem: FILE_SYSTEM,
+    }),
+    RUNTIME,
+  );
 
   await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);
   await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
@@ -180,24 +199,24 @@ test("a failed first load is retried before a later write", async (t) => {
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
 });
 
-async function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
+async function readWorkspaceAgentDefault(store: AwaitedSettingsStore, providerId: ProviderId) {
   return (await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId];
 }
 
 async function setWorkspaceAgentDefault(
-  store: SettingsStore,
+  store: AwaitedSettingsStore,
   providerId: ProviderId,
   selection: WorkspaceAgentSelection | undefined,
 ) {
   return store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, providerId, selection);
 }
 
-async function readWorkspaceProjectDefault(store: SettingsStore, providerId: ProviderId) {
+async function readWorkspaceProjectDefault(store: AwaitedSettingsStore, providerId: ProviderId) {
   return (await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId];
 }
 
 async function setWorkspaceProjectDefault(
-  store: SettingsStore,
+  store: AwaitedSettingsStore,
   providerId: ProviderId,
   providerProjectId: string | undefined,
 ) {
@@ -1597,3 +1616,68 @@ test("pasting a key back while parked on the allowance is still choosing it", as
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
 });
+
+/**
+ * The store's own face, yielded rather than awaited: what every caller above
+ * reads through one run apiece is one fiber here, and a write and the read
+ * after it settle in the order the effects are sequenced in.
+ */
+it.effect("the store's own methods are effects a caller sequences itself", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped();
+      const store = new SettingsStore({
+        directory: () => directory,
+        cipher: testCipher(),
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+      });
+
+      assert.equal(
+        yield* store.get(APP_SETTING_SCHEMA.showInDock.field),
+        APP_SETTING_SCHEMA.showInDock.guard(undefined).value,
+      );
+      const saved = yield* store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+      assert.equal(saved.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(yield* store.get(APP_SETTING_SCHEMA.showInDock.field), true);
+
+      const reopened = new SettingsStore({
+        directory: () => directory,
+        cipher: testCipher(),
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+      });
+      assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+/** Concurrent reads share one read of the file rather than each making their own. */
+it.effect("concurrent reads of an unread store read the file once", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped();
+      let directoryReads = 0;
+      const store = new SettingsStore({
+        directory: () => {
+          directoryReads += 1;
+          return directory;
+        },
+        cipher: testCipher(),
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+      });
+
+      yield* Effect.all(
+        [
+          store.get(APP_SETTING_SCHEMA.showInDock.field),
+          store.get(APP_SETTING_SCHEMA.duckOtherMedia.field),
+          store.get(APP_SETTING_SCHEMA.voice.field),
+        ],
+        { concurrency: 3 },
+      );
+
+      assert.equal(directoryReads, 1);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);

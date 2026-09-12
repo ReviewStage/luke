@@ -200,7 +200,7 @@ export const composeLive = (
         .rosterForClients()
         .find((session) => session.status === SESSION_STATUS.WORKING);
       const talkKey = voiceHotkeyCandidates(
-        await settings.store.get(APP_SETTING_SCHEMA.voiceHotkey.field),
+        await settings.awaitedStore.get(APP_SETTING_SCHEMA.voiceHotkey.field),
       )[0];
       return {
         kind: PROACTIVE_SPEECH_KIND.ARRIVAL,

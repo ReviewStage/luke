@@ -1,4 +1,5 @@
-import type * as FileSystem from "@effect/platform/FileSystem";
+import type { PlatformError } from "@effect/platform/Error";
+import * as FileSystem from "@effect/platform/FileSystem";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -39,7 +40,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Either, Redacted, Runtime } from "effect";
+import { Effect, Either, Redacted } from "effect";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
@@ -122,12 +123,13 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
   /**
-   * What `#readPersisted` and `#write` below run their `FileSystem` effects
-   * on: the composer's own runtime, captured once with `Effect.runtime` over
-   * the `FileSystem` the host's assembly layer already resolves, rather than a
-   * `FileSystem` layer this class stands up for itself.
+   * The file system `#readPersisted` and `#write` below reach the settings
+   * file through, resolved once by the composer from the host's own assembly
+   * rather than by a layer this class stands up for itself. It is the service
+   * and not a runtime, so every method here is an effect with nothing left in
+   * its context for a caller to provide.
    */
-  runtime: Runtime.Runtime<FileSystem.FileSystem>;
+  fileSystem: FileSystem.FileSystem;
 }
 
 export interface PersistedSettings extends StoredAppSettings {
@@ -491,43 +493,48 @@ export class SettingsStore {
   readonly #cipher: SecretCipher;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
+  readonly #fileSystem: FileSystem.FileSystem;
   /**
-   * The runtime `#readPersisted` and `#write` below run their `FileSystem`
-   * effects on: the composer's own, handed in rather than a layer this class
-   * stands up for itself.
-   *
-   * @deprecated The strangler shim on the `docs/adr/0001-effect.md` allowlist:
-   * this class still answers `get`/`set`/`snapshot`/... as Promises rather
-   * than Effects, so its own `FileSystem` reads and writes still have to be
-   * run to a promise somewhere, and this is where. It goes once the store's
-   * own methods are stated as Effects, which the plan does not currently
-   * schedule; this is where that is recorded.
+   * The settings as last read or written. The gate beside it is what makes a
+   * read shared rather than repeated: a second reader waits for the first
+   * read to land and then finds it here, and a read that failed leaves
+   * nothing behind, so the next reader tries the file again.
    */
-  readonly #runtime: Runtime.Runtime<FileSystem.FileSystem>;
-  #loading: Promise<PersistedSettings> | undefined;
+  #held: PersistedSettings | undefined;
+  readonly #reads = Effect.unsafeMakeSemaphore(1);
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
   #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
-  #mutations: Promise<void> = Promise.resolve();
+  /**
+   * Runs one settings change at a time. Serializing only the file write is not
+   * enough: a user with more than one provider row can start a second save
+   * before the first lands, and both would read the same stored keys before
+   * either wrote, so the later write would drop the other provider's key.
+   */
+  readonly #writes = Effect.unsafeMakeSemaphore(1);
 
-  async get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>> {
+  get<Field extends AppSettingField>(
+    field: Field,
+  ): Effect.Effect<AppSettingValue<Field>, PlatformError> {
     // SAFETY: PersistedSettings extends the schema-derived stored shape; the
     // generic field selects the same schema member on both sides.
-    return (await this.#load())[field] as AppSettingValue<Field>;
+    return Effect.map(this.#load(), (persisted) => persisted[field] as AppSettingValue<Field>);
   }
 
-  async set<Field extends AppSettingField>(
+  set<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
-  ): Promise<SettingsUpdateResult> {
-    await this.#mutate((persisted) => {
-      if (persisted[field] === value) return undefined;
-      const next: PersistedSettings = { ...persisted };
-      if (value === undefined) delete next[field];
-      else Object.assign(next, { [field]: value });
-      return next;
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      yield* this.#mutate((persisted) => {
+        if (persisted[field] === value) return undefined;
+        const next: PersistedSettings = { ...persisted };
+        if (value === undefined) delete next[field];
+        else Object.assign(next, { [field]: value });
+        return next;
+      });
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
     });
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -538,112 +545,125 @@ export class SettingsStore {
    * left with no entries is deleted, so an emptied setting reads as unset
    * rather than as an empty object.
    */
-  async setEntry<Field extends KeyedAppSettingField>(
+  setEntry<Field extends KeyedAppSettingField>(
     field: Field,
     key: string,
     value: SettingEntryValue<Field> | undefined,
-  ): Promise<SettingsUpdateResult> {
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
     // SAFETY: a setting entry's own value is one of the wire values it was parsed from.
     const entry = value as UnparsedWireValue;
-    await this.#mutate((persisted) => {
-      // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
-      const current = persisted[field] as WireRecord | undefined;
-      if (sameSettingEntry(field, current?.[key], entry)) return undefined;
-      const entries = { ...current };
-      if (entry === undefined) delete entries[key];
-      else entries[key] = entry;
-      const next: PersistedSettings = { ...persisted };
-      if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
-      else delete next[field];
-      return next;
+    return Effect.gen(this, function* () {
+      yield* this.#mutate((persisted) => {
+        // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
+        const current = persisted[field] as WireRecord | undefined;
+        if (sameSettingEntry(field, current?.[key], entry)) return undefined;
+        const entries = { ...current };
+        if (entry === undefined) delete entries[key];
+        else entries[key] = entry;
+        const next: PersistedSettings = { ...persisted };
+        if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
+        else delete next[field];
+        return next;
+      });
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
     });
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
-  async accountPreferences(): Promise<AccountPreferences> {
-    return accountPreferencesFromPersisted(await this.#load());
+  accountPreferences(): Effect.Effect<AccountPreferences, PlatformError> {
+    return Effect.map(this.#load(), accountPreferencesFromPersisted);
   }
 
-  async applyAccountPreferences(
+  applyAccountPreferences(
     settings: AccountPreferences,
     expected?: { accountEmail: string; preferences: AccountPreferences },
-  ): Promise<SettingsUpdateResult & { changed: readonly AccountPreferenceField[] }> {
-    const changed: AccountPreferenceField[] = [];
-    await this.#mutate((persisted) => {
-      if (expected && persisted.account?.email !== expected.accountEmail) return undefined;
-      const nextSettings = expected
-        ? accountPreferencesWithLocalChanges(
-            settings,
-            accountPreferencesFromPersisted(persisted),
-            expected.preferences,
-          )
-        : settings;
-      const next: PersistedSettings = { ...persisted };
-      for (const field of ACCOUNT_PREFERENCE_FIELDS) {
-        // SAFETY: AccountPreferences is the parsed subset of JSON-compatible stored app settings.
-        const value = nextSettings[field] as UnparsedWireValue;
-        // SAFETY: AccountPreferenceField selects the same persisted JSON-compatible setting value.
-        if (!sameAccountPreferenceValue(persisted[field] as UnparsedWireValue, value)) {
-          changed.push(field);
+  ): Effect.Effect<
+    SettingsUpdateResult & { changed: readonly AccountPreferenceField[] },
+    PlatformError
+  > {
+    return Effect.gen(this, function* () {
+      const changed: AccountPreferenceField[] = [];
+      yield* this.#mutate((persisted) => {
+        if (expected && persisted.account?.email !== expected.accountEmail) return undefined;
+        const nextSettings = expected
+          ? accountPreferencesWithLocalChanges(
+              settings,
+              accountPreferencesFromPersisted(persisted),
+              expected.preferences,
+            )
+          : settings;
+        const next: PersistedSettings = { ...persisted };
+        for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+          // SAFETY: AccountPreferences is the parsed subset of JSON-compatible stored app settings.
+          const value = nextSettings[field] as UnparsedWireValue;
+          // SAFETY: AccountPreferenceField selects the same persisted JSON-compatible setting value.
+          if (!sameAccountPreferenceValue(persisted[field] as UnparsedWireValue, value)) {
+            changed.push(field);
+          }
+          if (value === undefined) delete next[field];
+          else Object.assign(next, { [field]: value });
         }
-        if (value === undefined) delete next[field];
-        else Object.assign(next, { [field]: value });
-      }
-      return changed.length > 0 ? next : undefined;
+        return changed.length > 0 ? next : undefined;
+      });
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        settings: yield* this.snapshot(),
+        changed,
+      };
     });
-    return {
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      settings: await this.snapshot(),
-      changed,
-    };
   }
 
-  async accountPreferencesSyncBaseline(
+  accountPreferencesSyncBaseline(
     accountEmail: string,
-  ): Promise<AccountPreferences | undefined> {
-    const sync = (await this.#load()).accountPreferencesSync;
-    return sync?.accountEmail === accountEmail ? sync.preferences : undefined;
+  ): Effect.Effect<AccountPreferences | undefined, PlatformError> {
+    return Effect.map(this.#load(), ({ accountPreferencesSync: sync }) =>
+      sync?.accountEmail === accountEmail ? sync.preferences : undefined,
+    );
   }
 
-  async setAccountPreferencesSyncBaseline(
+  setAccountPreferencesSyncBaseline(
     accountEmail: string,
     preferences: AccountPreferences,
-  ): Promise<boolean> {
-    let saved = false;
-    await this.#mutate((persisted) => {
-      if (persisted.account?.email !== accountEmail) return undefined;
-      saved = true;
-      if (
-        persisted.accountPreferencesSync?.accountEmail === accountEmail &&
-        JSON.stringify(persisted.accountPreferencesSync.preferences) === JSON.stringify(preferences)
-      ) {
-        return undefined;
-      }
-      return { ...persisted, accountPreferencesSync: { accountEmail, preferences } };
+  ): Effect.Effect<boolean, PlatformError> {
+    return Effect.gen(this, function* () {
+      let saved = false;
+      yield* this.#mutate((persisted) => {
+        if (persisted.account?.email !== accountEmail) return undefined;
+        saved = true;
+        if (
+          persisted.accountPreferencesSync?.accountEmail === accountEmail &&
+          JSON.stringify(persisted.accountPreferencesSync.preferences) ===
+            JSON.stringify(preferences)
+        ) {
+          return undefined;
+        }
+        return { ...persisted, accountPreferencesSync: { accountEmail, preferences } };
+      });
+      return saved;
     });
-    return saved;
   }
 
   /** Clears one map entry only if it still holds the value the caller read. */
-  async clearEntryIfUnchanged<Field extends KeyedAppSettingField>(
+  clearEntryIfUnchanged<Field extends KeyedAppSettingField>(
     field: Field,
     key: string,
     expected: SettingEntryValue<Field>,
-  ): Promise<SettingsUpdateResult & { cleared: boolean }> {
+  ): Effect.Effect<SettingsUpdateResult & { cleared: boolean }, PlatformError> {
     // SAFETY: a setting entry's own value is one of the wire values it was parsed from.
     const held = expected as UnparsedWireValue;
-    const cleared = await this.#mutate((persisted) => {
-      // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
-      const current = persisted[field] as WireRecord | undefined;
-      if (!sameSettingEntry(field, current?.[key], held)) return undefined;
-      const entries = { ...current };
-      delete entries[key];
-      const next: PersistedSettings = { ...persisted };
-      if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
-      else delete next[field];
-      return next;
+    return Effect.gen(this, function* () {
+      const cleared = yield* this.#mutate((persisted) => {
+        // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
+        const current = persisted[field] as WireRecord | undefined;
+        if (!sameSettingEntry(field, current?.[key], held)) return undefined;
+        const entries = { ...current };
+        delete entries[key];
+        const next: PersistedSettings = { ...persisted };
+        if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
+        else delete next[field];
+        return next;
+      });
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot(), cleared };
     });
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot(), cleared };
   }
   #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
 
@@ -652,156 +672,168 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
-    this.#runtime = options.runtime;
+    this.#fileSystem = options.fileSystem;
   }
 
-  async snapshot(): Promise<AppSettings> {
-    const persisted = await this.#load();
-    const voiceCapability = await this.#voiceCapability(persisted);
-    const sources = await Promise.all(
-      CREDENTIAL_PROVIDER_LIST.map(
-        async (provider) => [provider.id, (await this.#resolveApiKey(provider)).source] as const,
-      ),
-    );
-    return {
-      stored: {
-        ...storedSettingsFromPersisted(persisted),
-        // Resolved the way the session source resolves it, so the panel marks
-        // what would actually be heard while the persisted file remains optional.
-        voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
-        voiceSource: voiceCapability.source,
-        formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
-      },
-      status: {
-        // SAFETY: the registry list contains every credential provider exactly once.
-        credentialSources: Object.fromEntries(sources) as Record<
-          CredentialProviderId,
-          CredentialSource
-        >,
-        // Reports what storing a key has already established, and asks nothing on
-        // its own: a snapshot is taken on every launch, and most of them are for
-        // a user with no key to protect.
-        secretStorage: this.#secretStorage,
-        // Whether a spoken turn could actually be minted: a key resolved, and this
-        // run will use it. Resolved here rather than left to the panel because it
-        // is the same question the voice and the pace are answered by — what would
-        // actually happen — and it travels with every settings reply, so storing a
-        // key is what turns voice on and deleting one is what turns it off.
-        voiceAvailable: voiceCapability.available,
-        // Whether this build can offer the Google Calendar sign-in at all: a
-        // registered OAuth client resolved, and this run would use what it
-        // grants. Without one the integration is not drawn at all.
-        calendarSignInAvailable:
-          this.#credentialsUsable && this.#overrides.googleCalendarSignIn !== undefined,
-        // Whether this build can offer the Apple Calendar connection: a Mac to
-        // read, and a run that would use what macOS grants. No client gates it
-        // the way the sign-ins are gated — the grant lives with the system.
-        appleCalendarAvailable: this.#credentialsUsable && process.platform === "darwin",
-        // The accounts without their grants: which are connected and which
-        // calendars count is the renderer's to draw; the tokens never travel.
-        calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
-          id: account.id,
-          selectedCalendarIds: account.calendars,
-        })),
-        // The Apple Calendar connection on the same terms: the fact and the
-        // chosen calendars, with nothing behind them to keep from travelling.
-        ...(persisted.appleCalendar
-          ? {
-              appleCalendar: {
-                id: APPLE_CALENDAR_ID,
-                selectedCalendarIds: persisted.appleCalendar.calendars,
-              },
-            }
-          : undefined),
-      },
-    };
-  }
-
-  /** Returns account credentials only to the main process. */
-  async readAccount(): Promise<StoredAccount | undefined> {
-    const account = (await this.#load()).account;
-    if (!account) return undefined;
-    return this.#decryptRecord(account.tokenCipher, (tokens) => {
-      const { accessToken, refreshToken } = tokens;
-      if (!isWireString(accessToken) || !isWireString(refreshToken)) return undefined;
+  snapshot(): Effect.Effect<AppSettings, PlatformError> {
+    return Effect.gen(this, function* () {
+      const persisted = yield* this.#load();
+      const voiceCapability = yield* this.#voiceCapability(persisted);
+      const sources = yield* Effect.forEach(CREDENTIAL_PROVIDER_LIST, (provider) =>
+        Effect.map(
+          this.#resolveApiKey(provider),
+          (resolved) => [provider.id, resolved.source] as const,
+        ),
+      );
       return {
-        accessToken,
-        refreshToken,
-        ...(account.id ? { id: account.id } : undefined),
-        email: account.email,
-        ...(account.name ? { name: account.name } : undefined),
-        ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
-        provider: account.provider,
+        stored: {
+          ...storedSettingsFromPersisted(persisted),
+          // Resolved the way the session source resolves it, so the panel marks
+          // what would actually be heard while the persisted file remains optional.
+          voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
+          voiceSource: voiceCapability.source,
+          formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
+        },
+        status: {
+          // SAFETY: the registry list contains every credential provider exactly once.
+          credentialSources: Object.fromEntries(sources) as Record<
+            CredentialProviderId,
+            CredentialSource
+          >,
+          // Reports what storing a key has already established, and asks nothing on
+          // its own: a snapshot is taken on every launch, and most of them are for
+          // a user with no key to protect.
+          secretStorage: this.#secretStorage,
+          // Whether a spoken turn could actually be minted: a key resolved, and this
+          // run will use it. Resolved here rather than left to the panel because it
+          // is the same question the voice and the pace are answered by — what would
+          // actually happen — and it travels with every settings reply, so storing a
+          // key is what turns voice on and deleting one is what turns it off.
+          voiceAvailable: voiceCapability.available,
+          // Whether this build can offer the Google Calendar sign-in at all: a
+          // registered OAuth client resolved, and this run would use what it
+          // grants. Without one the integration is not drawn at all.
+          calendarSignInAvailable:
+            this.#credentialsUsable && this.#overrides.googleCalendarSignIn !== undefined,
+          // Whether this build can offer the Apple Calendar connection: a Mac to
+          // read, and a run that would use what macOS grants. No client gates it
+          // the way the sign-ins are gated — the grant lives with the system.
+          appleCalendarAvailable: this.#credentialsUsable && process.platform === "darwin",
+          // The accounts without their grants: which are connected and which
+          // calendars count is the renderer's to draw; the tokens never travel.
+          calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
+            id: account.id,
+            selectedCalendarIds: account.calendars,
+          })),
+          // The Apple Calendar connection on the same terms: the fact and the
+          // chosen calendars, with nothing behind them to keep from travelling.
+          ...(persisted.appleCalendar
+            ? {
+                appleCalendar: {
+                  id: APPLE_CALENDAR_ID,
+                  selectedCalendarIds: persisted.appleCalendar.calendars,
+                },
+              }
+            : undefined),
+        },
       };
     });
   }
 
-  async accountSnapshot(): Promise<AccountSnapshot> {
-    const account = await this.readAccount();
-    return account
-      ? {
-          status: ACCOUNT_STATUS.SIGNED_IN,
-          email: account.email,
-          ...(account.name ? { name: account.name } : undefined),
-          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
-          provider: account.provider,
-        }
-      : { status: ACCOUNT_STATUS.SIGNED_OUT };
-  }
-
-  /** Stores both OAuth tokens under one Keychain-backed ciphertext. */
-  async setAccount(account: StoredAccount): Promise<AccountSnapshot> {
-    if (!this.#secretStorageUsable()) {
-      throw new Error("Encrypted credential storage is unavailable on this system.");
-    }
-    await this.#mutate((persisted) => {
-      const tokenCipher = this.#cipher
-        .encrypt(
-          JSON.stringify({
-            accessToken: account.accessToken,
-            refreshToken: account.refreshToken,
-          }),
-        )
-        .toString("base64");
-      const next: PersistedSettings = {
-        ...persisted,
-        account: {
-          tokenCipher,
+  /** Returns account credentials only to the main process. */
+  readAccount(): Effect.Effect<StoredAccount | undefined, PlatformError> {
+    return Effect.map(this.#load(), ({ account }) => {
+      if (!account) return undefined;
+      return this.#decryptRecord(account.tokenCipher, (tokens) => {
+        const { accessToken, refreshToken } = tokens;
+        if (!isWireString(accessToken) || !isWireString(refreshToken)) return undefined;
+        return {
+          accessToken,
+          refreshToken,
           ...(account.id ? { id: account.id } : undefined),
           email: account.email,
           ...(account.name ? { name: account.name } : undefined),
           ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
           provider: account.provider,
-        },
-      };
-      if (persisted.account?.email && persisted.account.email !== account.email) {
+        };
+      });
+    });
+  }
+
+  accountSnapshot(): Effect.Effect<AccountSnapshot, PlatformError> {
+    return Effect.map(this.readAccount(), (account) =>
+      account
+        ? {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            email: account.email,
+            ...(account.name ? { name: account.name } : undefined),
+            ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
+            provider: account.provider,
+          }
+        : { status: ACCOUNT_STATUS.SIGNED_OUT },
+    );
+  }
+
+  /** Stores both OAuth tokens under one Keychain-backed ciphertext. */
+  setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot, PlatformError> {
+    return Effect.gen(this, function* () {
+      if (!this.#secretStorageUsable()) {
+        throw new Error("Encrypted credential storage is unavailable on this system.");
+      }
+      yield* this.#mutate((persisted) => {
+        const tokenCipher = this.#cipher
+          .encrypt(
+            JSON.stringify({
+              accessToken: account.accessToken,
+              refreshToken: account.refreshToken,
+            }),
+          )
+          .toString("base64");
+        const next: PersistedSettings = {
+          ...persisted,
+          account: {
+            tokenCipher,
+            ...(account.id ? { id: account.id } : undefined),
+            email: account.email,
+            ...(account.name ? { name: account.name } : undefined),
+            ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
+            provider: account.provider,
+          },
+        };
+        if (persisted.account?.email && persisted.account.email !== account.email) {
+          for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+            delete next[field];
+          }
+          delete next.accountPreferencesSync;
+        }
+        return next;
+      });
+      return yield* this.accountSnapshot();
+    });
+  }
+
+  clearAccount(): Effect.Effect<AccountSnapshot, PlatformError> {
+    return Effect.as(
+      this.#mutate((persisted) => {
+        if (!persisted.account) return undefined;
+        const { account: _account, ...withoutAccount } = persisted;
+        const next: PersistedSettings = { ...withoutAccount };
         for (const field of ACCOUNT_PREFERENCE_FIELDS) {
           delete next[field];
         }
         delete next.accountPreferencesSync;
-      }
-      return next;
-    });
-    return this.accountSnapshot();
-  }
-
-  async clearAccount(): Promise<AccountSnapshot> {
-    await this.#mutate((persisted) => {
-      if (!persisted.account) return undefined;
-      const { account: _account, ...withoutAccount } = persisted;
-      const next: PersistedSettings = { ...withoutAccount };
-      for (const field of ACCOUNT_PREFERENCE_FIELDS) {
-        delete next[field];
-      }
-      delete next.accountPreferencesSync;
-      return next;
-    });
-    return { status: ACCOUNT_STATUS.SIGNED_OUT };
+        return next;
+      }),
+      { status: ACCOUNT_STATUS.SIGNED_OUT },
+    );
   }
 
   /** Main-process only: the source the minter and the reviewer are built for. */
-  async readVoiceSource(): Promise<VoiceSource> {
-    return (await this.#voiceCapability(await this.#load())).source;
+  readVoiceSource(): Effect.Effect<VoiceSource, PlatformError> {
+    return Effect.map(
+      Effect.flatMap(this.#load(), (persisted) => this.#voiceCapability(persisted)),
+      (capability) => capability.source,
+    );
   }
 
   /**
@@ -809,14 +841,16 @@ export class SettingsStore {
    * what this run holds. One resolution, so the panel's snapshot and the
    * minter's own read can never answer the question differently.
    */
-  async #voiceCapability(persisted: PersistedSettings) {
-    return resolveVoiceCapability({
-      credentialsUsable: this.#credentialsUsable,
-      keyConfigured:
-        this.#credentialsUsable &&
-        (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined,
-      accountSignedIn: this.#credentialsUsable && (await this.readAccount()) !== undefined,
-      chosenSource: persisted.voiceSource,
+  #voiceCapability(persisted: PersistedSettings) {
+    return Effect.gen(this, function* () {
+      const key = yield* this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID);
+      const account = yield* this.readAccount();
+      return resolveVoiceCapability({
+        credentialsUsable: this.#credentialsUsable,
+        keyConfigured: this.#credentialsUsable && key !== undefined,
+        accountSignedIn: this.#credentialsUsable && account !== undefined,
+        chosenSource: persisted.voiceSource,
+      });
     });
   }
 
@@ -825,10 +859,10 @@ export class SettingsStore {
    * reads. A provider with no key resolves to nothing, so its adapter observes
    * nothing and issues no request.
    */
-  async readApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
+  readApiKey(providerId: CredentialProviderId): Effect.Effect<string | undefined, PlatformError> {
     const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
-    if (!provider) return undefined;
-    return (await this.#resolveApiKey(provider)).apiKey;
+    if (!provider) return Effect.succeed(undefined);
+    return Effect.map(this.#resolveApiKey(provider), (resolved) => resolved.apiKey);
   }
 
   /**
@@ -837,23 +871,28 @@ export class SettingsStore {
    * an environment key was configured for this machine's shell, not entered
    * into Luke, so it is not Luke's to send anywhere.
    */
-  async readStoredApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
+  readStoredApiKey(
+    providerId: CredentialProviderId,
+  ): Effect.Effect<string | undefined, PlatformError> {
     const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
-    if (!provider) return undefined;
-    const resolved = await this.#resolveApiKey(provider);
-    return resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined;
+    if (!provider) return Effect.succeed(undefined);
+    return Effect.map(this.#resolveApiKey(provider), (resolved) =>
+      resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined,
+    );
   }
 
   /** Which account this Mac's provider keys were last synced for; see the field. */
-  async readVaultSyncAccount(): Promise<string | undefined> {
-    return (await this.#load()).vaultSyncAccount;
+  readVaultSyncAccount(): Effect.Effect<string | undefined, PlatformError> {
+    return Effect.map(this.#load(), (persisted) => persisted.vaultSyncAccount);
   }
 
-  async setVaultSyncAccount(accountKey: string): Promise<void> {
-    await this.#mutate((persisted) =>
-      persisted.vaultSyncAccount === accountKey
-        ? undefined
-        : { ...persisted, vaultSyncAccount: accountKey },
+  setVaultSyncAccount(accountKey: string): Effect.Effect<void, PlatformError> {
+    return Effect.asVoid(
+      this.#mutate((persisted) =>
+        persisted.vaultSyncAccount === accountKey
+          ? undefined
+          : { ...persisted, vaultSyncAccount: accountKey },
+      ),
     );
   }
 
@@ -862,58 +901,60 @@ export class SettingsStore {
    * key the user cannot use comes back as a `reason` rather than an exception,
    * so only an unexpected filesystem failure throws.
    */
-  async setApiKey(
+  setApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
-  ): Promise<SettingsUpdateResult> {
-    const keyFormat = CREDENTIAL_PROVIDER_LIST.find(
-      (candidate) => candidate.id === providerId,
-    )?.keyFormat;
-    const normalized = apiKey?.trim();
-    // Clearing a key needs no cipher, so only a key on its way in asks whether
-    // there is anywhere to put it.
-    const rejection = normalized
-      ? !this.#secretStorageUsable()
-        ? "Encrypted credential storage is unavailable on this system."
-        : apiKeyRejection(normalized, keyFormat)
-      : undefined;
-    if (rejection)
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        settings: await this.snapshot(),
-        reason: rejection,
-      };
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      const keyFormat = CREDENTIAL_PROVIDER_LIST.find(
+        (candidate) => candidate.id === providerId,
+      )?.keyFormat;
+      const normalized = apiKey?.trim();
+      // Clearing a key needs no cipher, so only a key on its way in asks whether
+      // there is anywhere to put it.
+      const rejection = normalized
+        ? !this.#secretStorageUsable()
+          ? "Encrypted credential storage is unavailable on this system."
+          : apiKeyRejection(normalized, keyFormat)
+        : undefined;
+      if (rejection)
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          settings: yield* this.snapshot(),
+          reason: rejection,
+        };
 
-    await this.#mutate(
-      (persisted) => {
-        const ciphertext = normalized
-          ? this.#cipher.encrypt(normalized).toString("base64")
-          : undefined;
-        // Connecting the key voice runs on is choosing it: someone who parked on
-        // the free allowance and later pastes a key means to use that key, and a
-        // stored preference quietly ignoring it would look like the key failed
-        // to save. Deleting one leaves the choice alone — there is nothing left
-        // for it to hold back, and it says where to land if another key arrives.
-        const chooses =
-          providerId === VOICE_CREDENTIAL_PROVIDER_ID &&
-          ciphertext !== undefined &&
-          persisted.voiceSource !== VOICE_SOURCE.KEY;
-        // A key that is already stored is not a write — unless it is also the
-        // act of choosing it, which pasting the same key back while parked on
-        // the allowance is.
-        if (persisted.apiKeys[providerId] === ciphertext && !chooses) return undefined;
-        // Every other provider's ciphertext is carried over, so saving one key
-        // never disturbs another.
-        const apiKeys = { ...persisted.apiKeys };
-        if (ciphertext) apiKeys[providerId] = ciphertext;
-        else delete apiKeys[providerId];
-        const next: PersistedSettings = { ...persisted, apiKeys };
-        if (chooses) next.voiceSource = VOICE_SOURCE.KEY;
-        return next;
-      },
-      () => this.#resolved.delete(providerId),
-    );
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+      yield* this.#mutate(
+        (persisted) => {
+          const ciphertext = normalized
+            ? this.#cipher.encrypt(normalized).toString("base64")
+            : undefined;
+          // Connecting the key voice runs on is choosing it: someone who parked on
+          // the free allowance and later pastes a key means to use that key, and a
+          // stored preference quietly ignoring it would look like the key failed
+          // to save. Deleting one leaves the choice alone — there is nothing left
+          // for it to hold back, and it says where to land if another key arrives.
+          const chooses =
+            providerId === VOICE_CREDENTIAL_PROVIDER_ID &&
+            ciphertext !== undefined &&
+            persisted.voiceSource !== VOICE_SOURCE.KEY;
+          // A key that is already stored is not a write — unless it is also the
+          // act of choosing it, which pasting the same key back while parked on
+          // the allowance is.
+          if (persisted.apiKeys[providerId] === ciphertext && !chooses) return undefined;
+          // Every other provider's ciphertext is carried over, so saving one key
+          // never disturbs another.
+          const apiKeys = { ...persisted.apiKeys };
+          if (ciphertext) apiKeys[providerId] = ciphertext;
+          else delete apiKeys[providerId];
+          const next: PersistedSettings = { ...persisted, apiKeys };
+          if (chooses) next.voiceSource = VOICE_SOURCE.KEY;
+          return next;
+        },
+        () => this.#resolved.delete(providerId),
+      );
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
+    });
   }
 
   /**
@@ -923,68 +964,72 @@ export class SettingsStore {
    * choices — the choices are the user's, and a fresh grant is not a fresh
    * mind about them.
    */
-  async addCalendarAccount(
+  addCalendarAccount(
     accountId: string,
     refreshToken: string,
     selectedCalendarIds: readonly string[],
-  ): Promise<SettingsUpdateResult> {
-    const id = calendarIdentifierText(accountId);
-    const normalized = refreshToken.trim();
-    const rejection = !id
-      ? "Google answered the sign-in without naming an account."
-      : !this.#secretStorageUsable()
-        ? "Encrypted credential storage is unavailable on this system."
-        : // The shape rules a pasted key answers to: a grant is Google's to
-          // shape, and only sendability is checked.
-          apiKeyRejection(normalized);
-    if (rejection || !id) {
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        settings: await this.snapshot(),
-        reason: rejection ?? "Google answered the sign-in without naming an account.",
-      };
-    }
-
-    await this.#mutate(
-      (persisted) => {
-        const token = this.#cipher.encrypt(normalized).toString("base64");
-        const existing = persisted.calendarAccounts ?? [];
-        const held = existing.find((account) => account.id === id);
-        if (!held && existing.length >= MAXIMUM_CALENDAR_ACCOUNTS) {
-          throw new Error("More calendar accounts than the store keeps");
-        }
-        const account: PersistedCalendarAccount = {
-          id,
-          token,
-          calendars: held
-            ? held.calendars
-            : sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      const id = calendarIdentifierText(accountId);
+      const normalized = refreshToken.trim();
+      const rejection = !id
+        ? "Google answered the sign-in without naming an account."
+        : !this.#secretStorageUsable()
+          ? "Encrypted credential storage is unavailable on this system."
+          : // The shape rules a pasted key answers to: a grant is Google's to
+            // shape, and only sendability is checked.
+            apiKeyRejection(normalized);
+      if (rejection || !id) {
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          settings: yield* this.snapshot(),
+          reason: rejection ?? "Google answered the sign-in without naming an account.",
         };
-        return withCalendarAccounts(
-          persisted,
-          held
-            ? existing.map((candidate) => (candidate.id === id ? account : candidate))
-            : [...existing, account],
-        );
-      },
-      () => this.#forgetCalendarAccounts(),
-    );
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+      }
+
+      yield* this.#mutate(
+        (persisted) => {
+          const token = this.#cipher.encrypt(normalized).toString("base64");
+          const existing = persisted.calendarAccounts ?? [];
+          const held = existing.find((account) => account.id === id);
+          if (!held && existing.length >= MAXIMUM_CALENDAR_ACCOUNTS) {
+            throw new Error("More calendar accounts than the store keeps");
+          }
+          const account: PersistedCalendarAccount = {
+            id,
+            token,
+            calendars: held
+              ? held.calendars
+              : sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
+          };
+          return withCalendarAccounts(
+            persisted,
+            held
+              ? existing.map((candidate) => (candidate.id === id ? account : candidate))
+              : [...existing, account],
+          );
+        },
+        () => this.#forgetCalendarAccounts(),
+      );
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
+    });
   }
 
   /** Disconnects one account, deleting its stored grant with it. */
-  async removeCalendarAccount(accountId: string): Promise<SettingsUpdateResult> {
-    await this.#mutate(
-      (persisted) => {
-        const existing = persisted.calendarAccounts ?? [];
-        const calendarAccounts = existing.filter((account) => account.id !== accountId);
-        return calendarAccounts.length === existing.length
-          ? undefined
-          : withCalendarAccounts(persisted, calendarAccounts);
-      },
-      () => this.#forgetCalendarAccounts(),
-    );
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+  removeCalendarAccount(accountId: string): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      yield* this.#mutate(
+        (persisted) => {
+          const existing = persisted.calendarAccounts ?? [];
+          const calendarAccounts = existing.filter((account) => account.id !== accountId);
+          return calendarAccounts.length === existing.length
+            ? undefined
+            : withCalendarAccounts(persisted, calendarAccounts);
+        },
+        () => this.#forgetCalendarAccounts(),
+      );
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
+    });
   }
 
   /**
@@ -995,54 +1040,56 @@ export class SettingsStore {
    * process validates a selection against its latest observation — so only
    * the value's shape is held here.
    */
-  async setCalendarSelected(
+  setCalendarSelected(
     accountId: string,
     calendarId: string,
     selected: boolean,
-  ): Promise<SettingsUpdateResult> {
-    const id = calendarIdentifierText(calendarId);
-    if (!id)
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        settings: await this.snapshot(),
-        reason: "That is not a calendar id.",
-      };
-    let missing: string | undefined;
-    const apple = accountId === APPLE_CALENDAR_ID;
-    await this.#mutate(
-      (persisted) => {
-        if (apple) {
-          const held = persisted.appleCalendar;
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      const id = calendarIdentifierText(calendarId);
+      if (!id)
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          settings: yield* this.snapshot(),
+          reason: "That is not a calendar id.",
+        };
+      let missing: string | undefined;
+      const apple = accountId === APPLE_CALENDAR_ID;
+      yield* this.#mutate(
+        (persisted) => {
+          if (apple) {
+            const held = persisted.appleCalendar;
+            if (!held) {
+              missing = "Apple Calendar is not connected.";
+              return undefined;
+            }
+            const calendars = toggledCalendarSelection(held.calendars, id, selected);
+            return calendars ? withAppleCalendar(persisted, { calendars }) : undefined;
+          }
+          const existing = persisted.calendarAccounts ?? [];
+          const held = existing.find((account) => account.id === accountId);
           if (!held) {
-            missing = "Apple Calendar is not connected.";
+            missing = "That calendar account is not connected.";
             return undefined;
           }
           const calendars = toggledCalendarSelection(held.calendars, id, selected);
-          return calendars ? withAppleCalendar(persisted, { calendars }) : undefined;
-        }
-        const existing = persisted.calendarAccounts ?? [];
-        const held = existing.find((account) => account.id === accountId);
-        if (!held) {
-          missing = "That calendar account is not connected.";
-          return undefined;
-        }
-        const calendars = toggledCalendarSelection(held.calendars, id, selected);
-        if (!calendars) return undefined;
-        return withCalendarAccounts(
-          persisted,
-          existing.map((account) =>
-            account.id === accountId ? { ...account, calendars } : account,
-          ),
-        );
-      },
-      // Only a Google account's grant is decrypted, so only its edit costs the
-      // cache; this Mac's connection carries no grant to have cached.
-      apple ? undefined : () => this.#forgetCalendarAccounts(),
-    );
-    const settings = await this.snapshot();
-    return missing
-      ? { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: missing }
-      : { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
+          if (!calendars) return undefined;
+          return withCalendarAccounts(
+            persisted,
+            existing.map((account) =>
+              account.id === accountId ? { ...account, calendars } : account,
+            ),
+          );
+        },
+        // Only a Google account's grant is decrypted, so only its edit costs the
+        // cache; this Mac's connection carries no grant to have cached.
+        apple ? undefined : () => this.#forgetCalendarAccounts(),
+      );
+      const settings = yield* this.snapshot();
+      return missing
+        ? { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: missing }
+        : { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
+    });
   }
 
   /**
@@ -1051,17 +1098,19 @@ export class SettingsStore {
    * another OS account, a rotated Keychain — is skipped; its row still shows
    * connected, and the failing read is what says to sign in again.
    */
-  async readCalendarAccounts(): Promise<readonly CalendarAccountCredential[]> {
-    if (this.#resolvedCalendarAccounts) return this.#resolvedCalendarAccounts;
-    const persisted = await this.#load();
-    const accounts: CalendarAccountCredential[] = [];
-    for (const account of persisted.calendarAccounts ?? []) {
-      const refreshToken = this.#decryptSecret(account.token);
-      if (!refreshToken) continue;
-      accounts.push({ id: account.id, refreshToken, selectedCalendarIds: account.calendars });
-    }
-    this.#resolvedCalendarAccounts = accounts;
-    return accounts;
+  readCalendarAccounts(): Effect.Effect<readonly CalendarAccountCredential[], PlatformError> {
+    return Effect.gen(this, function* () {
+      if (this.#resolvedCalendarAccounts) return this.#resolvedCalendarAccounts;
+      const persisted = yield* this.#load();
+      const accounts: CalendarAccountCredential[] = [];
+      for (const account of persisted.calendarAccounts ?? []) {
+        const refreshToken = this.#decryptSecret(account.token);
+        if (!refreshToken) continue;
+        accounts.push({ id: account.id, refreshToken, selectedCalendarIds: account.calendars });
+      }
+      this.#resolvedCalendarAccounts = accounts;
+      return accounts;
+    });
   }
 
   /**
@@ -1071,28 +1120,32 @@ export class SettingsStore {
    * choices: the choices are the user's, and asking again is not a fresh
    * mind about them.
    */
-  async connectAppleCalendar(
+  connectAppleCalendar(
     selectedCalendarIds: readonly string[],
-  ): Promise<SettingsUpdateResult> {
-    await this.#mutate((persisted) =>
-      persisted.appleCalendar
-        ? undefined
-        : withAppleCalendar(persisted, {
-            calendars: sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
-          }),
-    );
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      yield* this.#mutate((persisted) =>
+        persisted.appleCalendar
+          ? undefined
+          : withAppleCalendar(persisted, {
+              calendars: sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
+            }),
+      );
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
+    });
   }
 
   /**
    * Disconnects this Mac's Calendar. Only the connection is Luke's to delete:
    * the system grant stays macOS's, withdrawable in System Settings.
    */
-  async disconnectAppleCalendar(): Promise<SettingsUpdateResult> {
-    await this.#mutate((persisted) =>
-      persisted.appleCalendar ? withAppleCalendar(persisted, undefined) : undefined,
-    );
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+  disconnectAppleCalendar(): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      yield* this.#mutate((persisted) =>
+        persisted.appleCalendar ? withAppleCalendar(persisted, undefined) : undefined,
+      );
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
+    });
   }
 
   /** The decrypted account list a written one makes stale. */
@@ -1105,15 +1158,19 @@ export class SettingsStore {
    * no grant decrypted and no keychain touched, for the onboarding reconcile
    * that only needs to know the step's purpose is already standing.
    */
-  async calendarConnectionStored(): Promise<boolean> {
-    const persisted = await this.#load();
-    return (persisted.calendarAccounts ?? []).length > 0 || persisted.appleCalendar !== undefined;
+  calendarConnectionStored(): Effect.Effect<boolean, PlatformError> {
+    return Effect.map(
+      this.#load(),
+      (persisted) =>
+        (persisted.calendarAccounts ?? []).length > 0 || persisted.appleCalendar !== undefined,
+    );
   }
 
   /** The connection as the reader is fed it; absent means never run the helper. */
-  async readAppleCalendarConnection(): Promise<AppleCalendarConnection | undefined> {
-    const held = (await this.#load()).appleCalendar;
-    return held ? { selectedCalendarIds: held.calendars } : undefined;
+  readAppleCalendarConnection(): Effect.Effect<AppleCalendarConnection | undefined, PlatformError> {
+    return Effect.map(this.#load(), ({ appleCalendar: held }) =>
+      held ? { selectedCalendarIds: held.calendars } : undefined,
+    );
   }
 
   /**
@@ -1127,19 +1184,21 @@ export class SettingsStore {
    * A scope already at its defaults writes nothing, like any other setter
    * asked for the value it holds.
    */
-  async resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult> {
-    await this.#mutate((persisted) => {
-      const next: PersistedSettings = { ...persisted };
-      for (const field of APP_SETTING_FIELDS) {
-        const definition = APP_SETTING_SCHEMA[field];
-        if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
-        if (definition.guard(undefined).valid) delete next[field];
-        else Object.assign(next, { [field]: definition.default });
-      }
-      const changed = APP_SETTING_FIELDS.some((field) => next[field] !== persisted[field]);
-      return changed ? next : undefined;
+  resetSettings(scope: SettingsResetScope): Effect.Effect<SettingsUpdateResult, PlatformError> {
+    return Effect.gen(this, function* () {
+      yield* this.#mutate((persisted) => {
+        const next: PersistedSettings = { ...persisted };
+        for (const field of APP_SETTING_FIELDS) {
+          const definition = APP_SETTING_SCHEMA[field];
+          if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+          if (definition.guard(undefined).valid) delete next[field];
+          else Object.assign(next, { [field]: definition.default });
+        }
+        const changed = APP_SETTING_FIELDS.some((field) => next[field] !== persisted[field]);
+        return changed ? next : undefined;
+      });
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
     });
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -1153,39 +1212,22 @@ export class SettingsStore {
    * disturb would cost a Keychain read for nothing. Answers whether a write
    * landed.
    */
-  async #mutate(
+  #mutate(
     mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
     invalidate?: () => void,
-  ): Promise<boolean> {
-    let wrote = false;
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
-      const mutated = mutate(persisted);
-      if (!mutated) return;
-      const next: PersistedSettings = { ...mutated, version: SETTINGS_FILE_VERSION };
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
-      invalidate?.();
-      wrote = true;
-    });
-    return wrote;
-  }
-
-  /**
-   * Runs one settings change at a time. Serializing only the file write is not
-   * enough: a user with more than one provider row can start a second save
-   * before the first lands, and both would read the same stored keys before
-   * either wrote, so the later write would drop the other provider's key.
-   */
-  async #serialize<Result>(operation: () => Promise<Result>): Promise<Result> {
-    const result = this.#mutations.then(operation);
-    // A failed change must not wedge the queue, so the chain forgets its
-    // outcome; the caller still receives the rejection.
-    this.#mutations = result.then(
-      () => undefined,
-      () => undefined,
+  ): Effect.Effect<boolean, PlatformError> {
+    return this.#writes.withPermits(1)(
+      Effect.gen(this, function* () {
+        const persisted = yield* this.#load();
+        const mutated = mutate(persisted);
+        if (!mutated) return false;
+        const next: PersistedSettings = { ...mutated, version: SETTINGS_FILE_VERSION };
+        yield* this.#write(next);
+        this.#held = next;
+        invalidate?.();
+        return true;
+      }),
     );
-    return result;
   }
 
   /**
@@ -1212,23 +1254,27 @@ export class SettingsStore {
    * few seconds, and decrypting on each tick would hit the OS keychain
    * thousands of times a day for a value only the user can change.
    */
-  async #resolveApiKey(provider: CredentialProvider): Promise<ResolvedApiKey> {
-    const cached = this.#resolved.get(provider.id);
-    if (cached) return cached;
-    const stored = await this.#storedApiKey(provider);
-    const fromEnvironment = stored ? undefined : this.#overrides.apiKeys.get(provider.id);
-    const resolved: ResolvedApiKey = stored
-      ? { apiKey: stored, source: CREDENTIAL_SOURCE.ENCRYPTED_FILE }
-      : fromEnvironment
-        ? { apiKey: Redacted.value(fromEnvironment), source: CREDENTIAL_SOURCE.ENVIRONMENT }
-        : { source: CREDENTIAL_SOURCE.NONE };
-    this.#resolved.set(provider.id, resolved);
-    return resolved;
+  #resolveApiKey(provider: CredentialProvider): Effect.Effect<ResolvedApiKey, PlatformError> {
+    return Effect.gen(this, function* () {
+      const cached = this.#resolved.get(provider.id);
+      if (cached) return cached;
+      const stored = yield* this.#storedApiKey(provider);
+      const fromEnvironment = stored ? undefined : this.#overrides.apiKeys.get(provider.id);
+      const resolved: ResolvedApiKey = stored
+        ? { apiKey: stored, source: CREDENTIAL_SOURCE.ENCRYPTED_FILE }
+        : fromEnvironment
+          ? { apiKey: Redacted.value(fromEnvironment), source: CREDENTIAL_SOURCE.ENVIRONMENT }
+          : { source: CREDENTIAL_SOURCE.NONE };
+      this.#resolved.set(provider.id, resolved);
+      return resolved;
+    });
   }
 
-  async #storedApiKey(provider: CredentialProvider): Promise<string | undefined> {
-    const ciphertext = (await this.#load()).apiKeys[provider.id];
-    return ciphertext ? this.#decryptSecret(ciphertext, provider.keyFormat) : undefined;
+  #storedApiKey(provider: CredentialProvider): Effect.Effect<string | undefined, PlatformError> {
+    return Effect.map(this.#load(), (persisted) => {
+      const ciphertext = persisted.apiKeys[provider.id];
+      return ciphertext ? this.#decryptSecret(ciphertext, provider.keyFormat) : undefined;
+    });
   }
 
   /**
@@ -1264,36 +1310,52 @@ export class SettingsStore {
     }
   }
 
-  /** Shares one in-flight read, but lets a transient failure retry next time. */
-  async #load(): Promise<PersistedSettings> {
-    const loading = this.#loading ?? this.#readPersisted();
-    this.#loading = loading;
-    try {
-      return await loading;
-    } catch (error) {
-      // Defaults belong to an absent or corrupt file, both handled by the
-      // reader. An unexpected I/O failure must not become writable defaults:
-      // forget only this failed attempt so the next read can try the file again.
-      if (this.#loading === loading) this.#loading = undefined;
-      throw error;
-    }
-  }
-
-  async #readPersisted(): Promise<PersistedSettings> {
-    const directory = this.#directory();
-    const source = await Runtime.runPromise(this.#runtime)(readSettingsFileText(directory));
-    if (!source) return defaultPersistedSettings();
-    // A corrupt settings file is replaced by the next write rather than
-    // failing app start, so a refusal here falls back to defaults exactly as
-    // an absent file does.
-    return Either.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings);
-  }
-
-  /** Only ever called from inside `#serialize`, so writes cannot interleave. */
-  async #write(persisted: PersistedSettings): Promise<void> {
-    const directory = this.#directory();
-    await Runtime.runPromise(this.#runtime)(
-      writeSettingsFileAtomic(directory, `${JSON.stringify(persisted, undefined, 2)}\n`),
+  /**
+   * Shares one read, but lets a transient failure retry next time. The gate is
+   * what shares it: a second reader waits for the first read rather than
+   * making its own, and a read that failed leaves nothing held, so the next
+   * one tries the file again rather than turning an I/O failure into writable
+   * defaults.
+   */
+  #load(): Effect.Effect<PersistedSettings, PlatformError> {
+    return this.#reads.withPermits(1)(
+      Effect.suspend(() =>
+        this.#held
+          ? Effect.succeed(this.#held)
+          : Effect.tap(this.#readPersisted(), (persisted) =>
+              Effect.sync(() => {
+                this.#held = persisted;
+              }),
+            ),
+      ),
     );
+  }
+
+  #readPersisted(): Effect.Effect<PersistedSettings, PlatformError> {
+    return Effect.map(this.#onFileSystem(readSettingsFileText(this.#directory())), (source) =>
+      source === undefined
+        ? defaultPersistedSettings()
+        : // A corrupt settings file is replaced by the next write rather than
+          // failing app start, so a refusal here falls back to defaults exactly
+          // as an absent file does.
+          Either.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings),
+    );
+  }
+
+  /** Only ever run inside `#mutate`'s gate, so writes cannot interleave. */
+  #write(persisted: PersistedSettings): Effect.Effect<void, PlatformError> {
+    return this.#onFileSystem(
+      writeSettingsFileAtomic(this.#directory(), `${JSON.stringify(persisted, undefined, 2)}\n`),
+    );
+  }
+
+  /**
+   * The file system this store was handed, provided to its own reads and
+   * writes, so a caller of any method above is left nothing to provide.
+   */
+  #onFileSystem<A>(
+    effect: Effect.Effect<A, PlatformError, FileSystem.FileSystem>,
+  ): Effect.Effect<A, PlatformError> {
+    return Effect.provideService(effect, FileSystem.FileSystem, this.#fileSystem);
   }
 }

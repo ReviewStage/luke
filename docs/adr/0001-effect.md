@@ -485,10 +485,10 @@ because P12-04d threads that runtime through `VoiceCapabilityAssembler` to
 own permanent row above; what this file no longer holds is a run of its own.
 `startCapabilities` and `stopCapabilities` are the links' own effects behind
 an `Effect.suspend`, which is what keeps a link read no earlier than the call
-that needs it, and `onSignOut` is `releaseDevice` directly. What the composer still lifts is
-the settings store's three account reads and writes, each an `Effect.promise`
-at the seam rather than a run made inside the session manager, until P12-14c
-takes the store itself onto effects.
+that needs it, and `onSignOut` is `releaseDevice` directly. The three account reads and
+writes it lifted at that seam are lifted no longer: P12-14c took the store
+itself onto effects, so each is the store's own, with `Effect.orDie` where the
+rejected promise behind it was already a defect.
 
 P7-13 finished the boundary those pairs sit behind: a `GatewayMethodTable`
 entry is an `Effect<WireValue | undefined, GatewayRefusal>` rather than a
@@ -596,30 +596,34 @@ is run on the writer's own `ManagedRuntime` here. It is deleted once the host
 composer that holds it is a `Layer` able to hold that runtime itself, in
 Phase 7's devtrace composer conversion.
 
-`SettingsStore`'s `#readPersisted` and `#write` in
-`packages/host/src/settings-store.ts` are on the allowlist too, though not on
-`AgentTraceWriter`'s terms any more: `compose-settings.ts` is now an `Effect`
-over the `HostKernelTag`, `Environment`, `SecretCipher`, and
-`FileSystem.FileSystem` tags, so the class no longer builds its own
-`ManagedRuntime` over `NodeFileSystem.layer` — the composer captures the
-`Runtime.Runtime<FileSystem.FileSystem>` it is already running under, with
-`Effect.runtime`, and hands that in, so `readSettingsFileText` and
-`writeSettingsFileAtomic` run on the one `FileSystem` the host's assembly
-layer resolves rather than a second layer of the class's own. What keeps this
-on the allowlist is narrower now: the class still answers `get`/`set`/
-`snapshot`/... as Promises rather than Effects, so those two reads and writes
-still have to reach a promise somewhere, and this is where. The parse failure
-beside them, `parsePersistedSettingsEither`, answers an `Either` rather than a
-throw and is not on this allowlist, since it runs no effect: it wraps the
-store's own `parsePersistedSettingsThrowing` in `Either.try`, kept private to
-that wrapping rather than a second parse a caller could reach directly, and
-every caller today still folds a refusal into `defaultPersistedSettings()`
-exactly as the throwing form's catch already did. The cipher is sourced
+`SettingsStore` in `packages/host/src/settings-store.ts` is off the allowlist
+since P12-14c: its own methods are effects, `#readPersisted` and `#write`
+provide the `FileSystem` service the composer hands the class rather than
+running on a runtime it was handed, and the class holds no runtime at all.
+Its serialization moved with them and is Effect's own: the write gate and the
+read gate are two `Effect.unsafeMakeSemaphore(1)` permits in place of the two
+promise chains that stood there, so a second reader still waits for the first
+read rather than making its own, and a read that failed still leaves nothing
+held for the next one to inherit. The parse failure beside them,
+`parsePersistedSettingsEither`, answers an `Either` rather than a throw and
+never was on this allowlist, since it runs no effect. The cipher is sourced
 through the `SecretCipher` tag at the composer and handed to the class as the
 same plain field it always was: decrypting a stored key or grant is still
 synchronous and throws on its own terms, so widening the tag past the
-composer would gain the class nothing. The plan schedules no PR that states
-this class's own methods as Effects, and this row is where that is recorded.
+composer would gain the class nothing.
+
+`awaitedSettingsStore` in `packages/host/src/settings-store-awaited.ts` is
+what took the store's place on the allowlist, and it is the store's own
+methods as the promises their unmigrated callers still hold, run on the
+runtime the host is composed on. The callers are the reason it exists rather
+than the store: the calendars, observation, and live composers reach the
+store from promise-shaped bodies of their own, the settings composer's
+account-preferences and provider-key-vault chains are promise queues,
+`session-action-performer.ts` reads one field inside a promise, and
+`@sidecar/voice`'s `VoiceSettings` is a promise-shaped interface the
+capability assembler awaits — each its own conversion, and each one's landing
+takes rows out of this face. It is deleted by P12-14d..g, when the last of
+them yields the store directly.
 
 `tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is on the same
 terms as `runCall`, permanently: the traced `respond` still answers the
@@ -1098,6 +1102,7 @@ design decision stated as such:
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b |
+| `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | P12-14d..g — the calendars, observation, and live composers, the settings composer's promise chains, the session action performer, and `@sidecar/voice`'s `VoiceSettings` |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |

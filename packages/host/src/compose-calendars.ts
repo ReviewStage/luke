@@ -122,7 +122,7 @@ export const composeCalendars = (
     const runtime = yield* Effect.runtime<never>();
     const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
-    const settingsStore = settings.store;
+    const settingsStore = settings.awaitedStore;
     const late = yield* lateService<CalendarsLinks>();
     const links = (): CalendarsLinks => {
       const standing = late.unsafePeek();

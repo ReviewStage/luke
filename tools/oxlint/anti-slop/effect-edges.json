@@ -43,7 +43,6 @@
     "packages/host/src/compose-conversation.ts",
     "packages/host/src/compose-devices.ts",
     "packages/host/src/service.ts",
-    "packages/host/src/settings-store.ts",
     "packages/host/src/snapshot-roster.ts",
     "packages/host/src/testing/gateway-service.ts",
     "packages/hosted/src/account-call.ts",
@@ -61,6 +60,7 @@
     "apps/web/server/hosted/fiber-runner.ts",
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-live.ts",
+    "packages/host/src/settings-store-awaited.ts",
     "packages/runtime/src/children.effect.ts",
     "packages/runtime/src/queue.effect.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
