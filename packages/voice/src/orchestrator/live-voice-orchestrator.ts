@@ -56,18 +56,16 @@ export interface LiveVoiceExchangeOpening {
 export interface LiveVoiceBridge {
   reportView(view: LiveVoiceView, exchange: LiveVoiceExchangeOpening | undefined): void;
   /** Asks the system for the microphone, answering whether it is granted. */
-  requestMicrophone(): Promise<boolean>;
+  requestMicrophone(): Effect.Effect<boolean>;
   /** The neutral note said when the hosted service's ceiling refuses a session. */
-  hostedUnavailableNote(): Promise<string | undefined>;
+  hostedUnavailableNote(): Effect.Effect<string | undefined>;
   /** Tells the host to stop Luke speaking, answering whether a session stood to tell; the stop key's ask alone, and only while he speaks. */
-  stopSpeaking(): Promise<boolean>;
+  stopSpeaking(): Effect.Effect<boolean>;
 }
 
 export interface LiveVoiceOrchestratorOptions {
   bridge: LiveVoiceBridge;
   createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
-  /** The runtime the session's lifecycle fiber is forked on; `Runtime.defaultRuntime` for a caller (a test today) that holds none of its own. */
-  runtime?: Runtime.Runtime<never>;
 }
 
 /** Nobody heard on either side, which is what a call that is gone carries. */
@@ -105,24 +103,18 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  * written here: both speakers' lines are the host's, from the transcript its
  * sideband receives.
  *
- * The standing call's whole life is one fiber, forked on the runtime this
- * orchestrator was handed: it acquires the call by opening it, waits to be
- * told the call should end, and releases it by closing it, so a call is
- * closed exactly once whichever way its life ends — on its own status, on the
- * host's word, or on `stop`'s interruption. `LiveVoiceCall`'s four verbs
- * answer Effects, run on that same runtime, but `#ensureSession` and every
- * public verb above them still answers a Promise of its own.
- *
- * @deprecated `beginTalk`, `endTalk`, and `stopSpeaking` answer promises
- * because this orchestrator still holds its own runtime rather than a caller's
- * fiber. Its one caller is the renderer's `use-voice-session.ts`, never a
- * `packages/host` composer, so P9-03 (the renderer's own voice lane) deletes
- * the promise-facing shape once that caller runs on its own fiber.
+ * Every verb is an Effect of the caller's own fiber, and the standing call's
+ * whole life is one daemon fiber forked from it: it acquires the call by
+ * opening it, waits to be told the call should end, and releases it by
+ * closing it, so a call is closed exactly once whichever way its life ends —
+ * on its own status, on the host's word, or on `stop`'s interruption. What
+ * stays a plain method is what decides nothing asynchronously: `surround`
+ * amends the surroundings, and the call's own callbacks report a status or a
+ * caption row.
  */
 export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;
   readonly #createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
-  readonly #runtime: Runtime.Runtime<never>;
   readonly #strip = new NoticeStrip({ onChanged: () => this.#touch() });
   #call: LiveVoiceCall | undefined;
   #surroundings: LiveVoiceSurroundings = {
@@ -166,11 +158,6 @@ export class LiveVoiceOrchestrator {
   constructor(options: LiveVoiceOrchestratorOptions) {
     this.#bridge = options.bridge;
     this.#createCall = options.createCall;
-    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
-  }
-
-  #run<A>(effect: Effect.Effect<A>): Promise<A> {
-    return Runtime.runPromise(this.#runtime)(effect);
   }
 
   surround(surroundings: LiveVoiceSurroundings): void {
@@ -190,31 +177,33 @@ export class LiveVoiceOrchestrator {
    * hold that ended while the system's microphone dialog stood, or while the
    * session was opening, unmutes nothing.
    */
-  async beginTalk(): Promise<void> {
-    if (this.#surroundings.voiceAvailable === false) {
-      const unavailable = await this.#bridge.hostedUnavailableNote();
-      if (unavailable) this.#strip.showNotice(unavailable);
-      return;
-    }
-    this.#pressHeld = true;
-    if (!this.#surroundings.microphoneGranted) {
-      const granted = await this.#bridge.requestMicrophone();
-      if (!granted) {
-        this.#strip.showError(MICROPHONE_REFUSED_NOTE);
+  beginTalk(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (this.#surroundings.voiceAvailable === false) {
+        const unavailable = yield* this.#bridge.hostedUnavailableNote();
+        if (unavailable) this.#strip.showNotice(unavailable);
         return;
       }
-      if (!this.#pressHeld) return;
-    }
-    const call = await this.#ensureSession({ byPress: true });
-    // A key let go of during the opening leaves the session muted, and the
-    // mute is still sent: the press's device rode the offer, and only the
-    // release takes it back.
-    if (call) await this.#run(this.#pressHeld ? call.unmute() : call.mute());
-    // The press is answered once the session hears the developer; between the
-    // offer and the unmute the session passes through muted, which is not the
-    // exchange ending.
-    this.#talkOpening = false;
-    this.#touch();
+      this.#pressHeld = true;
+      if (!this.#surroundings.microphoneGranted) {
+        const granted = yield* this.#bridge.requestMicrophone();
+        if (!granted) {
+          this.#strip.showError(MICROPHONE_REFUSED_NOTE);
+          return;
+        }
+        if (!this.#pressHeld) return;
+      }
+      const call = yield* this.#ensureSession({ byPress: true });
+      // A key let go of during the opening leaves the session muted, and the
+      // mute is still sent: the press's device rode the offer, and only the
+      // release takes it back.
+      if (call) yield* this.#pressHeld ? call.unmute() : call.mute();
+      // The press is answered once the session hears the developer; between the
+      // offer and the unmute the session passes through muted, which is not the
+      // exchange ending.
+      this.#talkOpening = false;
+      this.#touch();
+    });
   }
 
   /**
@@ -222,12 +211,14 @@ export class LiveVoiceOrchestrator {
    * press's session is still opening leaves it to open muted, and one with
    * no press behind it does nothing.
    */
-  async endTalk(): Promise<void> {
-    if (!this.#pressHeld) return;
-    this.#pressHeld = false;
-    if (this.#opening) return;
-    const call = this.#call;
-    if (call?.standing) await this.#run(call.mute());
+  endTalk(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (!this.#pressHeld) return Effect.void;
+      this.#pressHeld = false;
+      if (this.#opening) return Effect.void;
+      const call = this.#call;
+      return call?.standing ? Effect.asVoid(call.mute()) : Effect.void;
+    });
   }
 
   /**
@@ -242,16 +233,18 @@ export class LiveVoiceOrchestrator {
    * routinely still answering. Pressed while a press's session is still
    * opening, it cancels that press's unmute, so the session opens muted.
    */
-  async stopSpeaking(): Promise<boolean> {
-    this.#pressHeld = false;
-    // A session still being opened has no peer to mute yet; the press
-    // remembers the key is no longer held and leaves the session muted.
-    if (this.#opening) return true;
-    const call = this.#call;
-    if (!call?.standing) return false;
-    if (call.status === LIVE_STATUS.SPEAKING) await this.#bridge.stopSpeaking();
-    await this.#run(call.mute());
-    return true;
+  stopSpeaking(): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      this.#pressHeld = false;
+      // A session still being opened has no peer to mute yet; the press
+      // remembers the key is no longer held and leaves the session muted.
+      if (this.#opening) return true;
+      const call = this.#call;
+      if (!call?.standing) return false;
+      if (call.status === LIVE_STATUS.SPEAKING) yield* this.#bridge.stopSpeaking();
+      yield* call.mute();
+      return true;
+    });
   }
 
   /**
@@ -260,13 +253,13 @@ export class LiveVoiceOrchestrator {
    * queued until the next drain, so the standing phase is obeyed once at
    * adoption; every later phase arrives as its own event.
    */
-  adoptStanding(phase: LiveSessionPhase | undefined): void {
-    if (phase === LIVE_SESSION_PHASE.WANTED) this.obeySessionChange({ phase });
+  adoptStanding(phase: LiveSessionPhase | undefined): Effect.Effect<void> {
+    return phase === LIVE_SESSION_PHASE.WANTED ? this.obeySessionChange({ phase }) : Effect.void;
   }
 
   /** The panel asking for the microphone from its own row. */
-  async requestMicrophoneAccess(): Promise<void> {
-    await this.#bridge.requestMicrophone();
+  requestMicrophoneAccess(): Effect.Effect<void> {
+    return Effect.asVoid(this.#bridge.requestMicrophone());
   }
 
   /**
@@ -276,49 +269,51 @@ export class LiveVoiceOrchestrator {
    * the developer mid-hold is remembered so the next session listens again,
    * for as long as the key is still down.
    */
-  obeySessionChange(change: VoiceLiveSessionChanged): void {
-    switch (change.phase) {
-      case LIVE_SESSION_PHASE.WANTED:
-        if (this.#surroundings.voiceAvailable === false) return;
-        void this.#ensureSession({ byPress: false }).then(async (call) => {
+  obeySessionChange(change: VoiceLiveSessionChanged): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      switch (change.phase) {
+        case LIVE_SESSION_PHASE.WANTED: {
+          if (this.#surroundings.voiceAvailable === false) return;
+          const call = yield* this.#ensureSession({ byPress: false });
           const resume = this.#resumeListening;
           this.#resumeListening = false;
-          if (call && resume && this.#pressHeld) await this.#run(call.unmute());
-        });
-        return;
-      case LIVE_SESSION_PHASE.CLOSING:
-        if (this.#aboutThisCall(change)) this.#endCall();
-        return;
-      case LIVE_SESSION_PHASE.CLOSED: {
-        // A call still standing that the word is not about is left alone; no
-        // call at all is the peer having ended first, and the word still says
-        // whether the developer was being heard when the session was lost.
-        if (this.#call && !this.#aboutThisCall(change)) return;
-        // The host's word ends the session whatever the peer still shows: the
-        // call is let go of here so the wanted that may follow opens a new
-        // one, and it finishes its own hang-up behind. Whether the developer
-        // was being heard is read from the last status the call reported,
-        // since its own end may have landed before this event did.
-        this.#resumeListening =
-          this.#lastListening &&
-          (change.reason === LIVE_CLOSE_REASON.EXPIRED ||
-            change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST);
-        this.#lastListening = false;
-        if (this.#call) {
-          this.#call = undefined;
-          this.#status = LIVE_STATUS.IDLE;
-          this.#speakers = SILENT;
-          this.#rows = [];
-          this.#openedByPress = false;
-          this.#endCall();
-          this.#recomposeCaptions();
-          this.#touch();
+          if (call && resume && this.#pressHeld) yield* call.unmute();
+          return;
         }
-        return;
+        case LIVE_SESSION_PHASE.CLOSING:
+          if (this.#aboutThisCall(change)) this.#endCall();
+          return;
+        case LIVE_SESSION_PHASE.CLOSED: {
+          // A call still standing that the word is not about is left alone; no
+          // call at all is the peer having ended first, and the word still says
+          // whether the developer was being heard when the session was lost.
+          if (this.#call && !this.#aboutThisCall(change)) return;
+          // The host's word ends the session whatever the peer still shows: the
+          // call is let go of here so the wanted that may follow opens a new
+          // one, and it finishes its own hang-up behind. Whether the developer
+          // was being heard is read from the last status the call reported,
+          // since its own end may have landed before this event did.
+          this.#resumeListening =
+            this.#lastListening &&
+            (change.reason === LIVE_CLOSE_REASON.EXPIRED ||
+              change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST);
+          this.#lastListening = false;
+          if (this.#call) {
+            this.#call = undefined;
+            this.#status = LIVE_STATUS.IDLE;
+            this.#speakers = SILENT;
+            this.#rows = [];
+            this.#openedByPress = false;
+            this.#endCall();
+            this.#recomposeCaptions();
+            this.#touch();
+          }
+          return;
+        }
+        default:
+          return;
       }
-      default:
-        return;
-    }
+    });
   }
 
   /**
@@ -338,12 +333,14 @@ export class LiveVoiceOrchestrator {
    * it: `Effect.acquireRelease`'s own guarantee closes it exactly once,
    * whether the interruption lands mid-open or mid-standing.
    */
-  async stop(): Promise<void> {
-    this.#stopped = true;
-    const fiber = this.#lifecycle;
-    this.#lifecycle = undefined;
-    this.#call = undefined;
-    if (fiber) await this.#run(Fiber.interrupt(fiber));
+  stop(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.#stopped = true;
+      const fiber = this.#lifecycle;
+      this.#lifecycle = undefined;
+      this.#call = undefined;
+      return fiber ? Effect.asVoid(Fiber.interrupt(fiber)) : Effect.void;
+    });
   }
 
   /** Signals the standing call's lifecycle fiber to end, which releases it by closing it exactly once. */
@@ -358,15 +355,11 @@ export class LiveVoiceOrchestrator {
    * at a time: a second ask while the first is still negotiating waits for
    * it rather than offering the host a second peer.
    */
-  #ensureSession(input: { byPress: boolean }): Promise<LiveVoiceCall | undefined> {
-    return this.#run(this.#ensureSessionEffect(input));
-  }
-
-  #ensureSessionEffect(input: { byPress: boolean }): Effect.Effect<LiveVoiceCall | undefined> {
-    return Effect.suspend(() => {
-      if (this.#call?.standing) return Effect.succeed(this.#call);
+  #ensureSession(input: { byPress: boolean }): Effect.Effect<LiveVoiceCall | undefined> {
+    return Effect.gen(this, function* () {
+      if (this.#call?.standing) return this.#call;
       const negotiating = this.#opening;
-      if (negotiating) return Deferred.await(negotiating);
+      if (negotiating) return yield* Deferred.await(negotiating);
       const opened = Deferred.unsafeMake<LiveVoiceCall | undefined>(FiberId.none);
       this.#opening = opened;
       this.#openedByPress = input.byPress;
@@ -379,10 +372,15 @@ export class LiveVoiceOrchestrator {
       this.#call = call;
       this.#talkOpening = input.byPress;
       this.#touch();
-      this.#lifecycle = Runtime.runFork(this.#runtime)(
+      // Started on the asking fiber's own runtime rather than forked as a
+      // child of it: the call outlives the press that asked for it, and a
+      // forked fiber begins on the next scheduler task, which would leave the
+      // press's own open — and the connecting status it reports — a task
+      // behind the view this verb has already touched.
+      this.#lifecycle = Runtime.runFork(yield* Effect.runtime<never>())(
         Effect.scoped(this.#lifecycleEffect(call, input, opened)),
       );
-      return Deferred.await(opened);
+      return yield* Deferred.await(opened);
     });
   }
 
@@ -408,7 +406,7 @@ export class LiveVoiceOrchestrator {
       if (!standing) {
         this.#talkOpening = false;
         if (this.#call === call) this.#call = undefined;
-        const unavailable = yield* Effect.promise(() => this.#bridge.hostedUnavailableNote());
+        const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
         this.#touch();
         yield* Deferred.succeed(opened, undefined);

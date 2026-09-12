@@ -6,4 +6,3 @@ export {
   LiveSessionSourceTag,
   liveSessionSourceLayer,
 } from "./live-session-source.js";
-export { LiveVoiceBridgeTag, liveVoiceBridgeLayer } from "./live-voice-bridge.js";

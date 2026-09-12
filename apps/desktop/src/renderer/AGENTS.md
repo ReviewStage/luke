@@ -31,9 +31,11 @@ held in the registry `renderer-runtime.ts` makes and each root provides. The
 runtime beside that registry is the bundle's one Effect edge, and not the
 atoms' alone: `rendererRuntimeNow` hands it to work that is a fiber of its own
 rather than an atom's, run through `Runtime.runFork` or `Runtime.runPromise`
-on the value it answers — `use-voice-session.ts`'s remote-audio retry,
-`voice/live-call.ts`'s own session-life fiber and its armed bounds,
-`LiveVoiceOrchestrator`'s own standing-call lifecycle above it, and
+on the value it answers — `use-voice-session.ts`'s remote-audio retry and its
+one `drive` helper, through which every verb it asks of `LiveVoiceOrchestrator`
+runs, `voice/live-call.ts`'s own session-life fiber and its armed bounds, the
+orchestrator's own standing-call lifecycle above it, which it starts on the
+runtime of whichever of those fibers asked for the session, and
 `introduction-takeover.tsx`'s one `runCallEffect` helper, through which every
 verb it asks of its own `LiveCall` runs — so nothing here builds a second
 runtime to fork on. The
@@ -92,8 +94,11 @@ how the host's `voiceLiveSession.changed` is obeyed — wanted opens a session
 with no microphone, closing hangs up, a session lost while the key is still
 held listens again on the next — and what view the panels draw are
 `LiveVoiceOrchestrator` in `@sidecar/voice`, which touches no DOM: what the
-hook supplies is the call it drives, and what it takes back is one view to
-report and the two streams only a browser can play or meter. The hook
+hook supplies is the call it drives and the bridge it asks the main process
+over, each verb of which is an Effect, and what it takes back is one view to
+report and the two streams only a browser can play or meter. Every verb of the
+orchestrator is an Effect too, started on the renderer's own runtime by the
+press, command, or word that asked for it. The hook
 subscribes both talk-key edges, `onVoiceHotkeyPress` and
 `onVoiceHotkeyRelease`, from main's native watcher; under the Electron
 fallback main alternates the two across presses, since that key reports no

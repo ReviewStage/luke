@@ -605,24 +605,35 @@ necessary, just onto a real runtime instead of a default one. Those methods
 answer effects since P7-13, and both doors go in P7-13b, which takes each
 handler onto the reader's own request effect.
 
-`LiveVoiceOrchestrator`'s `beginTalk`, `endTalk`, and `stopSpeaking` in
-`packages/voice/src/orchestrator/live-voice-orchestrator.ts` are on the
-allowlist: the standing call's whole life is one fiber the orchestrator forks
-on the runtime it was handed, opening the call as an `Effect.acquireRelease`
-acquire and closing it as the release, and `LiveVoiceCall`'s four verbs answer
-Effects run on that same runtime, but `beginTalk`, `endTalk`, and
-`stopSpeaking` above them still answer promises of their own, run to one on
-the orchestrator's runtime rather than a caller's fiber. The orchestrator's
-one caller is the renderer's `use-voice-session.ts`, never a host composer, so
-P9-03 (the renderer's own voice lane, not P7-07) deletes the seam once that
-caller runs on its own fiber rather than awaiting these promises. Beside it,
+`LiveVoiceOrchestrator` in
+`packages/voice/src/orchestrator/live-voice-orchestrator.ts` runs nothing of a
+caller's any more, and is on the handed-runtime list rather than the shim
+list: P12-13d took `beginTalk`, `endTalk`, `stopSpeaking`, `stop`,
+`requestMicrophoneAccess`, `adoptStanding`, and `obeySessionChange` onto
+Effects of the asking fiber, took `LiveVoiceBridge`'s three asks of the host
+onto Effects with them, and deleted both the `runtime` option and the `#run`
+door that settled each verb to a promise; the renderer's
+`use-voice-session.ts` — the one caller, never a host composer — starts each
+on the renderer's own runtime through a `drive` helper beside the
+remote-audio retry it already ran there. What is left is one
+`Runtime.runFork` over the runtime the asking fiber is already on, read
+inside the effect with `Effect.runtime<never>()` rather than handed in at
+construction: the standing call's whole life is one fiber above the ambient
+scope, since the call outlives the press that opened it, and a forked child
+would begin on the next scheduler task, which would leave the press's own
+open — and the connecting status it reports — a task behind the view the
+verb has already touched. It goes when a fork can be both detached and
+started at once. There is no tag for the bridge either: `reportView` is
+called from a microtask of the orchestrator's own rather than from a fiber,
+so the bridge is a field it holds and cannot be a service it reads, and
+`liveVoiceBridgeLayer` was deleted rather than adopted. Beside it,
 `ReattachingSocket`'s recovery in `packages/voice/src/live-session-source.ts`
 is on the allowlist too, and for its own reason rather than a caller's: the
 socket it wraps is a plain, synchronous `LiveSocket`, so the tries themselves
 are a fiber this class forks and interrupts on its own, with no promise
-anywhere above it waiting to be freed of one. P9-03 deletes it together with
-the orchestrator's, for the same reason: both are reached only from the
-renderer's voice call machinery, never from `packages/host`.
+anywhere above it waiting to be freed of one. It goes when the socket it
+wraps answers effects itself; the orchestrator's conversion above did not
+reach it, since the two share only a package.
 
 `HostedStoreRun` in `apps/web/server/hosted/store/database.ts` is on the
 allowlist as the door rather than as a runtime: a module of the hosted store
@@ -942,10 +953,8 @@ design decision stated as such:
 | `timerSeamFromRuntime` (`packages/runtime/src/effect/timer-seam.ts`) | P12-03 | once `children.effect.ts`/`queue.effect.ts` answer `Clock`/`Scope` directly |
 | `timerSeamFromRuntime` (`packages/host/src/effect/timer-seam.ts`) | P12-03 | once `compose-live.ts` answers `Clock`/`Scope` directly |
 | `timerSeamFromRuntime` (`packages/brain/src/effect/harness.ts`) | P12-03 | once `BrainAgent` answers `Clock`/`Scope` directly |
-| `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P9-03 — its one caller is the renderer's `use-voice-session.ts`, never a `packages/host` composer |
-| `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P9-03, for the same reason |
+| `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
-| `LiveVoiceBridgeTag` / `liveVoiceBridgeLayer(bridge)` over the plain `LiveVoiceBridge` object | P6-08 | P9-03 — its one caller is the renderer's orchestrator |
 | `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
 | `carryOn`, the brain's one promise door onto the host's `ExecutionRuntime` | P12-02 | P12-04 |
 | `BrainAgent#onRunEvent`'s per-subscription fiber over `Stream.fromPubSub` | P5-06 | once a subscriber reads the stream directly |
