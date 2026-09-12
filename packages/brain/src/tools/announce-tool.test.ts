@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import { ANNOUNCE_TOOL, type AnnounceToolContext } from "./announce-tool.js";
 import { BRAIN_TOOL, maximumBriefingLength } from "./names.js";
@@ -24,7 +25,7 @@ function context() {
 
 test("announce takes the briefing alone, hands it on bounded, and answers accepted", async () => {
   assert.equal(ANNOUNCE_TOOL.name, BRAIN_TOOL.ANNOUNCE);
-  const node = ANNOUNCE_TOOL.inputSchema.jsonSchema();
+  const node = emitJsonSchema(ANNOUNCE_TOOL.inputSchema);
   assert.ok("required" in node && "properties" in node);
   assert.deepEqual(node.required, ["briefing"]);
   assert.deepEqual(Object.keys(node.properties), ["briefing"]);

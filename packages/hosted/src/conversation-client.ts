@@ -2,14 +2,13 @@ import type * as HttpClient from "@effect/platform/HttpClient";
 import type { UnreadableRow } from "@sidecar/session";
 import {
   type CloudFetch,
-  effectSchema,
   HTTP_METHOD,
   type UnparsedWireValue,
   unparsedWire,
   type WireRecord,
 } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Effect, type Layer } from "effect";
+import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import { Effect, Either, type Layer } from "effect";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -149,7 +148,7 @@ export class HostedConversationClient {
   messages(page: ReadPageQuery = {}): Promise<ConversationReadResult<ConversationMessagesAnswer>> {
     return this.#run(
       this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page, (payload) =>
-        conversationMessagesAnswerSchema.parse(payload),
+        Either.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
       ),
     );
   }
@@ -157,7 +156,7 @@ export class HostedConversationClient {
   events(page: ReadPageQuery = {}): Promise<ConversationReadResult<ConversationEventsAnswer>> {
     return this.#run(
       this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page, (payload) =>
-        conversationEventsAnswerSchema.parse(payload),
+        Either.getOrUndefined(readEither(conversationEventsAnswerSchema)(payload)),
       ),
     );
   }
@@ -165,7 +164,7 @@ export class HostedConversationClient {
   turns(page: ReadPageQuery = {}): Promise<ConversationReadResult<BrainTurnsAnswer>> {
     return this.#run(
       this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
-        brainTurnsAnswerSchema.parse(payload),
+        Either.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
       ),
     );
   }
@@ -175,7 +174,7 @@ export class HostedConversationClient {
     return this.#run(
       this.#call.ask(
         { method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.CONVERSATION_CLEAR },
-        effectSchema(conversationClearAnswerSchema),
+        conversationClearAnswerSchema,
       ),
     );
   }
@@ -197,7 +196,9 @@ export class HostedConversationClient {
     messageId: string,
     request: HostedMessageRatingRequest,
   ): Effect.Effect<ConversationRateResult, never, HttpClient.HttpClient> {
-    const admitted = hostedMessageRatingRequestSchema.parse(ratingRecord(request));
+    const admitted = Either.getOrUndefined(
+      readEither(hostedMessageRatingRequestSchema)(ratingRecord(request)),
+    );
     if (admitted === undefined) return Effect.succeed(RATE_UNANSWERED);
     const call = this.#call;
     return Effect.gen(function* () {
@@ -211,10 +212,10 @@ export class HostedConversationClient {
       if (payload === undefined) return RATE_UNANSWERED;
       const wire = unparsedWire(payload);
       if (answer.response.ok) {
-        const recorded = hostedMessageRatingAnswerSchema.parse(wire);
+        const recorded = Either.getOrUndefined(readEither(hostedMessageRatingAnswerSchema)(wire));
         return recorded === undefined ? RATE_UNANSWERED : { ok: true, answer: recorded };
       }
-      switch (hostedErrorSchema.parse(wire)) {
+      switch (Either.getOrUndefined(readEither(hostedErrorSchema)(wire))) {
         case HOSTED_API_ERROR.NOT_FOUND:
           return { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_FOUND };
         case HOSTED_API_ERROR.NOT_RATEABLE:
@@ -241,7 +242,7 @@ export class HostedConversationClient {
         const value = read(wire);
         return value === undefined ? UNANSWERED : { ok: true, answer: value };
       }
-      const row = unreadableRowRefusalSchema.parse(wire);
+      const row = Either.getOrUndefined(readEither(unreadableRowRefusalSchema)(wire));
       return row === undefined
         ? UNANSWERED
         : { ok: false, failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW, row };

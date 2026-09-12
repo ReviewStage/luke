@@ -23,6 +23,8 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { estimateTokens } from "./compaction.js";
 import { UNCONFIRMED_ACTION_RESULT, UNKNOWN_ACTION_RESULT } from "./journal.js";
 import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
@@ -287,8 +289,9 @@ export function createTurnToolExecutor(
               ...execution,
               admission: dependencies.actions.admission(execution),
               carry: async (action) =>
-                ACTION_OUTPUT.parse(await dependencies.actions.carry(action, execution)) ??
-                unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
+                Either.getOrUndefined(
+                  readEither(ACTION_OUTPUT)(await dependencies.actions.carry(action, execution)),
+                ) ?? unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
             });
           }),
         );

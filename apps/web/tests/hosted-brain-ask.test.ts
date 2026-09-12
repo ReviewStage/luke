@@ -15,7 +15,8 @@ import {
   type UnparsedWireValue,
   type WireBoundaryInput,
 } from "@sidecar/wire";
-import { Effect, Schema } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Either, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
@@ -279,6 +280,13 @@ async function body(response: Response): Promise<UnparsedWireValue> {
   return (await response.json()) as UnparsedWireValue;
 }
 
+function parse<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
 async function errorOf(response: Response): Promise<[number, string]> {
   // SAFETY: the handler's own JSON refusal, read for its status and slug.
   const read = (await response.json()) as { error: string };
@@ -470,7 +478,7 @@ test("an ask naming a cleared conversation is refused as not found before eve is
 
   const opened = await handleBrainAsk(h.options(askRequest(userId, ASK), userId));
   assert.equal(opened.status, 202);
-  const answer = hostedBrainAskAnswerSchema.parse(await body(opened));
+  const answer = parse(hostedBrainAskAnswerSchema, await body(opened));
   assert.ok(answer);
   assert.notEqual(answer.conversationId, cleared);
   assert.equal(h.eve.calls.length, 1);
@@ -481,7 +489,7 @@ test("the first ask opens the conversation's session under the caller's own bear
   const h = harness();
   const first = await handleBrainAsk(h.options(askRequest(userId, ASK), userId));
   assert.equal(first.status, 202);
-  const accepted = hostedBrainAskAnswerSchema.parse(await body(first));
+  const accepted = parse(hostedBrainAskAnswerSchema, await body(first));
   assert.ok(accepted);
   assert.equal(accepted.queuedAt, NOW);
   assert.deepEqual(h.eve.bearers, [bearer(userId)]);
@@ -505,7 +513,7 @@ test("the first ask opens the conversation's session under the caller's own bear
     ),
   );
   assert.equal(second.status, 202);
-  const followUp = hostedBrainAskAnswerSchema.parse(await body(second));
+  const followUp = parse(hostedBrainAskAnswerSchema, await body(second));
   assert.ok(followUp);
   assert.equal(followUp.conversationId, accepted.conversationId);
   const [, send] = h.eve.calls;
@@ -539,7 +547,8 @@ test("a follow-up goes to the newest session the record knows of, by eve's own s
   const older = mintSession();
   const newer = mintSession();
   const conversationId = await conversation(userId, { runtimeSessionId: older });
-  const first = hostedBrainAskAnswerSchema.parse(
+  const first = parse(
+    hostedBrainAskAnswerSchema,
     await body(
       await handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId }), userId)),
     ),
@@ -586,11 +595,11 @@ test("the same client id is the same ask: answered again with the same id and di
 
   const retried = await handleBrainAsk(h.options(askRequest(userId, ASK), userId));
   assert.equal(retried.status, 202);
-  const accepted = hostedBrainAskAnswerSchema.parse(await body(retried));
+  const accepted = parse(hostedBrainAskAnswerSchema, await body(retried));
   assert.ok(accepted);
   const again = await handleBrainAsk(h.options(askRequest(userId, ASK), userId));
   assert.equal(again.status, 202);
-  const same = hostedBrainAskAnswerSchema.parse(await body(again));
+  const same = parse(hostedBrainAskAnswerSchema, await body(again));
   assert.deepEqual(same, accepted);
   assert.equal(h.eve.calls.length, 2);
   assert.equal(h.asks.rows.size, 1);
@@ -607,7 +616,7 @@ test("a turn read answers a turn row's stamps under the id asked by, an ask with
   });
   const read = await handleBrainTurn(h.options(turnRequest(owner, turnId), owner));
   assert.equal(read.status, 200);
-  const answer = hostedBrainTurnAnswerSchema.parse(await body(read));
+  const answer = parse(hostedBrainTurnAnswerSchema, await body(read));
   assert.deepEqual(answer, {
     id: turnId,
     turnId,
@@ -623,7 +632,8 @@ test("a turn read answers a turn row's stamps under the id asked by, an ask with
     [404, HOSTED_API_ERROR.NOT_FOUND],
   );
 
-  const asked = hostedBrainAskAnswerSchema.parse(
+  const asked = parse(
+    hostedBrainAskAnswerSchema,
     await body(
       await handleBrainAsk(h.options(askRequest(owner, { ...ASK, conversationId }), owner)),
     ),
@@ -632,7 +642,8 @@ test("a turn read answers a turn row's stamps under the id asked by, an ask with
   const row = h.asks.rows.get(asked.id);
   assert.ok(row);
   h.asks.rows.set(asked.id, beforeItsTurn(row));
-  const queued = hostedBrainTurnAnswerSchema.parse(
+  const queued = parse(
+    hostedBrainTurnAnswerSchema,
     await body(await handleBrainTurn(h.options(turnRequest(owner, asked.id), owner))),
   );
   assert.deepEqual(queued, {
@@ -665,7 +676,8 @@ test("the in-process standing read answers what the turn route answers: for a qu
   const h = harness();
   const conversationId = await conversation(owner);
   const turnId = await turnRow(owner, conversationId, { cancelRequestedAt: new Date(NOW + 1) });
-  const asked = hostedBrainAskAnswerSchema.parse(
+  const asked = parse(
+    hostedBrainAskAnswerSchema,
     await body(
       await handleBrainAsk(h.options(askRequest(owner, { ...ASK, conversationId }), owner)),
     ),
@@ -676,7 +688,8 @@ test("the in-process standing read answers what the turn route answers: for a qu
   h.asks.rows.set(asked.id, beforeItsTurn(record));
   const reads = { store: database.store, run: database.run, asks: h.asks };
   const routed = async (userId: string, id: string) =>
-    hostedBrainTurnAnswerSchema.parse(
+    parse(
+      hostedBrainTurnAnswerSchema,
       await body(await handleBrainTurn(h.options(turnRequest(userId, id), userId))),
     );
 
@@ -704,7 +717,8 @@ test("the in-process ask answers what the ask route answers: the same record aga
   const h = harness();
   const conversationId = await conversation(owner);
   const seams = { run: database.run, asks: h.asks, eve: h.eve, now: () => h.clock };
-  const routed = hostedBrainAskAnswerSchema.parse(
+  const routed = parse(
+    hostedBrainAskAnswerSchema,
     await body(
       await handleBrainAsk(h.options(askRequest(owner, { ...ASK, conversationId }), owner)),
     ),
@@ -741,13 +755,14 @@ test("a Stop on a running turn is eve's cancel of the conversation's recorded se
   const turnId = await turnRow(userId, conversationId);
   const cancelled = await handleBrainTurnCancel(h.options(cancelRequest(userId, turnId), userId));
   assert.equal(cancelled.status, 200);
-  const answer = hostedBrainTurnAnswerSchema.parse(await body(cancelled));
+  const answer = parse(hostedBrainTurnAnswerSchema, await body(cancelled));
   assert.equal(answer?.cancelRequestedAt, NOW);
   assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId }]);
   const [row] = await database.store.turns.named(userId, [turnId]);
   assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
 
-  const asked = hostedBrainAskAnswerSchema.parse(
+  const asked = parse(
+    hostedBrainAskAnswerSchema,
     await body(
       await handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId }), userId)),
     ),
@@ -759,7 +774,7 @@ test("a Stop on a running turn is eve's cancel of the conversation's recorded se
   const callsBefore = h.eve.calls.length;
   const stamped = await handleBrainTurnCancel(h.options(cancelRequest(userId, asked.id), userId));
   assert.equal(stamped.status, 200);
-  const stampedAnswer = hostedBrainTurnAnswerSchema.parse(await body(stamped));
+  const stampedAnswer = parse(hostedBrainTurnAnswerSchema, await body(stamped));
   assert.equal(stampedAnswer?.status, TURN_STATUS.QUEUED);
   assert.equal(stampedAnswer?.cancelRequestedAt, NOW);
   assert.equal(h.asks.rows.get(asked.id)?.cancelRequestedAt?.getTime(), NOW);
@@ -775,7 +790,8 @@ test("the in-process Stop answers what the cancel route answers: for a running t
   const unrecordedOwner = await database.createUser();
   const unrecorded = await conversation(unrecordedOwner);
   const orphan = await turnRow(unrecordedOwner, unrecorded);
-  const asked = hostedBrainAskAnswerSchema.parse(
+  const asked = parse(
+    hostedBrainAskAnswerSchema,
     await body(
       await handleBrainAsk(
         h.options(askRequest(owner, { ...ASK, conversationId: recorded }), owner),
@@ -796,7 +812,8 @@ test("the in-process Stop answers what the cancel route answers: for a running t
   };
 
   for (const id of [running, asked.id]) {
-    const viaRoute = hostedBrainTurnAnswerSchema.parse(
+    const viaRoute = parse(
+      hostedBrainTurnAnswerSchema,
       await body(await handleBrainTurnCancel(h.options(cancelRequest(owner, id), owner))),
     );
     assert.ok(viaRoute);
@@ -872,7 +889,7 @@ test("a held read answers the moment the turn settles, and at the bound with the
     h.options(turnRequest(userId, turnId, { [TURN_WAIT_QUERY]: "5000" }), userId),
   );
   assert.equal(settling.status, 200);
-  const settled = hostedBrainTurnAnswerSchema.parse(await body(settling));
+  const settled = parse(hostedBrainTurnAnswerSchema, await body(settling));
   assert.equal(settled?.status, TURN_STATUS.SETTLED);
   assert.equal(sleeps, 2);
   assert.equal(h.clock, NOW + 1_000);
@@ -880,7 +897,8 @@ test("a held read answers the moment the turn settles, and at the bound with the
 
   const running = await turnRow(userId, conversationId);
   const before = h.clock;
-  const held = hostedBrainTurnAnswerSchema.parse(
+  const held = parse(
+    hostedBrainTurnAnswerSchema,
     await body(
       await handleBrainTurn(
         h.options(turnRequest(userId, running, { [TURN_WAIT_QUERY]: "2000" }), userId),

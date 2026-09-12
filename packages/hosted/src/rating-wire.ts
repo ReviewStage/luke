@@ -1,13 +1,5 @@
-import {
-  effectSchema,
-  MESSAGE_RATING,
-  maximumRatingNoteLength,
-  type RatingEventPayload,
-  type Schema,
-  s,
-} from "@sidecar/wire";
-import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { MESSAGE_RATING, maximumRatingNoteLength, type RatingEventPayload } from "@sidecar/wire";
+import { Schema as EffectSchema } from "effect";
 import { deviceWireIdSchema } from "./device-wire.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -21,32 +13,10 @@ import { countedNumber } from "./service-wire.js";
  * `@sidecar/wire`, restated here as Effect `Schema`, so the wire and the row
  * cannot say different things.
  *
- * Every declaration below is composed directly as an Effect `Schema`, under
- * its own `<name>Effect` export; the plain `<name>` export beside it is the
- * same declaration read through `fromEffect` (the pattern P1-04 established
- * in `packages/wire/src/ui-message-metadata.ts`), which is what still
- * answers the facade's `read`/`parse` for `apps/web/server/hosted/message-rating.ts`'s
- * and this module's own test's callers. The facade twin is the strangler
- * shim P12-08 deletes, once every caller declares against the `Effect`
- * export directly.
+ * Every declaration below is composed directly as an Effect `Schema` and
+ * exported under its own name; `apps/web/server/hosted/message-rating.ts`
+ * reads one through `readEither` and shows it through `emitJsonSchema`.
  */
-
-/**
- * The Effect schema a declaration was composed from, adapted to the facade
- * still-held callers use: `read` through `readEither`, `jsonSchema` through
- * the emitter walking the same schema.
- */
-function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
-  const read = readEither(core);
-  return s.reader({
-    read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
-      }),
-    jsonSchema: () => emitJsonSchema(core),
-  });
-}
 
 /**
  * A record that ignores a key a newer service added, which is what an answer
@@ -56,7 +26,7 @@ function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): 
 const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
   EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
-/** A text settled with its ends trimmed, refused when nothing but whitespace stands, the way `s.text()` reads one. */
+/** A text settled with its ends trimmed, refused when nothing but whitespace stands. */
 function trimmedText(maximumChars?: number) {
   const core = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
     strict: true,
@@ -73,15 +43,11 @@ function trimmedText(maximumChars?: number) {
 
 export type HostedMessageRatingRequest = RatingEventPayload & { deviceId: string };
 
-export const hostedMessageRatingRequestSchemaEffect = EffectSchema.Struct({
+export const hostedMessageRatingRequestSchema = EffectSchema.Struct({
   rating: EffectSchema.Literal(...Object.values(MESSAGE_RATING)),
   note: EffectSchema.optionalWith(trimmedText(maximumRatingNoteLength), { exact: true }),
-  deviceId: effectSchema(deviceWireIdSchema),
+  deviceId: deviceWireIdSchema,
 });
-
-export const hostedMessageRatingRequestSchema: Schema<HostedMessageRatingRequest> = fromEffect(
-  hostedMessageRatingRequestSchemaEffect,
-);
 
 /** What recording a rating answers: the event row's id and its place in the conversation's event sequence. */
 export interface HostedMessageRatingAnswer {
@@ -89,11 +55,7 @@ export interface HostedMessageRatingAnswer {
   seq: number;
 }
 
-export const hostedMessageRatingAnswerSchemaEffect = tolerantRecord({
+export const hostedMessageRatingAnswerSchema = tolerantRecord({
   id: trimmedText(),
-  seq: effectSchema(countedNumber),
+  seq: countedNumber,
 });
-
-export const hostedMessageRatingAnswerSchema: Schema<HostedMessageRatingAnswer> = fromEffect(
-  hostedMessageRatingAnswerSchemaEffect,
-);

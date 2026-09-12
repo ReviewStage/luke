@@ -1,10 +1,6 @@
 import {
   isRecord,
-  RATING_EVENT_PAYLOAD_FIELDS,
-  RECORD_EXTRA_KEYS,
-  type RecordOf,
-  s,
-  TEXT_ENDS,
+  MessageRatingSchema,
   type UnparsedWireValue,
   type WireRecord,
   WireValueSchema,
@@ -170,30 +166,49 @@ const LIVE_TRANSPORT_STATES: readonly LiveTransportState[] = Object.values(LIVE_
  */
 export const LIVE_SDP_MAX_CHARACTERS = 65_536;
 
+/** A trimmed text, refused when only whitespace remains. */
+const text: Schema.Schema<string, string> = Schema.transform(Schema.String, Schema.String, {
+  strict: true,
+  decode: (value) => value.trim(),
+  encode: (value) => value,
+}).pipe(Schema.minLength(1));
+
+/** A text admitted as written, refused when only whitespace remains, and bounded by `max`. */
+function keptText(max: number): Schema.Schema<string, string> {
+  return Schema.String.pipe(
+    Schema.filter((value) => value.trim().length > 0, {
+      schemaId: Schema.MinLengthSchemaId,
+      jsonSchema: { minLength: 1 },
+    }),
+    Schema.maxLength(max),
+  );
+}
+
+/** A record that ignores a key a newer service added, which is what every answer here does. */
+const tolerant = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
+  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
 /** SDP is line-oriented and ends its lines with CRLF, so it travels verbatim: nothing is trimmed, collapsed, or cut. */
-const sdpSchema = s.text({ max: LIVE_SDP_MAX_CHARACTERS, ends: TEXT_ENDS.KEEP });
+const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /** `voice.createLiveSession`: the peer's SDP offer, and nothing else. */
-export const voiceCreateLiveSessionParamsSchema = s.record({ sdp: sdpSchema });
-
-const VOICE_CREATE_LIVE_SESSION_RESULT = { sessionId: s.text(), sdpAnswer: sdpSchema } as const;
+export const voiceCreateLiveSessionParamsSchema = Schema.Struct({ sdp: sdpSchema });
 
 /** What `voice.createLiveSession` answers: the session the provider named, and the SDP answer the peer sets. */
-export const voiceCreateLiveSessionResultSchema = s.record(VOICE_CREATE_LIVE_SESSION_RESULT, {
-  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+export const voiceCreateLiveSessionResultSchema = tolerant({
+  sessionId: text,
+  sdpAnswer: sdpSchema,
 });
 
-export type VoiceCreateLiveSessionResult = RecordOf<typeof VOICE_CREATE_LIVE_SESSION_RESULT>;
+export type VoiceCreateLiveSessionResult = typeof voiceCreateLiveSessionResultSchema.Type;
 
 /** `voice.reportLiveTransport`: the peer connection's state as the peer saw it change. */
-export const voiceReportLiveTransportParamsSchema = s.record({
-  state: s.enumOf(LIVE_TRANSPORT_STATES),
+export const voiceReportLiveTransportParamsSchema = Schema.Struct({
+  state: Schema.Literal(...LIVE_TRANSPORT_STATES),
 });
 
 /** `voice.reportLiveActivity`: whether the peer has decided, from its own local signals, that the exchange is idle. */
-export const voiceReportLiveActivityParamsSchema = s.record({ idle: s.boolean() });
-
-const VOICE_STOP_SPEAKING_RESULT = { stopped: s.boolean() } as const;
+export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.Boolean });
 
 /**
  * What `voice.stopSpeaking` answers: whether a standing session was told to
@@ -201,34 +216,26 @@ const VOICE_STOP_SPEAKING_RESULT = { stopped: s.boolean() } as const;
  * says nothing about Luke's own output, so the method takes no parameters
  * and the mute carries none of its meaning.
  */
-export const voiceStopSpeakingResultSchema = s.record(VOICE_STOP_SPEAKING_RESULT, {
-  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
-});
-
-const VOICE_LIVE_SESSION_CHANGED = {
-  sessionId: s.text().optional(),
-  phase: s.enumOf(LIVE_SESSION_PHASES),
-  reason: s.text().optional(),
-} as const;
+export const voiceStopSpeakingResultSchema = tolerant({ stopped: Schema.Boolean });
 
 /** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
-export const voiceLiveSessionChangedSchema = s.record(VOICE_LIVE_SESSION_CHANGED, {
-  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+export const voiceLiveSessionChangedSchema = tolerant({
+  sessionId: Schema.optionalWith(text, { exact: true }),
+  phase: Schema.Literal(...LIVE_SESSION_PHASES),
+  reason: Schema.optionalWith(text, { exact: true }),
 });
 
-export type VoiceLiveSessionChanged = RecordOf<typeof VOICE_LIVE_SESSION_CHANGED>;
-
-const CONVERSATION_RATE_MESSAGE_PARAMS = {
-  /** The message as the view holds it, by its own id, admitted as written so it matches the row the host holds. */
-  messageId: s.text({ max: 512, ends: TEXT_ENDS.KEEP }),
-  /** The verdict under the stored event's own rule, so the method and the row cannot say different things. */
-  rating: RATING_EVENT_PAYLOAD_FIELDS.rating,
-} as const;
+export type VoiceLiveSessionChanged = typeof voiceLiveSessionChangedSchema.Type;
 
 /** `conversation.rateMessage`: which of Luke's messages, and the developer's verdict on it. */
-export const conversationRateMessageParamsSchema = s.record(CONVERSATION_RATE_MESSAGE_PARAMS);
+export const conversationRateMessageParamsSchema = Schema.Struct({
+  /** The message as the view holds it, by its own id, admitted as written so it matches the row the host holds. */
+  messageId: keptText(512),
+  /** The verdict under the stored event's own rule, so the method and the row cannot say different things. */
+  rating: MessageRatingSchema,
+});
 
-export type ConversationRateMessageParams = RecordOf<typeof CONVERSATION_RATE_MESSAGE_PARAMS>;
+export type ConversationRateMessageParams = typeof conversationRateMessageParamsSchema.Type;
 
 /**
  * How `conversation.rateMessage` ended. A rating is recorded or it is not,
@@ -251,16 +258,12 @@ export const CONVERSATION_RATE_STATUS = {
 export type ConversationRateStatus =
   (typeof CONVERSATION_RATE_STATUS)[keyof typeof CONVERSATION_RATE_STATUS];
 
-const CONVERSATION_RATE_MESSAGE_RESULT = {
-  status: s.enumOf(Object.values(CONVERSATION_RATE_STATUS)),
-} as const;
-
 /** What `conversation.rateMessage` answers: whether the rating was recorded, and if not, which of the three refusals stands. */
-export const conversationRateMessageResultSchema = s.record(CONVERSATION_RATE_MESSAGE_RESULT, {
-  extraKeys: RECORD_EXTRA_KEYS.IGNORE,
+export const conversationRateMessageResultSchema = tolerant({
+  status: Schema.Literal(...Object.values(CONVERSATION_RATE_STATUS)),
 });
 
-export type ConversationRateMessageResult = RecordOf<typeof CONVERSATION_RATE_MESSAGE_RESULT>;
+export type ConversationRateMessageResult = typeof conversationRateMessageResultSchema.Type;
 
 const GATEWAY_METHODS_BY_NAME: ReadonlyMap<string, GatewayMethodEntry> = new Map(
   GATEWAY_METHOD_ENTRIES.map((entry) => [entry.name, entry]),

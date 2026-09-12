@@ -1,7 +1,7 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
-import { type CloudFetch, effectSchema, type WireRecord } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, type Layer } from "effect";
+import type { CloudFetch, WireRecord } from "@sidecar/wire";
+import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import { Effect, type Schema as EffectSchema, Either, type Layer } from "effect";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -48,9 +48,6 @@ export interface DepartingCredential {
   accessToken: string;
 }
 
-const deviceRegisterAnswerEffect = effectSchema(deviceRegisterAnswerSchema);
-const deviceForgetAnswerEffect = effectSchema(deviceForgetAnswerSchema);
-
 /**
  * Each request as the record that travels, field by field. Built twice per
  * call — once from the caller's request for the schema to read, and again
@@ -95,11 +92,13 @@ export class HostedDeviceClient {
   }
 
   register(request: DeviceRegisterRequest): Promise<DeviceRegisterAnswer | undefined> {
-    const admitted = deviceRegisterRequestSchema.parse(registerRecord(request));
+    const admitted = Either.getOrUndefined(
+      readEither(deviceRegisterRequestSchema)(registerRecord(request)),
+    );
     if (admitted === undefined) return Promise.resolve(undefined);
     return this.#ask(
       { method: DEVICE_METHOD.REGISTER, body: registerRecord(admitted) },
-      deviceRegisterAnswerEffect,
+      deviceRegisterAnswerSchema,
     );
   }
 
@@ -112,11 +111,13 @@ export class HostedDeviceClient {
     request: DeviceForgetRequest,
     departing?: DepartingCredential,
   ): Promise<DeviceForgetAnswer | undefined> {
-    const admitted = deviceForgetRequestSchema.parse(forgetRecord(request));
+    const admitted = Either.getOrUndefined(
+      readEither(deviceForgetRequestSchema)(forgetRecord(request)),
+    );
     if (admitted === undefined) return Promise.resolve(undefined);
     return this.#ask(
       { method: DEVICE_METHOD.FORGET, body: forgetRecord(admitted) },
-      deviceForgetAnswerEffect,
+      deviceForgetAnswerSchema,
       departing,
     );
   }

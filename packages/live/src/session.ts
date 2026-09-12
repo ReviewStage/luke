@@ -1,4 +1,3 @@
-import { RECORD_EXTRA_KEYS, s, TEXT_ENDS } from "@sidecar/wire";
 import { Schema } from "effect";
 import {
   type LiveClientEventType,
@@ -103,26 +102,24 @@ export function liveCreateRequest(session: LiveSessionConfig, sdpOffer: string) 
  * renderer applies as its remote description. Anything else the service adds
  * is ignored; an answer without both is refused whole.
  */
-export const liveCreateAnswerSchema = s.record(
-  {
-    session: s.record(
-      { id: s.text({ ends: TEXT_ENDS.KEEP }) },
-      {
-        extraKeys: RECORD_EXTRA_KEYS.IGNORE,
-      },
-    ),
-    transport: s.record(
-      {
-        type: s.literal(LIVE_TRANSPORT_TYPE),
-        sdp: s.text({ ends: TEXT_ENDS.KEEP }),
-      },
-      { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-    ),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const keptText = Schema.String.pipe(
+  Schema.filter((value) => value.trim().length > 0, {
+    schemaId: Schema.MinLengthSchemaId,
+    jsonSchema: { minLength: 1 },
+  }),
 );
 
-export type LiveCreateAnswer = NonNullable<ReturnType<typeof liveCreateAnswerSchema.parse>>;
+export const liveCreateAnswerSchema = Schema.Struct({
+  session: Schema.Struct({ id: keptText }).annotations({
+    parseOptions: { onExcessProperty: "ignore" },
+  }),
+  transport: Schema.Struct({
+    type: Schema.Literal(LIVE_TRANSPORT_TYPE),
+    sdp: keptText,
+  }).annotations({ parseOptions: { onExcessProperty: "ignore" } }),
+}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+export type LiveCreateAnswer = typeof liveCreateAnswerSchema.Type;
 
 /**
  * Why the last attempt to open a session ended the way it did. "Voice is

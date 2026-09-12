@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
-import { Effect } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Either } from "effect";
 import { test } from "vitest";
 import type { GatewayMethodTable } from "./methods.js";
 import {
@@ -206,17 +207,27 @@ function answeringTable(): GatewayMethodTable {
 
 test("the declared parameters the fixtures carry are the shapes the protocol admits", () => {
   assert.deepEqual(
-    voiceCreateLiveSessionParamsSchema.parse(paramsFor(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION)),
+    Either.getOrUndefined(
+      readEither(voiceCreateLiveSessionParamsSchema)(
+        paramsFor(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION),
+      ),
+    ),
     { sdp: FIXTURE_SDP },
   );
   assert.deepEqual(
-    voiceReportLiveTransportParamsSchema.parse(
-      paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT),
+    Either.getOrUndefined(
+      readEither(voiceReportLiveTransportParamsSchema)(
+        paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT),
+      ),
     ),
     { state: LIVE_TRANSPORT_STATE.CONNECTED },
   );
   assert.deepEqual(
-    voiceReportLiveActivityParamsSchema.parse(paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY)),
+    Either.getOrUndefined(
+      readEither(voiceReportLiveActivityParamsSchema)(
+        paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY),
+      ),
+    ),
     { idle: false },
   );
 });

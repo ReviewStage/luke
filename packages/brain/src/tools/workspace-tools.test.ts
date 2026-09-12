@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
 import { BRAIN_TOOL } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -51,7 +52,7 @@ test("the three workspace tools are modules in catalog order, each naming the st
   );
   for (const tool of WORKSPACE_TOOLS) assert.equal(workspaceToolNamed(tool.name), tool);
   const required = WORKSPACE_TOOLS.map((tool) => {
-    const node = tool.inputSchema.jsonSchema();
+    const node = emitJsonSchema(tool.inputSchema);
     return "required" in node ? [...node.required] : [];
   });
   assert.deepEqual(required, [["name"], ["name", "content"], ["location"]]);

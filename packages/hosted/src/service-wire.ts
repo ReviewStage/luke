@@ -1,6 +1,5 @@
-import { type Schema, s } from "@sidecar/wire";
-import { emitJsonSchema, readEither, verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { verbatimJsonSchema } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 
 /**
  * The vocabulary every hosted endpoint shares: how a refusal is worded, what
@@ -8,17 +7,10 @@ import { Schema as EffectSchema, Either } from "effect";
  * declarations are written from. Each domain's own answers live in its own
  * wire module beside this one.
  *
- * Every declaration below is composed directly as an Effect `Schema` under
- * its own `<name>Effect` export, the way `brain-contract.ts` (P3-05) states
- * its declarations. The plain `<name>` export beside it is the same
- * declaration read through `fromEffect`, the pattern P1-04 established in
- * `packages/wire/src/ui-message-metadata.ts`: it is what still answers the
- * facade's `read`/`parse`/`jsonSchema` for the callers that hold one — the
- * still-unconverted sibling wire modules that pass these into
- * `s.record`/`s.array`/`s.dropRefused`/`.optional()`, and the direct
- * `.parse()` callers in `@sidecar/voice`, `@sidecar/brain`, and `apps/web`.
- * The facade twin is the strangler shim P12-08 deletes, once every caller of
- * this module declares against the `Effect` export directly.
+ * Every declaration below is composed directly as an Effect `Schema` and
+ * exported under its own name, the way `brain-contract.ts` states its
+ * declarations: a caller reads one through `readEither` and shows it through
+ * `emitJsonSchema`, both from `@sidecar/wire/effect`.
  */
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
@@ -81,33 +73,14 @@ export interface HostedQuota {
 const HOSTED_API_ERROR_NAMES = Object.values(HOSTED_API_ERROR);
 
 /**
- * The Effect schema a declaration was composed from, adapted to the facade
- * still-held callers use: `read` through `readEither`, `jsonSchema` through
- * the emitter walking the same schema.
- */
-function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
-  const read = readEither(core);
-  return s.reader({
-    read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
-      }),
-    jsonSchema: () => emitJsonSchema(core),
-  });
-}
-
-/**
  * A text admitted exactly as it arrived — no ends settled, nothing collapsed
  * — and refused only when there is nothing there at all. What an author or a
  * provider wrote, where trimming would be a display decision a wire reader
  * has no business making.
  */
-export const writtenTextEffect = EffectSchema.String.pipe(
+export const writtenText = EffectSchema.String.pipe(
   EffectSchema.filter((value) => value.length > 0),
 );
-
-export const writtenText: Schema<string> = fromEffect(writtenTextEffect);
 
 /**
  * A count an answer reports: any finite number at or above zero, whole or
@@ -115,12 +88,10 @@ export const writtenText: Schema<string> = fromEffect(writtenTextEffect);
  * and a fractional one is the service miscounting rather than the wire
  * carrying something else.
  */
-export const countedNumberEffect = EffectSchema.Number.pipe(
+export const countedNumber = EffectSchema.Number.pipe(
   EffectSchema.finite(),
   EffectSchema.greaterThanOrEqualTo(0),
 );
-
-export const countedNumber: Schema<number> = fromEffect(countedNumberEffect);
 
 /**
  * A record that ignores a key a newer service added, which is what an answer
@@ -130,15 +101,13 @@ export const countedNumber: Schema<number> = fromEffect(countedNumberEffect);
 const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
   EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
-export const hostedQuotaSchemaEffect = tolerantRecord({
-  used: countedNumberEffect,
-  limit: countedNumberEffect,
-  resetsAt: countedNumberEffect,
+export const hostedQuotaSchema = tolerantRecord({
+  used: countedNumber,
+  limit: countedNumber,
+  resetsAt: countedNumber,
 });
 
-export const hostedQuotaSchema: Schema<HostedQuota> = fromEffect(hostedQuotaSchemaEffect);
-
-/** A member set read with its ends trimmed, the way `s.enumOf({ ends: TEXT_ENDS.TRIM })` reads one. */
+/** A member set read with its ends trimmed, the way an enum reads one. */
 function trimmedEnum<const Member extends string>(members: readonly Member[]) {
   return verbatimJsonSchema(
     EffectSchema.transform(EffectSchema.String, EffectSchema.Literal(...members), {
@@ -153,13 +122,11 @@ function trimmedEnum<const Member extends string>(members: readonly Member[]) {
 const hostedErrorRecord = tolerantRecord({ error: trimmedEnum(HOSTED_API_ERROR_NAMES) });
 
 /** The error reason out of a refused hosted answer, or nothing. */
-export const hostedErrorSchemaEffect = EffectSchema.transform(
+export const hostedErrorSchema = EffectSchema.transform(
   hostedErrorRecord,
   EffectSchema.Literal(...HOSTED_API_ERROR_NAMES),
   { strict: false, decode: (answer) => answer.error, encode: (error) => ({ error }) },
 );
-
-export const hostedErrorSchema: Schema<HostedApiError> = fromEffect(hostedErrorSchemaEffect);
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -188,10 +155,8 @@ const trimmedUuidText = EffectSchema.transform(EffectSchema.String, EffectSchema
  * `uuid`, and Postgres refuses any other text bound to it, so an id is held
  * to this shape at the boundary rather than met as a failed query.
  */
-export const wireUuidSchemaEffect = EffectSchema.transform(trimmedUuidText, EffectSchema.String, {
+export const wireUuidSchema = EffectSchema.transform(trimmedUuidText, EffectSchema.String, {
   strict: false,
   decode: (value) => value.toLowerCase(),
   encode: (value) => value,
 }).pipe(EffectSchema.filter(isWireUuid));
-
-export const wireUuidSchema: Schema<string> = fromEffect(wireUuidSchemaEffect);

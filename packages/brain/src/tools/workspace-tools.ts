@@ -2,10 +2,11 @@ import type { SkillLoad, WorkspaceReadResult, WorkspaceWriteResult } from "@side
 import {
   ACTION_RESULT_STATUS,
   isWireString,
-  RECORD_EXTRA_KEYS,
-  s,
+  type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { describeWire } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -37,24 +38,60 @@ export interface WorkspaceToolContext extends ToolContext {
 
 export type WorkspaceToolModule = ToolModule<WireRecord, WorkspaceToolContext>;
 
-const FILE_NAME = s.text({ description: "The file's name relative to the workspace." });
+/** A text trimmed and refused when left with nothing. */
+function trimmedText(description: string): EffectSchema.Schema<string, string> {
+  return describeWire(
+    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+      strict: true,
+      decode: (value) => value.trim(),
+      encode: (value) => value,
+    }).pipe(
+      EffectSchema.filter((value) => value.trim().length > 0, {
+        schemaId: EffectSchema.MinLengthSchemaId,
+        jsonSchema: { minLength: 1 },
+      }),
+    ),
+    description,
+  );
+}
 
-const READ_WORKSPACE_FILE_INPUT = s.record(
-  { name: FILE_NAME },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+/** A text trimmed and admitted even when left with nothing. */
+function trimmedTextAllowingEmpty(description: string): EffectSchema.Schema<string, string> {
+  return describeWire(
+    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+      strict: true,
+      decode: (value) => value.trim(),
+      encode: (value) => value,
+    }),
+    description,
+  );
+}
 
-const WRITE_WORKSPACE_FILE_INPUT = s.record(
-  {
+const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase<A, I>(
+  schema: EffectSchema.Schema<A, I>,
+): EffectSchema.Schema<unknown, UnparsedWireValue> {
+  return EffectSchema.make(schema.ast);
+}
+
+const FILE_NAME = trimmedText("The file's name relative to the workspace.");
+
+const READ_WORKSPACE_FILE_INPUT = erase(tolerantRecord({ name: FILE_NAME }));
+
+const WRITE_WORKSPACE_FILE_INPUT = erase(
+  tolerantRecord({
     name: FILE_NAME,
-    content: s.text({ description: "The file's whole new content.", allowEmpty: true }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+    content: trimmedTextAllowingEmpty("The file's whole new content."),
+  }),
 );
 
-const LOAD_SKILL_INPUT = s.record(
-  { location: s.text({ description: "The SKILL.md location exactly as listed." }) },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const LOAD_SKILL_INPUT = erase(
+  tolerantRecord({
+    location: trimmedText("The SKILL.md location exactly as listed."),
+  }),
 );
 
 const READ_WORKSPACE_FILE: WorkspaceToolModule = {

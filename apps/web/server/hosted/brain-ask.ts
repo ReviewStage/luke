@@ -1,4 +1,5 @@
-import { Effect, Either } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Schema as EffectSchema, Either } from "effect";
 import {
   ASK_BOUNDS,
   ASK_ORIGIN,
@@ -7,7 +8,6 @@ import {
   type HostedBrainAskRequest,
   type HostedBrainTurnAnswer,
   hostedBrainAskRequestSchema,
-  s,
   TURN_STATUS,
   TURN_WAIT_QUERY,
   type TurnStatus,
@@ -82,7 +82,10 @@ const TURN_ID_QUERY = "id";
 /** How often a held turn read looks again; eve's step boundaries land at a few hundred milliseconds apart. */
 const TURN_WAIT_POLL_MS = 500;
 
-const waitSchema = s.wholeNumber({ minimum: 0, maximum: ASK_BOUNDS.MAX_WAIT_MS });
+const waitSchema = EffectSchema.Int.pipe(
+  EffectSchema.greaterThanOrEqualTo(0),
+  EffectSchema.lessThanOrEqualTo(ASK_BOUNDS.MAX_WAIT_MS),
+);
 
 const TERMINAL_TURN_STATUSES: ReadonlySet<TurnStatus> = new Set([
   TURN_STATUS.SETTLED,
@@ -138,9 +141,9 @@ function pathId(request: Request): string | Response {
   if (id === undefined || ids.length !== 1) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
-  const read = wireUuidSchema.read(unparsedWire(id));
-  return read.ok
-    ? read.value
+  const read = readEither(wireUuidSchema)(unparsedWire(id));
+  return Either.isRight(read)
+    ? read.right
     : errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 }
 
@@ -351,8 +354,8 @@ export async function handleBrainAsk(options: BrainAskOptions): Promise<Response
   if (admitted instanceof Response) return admitted;
   const parsed = await readJsonBody(options.request, MAXIMUM_ASK_BODY_BYTES);
   if (parsed instanceof Response) return parsed;
-  const request = hostedBrainAskRequestSchema.read(parsed);
-  if (!request.ok) {
+  const request = readEither(hostedBrainAskRequestSchema)(parsed);
+  if (Either.isLeft(request)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
   const outcome = await acceptAsk(
@@ -362,7 +365,7 @@ export async function handleBrainAsk(options: BrainAskOptions): Promise<Response
       eve: options.eve(admitted.authorization),
       now: options.now ?? Date.now,
     },
-    { ...request.value, userId: admitted.userId },
+    { ...request.right, userId: admitted.userId },
   );
   if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, outcome.answer);
   switch (outcome.refusal) {
@@ -383,14 +386,14 @@ export async function handleBrainTurn(options: BrainAskOptions): Promise<Respons
   const waitText = new URL(options.request.url).searchParams.get(TURN_WAIT_QUERY);
   const wait =
     waitText === null
-      ? { ok: true, value: 0 }
-      : waitSchema.read(unparsedWire(waitText === "" ? Number.NaN : Number(waitText)));
-  if (!wait.ok) {
+      ? Either.right(0)
+      : readEither(waitSchema)(unparsedWire(waitText === "" ? Number.NaN : Number(waitText)));
+  if (Either.isLeft(wait)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const deadline = now() + wait.value;
+  const deadline = now() + wait.right;
   let standing = await askStanding(options, admitted.userId, id);
   while (
     standing !== undefined &&

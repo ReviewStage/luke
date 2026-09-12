@@ -26,7 +26,18 @@ import type {
   LiveVoiceSpeakers,
 } from "@sidecar/voice/orchestrator";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
-import { Deferred, Duration, Effect, Exit, type Fiber, FiberId, Runtime, type Scope } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import {
+  Deferred,
+  Duration,
+  Effect,
+  Either,
+  Exit,
+  type Fiber,
+  FiberId,
+  Runtime,
+  type Scope,
+} from "effect";
 import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
@@ -514,9 +525,11 @@ export class LiveCall implements LiveVoiceCall {
   // The peer connection's own state names are the transport report's; the
   // report's schema is what says which of them the host is told.
   #onTransport(peer: LivePeer): void {
-    const state = voiceReportLiveTransportParamsSchema.parse({
-      state: peer.connection.connectionState,
-    })?.state;
+    const state = Either.getOrUndefined(
+      readEither(voiceReportLiveTransportParamsSchema)({
+        state: peer.connection.connectionState,
+      }),
+    )?.state;
     if (state === undefined) return;
     this.#options.acts.reportTransport(state);
     if (state === LIVE_TRANSPORT_STATE.FAILED && !this.#ended) {

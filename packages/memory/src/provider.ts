@@ -16,12 +16,12 @@ import {
 import {
   ACTION_RESULT_STATUS,
   isWireNumber,
-  RECORD_EXTRA_KEYS,
-  type Schema,
-  s,
   text,
+  type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { describeWire } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "./defaults.js";
 import type { NotebookMemoryAccess } from "./notebook-memory.js";
 
@@ -67,33 +67,63 @@ export const NOTEBOOK_MEMORY_REFUSAL = {
 export interface NotebookMemoryToolShape {
   readonly name: NotebookMemoryToolName;
   readonly description: string;
-  readonly inputSchema: Schema<unknown>;
+  readonly inputSchema: EffectSchema.Schema<unknown, UnparsedWireValue>;
   readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
 }
 
-const MEMORY_SEARCH_INPUT = s.record(
-  {
-    query: s.text({
-      description: `What to look for, under ${maximumMemoryQueryLength} characters.`,
-    }),
-    max_results: s
-      .wholeNumber({
-        description: `How many results at most; ${maximumMemorySearchResults} is the ceiling.`,
-      })
-      .optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+/** A text trimmed and refused when left with nothing. */
+function trimmedText(description: string): EffectSchema.Schema<string, string> {
+  return describeWire(
+    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+      strict: true,
+      decode: (value) => value.trim(),
+      encode: (value) => value,
+    }).pipe(
+      EffectSchema.filter((value) => value.trim().length > 0, {
+        schemaId: EffectSchema.MinLengthSchemaId,
+        jsonSchema: { minLength: 1 },
+      }),
+    ),
+    description,
+  );
+}
+
+/** A whole number, with no bound beyond being finite and integral. */
+function wholeNumber(description: string): EffectSchema.Schema<number, number> {
+  return describeWire(
+    EffectSchema.Number.pipe(EffectSchema.finite(), EffectSchema.int()),
+    description,
+  );
+}
+
+const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase<A, I>(
+  schema: EffectSchema.Schema<A, I>,
+): EffectSchema.Schema<unknown, UnparsedWireValue> {
+  return EffectSchema.make(schema.ast);
+}
+
+const MEMORY_SEARCH_INPUT = erase(
+  tolerantRecord({
+    query: trimmedText(`What to look for, under ${maximumMemoryQueryLength} characters.`),
+    max_results: EffectSchema.optionalWith(
+      wholeNumber(`How many results at most; ${maximumMemorySearchResults} is the ceiling.`),
+      { exact: true },
+    ),
+  }),
 );
 
-const MEMORY_GET_INPUT = s.record(
-  {
-    path: s.text({
-      description: "The file's path relative to the notebook, as a result named it.",
+const MEMORY_GET_INPUT = erase(
+  tolerantRecord({
+    path: trimmedText("The file's path relative to the notebook, as a result named it."),
+    from: EffectSchema.optionalWith(wholeNumber("The first line to read, counting from 1."), {
+      exact: true,
     }),
-    from: s.wholeNumber({ description: "The first line to read, counting from 1." }).optional(),
-    lines: s.wholeNumber({ description: "How many lines to read." }).optional(),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+    lines: EffectSchema.optionalWith(wholeNumber("How many lines to read."), { exact: true }),
+  }),
 );
 
 const SEARCH_SHAPE: NotebookMemoryToolShape = {

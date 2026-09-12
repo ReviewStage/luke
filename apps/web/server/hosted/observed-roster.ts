@@ -1,18 +1,16 @@
+import { readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
 import {
   ACTION_KIND,
   type AdvertisedAction,
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
   type ProviderSessionObservation,
-  RECORD_EXTRA_KEYS,
-  type Schema,
   SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
-  s,
-  TEXT_ENDS,
   type UnparsedWireValue,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
@@ -59,119 +57,163 @@ export function encodeObservedRoster(roster: ObservedRoster): string {
 }
 
 /**
+ * A value the schema admitted, or nothing, for a caller that only cares
+ * whether the value is admissible.
+ */
+function admitted<Value>(
+  schema: EffectSchema.Schema<Value, UnparsedWireValue>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
+
+/** A declaration handed the interface it decodes into, matching the assembled struct's shape. */
+function schemaAs<Value>(
+  schema: EffectSchema.Schema.Any,
+): EffectSchema.Schema<Value, UnparsedWireValue> {
+  return EffectSchema.make<Value, UnparsedWireValue>(schema.ast);
+}
+
+/**
  * A stored field read back exactly as the pass wrote it: the adapter already
  * bounded and settled every field it reported, so the read here changes
  * nothing and refuses only what is not a string at all.
  */
-const storedText = s.text({ ends: TEXT_ENDS.KEEP, allowEmpty: true });
-const optionalText = storedText.optional();
+const storedText = EffectSchema.String;
+const optionalText = EffectSchema.optionalWith(storedText, { exact: true });
 
-export const cloudProviderIdSchema: Schema<CloudAgentProviderId> = s.enumOf(
-  Object.values(CLOUD_AGENT_PROVIDER_ID),
+export const cloudProviderIdSchema: EffectSchema.Schema<CloudAgentProviderId, UnparsedWireValue> =
+  schemaAs(EffectSchema.Literal(...Object.values(CLOUD_AGENT_PROVIDER_ID)));
+
+export const sessionStatusSchema = EffectSchema.Literal(...Object.values(SESSION_STATUS));
+
+const advertisedActionSchema: EffectSchema.Schema<AdvertisedAction, UnparsedWireValue> = schemaAs(
+  EffectSchema.Union(
+    EffectSchema.Struct({ kind: EffectSchema.Literal(ACTION_KIND.MESSAGE) }),
+    EffectSchema.Struct({
+      kind: EffectSchema.Literal(ACTION_KIND.CONTROL),
+      id: storedText,
+      label: storedText,
+      controlKind: EffectSchema.optionalWith(
+        EffectSchema.Literal(...Object.values(SESSION_CONTROL_KIND)),
+        { exact: true },
+      ),
+      target: optionalText,
+    }),
+    EffectSchema.Struct({
+      kind: EffectSchema.Literal(ACTION_KIND.ADD_AGENT),
+      agents: EffectSchema.Array(storedText),
+      target: optionalText,
+    }),
+    EffectSchema.Struct({ kind: EffectSchema.Literal(ACTION_KIND.RENAME_SESSION) }),
+    EffectSchema.Struct({
+      kind: EffectSchema.Literal(ACTION_KIND.RENAME_WORKSPACE),
+      target: storedText,
+    }),
+  ),
 );
 
-export const sessionStatusSchema = s.enumOf(Object.values(SESSION_STATUS));
-
-const advertisedActionSchema: Schema<AdvertisedAction> = s.union([
-  s.record({ kind: s.literal(ACTION_KIND.MESSAGE) }),
-  s.record({
-    kind: s.literal(ACTION_KIND.CONTROL),
-    id: storedText,
-    label: storedText,
-    controlKind: s.enumOf(Object.values(SESSION_CONTROL_KIND)).optional(),
-    target: optionalText,
-  }),
-  s.record({
-    kind: s.literal(ACTION_KIND.ADD_AGENT),
-    agents: s.array(storedText),
-    target: optionalText,
-  }),
-  s.record({ kind: s.literal(ACTION_KIND.RENAME_SESSION) }),
-  s.record({ kind: s.literal(ACTION_KIND.RENAME_WORKSPACE), target: storedText }),
-]);
-
-const observationSchema: Schema<ProviderSessionObservation> = s.record({
-  providerSessionId: storedText,
-  directory: optionalText,
-  parentProviderSessionId: optionalText,
-  title: storedText,
-  status: sessionStatusSchema,
-  completionCause: s.enumOf(Object.values(SESSION_COMPLETION_CAUSE)).optional(),
-  lastActivityAt: s.number(),
-  realtimeVoice: s.boolean().optional(),
-  realtimeVoiceLive: s.boolean().optional(),
-  standing: s.boolean().optional(),
-  holdingForDeveloper: s.boolean().optional(),
-  agent: s.record({ id: storedText, displayName: storedText }).optional(),
-  workspace: s
-    .record({
-      providerWorkspaceId: storedText,
-      scopeId: optionalText,
-      managerName: optionalText,
-      name: optionalText,
-    })
-    .optional(),
-  location: s.enumOf(Object.values(SESSION_LOCATION)).optional(),
-  detail: s
-    .record({
-      activity: optionalText,
-      repository: optionalText,
-      branch: optionalText,
-      model: optionalText,
-      error: optionalText,
-      link: optionalText,
-      change: optionalText,
-      diff: s
-        .record({
-          filesChanged: s.wholeNumber(),
-          linesAdded: s.wholeNumber(),
-          linesRemoved: s.wholeNumber(),
-        })
-        .optional(),
-    })
-    .optional(),
-  applications: s
-    .array(
-      s.record({
-        id: storedText,
-        displayName: storedText,
-        scope: s.enumOf(Object.values(SESSION_APPLICATION_SCOPE)),
-        link: optionalText,
+const observationSchema: EffectSchema.Schema<ProviderSessionObservation, UnparsedWireValue> =
+  schemaAs(
+    EffectSchema.Struct({
+      providerSessionId: storedText,
+      directory: optionalText,
+      parentProviderSessionId: optionalText,
+      title: storedText,
+      status: sessionStatusSchema,
+      completionCause: EffectSchema.optionalWith(
+        EffectSchema.Literal(...Object.values(SESSION_COMPLETION_CAUSE)),
+        { exact: true },
+      ),
+      lastActivityAt: EffectSchema.Number,
+      realtimeVoice: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+      realtimeVoiceLive: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+      standing: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+      holdingForDeveloper: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+      agent: EffectSchema.optionalWith(
+        EffectSchema.Struct({ id: storedText, displayName: storedText }),
+        { exact: true },
+      ),
+      workspace: EffectSchema.optionalWith(
+        EffectSchema.Struct({
+          providerWorkspaceId: storedText,
+          scopeId: optionalText,
+          managerName: optionalText,
+          name: optionalText,
+        }),
+        { exact: true },
+      ),
+      location: EffectSchema.optionalWith(
+        EffectSchema.Literal(...Object.values(SESSION_LOCATION)),
+        { exact: true },
+      ),
+      detail: EffectSchema.optionalWith(
+        EffectSchema.Struct({
+          activity: optionalText,
+          repository: optionalText,
+          branch: optionalText,
+          model: optionalText,
+          error: optionalText,
+          link: optionalText,
+          change: optionalText,
+          diff: EffectSchema.optionalWith(
+            EffectSchema.Struct({
+              filesChanged: EffectSchema.Number.pipe(EffectSchema.int()),
+              linesAdded: EffectSchema.Number.pipe(EffectSchema.int()),
+              linesRemoved: EffectSchema.Number.pipe(EffectSchema.int()),
+            }),
+            { exact: true },
+          ),
+        }),
+        { exact: true },
+      ),
+      applications: EffectSchema.optionalWith(
+        EffectSchema.Array(
+          EffectSchema.Struct({
+            id: storedText,
+            displayName: storedText,
+            scope: EffectSchema.Literal(...Object.values(SESSION_APPLICATION_SCOPE)),
+            link: optionalText,
+          }),
+        ),
+        { exact: true },
+      ),
+      advertises: EffectSchema.optionalWith(EffectSchema.Array(advertisedActionSchema), {
+        exact: true,
       }),
-    )
-    .optional(),
-  advertises: s.array(advertisedActionSchema).optional(),
-});
+    }),
+  );
 
-const projectSchema: Schema<WorkspaceProject> = s.record({
-  providerProjectId: storedText,
-  repository: storedText,
-  taskSupport: s.enumOf(Object.values(WORKSPACE_TASK_SUPPORT)),
-  providerTargetId: optionalText,
-  targetName: optionalText,
-  spawnableAgents: s.array(storedText).optional(),
-  defaultAgent: optionalText,
-  namesItself: s.boolean().optional(),
-});
+const projectSchema: EffectSchema.Schema<WorkspaceProject, UnparsedWireValue> = schemaAs(
+  EffectSchema.Struct({
+    providerProjectId: storedText,
+    repository: storedText,
+    taskSupport: EffectSchema.Literal(...Object.values(WORKSPACE_TASK_SUPPORT)),
+    providerTargetId: optionalText,
+    targetName: optionalText,
+    spawnableAgents: EffectSchema.optionalWith(EffectSchema.Array(storedText), { exact: true }),
+    defaultAgent: optionalText,
+    namesItself: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+  }),
+);
 
 /**
  * Every field the pass writes and no other: a body carrying a field this
  * build does not know is a body another build wrote, and is read as no
  * snapshot rather than as a roster with something missing from it.
  */
-const observedRosterSchema: Schema<ObservedRoster> = s.record(
-  {
-    version: s.literal(OBSERVED_ROSTER_VERSION),
-    providers: s.array(
-      s.record({
+const observedRosterSchema: EffectSchema.Schema<ObservedRoster, UnparsedWireValue> = schemaAs(
+  EffectSchema.Struct({
+    version: EffectSchema.Literal(OBSERVED_ROSTER_VERSION),
+    providers: EffectSchema.Array(
+      EffectSchema.Struct({
         providerId: cloudProviderIdSchema,
         keyFingerprint: storedText,
-        observations: s.array(observationSchema),
-        projects: s.array(projectSchema),
+        observations: EffectSchema.Array(observationSchema),
+        projects: EffectSchema.Array(projectSchema),
       }),
     ),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.REFUSE },
+  }),
 );
 
 /** A stored body as JSON, or nothing for text that is not JSON at all. */
@@ -191,5 +233,5 @@ export function parseStoredJson(body: string): UnparsedWireValue {
  * takes no diff against it.
  */
 export function decodeObservedRoster(body: string): ObservedRoster | undefined {
-  return observedRosterSchema.parse(parseStoredJson(body));
+  return admitted(observedRosterSchema, parseStoredJson(body));
 }

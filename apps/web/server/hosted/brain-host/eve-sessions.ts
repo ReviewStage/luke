@@ -1,10 +1,6 @@
-import {
-  RECORD_EXTRA_KEYS,
-  s,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "../../core.js";
+import { readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
+import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
 /**
@@ -60,18 +56,32 @@ const SESSION_NOT_ACTIVE_RETRY_MS = [250, 500, 1_000] as const;
 const ACCEPTED_STATUS = 202;
 const CONFLICT_STATUS = 409;
 
-const openedSession = s.record({ sessionId: s.text() }, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
-const acceptedDelivery = s.record(
-  { sessionId: s.text(), deliveryId: s.text() },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const ignoringExtraKeys = { parseOptions: { onExcessProperty: "ignore" } } as const;
+
+const trimmedText = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+  strict: true,
+  decode: (value) => value.trim(),
+  encode: (value) => value,
+}).pipe(
+  EffectSchema.filter((value) => value.trim().length > 0, {
+    schemaId: EffectSchema.MinLengthSchemaId,
+    jsonSchema: { minLength: 1 },
+  }),
 );
-const refusedSend = s.record({ code: s.text() }, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
+
+const openedSession = EffectSchema.Struct({ sessionId: trimmedText }).annotations(
+  ignoringExtraKeys,
+);
+const acceptedDelivery = EffectSchema.Struct({
+  sessionId: trimmedText,
+  deliveryId: trimmedText,
+}).annotations(ignoringExtraKeys);
+const refusedSend = EffectSchema.Struct({ code: trimmedText }).annotations(ignoringExtraKeys);
 
 const EVE_CANCEL_STATUS = { ACCEPTED: "accepted", NO_ACTIVE_TURN: "no_active_turn" } as const;
-const cancelAnswer = s.record(
-  { status: s.enumOf(Object.values(EVE_CANCEL_STATUS)) },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
-);
+const cancelAnswer = EffectSchema.Struct({
+  status: EffectSchema.Literal(...Object.values(EVE_CANCEL_STATUS)),
+}).annotations(ignoringExtraKeys);
 
 /** How eve answered a call: what it accepted, a session it no longer runs, or an answer this build cannot read as either. */
 export const EVE_SEND_OUTCOME = {
@@ -207,11 +217,11 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
       const response = await post(EVE_SESSION_PATH, turnHeaders(message), {
         message: message.message,
       });
-      const opened = openedSession.read(await bodyOf(response));
-      if (response.status !== ACCEPTED_STATUS || !opened.ok) {
+      const opened = readEither(openedSession)(await bodyOf(response));
+      if (response.status !== ACCEPTED_STATUS || Either.isLeft(opened)) {
         return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
       }
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.value.sessionId };
+      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.right.sessionId };
     },
     async send(sessionId, message) {
       for (let attempt = 0; ; attempt += 1) {
@@ -220,22 +230,22 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
         });
         const body = await bodyOf(response);
         if (response.status === CONFLICT_STATUS) {
-          const refused = refusedSend.read(body);
-          if (refused.ok && refused.value.code === EVE_SESSION_NOT_ACTIVE) {
+          const refused = readEither(refusedSend)(body);
+          if (Either.isRight(refused) && refused.right.code === EVE_SESSION_NOT_ACTIVE) {
             const wait = SESSION_NOT_ACTIVE_RETRY_MS[attempt];
             if (wait === undefined) return { outcome: EVE_SEND_OUTCOME.RETIRED };
             await sleep(wait);
             continue;
           }
         }
-        const accepted = acceptedDelivery.read(body);
-        if (response.status !== ACCEPTED_STATUS || !accepted.ok) {
+        const accepted = readEither(acceptedDelivery)(body);
+        if (response.status !== ACCEPTED_STATUS || Either.isLeft(accepted)) {
           return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
         }
         return {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
-          sessionId: accepted.value.sessionId,
-          deliveryId: accepted.value.deliveryId,
+          sessionId: accepted.right.sessionId,
+          deliveryId: accepted.right.deliveryId,
         };
       }
     },
@@ -245,11 +255,11 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
         {},
         eveTurnId === undefined ? {} : { turnId: eveTurnId },
       );
-      const answer = cancelAnswer.read(await bodyOf(response));
-      if (!response.ok || !answer.ok) {
+      const answer = readEither(cancelAnswer)(await bodyOf(response));
+      if (!response.ok || Either.isLeft(answer)) {
         return { outcome: EVE_CANCEL_OUTCOME.FAILED, status: response.status };
       }
-      return answer.value.status === EVE_CANCEL_STATUS.ACCEPTED
+      return answer.right.status === EVE_CANCEL_STATUS.ACCEPTED
         ? { outcome: EVE_CANCEL_OUTCOME.ACCEPTED }
         : { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
     },

@@ -1,0 +1,13 @@
+{
+  "type": "string",
+  "enum": [
+    "unavailable",
+    "idle",
+    "connecting",
+    "muted",
+    "listening",
+    "speaking",
+    "closing",
+    "failed"
+  ]
+}

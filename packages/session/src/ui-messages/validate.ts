@@ -1,7 +1,6 @@
 import {
   ASSISTANT_MESSAGE_METADATA,
   type AssistantMessageMetadata,
-  effectSchema,
   isRecord,
   isWireString,
   MESSAGE_ROLE,
@@ -39,11 +38,12 @@ import { isStoredToolPart, toolPartName } from "./tool-parts.js";
  * `metadataSchema` option reads one schema for every row regardless of its
  * role, so it cannot stand in for a check that a user row and an assistant
  * row answer to different shapes; the role dispatch below reads each row's
- * metadata against the Effect schema the wire vocabulary's
+ * metadata through `readEither` against the same `USER_MESSAGE_METADATA` and
+ * `ASSISTANT_MESSAGE_METADATA` declarations the wire vocabulary's
  * `USER_MESSAGE_METADATA_STANDARD_SCHEMA` and
  * `ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA` twins are themselves built
- * from, through `effectSchema` and `readEither`, so the same declaration
- * backs both the SDK-facing Standard Schema and this reader.
+ * from, so the same declaration backs both the SDK-facing Standard Schema and
+ * this reader.
  */
 export type StoredUIMessage =
   | StoredMessageOf<typeof MESSAGE_ROLE.USER, UserMessageMetadata>
@@ -72,8 +72,8 @@ type ValidationOptions = Parameters<typeof safeValidateUIMessages<ValidatedMessa
  */
 const DYNAMIC_TOOL_PART_TYPE = "dynamic-tool";
 
-const readUserMetadata = readEither(effectSchema(USER_MESSAGE_METADATA));
-const readAssistantMetadata = readEither(effectSchema(ASSISTANT_MESSAGE_METADATA));
+const readUserMetadata = readEither(USER_MESSAGE_METADATA);
+const readAssistantMetadata = readEither(ASSISTANT_MESSAGE_METADATA);
 
 function refuse(
   refusal: SchemaRefusal,

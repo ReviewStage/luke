@@ -64,7 +64,7 @@ test("every row of the actions table is a module, in the table's order, the note
   for (const [index, tool] of ACTION_TOOLS.entries()) {
     const request = rows[index]?.request;
     assert.ok(request);
-    assert.deepEqual(tool.inputSchema.jsonSchema(), emitJsonSchema(request));
+    assert.deepEqual(emitJsonSchema(tool.inputSchema), emitJsonSchema(request));
     assert.equal(actionToolNamed(tool.name), tool);
   }
   assert.equal(actionToolNamed("remember_fact")?.kind, ACTION_KIND.REMEMBER);

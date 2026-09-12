@@ -12,7 +12,6 @@ import {
   OPEN_REQUEST,
   RENAME_SESSION_REQUEST,
   RENAME_WORKSPACE_REQUEST,
-  requestSchema,
   type SessionActionKind,
 } from "@sidecar/actions";
 import {
@@ -24,7 +23,20 @@ import {
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either, type Schema } from "effect";
 import type { SessionView } from "./session-model";
+
+/** A request read against its schema; downstream code reads `ok`/`value` exactly as it did against the facade. */
+function parsedRequest<Value, Encoded>(
+  schema: Schema.Schema<Value, Encoded>,
+  input: UnparsedWireValue,
+): { readonly ok: true; readonly value: Value } | { readonly ok: false } {
+  return Either.match(readEither(schema)(input), {
+    onRight: (value) => ({ ok: true, value }),
+    onLeft: () => ({ ok: false }),
+  });
+}
 
 /**
  * How an action's tool part becomes a row: from the call's own arguments and
@@ -114,8 +126,8 @@ const UNREADABLE_ENVELOPE = "The record of this action's answer could not be rea
 function envelopeOf(part: StoredToolPart): ActionOutputEnvelope | undefined {
   if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return undefined;
   // SAFETY: a stored part's output is JSON the store holds as jsonb; the wire boundary is where it is read.
-  const read = ACTION_OUTPUT.read(unparsedWire(part.output as WireBoundaryInput));
-  return read.ok ? read.value : undefined;
+  const read = readEither(ACTION_OUTPUT)(unparsedWire(part.output as WireBoundaryInput));
+  return Either.getOrUndefined(read);
 }
 
 /** What became of the action and, where it did not simply land, why. */
@@ -251,7 +263,7 @@ function composeRuns(
   const input = inputOf(part);
   switch (kind) {
     case ACTION_KIND.MESSAGE: {
-      const read = requestSchema(MESSAGE_REQUEST).read(input);
+      const read = parsedRequest(MESSAGE_REQUEST, input);
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       return {
         runs: [
@@ -263,7 +275,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.CONTROL: {
-      const read = requestSchema(CONTROL_REQUEST).read(input);
+      const read = parsedRequest(CONTROL_REQUEST, input);
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       const controlKind = target?.controlKind;
       const label = target?.controlLabel;
@@ -282,7 +294,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.OPEN: {
-      const read = requestSchema(OPEN_REQUEST).read(input);
+      const read = parsedRequest(OPEN_REQUEST, input);
       const { identity, chip, providerId } = namedSession(
         read.ok ? read.value : undefined,
         target,
@@ -301,7 +313,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.CREATE_WORKSPACE: {
-      const read = requestSchema(CREATE_WORKSPACE_REQUEST).read(input);
+      const read = parsedRequest(CREATE_WORKSPACE_REQUEST, input);
       const created =
         envelope?.status === ACTION_OUTPUT_STATUS.ACCEPTED ? envelope.createdSession : undefined;
       const providerId = target?.providerId ?? (read.ok ? read.value.provider_id : undefined);
@@ -328,7 +340,7 @@ function composeRuns(
       };
     }
     case ACTION_KIND.ADD_AGENT: {
-      const read = requestSchema(ADD_AGENT_REQUEST).read(input);
+      const read = parsedRequest(ADD_AGENT_REQUEST, input);
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       return {
         runs: [
@@ -340,11 +352,10 @@ function composeRuns(
     }
     case ACTION_KIND.RENAME_WORKSPACE:
     case ACTION_KIND.RENAME_SESSION: {
-      const read = (
-        kind === ACTION_KIND.RENAME_WORKSPACE
-          ? requestSchema(RENAME_WORKSPACE_REQUEST)
-          : requestSchema(RENAME_SESSION_REQUEST)
-      ).read(input);
+      const read = parsedRequest(
+        kind === ACTION_KIND.RENAME_WORKSPACE ? RENAME_WORKSPACE_REQUEST : RENAME_SESSION_REQUEST,
+        input,
+      );
       const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
       return {
         runs: [

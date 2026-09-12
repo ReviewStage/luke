@@ -1,6 +1,8 @@
 import { maximumIdentifierLength } from "@sidecar/actions";
 import type { SessionIdentity } from "@sidecar/session";
-import { RECORD_EXTRA_KEYS, s, type WireRecord } from "@sidecar/wire";
+import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
+import { describeWire } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { identityFromRecord, rejection, sameIdentity } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -24,14 +26,41 @@ export interface ReadToolContext extends ToolContext {
 
 export type ReadToolModule = ToolModule<WireRecord, ReadToolContext>;
 
-const LIST_SESSIONS_INPUT = s.record({}, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
+/** A text trimmed, refused when left with nothing, and bounded to `max` characters. */
+function boundedText(description: string, max: number): EffectSchema.Schema<string, string> {
+  return describeWire(
+    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+      strict: true,
+      decode: (value) => value.trim(),
+      encode: (value) => value,
+    }).pipe(
+      EffectSchema.filter((value) => value.trim().length > 0, {
+        schemaId: EffectSchema.MinLengthSchemaId,
+        jsonSchema: { minLength: 1 },
+      }),
+      EffectSchema.maxLength(max),
+    ),
+    description,
+  );
+}
 
-const READ_TRANSCRIPT_INPUT = s.record(
-  {
-    provider_id: s.text({ max: maximumIdentifierLength, description: "The session provider ID." }),
-    provider_session_id: s.text({ max: maximumIdentifierLength, description: "The session ID." }),
-  },
-  { extraKeys: RECORD_EXTRA_KEYS.IGNORE },
+const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
+  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+
+/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase<A, I>(
+  schema: EffectSchema.Schema<A, I>,
+): EffectSchema.Schema<unknown, UnparsedWireValue> {
+  return EffectSchema.make(schema.ast);
+}
+
+const LIST_SESSIONS_INPUT = erase(tolerantRecord({}));
+
+const READ_TRANSCRIPT_INPUT = erase(
+  tolerantRecord({
+    provider_id: boundedText("The session provider ID.", maximumIdentifierLength),
+    provider_session_id: boundedText("The session ID.", maximumIdentifierLength),
+  }),
 );
 
 const LIST_SESSIONS: ReadToolModule = {

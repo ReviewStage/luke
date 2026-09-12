@@ -1,3 +1,5 @@
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import {
   type HostedMessageRatingRequest,
   hostedMessageRatingRequestSchema,
@@ -56,8 +58,8 @@ export async function handleMessageRating(options: MessageRatingOptions): Promis
   if (id === undefined || ids.length !== 1) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
-  const messageId = wireUuidSchema.read(unparsedWire(id));
-  if (!messageId.ok) {
+  const messageId = readEither(wireUuidSchema)(unparsedWire(id));
+  if (Either.isLeft(messageId)) {
     return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
   }
 
@@ -68,12 +70,12 @@ export async function handleMessageRating(options: MessageRatingOptions): Promis
 
   const parsed = await readJsonBody(request, MAXIMUM_RATING_BODY_BYTES);
   if (parsed instanceof Response) return parsed;
-  const rating = hostedMessageRatingRequestSchema.read(parsed);
-  if (!rating.ok) {
+  const rating = readEither(hostedMessageRatingRequestSchema)(parsed);
+  if (Either.isLeft(rating)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
-  const written = await rate(userId, messageId.value, rating.value);
+  const written = await rate(userId, messageId.right, rating.right);
   if (written.ok) return jsonResponse(HOSTED_HTTP_STATUS.OK, { id: written.id, seq: written.seq });
   switch (written.refusal) {
     case RATING_REFUSAL.NOT_FOUND:

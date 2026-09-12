@@ -14,6 +14,8 @@ import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import { liveExchangeActive } from "@sidecar/live";
 import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import { isRecord, isWireBoolean, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
 import { isSessionIdentity } from "./messages/session";
@@ -268,8 +270,8 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:voice-live-session-changed",
     args: noArgs,
-    result: result<VoiceLiveSessionChanged>(
-      (value) => voiceLiveSessionChangedSchema.read(value).ok,
+    result: result<VoiceLiveSessionChanged>((value) =>
+      Either.isRight(readEither(voiceLiveSessionChangedSchema)(value)),
     ),
   }),
   /**

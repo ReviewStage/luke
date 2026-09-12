@@ -24,6 +24,8 @@ import {
   type RatingEventPayload,
   unparsedWire,
 } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 
 /**
  * One device's own picture of the Conversation, kept the way D2's contract
@@ -269,7 +271,9 @@ export class ConversationViewSync {
           rating:
             event.payload === undefined
               ? undefined
-              : RATING_EVENT_PAYLOAD.parse(unparsedWire(event.payload)),
+              : Either.getOrUndefined(
+                  readEither(RATING_EVENT_PAYLOAD)(unparsedWire(event.payload)),
+                ),
           newerThanFold: false,
         })
       ) {

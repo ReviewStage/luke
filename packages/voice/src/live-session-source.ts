@@ -46,7 +46,8 @@ import {
   type WireRecord,
   withoutTrailingSlash,
 } from "@sidecar/wire";
-import { Data, Duration, Effect, Fiber, Runtime, Schedule } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Data, Duration, Effect, Either, Fiber, Runtime, Schedule } from "effect";
 import type { HeldSocket } from "./held-socket.js";
 import {
   type LiveSideband,
@@ -293,7 +294,9 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
     }
     const payload = await response.json().catch(() => undefined);
     const created =
-      payload === undefined ? undefined : liveCreateAnswerSchema.parse(unparsedWire(payload));
+      payload === undefined
+        ? undefined
+        : Either.getOrUndefined(readEither(liveCreateAnswerSchema)(unparsedWire(payload)));
     if (!created) {
       this.#outcome.record(LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE, "no session id and SDP answer");
       return undefined;
@@ -628,10 +631,12 @@ class ServiceLiveSessionSource {
       this.#quota = created.quota ?? this.#quota;
       return { sessionId: created.sessionId, sdpAnswer: created.sdpAnswer };
     }
-    const error = hostedErrorSchema.parse(payload);
+    const error = Either.getOrUndefined(readEither(hostedErrorSchema)(payload));
     if (error) {
       if (error === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
-        this.#quota = hostedQuotaSchema.parse(unparsedWire(payload.quota)) ?? this.#quota;
+        this.#quota =
+          Either.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(payload.quota))) ??
+          this.#quota;
       }
       this.#refuse(HOSTED_ERROR_OUTCOME.get(error) ?? LIVE_SESSION_OUTCOME.HTTP_ERROR, error);
       return undefined;

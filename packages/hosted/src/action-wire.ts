@@ -1,9 +1,6 @@
 import {
   ACTION_RESULT_STATUS,
   type ActionResultStatus,
-  effectSchema,
-  type Schema,
-  s,
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import {
@@ -20,9 +17,8 @@ import { writtenText } from "./service-wire.js";
  * one identifier a creation names. The reason travels as written, because it
  * is a sentence a person reads.
  *
- * Every shape below is composed directly with Effect's `Schema.Struct` rather
- * than through the `s.*` facade; {@link fromEffect} is what still answers the
- * facade's `read`/`parse`/`jsonSchema` for the callers that hold one.
+ * Every shape below is composed directly with Effect's `Schema.Struct` and
+ * exported under its own name.
  */
 
 /**
@@ -42,23 +38,6 @@ export interface HostedActionAnswer {
 export interface HostedActionWorkspaceAnswer extends HostedActionAnswer {
   /** The created session's provider id, when the provider reports one. */
   providerSessionId?: string;
-}
-
-/**
- * The Effect schema a declaration was composed from, adapted to the facade
- * still-held callers use: `read` through `readEither`, `jsonSchema` through
- * the emitter walking the same schema.
- */
-function fromEffect<Value, Encoded>(core: EffectSchema.Schema<Value, Encoded>): Schema<Value> {
-  const read = readEither(core);
-  return s.reader({
-    read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
-      }),
-    jsonSchema: () => emitJsonSchema(core),
-  });
 }
 
 /**
@@ -94,9 +73,9 @@ function dropped<Value, Encoded>(
   );
 }
 
-const reason = EffectSchema.optionalWith(dropped(effectSchema(writtenText)), { exact: true });
+const reason = EffectSchema.optionalWith(dropped(writtenText), { exact: true });
 
-const providerSessionId = EffectSchema.optionalWith(dropped(effectSchema(writtenText)), {
+const providerSessionId = EffectSchema.optionalWith(dropped(writtenText), {
   exact: true,
 });
 
@@ -134,8 +113,7 @@ const hostedActionAnswerCore = EffectSchema.transform(
   },
 );
 
-export const hostedActionAnswerSchema: Schema<HostedActionAnswer> =
-  fromEffect(hostedActionAnswerCore);
+export const hostedActionAnswerSchema = hostedActionAnswerCore;
 
 const actionWorkspaceAnswerFieldsFrom = EffectSchema.Struct({
   result,
@@ -165,6 +143,4 @@ const hostedActionWorkspaceAnswerCore = EffectSchema.transform(
   },
 );
 
-export const hostedActionWorkspaceAnswerSchema: Schema<HostedActionWorkspaceAnswer> = fromEffect(
-  hostedActionWorkspaceAnswerCore,
-);
+export const hostedActionWorkspaceAnswerSchema = hostedActionWorkspaceAnswerCore;

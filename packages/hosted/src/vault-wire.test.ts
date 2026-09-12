@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { type Schema as EffectSchema, Either } from "effect";
 import { test } from "vitest";
 import {
   VAULT_KEY_MAX_LENGTH,
@@ -8,6 +11,13 @@ import {
   vaultKeyStoreAnswerSchema,
   vaultKeysListAnswerSchema,
 } from "./vault-wire.js";
+
+function parse<Value, Encoded>(
+  schema: EffectSchema.Schema<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Either.getOrUndefined(readEither(schema)(value));
+}
 
 test("a storable key is non-empty, whitespace-free, and bounded", () => {
   assert.equal(vaultKeyIsStorable("key_1234abcd"), true);
@@ -20,22 +30,22 @@ test("a storable key is non-empty, whitespace-free, and bounded", () => {
 });
 
 test("the vault answers read only their documented shapes", () => {
-  assert.deepEqual(vaultKeyStoreAnswerSchema.parse({ stored: true }), { stored: true });
-  assert.equal(vaultKeyStoreAnswerSchema.parse({ stored: false }), undefined);
-  assert.deepEqual(vaultKeyDeleteAnswerSchema.parse({ deleted: false }), { deleted: false });
-  assert.equal(vaultKeyDeleteAnswerSchema.parse({ deleted: "yes" }), undefined);
+  assert.deepEqual(parse(vaultKeyStoreAnswerSchema, { stored: true }), { stored: true });
+  assert.equal(parse(vaultKeyStoreAnswerSchema, { stored: false }), undefined);
+  assert.deepEqual(parse(vaultKeyDeleteAnswerSchema, { deleted: false }), { deleted: false });
+  assert.equal(parse(vaultKeyDeleteAnswerSchema, { deleted: "yes" }), undefined);
 });
 
 test("one unreadable key entry drops the whole list rather than hiding a stored key", () => {
-  const listed = vaultKeysListAnswerSchema.parse({
+  const listed = parse(vaultKeysListAnswerSchema, {
     keys: [{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: 1 }],
   });
   assert.deepEqual(listed, {
     keys: [{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: 1 }],
   });
-  assert.deepEqual(vaultKeysListAnswerSchema.parse({ keys: [] }), { keys: [] });
+  assert.deepEqual(parse(vaultKeysListAnswerSchema, { keys: [] }), { keys: [] });
   assert.equal(
-    vaultKeysListAnswerSchema.parse({
+    parse(vaultKeysListAnswerSchema, {
       keys: [
         { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: 1 },
         { providerId: "openai" },
@@ -44,7 +54,7 @@ test("one unreadable key entry drops the whole list rather than hiding a stored 
     undefined,
   );
   assert.equal(
-    vaultKeysListAnswerSchema.parse({
+    parse(vaultKeysListAnswerSchema, {
       keys: [{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: -1 }],
     }),
     undefined,

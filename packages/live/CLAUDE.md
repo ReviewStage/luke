@@ -10,15 +10,20 @@ creates a session, or holds one; the host and the voice service do that, and
 they import their shapes from here.
 
 `events.ts` is the grammar: `LIVE_STATUS`, both sides' event names, the
-close reasons and delegation targets, one `@sidecar/wire` `Schema` per server
-event unioned into `liveServerEventSchema` behind `parseLiveServerEvent`, and
-the builders for the six client events this build sends. An append carries a
-required `delegation_id`, `null` included, because the API requires the field
-on every append and a builder that defaulted it would hide the one decision an
-append turns on: whether it answers a delegation or speaks session-wide. A
-transcript delta is admitted untrimmed and may be whitespace, since the
-captions recipe forbids trimming a fragment. Reflected audio parses to its
-type alone, so a sideband drops it by type before anything reads it.
+close reasons and delegation targets, one Effect `Schema` per server event
+composed directly with `Schema.Struct`, `Schema.Literal`, and `Schema.Union`
+and unioned into `liveServerEventSchema` behind `parseLiveServerEvent`, and
+the builders for the six client events this build sends. Every declaration
+reads through `readEither` and shows what `emitJsonSchema` walks out of the
+same AST, both from `@sidecar/wire/effect`, so the bytes a model or a client
+is shown are the same bytes the goldens under `fixtures/json-schema/` hold. An
+append carries a required `delegation_id`, `null` included, because the API
+requires the field on every append and a builder that defaulted it would hide
+the one decision an append turns on: whether it answers a delegation or
+speaks session-wide. A transcript delta is admitted untrimmed and may be
+whitespace, since the captions recipe forbids trimming a fragment. Reflected
+audio parses to its type alone, so a sideband drops it by type before
+anything reads it.
 `RENDERER_CLIENT_EVENTS` and `RENDERER_SERVER_EVENTS` are what an untrusted
 window's data channel may send and is shown: the microphone switch, the
 hang-up, the lifecycle, both captions, usage, error, and info; every append
@@ -28,21 +33,23 @@ and the transport-level vocabularies (`LIVE_CLIENT_EVENT`, `LIVE_SERVER_EVENT`,
 `Schema.Literal` beside the `as const` object they derive from
 (`LiveStatusSchema`, `LiveClientEventTypeSchema`, and so on), spread from
 `Object.values` like every vocabulary in this migration; nothing here parses
-an inbound value against them yet, since the wire grammar's own parsing
-still runs through `@sidecar/wire`'s `s.*` schemas and the JSON Schema
-goldens they emit.
+an inbound value against them yet, since the wire grammar's own parsing runs
+through the server-event union above, which reads through the same
+`readEither` these vocabularies would if a caller asked.
 
 `session.ts` is the creation contract: the sessions path and the attach
 path, `liveSessionConfig`, which sets the client delegation, `store: false`,
 the renderer's channel restrictions, and no field the API does not document
 for WebRTC (no `audio.format`, no tools, no speed, no truncation), the
-`liveCreateRequest` body, the `liveCreateAnswerSchema` that reads the id and
-SDP answer back, and the outcome set and `LiveDiagnostics` shape the host
-reports voice's availability with. A diagnostics document carries no
-credential material. `LIVE_TRANSPORT_TYPE` and `LIVE_DELEGATION_TYPE` are
-each a schema of their own single value (`LiveTransportTypeSchema`,
-`LiveDelegationTypeSchema`). Every non-attempt, non-success member of
-`LIVE_SESSION_OUTCOME` also has its own `Schema.TaggedError` class
+`liveCreateRequest` body, the `liveCreateAnswerSchema` — composed directly
+with Effect's `Schema.Struct`, read through `readEither` and shown through
+`emitJsonSchema` — that reads the id and SDP answer back, and the outcome set
+and `LiveDiagnostics` shape the host reports voice's availability with. A
+diagnostics document carries no credential material. `LIVE_TRANSPORT_TYPE`
+and `LIVE_DELEGATION_TYPE` are each a schema of their own single value
+(`LiveTransportTypeSchema`, `LiveDelegationTypeSchema`). Every non-attempt,
+non-success member of `LIVE_SESSION_OUTCOME` also has its own
+`Schema.TaggedError` class
 (`NoApiKeyRefusal`, `HttpErrorRefusal`, and so on, listed whole as
 `LIVE_SESSION_REFUSALS`), each carrying the legacy string as its `code` field
 so a caller that throws or yields the class and one still comparing

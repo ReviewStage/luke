@@ -12,7 +12,9 @@ import {
   type ToolPolicyLayers,
 } from "@sidecar/runtime";
 import type { ToolSchema } from "@sidecar/runtime/vocabulary";
-import type { Schema, WireRecord } from "@sidecar/wire";
+import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
+import type { Schema } from "effect";
 import {
   type ResponsesToolDefinition,
   responsesToolDefinition,
@@ -117,13 +119,13 @@ const BRAIN_ONLY_DESCRIPTORS = {
 function schemaOf(module: {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: Schema<unknown>;
+  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
 }): ToolSchema {
   const definition: ActionToolDefinition = {
     type: BRAIN_TOOL_TYPE,
     name: module.name,
     description: module.description,
-    parameters: module.inputSchema.jsonSchema(),
+    parameters: emitJsonSchema(module.inputSchema),
   };
   return toolSchemaFromDefinition(definition);
 }
@@ -216,7 +218,7 @@ export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSche
 export interface BrainToolRegistration {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: Schema<unknown>;
+  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
 }
 
 /** Every catalog tool with its wire schema, keyed by name, in the catalog's order. */

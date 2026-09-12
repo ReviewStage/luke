@@ -7,7 +7,7 @@
  * what says whether it was ever heard — so they are told from the rating.
  */
 
-import { type RecordOf, type Schema, type SchemaFields, s } from "./schema.js";
+import { Schema as EffectSchema } from "effect";
 
 export const CONVERSATION_EVENT_KIND = {
   SPEECH_OFFERED: "speech.offered",
@@ -28,6 +28,25 @@ export function isSpeechEventKind(kind: ConversationEventKind): kind is SpeechEv
   return kind !== CONVERSATION_EVENT_KIND.RATING;
 }
 
+/** An integer at or above zero, the way `s.wholeNumber({ minimum: 0 })` reads one. */
+const nonNegativeInteger = EffectSchema.Number.pipe(
+  EffectSchema.finite(),
+  EffectSchema.int(),
+  EffectSchema.greaterThanOrEqualTo(0),
+);
+
+/** A trimmed text, refused when nothing but whitespace remains, the way `s.text()` reads one. */
+const text = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
+  strict: true,
+  decode: (value) => value.trim(),
+  encode: (value) => value,
+}).pipe(
+  EffectSchema.filter((value) => value.length > 0, {
+    schemaId: EffectSchema.MinLengthSchemaId,
+    jsonSchema: { minLength: 1 },
+  }),
+);
+
 /**
  * What `speech.offered` carries: the instant, in epoch milliseconds, past
  * which the offer stands for nothing. A briefing is about what just changed,
@@ -35,15 +54,13 @@ export function isSpeechEventKind(kind: ConversationEventKind): kind is SpeechEv
  * and every reader of the offer — a claim, a push, the expiry sweep — takes
  * the bound from the offer itself rather than from a clock of its own.
  */
-export const SPEECH_OFFERED_EVENT_PAYLOAD_FIELDS = {
-  expiresAt: s.wholeNumber({ minimum: 0 }),
-} satisfies SchemaFields;
+export const SPEECH_OFFERED_EVENT_PAYLOAD = EffectSchema.Struct({
+  expiresAt: nonNegativeInteger,
+});
 
-export type SpeechOfferedEventPayload = RecordOf<typeof SPEECH_OFFERED_EVENT_PAYLOAD_FIELDS>;
-
-export const SPEECH_OFFERED_EVENT_PAYLOAD: Schema<SpeechOfferedEventPayload> = s.record(
-  SPEECH_OFFERED_EVENT_PAYLOAD_FIELDS,
-);
+export type SpeechOfferedEventPayload = EffectSchema.Schema.Type<
+  typeof SPEECH_OFFERED_EVENT_PAYLOAD
+>;
 
 /**
  * What `speech.held` carries: the instant, in epoch milliseconds, the quiet
@@ -52,31 +69,23 @@ export const SPEECH_OFFERED_EVENT_PAYLOAD: Schema<SpeechOfferedEventPayload> = s
  * re-decided, so the instant here is read only to know when the hold is
  * over, never to schedule speech.
  */
-export const SPEECH_HELD_EVENT_PAYLOAD_FIELDS = {
-  quietUntil: s.wholeNumber({ minimum: 0 }),
-} satisfies SchemaFields;
+export const SPEECH_HELD_EVENT_PAYLOAD = EffectSchema.Struct({
+  quietUntil: nonNegativeInteger,
+});
 
-export type SpeechHeldEventPayload = RecordOf<typeof SPEECH_HELD_EVENT_PAYLOAD_FIELDS>;
-
-export const SPEECH_HELD_EVENT_PAYLOAD: Schema<SpeechHeldEventPayload> = s.record(
-  SPEECH_HELD_EVENT_PAYLOAD_FIELDS,
-);
+export type SpeechHeldEventPayload = EffectSchema.Schema.Type<typeof SPEECH_HELD_EVENT_PAYLOAD>;
 
 /**
  * What `speech.spoken` carries where the voice said it: the voice session,
  * and where on that session's own clock the speech began. The device that
  * spoke is the event row's own column.
  */
-export const SPEECH_SPOKEN_EVENT_PAYLOAD_FIELDS = {
-  voiceSessionId: s.text(),
-  atMs: s.wholeNumber({ minimum: 0 }),
-} satisfies SchemaFields;
+export const SPEECH_SPOKEN_EVENT_PAYLOAD = EffectSchema.Struct({
+  voiceSessionId: text,
+  atMs: nonNegativeInteger,
+});
 
-export type SpeechSpokenEventPayload = RecordOf<typeof SPEECH_SPOKEN_EVENT_PAYLOAD_FIELDS>;
-
-export const SPEECH_SPOKEN_EVENT_PAYLOAD: Schema<SpeechSpokenEventPayload> = s.record(
-  SPEECH_SPOKEN_EVENT_PAYLOAD_FIELDS,
-);
+export type SpeechSpokenEventPayload = EffectSchema.Schema.Type<typeof SPEECH_SPOKEN_EVENT_PAYLOAD>;
 
 /** Why an offer ended unspoken. */
 export const SPEECH_EXPIRY_REASON = {
@@ -88,15 +97,13 @@ export const SPEECH_EXPIRY_REASON = {
 
 export type SpeechExpiryReason = (typeof SPEECH_EXPIRY_REASON)[keyof typeof SPEECH_EXPIRY_REASON];
 
-export const SPEECH_EXPIRED_EVENT_PAYLOAD_FIELDS = {
-  reason: s.enumOf(Object.values(SPEECH_EXPIRY_REASON)),
-} satisfies SchemaFields;
+export const SPEECH_EXPIRED_EVENT_PAYLOAD = EffectSchema.Struct({
+  reason: EffectSchema.Literal(...Object.values(SPEECH_EXPIRY_REASON)),
+});
 
-export type SpeechExpiredEventPayload = RecordOf<typeof SPEECH_EXPIRED_EVENT_PAYLOAD_FIELDS>;
-
-export const SPEECH_EXPIRED_EVENT_PAYLOAD: Schema<SpeechExpiredEventPayload> = s.record(
-  SPEECH_EXPIRED_EVENT_PAYLOAD_FIELDS,
-);
+export type SpeechExpiredEventPayload = EffectSchema.Schema.Type<
+  typeof SPEECH_EXPIRED_EVENT_PAYLOAD
+>;
 
 /** The developer's verdict on one of Luke's messages. */
 export const MESSAGE_RATING = {
@@ -105,6 +112,8 @@ export const MESSAGE_RATING = {
 } as const;
 
 export type MessageRating = (typeof MESSAGE_RATING)[keyof typeof MESSAGE_RATING];
+
+export const MessageRatingSchema = EffectSchema.Literal(...Object.values(MESSAGE_RATING));
 
 /** The most characters a rating's note may carry; it is the developer's own free text, so the bound is the whole of its shape. */
 export const maximumRatingNoteLength = 500;
@@ -117,13 +126,9 @@ export const maximumRatingNoteLength = 500;
  * later event, never an update: the record keeps every verdict, and a read
  * takes the newest.
  */
-export const RATING_EVENT_PAYLOAD_FIELDS = {
-  rating: s.enumOf(Object.values(MESSAGE_RATING)),
-  note: s.text({ max: maximumRatingNoteLength }).optional(),
-} satisfies SchemaFields;
+export const RATING_EVENT_PAYLOAD = EffectSchema.Struct({
+  rating: MessageRatingSchema,
+  note: EffectSchema.optional(text.pipe(EffectSchema.maxLength(maximumRatingNoteLength))),
+});
 
-export type RatingEventPayload = RecordOf<typeof RATING_EVENT_PAYLOAD_FIELDS>;
-
-export const RATING_EVENT_PAYLOAD: Schema<RatingEventPayload> = s.record(
-  RATING_EVENT_PAYLOAD_FIELDS,
-);
+export type RatingEventPayload = EffectSchema.Schema.Type<typeof RATING_EVENT_PAYLOAD>;

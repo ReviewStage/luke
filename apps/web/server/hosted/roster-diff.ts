@@ -1,10 +1,10 @@
-import {
-  type CloudAgentProviderId,
-  type ProviderSessionObservation,
-  type Schema,
-  type SessionStatus,
-  s,
-  TEXT_ENDS,
+import { readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Either } from "effect";
+import type {
+  CloudAgentProviderId,
+  ProviderSessionObservation,
+  SessionStatus,
+  UnparsedWireValue,
 } from "../core.js";
 import {
   cloudProviderIdSchema,
@@ -200,49 +200,67 @@ export function encodeRosterDiff(diff: RosterDiff): string {
   return JSON.stringify(diff);
 }
 
-const storedText = s.text({ ends: TEXT_ENDS.KEEP, allowEmpty: true });
-const optionalText = storedText.optional();
+/** A declaration handed the interface it decodes into, matching the assembled struct's shape. */
+function schemaAs<Value>(
+  schema: EffectSchema.Schema.Any,
+): EffectSchema.Schema<Value, UnparsedWireValue> {
+  return EffectSchema.make<Value, UnparsedWireValue>(schema.ast);
+}
 
-const diffSessionSchema: Schema<RosterDiffSession> = s.record({
-  providerId: cloudProviderIdSchema,
-  providerSessionId: storedText,
-  title: storedText,
-  status: sessionStatusSchema,
-  workspaceId: optionalText,
-  workspaceName: optionalText,
-});
+const storedText = EffectSchema.String;
+const optionalText = EffectSchema.optionalWith(storedText, { exact: true });
 
-const diffWorkspaceSchema: Schema<RosterDiffWorkspace> = s.record({
-  providerId: cloudProviderIdSchema,
-  providerWorkspaceId: storedText,
-  name: optionalText,
-});
+const diffSessionSchema: EffectSchema.Schema<RosterDiffSession, UnparsedWireValue> = schemaAs(
+  EffectSchema.Struct({
+    providerId: cloudProviderIdSchema,
+    providerSessionId: storedText,
+    title: storedText,
+    status: sessionStatusSchema,
+    workspaceId: optionalText,
+    workspaceName: optionalText,
+  }),
+);
 
-const statusTransitionSchema: Schema<RosterStatusTransition> = s.record({
-  session: diffSessionSchema,
-  from: sessionStatusSchema,
-  to: sessionStatusSchema,
-});
+const diffWorkspaceSchema: EffectSchema.Schema<RosterDiffWorkspace, UnparsedWireValue> = schemaAs(
+  EffectSchema.Struct({
+    providerId: cloudProviderIdSchema,
+    providerWorkspaceId: storedText,
+    name: optionalText,
+  }),
+);
 
-const lineChangeSchema: Schema<RosterLineChange> = s.record({
-  session: diffSessionSchema,
-  from: optionalText,
-  to: optionalText,
-});
+const statusTransitionSchema: EffectSchema.Schema<RosterStatusTransition, UnparsedWireValue> =
+  schemaAs(
+    EffectSchema.Struct({
+      session: diffSessionSchema,
+      from: sessionStatusSchema,
+      to: sessionStatusSchema,
+    }),
+  );
 
-const rosterDiffSchema: Schema<RosterDiff> = s.record({
-  appeared: s.array(diffSessionSchema),
-  vanished: s.array(diffSessionSchema),
-  statusChanged: s.array(statusTransitionSchema),
-  errorChanged: s.array(lineChangeSchema),
-  activityChanged: s.array(lineChangeSchema),
-  workspacesAppeared: s.array(diffWorkspaceSchema),
-  workspacesVanished: s.array(diffWorkspaceSchema),
-});
+const lineChangeSchema: EffectSchema.Schema<RosterLineChange, UnparsedWireValue> = schemaAs(
+  EffectSchema.Struct({
+    session: diffSessionSchema,
+    from: optionalText,
+    to: optionalText,
+  }),
+);
+
+const rosterDiffSchema: EffectSchema.Schema<RosterDiff, UnparsedWireValue> = schemaAs(
+  EffectSchema.Struct({
+    appeared: EffectSchema.Array(diffSessionSchema),
+    vanished: EffectSchema.Array(diffSessionSchema),
+    statusChanged: EffectSchema.Array(statusTransitionSchema),
+    errorChanged: EffectSchema.Array(lineChangeSchema),
+    activityChanged: EffectSchema.Array(lineChangeSchema),
+    workspacesAppeared: EffectSchema.Array(diffWorkspaceSchema),
+    workspacesVanished: EffectSchema.Array(diffWorkspaceSchema),
+  }),
+);
 
 /** Reads a stored diff, or nothing for a payload that is not one this build wrote. */
 export function decodeRosterDiff(payload: string): RosterDiff | undefined {
-  return rosterDiffSchema.parse(parseStoredJson(payload));
+  return Either.getOrUndefined(readEither(rosterDiffSchema)(parseStoredJson(payload)));
 }
 
 /**

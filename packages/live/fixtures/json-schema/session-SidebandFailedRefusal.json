@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "sideband-failed"
+      ]
+    },
+    "_tag": {
+      "type": "string",
+      "enum": [
+        "SidebandFailedRefusal"
+      ]
+    }
+  },
+  "required": [
+    "code",
+    "_tag"
+  ],
+  "additionalProperties": false
+}

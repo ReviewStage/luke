@@ -1,4 +1,5 @@
-import type { Schema, WireRecord } from "@sidecar/wire";
+import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
+import type { Schema } from "effect";
 import type { ToolExecutionContext } from "./execution.js";
 import type { RunOrigin } from "./identifiers.js";
 import type { TOOL_EFFECT } from "./registry.js";
@@ -116,7 +117,7 @@ export interface MemoryToolContext extends ToolExecutionContext {
 export interface MemoryTool {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: Schema<unknown>;
+  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
   readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
   execute(input: WireRecord, context: MemoryToolContext): Promise<WireRecord>;
 }

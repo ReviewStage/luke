@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Either, ParseResult, Schema } from "effect";
 import { test } from "vitest";
 import type { WireRecord } from "../json.js";
-import { type JsonSchemaNode, SCHEMA_REFUSAL } from "../schema.js";
+import { type JsonSchemaNode, SCHEMA_REFUSAL } from "../schema-vocabulary.js";
 import { matchJsonSchemaGolden } from "../testing/json-schema-golden.js";
 import {
   describeWire,
@@ -17,10 +17,10 @@ import {
 } from "./json-schema.js";
 
 /**
- * The emitter is measured against the goldens the builder recorded: each
- * schema below is the Effect declaration of one the `s.*` builder declares in
- * another package, and the bytes it emits have to be the bytes that package's
- * own test holds still. The goldens are read and never written from here.
+ * The emitter is measured against the goldens each package recorded: each
+ * schema below is the Effect declaration of one another package declares
+ * directly, and the bytes it emits have to be the bytes that package's own
+ * test holds still. The goldens are read and never written from here.
  */
 
 const PACKAGES = path.resolve(fileURLToPath(import.meta.url), "../../../..");
@@ -41,13 +41,13 @@ const HOSTED_BRAIN_OPTION_BOUNDS = {
 } as const;
 const HOSTED_BRAIN_EMBED_BOUNDS = { MAXIMUM_TEXTS: 64, MAXIMUM_TEXT_CHARS: 8_000 } as const;
 
-/** The builder's `text`: a non-empty string, bounded where a `max` is declared. */
+/** A non-empty string, bounded where a `max` is declared, as a wire declaration reads one. */
 const text = (max?: number) =>
   max === undefined
     ? Schema.String.pipe(Schema.minLength(1))
     : Schema.String.pipe(Schema.minLength(1), Schema.maxLength(max));
 
-/** The builder's `wholeNumber`: an integer at or above its minimum. */
+/** An integer at or above its minimum, as a wire declaration reads one. */
 const wholeNumber = (minimum: number) => Schema.Int.pipe(Schema.greaterThanOrEqualTo(minimum));
 
 const contract = Schema.Literal(HOSTED_BRAIN_CONTRACT_VERSION);
@@ -78,7 +78,7 @@ const hostedBrainEmbedRequest = Schema.Struct({
   ),
 });
 
-/** The builder's `refine`: a rule the node cannot say, so the node beneath it is emitted. */
+/** A rule the node cannot say, so the node beneath it is emitted. */
 const hostedBrainEmbedAnswer = Schema.Struct({
   model: text(),
   dimensions: wholeNumber(1),
@@ -89,12 +89,12 @@ const hostedBrainEmbedAnswer = Schema.Struct({
 
 const hostedBrainCountTokensAnswer = Schema.Struct({ inputTokens: wholeNumber(0) });
 
-/** The builder's `text` admitting an empty value and kept as written: no `minLength`. */
+/** A text admitting an empty value and kept as written: no `minLength`. */
 const prompt = Schema.String.pipe(Schema.maxLength(HOSTED_BRAIN_PROMPT_CHARS));
 
 const FIXTURE_TOOL_CATALOG: ReadonlySet<string> = new Set(["fixture_tool"]);
 
-/** The builder's `registered` over a bounded text, and `refine` for uniqueness over the array. */
+/** A value admitted only by a registry, over a bounded text, and a uniqueness rule over the array. */
 const tools = Schema.Array(
   text(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS).pipe(
     Schema.filter(
@@ -121,7 +121,7 @@ const options = Schema.Struct({
   }),
 });
 
-/** The builder's `reader`: the node is declared beside the reader, in the reader's own key order. */
+/** A declared reader: the node is declared beside the reader, in the reader's own key order. */
 const INPUT_NODE: JsonSchemaNode = {
   type: "array",
   description:
@@ -138,7 +138,7 @@ const hostedBrainRespondRequest = Schema.Struct({ contract, prompt, tools, optio
 
 const hostedBrainCountTokensRequest = Schema.Struct({ contract, prompt, tools, input });
 
-/** The builder's `union` of a bounded whole number and `literal(null)`, under `optional`. */
+/** A union of a bounded whole number and a null literal, under `optional`. */
 const presenceInstant = Schema.Union(wholeNumber(0), Schema.Null);
 
 const changesRequest = Schema.Struct({
@@ -154,7 +154,7 @@ const HOSTED_GOLDENS = [
   ["brain-contract-hostedBrainCountTokensAnswerSchema", hostedBrainCountTokensAnswer],
   ["brain-contract-hostedBrainRespondRequestSchema", hostedBrainRespondRequest],
   ["brain-contract-hostedBrainCountTokensRequestSchema", hostedBrainCountTokensRequest],
-  ["reads-wire-changesRequestSchemaEffect", changesRequest],
+  ["reads-wire-changesRequestSchema", changesRequest],
 ] as const satisfies readonly (readonly [string, Schema.Schema.All])[];
 
 test.for(HOSTED_GOLDENS)(
@@ -259,7 +259,7 @@ test("the outermost description wins and Effect's own descriptions are never rea
   assert.deepEqual(emitJsonSchema(Schema.String), { type: "string" });
 });
 
-test("bounds are emitted in the builder's key order whatever order they were piped in", () => {
+test("bounds are emitted in a fixed key order whatever order they were piped in", () => {
   const piped = Schema.String.pipe(Schema.maxLength(9), Schema.minLength(2));
 
   assert.deepEqual(Object.keys(emitJsonSchema(piped)), ["type", "minLength", "maxLength"]);

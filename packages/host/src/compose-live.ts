@@ -24,7 +24,8 @@ import {
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
 import { LiveSessionService } from "@sidecar/voice/live-session";
-import { Effect, Option } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Either, Option } from "effect";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
@@ -179,7 +180,9 @@ export const composeLive = (
       // retried offer creating and billing a second one.
       [GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION]: (params) =>
         Effect.gen(function* () {
-          const request = voiceCreateLiveSessionParamsSchema.parse(params);
+          const request = Either.getOrUndefined(
+            readEither(voiceCreateLiveSessionParamsSchema)(params),
+          );
           if (!request) return yield* invalid("sdp must be the peer's offer");
           const created = yield* Effect.promise(() => service.createSession(request.sdp));
           if (!created)
@@ -194,13 +197,17 @@ export const composeLive = (
           {},
         ),
       [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
-        const report = voiceReportLiveTransportParamsSchema.parse(params);
+        const report = Either.getOrUndefined(
+          readEither(voiceReportLiveTransportParamsSchema)(params),
+        );
         if (!report) return invalid("state is not one the peer connection reports");
         service.reportTransport(report.state);
         return Effect.succeed({});
       },
       [GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY]: (params) => {
-        const report = voiceReportLiveActivityParamsSchema.parse(params);
+        const report = Either.getOrUndefined(
+          readEither(voiceReportLiveActivityParamsSchema)(params),
+        );
         if (!report) return invalid("idle must be a boolean");
         service.reportActivity(report.idle);
         return Effect.succeed({});

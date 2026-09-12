@@ -6,7 +6,9 @@ import {
   MESSAGE_ROLE,
   unparsedWire,
 } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
 import type { TextUIPart } from "ai";
+import { Either } from "effect";
 import type { StoredUIMessage } from "./validate.js";
 
 /**
@@ -57,7 +59,7 @@ export function compactionSummaryMessage(
 ): CompactionMessage | undefined {
   const text = summary.text.trim();
   if (text.length === 0) return undefined;
-  const read = ASSISTANT_MESSAGE_METADATA.read(
+  const read = readEither(ASSISTANT_MESSAGE_METADATA)(
     unparsedWire({
       author: MESSAGE_AUTHOR.BRAIN,
       compaction: {
@@ -68,12 +70,12 @@ export function compactionSummaryMessage(
       },
     }),
   );
-  if (!read.ok || read.value.compaction === undefined) return undefined;
+  if (Either.isLeft(read) || read.right.compaction === undefined) return undefined;
   const part: TextUIPart = { type: "text", text, state: TEXT_PART_STATE_DONE };
   return {
     id,
     role: MESSAGE_ROLE.ASSISTANT,
-    metadata: { author: read.value.author, compaction: read.value.compaction },
+    metadata: { author: read.right.author, compaction: read.right.compaction },
     parts: [part],
   };
 }

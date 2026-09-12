@@ -9,6 +9,8 @@ import {
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { onTestFinished, test } from "vitest";
 import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
@@ -93,6 +95,10 @@ function record(text: string): WireRecord {
   const value = unparsedWire(JSON.parse(text));
   assert.ok(isRecord(value));
   return value;
+}
+
+function hostedError(text: WireRecord): string | undefined {
+  return Either.getOrUndefined(readEither(hostedErrorSchema)(text));
 }
 
 interface Stand {
@@ -205,10 +211,7 @@ test("a spent allowance closes the socket behind one hosted error frame and spen
   assert.ok("reader" in opened);
   await send(opened.reader.socket, createFrame());
 
-  assert.equal(
-    hostedErrorSchema.parse(record(await opened.reader.next())),
-    HOSTED_API_ERROR.QUOTA_EXHAUSTED,
-  );
+  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   const end = await opened.reader.closed;
   assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
   assert.equal(end.reason, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
@@ -226,10 +229,7 @@ test("a bearer no account stands behind is refused as an invalid token and spend
   });
   assert.ok("reader" in opened);
   await send(opened.reader.socket, createFrame());
-  assert.equal(
-    hostedErrorSchema.parse(record(await opened.reader.next())),
-    HOSTED_API_ERROR.INVALID_TOKEN,
-  );
+  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.INVALID_TOKEN);
   assert.equal(context.openAi.creates.length, 0);
   assert.equal(context.accounts.spent.length, 0);
 });
@@ -241,10 +241,7 @@ test("a first frame that is not session.create is refused as an invalid request"
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
   await send(opened.reader.socket, { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "m1" });
-  assert.equal(
-    hostedErrorSchema.parse(record(await opened.reader.next())),
-    HOSTED_API_ERROR.INVALID_REQUEST,
-  );
+  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
   assert.equal((await opened.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
   assert.equal(context.accounts.resolved.length, 0);
 });
@@ -453,10 +450,7 @@ test("a creation OpenAI refuses is answered as an upstream error and nothing is 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
   await send(opened.reader.socket, createFrame());
-  assert.equal(
-    hostedErrorSchema.parse(record(await opened.reader.next())),
-    HOSTED_API_ERROR.UPSTREAM_ERROR,
-  );
+  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.UPSTREAM_ERROR);
   await opened.reader.closed;
   assert.equal(context.openAi.attaches.length, 0);
 });
@@ -739,10 +733,7 @@ test("an introduction seed beyond one bounded developer message is refused befor
   const tooMany = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in tooMany);
   await send(tooMany.reader.socket, createFrame([developerMessage("a"), developerMessage("b")]));
-  assert.equal(
-    hostedErrorSchema.parse(record(await tooMany.reader.next())),
-    HOSTED_API_ERROR.INVALID_REQUEST,
-  );
+  assert.equal(hostedError(record(await tooMany.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
 
   const tooLong = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in tooLong);
@@ -750,16 +741,13 @@ test("an introduction seed beyond one bounded developer message is refused befor
     tooLong.reader.socket,
     createFrame([developerMessage("x".repeat(INTRODUCTION_INPUT_BOUNDS.CHARS + 1))]),
   );
-  assert.equal(
-    hostedErrorSchema.parse(record(await tooLong.reader.next())),
-    HOSTED_API_ERROR.INVALID_REQUEST,
-  );
+  assert.equal(hostedError(record(await tooLong.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
 
   const wrongRole = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in wrongRole);
   await send(wrongRole.reader.socket, createFrame([SEED[1] ?? {}]));
   assert.equal(
-    hostedErrorSchema.parse(record(await wrongRole.reader.next())),
+    hostedError(record(await wrongRole.reader.next())),
     HOSTED_API_ERROR.INVALID_REQUEST,
   );
 
@@ -784,10 +772,7 @@ test("an introduction spends the shared ceiling only for an admitted frame, and 
   const refused = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
   assert.ok("reader" in refused);
   await send(refused.reader.socket, createFrame([developerMessage("Running: api on main.")]));
-  assert.equal(
-    hostedErrorSchema.parse(record(await refused.reader.next())),
-    HOSTED_API_ERROR.QUOTA_EXHAUSTED,
-  );
+  assert.equal(hostedError(record(await refused.reader.next())), HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   assert.equal((await refused.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
   assert.equal(context.accounts.introductions, 1);
   assert.equal(context.openAi.creates.length, 0);
@@ -893,10 +878,7 @@ test("an attach to a session another account created, or one never created, is r
     });
     assert.ok("reader" in opened);
     await send(opened.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
-    assert.equal(
-      hostedErrorSchema.parse(record(await opened.reader.next())),
-      HOSTED_API_ERROR.INVALID_TOKEN,
-    );
+    assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.INVALID_TOKEN);
     assert.equal((await opened.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
   }
   const stale = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
@@ -907,10 +889,7 @@ test("an attach to a session another account created, or one never created, is r
     type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
     sessionId: created.sessionId,
   });
-  assert.equal(
-    hostedErrorSchema.parse(record(await stale.reader.next())),
-    HOSTED_API_ERROR.INVALID_TOKEN,
-  );
+  assert.equal(hostedError(record(await stale.reader.next())), HOSTED_API_ERROR.INVALID_TOKEN);
   assert.equal(context.openAi.attaches.length, 1);
   assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
 });
@@ -924,10 +903,7 @@ test("the introduction never re-attaches", async () => {
     type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
     sessionId: "live_intro",
   });
-  assert.equal(
-    hostedErrorSchema.parse(record(await opened.reader.next())),
-    HOSTED_API_ERROR.INVALID_REQUEST,
-  );
+  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
   assert.equal(context.openAi.attaches.length, 0);
 });
 
@@ -968,7 +944,7 @@ test("a handshake naming a device the account does not hold is refused before a 
     assert.ok("reader" in opened);
     await send(opened.reader.socket, createFrame());
     refusals.push({
-      error: hostedErrorSchema.parse(record(await opened.reader.next())),
+      error: hostedError(record(await opened.reader.next())),
       close: (await opened.reader.closed).code,
     });
   }

@@ -3,7 +3,7 @@ import {
   type WorkspaceAgentModels,
   type WorkspaceProject,
 } from "@sidecar/session";
-import { effectSchema, type UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   declareReader,
   emitJsonSchema,
@@ -111,7 +111,7 @@ function trimmedEnum<const Member extends string>(
   );
 }
 
-const written = effectSchema(writtenText);
+const written = writtenText;
 
 /** The value a schema admitted, or nothing, for a caller that only cares whether the value is admissible. */
 function admitted<Value, Encoded>(

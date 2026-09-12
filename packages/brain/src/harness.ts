@@ -46,7 +46,8 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Either } from "effect";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
@@ -575,7 +576,7 @@ export function assertNoActionReached(h: Harness): void {
   for (const forbidden of OBSERVATION_ACTIONS) {
     const output = outputs.find((entry) => entry.callId === forbidden.call_id);
     assert.ok(output, `${String(forbidden.call_id)} was answered`);
-    const envelope = ACTION_OUTPUT.parse(parsedRecord(output.output));
+    const envelope = Either.getOrUndefined(readEither(ACTION_OUTPUT)(parsedRecord(output.output)));
     assert.equal(envelope?.status, ACTION_OUTPUT_STATUS.REFUSED);
     assert.equal(envelope?.reason, REFUSAL_REASON.NOT_ALLOWED);
   }

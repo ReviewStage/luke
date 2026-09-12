@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "no-api-key"
+      ]
+    },
+    "_tag": {
+      "type": "string",
+      "enum": [
+        "NoApiKeyRefusal"
+      ]
+    }
+  },
+  "required": [
+    "code",
+    "_tag"
+  ],
+  "additionalProperties": false
+}

@@ -22,11 +22,10 @@ import {
 import {
   ACTION_RESULT_STATUS,
   isRecord,
-  RECORD_EXTRA_KEYS,
-  s,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Schema as EffectSchema } from "effect";
 import { test } from "vitest";
 import { BrainJournal } from "./journal.js";
 import { fakeActionPerformer } from "./testing.js";
@@ -394,7 +393,9 @@ function memoryDefinition() {
       tools: Object.values(NOTEBOOK_MEMORY_TOOL).map((name) => ({
         name,
         description: name,
-        inputSchema: s.record({}, { extraKeys: RECORD_EXTRA_KEYS.IGNORE }),
+        inputSchema: EffectSchema.make(
+          EffectSchema.Struct({}).annotations({ parseOptions: { onExcessProperty: "ignore" } }).ast,
+        ),
         effect: TOOL_EFFECT.READ,
         execute: async (input, context) => {
           inputs.push(input);

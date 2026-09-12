@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "not-signed-in"
+      ]
+    },
+    "_tag": {
+      "type": "string",
+      "enum": [
+        "NotSignedInRefusal"
+      ]
+    }
+  },
+  "required": [
+    "code",
+    "_tag"
+  ],
+  "additionalProperties": false
+}

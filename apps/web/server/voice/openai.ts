@@ -1,3 +1,5 @@
+import { readEither } from "@sidecar/wire/effect";
+import { Either } from "effect";
 import { WebSocket } from "ws";
 import {
   type CloudFetch,
@@ -85,9 +87,8 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
       if (!answer.response.ok) {
         return { outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR, status: answer.response.status };
       }
-      const created = liveCreateAnswerSchema.parse(
-        await answer.response.json().catch(() => undefined),
-      );
+      const payload = await answer.response.json().catch(() => undefined);
+      const created = Either.getOrUndefined(readEither(liveCreateAnswerSchema)(payload));
       return created
         ? { outcome: LIVE_SESSION_OUTCOME.SUCCEEDED, answer: created }
         : { outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };

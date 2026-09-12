@@ -27,8 +27,8 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Cause, Effect, Exit, type Layer } from "effect";
+import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import { Cause, Effect, Either, Exit, type Layer } from "effect";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
   type Failure,
@@ -156,7 +156,7 @@ export class BrainTransport {
     const record = wireRecord(unparsedWire(body));
     const quota =
       record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
-        ? hostedQuotaSchema.parse(unparsedWire(record.quota))
+        ? Either.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(record.quota)))
         : undefined;
     const resetsAt = quota?.resetsAt;
     if (resetsAt !== undefined && resetsAt > this.#now()) {

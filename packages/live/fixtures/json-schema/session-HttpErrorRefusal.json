@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "http-error"
+      ]
+    },
+    "_tag": {
+      "type": "string",
+      "enum": [
+        "HttpErrorRefusal"
+      ]
+    }
+  },
+  "required": [
+    "code",
+    "_tag"
+  ],
+  "additionalProperties": false
+}

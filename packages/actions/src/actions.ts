@@ -14,14 +14,9 @@
  * schema. Luke is another way to ask, never a wider one.
  */
 
-import {
-  type JsonSchemaNode,
-  s,
-  type UnparsedWireValue,
-  type Schema as WireSchema,
-} from "@sidecar/wire";
-import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import type { JsonSchemaNode, UnparsedWireValue } from "@sidecar/wire";
+import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Schema } from "effect";
 import { ACTION_FAMILY, ACTION_KIND, type ActionFamily, type ActionKind } from "./action-kinds.js";
 import {
   ADD_AGENT_REQUEST,
@@ -239,27 +234,6 @@ export function actionToolFamily(name: string): ActionFamily | undefined {
 /** The kind of action a named tool carries, or nothing when no such tool exists. */
 export function actionToolKind(name: string): ActionKind | undefined {
   return ACTS_BY_NAME.get(name)?.kind;
-}
-
-/**
- * A tool's request as the `@sidecar/wire` facade still-held callers take: the
- * brain's action tool modules and the desktop renderer's own re-parse of a
- * stored call both read a call back through it. `read` runs `readEither`
- * over the same schema {@link definitionOf} showed the model, and `jsonSchema`
- * walks it with the same emitter, so the two never drift.
- */
-export function requestSchema<Value, Encoded>(
-  request: Schema.Schema<Value, Encoded>,
-): WireSchema<Value> {
-  const read = readEither(request);
-  return s.reader({
-    read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
-      }),
-    jsonSchema: () => emitJsonSchema(request),
-  });
 }
 
 /** One function tool as a function-calling request carries it. */
