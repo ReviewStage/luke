@@ -6,7 +6,7 @@ export {
   hostLayer,
 } from "../compose-host.js";
 export { DuplicateGatewayMethod, foldMethods } from "../composer.js";
-export { composerLayer, layersInOrder, mergedMethods } from "./composer.js";
+export { layersInOrder, mergedMethods, startedAndStopped } from "./composer.js";
 export {
   type HostAssembly,
   HostAssemblyTag,

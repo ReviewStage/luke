@@ -359,9 +359,7 @@ export const composeDevices = (
       register,
       release,
       deviceId: () => cadence.deviceId(),
-      start: async () => undefined,
       // A quit is not a sign-out: the poll stops and the row stands for the next launch.
-      armed: Effect.addFinalizer(() => release(undefined)),
-      stop: async () => undefined,
+      lifetime: Effect.addFinalizer(() => release(undefined)),
     };
   });

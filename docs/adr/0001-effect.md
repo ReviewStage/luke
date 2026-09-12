@@ -203,8 +203,8 @@ is the race the mid-way re-reads of `capabilitiesActive()` used to answer.
 account composer's `startCapabilities`/`stopCapabilities` links are that
 gate's `arm` and `disarm`, the devices cadence and the calendars composer's
 observation each hold a gate of their own, and the hourly conversation
-maintenance is the brain composer's own `armed`, run by `composerLayer` in
-the scope that composer's lifetime is. `openCadenceScope`, `forkIntoCadence`,
+maintenance is armed by the brain composer's own lifetime, in the scope that
+lifetime is. `openCadenceScope`, `forkIntoCadence`,
 and `closeCadenceScope` stay on the allowlist for the one arming left that is
 not an effect: the calendars composer's meeting-boundary wake, re-armed from
 inside an observation pass the loop runs as a promise, so the fork and the
@@ -274,13 +274,17 @@ runs them, or the edge rule records this boundary as one.
 Two faces beside it run on the same runtime for the same reason and are on
 the allowlist too: `createGatewayService`'s own `emit` and `closeAdmissions`
 in `packages/host/src/service.ts`, because a change is reported to that
-service from a composer's callback rather than from an effect — pending,
-since every composer still answers `Composer`'s own `start()`/`stop()`
-promises rather than appending to the log itself; P12-05 deleted the host's
-own composition adaptors (`composeHost`, `hostSeamLayers`,
-`hostKernelLayerFromSeams`, `createHostKernel`, `mergeMethods`) but left the
-`Composer` promise face standing, so this one waits for whichever PR converts
-it — and
+service from a callback rather than from an effect. P7-14 found the reason
+this document gave for that pending — the `Composer` promise face — was not
+the one holding it up: `Composer` answers one scoped `lifetime` effect now,
+and the `emit` callers are unchanged, because every one of them is a
+synchronous callback a collaborator outside this host calls (the brain
+wiring's `broadcastRequests` and conversation report, the live session's
+`emit`, the node registry's `onChange`), and `closeAdmissions` is a step of
+`GatewayShutdownSteps`, whose four members are promises the gateway's own
+coordinator reads. Both go when those collaborators answer effects, which is
+a change to `packages/brain`, `packages/voice`, and the shutdown contract
+rather than to a composer. Beside them are
 `gatewayTestHost` (`packages/gateway/src/testing.ts`) with
 `scopedGatewayService` (`packages/host/src/testing/gateway-service.ts`),
 which are the test's own edge while those suites are plain `test` bodies
@@ -314,6 +318,23 @@ with its last caller: `compose-settings.ts` is now the effect over the
 `Environment` seam directly, and the store's own tests read the same
 `settingsOverrides` effect through a `ConfigProvider` built from the
 environment record they still pass around.
+
+`Composer`'s own `start()` and `stop()` promises were the last of that face,
+and P7-14 deleted them: a composer answers one `lifetime`,
+`Effect<void, never, Scope>`, whose running is the concern started and whose
+finalizers are the whole of its stop, so `hostStandingLayer` is
+`Layer.scopedDiscard` of each lifetime in `HOST_START_ORDER` and the promise
+wrapper `composerLayer` put around a start and a stop is gone. `armed` went
+with them, because a lifetime is already the same scope: the brain composer
+yields its hourly maintenance after its own start, in the one effect. What
+that wrapper guaranteed is now `startedAndStopped` in
+`packages/host/src/effect/composer.ts`, which the two concerns holding
+something (settings' product-event sender, the brain's store) write their
+lifetimes as: the stop registered before the start runs rather than as the
+release of a successful acquire, since a stop is written to give back what a
+partial or failed start allocated, and the start uninterruptible so no stop
+stands over a start still under way. The order proof in
+`packages/host/src/effect/host.test.ts` is unchanged in what it asserts.
 
 `conversationMaintenance` in `packages/host/src/conversation-operations.ts`
 runs no effect at all any more: the hourly pass is `Effect.repeat` on a fiber
@@ -911,7 +932,7 @@ design decision stated as such:
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |
-| `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | P12-05 |
+| `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | pending — P7-14 established that the blocker is the synchronous collaborator callbacks that report a change and the promise steps of `GatewayShutdownSteps`, not the `Composer` face it deleted |
 | `gatewayTestHost`/`scopedGatewayService`, the suites' own scoped builds | P6-13 | P12-09 |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |

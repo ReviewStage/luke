@@ -368,9 +368,9 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     loop,
     snapshot,
     reset,
-    start: async () => undefined,
     // The supervisor the account gate arms owns this loop's cadence, and its
-    // disarm runs before any composer stops.
-    stop: async () => undefined,
+    // disarm runs before any composer stops, so this concern holds nothing of
+    // its own for the scope to give back.
+    lifetime: Effect.void,
   };
 }

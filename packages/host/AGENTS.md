@@ -77,14 +77,15 @@ rather than from an effect. Each concern is a
 composer — settings, account, devices,
 conversation, observation, calendars, brain, live — that owns its own mutable
 state, its own timers, and the Gateway methods of its domain, and answers
-`start()` and `stop()` for exactly what it began; `composerLayer` is that
-composer as a scoped layer whose build runs `start` and whose scope closing
-runs `stop`, so the scope a composer was built in is its lifetime and nothing
-else stops it; what a composer answers as `armed` is run after that start and
-in the same scope, so a cadence whose stop is a scope closing needs no handle
-handed back at all. The stop is registered before the start runs rather than as
-the release of a successful acquire, because a composer's `stop` is written
-to give back what a partial or failed `start` allocated. The layers
+one `lifetime` effect for exactly what it began: `Layer.scopedDiscard` of that
+lifetime is the composer as a scoped layer, so running it is the composer
+started, the finalizers it registered are the whole of its stop, and the scope
+it was built in is its lifetime and nothing else stops it — a cadence whose
+stop is a scope closing needs no handle handed back at all. A concern that
+holds something writes its lifetime as `startedAndStopped`, which registers
+the stop before the start runs rather than as the release of a successful
+acquire, because that stop is written to give back what a partial or failed
+start allocated. The layers
 are built one after another in one sequential scope (`layersInOrder`), never
 merged, because `Layer.merge` builds its sides concurrently and closes them in
 parallel, and a start that fails releases what began — the failed composer
@@ -178,8 +179,8 @@ the account gate opening and closing rather than a composer's own lifetime: a
 sign-out disarms them while the host still stands, and the gate is serialized,
 so a sign-out arriving while a sign-in's arming is still out waits for it and
 then undoes it. The hourly conversation maintenance is not the gate's: it is
-the brain composer's own `armed`, run by `composerLayer` in the scope that
-composer's lifetime is, and released before its stop. The drain runs once whichever door asks for it — `Host.stop()` under
+armed by the brain composer's own lifetime, after the start that opened the
+store and in the same scope, and released before its stop. The drain runs once whichever door asks for it — `Host.stop()` under
 the caller's own deadline, or the scope closing with the defaults — and every
 later ask is answered with that outcome, so the admissions close and the runs
 are cancelled once however many times the quit arrives. `Host.stop()` is

@@ -262,9 +262,8 @@ export const composeLive = (
       link: (next) => {
         late.unsafeSet(next);
       },
-      start: async () => undefined,
       // The session itself is closed by the drain, inside the quit's deadline,
       // before any composer stops; nothing is left here to give back.
-      stop: async () => undefined,
+      lifetime: Effect.void,
     };
   });

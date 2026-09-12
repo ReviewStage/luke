@@ -620,12 +620,12 @@ export const composeCalendars = (
       link: (next) => {
         late.unsafeSet(next);
       },
-      start: async () => {
+      // The gate's own disarm is what ends the observation; the scope this
+      // composer was built in ends whatever a disarm missed, so this lifetime
+      // is its start alone.
+      lifetime: Effect.sync(() => {
         onboardingState = onboarding.read();
         void settleCalendarOnboardingIfConnected();
-      },
-      // The gate's own disarm is what ends the observation; the scope this
-      // composer was built in ends whatever a disarm missed.
-      stop: async () => undefined,
+      }),
     };
   });

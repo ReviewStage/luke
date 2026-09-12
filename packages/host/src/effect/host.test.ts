@@ -5,7 +5,7 @@ import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Cause, Chunk, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { HOST_CONCERN, HOST_START_ORDER } from "../compose-host.js";
 import type { Composer } from "../composer.js";
-import { mergedMethods } from "./composer.js";
+import { mergedMethods, startedAndStopped } from "./composer.js";
 import {
   type HostAssembly,
   HostAssemblyTag,
@@ -34,23 +34,26 @@ interface Recorded {
 
 const stubComposer = (methods: readonly GatewayMethod[]): Composer => ({
   methods: Object.fromEntries(methods.map((method) => [method, () => Effect.succeed({})])),
-  start: async () => undefined,
-  stop: async () => undefined,
+  lifetime: Effect.void,
 });
 
 const recordingComposer = (
   log: Recorded[],
   concern: string,
-  stop: () => Promise<void> = async () => undefined,
+  stop: Effect.Effect<void> = Effect.void,
 ): Composer => ({
   methods: {},
-  start: async () => {
-    log.push({ step: STEP.START, concern });
-  },
-  stop: async () => {
-    log.push({ step: STEP.STOP, concern });
-    await stop();
-  },
+  lifetime: startedAndStopped(
+    Effect.sync(() => {
+      log.push({ step: STEP.START, concern });
+    }),
+    Effect.zipRight(
+      Effect.sync(() => {
+        log.push({ step: STEP.STOP, concern });
+      }),
+      stop,
+    ),
+  ),
 });
 
 const recordingAssembly = (log: Recorded[], startOrder: readonly Composer[]): HostAssembly => ({
@@ -134,9 +137,13 @@ describe("the standing host", () => {
         const refused = new Error("the store was already closed");
         const assembly = recordingAssembly(log, [
           recordingComposer(log, "first"),
-          recordingComposer(log, "second", async () => {
-            throw refused;
-          }),
+          recordingComposer(
+            log,
+            "second",
+            Effect.sync(() => {
+              throw refused;
+            }),
+          ),
           recordingComposer(log, "third"),
         ]);
         const scope = yield* Scope.make();
@@ -164,12 +171,14 @@ describe("the standing host", () => {
           recordingComposer(log, "second"),
           {
             methods: {},
-            start: async () => {
-              throw refused;
-            },
-            stop: async () => {
-              log.push({ step: STEP.STOP, concern: "third" });
-            },
+            lifetime: startedAndStopped(
+              Effect.sync(() => {
+                throw refused;
+              }),
+              Effect.sync(() => {
+                log.push({ step: STEP.STOP, concern: "third" });
+              }),
+            ),
           },
         ]);
         const scope = yield* Scope.make();
@@ -203,18 +212,17 @@ describe("a standup interrupted", () => {
           recordingComposer(log, "first"),
           {
             methods: {},
-            start: () =>
-              Effect.runPromise(
-                Effect.zipRight(
-                  Effect.zipRight(Deferred.succeed(began, undefined), Deferred.await(gate)),
-                  Effect.sync(() => {
-                    log.push({ step: STEP.START, concern: "second" });
-                  }),
-                ),
+            lifetime: startedAndStopped(
+              Effect.zipRight(
+                Effect.zipRight(Deferred.succeed(began, undefined), Deferred.await(gate)),
+                Effect.sync(() => {
+                  log.push({ step: STEP.START, concern: "second" });
+                }),
               ),
-            stop: async () => {
-              log.push({ step: STEP.STOP, concern: "second" });
-            },
+              Effect.sync(() => {
+                log.push({ step: STEP.STOP, concern: "second" });
+              }),
+            ),
           },
           recordingComposer(log, "third"),
         ]);

@@ -20,8 +20,7 @@ import { testKernelLayer } from "./testing/test-kernel.js";
 function stubComposer(methods: readonly GatewayMethod[]): Composer {
   return {
     methods: Object.fromEntries(methods.map((method) => [method, () => Effect.succeed({})])),
-    start: async () => undefined,
-    stop: async () => undefined,
+    lifetime: Effect.void,
   };
 }
 
