@@ -6,10 +6,9 @@ import {
   ACTION_OUTPUT_STATUS,
   ACTION_REFUSAL,
   ACTION_TOOL,
-  admit,
+  admitEffect,
   type CarriedActionResult,
   type CarriedSessionAction,
-  type Refusal,
   type RememberedFact,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -478,21 +477,29 @@ test("an admitted action with no turn standing is refused at the carrier, the ho
     guide: CAPTIONS_GUIDE,
     rememberedFacts: [],
   };
-  const minted: readonly (ValidatedAction | Refusal)[] = await Promise.all([
-    admit(
-      {
-        kind: ACTION_KIND.MESSAGE,
-        fields: { provider_id: "claude-code", provider_session_id: "session-a", text: "go ahead" },
-      },
-      standing,
-    ),
-    admit({ kind: ACTION_KIND.REMEMBER, fields: { words: "prefers concise answers" } }, standing),
-    admit(
-      { kind: ACTION_KIND.SETTING, fields: { setting_id: "voice_captions", value: "on" } },
-      standing,
-    ),
-  ]);
-  const admitted = minted.filter((action): action is ValidatedAction => action.kind !== undefined);
+  const admitted: readonly ValidatedAction[] = await Effect.runPromise(
+    Effect.all([
+      admitEffect(
+        {
+          kind: ACTION_KIND.MESSAGE,
+          fields: {
+            provider_id: "claude-code",
+            provider_session_id: "session-a",
+            text: "go ahead",
+          },
+        },
+        standing,
+      ),
+      admitEffect(
+        { kind: ACTION_KIND.REMEMBER, fields: { words: "prefers concise answers" } },
+        standing,
+      ),
+      admitEffect(
+        { kind: ACTION_KIND.SETTING, fields: { setting_id: "voice_captions", value: "on" } },
+        standing,
+      ),
+    ]),
+  );
   assert.equal(admitted.length, 3);
   // SAFETY: the carrier is the last gate before an effect and reads its
   // context as untrusted; these are the shapes a broken caller could hand it.

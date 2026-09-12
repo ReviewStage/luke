@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import type { Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import { test } from "vitest";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
 import { ACTION_KIND, ACTION_REFUSAL, type WireRecord } from "../server/core";
@@ -439,14 +439,16 @@ async function ask(
 ): Promise<ActionExecutionAnswer> {
   const roster = await snapshotRoster(api);
   const readsBefore = api.reads.length;
-  const answer = await executeSessionAction({
-    kind,
-    providerId: "conductor",
-    fields: { provider_id: "conductor", ...fields },
-    apiKey: "key-1",
-    roster,
-    seams: { httpClient: api.layer },
-  });
+  const answer = await Effect.runPromise(
+    executeSessionAction({
+      kind,
+      providerId: "conductor",
+      fields: { provider_id: "conductor", ...fields },
+      apiKey: "key-1",
+      roster,
+      seams: { httpClient: api.layer },
+    }),
+  );
   // No read runs on an action: the snapshot is the roster, and the provider
   // sees only the write itself.
   assert.equal(api.reads.length, readsBefore);
@@ -524,18 +526,20 @@ async function seededRoster(httpClient: Layer.Layer<HttpClient.HttpClient>) {
 test("a key the provider refuses is named as the reason, not a missing session, and seeds no snapshot", async () => {
   const refusedKey = fakeHttpClientLayer(() => new Response("{}", { status: 401 }));
   const { roster, store } = await seededRoster(refusedKey);
-  const answer = await executeSessionAction({
-    kind: ACTION_KIND.MESSAGE,
-    providerId: "conductor",
-    fields: {
-      provider_id: "conductor",
-      provider_session_id: CONDUCTOR_SESSION_ID,
-      text: "hello",
-    },
-    apiKey: "key-1",
-    roster,
-    seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
-  });
+  const answer = await Effect.runPromise(
+    executeSessionAction({
+      kind: ACTION_KIND.MESSAGE,
+      providerId: "conductor",
+      fields: {
+        provider_id: "conductor",
+        provider_session_id: CONDUCTOR_SESSION_ID,
+        text: "hello",
+      },
+      apiKey: "key-1",
+      roster,
+      seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
+    }),
+  );
 
   assert.equal(answer.result, "rejected");
   assert.equal(store.snapshots.size, 0);
@@ -547,18 +551,20 @@ test("a provider that cannot be reached is named as the reason", async () => {
     throw new Error("connection refused");
   });
   const { roster } = await seededRoster(unreachable);
-  const answer = await executeSessionAction({
-    kind: ACTION_KIND.MESSAGE,
-    providerId: "conductor",
-    fields: {
-      provider_id: "conductor",
-      provider_session_id: CONDUCTOR_SESSION_ID,
-      text: "hello",
-    },
-    apiKey: "key-1",
-    roster,
-    seams: { httpClient: unreachable },
-  });
+  const answer = await Effect.runPromise(
+    executeSessionAction({
+      kind: ACTION_KIND.MESSAGE,
+      providerId: "conductor",
+      fields: {
+        provider_id: "conductor",
+        provider_session_id: CONDUCTOR_SESSION_ID,
+        text: "hello",
+      },
+      apiKey: "key-1",
+      roster,
+      seams: { httpClient: unreachable },
+    }),
+  );
 
   assert.equal(answer.result, "rejected");
 });

@@ -180,7 +180,8 @@ node --input-type=module -e '
 # the brain and its own directory, never the agent, the turn runner, the
 # ledger, or anything else of the brain by relative path. That is what lets a
 # tool be read, tested, and moved to another runtime without the agent that
-# runs it, and what keeps `admit()` inside `execute` rather than beside it.
+# runs it, and what keeps `admitEffect()` inside `execute` rather than beside
+# it.
 node --input-type=module -e '
   import { readdir, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -205,12 +206,11 @@ node --input-type=module -e '
 
 # Admission has one home in the brain: a tool module's own `execute`, under
 # `packages/brain/src/tools/`. Nothing else of the brain, and nothing in the
-# host's brain wiring or the memory package, may call `admit()` or
-# `admitEffect()` or reach for either, so no path can hand the host a raw call
-# to admit and carry in one breath — the notebook's two writes included, which
-# arrive at the host as admitted actions like every other. The check reads
-# import lists rather than call sites, because a file that never imports
-# `admit` cannot call it.
+# host's brain wiring or the memory package, may call `admitEffect()` or reach
+# for it, so no path can hand the host a raw call to admit and carry in one
+# breath — the notebook's two writes included, which arrive at the host as
+# admitted actions like every other. The check reads import lists rather than
+# call sites, because a file that never imports the gauntlet cannot call it.
 node --input-type=module -e '
   import { readdir, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -234,13 +234,13 @@ node --input-type=module -e '
       const text = await readFile(file, "utf8");
       for (const match of text.matchAll(/import\s*(?:type\s+)?\{([^}]*)\}\s*from\s+"@sidecar\/actions"/g)) {
         const names = match[1].split(",").map((name) => name.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]);
-        if (names.includes("admit") || names.includes("admitEffect")) reaching.push(relative);
+        if (names.includes("admitEffect")) reaching.push(relative);
       }
     }
   }
   if (reaching.length > 0) {
     process.stderr.write(
-      `error: admit() is reached outside the brain tool modules: ${reaching.join(", ")}\n`,
+      `error: admitEffect() is reached outside the brain tool modules: ${reaching.join(", ")}\n`,
     );
     process.exit(1);
   }
@@ -549,13 +549,13 @@ fi
 # whole point is that the set is entered in one place. The type system already
 # refuses an object literal, but a cast spells the brand out and would enter the
 # set from anywhere it is written, so the cast lives in the two wire modules that
-# define and re-shape the brand and in `admit()`, the one minter. An Effect
+# define and re-shape the brand and in `admitEffect()`, the one minter. An Effect
 # `Schema.brand` would be a third way in, which is why admission is not one.
 admitted_casts=$(grep -rEn --exclude-dir=node_modules --include='*.ts' --include='*.tsx' 'as Admitted\b' \
     "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
     grep -vE '/(packages/actions/src/admit\.ts|packages/wire/src/admitted\.ts|packages/wire/src/testing/admitted[^/]*\.ts):' || true)
 if [[ -n "$admitted_casts" ]]; then
-    printf 'error: the Admitted brand is cast only in admit() and wire'"'"'s admitted modules — reshapeAdmitted() is how everything else re-shapes what admission already minted:\n%s\n' \
+    printf 'error: the Admitted brand is cast only in admitEffect() and wire'"'"'s admitted modules — reshapeAdmitted() is how everything else re-shapes what admission already minted:\n%s\n' \
         "$admitted_casts" >&2
     exit 1
 fi

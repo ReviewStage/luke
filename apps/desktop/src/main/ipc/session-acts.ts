@@ -25,7 +25,7 @@ export interface SessionActsDependencies {
     openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
   };
   /**
-   * The two writes a row asks for, carried to the host, whose `admit()`
+   * The two writes a row asks for, carried to the host, whose `admitEffect()`
    * decides each against the roster it reads for itself; nothing here decides
    * whether a session takes them.
    */

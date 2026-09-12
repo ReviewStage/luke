@@ -32,7 +32,7 @@ export type BrainActionExecution = ToolContext;
 
 /**
  * The host's two halves of carrying an action, which the action tool's own
- * `execute` joins with `admit()` between them: the readers admission
+ * `execute` joins with `admitEffect()` between them: the readers admission
  * consults for an execution, and the carrier, which takes only what
  * admission minted and answers in the one envelope every action tool shares —
  * the status, the target as the roster held it at execution, and the session
