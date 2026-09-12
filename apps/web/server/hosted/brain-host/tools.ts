@@ -191,11 +191,11 @@ function runOf(
     case "action":
       return (fields, standing) =>
         Effect.gen(function* () {
-          const admission = yield* Effect.promise(() => seams.carrier.admission());
+          const admission = yield* seams.carrier.admission();
           return yield* named.module.execute(fields, {
             ...standing,
             admission,
-            carry: (action) => Effect.promise(() => seams.carrier.carry(action, fields, standing)),
+            carry: (action) => seams.carrier.carry(action, fields, standing),
           });
         });
     case "read":

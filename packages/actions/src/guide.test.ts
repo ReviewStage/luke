@@ -39,11 +39,13 @@ async function appToolAction(
   sessions: readonly Session[],
 ) {
   return withoutAdmission(
-    await admitToolCall(functionCall, {
-      origin: RUN_ORIGIN.USER,
-      roster: { read: () => Effect.succeed(sessions) },
-      guide,
-    }),
+    await Effect.runPromise(
+      admitToolCall(functionCall, {
+        origin: RUN_ORIGIN.USER,
+        roster: { read: () => Effect.succeed(sessions) },
+        guide,
+      }),
+    ),
   );
 }
 

@@ -19,7 +19,7 @@ and the idioms the replacements write to are the "Effect idioms" section of the
 root `AGENTS.md`.
 
 Three things are deliberately not Effect's. The `Admitted` brand stays a
-type-level `unique symbol` with `admit()` its sole minter, never a
+type-level `unique symbol` with `admitEffect()` its sole minter, never a
 `Schema.brand`, because a brand a cast can spell is a brand anything can enter.
 The JSON Schema a model reads is emitted by `@sidecar/wire`'s own emitter
 (`packages/wire/src/effect/json-schema.ts`) rather than `JSONSchema.make`,
@@ -283,34 +283,16 @@ link that asks for a beat is a synchronous callback the calendars composer
 holds, so the pass is run to a promise on this composition's own runtime. It
 goes when that link answers an effect.
 
-`admit()` in `packages/actions/src/admit.ts` is the fourth: the gauntlet is
-`admitEffect()`, an Effect failing with an `AdmitRefusal`, and `admit()` runs it
-to the `Promise<ValidatedAction | Refusal>` its callers still hold, answering
-the refusal as the `Refusal` the action journal records and rethrowing a roster
-read's own failure. The brain's action tools left it in P12-15c and admit the
-call as an effect, since the `ToolExecutor` seam they run under answers one;
-what still holds the door is the web's action endpoint, which is a promise
-from `executeSessionAction` up, and the two testing doors over it
-(`@sidecar/actions`'s `tool-call.ts` and the provider contract's oracle).
-P12-15d made the reads the gauntlet itself waits on effects — `ActionRoster`'s
-and `ActionProjects`' own, and `guardedRead`, which is now an interruptible
-`raceFirst` between the read and the guard's signal rather than a promise race
-— so everything inside `admitEffect` is an effect and only that door is not.
-The `interruptible` is load-bearing: an action is carried through the journal
-inside an uninterruptible region, and a race there whose loser cannot be
-interrupted would never answer.
-P12-04 turned out to be the CloudFetch/HttpClient family alone, so the door
-waits on those three answering effects instead.
-
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
-is the fifth: every caller of the brain's model transport still holds a
-promise, not a fiber, so the request effect built over `@sidecar/hosted`'s
-`accountCall` is run to a promise there, joining the caller's own
-`AbortSignal` to the run exactly as `createAccountCall` does. P12-04d moved
-what it runs on: `BrainTransport` takes an `execution?: ExecutionRuntime`
-(the host's own, captured once in `compose-account.ts` as
-`Effect.runtime<never>()` and threaded through `VoiceCapabilityAssembler` to
-every adapter it builds) and `runCall` runs through `@sidecar/brain`'s shared
+is on the allowlist too: every caller of the brain's model transport still
+holds a promise, not a fiber, so the request effect built over
+`@sidecar/hosted`'s `accountCall` is run to a promise there, joining the
+caller's own `AbortSignal` to the run exactly as `createAccountCall` does.
+P12-04d moved what it runs on: `BrainTransport` takes an
+`execution?: ExecutionRuntime` (the host's own, captured once in
+`compose-account.ts` as `Effect.runtime<never>()` and threaded through
+`VoiceCapabilityAssembler` to every adapter it builds) and `runCall` runs
+through `@sidecar/brain`'s shared
 `runtimeExit(execution)` — the same door `tracedModelAdapter` runs through —
 rather than the ambient default runtime `Effect.runPromiseExit` read before.
 It is permanent alongside `tracedModelAdapter`, because what keeps both is
@@ -319,8 +301,8 @@ OpenClaw `b7528507` that awaits `model.respond` and imports nothing from
 `effect`, so no adapter above this transport can answer an effect while that
 port stands.
 
-`createAccountCall` in `packages/hosted/src/account-call.ts` is the sixth: it
-provides the caller's own `httpClient` layer, or `FetchHttpClient.layer` for
+`createAccountCall` in `packages/hosted/src/account-call.ts` is on it as well:
+it provides the caller's own `httpClient` layer, or `FetchHttpClient.layer` for
 the ambient ones, joins the caller's `AbortSignal` to the run, and answers
 the `Promise` its callers still hold. P12-04 moved every caller inside this
 package onto `accountCall` directly and deleted the `CloudFetch` seam this
@@ -1011,8 +993,8 @@ call before it runs and settles it after is one effect around another, and
 the batch the runtime already held uninterruptible is still what keeps a
 dispatched effect from being parted from its result. What stays a promise
 inside the executor is what the host hands it: the turn's checkpoint, the
-whole-transcript read, the child and workspace access, the memory provider's
-own tools, and the carrier an admitted action reaches.
+whole-transcript read, the child and workspace access, and the memory
+provider's own tools.
 
 The rest of this package's Promise faces turned out to stand on
 `BrainAgent`'s own public surface rather than on the vocabulary's: a wake, an
@@ -1215,7 +1197,6 @@ design decision stated as such:
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
 | `cloudFetchFromHttpClient` | P1-07 | P12-04e |
 | `timersFromRuntime` | P2-01 | P12-03 |
-| `admit()` Promise door over `admitEffect()` | P4-01 | pending — the brain's action tools stopped using it in P12-15c; blocked now on the web's `executeSessionAction` and the two testing doors over it answering effects |
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |

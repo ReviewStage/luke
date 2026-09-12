@@ -35,7 +35,7 @@ import type { NotebookMemoryAccess } from "./notebook-memory.js";
  * which the index answers, each a module of the shape every tool of the
  * brain is declared in. The notebook's two writes, `remember_fact` and
  * `forget_fact`, are rows of the actions table and action tools of the
- * brain's own: admitted inside their module by the same `admit()` as every
+ * brain's own: admitted inside their module by the same `admitEffect()` as every
  * other action and carried by the host's performer to the store's worker, so
  * no call of theirs reaches the host raw, and nothing here carries one. The
  * provider is built over one scope and answers for no other.

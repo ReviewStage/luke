@@ -9,9 +9,8 @@
  * so an action whose turn ended while the roster was refreshing refuses rather
  * than dispatching.
  *
- * The gauntlet is an Effect, {@link admitEffect}, failing with the refusal as a
- * typed error; {@link admit} is the Promise door over it that every caller
- * still holds, and the one place in this package an Effect is run.
+ * The gauntlet is one Effect, {@link admitEffect}, failing with the refusal as
+ * a typed error, and every caller composes it into its own.
  *
  * Admission decides only whether an action may run. Which acts a conversation may
  * ask for at all was the effective tool policy's decision before a call left
@@ -57,7 +56,7 @@ import {
   text as wireText,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Cause, Data, Effect, Either, Exit, Option, type Schema } from "effect";
+import { Data, Effect, Either, type Schema } from "effect";
 import {
   ACTION_KIND,
   type ActionKind,
@@ -90,12 +89,12 @@ import {
 /**
  * An action that ran the gauntlet, carrying the turn's origin for Conversation to
  * record. The brand is `@sidecar/wire`'s, whose key nothing anywhere can spell,
- * and {@link admit} below is the one place in the repository that enters the
- * admitted set: everything downstream re-shapes what it already holds. What the
- * brand buys is that admission cannot be skipped by accident; a deliberate
+ * and {@link admitEffect} below is the one place in the repository that enters
+ * the admitted set: everything downstream re-shapes what it already holds. What
+ * the brand buys is that admission cannot be skipped by accident; a deliberate
  * `as ValidatedAction` would still compile, since the admitted action is a subtype of
- * its own payload, and that assertion appears nowhere but in `admit` itself —
- * `validated-action.type-test.ts` says both in as many words.
+ * its own payload, and that assertion appears nowhere but in `admitEffect`
+ * itself — `validated-action.type-test.ts` says both in as many words.
  */
 export type ValidatedAction<Kind extends ActionKind = ActionKind> = Admitted<
   CarriedAction<Kind>
@@ -970,24 +969,4 @@ export function admitEffect<Kind extends ActionKind>(
     // repository; the payload stands exactly as the admitter built it.
     return { ...admitted, origin: context.origin } as ValidatedAction<Kind>;
   });
-}
-
-/**
- * {@link admitEffect} answered as the Promise every caller still holds: the
- * refusal comes back as the {@link Refusal} the action journal records, and a
- * roster read that failed rejects with its own failure, as it always has. This
- * door is the strangler shim that runs the effect where no runtime edge does
- * yet; callers move onto `admitEffect` as their own runs become Effects
- * (P5-14b's turn runner, P7's composers), and the door goes with the `Settled`
- * Promise signatures in P12-02.
- */
-export async function admit<Kind extends ActionKind>(
-  request: ActionRequest<Kind>,
-  context: AdmitContext,
-): Promise<ValidatedAction<Kind> | Refusal> {
-  const exit = await Effect.runPromiseExit(admitEffect(request, context));
-  if (Exit.isSuccess(exit)) return exit.value;
-  const refusal = Cause.failureOption(exit.cause);
-  if (Option.isSome(refusal)) return refuse(refusal.value.reason);
-  throw Cause.squash(exit.cause);
 }

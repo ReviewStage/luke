@@ -104,7 +104,7 @@ export const ACT_KIND = {
   /**
    * The two writes a session's own row mints — the follow-up typed into its
    * composer and the press of a control its provider advertised — carried to
-   * the host, where `admit()` decides them against the roster it reads for
+   * the host, where `admitEffect()` decides them against the roster it reads for
    * itself before any provider sees them.
    */
   SESSION_SEND_MESSAGE: "session.sendMessage",

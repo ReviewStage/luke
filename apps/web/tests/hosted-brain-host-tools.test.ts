@@ -124,10 +124,11 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
     defaults: async () => ({}),
     facts: factsWriter(remembered),
     apiKey: async () => options.apiKey,
-    execute: async (input) => {
-      executed.push({ kind: input.kind, provider_id: input.providerId, ...input.fields });
-      return { result: ACTION_RESULT_STATUS.ACCEPTED };
-    },
+    execute: (input) =>
+      Effect.sync(() => {
+        executed.push({ kind: input.kind, provider_id: input.providerId, ...input.fields });
+        return { result: ACTION_RESULT_STATUS.ACCEPTED };
+      }),
   });
   const seams: HostedToolSeams = {
     conversation: { userId: "user-a", conversationId: "c-1" },

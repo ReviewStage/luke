@@ -42,7 +42,7 @@ export interface SessionRowActionsDependencies {
  * composer and the press of a control its provider advertised. They are the
  * developer's own acts, and they are admitted where the roster is: the
  * service admits each against the stored snapshot the row was drawn from,
- * by the same `admit()` every action runs, builds the write from that
+ * by the same `admitEffect()` every action runs, builds the write from that
  * snapshot's own advertisement, and answers what the provider said. The one
  * thing decided here is that the row still stands — a session the drawn
  * roster no longer holds is refused without a call, as it always was. A

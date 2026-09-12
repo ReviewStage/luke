@@ -68,7 +68,7 @@ export interface SessionActionPerformerDependencies {
   /**
    * The service's side of every session write. The service admits each
    * against the stored snapshot this Mac's rows were drawn from, by the same
-   * `admit()` the brain already ran here, builds the write from that
+   * `admitEffect()` the brain already ran here, builds the write from that
    * snapshot's own advertisement, and answers what the provider said.
    */
   actions: Pick<
@@ -97,7 +97,7 @@ export interface SessionActionPerformerDependencies {
 /**
  * The one entry every action on a session passes through. The brain
  * is the only caller, and what arrives is a `ValidatedAction`, which only
- * `admit()` mints: whether the action may run was decided there, against the
+ * `admitEffect()` mints: whether the action may run was decided there, against the
  * roster it read for itself, so what is left here is carrying it — a session
  * write to the service that admits it once more against the same stored
  * snapshot — and counting what landed. The opens are exposed on their own

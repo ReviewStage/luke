@@ -47,15 +47,17 @@ async function sessionToolAction(
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ) {
   return withoutAdmission(
-    await admitToolCall(call, {
-      origin: RUN_ORIGIN.USER,
-      roster: { read: () => Effect.succeed(sessions) },
-      projects: {
-        read: () => Effect.succeed(workspaceProjects),
-        defaults: () => Effect.succeed({ defaultProviderId, defaultProjectIds }),
-        agentModels,
-      },
-    }),
+    await Effect.runPromise(
+      admitToolCall(call, {
+        origin: RUN_ORIGIN.USER,
+        roster: { read: () => Effect.succeed(sessions) },
+        projects: {
+          read: () => Effect.succeed(workspaceProjects),
+          defaults: () => Effect.succeed({ defaultProviderId, defaultProjectIds }),
+          agentModels,
+        },
+      }),
+    ),
   );
 }
 

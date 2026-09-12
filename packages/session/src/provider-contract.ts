@@ -4,7 +4,7 @@ import type { WorkspaceAgentSelection } from "./workspace-agents.js";
 
 /**
  * What each action is asked with. Every one is an `Admitted` request, which only
- * `admit()` in `@sidecar/actions` stands behind: the session or project was one
+ * `admitEffect()` in `@sidecar/actions` stands behind: the session or project was one
  * the roster that pass reported, the action was one it advertised, and the
  * developer's text was bounded, before a provider saw any of it. What a
  * provider answers for is its own route — the advertised control, spawn

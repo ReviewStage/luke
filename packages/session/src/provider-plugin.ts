@@ -81,7 +81,7 @@ export type ConversationPage = Omit<ProviderConversationRequest, "providerSessio
 
 /**
  * Every action a plugin performs takes an admitted input, for the same reason an
- * adapter's write does: only `admit()` in `@sidecar/actions` mints one, so a
+ * adapter's write does: only `admitEffect()` in `@sidecar/actions` mints one, so a
  * handler cannot be reached by anything that skipped the gauntlet. The reads
  * below take the plain input — a read is not a write and admits nothing.
  */
@@ -313,7 +313,7 @@ const ACTION_DISPATCHERS: ActionDispatchers = {
  * acts on what the pass saw and never on what a caller sent, and answers
  * unsupported for a session the pass did not report or an action the plugin does
  * not name. Whether the action may run at all was answered before it arrived:
- * only `admit()` mints the request this takes.
+ * only `admitEffect()` mints the request this takes.
  */
 export function dispatchAction<Kind extends PluginActionKind>(
   plugin: SessionProviderPlugin,
