@@ -27,6 +27,29 @@ does not build until this vocabulary has answered for it.
 the narrowing — main validates a renderer's send against that union before the
 allowlist, so a compromised renderer reaches none of the actions.
 
+## The one batch that outlives a run
+
+A flush that found no credential writes its queue to the hold the host hands
+the sender (`held-product-events.json` under the state root), and the next run
+that counts reads it once, ahead of its first flush, and posts it under whichever
+account signs in next. **That moves when a count leaves, never whether**: a Mac
+that never signs in still posts none, and the bearer is still the only thing
+that names an account.
+
+Three things about it are load-bearing and look like accidents:
+
+- **The hold is written ahead of the request, never behind it.** A quit between
+  a post and a write can then only lose the batch, never post it twice, which is
+  the direction this pipeline already takes.
+- **Its age bound is `PRODUCT_EVENT_MAXIMUM_AGE_MS`, read by the service too.**
+  The service clamps an older `at` into that window; a held event past it is
+  dropped here rather than posted only to be re-dated.
+- **Each held event is read back through `productEventFromWire`**, so a build
+  that narrowed the vocabulary drops the event instead of posting it.
+
+`PRIVACY.md` says the hold in as many words, since a count standing on disk
+between launches is a fact a user should know.
+
 ## Everything outside this package has no such guarantee
 
 The session-replay client in each app runs on its library's own configuration, and

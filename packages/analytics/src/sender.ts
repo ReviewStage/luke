@@ -13,6 +13,12 @@ import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
 import { Duration, Effect, Exit, type Layer, Runtime, Schedule, Scope } from "effect";
 import {
+  adoptableHeldProductEvents,
+  HELD_PRODUCT_EVENTS_VERSION,
+  type HeldProductEvents,
+  type HeldProductEventsRecord,
+} from "./held-events.js";
+import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
   PRODUCT_EVENT_CLIENT,
@@ -42,6 +48,10 @@ const PRODUCT_EVENT_DEFAULTS = {
 /** The one discriminator the day marker dedups on; the day itself is the key. */
 const DAY_ACTIVE_KEY = "day";
 
+function utcDay(at: number): string {
+  return new Date(at).toISOString().slice(0, 10);
+}
+
 export interface ProductEventSenderOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
@@ -51,6 +61,11 @@ export interface ProductEventSenderOptions extends AccountToken {
   sends: boolean;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
+  /**
+   * Where a batch waits between runs while no credential can carry it. A
+   * sender given none holds nothing past its own life.
+   */
+  held?: HeldProductEvents;
   now?: () => number;
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
@@ -73,6 +88,15 @@ export interface ProductEventSenderOptions extends AccountToken {
  * flushing, because a request in `will-quit` either delays the quit or is
  * killed mid-flight, and an instant quit is worth a minute of counts.
  *
+ * The one batch that outlives a run is the one no credential could carry.
+ * A flush that found no account leaves its events queued, and writes them to
+ * the hold it was given, so a run that launched, was introduced, and quit
+ * before any sign-in still posts under the account that signs in next — in a
+ * later launch as readily as in this one. That moves when those counts
+ * leave, never whether: a Mac that never signs in posts none of them, and the
+ * hold is bounded to the queue's own limit and to the service's own age
+ * window, past which an event goes rather than being posted to be re-dated.
+ *
  * No identity travels with an event. The service resolves the account from the
  * bearer token this sender already holds for the voice and review endpoints,
  * so there is nothing here to name a person with.
@@ -87,9 +111,14 @@ export class ProductEventSender {
   readonly #flushIntervalMs: number;
   readonly #queueLimit: number;
   readonly #queue: ProductEvent[] = [];
+  readonly #held: HeldProductEvents | undefined;
   /** Nested rather than an interpolated key: the name and the discriminator stay apart. */
   readonly #recordedDays = new Map<ProductEventName, Map<string, string>>();
   #armed = false;
+  /** Whether the hold on disk names any event, so an emptied queue clears it exactly once. */
+  #holdStanding = false;
+  /** The one adoption of the hold, run ahead of whichever flush comes first. */
+  #adoption: Effect.Effect<void> | undefined;
   #scope: Scope.CloseableScope | undefined;
   #inFlight: Promise<void> | undefined;
 
@@ -110,6 +139,7 @@ export class ProductEventSender {
       requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
+    this.#held = options.held;
     this.#runtime = options.runtime ?? Runtime.defaultRuntime;
     this.#appVersion = options.appVersion;
     this.#sends = options.sends;
@@ -162,7 +192,7 @@ export class ProductEventSender {
     properties: ProductEventPropertiesFor<Name>,
   ): void {
     if (!this.#allowed()) return;
-    const today = new Date(this.#now()).toISOString().slice(0, 10);
+    const today = utcDay(this.#now());
     let recorded = this.#recordedDays.get(name);
     if (!recorded) {
       recorded = new Map();
@@ -249,13 +279,85 @@ export class ProductEventSender {
     return this.#sends && this.#armed;
   }
 
+  /**
+   * The hold is written ahead of the request, never behind it: what leaves
+   * the queue for the wire leaves the disk first, so a quit between the post
+   * and a write could only lose the batch, never post it twice — the direction
+   * this whole pipeline already takes. A refusal that requeues writes the
+   * hold again with the batch back in it.
+   */
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.suspend(() => {
-      if (this.#queue.length === 0) return Effect.void;
-      // Gone whatever becomes of the request, save for the one end that never
-      // authenticated at all.
-      const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
-      return Effect.map(
+    return Effect.zipRight(
+      this.#adoptHold(),
+      Effect.suspend(() => {
+        if (this.#queue.length === 0) return this.#persistHold();
+        // Gone whatever becomes of the request, save for the one end that never
+        // authenticated at all.
+        const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
+        return this.#persistHold().pipe(
+          Effect.zipRight(this.#send(events)),
+          Effect.flatMap((requeued) => (requeued ? this.#persistHold() : Effect.void)),
+        );
+      }),
+    );
+  }
+
+  /**
+   * The hold is read once, and only ahead of a flush of a run that counts:
+   * a fixture run and a sender not yet armed read nothing, nothing else reads
+   * the disk, and no write of the hold can happen before the read, so a run
+   * that quits ahead of its first flush leaves the earlier hold as it found
+   * it. What is adopted lands ahead of this run's own events, as the older
+   * counts they are, and a held day marker for a day this queue already marks
+   * is dropped, since a relaunch on the same day is one day used, not two.
+   */
+  #adoptHold(): Effect.Effect<void> {
+    const held = this.#held;
+    if (!held || !this.#allowed()) return Effect.void;
+    this.#adoption ??= Runtime.runSync(this.#runtime)(
+      Effect.cached(
+        Effect.map(held.read, (record) => {
+          if (!record) return;
+          this.#holdStanding = record.events.length > 0;
+          const adopted = adoptableHeldProductEvents(record, this.#now(), this.#queueLimit).filter(
+            (event) => !(event.name === PRODUCT_EVENT.APP_DAY_ACTIVE && this.#dayMarked(event.at)),
+          );
+          this.#queue.unshift(...adopted);
+          this.#trimQueue();
+        }),
+      ),
+    );
+    return this.#adoption;
+  }
+
+  #dayMarked(at: number): boolean {
+    const day = utcDay(at);
+    return this.#queue.some(
+      (queued) => queued.name === PRODUCT_EVENT.APP_DAY_ACTIVE && utcDay(queued.at) === day,
+    );
+  }
+
+  /**
+   * The hold follows the queue: written whenever the queue holds events, and
+   * written empty once when a hold that stood has nothing left behind it, so
+   * a quiet signed-in run writes nothing at all.
+   */
+  #persistHold(): Effect.Effect<void> {
+    const held = this.#held;
+    if (!held || !this.#allowed()) return Effect.void;
+    if (this.#queue.length === 0 && !this.#holdStanding) return Effect.void;
+    const record: HeldProductEventsRecord = {
+      version: HELD_PRODUCT_EVENTS_VERSION,
+      events: [...this.#queue],
+    };
+    this.#holdStanding = record.events.length > 0;
+    return held.write(record);
+  }
+
+  /** Posts one batch, answering whether it went back on the queue. */
+  #send(events: ProductEvent[]): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return Effect.suspend(() =>
+      Effect.map(
         this.#call.send({
           method: HTTP_METHOD.POST,
           path: HOSTED_SERVICE_PATH.EVENTS,
@@ -275,10 +377,12 @@ export class ProductEventSender {
           if (!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL) {
             this.#queue.unshift(...events);
             this.#trimQueue();
+            return true;
           }
+          return false;
         },
-      );
-    });
+      ),
+    );
   }
 
   #trimQueue(): void {

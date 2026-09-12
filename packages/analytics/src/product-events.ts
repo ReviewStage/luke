@@ -537,6 +537,15 @@ export type ProductEventBatch = readonly ProductEvent[];
 export const PRODUCT_EVENT_BATCH_LIMIT = 50;
 
 /**
+ * How far back an event's own `at` may date it when the service records it.
+ * The service clamps an older instant into this window ending at its own
+ * clock, so a Mac set to the wrong year cannot scatter counts across the
+ * timeline; the desktop's hold drops an event it would otherwise post to be
+ * re-dated, so the two sides read one number.
+ */
+export const PRODUCT_EVENT_MAXIMUM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
  * Which of Luke's own apps posted a batch, named in a request header rather
  * than an event property, so the events themselves stay one vocabulary and an
  * app cannot mislabel a single event. The header only ever selects between

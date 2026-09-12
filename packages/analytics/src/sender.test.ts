@@ -10,10 +10,16 @@ import {
 import { Effect, TestClock } from "effect";
 import { test } from "vitest";
 import {
+  HELD_PRODUCT_EVENTS_VERSION,
+  type HeldProductEvents,
+  type HeldProductEventsRecord,
+} from "./held-events.js";
+import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_CLIENT,
   PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_SESSION_COUNT_BUCKET,
+  PRODUCT_VOICE_SESSION_SOURCE,
   type ProductEvent,
 } from "./product-events.js";
 import { ProductEventSender, type ProductEventSenderOptions } from "./sender.js";
@@ -328,5 +334,265 @@ it.effect("stopping drops what was queued rather than holding the quit open", ()
     sender.stop();
     yield* Effect.promise(() => sender.flush());
     assert.deepEqual(requests, []);
+  }),
+);
+
+const HELD_AT = NOON - 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+
+/** A hold in memory: what an earlier run left, and every record this one writes over it, in order. */
+function memoryHold(initial?: HeldProductEventsRecord) {
+  const writes: HeldProductEventsRecord[] = [];
+  let record = initial;
+  const seam: HeldProductEvents = {
+    read: Effect.sync(() => record),
+    write: (next) =>
+      Effect.sync(() => {
+        record = next;
+        writes.push(next);
+      }),
+  };
+  return { seam, writes, current: () => record };
+}
+
+function heldRecord(events: readonly ProductEvent[]): HeldProductEventsRecord {
+  return { version: HELD_PRODUCT_EVENTS_VERSION, events };
+}
+
+test("a flush that found no credential writes its batch to the hold", async () => {
+  const hold = memoryHold();
+  const { sender, requests } = sharingSender({
+    held: hold.seam,
+    readAccessToken: () => Effect.succeed(undefined),
+  });
+  sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+  sender.record(PRODUCT_EVENT.VOICE_CALL_START, {
+    session_source: PRODUCT_VOICE_SESSION_SOURCE.INTRODUCTION,
+  });
+  sender.record(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
+  await sender.flush();
+
+  assert.deepEqual(requests, []);
+  assert.deepEqual(hold.writes, [
+    heldRecord([
+      { name: PRODUCT_EVENT.APP_LAUNCH, at: NOON, properties: { app_version: APP_VERSION } },
+      {
+        name: PRODUCT_EVENT.VOICE_CALL_START,
+        at: NOON,
+        properties: { session_source: PRODUCT_VOICE_SESSION_SOURCE.INTRODUCTION },
+      },
+      { name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: NOON, properties: {} },
+    ]),
+  ]);
+});
+
+test("a later run posts the hold ahead of its own events and then clears it", async () => {
+  const hold = memoryHold(
+    heldRecord([
+      {
+        name: PRODUCT_EVENT.VOICE_CALL_START,
+        at: HELD_AT,
+        properties: { session_source: PRODUCT_VOICE_SESSION_SOURCE.INTRODUCTION },
+      },
+      { name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} },
+    ]),
+  );
+  const { sender, requests } = sharingSender({ held: hold.seam });
+  sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+  await sender.flush();
+
+  assert.deepEqual(
+    sentEvents(recordedRequest(requests)).map((event) => [event.name, event.at]),
+    [
+      [PRODUCT_EVENT.VOICE_CALL_START, HELD_AT],
+      [PRODUCT_EVENT.INTRODUCTION_COMPLETE, HELD_AT],
+      [PRODUCT_EVENT.ACCOUNT_SIGN_IN, NOON],
+    ],
+  );
+  assert.deepEqual(hold.writes, [heldRecord([])]);
+
+  // A hold already cleared is not written again by a quiet flush.
+  await sender.flush();
+  assert.equal(hold.writes.length, 1);
+});
+
+test("a hold waits through a run that never signs in, emptied ahead of each attempt and refilled by its refusal", async () => {
+  const hold = memoryHold(
+    heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),
+  );
+  const { sender, requests } = sharingSender({
+    held: hold.seam,
+    readAccessToken: () => Effect.succeed(undefined),
+  });
+  sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+  await sender.flush();
+  await sender.flush();
+
+  assert.deepEqual(requests, []);
+  assert.deepEqual(
+    hold.writes.map((record) => record.events.map((event) => event.name)),
+    [
+      [],
+      [PRODUCT_EVENT.INTRODUCTION_COMPLETE, PRODUCT_EVENT.APP_LAUNCH],
+      [],
+      [PRODUCT_EVENT.INTRODUCTION_COMPLETE, PRODUCT_EVENT.APP_LAUNCH],
+    ],
+  );
+});
+
+test("the hold is emptied before the request leaves, so a quit after the post cannot replay it", async () => {
+  const hold = memoryHold(
+    heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),
+  );
+  const heldWhenPosted: number[] = [];
+  const { sender, requests } = sharingSender({ held: hold.seam }, () => {
+    heldWhenPosted.push(hold.current()?.events.length ?? 0);
+    return new Response("{}");
+  });
+  await sender.flush();
+
+  assert.equal(requests.length, 1);
+  assert.deepEqual(heldWhenPosted, [0]);
+  assert.deepEqual(hold.writes, [heldRecord([])]);
+});
+
+test("a held event older than the service's age window is dropped, one inside it stays", async () => {
+  const hold = memoryHold(
+    heldRecord([
+      { name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: NOON - WEEK_MS - 1, properties: {} },
+      { name: PRODUCT_EVENT.ACCOUNT_SIGN_IN, at: NOON - WEEK_MS, properties: {} },
+    ]),
+  );
+  const { sender, requests } = sharingSender({ held: hold.seam });
+  await sender.flush();
+
+  assert.deepEqual(
+    sentEvents(recordedRequest(requests)).map((event) => event.name),
+    [PRODUCT_EVENT.ACCOUNT_SIGN_IN],
+  );
+});
+
+test("a hold past the queue limit keeps the newest, and this run's events after them", async () => {
+  const hold = memoryHold(
+    heldRecord(
+      Array.from({ length: 5 }, (_, index) => ({
+        name: PRODUCT_EVENT.ACCOUNT_SIGN_IN,
+        at: HELD_AT + index,
+        properties: {},
+      })),
+    ),
+  );
+  const { sender, requests } = sharingSender({ held: hold.seam, queueLimit: 3 });
+  sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+  await sender.flush();
+
+  assert.deepEqual(
+    sentEvents(recordedRequest(requests)).map((event) => [event.name, event.at]),
+    [
+      [PRODUCT_EVENT.ACCOUNT_SIGN_IN, HELD_AT + 3],
+      [PRODUCT_EVENT.ACCOUNT_SIGN_IN, HELD_AT + 4],
+      [PRODUCT_EVENT.APP_LAUNCH, NOON],
+    ],
+  );
+});
+
+test("a held event the allowlist no longer reads is dropped rather than posted", async () => {
+  const hold = memoryHold({
+    version: HELD_PRODUCT_EVENTS_VERSION,
+    events: [
+      { name: "introduction:retired", at: HELD_AT, properties: {} },
+      { name: PRODUCT_EVENT.VOICE_CALL_START, at: HELD_AT, properties: { session_source: "cli" } },
+      { name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} },
+    ],
+  });
+  const { sender, requests } = sharingSender({ held: hold.seam });
+  await sender.flush();
+
+  assert.deepEqual(
+    sentEvents(recordedRequest(requests)).map((event) => event.name),
+    [PRODUCT_EVENT.INTRODUCTION_COMPLETE],
+  );
+});
+
+test("a held day marker for the day this run already marked is one day, not two", async () => {
+  const hold = memoryHold(
+    heldRecord([
+      {
+        name: PRODUCT_EVENT.APP_DAY_ACTIVE,
+        at: NOON - DAY_MS,
+        properties: { app_version: APP_VERSION },
+      },
+      { name: PRODUCT_EVENT.APP_DAY_ACTIVE, at: HELD_AT, properties: { app_version: APP_VERSION } },
+    ]),
+  );
+  const { sender, requests } = sharingSender({ held: hold.seam });
+  sender.markDayActive();
+  await sender.flush();
+
+  assert.deepEqual(
+    sentEvents(recordedRequest(requests)).map((event) => event.at),
+    [NOON - DAY_MS, NOON],
+  );
+});
+
+test("a run that sends no network neither reads nor writes the hold", async () => {
+  let reads = 0;
+  const hold = memoryHold(
+    heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),
+  );
+  const counted: HeldProductEvents = {
+    read: Effect.tap(hold.seam.read, () =>
+      Effect.sync(() => {
+        reads += 1;
+      }),
+    ),
+    write: hold.seam.write,
+  };
+  const { sender, requests } = sharingSender({ sends: false, held: counted });
+  sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+  await sender.flush();
+
+  assert.deepEqual(requests, []);
+  assert.equal(reads, 0);
+  assert.deepEqual(hold.writes, []);
+});
+
+test("a sender not yet armed leaves the hold unread", async () => {
+  let reads = 0;
+  const hold = memoryHold(
+    heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),
+  );
+  const { sender, requests } = senderWith({
+    held: {
+      read: Effect.tap(hold.seam.read, () =>
+        Effect.sync(() => {
+          reads += 1;
+        }),
+      ),
+      write: hold.seam.write,
+    },
+  });
+  await sender.flush();
+
+  assert.deepEqual(requests, []);
+  assert.equal(reads, 0);
+  assert.deepEqual(hold.writes, []);
+});
+
+it.effect("stopping before the first flush leaves the earlier hold as it was", () =>
+  Effect.gen(function* () {
+    const runtime = yield* Effect.runtime<never>();
+    const hold = memoryHold(
+      heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),
+    );
+    const { sender } = sharingSender({ held: hold.seam, runtime });
+    sender.start();
+    sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
+    sender.stop();
+    assert.deepEqual(hold.writes, []);
+    assert.deepEqual(
+      hold.current()?.events.map((event) => event.name),
+      [PRODUCT_EVENT.INTRODUCTION_COMPLETE],
+    );
   }),
 );
