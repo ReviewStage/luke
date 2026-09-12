@@ -1,6 +1,6 @@
 import type { ProviderTranscriptSinceResult, Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { settledUnlessAborted } from "./effect/settled.js";
 import type { Generation } from "./generation.js";
@@ -78,7 +78,7 @@ export class WakeCapture {
    */
   readonly #lastLook = new NestedMap<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
-  #capturing: Promise<unknown> = Promise.resolve();
+  readonly #captures = Effect.unsafeMakeSemaphore(1);
   #capturesInFlight = 0;
 
   constructor(options: WakeCaptureOptions) {
@@ -123,11 +123,12 @@ export class WakeCapture {
    * the window arm — so a turn is scheduled over input that already stands
    * on disk. Wakes inside the window open one turn together, and wakes
    * during a model's quiet wait for it to end rather than being dropped.
-   * Settles once the capture has landed or been refused.
+   * Ends once the capture has landed or been refused.
    */
-  wake(events: readonly BrainWakeEvent[]): Promise<void> {
-    if (this.#seam.stopped() || events.length === 0) return Promise.resolve();
-    return this.#capture(events).then((captured) => {
+  wake(events: readonly BrainWakeEvent[]): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (this.#seam.stopped() || events.length === 0) return;
+      const captured = yield* this.#capture(events);
       if (this.#seam.stopped()) return;
       const generation = this.#seam.generation();
       if (!generation) return;
@@ -147,16 +148,20 @@ export class WakeCapture {
    * model is quiet, because the next look reads the same deltas; pending
    * wakes ride along rather than waiting for their own.
    */
-  rosterLook(): Promise<void> {
-    if (this.#seam.stopped()) return Promise.resolve();
-    const generation = this.#seam.generation();
-    if (!generation) return this.#seam.ready().then(() => this.rosterLook());
-    const looks = this.#ownLooks(this.#options.roster(), this.#seam.now());
-    // The look is captured before anything opens, like a wake: what each
-    // session gained stands in the inbox with its cursor, and the turn that
-    // follows — now, or the next one if the model is quiet or a turn is in
-    // flight — consumes it from there.
-    return this.#capture(looks).then((captured) => {
+  rosterLook(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (this.#seam.stopped()) return;
+      const generation = this.#seam.generation();
+      if (!generation) {
+        yield* Effect.promise(() => this.#seam.ready());
+        return yield* this.rosterLook();
+      }
+      const looks = this.#ownLooks(this.#options.roster(), this.#seam.now());
+      // The look is captured before anything opens, like a wake: what each
+      // session gained stands in the inbox with its cursor, and the turn that
+      // follows — now, or the next one if the model is quiet or a turn is in
+      // flight — consumes it from there.
+      const captured = yield* this.#capture(looks);
       if (this.#seam.stopped() || this.#options.turnInFlight()) return;
       if (generation !== this.#seam.generation()) return;
       if (this.#options.quietUntil() !== undefined) return;
@@ -194,10 +199,19 @@ export class WakeCapture {
    * what was read and leaves no entry. What remains is written with the
    * advanced capture cursors in one save, and a save the store refuses moves
    * no cursor in memory either. Answers how many entries were captured.
+   *
+   * The whole of it is uninterruptible, as the promise it replaces was
+   * unstoppable: between a cursor moving past what was read and the save that
+   * writes both, there is no point where the capture may be cut without
+   * losing a transcript nothing will read again. The one wait inside it is
+   * the signal race, which is `Effect.interruptible` for the reason
+   * `readWholeTranscript`'s is: the race ends by interrupting whichever arm
+   * lost, and under this region a wait on a signal that never fires could
+   * otherwise never be interrupted at all.
    */
-  #capture(events: readonly BrainWakeEvent[]): Promise<number> {
-    const work = async (): Promise<number> => {
-      await this.#seam.ready();
+  #capture(events: readonly BrainWakeEvent[]): Effect.Effect<number> {
+    const work = Effect.gen(this, function* () {
+      yield* Effect.promise(() => this.#seam.ready());
       const generation = this.#seam.generation();
       if (!generation || this.#seam.stopped() || generation.abort.signal.aborted) return 0;
       const fresh = events.filter(
@@ -219,7 +233,7 @@ export class WakeCapture {
         if (!read) {
           // The capture is not a turn and holds no fiber of its own, so the
           // generation's signal is raced here rather than left to interrupt one.
-          const delta = await this.#seam.carry(
+          const delta = yield* Effect.interruptible(
             settledUnlessAborted(
               readTranscriptDelta(event.identity, {
                 cursors: generation.captureCursors,
@@ -270,7 +284,7 @@ export class WakeCapture {
         generation.captureCursors.rollback(mark);
         return 0;
       }
-      const written = await this.#seam.ledger.captured(generation, entries);
+      const written = yield* Effect.promise(() => this.#seam.ledger.captured(generation, entries));
       if (!written) {
         generation.captureCursors.rollback(mark);
         this.#seam.report("Brain observation could not be captured");
@@ -286,14 +300,17 @@ export class WakeCapture {
         }
       }
       return entries.length;
-    };
-    this.#capturesInFlight += 1;
-    const settled = () => {
-      this.#capturesInFlight -= 1;
-    };
-    const run = this.#capturing.then(work, work);
-    this.#capturing = run.then(settled, settled);
-    return run;
+    });
+    return Effect.acquireUseRelease(
+      Effect.sync(() => {
+        this.#capturesInFlight += 1;
+      }),
+      () => this.#captures.withPermits(1)(Effect.uninterruptible(work)),
+      () =>
+        Effect.sync(() => {
+          this.#capturesInFlight -= 1;
+        }),
+    );
   }
 
   /**

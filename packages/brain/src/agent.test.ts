@@ -22,7 +22,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, TestClock } from "effect";
+import { Effect, Fiber, TestClock } from "effect";
 import { advanceHarness, ambientTimers, effectHarness, effectReviewing } from "./effect/harness.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
@@ -90,7 +90,7 @@ it.effect("an announce is delivered trimmed, and every output item is remembered
       ]),
       answered([reasoning("rs_2"), message("said it")]),
     );
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
 
     assert.equal(h.client.inputs.length, 2);
@@ -125,7 +125,7 @@ it.effect("an announce is delivered trimmed, and every output item is remembered
 it.effect("an ask returns the final text, carries pending wakes, and refuses announce", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
-    yield* Effect.promise(() => h.agent.wake([edge(DEF)]));
+    yield* h.agent.wake([edge(DEF)]);
     h.client.answers.push(
       answered([
         call("call_a", BRAIN_TOOL.ANNOUNCE, { briefing: "nope" }),
@@ -229,7 +229,7 @@ it.effect(
         h.client.answers.push(answered([call(`loop-${index}`, BRAIN_TOOL.LIST_SESSIONS, {})]));
       }
       h.client.answers.push(answered([message("")]));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
 
       assert.equal(h.client.inputs.length, rounds + 1);
@@ -248,7 +248,7 @@ it.effect("a failed turn rolls the memory and cursors back and persists nothing"
   Effect.gen(function* () {
     const h = yield* effectHarness();
     h.client.answers.push(failedAnswer("boom"));
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
     // The capture stands on disk; the failed inference left it unconsumed.
     assert.equal(h.persisted.length, 1);
@@ -258,7 +258,7 @@ it.effect("a failed turn rolls the memory and cursors back and persists nothing"
 
     // The same edge again is one observation, read once: the standing entry is
     // tried again rather than the transcript read twice.
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 6_000);
     assert.equal(h.client.inputs[1]?.length, 2);
     assert.deepEqual(
@@ -278,10 +278,10 @@ it.effect("a call that fails mid-loop rolls back the whole turn, calls and all",
       answered([call("call_1", BRAIN_TOOL.LIST_SESSIONS, {})]),
       failedAnswer("network"),
     );
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
     assert.equal(h.persisted.length, 1);
-    yield* Effect.promise(() => h.agent.wake([edge(DEF)]));
+    yield* h.agent.wake([edge(DEF)]);
     yield* advanceHarness(NOW + 6_000);
     assert.equal(
       itemsOfType(h.client.inputs[2] ?? [], RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length,
@@ -306,7 +306,7 @@ it.effect(
         answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "Still waiting on you." })]),
         answered([message("")]),
       );
-      h.agent.releaseHeld([{ briefing: "Checkout wants a decision.", decidedAt: NOW - 1 }]);
+      yield* h.agent.releaseHeld([{ briefing: "Checkout wants a decision.", decidedAt: NOW - 1 }]);
       yield* Effect.promise(() => settle());
       const input = h.client.inputs[0] ?? [];
       assert.deepEqual(input.slice(0, 2), prior);
@@ -329,7 +329,7 @@ it.effect(
           truncated: false,
         }),
       });
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(
         answered([
           ...OBSERVATION_ACTIONS,
@@ -370,7 +370,7 @@ it.effect(
         quietUntil: () => undefined,
       };
       const h = yield* effectHarness({ client: hung, executionDeadlineMs: 60_000 });
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       yield* Effect.promise(() => settle());
       assert.equal(h.traces.length, 0, "the turn is still holding the model");
@@ -380,7 +380,7 @@ it.effect(
       assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
       assert.equal(h.traces[0]?.error, "execution deadline passed");
       // The next turn is not stuck behind the dead one.
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       assert.equal(h.traces.length, 2);
       yield* Effect.promise(() => h.agent.stop());
@@ -405,7 +405,7 @@ it.effect(
           transcript: INSTRUCTION_IN_DATA,
         }),
       });
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(
         // The model reads the whole transcript first, and its answer carries the
         // same instruction; the next emission is every action plus a briefing.
@@ -444,7 +444,7 @@ it.effect("a roster look under a policy denying actions runs none", () =>
       }),
     });
     h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assertNoActionReached(h);
     assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
@@ -455,7 +455,7 @@ it.effect("a hold release under a policy denying actions runs none", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness({ prepareTurn: NO_ACTS_POLICY });
     h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
-    h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1 }]);
+    yield* h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1 }]);
     yield* Effect.promise(() => settle());
     assertNoActionReached(h);
     assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
@@ -859,7 +859,7 @@ it.effect(
           }),
       });
       h.client.answers.push(answered([message("seen")]));
-      const capture = h.agent.wake([edge(ABC)]);
+      const capture = yield* Effect.fork(h.agent.wake([edge(ABC)]));
       yield* Effect.promise(() => settle());
       assert.ok(releaseRead);
       assert.equal(yield* Effect.promise(() => h.store.clear()), true);
@@ -869,7 +869,7 @@ it.effect(
         cursor: "old-cursor",
         truncated: false,
       });
-      yield* Effect.promise(() => capture);
+      yield* Fiber.join(capture);
       yield* advanceHarness(NOW + 3_000);
       // The late read captures nothing into the new generation: no entry, no
       // cursor of either kind, no inference, no briefing.
@@ -934,7 +934,7 @@ it.effect(
 
       // A capture whose delta read is held blocks no ask: the capture is not the
       // run's, so the ask opens on the inbox as it stands and answers.
-      const capture = h.agent.wake([edge(DEF)]);
+      const capture = yield* Effect.fork(h.agent.wake([edge(DEF)]));
       h.client.answers.push(answered([message("proceeding")]));
       const second = acceptedRunId(yield* Effect.promise(() => submit(h, "and this?")));
       assert.equal(deltas.length, 1);
@@ -950,7 +950,7 @@ it.effect(
         truncated: false,
       });
       reads[0]?.({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "late" });
-      yield* Effect.promise(() => capture);
+      yield* Fiber.join(capture);
       assert.deepEqual(h.repository.state?.captureCursors, { [claude.id]: { def: "c" } });
       assert.equal(h.repository.state?.inbox.length, 1);
       assert.deepEqual(h.repository.state?.cursors, {});
@@ -961,11 +961,11 @@ it.effect(
       assert.equal(h.repository.state?.inbox.length, 0);
 
       // A stop settles a held capture read too: nothing is captured, and the queue drains behind it.
-      const held = h.agent.wake([edge(ABC)]);
+      const held = yield* Effect.fork(h.agent.wake([edge(ABC)]));
       yield* Effect.promise(() => settle());
       assert.equal(deltas.length, 2);
       yield* Effect.promise(() => h.agent.stop());
-      yield* Effect.promise(() => held);
+      yield* Fiber.join(held);
       assert.equal(h.repository.state?.inbox.length, 0);
     }),
 );
@@ -1012,9 +1012,9 @@ it.effect(
       yield* Effect.promise(() => settle());
       // Every observation kind queues behind the held act: a hold release with an
       // old briefing, a roster look, a coalesced wake, and a quiet retry's wakes.
-      h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW }]);
-      yield* Effect.promise(() => h.agent.wake([edge(DEF)]));
-      h.agent.rosterLook();
+      yield* h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW }]);
+      yield* h.agent.wake([edge(DEF)]);
+      yield* h.agent.rosterLook();
       yield* advanceHarness(NOW + 3_000);
       assert.equal(yield* Effect.promise(() => h.store.clear()), true);
       assert.equal(h.agent.pendingWakes(), 0);
@@ -1045,7 +1045,7 @@ it.effect(
         answered([message("")]),
       );
       // The capture lands first; it is the turn's final write that is held.
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       const releasing = h.repository.hold();
       yield* advanceHarness(NOW + 3_000);
       assert.ok(h.repository.holding, "the turn is in its final write");
@@ -1069,7 +1069,7 @@ it.effect(
         ]),
         answered([message("")]),
       );
-      yield* Effect.promise(() => later.agent.wake([edge(ABC)]));
+      yield* later.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       assert.deepEqual(
         later.deliveries.map((delivery) => delivery.briefing),
@@ -1151,7 +1151,7 @@ it.effect(
       assert.notEqual(h.store.generationId(), "gen-stale");
       // The cursor died with the generation: the next look reads from the start.
       h.client.answers.push(answered([message("")]));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       assert.equal(h.sinceReads.at(-1)?.cursor, undefined);
 
@@ -1168,7 +1168,7 @@ it.effect(
       // fires along the way either.
       yield* TestClock.setTime(born.expiresAt);
       idle.client.answers.push(answered([message("")]));
-      yield* Effect.promise(() => idle.agent.wake([edge(ABC)]));
+      yield* idle.agent.wake([edge(ABC)]);
       yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
       assert.notEqual(idle.store.generationId(), born.generationId);
       assert.equal(idle.store.current()?.requests.length, 0);

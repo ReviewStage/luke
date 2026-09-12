@@ -115,7 +115,10 @@ it.scoped("a pass that outlives its disarm does not run the after-run hook", () 
       gate: () => enabled,
       intervalMs: 60_000,
       run: () => Deferred.await(pending),
-      afterRun: () => hooks.push(1),
+      afterRun: () =>
+        Effect.sync(() => {
+          hooks.push(1);
+        }),
     });
     const gate = yield* cadenceGate(loop.cadence);
     yield* gate.arm;

@@ -617,14 +617,16 @@ export class BrainAgent {
 
   /**
    * Captures wake events into the durable inbox and arms the coalescing
-   * window; settles once the capture has landed or been refused.
+   * window; ends once the capture has landed or been refused. The host runs
+   * it on its own runtime, so the capture is a fiber of the same runtime
+   * every turn of this conversation is one of.
    */
-  wake(events: readonly BrainWakeEvent[]): Promise<void> {
+  wake(events: readonly BrainWakeEvent[]): Effect.Effect<void> {
     return this.#wakes.wake(events);
   }
 
   /** One look at the whole roster, driven by the host's observation pass rather than an internal timer. */
-  rosterLook(): Promise<void> {
+  rosterLook(): Effect.Effect<void> {
     return this.#wakes.rosterLook();
   }
 
@@ -634,28 +636,30 @@ export class BrainAgent {
    * in the same turn, ahead of the held briefings, so the decision is made
    * knowing everything that happened during the hold.
    */
-  releaseHeld(held: readonly BrainDelivery[]): void {
-    if (this.#stopped || held.length === 0) return;
-    const generation = this.#generations.standing();
-    if (!generation) {
-      // The state is still loading: the briefings wait for the generation
-      // they will be re-decided in.
-      void this.ready().then(() => this.releaseHeld(held));
-      return;
-    }
-    this.#wakes.take();
-    void this.#queueTurn(BRAIN_TURN_TRIGGER.HOLD_RELEASED, () =>
-      this.#turns.turn({
-        generation,
-        trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
-        deliveries: new SteeredDeliveries(),
-        events: inboxEvents(generation.inbox),
-        open: (attached: readonly BrainWakeEvent[], now: number) => [
-          ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
-          holdReleasedInputText(held, now),
-        ],
-      }),
-    );
+  releaseHeld(held: readonly BrainDelivery[]): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (this.#stopped || held.length === 0) return;
+      const generation = this.#generations.standing();
+      if (!generation) {
+        // The state is still loading: the briefings wait for the generation
+        // they will be re-decided in.
+        yield* Effect.promise(() => this.ready());
+        return yield* this.releaseHeld(held);
+      }
+      this.#wakes.take();
+      void this.#queueTurn(BRAIN_TURN_TRIGGER.HOLD_RELEASED, () =>
+        this.#turns.turn({
+          generation,
+          trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+          deliveries: new SteeredDeliveries(),
+          events: inboxEvents(generation.inbox),
+          open: (attached: readonly BrainWakeEvent[], now: number) => [
+            ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
+            holdReleasedInputText(held, now),
+          ],
+        }),
+      );
+    });
   }
 
   /**

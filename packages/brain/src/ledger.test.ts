@@ -8,7 +8,7 @@ import {
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
 import { advanceHarness, effectHarness, timerSeamFromRuntime } from "./effect/harness.js";
@@ -640,9 +640,12 @@ it.effect("an ordinary observation checkpoint composed behind a held mark keeps 
     // Periodic observation races the publication: its inference and checkpoint
     // queue behind the held mark write.
     h.client.answers.push(answered([message("noted")]));
-    h.agent.rosterLook();
+    // Forked: the look's own capture queues behind the held write too, so a
+    // test that waits for it before releasing the write waits forever.
+    const looking = yield* Effect.fork(h.agent.rosterLook());
     yield* Effect.promise(() => settle());
     releaseWrite(true);
+    yield* Fiber.join(looking);
     assert.equal(yield* Effect.promise(() => marking), true);
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 2);
@@ -675,7 +678,7 @@ it.effect(
           h.agent.markAskRecorded(first, NOW),
         ]),
       );
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       assert.equal(second.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       assert.equal(end?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
@@ -857,8 +860,8 @@ it.effect(
       yield* Effect.promise(() => observing.agent.ready());
       // The pending wake rides in the hold release's turn: one observation that
       // reads a real delta, moves a cursor, and then waits on the model.
-      yield* Effect.promise(() => observing.agent.wake([edge(ABC)]));
-      observing.agent.releaseHeld([{ briefing: "UNCOMMITTED_OBSERVATION", decidedAt: NOW }]);
+      yield* observing.agent.wake([edge(ABC)]);
+      yield* observing.agent.releaseHeld([{ briefing: "UNCOMMITTED_OBSERVATION", decidedAt: NOW }]);
       yield* Effect.promise(() => settle());
       // The delta was captured — an inbox entry and a capture cursor — and read
       // into working memory; the consumed cursor has not moved; the model is held.
@@ -1048,7 +1051,7 @@ it.effect(
       // A later working checkpoint — an observation turn's — writes the agent's
       // journal again, and the pruned runs stay gone.
       h.client.answers.push(answered([message("")]));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       const after = h.repository.state;
       assert.deepEqual(new Set(after?.journal.map((entry) => entry.runId)), new Set(runIds));

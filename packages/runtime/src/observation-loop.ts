@@ -27,7 +27,7 @@ export interface ObservationLoopOptions {
   gate: () => boolean;
   intervalMs: number;
   run: (generation: number) => Effect.Effect<void>;
-  afterRun?: () => void;
+  afterRun?: () => Effect.Effect<void>;
   /**
    * Where a pass the cadence started reports its own failure. The interval
    * before it kept running whatever a pass threw, so the schedule may not end
@@ -118,10 +118,13 @@ export class ObservationLoop {
         // pass the loop still owns. A pass that outlived its stop has no clock
         // behind it — running the hook there would draw the roster again over
         // the empty one the stop just published.
-        if (this.isCurrent(generation)) this.#options.afterRun?.();
-        if (!this.#queued) return Effect.void;
+        const after = this.isCurrent(generation) ? this.#options.afterRun?.() : undefined;
+        if (!this.#queued) return after ?? Effect.void;
         this.#queued = false;
-        return Effect.asVoid(Effect.forkDaemon(this.refresh));
+        return Effect.zipRight(
+          after ?? Effect.void,
+          Effect.asVoid(Effect.forkDaemon(this.refresh)),
+        );
       }),
     );
   });

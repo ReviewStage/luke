@@ -536,7 +536,11 @@ read (the stored voice hotkey) onto `settings.store` directly; its own caller,
 `requestOnboardingBeat`, is still a plain async function rather than a fiber,
 so it runs `arrivalBeat` to a promise on the same captured runtime beside its
 existing `gateOfferable` run, one line above where that already stood. Neither
-changes what file this is: `compose-live.ts` was already on the list.
+changes what file this is: `compose-live.ts` was already on the list. P12-16c
+added one more of the same shape and for the same reason: the brain's
+`releaseHeld` is an effect, and `LiveSessionService`'s `releaseHeldBriefings`
+option is a synchronous callback, so the effect is forked onto that runtime
+until the service answers effects itself.
 
 `composeObservation`'s entry above was widened in P12-14f and narrowed again
 in P12-15e: every one of its nine `awaitedSettingsStore` reads moved onto
@@ -1019,10 +1023,11 @@ under an uninterruptible region, where only the signal can end it, and one
 whose value must be owned by exactly one party.
 
 What keeps this one door is what the brain is still asked for in promises:
-`BrainAgent`'s own public surface — an ask, a wake, a child's task, a stop —
-and the reset's own capture, which `packages/host/src/brain/wiring.ts` awaits
-because `resetConversation` answers the host a promise rather than because
-the capture is one. The `MemoryProvider` seam left that list in P12-16a:
+`BrainAgent`'s own public surface — an ask, a child's task, a stop — and the
+reset's own capture, which `packages/host/src/brain/wiring.ts` awaits because
+`resetConversation` answers the host a promise rather than because the capture
+is one. The wake face left that surface in P12-16c, named below. The
+`MemoryProvider` seam left that list in P12-16a:
 `recall`, `capture`, and a memory tool's `execute` are each an `Effect` the
 turn's own fiber runs, so the flush before a compaction is one effect inside
 another and the host's memory maintenance builds the housekeeping turn's
@@ -1038,7 +1043,17 @@ the summary — because a slot runs while the developer is still speaking and
 has no fiber of its own until P12-02 gives it one. A defect is squashed back to the error that
 caused it, so a store, a listener, or an engine that threw reaches the caller
 as the error it threw rather than as the fiber failure that carried it.
-P12-04 deletes it with those seams.
+P12-04 deletes it with those seams. What still awaits this door after P12-16c
+is these and nothing else: the turn runner's `runAsk` and `turn`, because
+the conversation's own serial queue and the host's lane both take a
+`() => Promise<T>`; `Maintenance`'s housekeeping turn, which rides that same
+queue; the generation's context open, which `generationFrom` must hold as a
+promise so the object is built in one synchronous statement; the prefetch's
+plan, planner call, and summary, and the whole-transcript read the agent
+builds for it; and `resetConversation`'s capture in the host. Each is named
+where it stands, and the ask face — with the conversation's serial queue and
+the host's lane beneath it — is what moves the turn runner's two and the
+maintenance's one.
 
 What the door does not carry is the other two seams. `ModelAdapter` and
 `ContextEngine` stay as the host hands them in, because each is owned above
@@ -1082,8 +1097,9 @@ workspace port answers (`packages/memory/src/provider.ts`).
 
 The rest of this package's Promise faces turned out to stand on
 `BrainAgent`'s own public surface rather than on the vocabulary's: a wake, an
-ask, a run event's subscriber, and the generation a replacement installs are
-each answered to a host that holds a promise and not a fiber. Three of those
+ask, a run event's subscriber, and the generation a replacement installs were
+each answered to a host that held a promise and not a fiber, and P12-16c took
+the wake out. Three of those
 four needed no fiber at all, and P7-08b took the runs out rather than moving
 them: the wakes waiting for a turn (`packages/brain/src/wake-queue.ts`), the
 pending-submission map (`AskLedger`), and which generation stands
@@ -1138,6 +1154,27 @@ The coalescing timer the wake queue arms is untouched by that, since it is
 still the injected `schedule`/`cancel` seam a real elapsed-time wait stands
 behind rather than anything the queue runs.
 
+`BrainAgent`'s wake face needed no allowlist entry at all. `wake`,
+`rosterLook`, and `releaseHeld` are `Effect.Effect<void>` since P12-16c, and
+what runs them is the composer that always asked for them:
+`compose-observation.ts` yields the look from the observation loop's own pass,
+through an `afterRun` hook that is an effect rather than a `void` callback, and
+`compose-live.ts` forks the release onto the runtime it already holds because
+`LiveSessionService` hands its held briefings back through a synchronous
+callback. Each stays fire-and-forget where it always was: the host's wiring
+forks one fiber per conversation with `Effect.forkDaemon`, exactly as it
+detached one promise per conversation before, so a provider slow to answer one
+session's transcript holds neither the next pass nor the other sessions'
+looks. What that moved off `carryOn` is the capture's own transcript delta:
+`WakeCapture` reads it on the caller's fiber now, with the whole capture
+`Effect.uninterruptible` because the promise it replaces was unstoppable —
+between a cursor moving past what was read and the save that writes both there
+is no point where a capture may be cut without losing a transcript nothing
+will read again — and the signal race inside it `Effect.interruptible` for the
+reason `readWholeTranscript`'s is. The captures still run one at a time, on an
+`Effect.unsafeMakeSemaphore(1)` where a promise chain stood, so two reads of
+one session never race each other's cursor.
+
 `cloudPass` in `packages/providers/src/shared/cloud-pass.ts` no longer needs an
 allowlist entry: its reads and its one write are effects over the ambient
 `HttpClient` — `FetchHttpClient.layer`, or a test's own `httpClient` layer,
@@ -1186,8 +1223,14 @@ context the runtime answers is an effect now, carried to the promise the
 generation holds by the agent's own door rather than run here. The close
 stays, because the fence has to: the store announces a replacement in a
 synchronous callback, and the dead generation must stand nowhere before the
-caller's next statement. It goes in P12-04, with the surface that makes that
-callback a promise one.
+caller's next statement. P12-16c settled that this is where it ends rather
+than a deletion still owed. Holding the close in a `MutableRef` — the other
+shape considered, a release function stored beside the generation and called
+as a statement — would move the `runSync` into whoever filled the cell and
+buy nothing: the two finalizers are synchronous either way, and a `Scope` is
+what already states reverse order and closing exactly once. So the row is
+permanent, and what it costs is one `Effect.runSync` of two synchronous
+finalizers on a path that must not wait.
 
 `runAdapterRead` in the same package's `promise-face.ts` is the one face every
 adapter answers a `SessionProviderPlugin` from. Claude Code's and Codex's reads
@@ -1335,7 +1378,7 @@ design decision stated as such:
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e for `runTool`'s seams, which need the request's `SqlClient` rather than a runner, and P12-18c for `relay`'s; P12-18b took the turn event stream and the voice compositions off it |
 | `Promised<Methods>`, the mapped type `brainHost`'s `relay` hands `StreamRelay` and `carryStop`, and the promise-era suites' `promisedWriter`/`promisedAsks` | P10-16 | P12-18c for the relay and its stop carrier; with each suite as it moves onto `it.effect` |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
-| `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
+| `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | never — P12-16c settled it: the fence must stay synchronous, so the row is bookkeeping rather than a deletion owed |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h, both deleted in P12-16d) |
 | `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | deleted by P12-14i |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
@@ -1343,11 +1386,11 @@ design decision stated as such:
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
-The three permanent entries are not unfinished work. A `GATEWAY_ERROR` code
+The permanent entries in the table above are not unfinished work. A `GATEWAY_ERROR` code
 and the envelope shape in `packages/gateway/src/protocol.ts` are what a client
 speaks, and a client is not upgraded by this repository's merge queue; the
 goldens in `packages/gateway/fixtures/protocol` are what keeps both
-byte-stable. The third is `storeClient`'s face, above: the promises it answers
+byte-stable. Another is `storeClient`'s face, above: the promises it answers
 are the shape the OpenClaw ports beneath it read, and a port imports nothing
 from `effect` by a rule of this repository's own. A permanent row stays on
 `effect-edges.json`'s `runShims` list like any other, because the lint reads

@@ -99,7 +99,7 @@ it.effect(
         },
       });
       inner.answers.push(answered([messageAction("act_1")]), answered([message("done")]));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       assert.equal(held.performed.length, 1, "the action is out at the performer");
 
@@ -146,7 +146,7 @@ it.effect(
         }),
       });
       h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       assertNoActionReached(h);
     }),
@@ -168,11 +168,11 @@ it.effect("an action in a turn the developer did not open is Luke's own", () =>
         sessions: [session(ABC.providerSessionId, { detail: { activity: "running tests" } })],
       }),
     });
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
-    yield* Effect.promise(() => h.agent.rosterLook());
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
-    h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+    yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
     yield* Effect.promise(() => settle());
     const observation = h.traces.filter((trace) => trace.trigger !== BRAIN_TURN_TRIGGER.ASK);
     assert.ok(observation.length >= 3);
@@ -206,7 +206,7 @@ it.effect(
           truncated: false,
         }),
       });
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       assert.equal(h.client.inputs.length, 0, "nothing was sent before the capture landed");
       const captured = h.persisted.at(-1);
       assert.equal(h.persisted.length, 1, "the capture is its own save");
@@ -234,7 +234,7 @@ it.effect(
     Effect.gen(function* () {
       const h = yield* effectHarness();
       h.client.answers.push(failedAnswer("upstream down"));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       const after = h.persisted.at(-1);
       assert.equal(after?.inbox.length, 1, "a failed turn consumed nothing");
@@ -244,7 +244,7 @@ it.effect(
       });
 
       h.client.answers.push(answered([message("read")]));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC, NOW + 10_000)]));
+      yield* h.agent.wake([edge(ABC, NOW + 10_000)]);
       yield* advanceHarness(NOW + 20_000);
       const settled = h.persisted.at(-1);
       assert.deepEqual(settled?.inbox, [], "the turn that ran consumed them");
@@ -273,10 +273,10 @@ it.effect(
           sessions: [session(ABC.providerSessionId)],
         }),
       });
-      yield* Effect.promise(() => h.agent.rosterLook());
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       const captures = h.persisted.length;
-      yield* Effect.promise(() => h.agent.rosterLook());
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       assert.equal(
         h.persisted.length,
@@ -290,7 +290,7 @@ it.effect(
         ...edge(ABC, NOW + 100),
         session: session(ABC.providerSessionId, { detail: { activity: "running tests" } }),
       };
-      yield* Effect.promise(() => h.agent.wake([twice, { ...twice }]));
+      yield* h.agent.wake([twice, { ...twice }]);
       const entries = h.persisted.at(-1)?.inbox ?? [];
       assert.equal(
         entries.filter((entry) => entry.atMs === NOW + 100).length,
@@ -324,7 +324,7 @@ it.effect("a whole-transcript read is cut from the front to 60,000 characters", 
       ]),
       answered([message("")]),
     );
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
     const [read] = itemsOfType(
       h.client.inputs[1] ?? [],
@@ -356,7 +356,7 @@ it.effect("read_transcript is refused for any identity the roster does not hold"
       ]),
       answered([message("")]),
     );
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
     assert.deepEqual(h.wholeReads, [], "no provider file was opened for it");
   }),
@@ -488,7 +488,7 @@ it.effect("a briefing leaves only from a turn that still stands", () =>
       answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { briefing: "abc needs you" })]),
       answered([message("")]),
     );
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
     assert.deepEqual(
       h.deliveries.map((delivery) => delivery.briefing),
@@ -502,7 +502,7 @@ it.effect("a briefing leaves only from a turn that still stands", () =>
       answered([call("call_brief", BRAIN_TOOL.ANNOUNCE, { briefing: "never spoken" })]),
       answered([message("")]),
     );
-    yield* Effect.promise(() => other.agent.wake([edge(ABC)]));
+    yield* other.agent.wake([edge(ABC)]);
     // Advances past the wake's own coalesce timer, which dispatches the turn
     // into the gated client's held model call — the turn genuinely mid-flight,
     // never a guess about which of two pending microtasks runs first.

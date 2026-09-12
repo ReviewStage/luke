@@ -137,7 +137,7 @@ export const effectReviewing = (
     const gated = gatedClient(inner);
     const h = yield* effectHarness({ client: gated.client });
     inner.answers.push(answered([message("nothing spoken")]), ...replies);
-    h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+    yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
     yield* Effect.promise(() => settle());
     return {
       h,

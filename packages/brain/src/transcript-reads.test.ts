@@ -46,7 +46,7 @@ it.effect(
         ]),
         answered([message("")]),
       );
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       yield* advanceHarness(NOW + 3_000);
       const outputs = itemsOfType(
         h.client.inputs[1] ?? [],
@@ -72,7 +72,7 @@ it.effect("a delta longer than its bound is cut from the front and marked trunca
         truncated: false,
       }),
     });
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);
     assert.deepEqual(h.persisted.at(-1)?.cursors, {});
   }),

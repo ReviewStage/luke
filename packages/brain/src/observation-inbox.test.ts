@@ -54,8 +54,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC, NOW + 500), edge(DEF, NOW + 1_000)]));
+      yield* h.agent.wake([edge(ABC)]);
+      yield* h.agent.wake([edge(ABC, NOW + 500), edge(DEF, NOW + 1_000)]);
       assert.equal(h.client.inputs.length, 0);
       yield* advanceHarness(NOW + 3_000);
 
@@ -93,7 +93,7 @@ it.effect("the same session id under two providers is two identities, each read 
     const h = yield* effectHarness({
       roster: () => ({ text: "roster", identities: [ABC, codexAbc] }),
     });
-    yield* Effect.promise(() => h.agent.wake([edge(ABC), edge(codexAbc), edge(ABC, NOW + 500)]));
+    yield* h.agent.wake([edge(ABC), edge(codexAbc), edge(ABC, NOW + 500)]);
     yield* advanceHarness(NOW + 3_000);
 
     assert.equal(h.client.inputs.length, 1);
@@ -119,7 +119,7 @@ it.effect("the same session id under two providers is two identities, each read 
 it.effect("stop opens nothing more, and a captured observation stays for the next agent", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
-    yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+    yield* h.agent.wake([edge(ABC)]);
     yield* Effect.promise(() => h.agent.stop());
     assert.equal(h.agent.pendingWakes(), 1);
     assert.equal(h.repository.state?.inbox.length, 1);
@@ -174,7 +174,7 @@ it.effect(
           };
         },
       });
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
 
       // The cloud session is the only one read, through the same seam a local
@@ -214,7 +214,7 @@ it.effect("a cloud session seen working and then reported failed opens a look fo
       readTranscriptSince: async () => NO_TRANSCRIPT,
     });
     h.client.answers.push(answered([message("")]), answered([message("")]));
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 1);
 
@@ -222,7 +222,7 @@ it.effect("a cloud session seen working and then reported failed opens a look fo
       status: SESSION_STATUS.ERROR,
       detail: { error: "The agent stopped on an error." },
     });
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 2);
     const entry = h.persisted
@@ -242,11 +242,11 @@ it.effect("two identical cloud looks capture once", () =>
       readTranscriptSince: async () => NO_TRANSCRIPT,
     });
     h.client.answers.push(answered([message("")]));
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 1);
     const captures = h.persisted.length;
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.persisted.length, captures);
     assert.equal(h.client.inputs.length, 1);
@@ -268,7 +268,7 @@ it.effect("a roster look is skipped while the client is quiet or a turn is in fl
 
     // Quiet: the look is skipped.
     h.client.quiet = NOW + 30_000;
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 0);
 
@@ -285,7 +285,7 @@ it.effect("a roster look is skipped while the client is quiet or a turn is in fl
     };
     const asked = ask(h, "what's up?");
     yield* Effect.promise(() => settle());
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 0);
     release?.();
@@ -295,7 +295,7 @@ it.effect("a roster look is skipped while the client is quiet or a turn is in fl
 
     // After the turn completes, a look that finds the session moved proceeds.
     status = SESSION_STATUS.WAITING;
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 2);
     assert.equal(h.traces.at(-1)?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
@@ -316,7 +316,7 @@ it.effect("a conversation that observes no session opens no look, however the ro
         ],
       }),
     });
-    h.agent.rosterLook();
+    yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     // No transcript is read and no inference opens: this conversation's turns
     // are the developer's asks and its own scheduled review.
@@ -331,11 +331,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      yield* Effect.promise(() => h.agent.wake([edge(ABC), edge(ABC)]));
+      yield* h.agent.wake([edge(ABC), edge(ABC)]);
       assert.equal(h.agent.pendingWakes(), 1);
-      yield* Effect.promise(() =>
-        h.agent.wake(Array.from({ length: 40 }, (_, index) => edge(DEF, NOW + index))),
-      );
+      yield* h.agent.wake(Array.from({ length: 40 }, (_, index) => edge(DEF, NOW + index)));
       assert.equal(h.agent.pendingWakes(), 41);
     }),
 );
@@ -363,7 +361,7 @@ it.effect(
         },
       });
       for (let index = 0; index < 25; index += 1) {
-        yield* Effect.promise(() => quiet.agent.wake([edge(ABC, NOW + index)]));
+        yield* quiet.agent.wake([edge(ABC, NOW + index)]);
       }
       assert.equal(quiet.agent.pendingWakes(), 25);
       const stored = quiet.repository.state;
@@ -389,7 +387,7 @@ it.effect(
       assert.equal(relaunched.repository.state?.inbox.length, 5);
       // The next look finds nothing new in the transcript and still opens the
       // turn the standing captures are owed.
-      relaunched.agent.rosterLook();
+      yield* relaunched.agent.rosterLook();
       yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
       yield* Effect.promise(() => settle());
       assert.equal(relaunched.client.inputs.length, 2);
@@ -423,7 +421,7 @@ it.effect(
         }),
       });
       h.client.answers.push(answered([message("")]));
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 1);
       assert.deepEqual(notices[0]?.identities, [ABC]);
@@ -431,16 +429,16 @@ it.effect(
       assert.deepEqual(Object.keys(h.repository.state?.cursors["claude-code"] ?? {}), ["abc"]);
       // Nothing gained and the session unchanged: the look is suppressed, deterministically.
       text = "";
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 1);
       assert.equal(notices.length, 1);
       // The transcript growing opens a look again.
       text = "more words";
       h.client.answers.push(answered([message("")]));
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 2);
     }),
@@ -476,16 +474,14 @@ it.effect(
       // Neither the look nor a wake opens an inference over an
       // exchange being heard first-hand, and nothing is written down to open one
       // later — but the capture cursor moves past what was said.
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
-      yield* Effect.promise(() =>
-        h.agent.wake([
-          {
-            ...edge(ABC),
-            session: session("abc", { status: SESSION_STATUS.WORKING, realtimeVoiceLive: true }),
-          },
-        ]),
-      );
+      yield* h.agent.wake([
+        {
+          ...edge(ABC),
+          session: session("abc", { status: SESSION_STATUS.WORKING, realtimeVoiceLive: true }),
+        },
+      ]);
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 0);
       assert.equal(h.repository.state?.inbox.length ?? 0, 0);
@@ -497,14 +493,14 @@ it.effect(
       // The exchange ending is not news: with nothing gained since, the look
       // opens nothing and replays none of what the developer heard themselves.
       live = false;
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 0);
 
       // A fresh turn after it is read from where the exchange left off.
       transcript += "\nassistant: back to typing";
       h.client.answers.push(answered([message("")]));
-      h.agent.rosterLook();
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       assert.equal(h.client.inputs.length, 1);
       assert.equal(
@@ -520,21 +516,19 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      yield* Effect.promise(() =>
-        h.agent.wake([
-          {
-            ...edge(ABC),
-            session: session("abc", { holdingForDeveloper: true }),
-          },
-          {
-            ...edge(DEF),
-            session: session("def", {
-              status: SESSION_STATUS.COMPLETE,
-              completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
-            }),
-          },
-        ]),
-      );
+      yield* h.agent.wake([
+        {
+          ...edge(ABC),
+          session: session("abc", { holdingForDeveloper: true }),
+        },
+        {
+          ...edge(DEF),
+          session: session("def", {
+            status: SESSION_STATUS.COMPLETE,
+            completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+          }),
+        },
+      ]);
       yield* advanceHarness(NOW + 3_000);
       yield* Effect.promise(() => settle());
       const opening = itemText(
@@ -563,7 +557,7 @@ it.effect(
       acceptedRunId(yield* Effect.promise(() => submit(h, "first?")));
       yield* Effect.promise(() => settle());
       const queued = acceptedRunId(yield* Effect.promise(() => submit(h, "second, queued")));
-      yield* Effect.promise(() => h.agent.wake([edge(DEF)]));
+      yield* h.agent.wake([edge(DEF)]);
       yield* Effect.promise(() => settle());
       assert.equal(h.agent.pendingWakes(), 1);
       // The process dies with the first running, the second steered or queued, and a captured observation waiting.

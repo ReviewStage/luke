@@ -77,7 +77,7 @@ const liveSessionTimersOnRuntime = (runtime: Runtime.Runtime<never>) => {
 
 /** What the live session reaches in the brain that re-decides a held briefing. */
 interface LiveLinks {
-  releaseHeld: (briefings: readonly BrainDelivery[]) => void;
+  releaseHeld: (briefings: readonly BrainDelivery[]) => Effect.Effect<void>;
 }
 
 export interface LiveComposer extends Composer {
@@ -159,7 +159,12 @@ export const composeLive = (
       // composer's effect is run on the host's own runtime here until that
       // service answers effects itself.
       quietNow: () => Runtime.runPromise(runtime)(calendars.announcementsQuietNow(now())),
-      releaseHeldBriefings: (held) => links().releaseHeld(held),
+      // `LiveSessionService` hands its held briefings back through a
+      // synchronous callback, so the brain's own effect is forked onto this
+      // composition's runtime here until that service answers effects itself.
+      releaseHeldBriefings: (held) => {
+        Runtime.runFork(runtime)(links().releaseHeld(held));
+      },
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
       now: timers.now,
       schedule: timers.schedule,

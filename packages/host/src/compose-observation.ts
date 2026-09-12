@@ -66,7 +66,7 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
 
 /** What observation reaches in the brain: the look the pass ends with. */
 interface ObservationLinks {
-  rosterLook: () => void;
+  rosterLook: () => Effect.Effect<void>;
 }
 
 export interface ObservationComposer extends Composer {
@@ -367,9 +367,7 @@ export const composeObservation = (
           }),
           FetchHttpClient.layer,
         ),
-      afterRun: () => {
-        links().rosterLook();
-      },
+      afterRun: () => links().rosterLook(),
     });
 
     /**

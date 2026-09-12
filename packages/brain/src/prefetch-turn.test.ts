@@ -102,7 +102,7 @@ it.effect(
       h.agent.anticipateAsk(anticipation);
       yield* Effect.promise(() => settle());
       h.client.answers.push(answered([message("nothing to announce")]));
-      yield* Effect.promise(() => h.agent.rosterLook());
+      yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
       while (h.agent.busy()) yield* Effect.promise(() => settle());
       const look = h.client.inputs[0];
