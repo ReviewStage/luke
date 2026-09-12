@@ -3,7 +3,6 @@ import {
   GOOGLE_CALENDAR_ID,
   GOOGLE_CALENDAR_NAME,
 } from "@sidecar/calendar/vocabulary";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 
 /**
  * The services connected by consent rather than by a pasted key: the panel
@@ -13,15 +12,13 @@ import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
  * holds it, and a slot that cannot say whose ask it is would be the same
  * pill for all of them.
  *
- * Linear's id is the credential registry's, because Linear is a service Luke
- * holds one credential for. Each calendar's is its own: Google's holds
- * several accounts at once, which the per-provider registry does not model,
- * and Apple's holds no credential at all.
+ * Each calendar's id is its own: Google's holds several accounts at once,
+ * which the per-provider credential registry does not model, and Apple's
+ * holds no credential at all.
  */
 export const CONSENT_SERVICE_ID = {
   APPLE_CALENDAR: APPLE_CALENDAR_ID,
   GOOGLE_CALENDAR: GOOGLE_CALENDAR_ID,
-  LINEAR: CREDENTIAL_PROVIDER_ID.LINEAR,
 } as const;
 
 export type ConsentServiceId = (typeof CONSENT_SERVICE_ID)[keyof typeof CONSENT_SERVICE_ID];
@@ -32,9 +29,6 @@ export const CONSENT_SERVICE_NAME = {
   // the system's own, not Apple Calendar's.
   [CONSENT_SERVICE_ID.APPLE_CALENDAR]: "macOS",
   [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: GOOGLE_CALENDAR_NAME,
-  // Not the registry's `displayName` by lookup: the wait says "Waiting for
-  // Linear…", and the two must be the same word.
-  [CONSENT_SERVICE_ID.LINEAR]: "Linear",
 } as const satisfies Readonly<Record<ConsentServiceId, string>>;
 
 /** How every browser-consent wait reads; the services differ only upstream. */
@@ -61,7 +55,6 @@ export const CONSENT_SERVICE_WAIT = {
     settingsPane: true,
   },
   [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: BROWSER_WAIT,
-  [CONSENT_SERVICE_ID.LINEAR]: BROWSER_WAIT,
 } as const satisfies Readonly<
   Record<ConsentServiceId, { detail: string; reopens: boolean; settingsPane: boolean }>
 >;

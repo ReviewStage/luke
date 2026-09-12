@@ -3,7 +3,6 @@ import {
   GITHUB_PATH,
   GOOGLE_CALENDAR_MARK_LAYERS,
   GOOGLE_MARK_LAYERS,
-  LINEAR_PATH,
 } from "@sidecar/surface";
 
 /**
@@ -31,7 +30,6 @@ export const LOOPBACK_CONNECTION_SOURCE = {
   GOOGLE: "google",
   GITHUB: "github",
   GOOGLE_CALENDAR: "google-calendar",
-  LINEAR: "linear",
 } as const;
 
 export type LoopbackConnectionSource =
@@ -90,14 +88,6 @@ function googleCalendarMarkSvg(): string {
   );
 }
 
-function linearMarkSvg(): string {
-  return (
-    `<svg class="provider-mark provider-mark-linear" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">` +
-    `<path fill="currentColor" d="${LINEAR_PATH}"/>` +
-    `</svg>`
-  );
-}
-
 function providerMarkSvg(source: LoopbackConnectionSource): string {
   switch (source) {
     case LOOPBACK_CONNECTION_SOURCE.GOOGLE:
@@ -106,8 +96,6 @@ function providerMarkSvg(source: LoopbackConnectionSource): string {
       return githubMarkSvg();
     case LOOPBACK_CONNECTION_SOURCE.GOOGLE_CALENDAR:
       return googleCalendarMarkSvg();
-    case LOOPBACK_CONNECTION_SOURCE.LINEAR:
-      return linearMarkSvg();
   }
 }
 
@@ -157,7 +145,6 @@ const PAGE_STYLE = `
   .provider-mark-google { width: 38px; height: 38px; }
   .provider-mark-github { width: 38px; height: 38px; }
   .provider-mark-google-calendar { width: 42px; height: 42px; }
-  .provider-mark-linear { width: 38px; height: 38px; color: #5e6ad2; }
   .mark-connection { width: 48px; flex: 0 0 auto; }
   .arrow { width: 24px; height: 24px; color: rgba(255, 255, 255, 0.56); flex: 0 0 auto; }
   .pill {

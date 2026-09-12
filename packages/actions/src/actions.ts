@@ -4,9 +4,8 @@
  * derived from it; adding a tool is adding a row.
  *
  * The session actions are the ones the panel's rows offer — the writes, and the
- * press that opens a session where its provider keeps it — and the issue pair
- * are the two actions a connected tracker takes. Creating a workspace is the
- * session action with no row yet to mirror. The last six are the same presses
+ * press that opens a session where its provider keeps it. Creating a workspace
+ * is the session action with no row yet to mirror. The last six are the same presses
  * turned toward the app itself: a settings change, showing the panel, opening
  * the feedback composer, the Updates row's button, and the notebook's two writes.
  *
@@ -30,8 +29,6 @@ import {
   CREATE_WORKSPACE_REQUEST,
   FEEDBACK_REQUEST,
   FORGET_REQUEST,
-  ISSUE_COMMENT_REQUEST,
-  ISSUE_STATE_REQUEST,
   MESSAGE_REQUEST,
   OPEN_REQUEST,
   PANEL_REQUEST,
@@ -149,20 +146,6 @@ export const ACTIONS = {
       "developer just chose, in their own words. Only chats whose roster entry says they can " +
       "be renamed take one; an ask that names the workspace renames the workspace instead.",
     request: erase(RENAME_SESSION_REQUEST),
-  },
-  UPDATE_ISSUE_STATE: {
-    name: "update_issue_state",
-    family: ACTION_FAMILY.ISSUE,
-    kind: ACTION_KIND.ISSUE_STATE,
-    description: "Update a tracked issue's state.",
-    request: erase(ISSUE_STATE_REQUEST),
-  },
-  COMMENT_ON_ISSUE: {
-    name: "comment_on_issue",
-    family: ACTION_FAMILY.ISSUE,
-    kind: ACTION_KIND.ISSUE_COMMENT,
-    description: "Add a comment to a tracked issue.",
-    request: erase(ISSUE_COMMENT_REQUEST),
   },
   CHANGE_APP_SETTING: {
     name: "change_app_setting",
@@ -310,8 +293,7 @@ export function actionToolDefinitions(): readonly ActionToolDefinition[] {
  * app and PANEL on the app's own list, so each is performed on the phone and
  * reaches no endpoint at all.
  *
- * The issue actions are absent because no tracker is connected on the phone; a
- * setting change, the feedback composer, and the Updates row are surfaces the
+ * A setting change, the feedback composer, and the Updates row are surfaces the
  * phone does not draw. REMEMBER and FORGET are absent because the phone keeps
  * no memory: Luke's durable facts live on the Mac alone.
  */

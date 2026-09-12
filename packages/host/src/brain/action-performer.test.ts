@@ -7,7 +7,6 @@ import {
   ACTION_TOOL,
   admit,
   type CarriedActionResult,
-  type CarriedIssueAction,
   type CarriedSessionAction,
   type Refusal,
   type RememberedFact,
@@ -113,11 +112,11 @@ const CONTROL_CALL = {
 /** The one performer fake, answering every carried action with the result the test chose. */
 function performer(
   overrides: Partial<BrainActionPerformerDependencies> = {},
-  answer: (action: CarriedSessionAction | CarriedIssueAction) => CarriedActionResult = () => ({
+  answer: (action: CarriedSessionAction) => CarriedActionResult = () => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
   }),
 ) {
-  const performed: (CarriedSessionAction | CarriedIssueAction)[] = [];
+  const performed: CarriedSessionAction[] = [];
   const recorded: ConversationEntry[] = [];
   const appActions: BrainAppActionRequest["action"][] = [];
   let facts: readonly RememberedFact[] = [];
@@ -135,7 +134,6 @@ function performer(
     refreshSessions: async () => {},
     workspaceProjects: () => [],
     workspaceDefaults: async () => ({}),
-    trackedIssues: () => undefined,
     appGuide: () => EMPTY_APP_GUIDE,
     rememberedFacts: () => facts,
     // A notebook fake with the worker's own rules: one line per words, a replaced entry gone first.
@@ -320,20 +318,6 @@ test("a panel's answer is read in its own dialect: an acceptance keeps its note 
     unreadable,
     unreadable,
   ]);
-});
-
-test("an issue action is refused outright while no tracker is connected", async () => {
-  const { actions, performed } = performer();
-  const refused = await performCall(
-    actions,
-    {
-      name: ACTION_TOOL.UPDATE_ISSUE_STATE,
-      argumentsJson: '{"tracker_id":"linear","issue_id":"LUKE-1","state":"Done"}',
-    },
-    LIVE,
-  );
-  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
-  assert.equal(performed.length, 0);
 });
 
 test("memory actions are the main process's own, and the store's answer is the report", async () => {
@@ -591,22 +575,6 @@ test("a creation is admitted against the projects the same pass reported, and th
     performed.map((performedAction) => performedAction.kind),
     [ACTION_KIND.CREATE_WORKSPACE],
   );
-});
-
-test("an issue act observes nothing: no pass runs for an action the roster cannot answer for", async () => {
-  let passes = 0;
-  const { actions } = performer({
-    refreshSessions: async () => {
-      passes += 1;
-    },
-  });
-  const refused = await performCall(
-    actions,
-    { name: ACTION_TOOL.COMMENT_ON_ISSUE, argumentsJson: "{}" },
-    LIVE,
-  );
-  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
-  assert.equal(passes, 0);
 });
 
 test("a cancel during the roster refresh or the defaults read settles the action, and the late read dispatches nothing", async () => {

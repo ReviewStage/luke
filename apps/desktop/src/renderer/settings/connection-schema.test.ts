@@ -51,12 +51,7 @@ test("a build that can offer nothing draws no connection but the ones always the
 
 test("every connection this build can offer stands when its condition is true", () => {
   const offered = offeredConnections(everything()).map((spec) => spec.id);
-  for (const id of [
-    CREDENTIAL_PROVIDER_ID.OPENAI,
-    CREDENTIAL_PROVIDER_ID.LINEAR,
-    "apple-calendar",
-    "google-calendar",
-  ]) {
+  for (const id of [CREDENTIAL_PROVIDER_ID.OPENAI, "apple-calendar", "google-calendar"]) {
     assert.ok(offered.includes(id), id);
   }
 });
@@ -110,7 +105,6 @@ test("a query reads the connections in the order the page draws them", () => {
     .map((spec) => spec.id);
   assert.deepEqual(offered, [
     ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id),
-    CREDENTIAL_PROVIDER_ID.LINEAR,
     "apple-calendar",
     "google-calendar",
   ]);

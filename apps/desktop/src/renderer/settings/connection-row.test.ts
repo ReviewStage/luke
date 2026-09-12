@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { settingsView } from "@sidecar/settings/testing";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -44,7 +44,7 @@ test("an answer already sent says what it is doing and takes no second press", (
 });
 
 test("a row whose build cannot offer the connection draws nothing at all", () => {
-  const spec = CONNECTION_SCHEMA.find((entry) => entry.id === CREDENTIAL_PROVIDER_ID.LINEAR);
+  const spec = CONNECTION_SCHEMA.find((entry) => entry.id === GOOGLE_CALENDAR_ID);
   assert.ok(spec);
   const markup = renderToStaticMarkup(
     createElement(ConnectionRow, {

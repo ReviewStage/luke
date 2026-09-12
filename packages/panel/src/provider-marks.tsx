@@ -19,8 +19,7 @@
  * Google Calendar via Simple Icons (CC0-1.0, sourced from
  * https://developers.google.com/calendar), Grok Build's comet mark verbatim
  * from the favicon https://grok.com serves (a trademark of xAI),
- * OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
- * https://linear.app), OpenCode's two-tone terminal mark verbatim from
+ * OpenAI via Simple Icons (CC0-1.0), OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves, OMP's pi verbatim from the favicon
  * https://omp.sh serves, and Superset's bracket mark traced
  * from the pixel grid of the favicon https://superset.sh serves — the one
@@ -45,9 +44,6 @@ import {
   HOSTED_AGENT_ID,
   type HostedAgentId,
   HostedAgentIdSchema,
-  ISSUE_TRACKER_ID,
-  type IssueTrackerId,
-  IssueTrackerIdSchema,
   PROVIDER_ID,
   type ProviderId,
   ProviderIdSchema,
@@ -69,7 +65,6 @@ import {
   GOOGLE_CALENDAR_MARK_LAYERS,
   GROK_BUILD_ORBIT_PATH,
   GROK_BUILD_TAIL_PATH,
-  LINEAR_PATH,
   OMP_PATH,
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
@@ -304,20 +299,6 @@ function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-function LinearMark({ className }: MarkProps): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      data-mark={ISSUE_TRACKER_ID.LINEAR}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={LINEAR_PATH} />
-    </svg>
-  );
-}
-
 function OpenAiMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -440,7 +421,6 @@ export type MarkId =
   | ProviderId
   | HostedAgentId
   | SessionApplicationId
-  | IssueTrackerId
   | typeof APPLE_CALENDAR_ID
   | typeof GOOGLE_CALENDAR_ID
   | typeof CREDENTIAL_PROVIDER_ID.OPENAI;
@@ -449,7 +429,6 @@ export const MarkIdSchema = Schema.Union(
   ProviderIdSchema,
   HostedAgentIdSchema,
   SessionApplicationIdSchema,
-  IssueTrackerIdSchema,
   Schema.Literal(APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID, CREDENTIAL_PROVIDER_ID.OPENAI),
 );
 
@@ -465,7 +444,6 @@ const PROVIDER_MARKS = {
   [HOSTED_AGENT_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
   [HOSTED_AGENT_ID.GROK_BUILD]: GrokBuildMark,
-  [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OMP]: OmpMark,
   [HOSTED_AGENT_ID.OPENCODE]: OpenCodeMark,

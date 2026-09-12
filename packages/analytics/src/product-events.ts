@@ -1,12 +1,6 @@
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
-import {
-  ACTION_RESULT_STATUS,
-  ISSUE_TRACKER_ID,
-  type IssueTrackerId,
-  PROVIDER_ID_LIST,
-  type ProviderId,
-} from "@sidecar/session";
+import { ACTION_RESULT_STATUS, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -40,14 +34,11 @@ export const PRODUCT_EVENT = {
   ACCOUNT_ACTION: "account:action",
   PROVIDER_CONNECT: "provider:connect",
   PROVIDER_DISCONNECT: "provider:disconnect",
-  TRACKER_CONNECT: "tracker:connect",
-  TRACKER_DISCONNECT: "tracker:disconnect",
   CALENDAR_CONNECT: "calendar:connect",
   CALENDAR_DISCONNECT: "calendar:disconnect",
   SESSION_OBSERVE: "session:observe",
   SESSION_ACTION_SEND: "session:action_send",
   SESSION_DIAGNOSTIC: "session:diagnostic",
-  ISSUE_ACTION_SEND: "issue:action_send",
   PANEL_OPEN: "panel:open",
   PANEL_TAB_CHANGE: "panel:tab_change",
   SETTINGS_VIEW_OPEN: "settings:view_open",
@@ -106,14 +97,12 @@ export const PRODUCT_EVENT_PROPERTY = {
   APP_VERSION: "app_version",
   CONNECTION_ID: "connection_id",
   PROVIDER_ID: "provider_id",
-  TRACKER_ID: "tracker_id",
   CALENDAR_SOURCE: "calendar_source",
   SESSION_COUNT: "session_count",
   IMAGE_COUNT: "image_count",
   SESSION_SOURCE: "session_source",
   SESSION_ACTION: "session_action",
   DIAGNOSTIC_KIND: "diagnostic_kind",
-  ISSUE_ACTION: "issue_action",
   ACCOUNT_ACTION: "account_action",
   UPDATE_ACTION: "update_action",
   PANEL_TAB: "panel_tab",
@@ -305,14 +294,6 @@ export const PRODUCT_PERMISSION_RESULT = {
 export type ProductPermissionResult =
   (typeof PRODUCT_PERMISSION_RESULT)[keyof typeof PRODUCT_PERMISSION_RESULT];
 
-/** Which action a tracker took, never the state moved to or the comment written. */
-export const PRODUCT_ISSUE_ACTION = {
-  STATE_MOVE: "state_move",
-  COMMENT_ADD: "comment_add",
-} as const;
-
-type ProductIssueAction = (typeof PRODUCT_ISSUE_ACTION)[keyof typeof PRODUCT_ISSUE_ACTION];
-
 /**
  * The shape a setting's new value is counted in, never the value itself: a
  * chosen workspace project is a project name, and a hotkey is a chord the
@@ -419,14 +400,12 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: string;
   [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: CredentialProviderId;
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: ProviderId;
-  [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: IssueTrackerId;
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: ProductCalendarSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: ProductVoiceSessionSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: ProductSessionAction;
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
-  [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: ProductIssueAction;
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: ProductAccountAction;
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: ProductUpdateAction;
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: ProductPanelTab;
@@ -459,12 +438,10 @@ type EnumeratedProductEventProperty = Exclude<
 const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: Object.values(CREDENTIAL_PROVIDER_ID),
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: PROVIDER_ID_LIST,
-  [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: Object.values(ISSUE_TRACKER_ID),
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: Object.values(PRODUCT_VOICE_SESSION_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: Object.values(PRODUCT_SESSION_ACTION),
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
-  [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: Object.values(PRODUCT_ISSUE_ACTION),
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: Object.values(PRODUCT_ACCOUNT_ACTION),
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: Object.values(PRODUCT_UPDATE_ACTION),
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: Object.values(PRODUCT_PANEL_TAB),
@@ -494,8 +471,6 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.ACCOUNT_ACTION]: [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION],
   [PRODUCT_EVENT.PROVIDER_CONNECT]: [PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
   [PRODUCT_EVENT.PROVIDER_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
-  [PRODUCT_EVENT.TRACKER_CONNECT]: [PRODUCT_EVENT_PROPERTY.TRACKER_ID],
-  [PRODUCT_EVENT.TRACKER_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.TRACKER_ID],
   [PRODUCT_EVENT.CALENDAR_CONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
   [PRODUCT_EVENT.CALENDAR_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
   [PRODUCT_EVENT.PANEL_OPEN]: [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE],
@@ -520,10 +495,6 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.SESSION_DIAGNOSTIC]: [
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND,
-  ],
-  [PRODUCT_EVENT.ISSUE_ACTION_SEND]: [
-    PRODUCT_EVENT_PROPERTY.TRACKER_ID,
-    PRODUCT_EVENT_PROPERTY.ISSUE_ACTION,
   ],
   [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE],
   [PRODUCT_EVENT.INTRODUCTION_COMPLETE]: [],

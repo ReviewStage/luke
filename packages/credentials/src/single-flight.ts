@@ -15,10 +15,6 @@ import { Cause, Deferred, Effect, Exit, FiberId } from "effect";
  * the run's start are one uninterruptible step and never wait on the Effect
  * runtime's own scheduling.
  *
- * `singleFlightEffect` is the join itself, answered as an Effect rather than
- * run to a promise, for a caller — `LinearCredentials`'s own renewal — that
- * holds a runtime of its own to run it on.
- *
  * @deprecated The returned closure's `Effect.runPromiseExit` is on the
  * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: this function's
  * one remaining caller, `AccountSessionManager.refresh`, still holds a
@@ -42,7 +38,7 @@ export function singleFlight(run: () => Promise<void>): () => Promise<void> {
  * request on the spot expects: the semaphore only guards the check-and-create
  * of the one {@link Deferred} every concurrent caller then joins.
  */
-export function singleFlightEffect(run: () => Promise<void>): () => Effect.Effect<void, unknown> {
+function singleFlightEffect(run: () => Promise<void>): () => Effect.Effect<void, unknown> {
   const gate = Effect.unsafeMakeSemaphore(1);
   let flight: Deferred.Deferred<void, unknown> | undefined;
 

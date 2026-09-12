@@ -95,7 +95,6 @@ Optional: open **Settings** in Luke to:
 
 - Connect supported cloud agents with their API keys.
 - Connect Apple or Google Calendar.
-- Connect Linear.
 - Add an OpenAI API key for usage billed directly to your OpenAI account.
 - Customize Luke's voice, keyboard shortcuts, appearance, and workspace
   defaults.

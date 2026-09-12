@@ -49,7 +49,7 @@ import type { HostedTranscriptReads } from "./transcript.js";
 /**
  * What the service cannot perform is not offered: the tools that reach a
  * machine — an open, an app setting, the panel, the feedback composer, the
- * updater — the issue tracker no grant is held for, and the groups behind
+ * updater — and the groups behind
  * seams the service does not wire: delegation and skills, and the notebook's
  * two reads, which the index behind them does not stand here. The notebook's
  * two writes stay, admitted like every other action. The turn's own layer
@@ -67,8 +67,6 @@ const HOSTED_TOOL_POLICY: ToolPolicyLayers = {
       ACTION_TOOL.SHOW_PANEL,
       ACTION_TOOL.OPEN_FEEDBACK_COMPOSER,
       ACTION_TOOL.RUN_UPDATE_ACTION,
-      ACTION_TOOL.UPDATE_ISSUE_STATE,
-      ACTION_TOOL.COMMENT_ON_ISSUE,
     ],
   },
 };

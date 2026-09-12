@@ -38,7 +38,6 @@ import { Effect, Option } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
-import type { IssuesComposer } from "./compose-issues.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -98,7 +97,6 @@ export interface ObservationComposer extends Composer {
 export interface ObservationDependencies {
   settings: SettingsComposer;
   account: AccountComposer;
-  issues: IssuesComposer;
   observationGate: () => boolean;
 }
 
@@ -111,7 +109,7 @@ export const composeObservation = (
   dependencies: ObservationDependencies,
 ): Effect.Effect<ObservationComposer, never, HostKernelTag> =>
   Effect.gen(function* () {
-    const { settings, account, issues, observationGate } = dependencies;
+    const { settings, account, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
@@ -294,9 +292,6 @@ export const composeObservation = (
       rememberWorkspaceDefaults,
       expectCreatedWorkspace: (identity, at) => createdWorkspaceOpens.expect(identity, at),
       openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
-      trackedIssues: () => issues.issues(),
-      issueTrackers: issues.trackers,
-      refreshIssues: () => issues.refresh(),
       recordProductEvent: settings.recordProductEvent,
     });
 

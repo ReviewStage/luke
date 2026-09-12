@@ -11,7 +11,6 @@ import {
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
   normalizeSession,
-  normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
@@ -84,19 +83,6 @@ const LISTED_PROJECT: ObservedWorkspaceProject = {
   taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
 };
 
-const ISSUE = normalizeTrackedIssue(
-  { id: "linear", displayName: "Linear" },
-  {
-    trackerIssueId: "issue-uuid",
-    identifier: "LUKE-1",
-    title: "Ship admission",
-    stateName: "Todo",
-    observedAt: NOW,
-    canComment: true,
-    transitions: [{ id: "state-done", name: "Done" }],
-  },
-);
-
 /**
  * A context whose seams count what admission actually reached, so a test can
  * say not only what was answered but what was read to answer it.
@@ -132,8 +118,6 @@ const FIELDS = {
   [ACTION_KIND.ADD_AGENT]: { ...IDENTITY, agent: "codex" },
   [ACTION_KIND.RENAME_WORKSPACE]: { ...IDENTITY, name: "new name" },
   [ACTION_KIND.RENAME_SESSION]: { ...IDENTITY, name: "new name" },
-  [ACTION_KIND.ISSUE_STATE]: { tracker_id: "linear", issue_id: "LUKE-1", state: "Done" },
-  [ACTION_KIND.ISSUE_COMMENT]: { tracker_id: "linear", issue_id: "LUKE-1", body: "looking" },
   [ACTION_KIND.SETTING]: { setting_id: "voice_captions", value: "on" },
   [ACTION_KIND.PANEL]: { tab: "sessions" },
   [ACTION_KIND.FEEDBACK]: { kind: "feedback" },
@@ -408,36 +392,6 @@ test("who opened a turn is recorded on the action and is never by itself a permi
   for (const answer of answers) assert.deepEqual(answer, answers[0]);
 });
 
-test("validated against the observed issue roster before the tracker client sees anything", async () => {
-  const noTracker = context();
-  for (const kind of [ACTION_KIND.ISSUE_STATE, ACTION_KIND.ISSUE_COMMENT] as const) {
-    assert.equal(
-      refused(await admit({ kind, fields: FIELDS[kind] }, noTracker)),
-      ACTION_REFUSAL.NO_TRACKER,
-    );
-  }
-  assert.ok(ISSUE);
-  const board = context({ issues: [ISSUE] });
-  assert.equal(
-    refused(
-      await admit(
-        {
-          kind: ACTION_KIND.ISSUE_STATE,
-          fields: { ...FIELDS[ACTION_KIND.ISSUE_STATE], state: "Shipped" },
-        },
-        board,
-      ),
-    ),
-    ACTION_REFUSAL.NO_ISSUE_STATE,
-  );
-  const admitted = await admit(
-    { kind: ACTION_KIND.ISSUE_STATE, fields: FIELDS[ACTION_KIND.ISSUE_STATE] },
-    board,
-  );
-  assert.ok(admitted.kind === ACTION_KIND.ISSUE_STATE);
-  assert.deepEqual(admitted.transition, ISSUE.transitions[0]);
-});
-
 test("a setting the guide does not carry is one the conversation cannot change", async () => {
   assert.equal(
     refused(
@@ -518,8 +472,6 @@ const READS = {
   [ACTION_KIND.ADD_AGENT]: ["roster"],
   [ACTION_KIND.RENAME_WORKSPACE]: ["roster"],
   [ACTION_KIND.RENAME_SESSION]: ["roster"],
-  [ACTION_KIND.ISSUE_STATE]: [],
-  [ACTION_KIND.ISSUE_COMMENT]: [],
   [ACTION_KIND.SETTING]: [],
   [ACTION_KIND.PANEL]: ["roster"],
   [ACTION_KIND.FEEDBACK]: [],
@@ -552,7 +504,6 @@ test("each action is admitted against the observed state it names, and against n
           },
           agentModels: () => [],
         },
-        ...(ISSUE ? { issues: [ISSUE] } : undefined),
         guide: EMPTY_APP_GUIDE,
         rememberedFacts: [{ id: "fact-one", words: "prefers concise answers" }],
       },

@@ -140,14 +140,3 @@ export interface AppleCalendarControl {
    */
   revoked: boolean;
 }
-
-/** What the Linear row can be asked for, which is connecting and ending it. */
-export interface LinearControl {
-  /** True while another entry holds the slot, which refuses a second action. */
-  held: boolean;
-  /** True while a sign-in is waiting on the browser. */
-  connecting: boolean;
-  /** Stands the panel down and opens Linear's consent page. */
-  onSignIn: () => void;
-  onDisconnect: () => Promise<ActionResult>;
-}

@@ -6,8 +6,6 @@ import {
   ConversationEntryKindSchema,
   HOSTED_AGENT_ID,
   HostedAgentIdSchema,
-  ISSUE_TRACKER_ID,
-  IssueTrackerIdSchema,
   PROVIDER_ID,
   ProviderIdSchema,
   SESSION_APPLICATION_ID,
@@ -93,5 +91,4 @@ test("the stored message vocabularies hold their own states alone", () => {
     "observation",
     "briefing",
   ]);
-  settlesVocabulary(IssueTrackerIdSchema, Object.values(ISSUE_TRACKER_ID), [PROVIDER_ID.CODEX]);
 });

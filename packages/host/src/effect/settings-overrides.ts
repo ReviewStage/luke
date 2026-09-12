@@ -20,9 +20,6 @@ import {
   CREDENTIAL_PROVIDER_LIST,
   type CredentialProvider,
   type CredentialProviderId,
-  LINEAR_SIGN_IN_ENVIRONMENT,
-  type LinearSignInConfig,
-  linearSignInConfig,
 } from "@sidecar/credentials";
 import type { LiveVoice } from "@sidecar/live";
 import { environmentLiveVoice, LIVE_ENVIRONMENT } from "@sidecar/voice";
@@ -35,7 +32,6 @@ export const SETTINGS_OVERRIDE_VARIABLE = {
   LIVE_VOICE: LIVE_ENVIRONMENT.VOICE,
   GOOGLE_CALENDAR_CLIENT_ID: GOOGLE_CALENDAR_SIGN_IN_ENVIRONMENT.CLIENT_ID,
   GOOGLE_CALENDAR_CLIENT_SECRET: GOOGLE_CALENDAR_SIGN_IN_ENVIRONMENT.CLIENT_SECRET,
-  LINEAR_CLIENT_ID: LINEAR_SIGN_IN_ENVIRONMENT.CLIENT_ID,
 } as const;
 
 /**
@@ -52,7 +48,6 @@ export interface SettingsEnvironmentOverrides {
   /** The launch voice, already held to the ones the API speaks. */
   readonly voice: LiveVoice | undefined;
   readonly googleCalendarSignIn: GoogleCalendarSignInConfig | undefined;
-  readonly linearSignIn: LinearSignInConfig | undefined;
   /**
    * The key this machine's shell exported for a provider, sendable as an
    * authorization header, by the provider it authenticates. Redacted because
@@ -66,7 +61,6 @@ interface OverrideValues {
   readonly voice: Option.Option<string>;
   readonly googleCalendarClientId: Option.Option<string>;
   readonly googleCalendarClientSecret: Option.Option<Redacted.Redacted<string>>;
-  readonly linearClientId: Option.Option<string>;
   readonly apiKeys: ReadonlyMap<CredentialProviderId, Redacted.Redacted<string>>;
 }
 
@@ -86,12 +80,10 @@ function overridesFrom(values: OverrideValues): SettingsEnvironmentOverrides {
     [SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_SECRET]: Option.getOrUndefined(
       Option.map(values.googleCalendarClientSecret, Redacted.value),
     ),
-    [SETTINGS_OVERRIDE_VARIABLE.LINEAR_CLIENT_ID]: Option.getOrUndefined(values.linearClientId),
   };
   return {
     voice: environmentLiveVoice(read),
     googleCalendarSignIn: googleCalendarSignInConfig(read),
-    linearSignIn: linearSignInConfig(read),
     apiKeys: values.apiKeys,
   };
 }
@@ -144,7 +136,6 @@ export const settingsOverrides: Effect.Effect<SettingsEnvironmentOverrides, neve
       googleCalendarClientSecret: yield* load(
         optionalSecret(SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_SECRET),
       ),
-      linearClientId: yield* load(optional(SETTINGS_OVERRIDE_VARIABLE.LINEAR_CLIENT_ID)),
       apiKeys,
     });
   });

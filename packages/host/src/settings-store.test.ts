@@ -50,9 +50,6 @@ const TEST_ENVIRONMENT_VARIABLE = {
   API_TOKEN: "CONDUCTOR_API_TOKEN",
 } as const;
 
-/** The one service connected on its own consent page rather than by a pasted key. */
-const CONSENT_SERVICE = CREDENTIAL_PROVIDER_ID.LINEAR;
-
 /** Stands in for Electron's Keychain-backed `safeStorage`. */
 function testCipher(available = true): SecretCipher {
   return {
@@ -1599,81 +1596,4 @@ test("pasting a key back while parked on the allowance is still choosing it", as
   // read as a key that failed to take.
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
-});
-
-test("a grant is stored encrypted, and read back only in the main process", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-
-  const { settings } = await store.setGrant(CONSENT_SERVICE, {
-    accessToken: "granted-access",
-    refreshToken: "granted-refresh",
-    expiresAt: 1_760_000_000_000,
-  });
-
-  // The row says connected the way every other credential's row does.
-  assert.equal(
-    appSettingsView(settings).credentialSources[CONSENT_SERVICE],
-    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-  );
-
-  // Both tokens travel under one ciphertext; only the expiry stays readable,
-  // which is what lets a pass skip a refresh it does not need.
-  const file = JSON.parse(await readSettingsFile(directory));
-  assert.equal(file.grants[CONSENT_SERVICE].expiresAt, 1_760_000_000_000);
-
-  assert.deepEqual(await store.readGrant(CONSENT_SERVICE), {
-    accessToken: "granted-access",
-    refreshToken: "granted-refresh",
-    expiresAt: 1_760_000_000_000,
-  });
-
-  // A stored grant outlives the process that made it.
-  const reopened = storeIn(directory);
-  assert.equal((await reopened.readGrant(CONSENT_SERVICE))?.accessToken, "granted-access");
-});
-
-test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
-  await store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 });
-
-  const { settings } = await store.clearGrant(CONSENT_SERVICE);
-  assert.equal(
-    appSettingsView(settings).credentialSources[CONSENT_SERVICE],
-    CREDENTIAL_SOURCE.NONE,
-  );
-  assert.equal(await store.readGrant(CONSENT_SERVICE), undefined);
-  // Disconnecting one service never disturbs another's credential.
-  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
-});
-
-test("a key left by a build that asked for one is dropped, never carried", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  // What an installation upgraded from a build that pasted this service's key
-  // would hold: a credential this build can never send anywhere.
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: {
-        [CONSENT_SERVICE]: sealed("stale-pasted-key"),
-        [CREDENTIAL_PROVIDER_ID.OPENAI]: sealed("sk-stored-key"),
-      },
-    }),
-    "utf8",
-  );
-  const store = storeIn(directory);
-
-  const settings = appSettingsView(await store.snapshot());
-  assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readApiKey(CONSENT_SERVICE), undefined);
-
-  // A provider this build does know, and knows takes no key, has its key let
-  // go on the next write — a credential Luke will not use is not one to keep.
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-replaced-key");
-  const file = JSON.parse(await readSettingsFile(directory));
-  assert.equal(file.apiKeys[CONSENT_SERVICE], undefined);
-  assert.ok(file.apiKeys[CREDENTIAL_PROVIDER_ID.OPENAI]);
 });

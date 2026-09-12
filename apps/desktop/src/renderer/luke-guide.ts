@@ -28,7 +28,6 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot"
 import type { CredentialSource } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
-  CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
@@ -182,19 +181,6 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
  */
 function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
   const facts: AppGuideFact[] = [];
-  const linearProvider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
-  if (settings.linearSignInAvailable) {
-    facts.push({
-      label: "Linear",
-      detail:
-        `${linearProvider.displayName} ` +
-        `(${connectionWord(settings.credentialSources[linearProvider.id])}) connects by signing ` +
-        `in with Linear from its row in ${CONNECTIONS_PAGE}, under Integrations — no key is ` +
-        `ever typed or spoken. Connected, Luke can, when asked, move an issue the developer ` +
-        `names to another state or comment on it; disconnecting from the same row ends the ` +
-        `access at Linear as well as here.`,
-    });
-  }
   if (settings.appleCalendarAvailable) {
     facts.push({
       label: "Apple Calendar",

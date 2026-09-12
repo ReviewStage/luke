@@ -1,19 +1,13 @@
-import {
-  ISSUE_TRACKER_ID,
-  isCloudAgentProviderId,
-  PROVIDER_ID,
-  PROVIDER_IDENTITY_BY_ID,
-} from "@sidecar/session";
+import { isCloudAgentProviderId, PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * The services Luke can hold a credential for: the subset of the observed
  * providers whose sessions live in a cloud service with no local state to
- * read, plus the issue tracker Luke reads the same way — each of which must
- * observe nothing at all until the user connects it, by pasting a key or by
- * granting one on the provider's own consent page. Most ids are core's,
- * so a credential row names the same service a session row or the issue
- * roster does — that is what lets one mark registry serve them all.
+ * read, each of which must observe nothing at all until the user connects it
+ * by pasting a key. Most ids are core's, so a credential row names the same
+ * service a session row does — that is what lets one mark registry serve them
+ * all.
  *
  * OpenAI is the one that names nothing elsewhere, so it carries an id of its
  * own: Luke speaks through it rather than observing it, and there are no OpenAI
@@ -24,7 +18,6 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
-  LINEAR: ISSUE_TRACKER_ID.LINEAR,
   OPENAI: "openai",
 } as const;
 
@@ -42,7 +35,6 @@ export type CredentialProviderId =
  */
 export const CREDENTIAL_CONNECTION = {
   KEY: "key",
-  CONSENT: "consent",
 } as const;
 
 type CredentialConnection = (typeof CREDENTIAL_CONNECTION)[keyof typeof CREDENTIAL_CONNECTION];
@@ -136,17 +128,6 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
   },
-  [CREDENTIAL_PROVIDER_ID.LINEAR]: {
-    id: CREDENTIAL_PROVIDER_ID.LINEAR,
-    connection: CREDENTIAL_CONNECTION.CONSENT,
-    displayName: "Linear",
-    // No key page and no environment variable, alone among the providers:
-    // nothing is pasted here, so there is nowhere to send anyone to fetch a
-    // credential and nothing for a launch environment to supply. What the
-    // consent page hands back is Linear's to shape, and it is withdrawn in
-    // Linear's own settings as well as by disconnecting the row.
-    environmentVariables: [],
-  },
   [CREDENTIAL_PROVIDER_ID.OPENAI]: {
     id: CREDENTIAL_PROVIDER_ID.OPENAI,
     connection: CREDENTIAL_CONNECTION.KEY,
@@ -175,11 +156,6 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
 export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
   Object.values(CREDENTIAL_PROVIDERS);
 
-/* A key is a key, so every service lives in the one provider registry — but
-   Settings draws these apart: an integration is a service Luke uses, not an
-   agent whose sessions he observes. The tracker is one he reads and actions on. */
-const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
-
 /**
  * The one key Luke speaks through, and asks about a session with. Its row
  * lives on the Voice page rather than under Connections, because the key is
@@ -202,19 +178,10 @@ export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
   CREDENTIAL_PROVIDER_LIST.filter((provider) => isCloudAgentProviderId(provider.id));
 
 /**
- * The services beyond the agents. The Integrations section draws each as its
- * own block rather than from this list — a consent row and a key row are not
- * the same line — so this stands for what belongs in that section, which is
- * what keeps the three lists together covering the whole registry.
- */
-export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
-  CREDENTIAL_PROVIDER_LIST.filter((provider) => INTEGRATION_IDS.has(provider.id));
-
-/**
  * Whether this provider's key buys the observation of cloud sessions, which is
- * what the cloud badge on a mark says. Linear's issues and OpenAI's voice are
- * services Luke uses rather than sessions he watches, so their marks carry no
- * badge — a badge there would claim sessions neither service has.
+ * what the cloud badge on a mark says. OpenAI's voice is a service Luke uses
+ * rather than sessions he watches, so its mark carries no badge — a badge there
+ * would claim sessions the service has none of.
  */
 export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
   return isCloudAgentProviderId(id);

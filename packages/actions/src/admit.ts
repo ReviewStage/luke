@@ -32,7 +32,6 @@ import {
   EMPTY_APP_GUIDE,
 } from "@sidecar/guide";
 import type { RunOrigin } from "@sidecar/runtime/vocabulary";
-import type { IssueIdentity, TrackedIssue } from "@sidecar/session";
 import {
   advertisedActionFor,
   advertisedControl,
@@ -69,9 +68,7 @@ import {
   SESSION_LIST_VOICE,
 } from "./action-kinds.js";
 import {
-  COMMENT_BODY,
   FEEDBACK_KIND,
-  ISSUE_IDENTITY_FIELDS,
   MESSAGE_TEXT,
   OPENING_TASK,
   PANEL_FILTERS,
@@ -153,8 +150,6 @@ export interface AdmitContext {
   readonly projects?: ActionProjects;
   /** The app's own word about itself; absent in a run that reports none, which then admits no app action. */
   readonly guide?: AppGuideSnapshot;
-  /** Absent when no tracker is connected, which then admits no issue action. */
-  readonly issues?: readonly TrackedIssue[];
   /** The facts standing right now; an id the conversation never saw names nothing. */
   readonly rememberedFacts?: readonly RememberedFact[];
 }
@@ -194,10 +189,6 @@ export const ACTION_REFUSAL = {
   NO_MODEL: "No documented model goes by that name here.",
   NO_EFFORT_LEVEL: "That model takes no effort level.",
   EFFORT_NEEDS_MODEL: "An effort rides a model; name the model too.",
-  NO_ISSUE: "No tracked issue matches that identity.",
-  NO_ISSUE_STATE: "That issue lists no such state.",
-  NO_COMMENTS: "That issue does not take comments.",
-  COMMENT_BOUND: "That comment is empty or too long.",
   NO_SETTING: "The app guide lists no such setting.",
   NO_TAB: "The panel has no such tab.",
   NO_SORT: "The list orders by urgency or by recency.",
@@ -212,7 +203,6 @@ export const ACTION_REFUSAL = {
   NO_SUCH_FACT: "Nothing remembered goes by that id.",
   MEMORY_BOUND: `A memory has to be under ${maximumRememberedFactLength} characters and longer than nothing.`,
   MEMORY_FULL: `Luke already remembers ${maximumRememberedFacts} things; replace or forget one first.`,
-  NO_TRACKER: "No issue tracker is connected.",
 } as const;
 
 export type ActionRefusalReason = (typeof ACTION_REFUSAL)[keyof typeof ACTION_REFUSAL];
@@ -353,19 +343,6 @@ function sessionFrom(
       providerSessionId: session.providerSessionId,
     },
   };
-}
-
-function issueFrom(
-  fields: WireRecord,
-  issues: readonly TrackedIssue[],
-): { issue: TrackedIssue; identity: IssueIdentity } | Refusal {
-  const trackerId = wireParse(ISSUE_IDENTITY_FIELDS.tracker_id, fields.tracker_id);
-  const issueId = wireParse(ISSUE_IDENTITY_FIELDS.issue_id, fields.issue_id);
-  const issue = issues.find(
-    (candidate) => candidate.trackerId === trackerId && candidate.identifier === issueId,
-  );
-  if (!issue) return refuse(ACTION_REFUSAL.NO_ISSUE);
-  return { issue, identity: { trackerId: issue.trackerId, identifier: issue.identifier } };
 }
 
 /**
@@ -833,40 +810,6 @@ const admitRenameSession: Admitter<typeof ACTION_KIND.RENAME_SESSION> = (fields,
     return { kind: ACTION_KIND.RENAME_SESSION, identity: found.identity, name };
   });
 
-function admittedIssue(
-  fields: WireRecord,
-  context: AdmitContext,
-): { issue: TrackedIssue; identity: IssueIdentity } | Refusal {
-  if (!context.issues) return refuse(ACTION_REFUSAL.NO_TRACKER);
-  return issueFrom(fields, context.issues);
-}
-
-const admitIssueState: Decider<typeof ACTION_KIND.ISSUE_STATE> = (fields, context) => {
-  const found = admittedIssue(fields, context);
-  if ("status" in found) return found;
-  const state = textArgument(fields, "state");
-  const transition =
-    state === undefined
-      ? undefined
-      : namedOnce(
-          found.issue.transitions,
-          state,
-          (candidate) => candidate.name,
-          (name) => name.toLowerCase(),
-        );
-  if (!transition) return refuse(ACTION_REFUSAL.NO_ISSUE_STATE);
-  return { kind: ACTION_KIND.ISSUE_STATE, identity: found.identity, transition };
-};
-
-const admitIssueComment: Decider<typeof ACTION_KIND.ISSUE_COMMENT> = (fields, context) => {
-  const found = admittedIssue(fields, context);
-  if ("status" in found) return found;
-  if (!found.issue.canComment) return refuse(ACTION_REFUSAL.NO_COMMENTS);
-  const body = wireParse(COMMENT_BODY, fields.body);
-  if (!body) return refuse(ACTION_REFUSAL.COMMENT_BOUND);
-  return { kind: ACTION_KIND.ISSUE_COMMENT, identity: found.identity, body };
-};
-
 const admitSetting: Decider<typeof ACTION_KIND.SETTING> = (fields, context) => {
   const guide = context.guide ?? EMPTY_APP_GUIDE;
   const setting = appGuideSetting(guide, textArgument(fields, "setting_id"));
@@ -997,8 +940,6 @@ const ADMITTERS = {
   [ACTION_KIND.ADD_AGENT]: admitAddAgent,
   [ACTION_KIND.RENAME_WORKSPACE]: admitRenameWorkspace,
   [ACTION_KIND.RENAME_SESSION]: admitRenameSession,
-  [ACTION_KIND.ISSUE_STATE]: decidedAtOnce(admitIssueState),
-  [ACTION_KIND.ISSUE_COMMENT]: decidedAtOnce(admitIssueComment),
   [ACTION_KIND.SETTING]: decidedAtOnce(admitSetting),
   [ACTION_KIND.PANEL]: admitPanel,
   [ACTION_KIND.FEEDBACK]: decidedAtOnce(admitFeedback),

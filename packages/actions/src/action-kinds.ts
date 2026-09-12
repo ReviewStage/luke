@@ -17,8 +17,6 @@ import type {
 import type {
   ACTION_KIND as ADVERTISED_ACTION_KIND,
   AdvertisedControl,
-  IssueIdentity,
-  IssueTransition,
   SessionApplicationId,
   SessionIdentity,
   WorkspaceAgentSelection,
@@ -35,10 +33,9 @@ export interface ActionFunctionCall {
   argumentsJson: string;
 }
 
-/** Which process an action is about: a session, an issue, or Luke himself. */
+/** Which process an action is about: a session, or Luke himself. */
 export const ACTION_FAMILY = {
   SESSION: "session",
-  ISSUE: "issue",
   APP: "app",
 } as const;
 
@@ -58,8 +55,6 @@ export const ACTION_KIND = {
   ADD_AGENT: "add-agent",
   RENAME_WORKSPACE: "rename-workspace",
   RENAME_SESSION: "rename-session",
-  ISSUE_STATE: "issue-state",
-  ISSUE_COMMENT: "issue-comment",
   SETTING: "setting",
   PANEL: "panel",
   FEEDBACK: "feedback",
@@ -118,8 +113,6 @@ export interface ActionPayloads {
   [ACTION_KIND.RENAME_WORKSPACE]: { identity: SessionIdentity; name: string };
   /** The chat's new name, exactly as the developer chose it. */
   [ACTION_KIND.RENAME_SESSION]: { identity: SessionIdentity; name: string };
-  [ACTION_KIND.ISSUE_STATE]: { identity: IssueIdentity; transition: IssueTransition };
-  [ACTION_KIND.ISSUE_COMMENT]: { identity: IssueIdentity; body: string };
   [ACTION_KIND.SETTING]: {
     setting: AppGuideSetting;
     value: string;
@@ -164,8 +157,6 @@ export type SessionActionKind =
   | typeof ACTION_KIND.RENAME_WORKSPACE
   | typeof ACTION_KIND.RENAME_SESSION;
 
-export type IssueActionKind = typeof ACTION_KIND.ISSUE_STATE | typeof ACTION_KIND.ISSUE_COMMENT;
-
 export type AppActionKind =
   | typeof ACTION_KIND.SETTING
   | typeof ACTION_KIND.PANEL
@@ -175,7 +166,6 @@ export type AppActionKind =
   | typeof ACTION_KIND.FORGET;
 
 export type CarriedSessionAction = CarriedAction<SessionActionKind>;
-export type CarriedIssueAction = CarriedAction<IssueActionKind>;
 export type CarriedAppAction = CarriedAction<AppActionKind>;
 
 /**

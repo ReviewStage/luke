@@ -10,7 +10,7 @@ import type { ConsentConnectEntry } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { PANEL_PRESENTATION } from "./panel-state";
-import type { AppleCalendarControl, CalendarControl, LinearControl } from "./settings/controls";
+import type { AppleCalendarControl, CalendarControl } from "./settings/controls";
 import {
   PANEL_STAND_DOWN,
   type SettingsView,
@@ -51,7 +51,6 @@ export interface Connections {
   reopenConsentPage: () => void;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
-  linear: LinearControl;
   signInWait: AccountProvider | undefined;
   signInWaitNow: () => AccountProvider | undefined;
   signInFailure: string | undefined;
@@ -85,11 +84,6 @@ export function useConnections(options: UseConnectionsOptions): Connections {
           connect: () => act(ACT_KIND.CALENDAR_CONNECT_GOOGLE),
           cancel: () => tell(ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN),
           reopen: () => tell(ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN),
-        },
-        [CONSENT_SERVICE_ID.LINEAR]: {
-          connect: () => act(ACT_KIND.TRACKER_CONNECT),
-          cancel: () => tell(ACT_KIND.TRACKER_CANCEL_SIGN_IN),
-          reopen: () => tell(ACT_KIND.TRACKER_REOPEN_SIGN_IN),
         },
       }) as const satisfies Readonly<
         Record<
@@ -125,8 +119,6 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       act(ACT_KIND.CALENDAR_SET_SELECTED, { accountId: APPLE_CALENDAR_ID, calendarId, selected }),
     [],
   );
-
-  const disconnectLinear = useCallback(() => act(ACT_KIND.TRACKER_DISCONNECT), []);
 
   /**
    * A consent sign-in is asking for one thing too, so the panel gets out of
@@ -413,12 +405,6 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       onDisconnect: disconnectAppleCalendar,
       onToggleCalendar: toggleAppleCalendarSelected,
       revoked: appleCalendarObserved?.revoked === true,
-    },
-    linear: {
-      held: slotHeldExcept(CONSENT_SERVICE_ID.LINEAR),
-      connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.LINEAR,
-      onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
-      onDisconnect: disconnectLinear,
     },
     signInWait,
     signInWaitNow,

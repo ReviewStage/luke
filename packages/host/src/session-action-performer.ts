@@ -5,33 +5,26 @@ import {
   type CarriedActionResult,
   dispatchByKind,
   guardedRead,
-  type IssueActionKind,
   type SessionActionKind,
   type ValidatedAction,
 } from "@sidecar/actions";
 import {
   PRODUCT_EVENT,
-  PRODUCT_ISSUE_ACTION,
   PRODUCT_SESSION_ACTION,
   type ProductSessionAction,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import type { LinearIssueTracker } from "@sidecar/credentials";
 import type { HostedActionClient, HostedActionOutcome, HostedActionTarget } from "@sidecar/hosted";
 import {
   type CloudAgentProviderId,
   ExternalOpenAnswerLostError,
-  ISSUE_ACTION_KIND,
   isCloudAgentProviderId,
-  isIssueTrackerId,
   isProviderId,
   type SessionApplicationId,
   type SessionIdentity,
   type SessionOpenResult,
   type SessionRoster,
   type SessionWriteResult,
-  type TrackedIssue,
-  type TrackerActionResult,
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
@@ -97,20 +90,17 @@ export interface SessionActionPerformerDependencies {
   ) => Promise<void>;
   expectCreatedWorkspace: (identity: SessionIdentity, now: number) => void;
   openCreatedWorkspaces: () => void;
-  trackedIssues: () => readonly TrackedIssue[] | undefined;
-  issueTrackers: readonly LinearIssueTracker[];
-  refreshIssues: () => void;
   recordProductEvent: RecordProductEvent;
 }
 
 /**
- * The one entry every action on a session or an issue passes through. The brain
+ * The one entry every action on a session passes through. The brain
  * is the only caller, and what arrives is a `ValidatedAction`, which only
  * `admit()` mints: whether the action may run was decided there, against the
  * roster it read for itself, so what is left here is carrying it — a session
  * write to the service that admits it once more against the same stored
- * snapshot, an issue write to the tracker that offered it — and counting what
- * landed. The opens are exposed on their own because a row press is not a
+ * snapshot — and counting what landed. The opens are exposed on their own
+ * because a row press is not a
  * write and reaches them without the brain.
  */
 export interface SessionActionPerformer {
@@ -122,7 +112,7 @@ export interface SessionActionPerformer {
    * own — the stored agent defaults — between admission and the write.
    */
   perform(
-    action: ValidatedAction<SessionActionKind | IssueActionKind>,
+    action: ValidatedAction<SessionActionKind>,
     guard?: ActionGuard,
   ): Promise<CarriedActionResult>;
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
@@ -142,10 +132,9 @@ export const OPEN_REFUSAL = {
 
 const REFUSAL = {
   // The sentences `admit` already says for these. The performer refuses the
-  // same three things at the last boundary before an effect, and a refusal
-  // worded twice is a refusal that drifts.
+  // same things at the last boundary before an effect, and a refusal worded
+  // twice is a refusal that drifts.
   NO_SESSION: ACTION_REFUSAL.NO_SESSION,
-  NO_ISSUE: ACTION_REFUSAL.NO_ISSUE,
   NO_ADDRESS: ACTION_REFUSAL.NO_ADDRESS,
   TURN_OVER: ACTION_REFUSAL.TURN_OVER,
   NO_ENDPOINT: HOSTED_ACTION_ANSWER.NO_ENDPOINT,
@@ -171,9 +160,6 @@ export function createSessionActionPerformer(
     rememberWorkspaceDefaults,
     expectCreatedWorkspace,
     openCreatedWorkspaces,
-    trackedIssues,
-    issueTrackers,
-    refreshIssues,
     recordProductEvent,
   } = dependencies;
 
@@ -435,67 +421,6 @@ export function createSessionActionPerformer(
       actions.renameSession(target, action.name),
     );
 
-  // An issue action is built from observed state alone: the issue's own tracker
-  // id comes back off the latest board rather than out of the action, and the
-  // transition comes back off that issue's own listed set. A fixture run
-  // observes no tracker, so it carries nothing.
-  const performIssueAction = async (
-    action: ValidatedAction<IssueActionKind>,
-  ): Promise<TrackerActionResult> => {
-    const issue = trackedIssues()?.find(
-      (candidate) =>
-        candidate.trackerId === action.identity.trackerId &&
-        candidate.identifier === action.identity.identifier,
-    );
-    if (!issue) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ISSUE };
-    const tracker = issueTrackers.find((candidate) => candidate.tracker.id === issue.trackerId);
-    if (!tracker) {
-      return {
-        status: ACTION_RESULT_STATUS.UNSUPPORTED,
-        reason: "That issue's tracker is not connected.",
-      };
-    }
-
-    let result: TrackerActionResult;
-    if (action.kind === ACTION_KIND.ISSUE_STATE) {
-      const transition = issue.transitions.find(
-        (candidate) => candidate.id === action.transition.id,
-      );
-      if (!transition) {
-        return {
-          status: ACTION_RESULT_STATUS.UNSUPPORTED,
-          reason: "That issue lists no such state.",
-        };
-      }
-      result = await tracker.execute({
-        kind: ISSUE_ACTION_KIND.SET_STATE,
-        trackerIssueId: issue.trackerIssueId,
-        transition,
-      });
-    } else {
-      result = await tracker.execute({
-        kind: ISSUE_ACTION_KIND.COMMENT,
-        trackerIssueId: issue.trackerIssueId,
-        body: action.body,
-      });
-    }
-    // An action that landed changes the board, so the roster should catch up
-    // as soon as Linear will say.
-    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
-      refreshIssues();
-      if (isIssueTrackerId(issue.trackerId)) {
-        recordProductEvent(PRODUCT_EVENT.ISSUE_ACTION_SEND, {
-          tracker_id: issue.trackerId,
-          issue_action:
-            action.kind === ACTION_KIND.ISSUE_STATE
-              ? PRODUCT_ISSUE_ACTION.STATE_MOVE
-              : PRODUCT_ISSUE_ACTION.COMMENT_ADD,
-        });
-      }
-    }
-    return result;
-  };
-
   // Of the actions below, only the create and the spawn await anything of their
   // own between admission and the provider effect, so only they take the
   // guard; the rest reach the service with nothing awaited between.
@@ -523,12 +448,7 @@ export function createSessionActionPerformer(
     });
 
   return {
-    async perform(action, guard) {
-      if (action.kind === ACTION_KIND.ISSUE_STATE || action.kind === ACTION_KIND.ISSUE_COMMENT) {
-        return performIssueAction(action);
-      }
-      return performSessionAction(action, guard);
-    },
+    perform: (action, guard) => performSessionAction(action, guard),
     // The two a row press reaches: the pressing panel has stood itself down
     // already, so the node is handed an address and nothing more.
     openSession: (identity) => openSession(identity, HOST_NODE_OPEN_KIND.ADDRESS),

@@ -9,7 +9,6 @@ import type { ConnectionInput } from "./connection-schema";
 import type {
   AppleCalendarControl,
   CalendarControl,
-  LinearControl,
   MicrophoneControl,
   WorkspaceProviderOption,
 } from "./controls";
@@ -56,7 +55,6 @@ export function useConnectionInput(input: {
   credentials: CredentialEntryControl;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
-  linear: LinearControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
   panelOpen: boolean;
 }): ConnectionInput | undefined {
@@ -76,7 +74,6 @@ export function useConnectionInput(input: {
     credentials: input.credentials,
     calendar: input.calendar,
     appleCalendar: input.appleCalendar,
-    linear: input.linear,
     workspaceProviders: input.workspaceProviders,
     writes,
     panelOpen: input.panelOpen,

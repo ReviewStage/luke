@@ -37,7 +37,6 @@ import {
 import type {
   AppleCalendarControl,
   CalendarControl,
-  LinearControl,
   MicrophoneControl,
   ShortcutControl,
   UpdateControl,
@@ -97,8 +96,6 @@ export interface SettingsPanelProps {
   calendar: CalendarControl;
   /** Everything the Apple Calendar block can do. */
   appleCalendar: AppleCalendarControl;
-  /** Everything the Linear block can do. */
-  linear: LinearControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
   /**
@@ -132,7 +129,6 @@ export function SettingsPanel({
   workspaceProviders,
   calendar,
   appleCalendar,
-  linear,
   onQuit,
   shortcuts,
   searchOpen,
@@ -171,7 +167,6 @@ export function SettingsPanel({
     credentials,
     calendar,
     appleCalendar,
-    linear,
     workspaceProviders,
     panelOpen,
   });

@@ -36,7 +36,7 @@ const PANEL: ActSender = {
 
 function rows(overrides: {
   updateSetting?: () => Promise<SettingsUpdateResult>;
-  connectLinear?: () => Promise<SettingsUpdateResult>;
+  connectGoogleCalendar?: () => Promise<SettingsUpdateResult>;
   applyLoginItem?: () => void;
   lastSettings?: () => AppSettings | undefined;
 }) {
@@ -44,7 +44,7 @@ function rows(overrides: {
     // SAFETY: these rows reach only the three host calls named here.
     host: {
       updateSetting: overrides.updateSetting ?? (async () => accepted()),
-      connectLinear: overrides.connectLinear ?? (async () => accepted()),
+      connectGoogleCalendar: overrides.connectGoogleCalendar ?? (async () => accepted()),
       settingsSnapshot: async () => undefined,
     } as unknown as HostOperator,
     reporterOf: () => "reporter",
@@ -111,15 +111,15 @@ test("a write the host refused is refused with the settings this client last saw
 test("a client with no snapshot at all refuses through the act's own sentence", async () => {
   const router = rows({
     lastSettings: () => undefined,
-    connectLinear: async () => {
+    connectGoogleCalendar: async () => {
       throw new Error("the host is not reachable");
     },
   });
   assert.deepEqual(
-    await Effect.runPromise(router.performAct({ kind: ACT_KIND.TRACKER_CONNECT }, PANEL)),
+    await Effect.runPromise(router.performAct({ kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE }, PANEL)),
     {
       status: "refused",
-      reason: ACT[ACT_KIND.TRACKER_CONNECT].refusal,
+      reason: ACT[ACT_KIND.CALENDAR_CONNECT_GOOGLE].refusal,
     },
   );
 });

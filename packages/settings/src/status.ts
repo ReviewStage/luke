@@ -31,7 +31,6 @@ export interface RuntimeStatus {
   secretStorage: SecretStorage;
   voiceAvailable: boolean;
   calendarSignInAvailable: boolean;
-  linearSignInAvailable: boolean;
   calendarAccounts: readonly CalendarAccount[];
   appleCalendarAvailable: boolean;
   appleCalendar?: CalendarAccount;

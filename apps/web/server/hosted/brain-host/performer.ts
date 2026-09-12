@@ -43,7 +43,7 @@ import type { HostedRoster } from "./roster.js";
  * a memory and the cloud action execution for a session or a workspace,
  * which admits the action once more against a fresh pass before the
  * provider's documented endpoint sees it. Nothing here reaches a machine:
- * an open, an app action, and an issue action have no performer on the
+ * an open and an app action have no performer on the
  * service, the tool policy offers none of them, and one that still arrives
  * is refused with a reason the model can read.
  */
@@ -188,8 +188,6 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
         [ACTION_KIND.PANEL]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
         [ACTION_KIND.FEEDBACK]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
         [ACTION_KIND.UPDATE]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
-        [ACTION_KIND.ISSUE_STATE]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
-        [ACTION_KIND.ISSUE_COMMENT]: async () => refusedActionOutput(REFUSAL.NOT_HERE),
       });
     },
   };

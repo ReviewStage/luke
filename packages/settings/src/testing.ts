@@ -32,7 +32,6 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
       ...APP_SETTING_DEFAULTS,
       credentialSources: {
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
@@ -43,7 +42,6 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
       quietDuringMeetings: true,
       announceSessions: true,
       calendarSignInAvailable: false,
-      linearSignInAvailable: false,
       appleCalendarAvailable: false,
       voiceAvailable: false,
       voiceSource: VOICE_SOURCE.ACCOUNT,

@@ -21,7 +21,6 @@ export function everyConnectionOffered(): ConnectionVisibility {
   return connectionVisibility({
     settings: settingsView({
       voiceSource: VOICE_SOURCE.KEY,
-      linearSignInAvailable: true,
       calendarSignInAvailable: true,
       appleCalendarAvailable: true,
     }),
@@ -39,12 +38,10 @@ export function connectionInput(overrides: Partial<ConnectionInput> = {}): Conne
     visibility: everyConnectionOffered(),
     settings: settingsView({
       voiceSource: VOICE_SOURCE.KEY,
-      linearSignInAvailable: true,
       calendarSignInAvailable: true,
       appleCalendarAvailable: true,
       credentialSources: {
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-        [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
       },
     }),
@@ -75,7 +72,6 @@ export function connectionInput(overrides: Partial<ConnectionInput> = {}): Conne
       onDisconnect: accepted,
       onToggleCalendar: accepted,
     },
-    linear: { held: false, connecting: false, onSignIn: () => undefined, onDisconnect: accepted },
     workspaceProviders: [],
     writes: { setting: accepted, entry: accepted, reset: accepted },
     panelOpen: true,

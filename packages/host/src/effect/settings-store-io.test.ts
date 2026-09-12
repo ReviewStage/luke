@@ -3,7 +3,6 @@ import path from "node:path";
 import * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
-import { CREDENTIAL_PROVIDER_LIST } from "@sidecar/credentials";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { Effect, Either } from "effect";
 import {
@@ -91,17 +90,13 @@ describe("parsePersistedSettingsEither", () => {
   it("answers the parsed record for a well-formed settings file", () => {
     const parsed = parsePersistedSettingsEither(
       JSON.stringify({ version: 2, apiKeys: {}, showInDock: true }),
-      CREDENTIAL_PROVIDER_LIST,
     );
     assert.equal(Either.isRight(parsed), true);
     assert.equal(Either.getOrThrow(parsed).showInDock, true);
   });
 
   it("refuses a file whose top level is not an object, with the legacy reason", () => {
-    const parsed = parsePersistedSettingsEither(
-      JSON.stringify([1, 2, 3]),
-      CREDENTIAL_PROVIDER_LIST,
-    );
+    const parsed = parsePersistedSettingsEither(JSON.stringify([1, 2, 3]));
     assert.equal(Either.isLeft(parsed), true);
     assert.deepEqual(
       Either.getLeft(parsed),
@@ -112,7 +107,7 @@ describe("parsePersistedSettingsEither", () => {
   });
 
   it("refuses text that is not JSON at all", () => {
-    const parsed = parsePersistedSettingsEither("{ not json", CREDENTIAL_PROVIDER_LIST);
+    const parsed = parsePersistedSettingsEither("{ not json");
     assert.equal(Either.isLeft(parsed), true);
     assert.equal(Either.isLeft(parsed) && parsed.left._tag, "SettingsParseRefusal");
   });
