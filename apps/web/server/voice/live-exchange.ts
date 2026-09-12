@@ -11,7 +11,6 @@ import { Effect, Option, Schema } from "effect";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
-import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import { askRecord } from "../hosted/store/asks.js";
 import type { HostedStoreContext } from "../hosted/store/database.js";
 import {
@@ -21,6 +20,7 @@ import {
   voiceWriter,
 } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
+import type { WebStoreRun } from "../runtime.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import {
   type HostedBriefingDelivery,
@@ -55,7 +55,7 @@ export interface HostedLiveExchangeOptions {
   readonly conversationId: string;
   readonly context: HostedStoreContext;
   /** The promise face this composition's own effects — the store's reads, the ask record, the voice writer — are run to, since the voice service drives them from socket callbacks. */
-  readonly run: FiberStoreRunner;
+  readonly run: WebStoreRun;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
   /**

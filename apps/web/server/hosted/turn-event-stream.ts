@@ -1,8 +1,7 @@
-import { setTimeout as sleepFor } from "node:timers/promises";
 import type { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, type ParseResult } from "effect";
+import { Chunk, Effect, Either, Option, type ParseResult, Stream } from "effect";
 import {
   BRAIN_TURN_TRIGGER,
   type BrainTurnTrigger,
@@ -31,7 +30,6 @@ import {
 } from "../core.js";
 import { hostedTurnPolicy } from "./brain-host/tools.js";
 import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
-import { type FiberStoreRunner, fiberStoreRunner } from "./fiber-runner.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { makeRateBrake } from "./rate-brake.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
@@ -177,7 +175,7 @@ export interface TurnEventStreamOptions {
   resolveUserId: (request: Request) => Promise<string | undefined>;
   store: Pick<HostedStore, "turns" | "messages">;
   now?: () => number;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number) => Effect.Effect<void>;
   /** The stream's own bounds, narrowed by a test so an attachment lapses in milliseconds rather than minutes. */
   bounds?: Partial<TurnEventStreamBounds>;
 }
@@ -191,19 +189,39 @@ function notFound(): Response {
 }
 
 /** The turn's record and its journal as they stand now, or nothing where the turn is gone or its journal cannot be read. */
-async function lookAtTurn(
-  run: FiberStoreRunner,
+function lookAtTurn(
   store: TurnEventStreamOptions["store"],
   userId: string,
   turnId: string,
-): Promise<readonly TurnEvent[] | undefined> {
-  const [turn] = await run(store.turns.named(userId, [turnId]));
-  if (turn === undefined) return undefined;
-  const journal = await run(
-    store.messages.byClientId(userId, turn.conversationId, CATALOG_TOOL_SET, turn.id),
-  );
-  if (!journal.ok) return undefined;
-  return projectTurnEvents(turn, journal.value[0]?.message);
+): Effect.Effect<
+  readonly TurnEvent[] | undefined,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient
+> {
+  return Effect.gen(function* () {
+    const [turn] = yield* store.turns.named(userId, [turnId]);
+    if (turn === undefined) return undefined;
+    const journal = yield* store.messages.byClientId(
+      userId,
+      turn.conversationId,
+      CATALOG_TOOL_SET,
+      turn.id,
+    );
+    if (!journal.ok) return undefined;
+    return projectTurnEvents(turn, journal.value[0]?.message);
+  });
+}
+
+/** Where one attachment's polling stands between reads: what the client has been told, and when it last heard anything. */
+interface Attachment {
+  /** The number of the last event written, which is where the next read's events are taken from. */
+  readonly told: number;
+  /** When the last frame was written, which the heartbeat is measured from. */
+  readonly quietSince: number;
+  /** Whether a read has already run, so the first happens at once and every later one waits out the interval. */
+  readonly polled: boolean;
+  /** Whether this chunk is the attachment's last: the end was told, or the attachment lapsed. */
+  readonly last: boolean;
 }
 
 /** The number of the last event the client took: absent for the turn's first; a cursor outside the shape is refused. */
@@ -245,49 +263,52 @@ export function handleTurnEventStream(
     if (turnId === undefined) return notFound();
     const [turn] = yield* store.turns.named(userId, [turnId]);
     if (turn === undefined) return notFound();
-    // The polling body runs inside the stream this handler answers with, so it
-    // outlives the handler's own fiber and holds the runtime rather than it.
-    const run = yield* fiberStoreRunner;
-
     const bounds = { ...TURN_EVENT_STREAM_BOUNDS, ...options.bounds };
-    const sleep = options.sleep ?? sleepFor;
+    const sleep = options.sleep ?? ((ms: number) => Effect.sleep(ms));
     const encoder = new TextEncoder();
     const attachedAt = now();
-    // The client's side of the connection can end two ways: the stream's own cancel, after which
-    // the controller takes nothing more, and the request's abort, after which the stream is closed.
-    let cancelled = false;
-    const gone = () => cancelled || request.signal.aborted;
+    // The client's side of the connection can end two ways: the stream's own
+    // cancel, which interrupts the fiber reading below it, and the request's
+    // abort, which the next read of the attachment sees and stops on.
+    const gone = () => request.signal.aborted;
 
-    const body = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        let told = after;
-        let quietSince = attachedAt;
-        const write = (frame: string) => {
-          controller.enqueue(encoder.encode(frame));
-          quietSince = now();
-        };
-        try {
-          for (;;) {
-            const events = await lookAtTurn(run, store, userId, turn.id);
-            if (events === undefined || gone()) break;
-            for (const event of events.slice(told)) {
-              write(encodeTurnEventFrame(event));
-              told = event.seq;
-            }
-            if (events.at(-1)?.kind === TURN_EVENT_KIND.ENDED) break;
-            if (now() - attachedAt >= bounds.ATTACHMENT_MS) break;
-            if (now() - quietSince >= bounds.HEARTBEAT_MS) write(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
-            await sleep(bounds.POLL_MS);
-            if (gone()) break;
-          }
-        } finally {
-          if (!cancelled) controller.close();
-        }
-      },
-      cancel() {
-        cancelled = true;
-      },
-    });
+    const frames = Stream.unfoldChunkEffect(
+      { told: after, quietSince: attachedAt, polled: false, last: false } satisfies Attachment,
+      (attachment: Attachment) =>
+        Effect.gen(function* () {
+          const none = Option.none<readonly [Chunk.Chunk<string>, Attachment]>();
+          if (attachment.last || gone()) return none;
+          if (attachment.polled) yield* sleep(bounds.POLL_MS);
+          if (gone()) return none;
+          const events = yield* lookAtTurn(store, userId, turn.id);
+          if (events === undefined || gone()) return none;
+          const fresh = events.slice(attachment.told);
+          const told = fresh.at(-1)?.seq ?? attachment.told;
+          const quietSince = fresh.length > 0 ? now() : attachment.quietSince;
+          const written = fresh.map((event) => encodeTurnEventFrame(event));
+          const last =
+            events.at(-1)?.kind === TURN_EVENT_KIND.ENDED ||
+            now() - attachedAt >= bounds.ATTACHMENT_MS;
+          const heartbeat = !last && now() - quietSince >= bounds.HEARTBEAT_MS;
+          if (heartbeat) written.push(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
+          return Option.some([
+            Chunk.fromIterable(written),
+            {
+              told,
+              quietSince: heartbeat ? now() : quietSince,
+              polled: true,
+              last,
+            } satisfies Attachment,
+          ] as const);
+        }),
+    );
+    // The polling runs inside the stream this handler answers with, so it
+    // outlives the handler's own fiber: the reader forks a fiber of its own on
+    // the runtime this request runs on, and the stream's cancel interrupts it.
+    const body = yield* Stream.toReadableStreamEffect(
+      Stream.map(frames, (frame) => encoder.encode(frame)),
+    );
+
     return new Response(body, {
       status: HOSTED_HTTP_STATUS.OK,
       headers: {

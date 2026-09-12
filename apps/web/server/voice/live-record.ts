@@ -1,5 +1,4 @@
 import type { LiveRecord } from "@sidecar/voice/live-session";
-import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import {
   STORE_WRITE_EFFECT,
   type VoiceTarget,
@@ -7,6 +6,7 @@ import {
   type VoiceWriter,
 } from "../hosted/store/index.js";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
+import type { WebStoreRun } from "../runtime.js";
 
 /**
  * The hosted implementation of the live record: the voice writer over
@@ -39,7 +39,7 @@ type DelegationCreated = Extract<
 
 export interface HostedLiveRecordOptions {
   /** The promise face the writer's effects are run to, since the record is driven from the session's own socket callbacks. */
-  readonly run: FiberStoreRunner;
+  readonly run: WebStoreRun;
   readonly writer: VoiceWriter;
   readonly target: VoiceTarget;
 }

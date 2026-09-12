@@ -959,7 +959,12 @@ turn has to be the caller's, refused before anything streams; another
 account's turn and none at all read alike as not found. The function carries a
 300-second duration and one attachment closes without an end at 270 seconds,
 for the client to attach again from its cursor, with a heartbeat frame every
-fifteen quiet seconds so the connection is known to stand.
+fifteen quiet seconds so the connection is known to stand. The polling itself
+is a stream: the handler answers a `ReadableStream` built by
+`Stream.toReadableStreamEffect`, which forks a fiber of its own on the runtime
+the request runs on, so the reads outlive the handler's fiber, the client's
+cancel interrupts them, and the request's own abort is seen at the top of each
+read.
 
 ## Provider key vault
 

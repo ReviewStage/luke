@@ -95,7 +95,6 @@
     "node:fs/promises",
     "node:os",
     "node:path",
-    "node:timers/promises",
     "path",
     "pg-native",
     "stream",

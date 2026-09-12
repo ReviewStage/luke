@@ -12,6 +12,7 @@ import {
   TURN_SLOW_STEP,
   type TurnEvent,
 } from "@sidecar/hosted";
+import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -350,10 +351,13 @@ test("a client that disconnects stops the polling", async () => {
         HEARTBEAT_MS: 60_000,
         ATTACHMENT_MS: 60_000,
       }),
-      sleep: async (ms) => {
-        polls += 1;
-        await new Promise((resolve) => setTimeout(resolve, ms));
-      },
+      sleep: (ms) =>
+        Effect.zipRight(
+          Effect.sync(() => {
+            polls += 1;
+          }),
+          Effect.sleep(ms),
+        ),
     }),
   );
   assert.ok(response.body);
