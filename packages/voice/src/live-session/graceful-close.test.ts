@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { LIVE_CLIENT_EVENT, LIVE_CLOSE_REASON, type LiveServerEvent } from "@sidecar/live";
-import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import { test } from "vitest";
 import { sidebandOverSocket } from "../live-socket.js";
-import { FakeLiveSocket } from "../testing.js";
+import { drainMicrotasks, FakeClock, FakeLiveSocket } from "../testing.js";
 import {
   closeGracefully,
   SIDEBAND_CLOSE_OUTCOME,

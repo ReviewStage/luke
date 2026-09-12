@@ -30,7 +30,6 @@ import {
   seedWorkspace,
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   type AgentRuntime,
   type CheckpointFormat,
@@ -78,6 +77,7 @@ import {
   type BrainRequestRecord,
 } from "./requests.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
+import type { ScheduledTimer } from "./seam.js";
 import { BrainStateStore } from "./state-store.js";
 import {
   type FakeBrainStateRepository,

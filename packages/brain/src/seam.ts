@@ -1,7 +1,9 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
 import type { BrainRequestLedger } from "./ledger.js";
+import type { ScheduledTimer } from "./scheduled-timer.js";
 import type { BrainTurnTrigger, RunControl } from "./turn.js";
+
+export type { ScheduledTimer } from "./scheduled-timer.js";
 
 /**
  * What every collaborator of {@link BrainAgent} reads of the conversation's

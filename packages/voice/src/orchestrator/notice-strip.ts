@@ -1,4 +1,6 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
+import type { ScheduledTimer } from "../scheduled-timer.js";
+
+export type { ScheduledTimer } from "../scheduled-timer.js";
 
 /**
  * How long a voice failure stays on the caption strip. The strip takes no

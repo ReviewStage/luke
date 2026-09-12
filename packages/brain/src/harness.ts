@@ -12,7 +12,6 @@ import {
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { notebookMemoryProvider } from "@sidecar/memory";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import {
   type AgentRuntime,
   CHILD_CLEANUP,
@@ -60,6 +59,7 @@ import {
 } from "./requests.js";
 import { type ResponsesInputItem, responsesModelAnswer } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
+import type { ScheduledTimer } from "./seam.js";
 import { BrainStateStore } from "./state-store.js";
 import {
   CAPTIONS_GUIDE,

@@ -8,17 +8,10 @@
  * the object this one builds on top of and overrides the clock seam of, and
  * `agentOn`/`heldOpenRuntime` stay there for the one test that builds a
  * second `BrainAgent` or runtime by hand without needing either to advance.
- *
- * `timersFromRuntime` reads and schedules against whichever runtime it is
- * handed, so capturing the currently running fiber's own runtime — the one
- * `it.effect` already provided a `TestClock` into — is what lets
- * `TestClock.setTime` reach the timers this harness's `BrainAgent` schedules,
- * with no clock of the harness's own to keep in step. The same runtime is
- * what every run of the harness's agent is a fiber on, so a run and the
- * timers around it stand on one clock rather than two.
  */
-import { type TimerSeam, timersFromRuntime } from "@sidecar/runtime/effect";
-import { Chunk, Effect, TestClock } from "effect";
+
+import type { Fiber } from "effect";
+import { Chunk, Clock, Duration, Effect, FiberId, Runtime, TestClock } from "effect";
 import {
   answered,
   type BrainClientAnswer,
@@ -31,7 +24,45 @@ import {
   harness as plainHarness,
   settle,
 } from "../harness.js";
+import type { ScheduledTimer } from "../seam.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "../testing.js";
+
+/**
+ * The `now`/`schedule`/`cancel` seam `BrainAgent` still takes, answered from
+ * a runtime's own `Clock`, so a caller reads and schedules against whichever
+ * clock that runtime carries — the `TestClock` an `it.effect` test already
+ * stands on. Starting the fiber here is a run outside an Effect for exactly
+ * that reason: this bridge is the edge, package-local to the test harness
+ * that is its last caller, rather than a shared seam another package holds.
+ *
+ * `cancel` has no way to be awaited, so it interrupts the fiber without
+ * waiting for the interruption to finish: what it must guarantee is that the
+ * callback does not run afterwards, never that the fiber has already ended.
+ */
+export const timerSeamFromRuntime = (runtime: Runtime.Runtime<never>) => {
+  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+  const sync = Runtime.runSync(runtime);
+  const fork = Runtime.runFork(runtime);
+  return {
+    now: () => sync(Clock.currentTimeMillis),
+    schedule: (callback: () => void, delayMs: number): ScheduledTimer => {
+      const handle: ScheduledTimer = {};
+      const fiber = fork(
+        Effect.delay(Effect.sync(callback), Duration.millis(delayMs)).pipe(
+          Effect.ensuring(Effect.sync(() => armed.delete(handle))),
+        ),
+      );
+      armed.set(handle, fiber);
+      return handle;
+    },
+    cancel: (timer: ScheduledTimer): void => {
+      const fiber = armed.get(timer);
+      if (fiber === undefined) return;
+      armed.delete(timer);
+      fiber.unsafeInterruptAsFork(FiberId.none);
+    },
+  };
+};
 
 /**
  * The `now`/`schedule`/`cancel` seam of the current fiber's own runtime, for
@@ -40,10 +71,12 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "../test
  * `effectHarness`'s own agent does, rather than a clock of its own that never
  * advances alongside it.
  */
-export const ambientTimers: Effect.Effect<TimerSeam> = Effect.gen(function* () {
-  const runtime = yield* Effect.runtime<never>();
-  return timersFromRuntime(runtime);
-});
+export const ambientTimers: Effect.Effect<ReturnType<typeof timerSeamFromRuntime>> = Effect.gen(
+  function* () {
+    const runtime = yield* Effect.runtime<never>();
+    return timerSeamFromRuntime(runtime);
+  },
+);
 
 /**
  * Builds the harness over the current fiber's own runtime, so its `BrainAgent`
@@ -59,7 +92,7 @@ export const effectHarness = (
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
     const runtime = yield* Effect.runtime<never>();
-    const { now, schedule, cancel } = timersFromRuntime(runtime);
+    const { now, schedule, cancel } = timerSeamFromRuntime(runtime);
     return plainHarness({ execution: runtime, now, schedule, cancel, ...overrides }, repository);
   });
 

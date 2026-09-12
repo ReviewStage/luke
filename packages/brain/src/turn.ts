@@ -1,5 +1,4 @@
 import { queueSummaryText, type ToolDescriptor, type ToolPolicyLayers } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { Generation } from "./generation.js";
 import type { RunEnd } from "./ledger.js";
@@ -10,6 +9,7 @@ import {
   type BrainRequestRecord,
   type BrainRunUsage,
 } from "./requests.js";
+import type { ScheduledTimer } from "./seam.js";
 import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { TurnEvents } from "./turn-events.js";

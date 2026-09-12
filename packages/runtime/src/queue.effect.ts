@@ -11,7 +11,7 @@
  * none of it.
  */
 import { Data, Duration, Effect, Schedule, type Scope } from "effect";
-import { timersFromRuntime } from "./effect/timers.js";
+import { timerSeamFromRuntime } from "./effect/timer-seam.js";
 import {
   admitToQueue,
   DEFAULT_QUEUE_SETTINGS,
@@ -114,7 +114,7 @@ export const makePendingInputQueue = (
 ): Effect.Effect<EffectPendingInputQueue, never, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.map(Effect.runtime<never>(), (runtime) => {
-      const timers = timersFromRuntime(runtime);
+      const timers = timerSeamFromRuntime(runtime);
       const queue = new PendingInputQueue({
         ...options,
         schedule: timers.schedule,

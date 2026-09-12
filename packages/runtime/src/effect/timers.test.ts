@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
 import { Effect, Exit, Fiber, Schedule, Scope, TestClock } from "effect";
-import { scheduleOnce, scheduleRepeat, timersFromRuntime } from "./timers.js";
+import { scheduleOnce, scheduleRepeat } from "./timers.js";
 
 describe("scheduleOnce", () => {
   it.effect("runs its work at the advanced instant and not before", () =>
@@ -73,77 +73,6 @@ describe("scheduleRepeat", () => {
       yield* TestClock.adjust("1 minute");
 
       assert.deepEqual(rounds, [0, 1, 2, 3]);
-    }),
-  );
-});
-
-describe("timersFromRuntime", () => {
-  it.effect("reads now from the runtime's own clock", () =>
-    Effect.gen(function* () {
-      const timers = timersFromRuntime(yield* Effect.runtime<never>());
-
-      assert.equal(timers.now(), 0);
-
-      yield* TestClock.adjust("90 seconds");
-
-      assert.equal(timers.now(), 90_000);
-    }),
-  );
-
-  it.effect("fires a scheduled callback at the advanced instant", () =>
-    Effect.gen(function* () {
-      const timers = timersFromRuntime(yield* Effect.runtime<never>());
-      const fired: number[] = [];
-
-      timers.schedule(() => fired.push(timers.now()), 2_000);
-
-      yield* TestClock.adjust("1999 millis");
-      assert.deepEqual(fired, []);
-
-      yield* TestClock.adjust("1 milli");
-      assert.deepEqual(fired, [2_000]);
-    }),
-  );
-
-  it.effect("runs nothing for a cancelled timer", () =>
-    Effect.gen(function* () {
-      const timers = timersFromRuntime(yield* Effect.runtime<never>());
-      const fired: number[] = [];
-
-      const handle = timers.schedule(() => fired.push(1), 2_000);
-      timers.cancel(handle);
-
-      yield* TestClock.adjust("1 minute");
-
-      assert.deepEqual(fired, []);
-    }),
-  );
-
-  it.effect("cancels only the timer it was handed", () =>
-    Effect.gen(function* () {
-      const timers = timersFromRuntime(yield* Effect.runtime<never>());
-      const fired: number[] = [];
-
-      const first = timers.schedule(() => fired.push(1), 1_000);
-      timers.schedule(() => fired.push(2), 2_000);
-      timers.cancel(first);
-
-      yield* TestClock.adjust("1 minute");
-
-      assert.deepEqual(fired, [2]);
-    }),
-  );
-
-  it.effect("takes a cancel of a timer that already fired", () =>
-    Effect.gen(function* () {
-      const timers = timersFromRuntime(yield* Effect.runtime<never>());
-      const fired: number[] = [];
-
-      const handle = timers.schedule(() => fired.push(1), 1_000);
-      yield* TestClock.adjust("1 second");
-      timers.cancel(handle);
-
-      assert.deepEqual(fired, [1]);
     }),
   );
 });

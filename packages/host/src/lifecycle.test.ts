@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGatewayEffect } from "@sidecar/gateway";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import {
@@ -8,6 +7,7 @@ import {
   shutdownStepsClosingLiveSession,
   shutdownStepsFlushingEvents,
 } from "./lifecycle.js";
+import { drainMicrotasks } from "./testing/index.js";
 
 /** The shutdown as a promise, since these bodies are plain tests rather than fibers. */
 const runShutdown = (

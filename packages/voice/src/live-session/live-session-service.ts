@@ -29,11 +29,10 @@ import {
   UTTERANCE_GAP_MS,
   UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
-import { AppendChannel } from "./append-channel.js";
+import { AppendChannel, type ScheduledTimer } from "./append-channel.js";
 import { closeGracefully, SIDEBAND_CLOSE_OUTCOME } from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,

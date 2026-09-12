@@ -20,12 +20,12 @@ import {
   UTTERANCE_GAP_MS,
   UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
-import { drainMicrotasks, FakeClock } from "@sidecar/runtime/testing";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
+import { drainMicrotasks, FakeClock } from "../testing.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,

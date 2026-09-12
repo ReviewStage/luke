@@ -463,19 +463,21 @@ if [[ -n "$drawn_hosted_quota" ]]; then
     exit 1
 fi
 
-# A temporary directory, a microtask drain, a fake clock, a native-helper
-# process and a brain composition were each hand-rolled in several test files,
-# and every copy drifted: three temporary directories were never cleaned up and
-# four drains had settled on four different tick counts for the same wait. The
-# first three live in @sidecar/runtime/testing, because the host's tests are in
-# a package and a package cannot reach into an app; the rest are under
-# apps/desktop/src/testing. These two calls are how a hand-rolled one always
-# begins.
+# A temporary directory, a native-helper process, and a brain composition were
+# each hand-rolled in several test files, and every copy drifted: three
+# temporary directories were never cleaned up. `temporaryDirectory` lives in
+# @sidecar/runtime/testing, because the host's tests are in a package and a
+# package cannot reach into an app; the rest are under apps/desktop/src/testing.
+# This call is how a hand-rolled one always begins. A microtask drain and a
+# fake clock are no longer this check's concern: `TestClock` is the clock an
+# `it.effect` test drives, and a plain vitest test's own wait is a
+# package-owned helper beside the suite that needs it, never a shared runtime
+# export — see P12-03.
 hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
-    'mkdtemp|setImmediate' \
+    'mkdtemp' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src" "$SIDECAR_REPO_ROOT/packages/host/src" || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
-    printf 'error: test files import temporaryDirectory and drainMicrotasks from @sidecar/runtime/testing rather than hand-rolling them:\n%s\n' \
+    printf 'error: test files import temporaryDirectory from @sidecar/runtime/testing rather than hand-rolling it:\n%s\n' \
         "$hand_rolled_fixtures" >&2
     exit 1
 fi

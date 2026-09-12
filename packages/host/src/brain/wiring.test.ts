@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import type { BrainStateRepository } from "@sidecar/brain";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Runtime } from "effect";
 import { test } from "vitest";
+import { drainMicrotasks } from "../testing/index.js";
 import { type BrainWiringDependencies, wireBrain } from "./wiring.js";
 
 /**

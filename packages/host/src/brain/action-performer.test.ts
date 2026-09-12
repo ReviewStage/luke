@@ -16,7 +16,6 @@ import type { BrainActionExecution } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { CAPTIONS_GUIDE, performCall } from "@sidecar/brain/testing";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import {
@@ -29,6 +28,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
+import { drainMicrotasks } from "../testing/index.js";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,

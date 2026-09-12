@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { FakeClock } from "@sidecar/runtime/testing";
 import {
   ASK_UNRECORDED_NOTE,
   LIVE_BRAIN_RUN_END,
@@ -15,7 +14,7 @@ import {
   type LiveSessionSource,
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
-import { FakeLiveSocket } from "@sidecar/voice/testing";
+import { FakeClock, FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
 import { Schema } from "effect";
 import { afterAll, test } from "vitest";

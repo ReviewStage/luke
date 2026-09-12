@@ -15,8 +15,10 @@ import {
   isTerminalChildRunStatus,
 } from "./child-records.js";
 import { type AgentId, childSessionKey, type SessionKey } from "./identifiers.js";
-import type { ScheduledTimer } from "./timers.js";
+import type { ScheduledTimer } from "./scheduled-timer.js";
 import { CHILD_DEPTH_CAP } from "./tool-policy.js";
+
+export type { ScheduledTimer } from "./scheduled-timer.js";
 
 /**
  * Delegation's own lifecycle, ported from OpenClaw `b7528507`'s sub-agent

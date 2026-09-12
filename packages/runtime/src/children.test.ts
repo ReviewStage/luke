@@ -17,6 +17,7 @@ import {
   type ChildStore,
   type CompletionDeliverer,
   deliveryBackoffMs,
+  type ScheduledTimer,
 } from "./children.js";
 import {
   childSessionKey,
@@ -25,7 +26,6 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "./identifiers.js";
-import type { ScheduledTimer } from "./timers.js";
 
 /**
  * The child service over a synthetic executor and deliverer: the limits, the

@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { timersFromRuntime } from "@sidecar/runtime/effect";
 import { Effect } from "effect";
-import { advanceHarness } from "./harness.js";
+import { advanceHarness, timerSeamFromRuntime } from "./harness.js";
 
 describe("advanceHarness", () => {
   it.effect(
@@ -10,7 +9,7 @@ describe("advanceHarness", () => {
     () =>
       Effect.gen(function* () {
         const runtime = yield* Effect.runtime<never>();
-        const { now, schedule } = timersFromRuntime(runtime);
+        const { now, schedule } = timerSeamFromRuntime(runtime);
         const fired: number[] = [];
 
         schedule(() => {
@@ -33,7 +32,7 @@ describe("advanceHarness", () => {
   it.effect("advances straight to the target when nothing is scheduled", () =>
     Effect.gen(function* () {
       const runtime = yield* Effect.runtime<never>();
-      const { now } = timersFromRuntime(runtime);
+      const { now } = timerSeamFromRuntime(runtime);
 
       yield* advanceHarness(2_000);
 

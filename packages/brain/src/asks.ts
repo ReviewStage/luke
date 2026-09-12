@@ -4,7 +4,6 @@ import {
   type QueuedInput,
   queueSummaryLine,
 } from "@sidecar/runtime";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
 import { MutableRef } from "effect";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
@@ -18,7 +17,7 @@ import {
   type BrainSubmissionResult,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import type { AgentSeam } from "./seam.js";
+import type { AgentSeam, ScheduledTimer } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { type AskInput, BRAIN_TURN_TRIGGER, newRunControl, type RunControl } from "./turn.js";
 import type { ActiveExecution } from "./turn-runner.js";

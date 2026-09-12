@@ -54,14 +54,18 @@
     "packages/hosted/src/vault-client.ts",
     "packages/providers/src/shared/promise-face.ts",
     "packages/runtime/src/effect/cadence.ts",
-    "packages/runtime/src/effect/timers.ts",
     "packages/runtime/src/execution.ts",
     "packages/voice/src/live-session-source.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts",
     "packages/wire/src/effect/http.ts",
     "packages/wire/src/testing/effect.ts"
   ],
-  "runOnHandedRuntime": ["apps/desktop/src/main/app-state.ts"],
+  "runOnHandedRuntime": [
+    "apps/desktop/src/main/app-state.ts",
+    "packages/brain/src/effect/harness.ts",
+    "packages/host/src/effect/timer-seam.ts",
+    "packages/runtime/src/effect/timer-seam.ts"
+  ],
   "rawAsyncPrimitives": [
     "apps/desktop/src/main/ipc/register-desktop-ipc.ts",
     "apps/desktop/src/main/native/apple-calendar-helper.ts",

@@ -13,7 +13,6 @@ import {
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
-import { timersFromRuntime } from "@sidecar/runtime/effect";
 import { SESSION_STATUS } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
@@ -33,6 +32,7 @@ import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
+import { timerSeamFromRuntime } from "./effect/timer-seam.js";
 
 /** What the live session reaches in the brain that re-decides a held briefing. */
 interface LiveLinks {
@@ -91,7 +91,7 @@ export const composeLive = (
     // The service's own idle, settle, and finalize timers, over the Effect
     // runtime this composition runs on rather than Node's own `setTimeout`, so
     // a test driving a `TestClock` drives them too.
-    const timers = timersFromRuntime(yield* Effect.runtime<never>());
+    const timers = timerSeamFromRuntime(yield* Effect.runtime<never>());
 
     function markFirstAnnouncementSpoken(): void {
       const onboardingState = calendars.onboarding();

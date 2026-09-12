@@ -230,8 +230,11 @@ brain and the one record it hands `LiveSessionService` are built in
 `compose-host.ts`, where the brain composer stands, and handed in as
 `@sidecar/voice/effect`'s `LiveBrainTag`/`LiveRecordTag` layers rather than
 through `compose-live.ts`'s own constructor arguments; its idle, settle, and
-finalize timers are `@sidecar/runtime/effect`'s `timersFromRuntime` over the
-Effect runtime the composition runs on, in place of Node's own `setTimeout`.
+finalize timers are this package's own `timerSeamFromRuntime`
+(`effect/timer-seam.ts`) over the Effect runtime the composition runs on, in
+place of Node's own `setTimeout` — a package-local bridge rather than a
+shared runtime export, since P12-03 deleted `@sidecar/runtime/effect`'s
+`timersFromRuntime` with the `ScheduledTimer` seam it answered.
 The live service is the one sink for
 everything Luke says unprompted: `compose-live.ts` takes every briefing from
 the brain, every run's streamed reply to speak, and the two onboarding
@@ -262,10 +265,12 @@ lowest one that holds both.
 ## The test scaffolding is behind its own door
 
 `@sidecar/host/testing` holds the brain composition and the operator a
-window's ask crosses, and `testKernelLayer`, every seam
-`hostAssemblyLayer`/`hostStandingLayer` need over a fixture state root, so
-nothing that ships can reach them. Its clock is Effect's own — a `TestClock`
-under `it.effect`, driven with `TestClock.adjust` rather than a hand-advanced
-`FakeClock` — and the three fixtures every other test in the repository
-shares — a temporary directory, a stated microtask drain, a clock the test
-drives by hand — are in `@sidecar/runtime/testing`.
+window's ask crosses, `testKernelLayer`, every seam
+`hostAssemblyLayer`/`hostStandingLayer` need over a fixture state root, and
+this package's own `drainMicrotasks` (`testing/drain.ts`), a package-owned
+microtask wait for the plain (non-`it.effect`) suites still on one, so
+nothing that ships can reach any of them. Its clock is Effect's own — a
+`TestClock` under `it.effect`, driven with `TestClock.adjust` rather than a
+hand-advanced fake clock — and the one fixture every other test in the
+repository still shares, a temporary directory, is in
+`@sidecar/runtime/testing`.

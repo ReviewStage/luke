@@ -4,10 +4,10 @@ import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { SOCKET_OPEN_FAULT, socketOpened } from "@sidecar/voice";
 import { test } from "vitest";
 import { WebSocketServer } from "ws";
+import { drainMicrotasks } from "../testing/index.js";
 import { openSocketOverWs } from "./socket-over-ws.js";
 
 /** A local upgrade endpoint that admits a bearer and refuses everything else with a status. */

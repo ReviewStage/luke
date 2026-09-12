@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { setImmediate as immediate } from "node:timers/promises";
 import { runModeFor } from "@sidecar/host";
 import { HostAssemblyTag, hostStandingLayer, layersInOrder } from "@sidecar/host/effect";
-import { drainMicrotasks, temporaryDirectory } from "@sidecar/runtime/testing";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { Context, Effect, Exit, Fiber, Layer, ManagedRuntime, Runtime, Stream } from "effect";
 import { test } from "vitest";
 import { AppStateStore, initialAppState } from "../app-state";
@@ -265,7 +266,8 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
   assert.ok(events, "the engine was never wired");
   events.onDownloaded("9.9.9");
   updates.install();
-  await drainMicrotasks(2);
+  await immediate();
+  await immediate();
   // The restart into a downloaded build swaps this executable, so everything
   // owed is given back before Squirrel is let anywhere near it — and given
   // back first, so the installer's own quit is not the one held open.

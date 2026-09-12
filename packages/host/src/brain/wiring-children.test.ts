@@ -17,8 +17,6 @@ import {
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
-import { timersFromRuntime } from "@sidecar/runtime/effect";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
@@ -38,6 +36,8 @@ import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Chunk, Duration, Effect, Runtime, TestClock } from "effect";
 import type { TestContext } from "vitest";
+import { timerSeamFromRuntime } from "../effect/timer-seam.js";
+import { drainMicrotasks } from "../testing/index.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -146,7 +146,7 @@ interface Composed {
  * advances on the same clock a test drives rather than firing on its own.
  */
 function childTimersOn(runtime: Runtime.Runtime<never>) {
-  const { schedule, cancel } = timersFromRuntime(runtime);
+  const { schedule, cancel } = timerSeamFromRuntime(runtime);
   return { schedule, cancel };
 }
 

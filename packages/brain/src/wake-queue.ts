@@ -1,6 +1,6 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { MutableRef } from "effect";
 import { sameObservation } from "./observation-inbox.js";
+import type { ScheduledTimer } from "./seam.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 /**

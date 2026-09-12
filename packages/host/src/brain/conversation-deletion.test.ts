@@ -18,7 +18,6 @@ import {
   bareModelAdapter,
   fakeActionPerformer,
 } from "@sidecar/brain/testing";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
@@ -37,7 +36,7 @@ import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Runtime } from "effect";
 import { type TestContext, test } from "vitest";
 import { ConversationThread } from "../conversation-thread.js";
-import { operatorOverBrain } from "../testing/index.js";
+import { drainMicrotasks, operatorOverBrain } from "../testing/index.js";
 import { CONVERSATION_DELETE_OUTCOME, deleteConversationFlow } from "./conversation-deletion.js";
 import { followBrainRequests } from "./publication.js";
 
