@@ -199,12 +199,12 @@ export const composeLive = (
      * sentence, read from the stored choice the desktop registers first. The
      * key is suggested only while voice could actually take it.
      */
-    async function arrivalBeat() {
+    const arrivalBeat = Effect.gen(function* () {
       const working = observation
         .rosterForClients()
         .find((session) => session.status === SESSION_STATUS.WORKING);
       const talkKey = voiceHotkeyCandidates(
-        await settings.awaitedStore.get(APP_SETTING_SCHEMA.voiceHotkey.field),
+        yield* Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.voiceHotkey.field)),
       )[0];
       return {
         kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
@@ -212,7 +212,7 @@ export const composeLive = (
         ...(working ? { sessionTitle: working.title } : undefined),
         ...(talkKey === undefined ? undefined : { talkKeyLabel: voiceHotkeyLabel(talkKey) }),
       } as const;
-    }
+    });
 
     async function requestOnboardingBeat(): Promise<void> {
       if (!runMode.requiresAccount || !account.signedIn()) return;
@@ -231,7 +231,7 @@ export const composeLive = (
       // when that link answers an effect.
       await Runtime.runPromise(runtime)(observation.loop.refresh);
       if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
-      service.speakBeat(await arrivalBeat());
+      service.speakBeat(await Runtime.runPromise(runtime)(arrivalBeat));
     }
 
     const methods: GatewayMethodTable = {
