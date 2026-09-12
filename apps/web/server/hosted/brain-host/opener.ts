@@ -3,6 +3,7 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, Effect, Either, Option, type ParseResult } from "effect";
 import type { BrainWakeEvent, SessionIdentity } from "../../core.js";
 import { holdReleasedInputText, TURN_ORIGIN, wakeInputText } from "../../core.js";
+import { OBSERVATION_TICK } from "../observation-bounds.js";
 import {
   decodeObservedRoster,
   encodeObservedRoster,
@@ -70,6 +71,22 @@ import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-e
  * hold-release message the relay has not written yet can only make the next
  * drain list a release again, never lose one, and a turn eve took and never
  * ran leaves its releases uncarried for the next release's drain to carry.
+ *
+ * The one change the opener refuses to derive is one across a stale gap.
+ * The bookmark's instant is the snapshot it was last kept level with — a
+ * visit that finds nothing to wake keeps it level all the same, so an idle
+ * roster is never mistaken for a gap — and the snapshot's is the pass that
+ * wrote it; a bookmark trailing the snapshot by more than
+ * `OBSERVATION_TICK.STALE_GAP_MS` means no visit has caught the brain up for
+ * that long — the cron paused, a deploy left a gap, the secret rotated, the
+ * provider refused every pass, or eve refused every turn — and what changed
+ * in between is history the roster already shows, not news. The
+ * visit reseeds the bookmark from the snapshot as it stands, over the
+ * bookmark's own instant, wakes nothing, and counts the reseed in its
+ * outcome, so the tick's answer says it happened. The next change under the
+ * reseeded bookmark wakes as usual. Nothing deterministic decides an
+ * announcement here either: the gate decides what the brain is told, and
+ * across a gap it is told nothing.
  *
  * The pass is per account by construction: it reads one account's diffs
  * and one account's queued rows, opens that account's conversations, and
@@ -142,15 +159,23 @@ export interface TurnOpeningOutcome {
   readonly holdRelease: number;
   /** Conversations the pass could not open a turn for: eve refused, or no conversation could stand for the session. */
   readonly failed: number;
+  /** Bookmarks found trailing the snapshot past the stale gap and reseeded from it, waking nothing: one per account at most. */
+  readonly reseeded: number;
 }
 
-export const NOTHING_OPENED: TurnOpeningOutcome = { observation: 0, holdRelease: 0, failed: 0 };
+export const NOTHING_OPENED: TurnOpeningOutcome = {
+  observation: 0,
+  holdRelease: 0,
+  failed: 0,
+  reseeded: 0,
+};
 
 function summed(left: TurnOpeningOutcome, right: TurnOpeningOutcome): TurnOpeningOutcome {
   return {
     observation: left.observation + right.observation,
     holdRelease: left.holdRelease + right.holdRelease,
     failed: left.failed + right.failed,
+    reseeded: left.reseeded + right.reseeded,
   };
 }
 
@@ -164,25 +189,37 @@ interface DerivedChange {
   readonly diff: RosterDiff;
 }
 
+/** What a visit settled: the change it derived, if it derived one, and whether it reseeded the bookmark across a stale gap instead. */
+interface Settled {
+  readonly change?: DerivedChange;
+  readonly reseeded: boolean;
+}
+
+const NOTHING_SETTLED: Settled = { reseeded: false };
+const RESEEDED: Settled = { reseeded: true };
+
+/** The outcome of a visit that woke nothing: nothing opened, and the reseed counted where the visit made one. */
+function nothingWoken(settled: Settled): TurnOpeningOutcome {
+  return { ...NOTHING_OPENED, reseeded: settled.reseeded ? 1 : 0 };
+}
+
 /**
  * The one function that reads the snapshot and the bookmark, settles every
  * bookkeeping the bookmark owes — a first adoption, the replacement of one
- * this build cannot read, a key change absorbed — and only then derives the
- * change. The wakes take its result as their argument and cannot run without
- * it, so no bound, emptiness, or refusal placed in front of the wakes can
- * skip the bookkeeping: state advances unconditionally and output is what
- * is bounded. The account's change is the snapshot the pass
- * just wrote, diffed against the consumed roster. There is no queue of diffs
- * to drain; a visit that could not hand its change over leaves the bookmark
- * where it was, and the next visit derives the same change again, wider by
- * whatever moved since, which is the coalescing wanted anyway. A first visit
- * finds no bookmark and adopts the snapshot as it stands, waking nothing,
- * exactly as the first pass records no change against nothing.
+ * this build cannot read, a reseed across a stale gap, a key change
+ * absorbed — and only then derives the change. The wakes take its result as
+ * their argument and cannot run without it, so no bound, emptiness, or
+ * refusal placed in front of the wakes can skip the bookkeeping: state
+ * advances unconditionally and output is what is bounded. The account's
+ * change is the snapshot the pass just wrote, diffed against the consumed
+ * roster. There is no queue of diffs to drain; a visit that could not hand
+ * its change over leaves the bookmark where it was, and the next visit
+ * derives the same change again, wider by whatever moved since, which is the
+ * coalescing wanted anyway, until the two stand a stale gap apart. A first
+ * visit finds no bookmark and adopts the snapshot as it stands, waking
+ * nothing, exactly as the first pass records no change against nothing.
  */
-function settledChange(
-  seams: TurnOpenerSeams,
-  userId: string,
-): OpenerEffect<DerivedChange | undefined> {
+function settledChange(seams: TurnOpenerSeams, userId: string): OpenerEffect<Settled> {
   return Effect.gen(function* () {
     // A snapshot this build cannot open is the pass's to replace on its next whole read; until then
     // the visit wakes nothing from it and says so, rather than failing the account's whole opening.
@@ -191,36 +228,49 @@ function settledChange(
       seams.report(
         `The roster snapshot of account ${userId} cannot be opened; nothing is woken from it.`,
       );
-      return undefined;
+      return NOTHING_SETTLED;
     }
     const snapshot: RosterSnapshotRecord | undefined = read.value;
-    if (snapshot === undefined) return undefined;
+    if (snapshot === undefined) return NOTHING_SETTLED;
     const current = decodeObservedRoster(snapshot.body);
     if (current === undefined) {
       seams.report(
         `The roster snapshot of account ${userId} cannot be read; nothing is woken from it.`,
       );
-      return undefined;
+      return NOTHING_SETTLED;
     }
     const bookmark = yield* seams.store.roster.consumed(userId);
     if (bookmark.state === CONSUMED_ROSTER.ABSENT) {
       yield* seams.store.roster.keepConsumed(userId, snapshot, undefined);
-      return undefined;
+      return NOTHING_SETTLED;
     }
     // A bookmark this build cannot open or read is replaced by the snapshot as it stands, over the
     // bookmark's own instant: kept where none stands it would lose to the row it meant to replace,
     // and every later visit would adopt in silence.
-    const replace = (from: number): OpenerEffect<undefined> =>
+    const replace = (from: number): OpenerEffect<Settled> =>
       Effect.gen(function* () {
         seams.report(
           `The roster bookmark of account ${userId} could not be read; it is replaced by the snapshot as it stands, and nothing is woken from it.`,
         );
         yield* seams.store.roster.keepConsumed(userId, snapshot, from);
-        return undefined;
+        return NOTHING_SETTLED;
       });
     if (bookmark.state === CONSUMED_ROSTER.UNREADABLE) return yield* replace(bookmark.observedAt);
     const heard = decodeObservedRoster(bookmark.roster.body);
     if (heard === undefined) return yield* replace(bookmark.roster.observedAt);
+    // A bookmark trailing the snapshot past the stale gap has not been caught up for that long — an
+    // empty visit keeps it level below, so this is never an idle roster — and what changed in between
+    // is history the roster shows rather than news: the bookmark is reseeded from the snapshot as it
+    // stands, over its own instant, and nothing is woken from the gap. The gap is the two rows' own
+    // instants apart, never the clock's reading.
+    const gap = snapshot.observedAt - bookmark.roster.observedAt;
+    if (gap > OBSERVATION_TICK.STALE_GAP_MS) {
+      seams.report(
+        `The roster bookmark of account ${userId} trails the snapshot by ${gap} ms, past the stale gap; it is reseeded from the snapshot as it stands, and nothing is woken from the gap.`,
+      );
+      yield* seams.store.roster.keepConsumed(userId, snapshot, bookmark.roster.observedAt);
+      return RESEEDED;
+    }
     // A provider whose key was replaced, added, or removed since the bookmark is another account's
     // roster to compare against; it is taken from the snapshot as it stands, as the pass refuses the
     // same comparison, so a key change wakes nothing and the bookmark settles on the new key at once.
@@ -232,15 +282,19 @@ function settledChange(
       from: bookmark.roster.observedAt,
       diff: rosterDiff(consumed, current),
     };
-    // Nothing to wake, but a provider taken from the snapshot still has to reach the bookmark, or the
-    // same adoption is made on every visit and the bookmark never settles on the new key.
+    // Nothing to wake, and the bookmark is kept level with the snapshot all the same, over its own
+    // instant: its instant is what the stale gap reads as when the brain was last caught up, so an
+    // idle roster must move it as a woken change does, and a provider taken from the snapshot on a
+    // key change must reach it or the same adoption is made on every visit. A visit whose pass left
+    // the snapshot standing, and whose bookmark already holds it, writes nothing.
     if (
       rosterDiffIsEmpty(change.diff) &&
-      encodeObservedRoster(consumed) !== encodeObservedRoster(heard)
+      (snapshot.observedAt !== change.from ||
+        encodeObservedRoster(consumed) !== encodeObservedRoster(heard))
     ) {
       yield* seams.store.roster.keepConsumed(userId, snapshot, change.from);
     }
-    return change;
+    return { change, reseeded: false };
   });
 }
 
@@ -359,9 +413,14 @@ export function openObservationTurns(
   options: TurnOpeningOptions = {},
 ): OpenerEffect<TurnOpeningOutcome> {
   return Effect.gen(function* () {
-    const change = yield* settledChange(seams, userId);
-    if (change === undefined) return NOTHING_OPENED;
-    return yield* wakeFrom(seams, userId, change, options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT);
+    const settled = yield* settledChange(seams, userId);
+    if (settled.change === undefined) return nothingWoken(settled);
+    return yield* wakeFrom(
+      seams,
+      userId,
+      settled.change,
+      options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT,
+    );
   });
 }
 
@@ -408,7 +467,7 @@ function wakeFrom(
       const read = yield* withTranscript(seams, opening);
       const words = wakeInputText(read.events, seams.now());
       if (!(yield* offered(seams, target, BRAIN_HOST_TURN.OBSERVATION, words))) {
-        return { observation, holdRelease: 0, failed: failed + 1 };
+        return { observation, holdRelease: 0, failed: failed + 1, reseeded: 0 };
       }
       if (read.cursor !== undefined) {
         cursors.push({ identity: opening.identity, cursor: read.cursor, from: read.from });
@@ -440,7 +499,7 @@ function wakeFrom(
         ),
       ),
     );
-    return { observation, holdRelease: 0, failed };
+    return { observation, holdRelease: 0, failed, reseeded: 0 };
   });
 }
 
@@ -487,7 +546,7 @@ export function openHoldReleaseTurns(
           seams.now(),
         );
         if (!(yield* offered(seams, target, BRAIN_HOST_TURN.HOLD_RELEASE, words))) {
-          return { observation: 0, holdRelease, failed: 1 };
+          return { observation: 0, holdRelease, failed: 1, reseeded: 0 };
         }
         holdRelease += 1;
       } else {
@@ -502,7 +561,7 @@ export function openHoldReleaseTurns(
         }
       }
     }
-    return { observation: 0, holdRelease, failed: 0 };
+    return { observation: 0, holdRelease, failed: 0, reseeded: 0 };
   });
 }
 
@@ -516,14 +575,17 @@ export function openAccountTurns(
     const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
     // The bookmark is settled before anything is woken, so neither the hold releases filling the bound
     // nor eve refusing one can leave a first bookmark unplaced for a visit.
-    const change = yield* settledChange(seams, userId);
+    const settled = yield* settledChange(seams, userId);
     const released = yield* openHoldReleaseTurns(seams, userId, { limit });
-    // A refused hold release ends the visit's wakes, since eve is refusing.
-    if (released.failed > 0 || change === undefined) return released;
+    // A refused hold release ends the visit's wakes, since eve is refusing; a reseed the visit made
+    // is settled already and counted either way.
+    if (released.failed > 0 || settled.change === undefined) {
+      return summed(released, nothingWoken(settled));
+    }
     const observed = yield* wakeFrom(
       seams,
       userId,
-      change,
+      settled.change,
       Math.max(0, limit - released.holdRelease),
     );
     return summed(released, observed);

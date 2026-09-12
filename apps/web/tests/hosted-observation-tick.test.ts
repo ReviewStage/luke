@@ -27,7 +27,12 @@ const PUSHED: SpeechPushOutcome = {
   waiting: 1,
 };
 /** What one account's opening answers unless a test says otherwise: nothing pending, nothing opened. */
-const NOTHING_OPENED: TurnOpeningOutcome = { observation: 0, holdRelease: 0, failed: 0 };
+const NOTHING_OPENED: TurnOpeningOutcome = {
+  observation: 0,
+  holdRelease: 0,
+  failed: 0,
+  reseeded: 0,
+};
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Request {
@@ -230,14 +235,14 @@ test("a pass that outruns its deadline is counted failed and the tick moves on",
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
-    turns: { observation: 0, holdRelease: 0, failed: 1 },
+    turns: { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
   });
 });
 
 test("each account's opening runs after its own pass, inside the same share of the tick, and its counts are summed; a pass that throws is still followed by its opening", async () => {
   const openings = new Map<string, TurnOpeningOutcome>([
-    ["user-a", { observation: 2, holdRelease: 0, failed: 0 }],
-    ["user-b", { observation: 1, holdRelease: 0, failed: 1 }],
+    ["user-a", { observation: 2, holdRelease: 0, failed: 0, reseeded: 0 }],
+    ["user-b", { observation: 0, holdRelease: 1, failed: 1, reseeded: 1 }],
   ]);
   const { options, recorded } = tickOptions(
     {},
@@ -264,7 +269,7 @@ test("each account's opening runs after its own pass, inside the same share of t
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
-    turns: { observation: 3, holdRelease: 0, failed: 1 },
+    turns: { observation: 2, holdRelease: 1, failed: 1, reseeded: 1 },
   });
   assert.deepEqual(recorded.ran, [
     "observe:user-a",
@@ -281,7 +286,7 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     async () => ({ complete: true, changed: false }),
     async (userId) => {
       if (userId === "user-a") throw new Error("eve went away");
-      return { observation: 1, holdRelease: 0, failed: 0 };
+      return { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 };
     },
   );
 
@@ -296,7 +301,7 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
-    turns: { observation: 1, holdRelease: 0, failed: 1 },
+    turns: { observation: 1, holdRelease: 0, failed: 1, reseeded: 0 },
   });
 });
 
