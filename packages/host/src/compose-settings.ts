@@ -39,6 +39,7 @@ import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
+import { heldProductEvents } from "./held-product-events.js";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { SettingsStore, type StoredAccount } from "./settings-store.js";
@@ -102,6 +103,7 @@ export const composeSettings = (): Effect.Effect<
     const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
     const runtime = yield* Effect.runtime<FileSystem.FileSystem>();
+    const fileSystem = yield* Effect.context<FileSystem.FileSystem>();
     const { runMode, report } = kernel;
     const late = yield* lateService<SettingsLinks>();
     const links = (): SettingsLinks => {
@@ -131,6 +133,8 @@ export const composeSettings = (): Effect.Effect<
     const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
       Effect.tryPromise(() => store.readAccount()).pipe(Effect.orElseSucceed(() => undefined));
 
+    // The quit's drain flushes ahead of this composer's stop, so a batch no
+    // account could carry at that flush is on disk before the queue is dropped.
     const productEvents = new ProductEventSender({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
@@ -138,6 +142,7 @@ export const composeSettings = (): Effect.Effect<
       readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
       refreshAccount: () => links().refreshAccount(),
       readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
+      held: heldProductEvents(kernel.stateRoot, report, fileSystem),
     });
     const hostedVault = new HostedVaultClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,

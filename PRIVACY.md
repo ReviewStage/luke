@@ -282,7 +282,12 @@ record. The counts are event names and values from a fixed list, and each one
 says which of the three apps it came from. A voice session's start is counted
 with which of three sources opened it — our voice service on your account,
 your own OpenAI key, or the accountless introduction — and never with a key
-or a session id. A thumbs up or down you give one of Luke's messages is
+or a session id. A count made while no account is signed in on the Mac — a
+launch, or the introduction where it plays before you sign in — is not sent
+then: it waits in a file in Luke's own data folder, for at most seven days
+and at most two hundred counts, and is sent under the account that next
+signs in, even when that is in a later launch. A Mac that never signs in
+sends none of them. A thumbs up or down you give one of Luke's messages is
 counted with the verdict and whether the message was a reply or a briefing,
 and never with the message, its id, or a note you left. Nothing you type or
 say and nothing from a session can appear in one: no titles, branches, file

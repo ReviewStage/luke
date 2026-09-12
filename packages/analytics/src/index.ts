@@ -1,4 +1,11 @@
 export {
+  adoptableHeldProductEvents,
+  HELD_PRODUCT_EVENTS_VERSION,
+  type HeldProductEvents,
+  type HeldProductEventsRecord,
+  HeldProductEventsRecordSchema,
+} from "./held-events.js";
+export {
   isProductExchangeKind,
   isProductSurfaceEventName,
   PRODUCT_ACCOUNT_ACTION,
@@ -10,6 +17,7 @@ export {
   PRODUCT_EVENT_CLIENT,
   PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_EVENT_CLIENT_LIB,
+  PRODUCT_EVENT_MAXIMUM_AGE_MS,
   PRODUCT_EXCHANGE_KIND,
   PRODUCT_PANEL_SOURCE,
   PRODUCT_PERMISSION_RESULT,

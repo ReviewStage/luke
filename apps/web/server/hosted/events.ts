@@ -3,6 +3,7 @@ import type { Layer } from "effect";
 import {
   PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_EVENT_CLIENT_LIB,
+  PRODUCT_EVENT_MAXIMUM_AGE_MS,
   type ProductEventBatch,
   productEventBatchFromWire,
   productEventClientFromWire,
@@ -43,15 +44,6 @@ const RATE_LIMIT = {
   /** The counter map is bounded; past this it forgets rather than grows. */
   MAX_TRACKED_USERS: 10_000,
 } as const;
-
-/**
- * How far back a desktop's own clock may place an event. A Mac set to the
- * wrong year must not scatter counts across the timeline, so what arrives is
- * clamped into this window ending at the reader's own clock — the same
- * principle the review answer follows by stamping `decidedAt` here rather than
- * trusting the sender.
- */
-const MAXIMUM_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const rateLimited = createRateBrake({
   windowMs: RATE_LIMIT.WINDOW_MS,
@@ -112,7 +104,10 @@ function batchDocument(
       return {
         event: event.name,
         timestamp: new Date(
-          Math.min(now, Math.max(event.at, now - MAXIMUM_EVENT_AGE_MS)),
+          // Clamped into the shared window ending at this reader's own clock
+          // — the same principle the review answer follows by stamping
+          // `decidedAt` here rather than trusting the sender.
+          Math.min(now, Math.max(event.at, now - PRODUCT_EVENT_MAXIMUM_AGE_MS)),
         ).toISOString(),
         properties: index === 0 && person ? { ...properties, $set: person } : properties,
       } satisfies PosthogBatchItem;
