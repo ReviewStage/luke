@@ -32,7 +32,7 @@ import {
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Effect, Option } from "effect";
+import { Cause, Effect, Option } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
@@ -76,13 +76,19 @@ export interface SettingsComposer extends Composer {
   recordProductEventOncePerDay: ProductEventSender["recordOncePerDay"];
   emitSettingsSnapshot: (settings: SettingsUpdateResult["settings"], reporter?: string) => void;
   emitSettings: () => Promise<void>;
-  refusedSettings: (reason: string) => Promise<SettingsUpdateResult>;
+  refusedSettings: (reason: string) => Effect.Effect<SettingsUpdateResult>;
+  /**
+   * One settings write and, when it landed, its host side effects and the
+   * change event. The refusal answers for every way the write or its effects
+   * could not be carried, defect included, exactly as the promise door here
+   * caught a rejection from either.
+   */
   settingsWrite: (
-    save: () => Promise<SettingsUpdateResult>,
-    apply: (result: SettingsUpdateResult) => Promise<void> | void,
+    save: () => Effect.Effect<SettingsUpdateResult, unknown>,
+    apply: (result: SettingsUpdateResult) => Effect.Effect<void, unknown>,
     refusal: string,
     reporter: string | undefined,
-  ) => Promise<SettingsUpdateResult>;
+  ) => Effect.Effect<SettingsUpdateResult>;
   reconcileProviderKeyVault: () => void;
   reconcileAccountPreferences: () => Promise<void>;
   /** The developer's own preference write, on its way to the account behind it. */
@@ -377,28 +383,34 @@ export const composeSettings = (): Effect.Effect<
       emitSettingsSnapshot(result.settings);
     }
 
-    const refusedSettings = async (reason: string): Promise<SettingsUpdateResult> => ({
-      status: ACTION_RESULT_STATUS.REJECTED,
-      settings: await awaitedStore.snapshot(),
-      reason,
-    });
+    const refusedSettings = (reason: string): Effect.Effect<SettingsUpdateResult> =>
+      Effect.map(Effect.orDie(store.snapshot()), (settings) => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        settings,
+        reason,
+      }));
 
     /** Runs one settings write and, when it landed, its host side effects and the change event. */
-    async function settingsWrite(
-      save: () => Promise<SettingsUpdateResult>,
-      apply: (result: SettingsUpdateResult) => Promise<void> | void,
+    function settingsWrite(
+      save: () => Effect.Effect<SettingsUpdateResult, unknown>,
+      apply: (result: SettingsUpdateResult) => Effect.Effect<void, unknown>,
       refusal: string,
       reporter: string | undefined,
-    ): Promise<SettingsUpdateResult> {
-      let saved: SettingsUpdateResult;
-      try {
-        saved = await save();
-        await apply(saved);
-      } catch {
-        return refusedSettings(refusal);
-      }
-      emitSettingsSnapshot(saved.settings, reporter);
-      return saved;
+    ): Effect.Effect<SettingsUpdateResult> {
+      return Effect.flatMap(save(), (saved) => Effect.as(apply(saved), saved)).pipe(
+        Effect.tap((saved) =>
+          Effect.sync(() => {
+            emitSettingsSnapshot(saved.settings, reporter);
+          }),
+        ),
+        // A write that could not be carried is the row's own refusal rather
+        // than the request's failure, and a step that threw is one of those
+        // ways, which is what the promise door's own `catch` already read it
+        // as. An interruption is not: it is the caller ending this fiber.
+        Effect.catchAllCause((cause) =>
+          Cause.isInterruptedOnly(cause) ? Effect.interrupt : refusedSettings(refusal),
+        ),
+      );
     }
 
     const methods: GatewayMethodTable = {
@@ -414,17 +426,17 @@ export const composeSettings = (): Effect.Effect<
           }
           const parsed = APP_SETTING_SCHEMA[field].guard(params.value);
           if (!parsed.valid) return yield* invalid("value is not the shape that setting takes");
-          const result = yield* Effect.promise(() =>
-            settingsWrite(
-              () => awaitedStore.set(field, parsed.value),
-              async (saved) => {
-                if (saved.reason) return;
-                recordSettingUpdate(field, saved.settings);
-                await applyHostSettingSideEffect(field, saved.settings);
-              },
-              "Could not save that setting on this system.",
-              reporterOf(params),
-            ),
+          const result = yield* settingsWrite(
+            () => store.set(field, parsed.value),
+            (saved) =>
+              saved.reason
+                ? Effect.void
+                : Effect.promise(async () => {
+                    recordSettingUpdate(field, saved.settings);
+                    await applyHostSettingSideEffect(field, saved.settings);
+                  }),
+            "Could not save that setting on this system.",
+            reporterOf(params),
           );
           if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
           return carried(result);
@@ -449,19 +461,18 @@ export const composeSettings = (): Effect.Effect<
           ) {
             return yield* invalid("that project is not one a provider offers");
           }
-          const result = yield* Effect.promise(() =>
-            settingsWrite(
-              // SAFETY: settingEntryGuard validated the entry before it reaches the store.
-              () =>
-                awaitedStore.setEntry(field, key, parsed.value as SettingEntryValue<typeof field>),
-              async (saved) => {
-                if (saved.reason) return;
-                recordSettingUpdate(field, saved.settings);
-                await applyHostSettingSideEffect(field, saved.settings);
-              },
-              "Could not save that setting on this system.",
-              reporterOf(params),
-            ),
+          const result = yield* settingsWrite(
+            // SAFETY: settingEntryGuard validated the entry before it reaches the store.
+            () => store.setEntry(field, key, parsed.value as SettingEntryValue<typeof field>),
+            (saved) =>
+              saved.reason
+                ? Effect.void
+                : Effect.promise(async () => {
+                    recordSettingUpdate(field, saved.settings);
+                    await applyHostSettingSideEffect(field, saved.settings);
+                  }),
+            "Could not save that setting on this system.",
+            reporterOf(params),
           );
           if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
           return carried(result);
@@ -471,21 +482,22 @@ export const composeSettings = (): Effect.Effect<
           const scope = params.scope;
           if (!isSettingsResetScope(scope))
             return yield* invalid("scope is not one this build knows");
-          const result = yield* Effect.promise(() =>
-            settingsWrite(
-              () => awaitedStore.resetSettings(scope),
-              async (saved) => {
-                if (saved.reason) return;
-                recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
-                for (const field of APP_SETTING_FIELDS) {
-                  const definition = APP_SETTING_SCHEMA[field];
-                  if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
-                  await applyHostSettingSideEffect(field, saved.settings);
-                }
-              },
-              "Could not reset those settings on this system.",
-              reporterOf(params),
-            ),
+          const result = yield* settingsWrite(
+            () => store.resetSettings(scope),
+            (saved) =>
+              saved.reason
+                ? Effect.void
+                : Effect.promise(async () => {
+                    recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
+                    for (const field of APP_SETTING_FIELDS) {
+                      const definition = APP_SETTING_SCHEMA[field];
+                      if (!("resetScope" in definition) || definition.resetScope !== scope)
+                        continue;
+                      await applyHostSettingSideEffect(field, saved.settings);
+                    }
+                  }),
+            "Could not reset those settings on this system.",
+            reporterOf(params),
           );
           if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
           return carried(result);
@@ -499,26 +511,30 @@ export const composeSettings = (): Effect.Effect<
           if (apiKey !== undefined && !isWireString(apiKey)) {
             return yield* invalid("apiKey must be a string");
           }
-          const result = yield* Effect.promise(() =>
-            settingsWrite(
-              () => awaitedStore.setApiKey(providerId, apiKey),
-              async (saved) => {
-                if (saved.reason) return;
-                if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-                  await links().applyVoiceCredential();
-                  await emitSettings();
-                }
-                void vaultSync.keySaved(providerId, apiKey, saved.settings.stored.syncProviderKeys);
-                recordProductEvent(
-                  apiKey?.trim()
-                    ? PRODUCT_EVENT.PROVIDER_CONNECT
-                    : PRODUCT_EVENT.PROVIDER_DISCONNECT,
-                  { connection_id: providerId },
-                );
-              },
-              "Could not save that API key on this system.",
-              reporterOf(params),
-            ),
+          const result = yield* settingsWrite(
+            () => store.setApiKey(providerId, apiKey),
+            (saved) =>
+              saved.reason
+                ? Effect.void
+                : Effect.promise(async () => {
+                    if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
+                      await links().applyVoiceCredential();
+                      await emitSettings();
+                    }
+                    void vaultSync.keySaved(
+                      providerId,
+                      apiKey,
+                      saved.settings.stored.syncProviderKeys,
+                    );
+                    recordProductEvent(
+                      apiKey?.trim()
+                        ? PRODUCT_EVENT.PROVIDER_CONNECT
+                        : PRODUCT_EVENT.PROVIDER_DISCONNECT,
+                      { connection_id: providerId },
+                    );
+                  }),
+            "Could not save that API key on this system.",
+            reporterOf(params),
           );
           return carried(result);
         }),
