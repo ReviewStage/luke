@@ -25,8 +25,8 @@ injected reading for as long as a test drives a `FakeClock`.
 
 Every override that seam holds is a `Config` read of the variable's own name,
 and the settings store's are read together (`effect/settings-overrides.ts`):
-the launch voice, the two registrations a development run points the Google
-Calendar and Linear sign-ins at, and each credential provider's own key
+the launch voice, the registration a development run points the Google
+Calendar sign-in at, and each credential provider's own key
 variables, the keys as `Config.redacted` because the store hands one on to
 that provider's adapter and to nothing else. The store itself reads no
 environment any more — it is handed what was resolved — so nothing it answers
@@ -51,7 +51,7 @@ that line: the ipcMain registrations stayed in `apps/desktop/src/main/ipc/`,
 and resolving this Mac's EventKit helper bundle stayed in
 `apps/desktop/src/main/native/`.
 
-## One composition, nine concerns
+## One composition, eight concerns
 
 The host is one `Layer` (`hostLayer`, behind `@sidecar/host/effect`) over the
 kernel: `hostAssemblyLayer` constructs, links, and merges, holding no state of
@@ -67,7 +67,7 @@ hold is a synchronous `emit` over that host's event log, run on the assembly's
 own runtime, because a change is reported to the service from a callback
 rather than from an effect. Each concern is a
 composer — settings, account, devices,
-conversation, issues, observation, calendars, brain, live — that owns its own mutable
+conversation, observation, calendars, brain, live — that owns its own mutable
 state, its own timers, and the Gateway methods of its domain, and answers
 `start()` and `stop()` for exactly what it began; `composerLayer` is that
 composer as a scoped layer whose build runs `start` and whose scope closing
@@ -106,11 +106,10 @@ so a sign-out's stop ends all three at once; the first two are fixed `Schedule`s
 that scope, exactly as the devices composer's poll is, and the third is a
 one-shot fiber the composer re-arms itself, because its delay is recomputed
 from the meetings every observation pass just read rather than held fixed.
-Both the calendars and issues composers carry the runtime the layer they were
-built under is running on into the classes that still answer a promise —
-`GoogleCalendarReader`, `googleCalendarSignIn`, `LinearCredentials`'s renewal,
-and `linearSignIn` — so each runs its request or its consent trip there
-instead of on the ambient default runtime. The conversation composer is the
+The calendars composer carries the runtime the layer it was built under is
+running on into the classes that still answer a promise —
+`GoogleCalendarReader` and `googleCalendarSignIn` — so each runs its request
+or its consent trip there instead of on the ambient default runtime. The conversation composer is the
 Conversation as the service holds it: on its own five-second loop it asks the
 change signal where each resource stands, reads only what moved behind the
 cursors this device holds, folds the pages into one picture

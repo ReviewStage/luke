@@ -28,73 +28,13 @@ Canonical commands:
 - Never write provider transcripts or session-state files. Reading them is what
   Luke is for; writing to them is never.
 - Never inject terminal input, simulate keystrokes, or request Accessibility.
-  A message the developer explicitly sends through Superset's documented
-  `terminals send` command is not terminal injection: Superset owns the
-  terminal and its authenticated endpoint, the observed binding identifies
-  the exact target, and Luke invokes it directly without a shell. It remains
-  bound by the same direct-user-action and latest-roster validation as every
-  other session message.
-- A Superset workspace creation is the same bounded exception at the workspace
-  level: only in a developer-opened turn, only on a host, project, and agent
-  preset returned by the CLI's latest read, and only through the documented
-  `workspaces create` command invoked directly without a shell. Luke supplies
-  the developer's opening task and a bounded generated branch, then may call
-  `workspaces open` for the identifier that creation returned. Renaming a
-  workspace is the same exception narrower still: only in a developer-opened
-  turn, only on a workspace behind an observed roster row, and only through
-  the documented `workspaces update` command invoked directly without a
-  shell, carrying nothing but that workspace's observed id and host and the
-  developer's own bounded new name behind `--name`, never the command's
-  other flags, which link and unlink tasks this exception does not authorize
-  touching. The connection
-  itself is bounded the same way at both ends: Connect runs the CLI's own
-  `auth login` and Disconnect its documented `auth logout`, each only at the
-  developer's press on the Superset row, each invoked directly with arguments
-  fixed by the build, and the CLI owns the credential throughout. One deletion
-  is authorized, as the control a managed row advertises and nothing wider:
-  deleting the workspace behind that row, through the documented
-  `workspaces delete` command with the observed workspace id as its single
-  argument, invoked directly without a shell, only as the direct product of
-  the control's own press or a developer-opened turn, and advertised only on
-  a row positively seen settled, never one still working or unreadable,
-  because the delete is unrecoverable and takes every sibling chat's terminal
-  with it. A managed row here is also the standing row an idle workspace
-  earns for itself: a worktree with no agent terminal at all, read from the
-  same observed host state, is settled by construction, since there is no agent
-  whose turn could be cut, and a workspace whose only terminal Luke cannot
-  map draws no row rather than a gamble, while the main checkout and
-  anything Superset already archived stand behind no row and can never be
-  offered the delete. This does not authorize any other Superset CLI command,
-  deletion
-  of anything else, tasks, automations, account changes, or settings changes.
 
-### Providers and hook registration
+### Providers
 
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
   the user supplies one and must leave every other provider working without it.
-- One registration is the exception the previous rule's word "require" leaves
-  room for, and it is bounded on every side: Luke may join an observation
-  hook to a provider's own user-level hook surface (today the `settings.json`
-  of Claude Code and the `hooks.json` of Codex, and nothing else of any
-  provider's) so local rows can tell a turn that just ended from a session
-  walked away from, and can see a tool call holding for permission at all. The
-  hook itself writes one fixed status token into a spool under Luke's own
-  application data, named by the session's id; the envelope the provider hands
-  it — piped in or passed as an argument — is read only for that id and never
-  reaches disk. The merge preserves the user's own entries and settings as
-  parsed, recognizes its own entries by the script's name, refuses to rewrite
-  a file it cannot parse, converges at launch rather than accumulating, and
-  skips a machine with no provider home to join. The registration is part of
-  observing at all, like reading the transcripts, so it converges at every
-  launch rather than answering to a preference; an entry outliving Luke is a
-  guarded no-op, and everything the hook sharpens still observes from the
-  transcripts alone wherever the hook is absent, including behind Codex's own
-  review gate, which shows a new entry to the user and runs nothing until they
-  trust it. Widening it to another provider or another lifecycle event is a
-  product decision, not an implementation detail.
-
 ### Acts on a session
 
 - The one thing Luke may change about a session is what the user just asked to
@@ -114,10 +54,9 @@ Canonical commands:
   target, rename target, or listed project it reads back from its own latest
   pass — and the provider's documented shape.
   Observation passes stay read-only by construction; where a provider's
-  documented read answers only a POSTed query (Conductor's transcripts view,
-  like Linear's GraphQL), observation sends a read document fixed by the
-  build, and nothing enters that document's text but identifiers the same
-  pass reported, each validated against the shape its provider documents.
+  documented read answers only a POSTed query (Conductor's transcripts
+  view), observation sends a read document fixed by the build, and nothing
+  enters that document's text but identifiers the same pass reported, each validated against the shape its provider documents.
   Nothing deterministic that decides on the user's behalf may reach a write
   path: the attention evaluator above all, and the voice session that says a
   briefing or a reply, whose model has no tools at all and can only delegate
@@ -233,7 +172,7 @@ Canonical commands:
   one save into the conversation's durable inbox, and the turn that follows
   consumes the entries it opened with at its checkpoint, moving the consumed
   cursor there and only there. Which sessions are looked at is the host's
-  decision, local or cloud alike: every session working or waiting now, and
+  decision: every session working or waiting now, and
   every one whose conversation already stands. A session whose provider
   answers no incremental read (a Conductor chat today) is looked at from its
   roster fields alone — the look itself reads no message of it — and the
@@ -248,8 +187,7 @@ Canonical commands:
   may also read one observed session's whole
   tail, cut from the front to 60,000 characters, through the same read tool
   a developer's ask is offered; a cloud session whose provider documents no
-  transcript read, and a local provider whose transcript this build does not
-  read, are read from roster fields alone.
+  transcript read is read from roster fields alone.
   An observed conversation's `announce` reaches the voice directly; main
   neither approves nor rewords it. Any conversation may delegate: the brain's
   `sessions_spawn` tool records a child (`agent:main:subagent:<uuid>`, kind
@@ -464,7 +402,7 @@ Canonical commands:
   the in-process transport, the text loopback transport, and the socket, and
   the method vocabulary is additive and named in `protocol.ts`
   (`client.bootstrap`, the `settings`, `credential`, `account`, `calendar`,
-  `tracker`, `superset`, `session`, `workspace`, `voice`, `guide`,
+  `session`, `workspace`, `voice`, `guide`,
   `analytics`, `conversation.append`, and `onboarding` methods, and the
   change events beside them; `voice.recordTrace` carries
   the renderer's tapped live events to the development trace writer the
@@ -505,9 +443,8 @@ Canonical commands:
   settings store and its cipher (so the credentials are decrypted where the
   host runs, under the same app name and Keychain entry), the account
   session and its refresh, the provider-key vault sync, the counted events,
-  every provider registration and the roster and observation loops, Superset
-  and Conductor, the hook registration and spool watchers under the state
-  root it is handed, Linear, the calendar readers and their holds, the live
+  the roster loop over the service's stored snapshot and the session actions
+  it carries to that service, the calendar readers and their holds, the live
   voice session, the runtime
   store worker, the notebook and its maintenance, the brain, the
   conversation operations, history maintenance, the
@@ -539,7 +476,7 @@ Canonical commands:
   page, the releases page, the changelog) reaches the operating system
   directly, as the client's own action, and crosses no node; an open a
   host-owned flow needs (a session's address, an OAuth consent page, a
-  Superset or Conductor link) crosses the native node, because the flow that
+  Conductor link) crosses the native node, because the flow that
   asks for it runs in the host. A node's capabilities are invoked on that
   node's own authenticated connection as transport frames, never as events,
   so no reconnection can replay an ask to act; the host settles an ask whose
@@ -1001,30 +938,9 @@ Canonical commands:
 
 ### Integrations
 
-- The issue tracker follows the same rule at one remove, and is connected the
-  way the calendar is rather than the way a cloud provider is. Luke reads the
-  issues a tracker lists for the user under a grant the tracker's own consent
-  page issued, and observes nothing without one. The integration exists only
-  in a build carrying a registered OAuth client; without one it is not drawn.
-  Connecting is the tracker's own flow for a public client: PKCE over a
-  loopback redirect that never leaves the machine, carrying no client secret,
-  asking for the narrowest scopes the actions need. No key is ever typed, and
-  none is read from the environment: a tracker connected by consent has no
-  environment variable at all. The grant is stored encrypted like a key, is
-  renewed before it lapses (the renewal written before it is used, because a
-  consumed refresh token is spent) and is deleted only when the tracker
-  itself refuses the renewal, never when the network merely could not carry
-  it. Disconnecting revokes the grant with the tracker as well as deleting it
-  here. The two actions a tracker takes, moving an issue to a state its latest
-  observation listed and adding a comment, happen only as the direct product of
-  a turn the developer opened themselves, through the tracker's own documented
-  endpoint under the same grant, admitted against the observed issue roster by
-  the same `admit()` every session action runs, before the tracker client sees
-  anything. Observation sends only the read document; the write documents are
-  fixed by the build and issued only for a validated action.
-- The calendar is the same rule with no write path at all. Luke reads when
-  the user's meetings start and end, under accounts the user signed in, and
-  observes nothing without one. The integration exists only in a build
+- The calendar follows the acts rule at one remove, with no write path at
+  all. Luke reads when the user's meetings start and end, under accounts the
+  user signed in, and observes nothing without one. The integration exists only in a build
   carrying a registered OAuth client; without one it is not drawn. Connecting
   is Google's own consent flow for an installed app: PKCE over a
   loopback redirect that never leaves the machine, asking for two read scopes
@@ -1201,10 +1117,7 @@ Canonical commands:
   one observed thing: the detected sessions' titles, as one developer message
   in the session's `input`, at most eight titles each cut to eighty characters
   (`INTRODUCTION_SEED_BOUNDS`, mirrored by the service's own admission), and
-  nothing for pretend rows. Detection is the keyless local peek — the same
-  read-only observe every pass runs, once, with no hook registration and no
-  credential, and answered only to the panel the takeover holds, which draws
-  every fresh session it reports in a list that scrolls like the panel's own.
+  nothing for pretend rows.
   The microphone is unmuted the moment the session starts, since the greeting
   is meant to be answered, and the talk key routed to the takeover for the
   introduction's duration is the same unmute; the introduction ends when
@@ -1457,7 +1370,7 @@ works in that subtree:
 |---|---|
 | `apps/desktop/src/renderer/AGENTS.md` | The sandbox rule, panel motion, brand artwork, and Luke's knowledge of himself |
 | `packages/AGENTS.md` | The acyclic package graph, the `.js` import rule, the Vercel doors, and how a barrel leaks |
-| `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the plugins |
+| `packages/providers/AGENTS.md` | The provider identity catalog, the one Conductor plugin, and keeping `PRIVACY.md` and the README's agent table true to them |
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/gateway/AGENTS.md` | The protocol as the contract, its three doors, and injected authentication |
 | `packages/host/AGENTS.md` | The host's seams, why it draws nothing, and the one drain |

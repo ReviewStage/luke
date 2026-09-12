@@ -145,8 +145,8 @@ from any sibling, a barrel at `src/index.ts`, and the dependencies its imports
 imply. Adding an *edge* is the part worth thinking about: a cycle usually means
 a module is in the wrong package rather than that the graph needs to allow one.
 Package boundaries should put wire vocabulary below behavior and keep behavior
-out of transport packages. The credential vocabulary and hook merge sit where
-they do because putting them elsewhere would close a loop.
+out of transport packages. The credential vocabulary sits where it does
+because putting it elsewhere would close a loop.
 
 The store used to depend on the brain it stores; folding it into
 `brain/src/store/` is what removed that edge, and nothing under
