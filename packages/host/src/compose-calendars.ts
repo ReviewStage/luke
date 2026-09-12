@@ -21,12 +21,7 @@ import {
 } from "@sidecar/gateway";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationLoop } from "@sidecar/runtime";
-import {
-  cadenceHome,
-  closeCadenceScope,
-  forkIntoCadence,
-  openCadenceScope,
-} from "@sidecar/runtime/effect";
+import { cadenceGate, cadenceHome, forkIntoCadence } from "@sidecar/runtime/effect";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
@@ -96,8 +91,9 @@ export interface CalendarsComposer extends Composer {
   writeOnboarding: (moment: OnboardingState) => void;
   /** The calendar step goes up at the first sign-in ever observed, before the account event. */
   recordFirstSignIn: () => void;
-  startObservation: () => void;
-  stopObservation: () => void;
+  /** Arms the three observation-driven timers; the account gate's own edges are what run these two. */
+  readonly armObservation: Effect.Effect<void>;
+  readonly disarmObservation: Effect.Effect<void>;
   link: (links: CalendarsLinks) => void;
 }
 
@@ -110,9 +106,9 @@ export interface CalendarsDependencies {
  * The calendars concern, over the kernel it takes as a tag and the runtime
  * the layer it is built under is running on: the reader classes below carry
  * that runtime rather than the ambient default one, and the three
- * observation-driven timers fork their fibers into a `Scope` this composer
- * makes at `startObservation` and closes at `stopObservation`, exactly as
- * `DeviceRegistration` does one level down.
+ * observation-driven timers fork their fibers into the `Scope` the account
+ * gate's own arming runs in, exactly as the device registration does one
+ * level down.
  */
 export const composeCalendars = (
   dependencies: CalendarsDependencies,
@@ -173,12 +169,11 @@ export const composeCalendars = (
     let appleConnectGeneration = 0;
 
     /**
-     * Every fiber the three observation-driven timers below fork, made in
-     * `startObservation` and closed in `stopObservation`; the scope closing is
-     * what ends all three, so no handle of any of them is kept only to be
-     * handed back.
+     * Every fiber the three observation-driven timers below fork lives in the
+     * scope the arming runs in; the scope closing is what ends all three, so
+     * no handle of any of them is kept only to be handed back.
      */
-    let observationScope: Scope.CloseableScope | undefined;
+    let observationScope: Scope.Scope | undefined;
     /** The one pending meeting-boundary wake, interrupted and replaced on every re-arm. */
     let boundaryFiber: Fiber.RuntimeFiber<void, never> | undefined;
 
@@ -320,7 +315,6 @@ export const composeCalendars = (
 
     const loop = new ObservationLoop({
       gate: observationGate,
-      home,
       intervalMs: CALENDAR_REFRESH_INTERVAL_MS,
       run: refreshCalendarMeetings,
     });
@@ -350,58 +344,45 @@ export const composeCalendars = (
 
     /**
      * The two remaining timers are fixed-interval `Schedule`s forked into the
-     * one scope this call makes: `Effect.schedule`, not `Effect.repeat`,
+     * one scope an arming runs in: `Effect.schedule`, not `Effect.repeat`,
      * because a `setInterval` never fires at once either, and a repeat would.
+     * What the gate's release gives back is registered first, so it runs after
+     * the fibers it belongs beside have been interrupted.
      */
-    function startObservation(): void {
-      if (observationScope !== undefined) return;
-      const scope = openCadenceScope(home);
+    const observationArmed = Effect.gen(function* () {
+      const scope = yield* Effect.scope;
       observationScope = scope;
-      forkIntoCadence(
-        home,
-        scope,
-        Effect.forkScoped(
-          Effect.schedule(
-            Effect.sync(() => links().reconcileSpeech()),
-            Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
-          ),
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          observationScope = undefined;
+          boundaryFiber = undefined;
+          appleAccessProbeFailing = false;
+          calendarMeetings = undefined;
+          observedCalendars = [];
+          googleCalendar.forget();
+          appleCalendar.forget();
+          links().dropBriefings();
+          kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: [] });
+          void refreshAnnouncementHold();
+        }),
+      );
+      yield* Effect.forkScoped(
+        Effect.schedule(
+          Effect.sync(() => links().reconcileSpeech()),
+          Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
         ),
       );
       if (process.platform === "darwin" && runMode.observesProviders) {
-        forkIntoCadence(
-          home,
-          scope,
-          Effect.forkScoped(
-            Effect.schedule(
-              Effect.promise(() => pollAppleCalendarAccess()),
-              Schedule.spaced(Duration.millis(APPLE_ACCESS_POLL_INTERVAL_MS)),
-            ),
+        yield* Effect.forkScoped(
+          Effect.schedule(
+            Effect.promise(() => pollAppleCalendarAccess()),
+            Schedule.spaced(Duration.millis(APPLE_ACCESS_POLL_INTERVAL_MS)),
           ),
         );
       }
-    }
+    });
 
-    function stopObservation(): void {
-      const scope = observationScope;
-      observationScope = undefined;
-      // Closing is not awaited, for the same reason cancelling a timer never
-      // was: what it has to guarantee is that no further beat starts, never
-      // that the fiber has already ended.
-      if (scope !== undefined) closeCadenceScope(home, scope);
-      if (boundaryFiber !== undefined) {
-        const fiber = boundaryFiber;
-        boundaryFiber = undefined;
-        Runtime.runFork(runtime)(Fiber.interrupt(fiber));
-      }
-      appleAccessProbeFailing = false;
-      calendarMeetings = undefined;
-      observedCalendars = [];
-      googleCalendar.forget();
-      appleCalendar.forget();
-      links().dropBriefings();
-      kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: [] });
-      void refreshAnnouncementHold();
-    }
+    const observation = yield* cadenceGate(observationArmed);
 
     const methods: GatewayMethodTable = {
       [GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE]: (params) =>
@@ -634,8 +615,8 @@ export const composeCalendars = (
         writeOnboardingState({ calendarOnboardingRequiredAt: new Date(now()).toISOString() });
         void settleCalendarOnboardingIfConnected();
       },
-      startObservation,
-      stopObservation,
+      armObservation: observation.arm,
+      disarmObservation: observation.disarm,
       link: (next) => {
         late.unsafeSet(next);
       },
@@ -643,8 +624,8 @@ export const composeCalendars = (
         onboardingState = onboarding.read();
         void settleCalendarOnboardingIfConnected();
       },
-      stop: async () => {
-        stopObservation();
-      },
+      // The gate's own disarm is what ends the observation; the scope this
+      // composer was built in ends whatever a disarm missed.
+      stop: async () => undefined,
     };
   });

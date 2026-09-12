@@ -24,7 +24,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { Config, Effect, Option } from "effect";
+import { Config, Effect, Option, Runtime } from "effect";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -40,8 +40,9 @@ const ACCOUNT_CLIENT_ID = "luke-desktop";
  * neither side can be the other's constructor argument.
  */
 interface AccountLinks {
-  startCapabilities: () => Promise<void>;
-  stopCapabilities: () => Promise<void>;
+  /** The account gate's own pair: opening it arms every cadence a signed-in account may have, and closing it disarms them. */
+  readonly startCapabilities: Effect.Effect<void>;
+  readonly stopCapabilities: Effect.Effect<void>;
   /** The calendar step of onboarding, raised before the account event so the gate already stands when the renderer learns of the sign-in. */
   onFirstSignIn: () => void;
   /** The arrival beat's own moment, recorded after the account event. */
@@ -50,7 +51,7 @@ interface AccountLinks {
   rebuildBrain: () => Promise<void>;
   syncMemory: () => void;
   /** The device row let go of on the departing account's own token, before the credential is cleared. */
-  releaseDevice: (account: StoredAccount) => Promise<void>;
+  releaseDevice: (account: StoredAccount) => Effect.Effect<void>;
   /** This installation's device row id, once registered, for the live session's handshake. */
   deviceId: () => string | undefined;
 }
@@ -95,6 +96,11 @@ export const composeAccount = (
     const environment = yield* Environment;
     const identity = yield* AppIdentity;
     const { runMode, report } = kernel;
+    // The runtime the host is being built on, so the three links the session
+    // manager awaits as promises are run as fibers of the host's own rather
+    // than of an ambient default one. It is the one run this composer makes,
+    // and it goes once `AccountSessionManager` answers effects itself.
+    const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<AccountLinks>();
     const links = (): AccountLinks => {
       const standing = late.unsafePeek();
@@ -116,9 +122,9 @@ export const composeAccount = (
       hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
       requiresAccount: runMode.requiresAccount,
       openExternal: (url) => kernel.openExternalThroughNode(url),
-      startCapabilities: () => links().startCapabilities(),
-      stopCapabilities: () => links().stopCapabilities(),
-      onSignOut: (stored) => links().releaseDevice(stored),
+      startCapabilities: () => Runtime.runPromise(runtime)(links().startCapabilities),
+      stopCapabilities: () => Runtime.runPromise(runtime)(links().stopCapabilities),
+      onSignOut: (stored) => Runtime.runPromise(runtime)(links().releaseDevice(stored)),
       onChange: (next) => {
         const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
         const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;

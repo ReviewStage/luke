@@ -261,12 +261,13 @@ JSON Schema emitter with its `readEither` — kept off
 the main barrel so a caller that only wants the wire vocabulary never
 resolves `@effect/platform`. `@sidecar/runtime/effect` is
 that door one package up: `scheduleOnce` and `scheduleRepeat` fork delayed and
-repeated work into a `Scope`, which is what cancels it, `cadenceHome` with
-`openCadenceScope`, `forkIntoCadence`, and `closeCadenceScope` are where a
-cadence armed at an edge outside any effect — an account gate opening, a
-supervisor enabling a loop — takes its scope and its runtime from, so its
-fibers are a child of the scope its owner was built in rather than an orphan
-on the ambient default runtime, `makePendingInputQueue` with `admitInput` and
+repeated work into a `Scope`, which is what cancels it, `cadenceGate` is a
+cadence armed and disarmed at an edge outside its own lifetime — an account
+gate opening and closing — as two effects over a child of the scope its owner
+was built in, so its fibers are never an orphan on the ambient default runtime
+and the owner's close disarms whatever a disarm missed, with `cadenceHome`,
+`openCadenceScope`, `forkIntoCadence`, and `closeCadenceScope` beside it for
+the armings still made from inside a promise, `makePendingInputQueue` with `admitInput` and
 `queueDebounceSchedule` are the reply queue's Effect surface, `withLane` and
 `acquireLane` are the execution lanes' — a lane's slot as a scoped,
 `Semaphore`-shaped resource admitted in the port's own arrival order —
@@ -282,10 +283,11 @@ apart from one a layer denied, while `decodeConversationRecord` and
 `decodeConversationArchiveRecord` restate the storage contracts' wire readers
 as effects that fail with a typed refusal rather than answering `undefined`.
 The vocabulary door names none of them, so a package that opens only it
-resolves no `effect`, while the barrel now does: `ObservationLoop` keeps its
-cadence on a `Schedule` forked into a `Scope` forked from the home it was
-handed rather than on an interval, so a caller that opens the barrel resolves
-`effect` behind it.
+resolves no `effect`, while the barrel now does: `ObservationLoop` answers
+`cadence`, the `Schedule` an arming stands up in the scope it runs in rather
+than an interval the loop starts itself, and `observationSupervisor` is one
+`CadenceGate` over several loops' cadences, so a caller that opens the barrel
+resolves `effect` behind it.
 `@sidecar/providers` needs no such door any more: what remains of it is the
 Conductor cloud adapter, whose pass rides `HttpClient` and takes the `Scope`
 it needs from whoever runs it, so the package names `@effect/platform` and no

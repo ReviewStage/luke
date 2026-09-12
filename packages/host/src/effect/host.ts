@@ -18,7 +18,7 @@ import {
   shutdownGatewayEffect,
 } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
-import { Context, Data, Deferred, Effect, Layer, Ref } from "effect";
+import { Context, Data, Deferred, Effect, Layer, Ref, type Scope } from "effect";
 import type { Composer } from "../composer.js";
 import { composerLayer, layersInOrder } from "./composer.js";
 
@@ -85,10 +85,13 @@ export interface HostAssembly {
   readonly gateway: GatewayInProcessHost;
   /** The composers in the order the launch has to keep; the quit is this order reversed. */
   readonly startOrder: readonly Composer[];
-  /** Arms the loops once every owner of one has started. */
-  readonly arm: () => Promise<void>;
-  /** Disarms them, before any composer stops. */
-  readonly disarm: () => void;
+  /**
+   * What the launch arms once every owner of a cadence has started, in the
+   * scope the host stands in: the account gate opened where it already stands
+   * open, and the scope's own close is what disarms it, before any composer
+   * stops.
+   */
+  readonly armed: Effect.Effect<void, never, Scope.Scope>;
   readonly drain: HostDrain;
 }
 
@@ -114,12 +117,7 @@ export class HostTag extends Context.Tag("@sidecar/host/Host")<HostTag, Standing
 export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = Layer.unwrapEffect(
   Effect.map(HostAssemblyTag, (assembly) => {
     const composers = layersInOrder(assembly.startOrder.map(composerLayer));
-    const armed = Layer.scopedDiscard(
-      Effect.acquireRelease(
-        Effect.promise(() => assembly.arm()),
-        () => Effect.sync(() => assembly.disarm()),
-      ),
-    );
+    const armed = Layer.scopedDiscard(assembly.armed);
     const standing = Layer.scoped(
       HostTag,
       Effect.as(

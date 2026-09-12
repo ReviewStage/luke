@@ -17,14 +17,21 @@ import { type Composer, type DuplicateGatewayMethod, foldMethods } from "../comp
  * its store is still stopped when the failed build releases what began.
  * The start itself runs to its end like an acquire, so an interruption never
  * leaves a stop standing over a start still under way.
+ *
+ * What the composer arms is run after that start and in the same scope, so
+ * its own finalizers run before the stop rather than through a handle the
+ * stop was handed back.
  */
 export const composerLayer = (composer: Composer): Layer.Layer<never> =>
   Layer.scopedDiscard(
-    Effect.uninterruptible(
-      Effect.zipRight(
-        Effect.addFinalizer(() => Effect.promise(() => composer.stop())),
-        Effect.promise(() => composer.start()),
+    Effect.zipRight(
+      Effect.uninterruptible(
+        Effect.zipRight(
+          Effect.addFinalizer(() => Effect.promise(() => composer.stop())),
+          Effect.promise(() => composer.start()),
+        ),
       ),
+      composer.armed ?? Effect.void,
     ),
   );
 

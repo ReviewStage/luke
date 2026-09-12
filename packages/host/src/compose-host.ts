@@ -8,8 +8,8 @@ import {
 } from "@sidecar/gateway";
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
-import { ObservationSupervisor } from "@sidecar/runtime";
-import { cadenceHome } from "@sidecar/runtime/effect";
+import { observationSupervisor } from "@sidecar/runtime";
+import { cadenceGate } from "@sidecar/runtime/effect";
 import {
   isTerminalChildRunStatus,
   MAIN_SESSION_KEY,
@@ -113,7 +113,6 @@ export const hostAssemblyLayer: Layer.Layer<
     const shutdownSignal = yield* ShutdownSignal;
     const runMode = yield* RunMode;
     const { report } = yield* Reporter;
-    const home = yield* cadenceHome;
     const { now } = kernel;
 
     const settings = yield* composeSettings();
@@ -124,7 +123,6 @@ export const hostAssemblyLayer: Layer.Layer<
     const devices = yield* composeDevices({ account, calendars });
     const conversation = composeConversation({
       kernel,
-      home,
       settings,
       account,
       devices,
@@ -165,6 +163,61 @@ export const hostAssemblyLayer: Layer.Layer<
       Layer.mergeAll(liveBrainLayer(liveBrain), liveRecordLayer(liveRecord)),
     );
 
+    const supervisor = yield* observationSupervisor([
+      observation.loop,
+      calendars.loop,
+      conversation.loop,
+    ]);
+
+    /**
+     * Every cadence the account gate holds open, as one scope rather than as a
+     * pair of arm-and-disarm calls: closing it is the whole of the disarm, and
+     * the standing scope's own close is what closes it at a quit, which is why
+     * nothing a sign-out alone means — the roster emptied, the view reset, the
+     * voice credential re-applied — is in here.
+     */
+    const capabilitiesArmed = Effect.gen(function* () {
+      yield* devices.register;
+      yield* Effect.addFinalizer(() => devices.release(undefined));
+      yield* calendars.armObservation;
+      yield* Effect.addFinalizer(() => calendars.disarmObservation);
+      yield* supervisor.arm;
+      yield* Effect.addFinalizer(() => supervisor.disarm);
+    });
+
+    const capabilities = yield* cadenceGate(capabilitiesArmed);
+
+    /**
+     * The account gate opening, which is what a sign-in runs and what a launch
+     * behind an account already signed in runs: the preferences reconciled, the
+     * voice credential applied, and only then the cadences armed. The gate is
+     * re-read after the awaits for the same reason it always was — a sign-out
+     * can land while they are out — and the gate itself is serialized, so a
+     * sign-out that arrives after the arm rather than before it disarms what
+     * this opened.
+     */
+    const openCapabilities = Effect.gen(function* () {
+      if (account.signedIn()) void settings.reconcileAccountPreferences();
+      yield* Effect.promise(() => account.applyVoiceCredential());
+      yield* Effect.promise(() => settings.emitSettings());
+      if (!account.capabilitiesActive()) return;
+      observation.startObservation();
+      yield* capabilities.arm;
+      if (account.signedIn()) settings.reconcileProviderKeyVault();
+      void live.requestOnboardingBeat();
+    });
+
+    /** The gate closing: the cadences disarmed, and then what a sign-out alone means. */
+    const closeCapabilities = Effect.gen(function* () {
+      yield* capabilities.disarm;
+      conversation.reset();
+      observation.stopObservation();
+      live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
+      live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
+      yield* Effect.promise(() => account.applyVoiceCredential());
+      yield* Effect.promise(() => settings.emitSettings());
+    });
+
     // Every edge a composer could not take as a constructor argument, in one
     // list: each is a cycle the concerns genuinely have, and reading one before
     // this has run throws by name rather than answering nothing.
@@ -181,8 +234,8 @@ export const hostAssemblyLayer: Layer.Layer<
       workspaceProjectOffered: observation.workspaceProjectOffered,
     });
     account.link({
-      startCapabilities: startAccountCapabilities,
-      stopCapabilities: stopAccountCapabilities,
+      startCapabilities: openCapabilities,
+      stopCapabilities: closeCapabilities,
       onFirstSignIn: calendars.recordFirstSignIn,
       onFirstSignInArrival: live.seedArrivalOnFirstSignIn,
       retireBrain: () => brain.wiring.retire(),
@@ -212,37 +265,6 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.OBSERVATION]: observation,
       [HOST_CONCERN.LIVE]: live,
     } satisfies Readonly<Record<HostConcern, Composer>>;
-    const supervisor = new ObservationSupervisor([
-      observation.loop,
-      calendars.loop,
-      conversation.loop,
-    ]);
-
-    async function startAccountCapabilities(): Promise<void> {
-      if (!account.capabilitiesActive()) return;
-      void settings.reconcileAccountPreferences();
-      await account.applyVoiceCredential();
-      await settings.emitSettings();
-      if (!account.capabilitiesActive()) return;
-      void devices.register();
-      observation.startObservation();
-      calendars.startObservation();
-      supervisor.setEnabled(true);
-      void live.requestOnboardingBeat();
-      settings.reconcileProviderKeyVault();
-    }
-
-    async function stopAccountCapabilities(): Promise<void> {
-      supervisor.setEnabled(false);
-      conversation.reset();
-      await devices.release(undefined);
-      observation.stopObservation();
-      calendars.stopObservation();
-      live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
-      live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
-      await account.applyVoiceCredential();
-      await settings.emitSettings();
-    }
 
     /**
      * The one method no composer can own: it reads six of them at once, so
@@ -332,7 +354,6 @@ export const hostAssemblyLayer: Layer.Layer<
       {
         closeAdmissions: () => service.closeAdmissions(),
         cancelActive: async () => {
-          supervisor.setEnabled(false);
           const cancelled: string[] = [];
           for (const record of brain.wiring.allRequests()) {
             if (
@@ -385,24 +406,39 @@ export const hostAssemblyLayer: Layer.Layer<
     // mid-call ends the session within the deadline and never after it.
     const shutdownSteps = shutdownStepsClosingLiveSession(drainSteps, () => live.service.stop());
 
+    const drain = yield* hostDrain(shutdownSteps, report);
+
     const assembly: HostAssembly = {
       gateway: service.gateway,
       startOrder: HOST_START_ORDER.map((name) => concerns[name]),
-      arm: async () => {
-        if (account.signedIn()) void settings.reconcileAccountPreferences();
-        void devices.register();
-        await account.applyVoiceCredential();
-        observation.startObservation();
-        calendars.startObservation();
-        supervisor.setEnabled(true);
-        if (account.signedIn()) settings.reconcileProviderKeyVault();
-        void live.requestOnboardingBeat();
+      /**
+       * The launch's own arming, which is the gate's: where the account's
+       * capabilities already stand open, the launch opens the gate exactly as
+       * a sign-in does, and the standing scope closing is what disarms it —
+       * the cadences alone, since a quit is not a sign-out. Where they do not,
+       * the launch still applies the voice credential the signed-out panel is
+       * drawn from and still asks for the onboarding beat, because neither
+       * waits on an account.
+       */
+      armed: Effect.gen(function* () {
+        // Registered whether or not the launch opens the gate, because a
+        // sign-in after a signed-out launch opens it too, and the gate's own
+        // scope would otherwise stand until the assembly's close — which is
+        // after every composer has stopped, so a calendars timer would still
+        // be firing into a live session that had already been told to stop.
+        yield* Effect.addFinalizer(() => capabilities.disarm);
+        if (account.capabilitiesActive()) {
+          yield* openCapabilities;
+        } else {
+          yield* Effect.promise(() => account.applyVoiceCredential());
+          void live.requestOnboardingBeat();
+        }
         void account.session.refreshOnce();
-      },
-      disarm: () => {
-        supervisor.setEnabled(false);
-      },
-      drain: yield* hostDrain(shutdownSteps, report),
+      }),
+      // The loops are disarmed before the admissions close, so no observation
+      // pass begins behind a quit; the gate's own scope is what the standing
+      // scope closes after.
+      drain: (shutdown) => Effect.zipRight(supervisor.disarm, drain(shutdown)),
     };
     return assembly;
   }),

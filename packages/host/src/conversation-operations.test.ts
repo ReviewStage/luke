@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { cadenceHome } from "@sidecar/runtime/effect";
 import {
   CONVERSATION_KIND,
   type ConversationRecord,
@@ -9,14 +8,14 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
-import { Duration, Effect, TestClock } from "effect";
+import { Duration, Effect, Exit, Scope, TestClock } from "effect";
 import { test } from "vitest";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
   CONVERSATION_MAINTENANCE_INTERVAL_MS,
   type ConversationOperationsDependencies,
+  conversationMaintenance,
   conversationOperations,
-  startConversationMaintenance,
 } from "./conversation-operations.js";
 import { drainMicrotasks } from "./testing/index.js";
 
@@ -103,22 +102,25 @@ test("a cutoff the store cannot read refuses the deletion after the marker, with
   assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
 });
 
-it.scoped(
+it.effect(
   "maintenance runs at the launch, preserving the busy conversations, and again on its own hourly clock, stopping with its scope",
   () =>
     Effect.gen(function* () {
-      const home = yield* cadenceHome;
+      const scope = yield* Scope.make();
       const runs: (readonly SessionKey[])[] = [];
-      const stop = startConversationMaintenance({
-        store: {
-          runMaintenance: async (preserve) => {
-            runs.push(preserve);
-            return undefined;
+      yield* Effect.provideService(
+        conversationMaintenance({
+          store: {
+            runMaintenance: async (preserve: readonly SessionKey[]) => {
+              runs.push(preserve);
+              return undefined;
+            },
           },
-        },
-        brain: { busyConversations: () => [THREAD] },
-        home,
-      });
+          brain: { busyConversations: () => [THREAD] },
+        }),
+        Scope.Scope,
+        scope,
+      );
       yield* Effect.promise(() => drainMicrotasks(20));
       assert.deepEqual(runs, [[THREAD]]);
 
@@ -126,7 +128,7 @@ it.scoped(
       yield* Effect.promise(() => drainMicrotasks(20));
       assert.deepEqual(runs, [[THREAD], [THREAD]]);
 
-      stop();
+      yield* Scope.close(scope, Exit.void);
       yield* TestClock.adjust(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS));
       yield* Effect.promise(() => drainMicrotasks(20));
       assert.deepEqual(runs, [[THREAD], [THREAD]]);

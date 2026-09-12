@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
-import { type CadenceHome, cadenceHome } from "@sidecar/runtime/effect";
+
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Duration, Effect, TestClock } from "effect";
@@ -64,7 +64,6 @@ function fakeClient(answers: {
 function cadence(
   directory: string,
   client: DeviceCadenceClient,
-  home: CadenceHome,
   mint: () => string = () => INSTALLATION_ID,
   presence: () => DevicePresenceReport = () => PRESENT,
   reported: string[] = [],
@@ -77,7 +76,6 @@ function cadence(
     report: (message) => {
       reported.push(message);
     },
-    home,
   });
 }
 
@@ -86,6 +84,9 @@ function cadence(
  * let run: advancing the test clock resumes the fiber, and the beat's own
  * awaits settle on the immediate queue rather than on it.
  */
+/** The arming's own beat let run: it is a fiber the gate forked, not the arming's own await. */
+const firstBeat = (): Effect.Effect<void> => Effect.promise(() => drainMicrotasks(20));
+
 const nextBeat = (): Effect.Effect<void> =>
   Effect.gen(function* () {
     yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
@@ -104,11 +105,11 @@ it.scoped(
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const home = yield* cadenceHome;
       const { client, calls } = fakeClient({});
-      const subject = cadence(directory, client, home);
+      const subject = yield* cadence(directory, client);
 
-      yield* Effect.promise(() => subject.start());
+      yield* subject.start;
+      yield* firstBeat();
 
       assert.deepEqual(calls, [
         {
@@ -124,7 +125,8 @@ it.scoped(
       assert.equal(subject.deviceId(), DEVICE_ID);
       assert.equal(subject.standing, true);
 
-      yield* Effect.promise(() => subject.start());
+      yield* subject.start;
+      yield* firstBeat();
       assert.equal(calls.length, 2);
 
       yield* nextBeat();
@@ -132,7 +134,7 @@ it.scoped(
         calls.map((call) => call.kind),
         ["register", "poll", "poll"],
       );
-      yield* Effect.promise(() => subject.stop({ forget: false }));
+      yield* subject.stop({ forget: false });
     }),
 );
 
@@ -141,11 +143,11 @@ it.scoped(
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const home = yield* cadenceHome;
       const first = fakeClient({});
-      const subject = cadence(directory, first.client, home);
-      yield* Effect.promise(() => subject.start());
-      yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
+      const subject = yield* cadence(directory, first.client);
+      yield* subject.start;
+      yield* firstBeat();
+      yield* subject.stop({ forget: { accessToken: "leaving" } });
 
       assert.deepEqual(first.calls.at(-1), {
         kind: "forget",
@@ -159,28 +161,29 @@ it.scoped(
       assert.equal(first.calls.length, settled, "a stopped cadence keeps no beat");
 
       const relaunched = fakeClient({ register: () => ({ deviceId: OTHER_DEVICE_ID }) });
-      const next = cadence(directory, relaunched.client, home, () => {
+      const next = yield* cadence(directory, relaunched.client, () => {
         throw new Error("a stored installation id is never minted again");
       });
-      yield* Effect.promise(() => next.start());
+      yield* next.start;
+      yield* firstBeat();
       assert.deepEqual(relaunched.calls[0]?.body, {
         platform: DEVICE_PLATFORM.MACOS,
         installationId: INSTALLATION_ID.toLowerCase(),
       });
       assert.equal(next.deviceId(), OTHER_DEVICE_ID);
-      yield* Effect.promise(() => next.stop({ forget: false }));
+      yield* next.stop({ forget: false });
     }),
 );
 
 it.scoped("a stop without a departing account ends the cadence and forgets nothing", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
-    const home = yield* cadenceHome;
     const { client, calls } = fakeClient({});
-    const subject = cadence(directory, client, home);
-    yield* Effect.promise(() => subject.start());
+    const subject = yield* cadence(directory, client);
+    yield* subject.start;
+    yield* firstBeat();
 
-    yield* Effect.promise(() => subject.stop({ forget: false }));
+    yield* subject.stop({ forget: false });
 
     yield* nextBeat();
     assert.deepEqual(
@@ -197,7 +200,6 @@ it.scoped(
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const home = yield* cadenceHome;
       const seen = [true, true, false];
       const ids = [DEVICE_ID, OTHER_DEVICE_ID];
       const reports: DevicePresenceReport[] = [
@@ -209,8 +211,14 @@ it.scoped(
         register: () => ({ deviceId: ids.shift() ?? OTHER_DEVICE_ID }),
         poll: () => ({ seen: seen.shift() ?? true }),
       });
-      const subject = cadence(directory, client, home, undefined, () => reports.shift() ?? PRESENT);
-      yield* Effect.promise(() => subject.start());
+      const subject = yield* cadence(
+        directory,
+        client,
+        undefined,
+        () => reports.shift() ?? PRESENT,
+      );
+      yield* subject.start;
+      yield* firstBeat();
 
       yield* nextBeat();
       assert.deepEqual(calls.at(-1), { kind: "poll", body: { deviceId: DEVICE_ID, ...PRESENT } });
@@ -227,7 +235,7 @@ it.scoped(
       });
       assert.deepEqual(calls[5]?.body, { deviceId: OTHER_DEVICE_ID, ...PRESENT });
       assert.equal(subject.deviceId(), OTHER_DEVICE_ID);
-      yield* Effect.promise(() => subject.stop({ forget: false }));
+      yield* subject.stop({ forget: false });
     }),
 );
 
@@ -236,12 +244,12 @@ it.scoped(
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const home = yield* cadenceHome;
       let answer: { deviceId: string } | undefined;
       const { client, calls } = fakeClient({ register: () => answer });
-      const subject = cadence(directory, client, home);
+      const subject = yield* cadence(directory, client);
 
-      yield* Effect.promise(() => subject.start());
+      yield* subject.start;
+      yield* firstBeat();
       assert.equal(subject.deviceId(), undefined);
       assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
 
@@ -252,7 +260,7 @@ it.scoped(
         ["register", "register", "poll"],
       );
       assert.equal(subject.deviceId(), DEVICE_ID);
-      yield* Effect.promise(() => subject.stop({ forget: false }));
+      yield* subject.stop({ forget: false });
 
       let release: (() => void) | undefined;
       let polls = 0;
@@ -266,10 +274,11 @@ it.scoped(
           });
         },
       };
-      const racing = cadence(directory, slow, home);
-      yield* Effect.promise(() => racing.start());
+      const racing = yield* cadence(directory, slow);
+      yield* racing.start;
+      yield* firstBeat();
       yield* nextBeat();
-      yield* Effect.promise(() => racing.stop({ forget: false }));
+      yield* racing.stop({ forget: false });
       release?.();
       yield* Effect.promise(() => drainMicrotasks(20));
       assert.equal(
@@ -283,14 +292,12 @@ it.scoped(
 it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
-    const home = yield* cadenceHome;
     const reported: string[] = [];
     let failing = false;
     const { client, calls } = fakeClient({});
-    const subject = cadence(
+    const subject = yield* cadence(
       directory,
       client,
-      home,
       undefined,
       () => {
         if (failing) throw new Error("the calendar could not be read");
@@ -298,7 +305,8 @@ it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t
       },
       reported,
     );
-    yield* Effect.promise(() => subject.start());
+    yield* subject.start;
+    yield* firstBeat();
     assert.equal(reported.length, 0);
 
     failing = true;
@@ -311,7 +319,7 @@ it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t
       calls.map((call) => call.kind),
       ["register", "poll", "poll"],
     );
-    yield* Effect.promise(() => subject.stop({ forget: false }));
+    yield* subject.stop({ forget: false });
   }),
 );
 
@@ -320,7 +328,6 @@ it.scoped(
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const home = yield* cadenceHome;
       let release: (() => void) | undefined;
       const ids = [DEVICE_ID, OTHER_DEVICE_ID];
       const { client, calls } = fakeClient({});
@@ -337,17 +344,17 @@ it.scoped(
             resolve({ deviceId });
           }),
       };
-      const subject = cadence(directory, gated, home);
-      const departing = subject.start();
-      yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
+      const subject = yield* cadence(directory, gated);
+      yield* subject.start;
+      yield* firstBeat();
+      yield* subject.stop({ forget: { accessToken: "leaving" } });
 
-      const arriving = subject.start();
-      yield* Effect.promise(() => drainMicrotasks(20));
+      yield* subject.start;
+      yield* firstBeat();
       assert.equal(calls.length, 1, "the next registration waits for the one on the wire");
 
       release?.();
-      yield* Effect.promise(() => departing);
-      yield* Effect.promise(() => arriving);
+      yield* firstBeat();
       assert.deepEqual(
         calls.map((call) => call.kind),
         ["register", "register", "poll"],
@@ -357,7 +364,7 @@ it.scoped(
         OTHER_DEVICE_ID,
         "the row the new sign-in registered stands",
       );
-      yield* Effect.promise(() => subject.stop({ forget: false }));
+      yield* subject.stop({ forget: false });
     }),
 );
 

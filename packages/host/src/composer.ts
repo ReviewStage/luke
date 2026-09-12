@@ -1,5 +1,5 @@
 import type { GatewayMethod, GatewayMethodTable } from "@sidecar/gateway";
-import { Data, Either } from "effect";
+import { Data, type Effect, Either, type Scope } from "effect";
 
 /** One concern of the host: the Gateway methods it answers, and its own lifecycle. */
 export interface Composer {
@@ -7,6 +7,12 @@ export interface Composer {
   readonly methods: GatewayMethodTable;
   /** What this concern begins: timers, subscriptions, loops, stores. */
   start: () => Promise<void>;
+  /**
+   * What this concern arms once its `start` has run, in the scope its
+   * lifetime is: a cadence whose disarm is that scope closing rather than a
+   * handle `stop` has to be handed back.
+   */
+  readonly armed?: Effect.Effect<void, never, Scope.Scope>;
   /** Stops exactly what `start` began; safe to call when `start` never ran, and safe to call twice. */
   stop: () => Promise<void>;
 }
