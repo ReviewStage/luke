@@ -221,7 +221,7 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
       sessions: () => roster,
       refreshSessions: () => Effect.void,
       workspaceProjects: () => [],
-      workspaceDefaults: async () => ({}),
+      workspaceDefaults: Effect.succeed({}),
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },

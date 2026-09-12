@@ -146,7 +146,7 @@ function performer(
     sessions: (): readonly Session[] => [observed],
     refreshSessions: () => Effect.void,
     workspaceProjects: () => [],
-    workspaceDefaults: async () => ({}),
+    workspaceDefaults: Effect.succeed({}),
     appGuide: () => EMPTY_APP_GUIDE,
     rememberedFacts: () => facts,
     // A notebook fake with the worker's own rules: one line per words, a replaced entry gone first.
@@ -559,10 +559,10 @@ test("a turn revoked while the creation defaults were read is refused before the
   let revoked = false;
   const { actions, performed, recorded } = performer({
     workspaceProjects: () => [LISTED_PROJECT],
-    workspaceDefaults: async () => {
+    workspaceDefaults: Effect.sync(() => {
       revoked = true;
       return {};
-    },
+    }),
   });
   const refused = await Effect.runPromise(
     performCall(
@@ -691,10 +691,10 @@ it.effect(
           ...(held === "refreshSessions"
             ? { refreshSessions: () => Effect.promise(waits) }
             : {
-                workspaceDefaults: async () => {
+                workspaceDefaults: Effect.promise(async () => {
                   await waits();
                   return {};
-                },
+                }),
               }),
         });
         const controller = new AbortController();

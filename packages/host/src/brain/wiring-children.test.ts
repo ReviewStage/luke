@@ -269,7 +269,7 @@ async function composed(
       sessions: () => [],
       refreshSessions: () => Effect.void,
       workspaceProjects: () => [],
-      workspaceDefaults: async () => ({}),
+      workspaceDefaults: Effect.succeed({}),
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },

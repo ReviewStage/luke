@@ -262,19 +262,24 @@ the queued pass behind it as a daemon, which is exactly what the detached
 `compose-conversation.ts`'s `pollAfter` still waits out — through a
 `Deferred` the pass settles rather than a promise it held.
 
-`composeObservation` in `packages/host/src/compose-observation.ts` is on the
-handed-runtime list for what the brain still awaits of it. `pokeRefresh` is no
-longer one of those reasons: P12-15e made `SessionActionPerformer.perform`,
+`composeObservation` in `packages/host/src/compose-observation.ts` was on the
+handed-runtime list for what the brain still awaited of it. `pokeRefresh` was
+no longer one of those reasons: P12-15e made `SessionActionPerformer.perform`,
 the row's own two writes, and `settleHostedWrite` effects, so the redraw a
 landed write earns is a `yield*` of a poke that forks `loop.refresh` as a
 daemon, on the fiber the write itself is carried on, and nothing runs it. What
-is left is the brain's own promise-shaped reads: `workspaceDefaults`, which the host's
-action performer still wraps in an `Effect.promise` for the `defaults` read
-`ActionAdmissionReads` declares, is run to one on the
-`Effect.runtime<never>()` this composer reads out of its own build, and
-`broadcastWorkspaceProjects` is forked onto the same runtime from the one
-place it still fires from a plain callback, `sessionRegistry.subscribe`'s
-listener. Both go when those reads and that listener answer effects.
+was left was the brain's own promise-shaped reads: `workspaceDefaults`, which
+the host's action performer wrapped in an `Effect.promise` for the `defaults`
+read `ActionAdmissionReads` declares, and `broadcastWorkspaceProjects`, forked
+onto the composer's own runtime from the one place it fired from a plain
+callback, `sessionRegistry.subscribe`'s listener. P12-16f took both off: the
+composer exposes `workspaceDefaults` as the `Effect.Effect<WorkspaceCreationDefaults>`
+its action performer already yields rather than a `() => Promise` it ran, and
+the loop's own pass yields `broadcastWorkspaceProjects` itself right after it
+draws the roster, so the subscribe listener no longer needs to fire it at
+all. `Effect.runtime<never>()` is gone from this composer's build, and
+`packages/host/src/compose-observation.ts` is off `runOnHandedRuntime` with
+it.
 
 `compose-live.ts`'s entry covers a second run beside the timer bridge named
 above: `requestOnboardingBeat` decides whether to speak from the roster a
@@ -542,7 +547,12 @@ but the session action performer held two of them as promises — one field read
 were run to promises where they were handed to
 `createSessionActionPerformer`. Both runs are gone: that performer takes
 `Pick<SettingsStore, "get">` and the remembering effect itself, and yields each
-on its own fiber.
+on its own fiber. P12-16f closed the entry: `workspaceDefaults` is now the
+`Effect.Effect<WorkspaceCreationDefaults>` the action performer yields
+directly, and `broadcastWorkspaceProjects` is yielded from the loop's own
+pass right after it draws the roster rather than forked from
+`sessionRegistry.subscribe`'s listener, so `compose-observation.ts` is off
+this list.
 
 `compose-settings.ts` never joins this list: the observation composer's
 `broadcastWorkspaceProjects` is an effect since P12-14f, and its one caller
@@ -1201,7 +1211,6 @@ design decision stated as such:
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
-| `composeObservation`'s runs for what the brain still awaits of it, the promise-shaped `workspaceDefaults` and the projects broadcast fired from a plain listener | P12-15a | when that read and that listener answer effects |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |
@@ -1233,7 +1242,6 @@ design decision stated as such:
 | `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | deleted by P12-14i |
 | `compose-calendars.ts`'s run of `settingsStore.readCalendarAccounts()`/`readAppleCalendarConnection()` on the host's own runtime, for `GoogleCalendarReader`/`AppleCalendarReader`'s still-`Promise`-shaped options | P12-14i | once each reader answers effects itself, a `@sidecar/calendar` change unscheduled by this plan |
 | `compose-account.ts`'s fork of `emitSessionReplay` onto the host's own runtime, from `AccountSessionManager`'s plain `onChange` callback | P12-14f | once `onChange` answers an effect a subscriber yields instead |
-| `compose-observation.ts`'s runs of `session-action-performer.ts`'s one field read and its `rememberWorkspaceDefaults` call, and its fork of `broadcastWorkspaceProjects` from `sessionRegistry.subscribe`'s callback, each on the composition's own runtime | P12-14f | once `session-action-performer.ts` answers effects itself |
 | `compose-account.ts`'s fork of `settings.emitSettings()` on the host's own runtime, from the session manager's synchronous `onChange` | P12-14h | once `AccountSessionManager`'s `onChange` answers an effect |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
