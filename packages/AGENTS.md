@@ -192,8 +192,10 @@ functions of their own. The build's last step writes the Build Output tree
 so the deploy shape is the build's own on every preset and nothing is committed
 under `apps/web/api/` (Vercel's zero-config pass would build a file there beside
 the tree). The `/api/` rewrites of `apps/web/vercel.json` land each route on its
-function's public path, and `pnpm --filter @luke/web functions:rewrites`
-regenerates them after a route is added. Reachability into a package is read from the bundles' inputs,
+function's public path; they are generated into the committed table
+`apps/web/server/api-rewrites.json`, from which `vercel.json` is assembled, so
+a later `vercel.ts` can import the table and the JSON go (LUKE-183). `pnpm
+--filter @luke/web functions:rewrites` regenerates both after a route is added. Reachability into a package is read from the bundles' inputs,
 not their externals, because an inlined import leaves no external behind.
 Server code still names packages by bare specifier like everything else, and
 `apps/web/package.json` declares each one it names: the bundle step refuses an

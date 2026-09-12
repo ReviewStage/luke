@@ -1,0 +1,158 @@
+[
+  {
+    "src": "/api/auth/(.*)",
+    "dest": "/api/default.js?route=auth/[...all]&path=auth/$1"
+  },
+  {
+    "src": "/api/conversation/messages/([^/]+)/rating",
+    "dest": "/api/default.js?route=conversation/messages/rating&id=$1"
+  },
+  {
+    "src": "/api/brain/turns/([^/]+)/cancel",
+    "dest": "/api/default.js?route=brain/turns/cancel&id=$1"
+  },
+  {
+    "src": "/api/brain/turns/([^/]+)/events",
+    "dest": "/api/turn-events.js?route=brain/turns/events&id=$1"
+  },
+  {
+    "src": "/api/brain/turns/([^/]+)",
+    "dest": "/api/turn-read.js?route=brain/turns/turn&id=$1"
+  },
+  {
+    "src": "/api/brain/v2/embed",
+    "dest": "/api/brain-embed.js?route=brain/v2/embed"
+  },
+  {
+    "src": "/api/brain/v2/respond",
+    "dest": "/api/brain-inference.js?route=brain/v2/respond"
+  },
+  {
+    "src": "/api/brain/v2/count-tokens",
+    "dest": "/api/brain-inference.js?route=brain/v2/count-tokens"
+  },
+  {
+    "src": "/api/account/delete",
+    "dest": "/api/default.js?route=account/delete"
+  },
+  {
+    "src": "/api/account/preferences",
+    "dest": "/api/default.js?route=account/preferences"
+  },
+  {
+    "src": "/api/actions/agent",
+    "dest": "/api/default.js?route=actions/agent"
+  },
+  {
+    "src": "/api/actions/control",
+    "dest": "/api/default.js?route=actions/control"
+  },
+  {
+    "src": "/api/actions/message",
+    "dest": "/api/default.js?route=actions/message"
+  },
+  {
+    "src": "/api/actions/rename-session",
+    "dest": "/api/default.js?route=actions/rename-session"
+  },
+  {
+    "src": "/api/actions/rename-workspace",
+    "dest": "/api/default.js?route=actions/rename-workspace"
+  },
+  {
+    "src": "/api/actions/workspace",
+    "dest": "/api/default.js?route=actions/workspace"
+  },
+  {
+    "src": "/api/admin/day",
+    "dest": "/api/default.js?route=admin/day"
+  },
+  {
+    "src": "/api/admin/favorite",
+    "dest": "/api/default.js?route=admin/favorite"
+  },
+  {
+    "src": "/api/admin/metrics",
+    "dest": "/api/default.js?route=admin/metrics"
+  },
+  {
+    "src": "/api/admin/user",
+    "dest": "/api/default.js?route=admin/user"
+  },
+  {
+    "src": "/api/admin/users",
+    "dest": "/api/default.js?route=admin/users"
+  },
+  {
+    "src": "/api/brain/ask",
+    "dest": "/api/default.js?route=brain/ask"
+  },
+  {
+    "src": "/api/brain/capabilities",
+    "dest": "/api/default.js?route=brain/capabilities"
+  },
+  {
+    "src": "/api/brain/turns",
+    "dest": "/api/default.js?route=brain/turns"
+  },
+  {
+    "src": "/api/changes",
+    "dest": "/api/default.js?route=changes"
+  },
+  {
+    "src": "/api/conversation/clear",
+    "dest": "/api/default.js?route=conversation/clear"
+  },
+  {
+    "src": "/api/conversation/events",
+    "dest": "/api/default.js?route=conversation/events"
+  },
+  {
+    "src": "/api/conversation/messages",
+    "dest": "/api/default.js?route=conversation/messages"
+  },
+  {
+    "src": "/api/devices",
+    "dest": "/api/default.js?route=devices"
+  },
+  {
+    "src": "/api/events",
+    "dest": "/api/default.js?route=events"
+  },
+  {
+    "src": "/api/observe",
+    "dest": "/api/default.js?route=observe"
+  },
+  {
+    "src": "/api/projects",
+    "dest": "/api/default.js?route=projects"
+  },
+  {
+    "src": "/api/sessions/messages",
+    "dest": "/api/default.js?route=sessions/messages"
+  },
+  {
+    "src": "/api/vault/key",
+    "dest": "/api/default.js?route=vault/key"
+  },
+  {
+    "src": "/api/vault/keys",
+    "dest": "/api/default.js?route=vault/keys"
+  },
+  {
+    "src": "/api/voice/introduction-mint",
+    "dest": "/api/default.js?route=voice/introduction-mint"
+  },
+  {
+    "src": "/api/voice/mint",
+    "dest": "/api/default.js?route=voice/mint"
+  },
+  {
+    "src": "/api/voice/remote-mint",
+    "dest": "/api/default.js?route=voice/remote-mint"
+  },
+  {
+    "src": "/api/observation/tick",
+    "dest": "/api/observation-tick.js?route=observation/tick"
+  }
+]
