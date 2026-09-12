@@ -237,7 +237,7 @@ export const CONDUCTOR_SQL_FIELD = {
 /**
  * The one query document this adapter ever sends, fixed by this build. The
  * endpoint takes a read as a POSTed document rather than a GET, so the
- * separation is held the way the Linear tracker holds it: observation only
+ * separation a GET gives for free is held by construction: observation only
  * ever sends this SELECT, and nothing reaches its text but session ids the
  * same pass reported — each validated as a UUID first, so no name, title, or
  * message a provider controls can ever be spliced into the document.

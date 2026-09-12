@@ -63,9 +63,9 @@ const DEFAULT_REQUEST_HEADERS = {
 };
 
 /**
- * The one body key a POSTed read document rides under. Linear's GraphQL and
- * Conductor's transcripts view both name it `query`, and a provider that names
- * it something else is asking for its own client rather than an option here.
+ * The one body key a POSTed read document rides under. Conductor's transcripts
+ * view names it `query`, and a provider that names it something else is asking
+ * for its own client rather than an option here.
  */
 const READ_DOCUMENT_FIELD = "query";
 
