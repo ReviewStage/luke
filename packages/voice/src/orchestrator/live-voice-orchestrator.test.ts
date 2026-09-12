@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
+import {
+  LIVE_SESSION_PHASE,
+  type LiveSessionPhase,
+  type VoiceLiveSessionChanged,
+} from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
 import { Effect } from "effect";
@@ -117,7 +121,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   const openings: (LiveVoiceExchangeOpening | undefined)[] = [];
   let microphoneGranted = true;
   let microphoneAsks = 0;
-  let microphoneAsk: (() => Promise<boolean>) | undefined;
+  let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
   const stops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
     bridge: {
@@ -125,15 +129,17 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
         views.push(view);
         openings.push(exchange);
       },
-      requestMicrophone: async () => {
-        microphoneAsks += 1;
-        return microphoneAsk ? microphoneAsk() : microphoneGranted;
-      },
-      hostedUnavailableNote: async () => undefined,
-      stopSpeaking: async () => {
-        stops.push(calls[calls.length - 1]?.mutes ?? 0);
-        return true;
-      },
+      requestMicrophone: () =>
+        Effect.suspend(() => {
+          microphoneAsks += 1;
+          return microphoneAsk ? microphoneAsk() : Effect.succeed(microphoneGranted);
+        }),
+      hostedUnavailableNote: () => Effect.succeed(undefined),
+      stopSpeaking: () =>
+        Effect.sync(() => {
+          stops.push(calls[calls.length - 1]?.mutes ?? 0);
+          return true;
+        }),
     },
     createCall: (events) => {
       const call = new FakeCall(events);
@@ -143,7 +149,18 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   });
   orchestrator.surround({ ...SURROUNDINGS, ...surroundings });
   return {
-    orchestrator,
+    surround: (next: LiveVoiceSurroundings) => orchestrator.surround(next),
+    beginTalk: () => Effect.runPromise(orchestrator.beginTalk()),
+    endTalk: () => Effect.runPromise(orchestrator.endTalk()),
+    stopSpeaking: () => Effect.runPromise(orchestrator.stopSpeaking()),
+    stop: () => Effect.runPromise(orchestrator.stop()),
+    /** The host's word, started on its own fiber the way the window's subscription starts it. */
+    obey: (change: VoiceLiveSessionChanged) => {
+      void Effect.runPromise(orchestrator.obeySessionChange(change));
+    },
+    adopt: (phase: LiveSessionPhase | undefined) => {
+      void Effect.runPromise(orchestrator.adoptStanding(phase));
+    },
     calls,
     views,
     openings,
@@ -151,7 +168,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
       microphoneGranted = granted;
     },
     /** The system's dialog standing: the ask answers when the test says so. */
-    setMicrophoneAsk: (ask: () => Promise<boolean>) => {
+    setMicrophoneAsk: (ask: () => Effect.Effect<boolean>) => {
       microphoneAsk = ask;
     },
     microphoneAsks: () => microphoneAsks,
@@ -172,7 +189,7 @@ function row(
 
 test("the talk key's press opens a session by press when none stands and unmutes it once started; its release mutes once", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   assert.equal(call.opens, 1);
@@ -183,29 +200,29 @@ test("the talk key's press opens a session by press when none stands and unmutes
   assert.equal(call.unmutes, 1);
   assert.equal(call.mutes, 0);
   assert.equal(call.status, LIVE_STATUS.LISTENING);
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   assert.equal(call.mutes, 1);
   assert.equal(call.opens, 1);
   assert.equal(f.calls.length, 1);
   // A release with no press behind it does nothing.
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   assert.equal(call.mutes, 1);
   // The next hold against the standing session: no second session, one more unmute, one more mute.
-  await f.orchestrator.beginTalk();
+  await f.beginTalk();
   assert.equal(f.calls.length, 1);
   assert.equal(call.unmutes, 2);
   assert.equal(call.mutes, 1);
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   assert.equal(call.mutes, 2);
 });
 
 test("a second press while the developer is heard never mutes", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   f.latest()?.started();
   await pressed;
-  await f.orchestrator.beginTalk();
-  await f.orchestrator.beginTalk();
+  await f.beginTalk();
+  await f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   assert.equal(call.mutes, 0);
@@ -214,11 +231,11 @@ test("a second press while the developer is heard never mutes", async () => {
 
 test("a release while the press's session is still opening leaves it to open muted", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   assert.equal(call.standing, false);
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   call.started();
   await pressed;
   // The release's mute still goes once the session stands: the press's device rode the offer.
@@ -229,56 +246,56 @@ test("a release while the press's session is still opening leaves it to open mut
 
 test("a press during a session opened for Luke's speech unmutes it once started, and a release during the opening does not", async () => {
   const f = fixture();
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const call = f.latest();
   assert.ok(call);
   assert.deepEqual(call.openings, [{ byPress: false }]);
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   await drainMicrotasks();
   assert.equal(f.calls.length, 1);
   call.started();
   await pressed;
   assert.equal(call.unmutes, 1);
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   assert.equal(call.mutes, 1);
 });
 
 test("the stop key mutes a standing session once, does nothing against none, and ends the hold so the release mutes nothing more", async () => {
   const f = fixture();
-  assert.equal(await f.orchestrator.stopSpeaking(), false);
+  assert.equal(await f.stopSpeaking(), false);
   assert.deepEqual(f.stops, []);
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   f.latest()?.started();
   await pressed;
-  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.equal(await f.stopSpeaking(), true);
   assert.equal(f.latest()?.mutes, 1);
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   assert.equal(f.latest()?.mutes, 1);
 });
 
 test("the stop key tells the host to stop only while Luke is speaking, and before it mutes", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   call.started();
   await pressed;
   assert.equal(call.status, LIVE_STATUS.LISTENING);
-  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.equal(await f.stopSpeaking(), true);
   assert.deepEqual(f.stops, []);
   assert.equal(call.mutes, 1);
   call.settle(LIVE_STATUS.SPEAKING);
-  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.equal(await f.stopSpeaking(), true);
   assert.deepEqual(f.stops, [1]);
   assert.equal(call.mutes, 2);
 });
 
 test("the talk key's release mutes and never tells the host to stop", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   f.latest()?.started();
   await pressed;
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   assert.equal(f.latest()?.mutes, 1);
   assert.deepEqual(f.stops, []);
 });
@@ -286,13 +303,13 @@ test("the talk key's release mutes and never tells the host to stop", async () =
 test("a press without the microphone asks for it, and a refusal opens nothing", async () => {
   const f = fixture({ microphoneGranted: false });
   f.setMicrophone(false);
-  await f.orchestrator.beginTalk();
+  await f.beginTalk();
   assert.equal(f.microphoneAsks(), 1);
   assert.equal(f.calls.length, 0);
   await drainMicrotasks();
   assert.notEqual(f.views.at(-1)?.voiceError, undefined);
   f.setMicrophone(true);
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   await drainMicrotasks();
   assert.equal(f.calls.length, 1);
   f.latest()?.started();
@@ -303,10 +320,14 @@ test("a press without the microphone asks for it, and a refusal opens nothing", 
 test("a key let go of while the microphone dialog stands opens the session muted", async () => {
   const f = fixture({ microphoneGranted: false });
   let grant: ((granted: boolean) => void) | undefined;
-  f.setMicrophoneAsk(() => new Promise<boolean>((resolve) => (grant = resolve)));
-  const pressed = f.orchestrator.beginTalk();
+  f.setMicrophoneAsk(() =>
+    Effect.async<boolean>((resume) => {
+      grant = (granted) => resume(Effect.succeed(granted));
+    }),
+  );
+  const pressed = f.beginTalk();
   await drainMicrotasks();
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   grant?.(true);
   await pressed;
   assert.equal(f.calls.length, 0);
@@ -314,13 +335,13 @@ test("a key let go of while the microphone dialog stands opens the session muted
 
 test("a press while voice is off opens nothing", async () => {
   const f = fixture({ voiceAvailable: false });
-  await f.orchestrator.beginTalk();
+  await f.beginTalk();
   assert.equal(f.calls.length, 0);
 });
 
 test("wanted opens a session with no device, closing hangs it up, and a session lost mid-hold listens again on the next", async () => {
   const f = fixture();
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const first = f.latest();
   assert.ok(first);
   first.started();
@@ -328,7 +349,7 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   assert.equal(first.unmutes, 0);
   assert.equal(first.status, LIVE_STATUS.MUTED);
   // A second wanted while it stands opens nothing more.
-  f.orchestrator.obeySessionChange({
+  f.obey({
     phase: LIVE_SESSION_PHASE.WANTED,
     sessionId: sessionIdOf(first),
   });
@@ -337,16 +358,16 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   // The developer holds the key, then the connection is lost under them: the
   // peer's own end may land before the host's word, and the wanted right
   // after it.
-  await f.orchestrator.beginTalk();
+  await f.beginTalk();
   assert.equal(first.unmutes, 1);
   const lost = sessionIdOf(first);
   first.settle(LIVE_STATUS.IDLE);
-  f.orchestrator.obeySessionChange({
+  f.obey({
     phase: LIVE_SESSION_PHASE.CLOSED,
     sessionId: lost,
     reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
   });
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const second = f.latest();
   assert.ok(second);
   assert.notEqual(second, first);
@@ -355,10 +376,10 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   await drainMicrotasks();
   assert.equal(second.unmutes, 1);
   // A closing that names another session is not this call's.
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: lost });
+  f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: lost });
   await drainMicrotasks();
   assert.equal(second.closes, 0);
-  f.orchestrator.obeySessionChange({
+  f.obey({
     phase: LIVE_SESSION_PHASE.CLOSING,
     sessionId: sessionIdOf(second),
   });
@@ -368,23 +389,23 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
 
 test("a session lost after the key was let go of does not listen again on the next", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const first = f.latest();
   assert.ok(first);
   first.started();
   await pressed;
-  await f.orchestrator.endTalk();
+  await f.endTalk();
   assert.equal(first.mutes, 1);
   // Lost before the mute's status landed: the last status the call reported was listening.
   first.settle(LIVE_STATUS.LISTENING);
   const lost = sessionIdOf(first);
   first.settle(LIVE_STATUS.IDLE);
-  f.orchestrator.obeySessionChange({
+  f.obey({
     phase: LIVE_SESSION_PHASE.CLOSED,
     sessionId: lost,
     reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
   });
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const second = f.latest();
   assert.ok(second);
   assert.notEqual(second, first);
@@ -395,21 +416,21 @@ test("a session lost after the key was let go of does not listen again on the ne
 
 test("a session closed by the host's own decision does not listen again on the next", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const first = f.latest();
   assert.ok(first);
   first.started();
   await pressed;
   // The host's word ends the call before the peer has noticed: the call is
   // let go of and hangs up behind, and the next wanted opens a new one.
-  f.orchestrator.obeySessionChange({
+  f.obey({
     phase: LIVE_SESSION_PHASE.CLOSED,
     sessionId: sessionIdOf(first),
     reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
   });
   await drainMicrotasks();
   assert.equal(first.closes, 1);
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const second = f.latest();
   assert.ok(second);
   assert.notEqual(second, first);
@@ -420,7 +441,7 @@ test("a session closed by the host's own decision does not listen again on the n
 
 test("a session that refuses to open leaves no call standing, and the next press opens another", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const first = f.latest();
   assert.ok(first);
   first.opensSucceed = false;
@@ -429,7 +450,7 @@ test("a session that refuses to open leaves no call standing, and the next press
   assert.equal(first.unmutes, 0);
   await drainMicrotasks();
   assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.FAILED);
-  const again = f.orchestrator.beginTalk();
+  const again = f.beginTalk();
   assert.equal(f.calls.length, 2);
   f.latest()?.started();
   await again;
@@ -438,7 +459,7 @@ test("a session that refuses to open leaves no call standing, and the next press
 test("the view reports each edge once, counts the exchange on its opening edge under who opened it, and carries the captions", async () => {
   const f = fixture();
   await drainMicrotasks();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   await drainMicrotasks();
@@ -484,7 +505,7 @@ test("the view reports each edge once, counts the exchange on its opening edge u
 
 test("captions are withheld when neither the preference nor a silent output asks for them", async () => {
   const f = fixture({ captionsEnabled: false, outputSilent: false });
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const call = f.latest();
   assert.ok(call);
   call.started();
@@ -493,28 +514,28 @@ test("captions are withheld when neither the preference nor a silent output asks
   await drainMicrotasks();
   assert.equal(f.views.at(-1)?.lukeCaptions, undefined);
   assert.deepEqual(f.openings.filter(Boolean), [{ microphoneCall: false }]);
-  f.orchestrator.surround({ ...SURROUNDINGS, captionsEnabled: false, outputSilent: true });
+  f.surround({ ...SURROUNDINGS, captionsEnabled: false, outputSilent: true });
   await drainMicrotasks();
   assert.deepEqual(f.views.at(-1)?.lukeCaptions, ["Two sessions"]);
 });
 
 test("voice turning off closes the standing session, and stop closes it and reports nothing after", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   call.started();
   await pressed;
-  f.orchestrator.surround({ ...SURROUNDINGS, voiceAvailable: false });
+  f.surround({ ...SURROUNDINGS, voiceAvailable: false });
   await drainMicrotasks();
   assert.equal(call.closes, 1);
   const g = fixture();
-  const opened = g.orchestrator.beginTalk();
+  const opened = g.beginTalk();
   g.latest()?.started();
   await opened;
   await drainMicrotasks();
   const reports = g.views.length;
-  await g.orchestrator.stop();
+  await g.stop();
   await drainMicrotasks();
   assert.equal(g.latest()?.closes, 1);
   assert.equal(g.views.length, reports);
@@ -522,7 +543,7 @@ test("voice turning off closes the standing session, and stop closes it and repo
 
 test("an ended session releases once, whether it ends itself or stop interrupts it afterward", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   call.started();
@@ -531,18 +552,18 @@ test("an ended session releases once, whether it ends itself or stop interrupts 
   call.settle(LIVE_STATUS.IDLE);
   await drainMicrotasks();
   assert.equal(call.closes, 1);
-  await f.orchestrator.stop();
+  await f.stop();
   await drainMicrotasks();
   assert.equal(call.closes, 1);
 });
 
 test("stop interrupts a call still opening, and releases it once the open settles", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   assert.equal(call.closes, 0);
-  const stopped = f.orchestrator.stop();
+  const stopped = f.stop();
   call.started();
   await pressed;
   await stopped;
@@ -552,12 +573,12 @@ test("stop interrupts a call still opening, and releases it once the open settle
 
 test("the host closing an older session leaves a call still waiting for its own answer standing", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   // The host hung up the session it still held before creating this one.
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: "old" });
-  f.orchestrator.obeySessionChange({
+  f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: "old" });
+  f.obey({
     phase: LIVE_SESSION_PHASE.CLOSED,
     sessionId: "old",
     reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
@@ -568,17 +589,17 @@ test("the host closing an older session leaves a call still waiting for its own 
   await pressed;
   assert.equal(call.unmutes, 1);
   // Still driven: the stop key reaches it.
-  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.equal(await f.stopSpeaking(), true);
   assert.equal(call.mutes, 1);
 });
 
 test("a stop while a press's session is still opening leaves it muted", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   assert.equal(call.standing, false);
-  assert.equal(await f.orchestrator.stopSpeaking(), true);
+  assert.equal(await f.stopSpeaking(), true);
   call.started();
   await pressed;
   assert.equal(call.unmutes, 0);
@@ -588,16 +609,16 @@ test("a stop while a press's session is still opening leaves it muted", async ()
 
 test("a wanted the document held at adoption opens a session; any other standing phase opens none", async () => {
   const f = fixture();
-  f.orchestrator.adoptStanding(LIVE_SESSION_PHASE.CLOSED);
-  f.orchestrator.adoptStanding(undefined);
+  f.adopt(LIVE_SESSION_PHASE.CLOSED);
+  f.adopt(undefined);
   assert.equal(f.calls.length, 0);
-  f.orchestrator.adoptStanding(LIVE_SESSION_PHASE.WANTED);
+  f.adopt(LIVE_SESSION_PHASE.WANTED);
   assert.equal(f.calls.length, 1);
 });
 
 test("a session pausing between Luke's sentences is one exchange, counted once", async () => {
   const f = fixture();
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const call = f.latest();
   assert.ok(call);
   call.started();
@@ -612,7 +633,7 @@ test("a session pausing between Luke's sentences is one exchange, counted once",
 
 test("both speakers stand together in the view, and a speaker moving under a still status is reported", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
   call.started();
@@ -640,7 +661,7 @@ test("both speakers stand together in the view, and a speaker moving under a sti
 
 test("a session lost while both speakers stood listens again on the next", async () => {
   const f = fixture();
-  const pressed = f.orchestrator.beginTalk();
+  const pressed = f.beginTalk();
   const first = f.latest();
   assert.ok(first);
   first.started();
@@ -648,12 +669,12 @@ test("a session lost while both speakers stood listens again on the next", async
   first.report(LIVE_STATUS.SPEAKING, { listening: true, lukeSpeaking: true });
   const lost = sessionIdOf(first);
   first.settle(LIVE_STATUS.IDLE);
-  f.orchestrator.obeySessionChange({
+  f.obey({
     phase: LIVE_SESSION_PHASE.CLOSED,
     sessionId: lost,
     reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
   });
-  f.orchestrator.obeySessionChange({ phase: LIVE_SESSION_PHASE.WANTED });
+  f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const second = f.latest();
   assert.ok(second);
   assert.notEqual(second, first);

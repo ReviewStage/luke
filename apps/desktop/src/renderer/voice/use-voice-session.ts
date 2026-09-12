@@ -71,15 +71,18 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         view,
         exchange === undefined ? undefined : voiceExchangeKind(exchange),
       ),
-    requestMicrophone: async () =>
-      (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
-    hostedUnavailableNote: async () =>
-      hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
-    stopSpeaking: () => act(ACT_KIND.VOICE_STOP_SPEAKING).catch(() => false),
+    requestMicrophone: () =>
+      Effect.promise(
+        async () => (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
+      ),
+    hostedUnavailableNote: () =>
+      Effect.promise(async () =>
+        hostedVoiceUnavailableNote(await act(ACT_KIND.VOICE_DIAGNOSTICS).catch(() => undefined)),
+      ),
+    stopSpeaking: () => Effect.promise(() => act(ACT_KIND.VOICE_STOP_SPEAKING).catch(() => false)),
   };
   orchestratorRef.current ??= new LiveVoiceOrchestrator({
     bridge,
-    runtime: rendererRuntimeNow(),
     createCall: (events) => {
       const call = new LiveCall({
         events,
@@ -121,6 +124,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     },
   });
   const orchestrator = orchestratorRef.current;
+  /**
+   * Every verb of the orchestrator is an Effect, and this window is the edge
+   * that runs one: a key press, a command, or the host's own word starts a
+   * fiber of the renderer's own runtime, which is the same runtime the call
+   * beneath already forks its session's life on.
+   */
+  const drive = useCallback((effect: Effect.Effect<unknown>) => {
+    Runtime.runFork(rendererRuntimeNow())(effect);
+  }, []);
   const audioContext = useRef<AudioContext | undefined>(undefined);
   /**
    * The pair the panels draw from, each meter amending its own half: a meter
@@ -221,12 +233,12 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   useEffect(
     () =>
       window.sidecar.onVoiceCommand(({ command }) => {
-        if (command === VOICE_COMMAND.STOP_SPEAKING) void orchestrator.stopSpeaking();
+        if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {
-          void orchestrator.requestMicrophoneAccess();
+          drive(orchestrator.requestMicrophoneAccess());
         }
       }),
-    [orchestrator],
+    [drive, orchestrator],
   );
 
   // The host's word on its one session: wanted opens one muted for whatever
@@ -238,12 +250,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   useEffect(() => {
     if (adopted.current || state === undefined) return;
     adopted.current = true;
-    orchestrator.adoptStanding(standingPhase);
-  }, [orchestrator, standingPhase, state]);
+    drive(orchestrator.adoptStanding(standingPhase));
+  }, [drive, orchestrator, standingPhase, state]);
   useEffect(
     () =>
-      window.sidecar.onVoiceLiveSessionChanged((change) => orchestrator.obeySessionChange(change)),
-    [orchestrator],
+      window.sidecar.onVoiceLiveSessionChanged((change) =>
+        drive(orchestrator.obeySessionChange(change)),
+      ),
+    [drive, orchestrator],
   );
 
   // The talk key is registered by the main process so it answers from any app,
@@ -254,26 +268,26 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // recording is known; a release always lands, so a hold begun before the
   // recording still ends.
   useEffect(
-    () => window.sidecar.onVoiceHotkeyPress(() => void orchestrator.beginTalk()),
-    [orchestrator],
+    () => window.sidecar.onVoiceHotkeyPress(() => drive(orchestrator.beginTalk())),
+    [drive, orchestrator],
   );
   useEffect(
-    () => window.sidecar.onVoiceHotkeyRelease(() => void orchestrator.endTalk()),
-    [orchestrator],
+    () => window.sidecar.onVoiceHotkeyRelease(() => drive(orchestrator.endTalk())),
+    [drive, orchestrator],
   );
   // The stop key asks for quiet from any app, exactly as Escape asks for it
   // from the panel: the microphone closes, and where Luke is speaking the
   // host tells the model to stop; a press over no session simply does
   // nothing.
   useEffect(
-    () => window.sidecar.onStopHotkeyPress(() => void orchestrator.stopSpeaking()),
-    [orchestrator],
+    () => window.sidecar.onStopHotkeyPress(() => drive(orchestrator.stopSpeaking())),
+    [drive, orchestrator],
   );
 
   useEffect(
     () => () => {
-      void orchestrator.stop();
+      drive(orchestrator.stop());
     },
-    [orchestrator],
+    [drive, orchestrator],
   );
 }

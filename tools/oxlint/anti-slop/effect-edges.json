@@ -53,7 +53,6 @@
     "packages/providers/src/shared/promise-face.ts",
     "packages/runtime/src/effect/cadence.ts",
     "packages/voice/src/live-session-source.ts",
-    "packages/voice/src/orchestrator/live-voice-orchestrator.ts",
     "packages/wire/src/effect/http.ts",
     "packages/wire/src/testing/effect.ts"
   ],
@@ -62,7 +61,8 @@
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-account.ts",
     "packages/host/src/effect/timer-seam.ts",
-    "packages/runtime/src/effect/timer-seam.ts"
+    "packages/runtime/src/effect/timer-seam.ts",
+    "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [
     "apps/desktop/src/main/ipc/register-desktop-ipc.ts",

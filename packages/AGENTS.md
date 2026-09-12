@@ -255,12 +255,15 @@ seam, and each composition binds `ws` on its own side.
 
 `@sidecar/voice/effect` is the same package's door for the Effect tags
 beside those plain seams: `LiveBrainTag`, `LiveRecordTag`,
-`LiveSessionSourceTag`, `IntroductionSessionSourceTag`, and
-`LiveVoiceBridgeTag`, each with a `Layer.succeed` adaptor over the plain
-object a caller still holds. Every adaptor is a strangler shim standing
-until the class it feeds — `LiveSessionService` or `LiveVoiceOrchestrator` —
-reads the tag itself rather than taking the value as a constructor argument,
-and `docs/adr/0001-effect.md` names which caller and which PR for each.
+`LiveSessionSourceTag`, and `IntroductionSessionSourceTag`, each with a
+`Layer.succeed` adaptor over the plain object a caller still holds. Every
+adaptor is a strangler shim standing until `LiveSessionService` reads the tag
+itself rather than taking the value as a constructor argument, and
+`docs/adr/0001-effect.md` names which caller and which PR for each. There is
+no tag for `LiveVoiceBridge`: the orchestrator reports its view from a
+microtask of its own rather than from a fiber, so the bridge has to be a
+field it holds and not a service it reads, and the adaptor that stood here
+for one was deleted rather than adopted.
 
 `@sidecar/wire/effect` is the same door for what still bridges a hand-rolled
 base to Effect's own — the `HttpClient` bridge over `CloudFetch`, and the
