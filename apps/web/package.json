@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "4.0.65",
+    "@better-auth/drizzle-adapter": "1.6.29",
     "@better-auth/oauth-provider": "1.6.29",
     "@effect/experimental": "catalog:",
     "@effect/platform": "catalog:",
@@ -46,9 +47,9 @@
     "@tailwindcss/vite": "4.3.3",
     "ai": "catalog:",
     "better-auth": "1.6.29",
+    "drizzle-orm": "0.45.2",
     "effect": "catalog:",
     "eve": "0.53.1",
-    "kysely": "0.29.5",
     "marked": "18.0.9",
     "pg": "8.23.0",
     "posthog-js": "1.418.3",
