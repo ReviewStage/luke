@@ -188,9 +188,10 @@ const sameRewrites = (a: readonly Rewrite[], b: readonly Rewrite[]) =>
  * reverse, is drift and not a pass.
  */
 export async function rewritesDrifted(web: string): Promise<boolean> {
+  // The file's shape is refused ahead of anything else being read, so the refusal names where the routes belong.
+  const committed = (await readVercelConfig(web)).services.web.routes.filter(isApiRewrite);
   const table = await readApiRewritesTable(web);
   const generated = apiRewrites(await webFunctions(web));
-  const committed = (await readVercelConfig(web)).services.web.routes.filter(isApiRewrite);
   return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 

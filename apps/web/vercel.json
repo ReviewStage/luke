@@ -41,6 +41,10 @@
           "dest": "/api/brain-inference.js?route=brain/v2/count-tokens"
         },
         {
+          "src": "/api/brain/v2/prefetch",
+          "dest": "/api/brain-inference.js?route=brain/v2/prefetch"
+        },
+        {
           "src": "/api/account/delete",
           "dest": "/api/default.js?route=account/delete"
         },
