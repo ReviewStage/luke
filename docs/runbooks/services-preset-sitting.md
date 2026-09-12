@@ -38,6 +38,25 @@ observed on 2026-09-11:
 So the flip and the merge happen in one sitting, and every merge to `main`
 inside the window between them fails production, recoverably.
 
+## What the first attempt cost, and what makes it stop
+
+The sitting was attempted on the night of 2026-09-11 and aborted. The flip
+needs the merge queue to stay empty for about twenty minutes, and the PR that
+carries the two-service `vercel.json` conflicts with anything that changes
+routes or the shared agent guide: it touches `vercel.json` and the route table
+(`server/api-rewrites.json`), and it rewrites a paragraph of
+`packages/AGENTS.md`. That night it was rebased seven times, each rebase
+costing a bootstrap, a full `check.sh`, a CI round, and a fresh review pair,
+and each undone by the next merge to `main`. A freeze over one lane's five
+workers held perfectly and was not enough, because two merges from another
+lane landed in twenty-five minutes and each dirtied the PR through one of the
+two paths above. **The PR can only land on a queue that is quiet across every
+lane, not just the one running the sitting**, and more discipline inside one
+lane does not change that. Only the person who can quiet every lane at once
+can open the window, which is why the sitting is scheduled rather than
+attempted: quiet the queue first, then rebase once, then flip. The rebase is
+the last thing done before the flip, not the first.
+
 ## Who does what
 
 - **The flip is Dean's.** The Framework Preset is a dashboard setting nobody
