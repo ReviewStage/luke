@@ -228,7 +228,6 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
         liveSessionId,
         conversationId: target.conversationId,
         context: { keys: KEYS },
-        run: database.run,
         writer,
         eve,
         source: () => source,
@@ -358,7 +357,7 @@ it.effect(
       const [offer] = await database.run(database.store.speech.open(target.userId));
       assert.ok(offer);
 
-      await f.exchange.briefings.look();
+      await database.run(f.exchange.briefings.look);
       await until(
         () => f.commentary().length === 1,
         () => `the briefing to be appended; reports ${JSON.stringify(f.reports)}`,
@@ -412,7 +411,7 @@ it.effect(
       });
       const [offer] = await database.run(database.store.speech.open(target.userId));
       assert.ok(offer);
-      await f.exchange.briefings.look();
+      await database.run(f.exchange.briefings.look);
       await sleep(30);
       assert.deepEqual(f.commentary(), []);
       assert.deepEqual(await speechEventsOf(offer.messageId), [

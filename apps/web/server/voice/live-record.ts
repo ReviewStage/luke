@@ -1,4 +1,8 @@
+import { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import type { LiveRecord } from "@sidecar/voice/live-session";
+import { Deferred, Effect, FiberId, type ParseResult, Queue, type Scope } from "effect";
+import { runOverClient } from "../hosted/fiber-runner.js";
 import {
   STORE_WRITE_EFFECT,
   type VoiceTarget,
@@ -6,7 +10,6 @@ import {
   type VoiceWriter,
 } from "../hosted/store/index.js";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
-import type { WebStoreRun } from "../runtime.js";
 
 /**
  * The hosted implementation of the live record: the voice writer over
@@ -38,8 +41,6 @@ type DelegationCreated = Extract<
 >;
 
 export interface HostedLiveRecordOptions {
-  /** The promise face the writer's effects are run to, since the record is driven from the session's own socket callbacks. */
-  readonly run: WebStoreRun;
   readonly writer: VoiceWriter;
   readonly target: VoiceTarget;
 }
@@ -54,41 +55,68 @@ export interface HostedLiveRecord extends LiveRecord {
 /** A delegation is held for the ask that names it, and the stream itself writes nothing for it yet. */
 const HELD: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
 
+/** One event waiting its turn at the writer, and what the caller that handed it over is waiting on. */
+interface PendingWrite {
+  readonly event: LiveServerEvent;
+  readonly landed: Deferred.Deferred<VoiceWriteResult, SqlError | ParseResult.ParseError>;
+}
+
 export function hostedLiveRecord({
-  run,
   writer,
   target,
-}: HostedLiveRecordOptions): HostedLiveRecord {
-  const held = new Map<string, DelegationCreated>();
-  let chain: Promise<unknown> = Promise.resolve();
+}: HostedLiveRecordOptions): Effect.Effect<
+  HostedLiveRecord,
+  never,
+  Scope.Scope | SqlClient.SqlClient
+> {
+  return Effect.gen(function* () {
+    const run = runOverClient(yield* SqlClient.SqlClient);
+    const held = new Map<string, DelegationCreated>();
+    const waiting = yield* Queue.unbounded<PendingWrite>();
+    let last: PendingWrite["landed"] | undefined;
 
-  /** Every write of one session takes its turn, so a segment's place in the sequence is its arrival. */
-  function consume(event: LiveServerEvent): Promise<VoiceWriteResult> {
-    const next = chain.then(() => run(writer.consume(target, event)));
-    chain = next.catch(() => undefined);
-    return next;
-  }
+    yield* Effect.forkScoped(
+      Effect.forever(
+        Effect.flatMap(Queue.take(waiting), (pending) =>
+          Effect.flatMap(Effect.exit(writer.consume(target, pending.event)), (written) =>
+            Deferred.done(pending.landed, written),
+          ),
+        ),
+      ),
+    );
 
-  return {
-    observe(event) {
-      if (event.type === LIVE_SERVER_EVENT.DELEGATION_CREATED) {
-        held.set(event.delegation.id, event);
-        return Promise.resolve(HELD);
-      }
-      return consume(event);
-    },
-    async writeDeveloperUtterance(record) {
-      if (record.delegationId === null) return true;
-      const delegation = held.get(record.delegationId);
-      if (delegation === undefined) return false;
-      try {
-        const written = await consume(delegation);
-        return written.ok && written.effect !== STORE_WRITE_EFFECT.IGNORED;
-      } catch {
-        return false;
-      }
-    },
-    writeLukeUtterance: () => Promise.resolve(true),
-    drained: () => chain.then(() => undefined),
-  };
+    /** Every write of one session takes its turn, so a segment's place in the sequence is its arrival. */
+    function consume(event: LiveServerEvent): Promise<VoiceWriteResult> {
+      const landed = Deferred.unsafeMake<VoiceWriteResult, SqlError | ParseResult.ParseError>(
+        FiberId.none,
+      );
+      last = landed;
+      Queue.unsafeOffer(waiting, { event, landed });
+      return run(Deferred.await(landed));
+    }
+
+    return {
+      observe(event) {
+        if (event.type === LIVE_SERVER_EVENT.DELEGATION_CREATED) {
+          held.set(event.delegation.id, event);
+          return Promise.resolve(HELD);
+        }
+        return consume(event);
+      },
+      async writeDeveloperUtterance(record) {
+        if (record.delegationId === null) return true;
+        const delegation = held.get(record.delegationId);
+        if (delegation === undefined) return false;
+        try {
+          const written = await consume(delegation);
+          return written.ok && written.effect !== STORE_WRITE_EFFECT.IGNORED;
+        } catch {
+          return false;
+        }
+      },
+      writeLukeUtterance: () => Promise.resolve(true),
+      drained: () =>
+        last === undefined ? Promise.resolve() : run(Effect.ignore(Deferred.await(last))),
+    };
+  });
 }

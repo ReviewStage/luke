@@ -947,11 +947,35 @@ promise face `voice/function.ts` builds over `runWeb` for `VoiceService`,
 declared in the same file rather than mapped from the effects, since P12-18c
 moved `Promised<Methods>` out of `server/` and the service is a class of `ws`
 callbacks rather than a composition of fibers, which no PR in this plan
-rewrites. `hostedLiveBrain`, `hostedBriefings`, and
-`hostedLiveRecord` still take `WebStoreRun`, and the exchange still hands it
-to them along with the device read the briefing look asks a promise for; that
-is P12-18d2, which is what takes the last `WebStoreRun` out of this
-composition.
+rewrites.
+
+P12-18d2 took the other two of the five, and the device read with them, so no
+composition below `exchangeAttachment` is handed a runner. `hostedBriefings`
+holds none at all: its `deviceId` seam is an effect rather than a promise,
+one look is an effect its caller composes, and its `start` forks the schedule
+into the socket's scope with `Effect.forkIn`, so that scope's close is the
+stop it no longer declares. `hostedLiveBrain` forks each accepted ask's
+follow into that same scope, which is what ends a follow and what replaced
+the `Deferred` its old `stop` completed; an interrupted follow emits nothing,
+where a failure or the follow bound still tells the service a failed end.
+`hostedLiveRecord` makes every write on one fiber of that scope, taking them
+from a queue each arrival puts one on with `Queue.unsafeOffer`, and hands
+each caller the write's own `Deferred`: an `Effect.Semaphore` was tried first
+and is not enough, because releasing it wakes every waiter that fits in the
+free permits at once — `taken` is not updated until each woken fiber
+resumes — so the winner is the scheduler's, which let an ask written under a
+delegation land ahead of a delta that reached the socket before it. Where an
+event lands in the sequence has to be decided where it arrives, and a queue
+is what decides it there; the `observe` call itself stays synchronous at
+arrival for the same reason, and only its reporting rides the exchange's
+scoped fiber. What those two modules do still hold is a promise face for the
+doors above them: `LiveRecord`'s two utterance writes and `LiveBrain`'s
+submission are promises `@sidecar/voice` declares, so each reads `SqlClient`
+once where it is built and runs those two over `runOverClient`, the same
+shim and the same shape `runTool`'s three seams take, rather than a runner
+threaded down from the edge. `WebStoreRun` stays for `exchangeAttachment`,
+which opens the socket's scope on it rather than running in one, and for
+`promisedVoiceSessionRecord`.
 
 What took the fiber's promise face was the brain host, for two reasons that
 were neither of them eve's authorship. `runTool`'s seams took it because the
@@ -982,7 +1006,9 @@ is gone from `fiber-runner.ts`; what is left of it is a copy in
 predate `it.effect`, and it goes with the last of them. What still calls
 `runOverClient` is `runTool`'s own three — `hostedFactsWriter`,
 `hostedTranscriptReads`, and the roster reader — whose contracts are the
-brain's and answer promises; that is P12-18g.
+brain's and answer promises; that is P12-18g. P12-18d2 gave it two more of
+the same shape, `hostedLiveRecord` and `hostedLiveBrain`, whose contracts are
+`@sidecar/voice`'s and answer promises for the same reason.
 
 `HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
 carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
@@ -1395,7 +1421,7 @@ design decision stated as such:
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and P12-18c took `relay`'s onto effects; P12-18b took the turn event stream and the voice compositions off it |
-| `runOverClient` in `fiber-runner.ts`, the replacement promise face `hostedFactsWriter`, `hostedTranscriptReads`, and the roster reader take, over a `SqlClient` `runTool` reads once rather than a runtime it reads off the fiber | P12-18e | P12-18g, with the last of its callers, as the brain's own tool contracts move onto effects; P12-18c took `relay`'s `StreamRelay` and stop carrier off it |
+| `runOverClient` in `fiber-runner.ts`, the replacement promise face `hostedFactsWriter`, `hostedTranscriptReads`, and the roster reader take, over a `SqlClient` `runTool` reads once rather than a runtime it reads off the fiber, and the one `hostedLiveRecord` and `hostedLiveBrain` take over the `SqlClient` the socket's scope is built on | P12-18e; the voice compositions' P12-18d2 | P12-18g, with the last of the brain's callers, as its own tool contracts move onto effects; the voice compositions' when `@sidecar/voice`'s `LiveRecord` and `LiveBrain` answer effects, which no PR in this plan schedules; P12-18c took `relay`'s `StreamRelay` and stop carrier off it |
 | `Promised<Methods>`, the mapped type the promise-era suites' `promisedWriter`/`promisedAsks` answer in `apps/web/tests/support/promised-store.ts`; P12-18c took `StreamRelay` and `carryStop` onto effects and moved the type out of `server/hosted/fiber-runner.ts` | P10-16 | with each suite as it moves onto `it.effect` |
 | `promisedVoiceSessionRecord`, the live session row's five effects as `VoiceServiceOptions.record` takes them, run to promises over `runWeb` in `voice/function.ts` | P12-18d | when `VoiceService` itself answers effects, which no PR in this plan schedules — it is a class of `ws` callbacks, on the same terms as `createLiveUpstream` above it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |

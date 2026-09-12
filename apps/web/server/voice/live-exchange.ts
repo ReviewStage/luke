@@ -21,7 +21,6 @@ import {
   voiceWriter,
 } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
-import type { WebStoreRun } from "../runtime.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import {
   type HostedBriefingDelivery,
@@ -48,12 +47,13 @@ import { observedSideband } from "./live-sideband.js";
  * stands empty and releases nothing.
  *
  * The composition is a scope's, not a socket callback's: it is built in the
- * `Scope` its caller opened for the socket, the fiber that reports what the
- * record made of each live event is forked into that scope, and the four
- * endings the exchange used to run from a `stop` of its own — the brain's
- * follows, the briefing look, the session's graceful close, and the wait on
- * every record write already started — are finalizers of it, in that order,
- * so closing the scope when the socket detaches is the whole of the ending.
+ * `Scope` its caller opened for the socket, and every fiber it runs is forked
+ * into that scope — the one that reports what the record made of each live
+ * event, the brain's follow of each accepted ask, and the briefing look on
+ * its schedule — so closing the scope when the socket detaches interrupts
+ * each of them. The session's graceful close and the wait on every record
+ * write already started are finalizers of the same scope, added so their
+ * reverse order is the order the old `stop` ran them.
  */
 
 export interface HostedLiveExchangeOptions {
@@ -63,8 +63,6 @@ export interface HostedLiveExchangeOptions {
   /** The account's standing main, which the spoken asks and the record land in. */
   readonly conversationId: string;
   readonly context: HostedStoreContext;
-  /** The edge's runner the record, the brain, and the briefing look are still handed, for the reads each of those three answers a promise from; P12-18d2 takes it off them. */
-  readonly run: WebStoreRun;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
   /**
@@ -168,9 +166,9 @@ function writeReport(write: Promise<VoiceWriteResult>): Promise<string | undefin
 
 export function hostedLiveExchange(
   options: HostedLiveExchangeOptions,
-): Effect.Effect<HostedLiveExchange, never, Scope.Scope> {
+): Effect.Effect<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
   return Effect.gen(function* () {
-    const { userId, liveSessionId, conversationId, context, run, writer, report } = options;
+    const { userId, liveSessionId, conversationId, context, writer, report } = options;
     const store = hostedStore(context);
     const target: VoiceTarget = {
       userId,
@@ -178,7 +176,7 @@ export function hostedLiveExchange(
       conversation: { userId, conversationId },
     };
     const voice = voiceWriter({ store: writer });
-    const record = hostedLiveRecord({ run, writer: voice, target });
+    const record = yield* hostedLiveRecord({ writer: voice, target });
     yield* Effect.addFinalizer(() => Effect.promise(() => record.drained()));
     /**
      * Every event the record was handed, in arrival order, as what it had to
@@ -197,10 +195,9 @@ export function hostedLiveExchange(
         ),
       ),
     );
-    const brain = hostedLiveBrain({
+    const brain = yield* hostedLiveBrain({
       userId,
       conversationId,
-      run,
       asks: {
         asks: askRecord(),
         eve: options.eve,
@@ -211,19 +208,12 @@ export function hostedLiveExchange(
     });
 
     /** The device the session's row names now, read at each look so a row completed after creation is seen. */
-    function deviceId(): Promise<string | undefined> {
-      return run(
-        Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
-          Option.getOrUndefined(
-            Option.flatMap(row, (found) => Option.fromNullable(found.deviceId)),
-          ),
-        ),
-      );
-    }
+    const deviceId = Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
+      Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullable(found.deviceId))),
+    );
 
-    const briefings = hostedBriefings({
+    const briefings = yield* hostedBriefings({
       userId,
-      run,
       speech: { writer },
       offers: store.speech,
       tools: CATALOG_TOOL_SET,
@@ -277,8 +267,6 @@ export function hostedLiveExchange(
     });
 
     yield* Effect.addFinalizer(() => Effect.promise(() => service.stop()));
-    yield* Effect.addFinalizer(() => Effect.sync(() => briefings.stop()));
-    yield* Effect.addFinalizer(() => Effect.sync(() => brain.stop()));
 
     return {
       service,
