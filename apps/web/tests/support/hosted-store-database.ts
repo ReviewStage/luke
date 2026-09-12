@@ -9,7 +9,8 @@ import { runWebMigrations } from "../../server/db/effect-migrator";
 import { sqlClientOverPool } from "../../server/db/sql-client";
 import { payloadKeyRing } from "../../server/hosted/encryption";
 import { type HostedStore, hostedStore } from "../../server/hosted/store";
-import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-client";
+import { sqlClientOverPglite } from "./sql-client";
+import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres";
 
 /**
  * The store's tests run against the real generated migrations on a real
@@ -18,7 +19,10 @@ import { STORE_TEST_DATABASE_ENVIRONMENT, sqlClientOverPglite } from "./sql-clie
  * CI job points at its service container after `db:migrate` has run there. A
  * PGlite is migrated here, through the same `runWebMigrations` the production
  * runner applies, because it is opened empty; a Postgres is not, because
- * `db:migrate` is the one runner that records what it applied.
+ * `db:migrate` is the one runner that records what it applied. Each opening
+ * is a database of its own on either dialect: a fresh PGlite, or a clone of
+ * the migrated Postgres that `close` drops (`store-test-postgres.ts`), so a
+ * statement one file forgets to scope reaches no other file's rows.
  */
 /**
  * The suite's own edge: the runner a test answers the store's effects
@@ -87,8 +91,15 @@ async function openPglite(): Promise<OpenedDatabase> {
   return { sql, close: () => client.close() };
 }
 
-/** Migrates nothing: `db:migrate` is what applies the migrations to a Postgres. */
+/** Migrates nothing: `db:migrate` is what applies the migrations to the Postgres this clones. */
 async function openNodePostgres(connectionString: string): Promise<OpenedDatabase> {
-  const pool = new Pool({ connectionString, max: 1 });
-  return { sql: sqlClientOverPool(pool), close: () => pool.end() };
+  const clone = await cloneStoreTestPostgres(connectionString);
+  const pool = new Pool({ connectionString: clone.connectionString, max: 1 });
+  return {
+    sql: sqlClientOverPool(pool),
+    async close() {
+      await pool.end();
+      await clone.drop();
+    },
+  };
 }
