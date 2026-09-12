@@ -767,10 +767,7 @@ test("a signed-in seed past the input bounds is refused by shape, before any ses
     tooLong.reader.socket,
     createFrame([developerMessage("x".repeat(SESSIONS_INPUT_BOUNDS.CHARS + 1))]),
   );
-  assert.equal(
-    hostedErrorSchema.parse(record(await tooLong.reader.next())),
-    HOSTED_API_ERROR.INVALID_REQUEST,
-  );
+  assert.equal(hostedError(record(await tooLong.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
 
   const tooMany = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
     authorization: BEARER,
@@ -782,10 +779,7 @@ test("a signed-in seed past the input bounds is refused by shape, before any ses
       Array.from({ length: SESSIONS_INPUT_BOUNDS.MESSAGES + 1 }, () => developerMessage("a")),
     ),
   );
-  assert.equal(
-    hostedErrorSchema.parse(record(await tooMany.reader.next())),
-    HOSTED_API_ERROR.INVALID_REQUEST,
-  );
+  assert.equal(hostedError(record(await tooMany.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
 
   assert.equal(context.openAi.creates.length, 0);
 });

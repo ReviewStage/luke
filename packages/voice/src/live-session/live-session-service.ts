@@ -559,11 +559,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const at = this.#options.now();
     const text = rosterUpdateText(session.rosterTold, sessions, at);
     if (text === undefined) return;
-    session.rosterTold = { sessions, at };
     session.channel.enqueue(async () => {
-      await session.channel.send(thinkingAppend(this.#input(null, text)), {
+      const taken = await session.channel.send(thinkingAppend(this.#input(null, text)), {
         countsForIdle: false,
       });
+      // What the session knows moves only once it has taken the append. A
+      // refresh the session refused was never heard, and recording it as told
+      // would withdraw a departed agent exactly once, into nothing.
+      if (taken) session.rosterTold = { sessions, at };
     });
   }
 

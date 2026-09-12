@@ -12,18 +12,27 @@ import type { Session } from "@sidecar/session";
  *
  * The identity travels for the refresh's diff and nothing else: it tells one
  * row from another between passes and never enters a rendered line.
+ *
+ * Luke's own voice chat is dropped, the same row `actableSessions` drops for
+ * the brain: the summary presents every line as one of the developer's coding
+ * agents, so a session told about itself would both say something untrue and
+ * spend one of the ten slots a busy desk needs.
  */
 export function voiceRoster(sessions: readonly Session[]): readonly RosterSeedSession[] {
-  return sessions.map((session) => ({
-    identity: {
-      providerId: session.providerId,
-      providerSessionId: session.providerSessionId,
-    },
-    title: session.title,
-    provider: { displayName: session.provider.displayName },
-    status: session.status,
-    ...(session.holdingForDeveloper === true ? { holdingForDeveloper: true } : undefined),
-    ...(session.detail.activity === undefined ? undefined : { activity: session.detail.activity }),
-    lastActivityAt: session.lastActivityAt,
-  }));
+  return sessions
+    .filter((session) => session.realtimeVoice !== true)
+    .map((session) => ({
+      identity: {
+        providerId: session.providerId,
+        providerSessionId: session.providerSessionId,
+      },
+      title: session.title,
+      provider: { displayName: session.provider.displayName },
+      status: session.status,
+      ...(session.holdingForDeveloper === true ? { holdingForDeveloper: true } : undefined),
+      ...(session.detail.activity === undefined
+        ? undefined
+        : { activity: session.detail.activity }),
+      lastActivityAt: session.lastActivityAt,
+    }));
 }

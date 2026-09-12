@@ -1432,6 +1432,31 @@ test("a desk that empties withdraws what the session was told rather than leavin
   );
 });
 
+test("a refresh the session refused is not recorded as told, so the withdrawal it carried is sent again", async () => {
+  const f = fixture();
+  f.roster.push(rosterSession("a"));
+  const sideband = await f.open();
+  sideband.acknowledgeThinkingAtOnce = false;
+  f.service.updateRoster([]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  const refused = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+  assert.equal(refused.length, 1);
+  // The append is never acknowledged, so the channel counts it as not taken.
+  await f.clock.advance(f.clock.now + 10_000);
+  await drainMicrotasks();
+  sideband.acknowledgeThinkingAtOnce = true;
+  f.service.updateRoster([]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+  assert.equal(sent.length, 2);
+  const first = sent[0];
+  const second = sent[1];
+  assert.ok(first && "content" in first && second && "content" in second);
+  assert.equal(second.content, first.content);
+});
+
 test("a desk that moves while no session stands opens none and sends nothing", async () => {
   const f = fixture();
   f.service.updateRoster([rosterSession("a")]);

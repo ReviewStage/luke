@@ -47,6 +47,15 @@ test("the voice is handed the summary fields and no other, whatever else a sessi
   assert.equal(mapped.lastActivityAt, OBSERVED_AT);
 });
 
+test("Luke's own voice chat is not one of the developer's coding agents", () => {
+  const voice: Session = { ...FULL, providerSessionId: "voice-1", realtimeVoice: true };
+  assert.deepEqual(
+    voiceRoster([voice, FULL]).map((one) => one.identity.providerSessionId),
+    [FULL.providerSessionId],
+  );
+  assert.deepEqual(voiceRoster([voice]), []);
+});
+
 test("the two fields a provider may leave unsaid are absent rather than empty", () => {
   const { holdingForDeveloper: _holding, ...rest } = FULL;
   const [mapped] = voiceRoster([{ ...rest, status: SESSION_STATUS.WORKING, detail: {} }]);
