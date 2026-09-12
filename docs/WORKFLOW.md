@@ -12,7 +12,12 @@
    and inspect all PNGs. For a web UI change, run `pnpm --filter @luke/web dev`
    and inspect the page in a browser. For desktop motion changes, run
    `pnpm evidence:record` on a physical Mac and inspect the generated MP4 or GIF
-   before publishing it.
+   before publishing it. CI cannot run `verify.sh` for you: its jobs are Linux
+   only, and by Dean's ruling of 2026-09-11 (recorded on
+   `orchestration/storage-plan` at `e7b57a9a`) no macOS job is coming back. The
+   release rehearsal, `release.yml`'s `macos-15` job on a tag push, is the only
+   Mac gate, so do not wait for a macOS check and do not read a green PR as
+   covering the Mac.
 4. Review the complete diff for secrets, machine-specific paths, generated
    files, unsafe IPC, unsupported provider behavior, and accidental scope
    expansion.
@@ -20,7 +25,10 @@
    section. Every UI change needs an inspected verification screenshot there,
    uploaded through GitHub's PR editor: for desktop UI, a PNG `./scripts/verify.sh`
    wrote to `artifacts/evidence/`; for web UI, a capture of the page served by
-   `pnpm --filter @luke/web dev`.
+   `pnpm --filter @luke/web dev`. A UI PR's body must say plainly that CI could
+   not verify it: a Mac break that lands is caught at the release rehearsal on
+   a tag, not at review, and LUKE-159 is the manual `verify.sh` pass on a Mac
+   that stands in for the missing job before the first release.
 6. When pushing follow-up commits to an open PR, re-read the PR description and
    update it if the change made it inaccurate or incomplete. Keep the summary,
    scope, and Evidence section matching the commands and results for the current
