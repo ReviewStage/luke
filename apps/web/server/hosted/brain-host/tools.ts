@@ -195,7 +195,7 @@ function runOf(
           return yield* named.module.execute(fields, {
             ...standing,
             admission,
-            carry: (action) => seams.carrier.carry(action, fields, standing),
+            carry: (action) => Effect.promise(() => seams.carrier.carry(action, fields, standing)),
           });
         });
     case "read":

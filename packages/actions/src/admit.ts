@@ -5,7 +5,7 @@
  * advertisement (the advertised entry itself becomes what the action carries — a
  * control, an agent kind, a rename target, a listed project — so nothing a
  * caller sent can redirect the effect), then the bounds (the developer's own
- * text, refused rather than cut). The guard is asked again after every await,
+ * text, refused rather than cut). The guard is asked again after every read,
  * so an action whose turn ended while the roster was refreshing refuses rather
  * than dispatching.
  *
@@ -107,28 +107,30 @@ export type ValidatedAction<Kind extends ActionKind = ActionKind> = Admitted<
 /** Whether the turn an action belongs to still stands, asked again after every await. */
 export interface ActionGuard {
   isRevoked(): boolean;
-  /** Fires on revocation, so a read awaited before the effect settles at once rather than finishing first. */
+  /** Fires on revocation, so a read waited on before the effect settles at once rather than finishing first. */
   readonly signal?: AbortSignal;
 }
 
 /**
  * The roster as admission reads it, and never as a caller hands it: `read`
  * answers what the latest observation saw, so the fresh-roster step is
- * admission's own rather than each intake's promise.
+ * admission's own rather than each intake's promise. The read is an effect,
+ * run on the fiber the gauntlet itself runs on, so the turn's own
+ * cancellation reaches it.
  */
 export interface ActionRoster {
-  read(): Promise<readonly Session[]>;
+  read(): Effect.Effect<readonly Session[]>;
 }
 
 /** The projects a creation ask may land in, read the same way and from the same pass. */
 export interface ActionProjects {
-  read(): Promise<readonly ObservedWorkspaceProject[]>;
+  read(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /**
    * The developer's saved tie-breaks, which only ever narrow within what
    * `read` returned: a default can settle an ambiguous ask, never widen where
    * one can land or override a provider or project the ask actually named.
    */
-  defaults(): Promise<{
+  defaults(): Effect.Effect<{
     defaultProviderId?: string | undefined;
     defaultProjectIds?: Readonly<Partial<Record<string, string>>> | undefined;
   }>;
@@ -230,48 +232,38 @@ export class AdmitRefusal extends Data.TaggedError("AdmitRefusal")<{
   readonly reason: string;
 }> {}
 
-/**
- * A read awaited before an effect, held only as long as the guard's standing:
- * once the signal fires the wait answers nothing, and the `isRevoked` check
- * that follows every such read refuses the action before anything is dispatched.
- * A guard with no signal — a row's own press — waits the read out.
- */
-export function guardedRead<T>(
-  read: Promise<T>,
-  guard: ActionGuard | undefined,
-): Promise<T | undefined> {
-  const signal = guard?.signal;
-  if (!signal) return read;
-  return new Promise<T | undefined>((resolve, reject) => {
-    let decided = false;
-    const settle = () => {
-      if (decided) return false;
-      decided = true;
-      signal.removeEventListener("abort", onAbort);
-      return true;
-    };
-    function onAbort() {
-      if (settle()) resolve(undefined);
-    }
+/** The guard's revocation as an effect: it answers nothing, the moment the signal fires. */
+function revocation(signal: AbortSignal): Effect.Effect<undefined> {
+  return Effect.async<undefined>((resume) => {
     if (signal.aborted) {
-      onAbort();
-      // The read still runs; its value and any failure are nobody's once the
-      // abort has answered, so neither is left to surface unhandled.
-      void read.catch(() => undefined);
+      resume(Effect.succeed(undefined));
       return;
     }
+    const onAbort = () => resume(Effect.succeed(undefined));
     signal.addEventListener("abort", onAbort, { once: true });
-    void (async () => {
-      try {
-        const value = await read;
-        if (settle()) resolve(value);
-      } catch (failure) {
-        // A failure after the abort answered belongs to nobody, and is dropped
-        // rather than surfacing as an unhandled rejection.
-        if (settle()) reject(failure instanceof Error ? failure : new Error(String(failure)));
-      }
-    })();
+    return Effect.sync(() => signal.removeEventListener("abort", onAbort));
   });
+}
+
+/**
+ * A read waited on before an effect, held only as long as the guard's
+ * standing: once the signal fires the wait answers nothing and the read is
+ * interrupted, so its value and any failure are nobody's, and the `isRevoked`
+ * check that follows every such read refuses the action before anything is
+ * dispatched. A guard with no signal — a row's own press — waits the read out.
+ */
+export function guardedRead<Value, Failure, Requirements>(
+  read: Effect.Effect<Value, Failure, Requirements>,
+  guard: ActionGuard | undefined,
+): Effect.Effect<Value | undefined, Failure, Requirements> {
+  const signal = guard?.signal;
+  if (!signal) return read;
+  // Interruptible on purpose: the race interrupts whichever of the two lost,
+  // and a caller that dispatches its effect uninterruptibly — the turn
+  // carrying an action through the journal — would otherwise wait on a loser
+  // that can never be interrupted. The window this opens is the wait on the
+  // read itself, which is the one place a turn that ended wants to be left.
+  return Effect.interruptible(Effect.raceFirst(read, revocation(signal)));
 }
 
 /**
@@ -298,18 +290,20 @@ interface AdmittedReads {
  * that cannot be read is not a refusal Luke has words for.
  */
 function admittedReads(context: AdmitContext): Effect.Effect<AdmittedReads> {
-  const guarded = <T>(read: () => Promise<T>): Effect.Effect<T | undefined> =>
+  const guarded = <T>(read: () => Effect.Effect<T>): Effect.Effect<T | undefined> =>
     Effect.suspend(() => {
       if (context.guard?.isRevoked()) return Effect.succeed(undefined);
-      return Effect.promise(() => guardedRead(read(), context.guard)).pipe(
+      return guardedRead(read(), context.guard).pipe(
         Effect.map((value) => (context.guard?.isRevoked() ? undefined : value)),
       );
     });
   const projects = context.projects;
+  const noProjects = Effect.succeed<readonly ObservedWorkspaceProject[]>([]);
+  const noDefaults = Effect.succeed({});
   return Effect.all({
     sessions: Effect.cached(guarded(() => context.roster.read())),
-    projects: Effect.cached(guarded(async () => (projects ? projects.read() : []))),
-    defaults: Effect.cached(guarded(async () => (projects ? projects.defaults() : {}))),
+    projects: Effect.cached(guarded(() => (projects ? projects.read() : noProjects))),
+    defaults: Effect.cached(guarded(() => (projects ? projects.defaults() : noDefaults))),
   });
 }
 

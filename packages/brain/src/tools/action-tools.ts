@@ -37,7 +37,7 @@ export type ActionAdmissionReads = Omit<AdmitContext, "origin" | "guard">;
 export interface ActionToolContext extends ToolContext {
   readonly admission: ActionAdmissionReads;
   /** Carries an action admission minted, and nothing else has the type to be carried. */
-  carry(action: ValidatedAction): Promise<ActionOutputEnvelope>;
+  carry(action: ValidatedAction): Effect.Effect<ActionOutputEnvelope>;
 }
 
 export interface ActionToolModule extends ToolModule<ActionOutputEnvelope, ActionToolContext> {
@@ -65,7 +65,7 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
         // Asked once more after admission's own reads, so an action whose turn
         // ended while the roster was refreshing is refused rather than carried.
         if (context.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER);
-        return yield* Effect.promise(() => context.carry(admitted.right));
+        return yield* context.carry(admitted.right);
       });
     },
   };

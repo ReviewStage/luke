@@ -49,7 +49,6 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
-      carry: (effect) => Effect.runPromise(effect),
       sessionActions: {
         perform: () => Effect.succeed({ status: "accepted" }),
         openSession: () => Effect.succeed({ status: "accepted" }),
@@ -57,7 +56,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
         openSessionChange: () => Effect.succeed({ status: "accepted" }),
       },
       sessions: () => [],
-      refreshSessions: async () => undefined,
+      refreshSessions: () => Effect.void,
       workspaceProjects: () => [],
       workspaceDefaults: async () => ({}),
       appGuide: () => ({ facts: [], settings: [] }),

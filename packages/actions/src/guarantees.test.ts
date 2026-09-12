@@ -19,6 +19,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { ACTION_KIND, type ActionKind } from "./action-kinds.js";
 import {
@@ -95,14 +96,15 @@ function context(
   const built: AdmitContext = {
     origin: RUN_ORIGIN.USER,
     roster: {
-      read: async () => {
-        rosterReads += 1;
-        return sessions;
-      },
+      read: () =>
+        Effect.sync(() => {
+          rosterReads += 1;
+          return sessions;
+        }),
     },
     projects: {
-      read: async () => [LISTED_PROJECT],
-      defaults: async () => ({}),
+      read: () => Effect.succeed([LISTED_PROJECT]),
+      defaults: () => Effect.succeed({}),
       agentModels: () => [],
     },
     ...overrides,
@@ -192,10 +194,11 @@ test("a turn that ends while the roster is read refuses rather than dispatching"
       origin: RUN_ORIGIN.USER,
       guard: { isRevoked: () => over, signal: controller.signal },
       roster: {
-        read: async () => {
-          over = true;
-          return [offering()];
-        },
+        read: () =>
+          Effect.sync(() => {
+            over = true;
+            return [offering()];
+          }),
       },
     },
   );
@@ -213,7 +216,7 @@ test("a read still out when the signal fires answers nothing, and the action ref
     {
       origin: RUN_ORIGIN.USER,
       guard: { isRevoked: () => controller.signal.aborted, signal: controller.signal },
-      roster: { read: () => held },
+      roster: { read: () => Effect.promise(() => held) },
     },
   );
   controller.abort();
@@ -333,8 +336,8 @@ test("each project says whether it takes a task, needs one, or takes none", asyn
   const withSupport = (taskSupport: ObservedWorkspaceProject["taskSupport"]) =>
     context({
       projects: {
-        read: async () => [{ ...LISTED_PROJECT, taskSupport }],
-        defaults: async () => ({}),
+        read: () => Effect.succeed([{ ...LISTED_PROJECT, taskSupport }]),
+        defaults: () => Effect.succeed({}),
         agentModels: () => [],
       },
     });
@@ -488,20 +491,23 @@ test("each action is admitted against the observed state it names, and against n
       {
         origin: RUN_ORIGIN.USER,
         roster: {
-          read: async () => {
-            reached.push("roster");
-            return [offering()];
-          },
+          read: () =>
+            Effect.sync(() => {
+              reached.push("roster");
+              return [offering()];
+            }),
         },
         projects: {
-          read: async () => {
-            reached.push("projects");
-            return [LISTED_PROJECT];
-          },
-          defaults: async () => {
-            reached.push("defaults");
-            return {};
-          },
+          read: () =>
+            Effect.sync(() => {
+              reached.push("projects");
+              return [LISTED_PROJECT];
+            }),
+          defaults: () =>
+            Effect.sync(() => {
+              reached.push("defaults");
+              return {};
+            }),
           agentModels: () => [],
         },
         guide: EMPTY_APP_GUIDE,

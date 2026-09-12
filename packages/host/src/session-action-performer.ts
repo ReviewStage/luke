@@ -4,6 +4,7 @@ import {
   type ActionGuard,
   type CarriedActionResult,
   dispatchByKind,
+  guardedRead,
   type SessionActionKind,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -44,26 +45,6 @@ import type { SettingsStore } from "./settings-store.js";
  * and never retried.
  */
 export { ExternalOpenAnswerLostError as NodeAnswerLostError };
-
-/**
- * The guard's own signal as an effect: it answers the moment the standing is
- * revoked, and is what a read waiting before a provider effect is raced
- * against, so a turn that ends mid-read settles the action rather than
- * leaving it waiting on a store.
- */
-function untilAborted(signal: AbortSignal): Effect.Effect<void> {
-  return Effect.async<void>((resume) => {
-    if (signal.aborted) {
-      resume(Effect.void);
-      return;
-    }
-    const abort = (): void => resume(Effect.void);
-    signal.addEventListener("abort", abort, { once: true });
-    return Effect.sync(() => {
-      signal.removeEventListener("abort", abort);
-    });
-  });
-}
 
 /** What an open answers when its answer was lost: the effect is uncertain. */
 function unknownOpen(error: ExternalOpenAnswerLostError): SessionOpenResult {
@@ -365,14 +346,13 @@ export function createSessionActionPerformer(
     providerId: CloudAgentProviderId,
     guard: ActionGuard | undefined,
   ): Effect.Effect<WorkspaceAgentSelection | undefined> =>
-    Effect.suspend(() => {
-      const read = Effect.map(
+    guardedRead(
+      Effect.map(
         Effect.orDie(settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)),
         (defaults) => defaults?.[providerId],
-      );
-      const signal = guard?.signal;
-      return signal ? Effect.raceFirst(read, Effect.as(untilAborted(signal), undefined)) : read;
-    });
+      ),
+      guard,
+    );
 
   // A new workspace lands only in a project the service's snapshot listed:
   // admission read that list here, and the service admits the ask against

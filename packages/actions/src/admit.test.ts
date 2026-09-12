@@ -17,6 +17,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   ACTION_FAMILY,
@@ -48,10 +49,10 @@ async function sessionToolAction(
   return withoutAdmission(
     await admitToolCall(call, {
       origin: RUN_ORIGIN.USER,
-      roster: { read: async () => sessions },
+      roster: { read: () => Effect.succeed(sessions) },
       projects: {
-        read: async () => workspaceProjects,
-        defaults: async () => ({ defaultProviderId, defaultProjectIds }),
+        read: () => Effect.succeed(workspaceProjects),
+        defaults: () => Effect.succeed({ defaultProviderId, defaultProjectIds }),
         agentModels,
       },
     }),

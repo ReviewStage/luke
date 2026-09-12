@@ -562,13 +562,16 @@ export function messageAction(callId: string, words = "run the tests"): WireReco
 /** A performer whose actions hold until the test releases each one, in order. */
 export function heldPerformer() {
   const releases: (() => void)[] = [];
-  const { actions, performed, executions } = performerWith(async (_action, execution) => {
+  const carry = async (_action: ValidatedAction, execution: BrainActionExecution) => {
     await new Promise<void>((resolve) => {
       releases.push(resolve);
     });
     return execution.isRevoked() ? refusedActionOutput("turn over") : acceptedActionOutput();
-  });
-  return { actions, releases, performed, executions };
+  };
+  const { actions, performed, executions } = performerWith(carry);
+  // The hold itself, for a test whose own carrier waits this one out before
+  // answering; the performer's own carrier answers an effect.
+  return { actions, releases, performed, executions, carry };
 }
 
 /** A client whose every answer waits for the test to open the gate. */

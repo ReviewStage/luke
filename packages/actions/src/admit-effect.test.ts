@@ -3,12 +3,14 @@ import { describe, it } from "@effect/vitest";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   normalizeSession,
+  type ObservedWorkspaceProject,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type Session,
+  WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { ACTION_KIND } from "./action-kinds.js";
 import { ACTION_REFUSAL, type AdmitContext, AdmitRefusal, admit, admitEffect } from "./admit.js";
 
@@ -54,16 +56,58 @@ function context(
     origin: RUN_ORIGIN.USER,
     ...(options.guard ? { guard: options.guard } : undefined),
     roster: {
-      read: async () => {
-        reads += 1;
-        return sessions;
-      },
+      read: () =>
+        Effect.sync(() => {
+          reads += 1;
+          return sessions;
+        }),
     },
     rosterReads: () => reads,
   };
 }
 
 const MESSAGE = { kind: ACTION_KIND.MESSAGE, fields: { ...IDENTITY, text: "add tests too" } };
+
+const LISTED_PROJECT: ObservedWorkspaceProject = {
+  providerId: "conductor",
+  providerName: "Conductor",
+  providerProjectId: "luke",
+  repository: "luke",
+  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+};
+
+const CREATE = {
+  kind: ACTION_KIND.CREATE_WORKSPACE,
+  fields: { provider_id: "conductor", project_id: "luke" },
+};
+
+/** A context whose projects and defaults are effects of their own, each counting its runs. */
+function offeringProjects(): AdmitContext & {
+  projectReads(): number;
+  defaultsReads(): number;
+} {
+  let projectReads = 0;
+  let defaultsReads = 0;
+  return {
+    origin: RUN_ORIGIN.USER,
+    roster: { read: () => Effect.succeed([offering()]) },
+    projects: {
+      read: () =>
+        Effect.sync(() => {
+          projectReads += 1;
+          return [LISTED_PROJECT];
+        }),
+      defaults: () =>
+        Effect.sync(() => {
+          defaultsReads += 1;
+          return {};
+        }),
+      agentModels: () => [],
+    },
+    projectReads: () => projectReads,
+    defaultsReads: () => defaultsReads,
+  };
+}
 
 describe("admitEffect", () => {
   it.effect("succeeds with the payload the admitter built, stamped with the turn's origin", () =>
@@ -130,10 +174,11 @@ describe("admitEffect", () => {
           origin: RUN_ORIGIN.USER,
           guard: { isRevoked: () => over, signal: controller.signal },
           roster: {
-            read: async () => {
-              over = true;
-              return [offering()];
-            },
+            read: () =>
+              Effect.sync(() => {
+                over = true;
+                return [offering()];
+              }),
           },
         }),
       );
@@ -170,7 +215,7 @@ describe("admitEffect", () => {
       const exit = yield* Effect.exit(
         admitEffect(MESSAGE, {
           origin: RUN_ORIGIN.USER,
-          roster: { read: () => Promise.reject(failure) },
+          roster: { read: () => Effect.promise(() => Promise.reject(failure)) },
         }),
       );
       assert.ok(Exit.isFailure(exit));
@@ -184,6 +229,72 @@ describe("admitEffect", () => {
       const standing = context();
       yield* admitEffect({ kind: ACTION_KIND.PANEL, fields: { filters: ["conductor"] } }, standing);
       assert.equal(standing.rosterReads(), 1);
+    }),
+  );
+
+  it.effect("runs the projects read and the defaults read once each for a creation", () =>
+    Effect.gen(function* () {
+      const standing = offeringProjects();
+      const admitted = yield* admitEffect(CREATE, standing);
+      assert.equal(admitted.kind, ACTION_KIND.CREATE_WORKSPACE);
+      assert.equal(admitted.providerProjectId, LISTED_PROJECT.providerProjectId);
+      assert.equal(standing.projectReads(), 1);
+      assert.equal(standing.defaultsReads(), 1);
+    }),
+  );
+
+  it.effect("runs neither projects read for an action that names no project", () =>
+    Effect.gen(function* () {
+      const standing = offeringProjects();
+      yield* admitEffect(MESSAGE, standing);
+      assert.equal(standing.projectReads(), 0);
+      assert.equal(standing.defaultsReads(), 0);
+    }),
+  );
+
+  it.effect("interrupts a read still out when the guard's signal fires, and refuses the turn", () =>
+    Effect.gen(function* () {
+      const controller = new AbortController();
+      const started = yield* Deferred.make<void>();
+      let interrupted = false;
+      const held: Effect.Effect<readonly Session[]> = Effect.zipRight(
+        Deferred.succeed(started, undefined),
+        Effect.never,
+      ).pipe(
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            interrupted = true;
+          }),
+        ),
+      );
+      const admitting = yield* Effect.fork(
+        Effect.flip(
+          admitEffect(MESSAGE, {
+            origin: RUN_ORIGIN.USER,
+            guard: { isRevoked: () => controller.signal.aborted, signal: controller.signal },
+            roster: { read: () => held },
+          }),
+        ),
+      );
+      yield* Deferred.await(started);
+      controller.abort();
+      const refusal = yield* Fiber.join(admitting);
+      assert.equal(refusal.reason, ACTION_REFUSAL.TURN_OVER);
+      assert.equal(interrupted, true);
+    }),
+  );
+
+  it.effect("answers a caller that admits inside an uninterruptible region", () =>
+    Effect.gen(function* () {
+      const controller = new AbortController();
+      const admitted = yield* Effect.uninterruptible(
+        admitEffect(MESSAGE, {
+          origin: RUN_ORIGIN.USER,
+          guard: { isRevoked: () => controller.signal.aborted, signal: controller.signal },
+          roster: { read: () => Effect.succeed([offering()]) },
+        }),
+      );
+      assert.equal(admitted.kind, ACTION_KIND.MESSAGE);
     }),
   );
 });
@@ -200,7 +311,10 @@ describe("admit", () => {
   it("rejects with a roster read's own failure, not a wrapper of it", async () => {
     const failure = new Error("roster offline");
     await assert.rejects(
-      admit(MESSAGE, { origin: RUN_ORIGIN.USER, roster: { read: () => Promise.reject(failure) } }),
+      admit(MESSAGE, {
+        origin: RUN_ORIGIN.USER,
+        roster: { read: () => Effect.promise(() => Promise.reject(failure)) },
+      }),
       (caught) => caught === failure,
     );
   });

@@ -211,7 +211,6 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
     actions: {
-      carry: (effect) => Effect.runPromise(effect),
       sessionActions: {
         perform: () =>
           Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not in test" }),
@@ -220,7 +219,7 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
         openSessionChange: () => Effect.die(new Error("not in test")),
       },
       sessions: () => roster,
-      refreshSessions: async () => undefined,
+      refreshSessions: () => Effect.void,
       workspaceProjects: () => [],
       workspaceDefaults: async () => ({}),
       appGuide: () => ({ facts: [], settings: [] }),

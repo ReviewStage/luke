@@ -20,6 +20,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   ACTION_FAMILY,
@@ -40,7 +41,7 @@ async function appToolAction(
   return withoutAdmission(
     await admitToolCall(functionCall, {
       origin: RUN_ORIGIN.USER,
-      roster: { read: async () => sessions },
+      roster: { read: () => Effect.succeed(sessions) },
       guide,
     }),
   );
