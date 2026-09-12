@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type CloudFetch } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { fakeCloudApi, HTTP_STATUS, recordedRoutes, recordingFetch } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HOSTED_ACTION_FAILURE, HostedActionClient } from "./action-client.js";
@@ -19,7 +20,7 @@ function client(
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
     ...options,
   });
 }

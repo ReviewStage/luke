@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { AccountPreferences } from "@sidecar/settings";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
@@ -41,7 +42,7 @@ test("reads account preferences as a bearer-authenticated GET", async () => {
     () => new Response(JSON.stringify(PREFERENCES_ANSWER), { status: 200 }),
   ]);
 
-  const answer = await client({ fetch: fetchLike }).readPreferences();
+  const answer = await client({ httpClient: layerFromCloudFetch(fetchLike) }).readPreferences();
   assert.deepEqual(answer, {
     preferences: PREFERENCES_ANSWER.preferences,
     hasStoredSnapshot: true,
@@ -60,7 +61,7 @@ test("reads a missing hosted row as an empty snapshot without a stored marker", 
     () => new Response(JSON.stringify({ preferences: {} }), { status: 200 }),
   ]);
 
-  assert.deepEqual(await client({ fetch: fetchLike }).readPreferences(), {
+  assert.deepEqual(await client({ httpClient: layerFromCloudFetch(fetchLike) }).readPreferences(), {
     preferences: {},
     hasStoredSnapshot: false,
   });
@@ -71,7 +72,7 @@ test("writes account preferences as a full snapshot", async () => {
     () => new Response(JSON.stringify(PREFERENCES_ANSWER), { status: 200 }),
   ]);
 
-  const answer = await client({ fetch: fetchLike }).writePreferences({
+  const answer = await client({ httpClient: layerFromCloudFetch(fetchLike) }).writePreferences({
     voice: "marin",
     defaultWorkspaceProvider: "conductor",
   });
@@ -95,26 +96,35 @@ test("a malformed account preferences payload never travels", async () => {
   // SAFETY: This deliberately bypasses the public AccountPreferences type to verify the runtime guard.
   const malformed = { voiceHotkey: "Command+Space" } as AccountPreferences;
 
-  assert.equal(await client({ fetch: fetchLike }).writePreferences(malformed), undefined);
+  assert.equal(
+    await client({ httpClient: layerFromCloudFetch(fetchLike) }).writePreferences(malformed),
+    undefined,
+  );
   assert.equal(requests.length, 0);
 });
 
 test("a refusal and a snapshot the settings vocabulary does not admit read as no answer", async () => {
   const refused = client({
-    fetch: async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
+    httpClient: layerFromCloudFetch(
+      async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
+    ),
   });
   assert.equal(await refused.writePreferences({ voice: "sage" }), undefined);
 
   const malformed = client({
-    fetch: async () => new Response(JSON.stringify({ preferences: "none" }), { status: 200 }),
+    httpClient: layerFromCloudFetch(
+      async () => new Response(JSON.stringify({ preferences: "none" }), { status: 200 }),
+    ),
   });
   assert.equal(await malformed.readPreferences(), undefined);
 
   const unknownField = client({
-    fetch: async () =>
-      new Response(JSON.stringify({ preferences: { voiceHotkey: "Command+Space" } }), {
-        status: 200,
-      }),
+    httpClient: layerFromCloudFetch(
+      async () =>
+        new Response(JSON.stringify({ preferences: { voiceHotkey: "Command+Space" } }), {
+          status: 200,
+        }),
+    ),
   });
   assert.equal(await unknownField.readPreferences(), undefined);
 });

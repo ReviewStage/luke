@@ -68,10 +68,10 @@ test("the promise face carries a submission over the caller's own fetch", async 
   const requests: { input: string; body: string }[] = [];
   const courier = feedbackDeliveryFromEnvironment({
     url: URL,
-    fetch: (input, init) => {
+    httpClient: layerFromCloudFetch((input, init) => {
       requests.push({ input, body: String(init.body) });
       return Promise.resolve(new Response("{}", { status: 200 }));
-    },
+    }),
   });
 
   const result = await courier.deliver(SUBMISSION);

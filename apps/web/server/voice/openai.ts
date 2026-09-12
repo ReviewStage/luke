@@ -1,4 +1,4 @@
-import { readEither } from "@sidecar/wire/effect";
+import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
 import { Either } from "effect";
 import { WebSocket } from "ws";
 import {
@@ -69,7 +69,7 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
   const call = createAccountCall({
     baseUrl,
     credential,
-    fetch: options.fetch,
+    ...(options.fetch ? { httpClient: layerFromCloudFetch(options.fetch) } : undefined),
     requestTimeoutMs: options.createTimeoutMs ?? OPENAI_DEFAULTS.CREATE_TIMEOUT_MS,
   });
   const attachTimeoutMs = options.attachTimeoutMs ?? OPENAI_DEFAULTS.ATTACH_TIMEOUT_MS;

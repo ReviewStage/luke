@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import * as HttpBody from "@effect/platform/HttpBody";
 import * as HttpClient from "@effect/platform/HttpClient";
 import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
@@ -9,7 +10,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { layerFromCloudFetch, webResponseFromClientResponse } from "@sidecar/wire/effect";
+import { webResponseFromClientResponse } from "@sidecar/wire/effect";
 import { Cause, Duration, Effect, Exit, type Layer } from "effect";
 import type { AccountProvider } from "./snapshot.js";
 
@@ -65,7 +66,8 @@ export type FetchLike = (input: string | URL | Request, init?: RequestInit) => P
 export interface AccountClientOptions {
   baseUrl: string;
   clientId: string;
-  fetch?: FetchLike;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   timeoutMs?: number;
 }
 
@@ -120,12 +122,11 @@ const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
  * `AbortSignal.timeout` always named it for the second — so every caller here
  * keeps reading a thrown error exactly as it always did.
  *
- * @deprecated This is the CloudFetch-shaped seam on the `Effect.runPromise`
+ * @deprecated This is the promise-facing seam on the `Effect.runPromise`
  * allowlist in `docs/adr/0001-effect.md`: `AccountClient` and
- * `deleteHostedAccount` still answer a Promise over a `CloudFetch`-shaped
- * `fetch` option, so the request built over the ambient `HttpClient` is run
- * to a promise here rather than left to a caller's own fiber. Deleted with
- * `CloudFetch` and `layerFromCloudFetch` in P12-04.
+ * `deleteHostedAccount` still answer a Promise, so the request built over the
+ * ambient `HttpClient` is run to a promise here rather than left to a
+ * caller's own fiber. Deleted once both take a fiber of their own instead.
  */
 function timedRequest(
   client: Layer.Layer<HttpClient.HttpClient>,
@@ -154,7 +155,7 @@ export class AccountClient {
   constructor(options: AccountClientOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/$/, "");
     this.#clientId = options.clientId;
-    this.#client = layerFromCloudFetch(options.fetch ?? fetch);
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
     this.#timeoutMs = options.timeoutMs ?? 15_000;
   }
 
@@ -298,7 +299,8 @@ export interface AccountDeletionOptions {
   serviceBaseUrl: string;
   /** The signed-in account's current access token. */
   accessToken: string;
-  fetch?: FetchLike;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   timeoutMs?: number;
 }
 
@@ -311,7 +313,7 @@ export interface AccountDeletionOptions {
  */
 export async function deleteHostedAccount(options: AccountDeletionOptions): Promise<void> {
   const response = await timedRequest(
-    layerFromCloudFetch(options.fetch ?? fetch),
+    options.httpClient ?? FetchHttpClient.layer,
     HttpClientRequest.post(
       `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
       { headers: { authorization: `Bearer ${options.accessToken}` } },

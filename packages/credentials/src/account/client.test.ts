@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import type { JsonValue } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
@@ -53,7 +54,7 @@ test("the code exchange sends the verifier and redirect as form fields", async (
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
   });
 
   assert.deepEqual(
@@ -85,7 +86,7 @@ test("a refresh keeps the existing refresh token when rotation omits one", async
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
   });
 
   assert.deepEqual(await client.refresh("existing-refresh"), {
@@ -100,10 +101,10 @@ test("sign-out revokes the refresh token as a public client", async () => {
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: async (input, init) => {
+    httpClient: layerFromCloudFetch(async (input, init) => {
       request = new Request(input, init);
       return new Response(null, { status: 200 });
-    },
+    }),
   });
 
   await client.revoke("refresh-to-revoke");
@@ -129,7 +130,7 @@ test("userinfo returns the identity fields and nothing else the claim carried", 
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
   });
 
   assert.deepEqual(await client.userInfo("access-token", ACCOUNT_PROVIDER.GITHUB), {
@@ -150,7 +151,7 @@ test("an identity with no subject claim still signs in, without an id", async ()
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: async () => json({ email: "developer@example.com" }),
+    httpClient: layerFromCloudFetch(async () => json({ email: "developer@example.com" })),
   });
 
   assert.deepEqual(await client.userInfo("access", ACCOUNT_PROVIDER.GOOGLE), {
@@ -164,7 +165,9 @@ test("userinfo keeps a picture only from the hosts the renderer's policy pins", 
     new AccountClient({
       baseUrl: "https://tryluke.dev/api/auth",
       clientId: "luke-desktop",
-      fetch: async () => json({ email: "developer@example.com", picture }),
+      httpClient: layerFromCloudFetch(async () =>
+        json({ email: "developer@example.com", picture }),
+      ),
     });
 
   const google = await clientFor("https://lh3.googleusercontent.com/a/portrait").userInfo(
@@ -198,7 +201,7 @@ test("a request that outlives its deadline ends as a timeout, never a hang", asy
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
     timeoutMs: 1,
-    fetch: () => new Promise<Response>(() => undefined),
+    httpClient: layerFromCloudFetch(() => new Promise<Response>(() => undefined)),
   });
 
   const error = await client.refresh("stale").catch((cause: unknown) => cause);
@@ -210,9 +213,9 @@ test("a transport that cannot carry the request is an error, never a hang", asyn
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: () => {
+    httpClient: layerFromCloudFetch(() => {
       throw new TypeError("fetch failed");
-    },
+    }),
   });
 
   const error = await client.refresh("stale").catch((cause: unknown) => cause);
@@ -224,8 +227,9 @@ test("OAuth errors preserve their status and machine-readable code", async () =>
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: async () =>
+    httpClient: layerFromCloudFetch(async () =>
       json({ error: "invalid_grant", error_description: "Refresh token was revoked" }, 400),
+    ),
   });
 
   await assert.rejects(client.refresh("revoked"), (error) => {
@@ -241,7 +245,7 @@ test("invalid token and identity responses are refused", async () => {
   const tokenClient = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: async () => json({ access_token: "access-only" }),
+    httpClient: layerFromCloudFetch(async () => json({ access_token: "access-only" })),
   });
   await assert.rejects(
     tokenClient.exchangeCode({
@@ -255,7 +259,7 @@ test("invalid token and identity responses are refused", async () => {
   const identityClient = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: async () => json({ provider: "unknown" }),
+    httpClient: layerFromCloudFetch(async () => json({ provider: "unknown" })),
   });
   await assert.rejects(
     identityClient.userInfo("access", ACCOUNT_PROVIDER.GOOGLE),
@@ -315,7 +319,7 @@ test("a delete posts the bearer token at the service's account-delete path", asy
   await deleteHostedAccount({
     serviceBaseUrl: "https://tryluke.dev/",
     accessToken: "access-1",
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
   });
 
   assert.equal(request?.url, "https://tryluke.dev/api/account/delete");
@@ -332,7 +336,7 @@ test("an expired token's refusal reads as refresh-and-retry, a service no does n
   const expired = await deleteHostedAccount({
     serviceBaseUrl: "https://tryluke.dev",
     accessToken: "access-1",
-    fetch: refusal(401),
+    httpClient: layerFromCloudFetch(refusal(401)),
   }).catch((error) => error);
   assert.equal(expired instanceof AccountClientError, true);
   assert.equal(accessTokenNeedsRefresh(expired), true);
@@ -340,7 +344,7 @@ test("an expired token's refusal reads as refresh-and-retry, a service no does n
   const refused = await deleteHostedAccount({
     serviceBaseUrl: "https://tryluke.dev",
     accessToken: "access-1",
-    fetch: refusal(503),
+    httpClient: layerFromCloudFetch(refusal(503)),
   }).catch((error) => error);
   assert.equal(refused instanceof AccountClientError, true);
   assert.equal(accessTokenNeedsRefresh(refused), false);

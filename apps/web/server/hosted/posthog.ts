@@ -15,6 +15,7 @@
 
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { type CloudFetch, HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import {
   accountCall,
@@ -106,7 +107,7 @@ export async function postPosthogBatch(
   const call = createAccountCall({
     baseUrl: options.host?.trim() || POSTHOG_DEFAULTS.HOST,
     credential: NO_CREDENTIAL,
-    fetch: options.fetch,
+    ...(options.fetch ? { httpClient: layerFromCloudFetch(options.fetch) } : undefined),
     requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
   });
   const answer = await call.send({

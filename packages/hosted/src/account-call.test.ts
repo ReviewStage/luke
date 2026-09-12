@@ -417,7 +417,7 @@ test("the promise the migration keeps answers a validated body over the caller's
   const call = createAccountCall({
     baseUrl: BASE_URL,
     credential: fixedBearer("sk-test"),
-    fetch: recording.fetch,
+    httpClient: layerFromCloudFetch(recording.fetch),
   });
 
   const answer = await call.ask({ method: HTTP_METHOD.GET, path: PATH }, (payload) => payload);
@@ -432,11 +432,13 @@ test("the caller's own cancellation ends the request, named by the reason it car
   const call = createAccountCall({
     baseUrl: BASE_URL,
     credential: fixedBearer("sk-test"),
-    fetch: () =>
-      new Promise<Response>((_settle, reject) => {
-        cancellation.abort();
-        cancellation.signal.addEventListener("abort", () => reject(cancellation.signal.reason));
-      }),
+    httpClient: layerFromCloudFetch(
+      () =>
+        new Promise<Response>((_settle, reject) => {
+          cancellation.abort();
+          cancellation.signal.addEventListener("abort", () => reject(cancellation.signal.reason));
+        }),
+    ),
   });
 
   const answer = await call.send({

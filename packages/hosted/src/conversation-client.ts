@@ -1,13 +1,8 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { UnreadableRow } from "@sidecar/session";
-import {
-  type CloudFetch,
-  HTTP_METHOD,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireRecord,
-} from "@sidecar/wire";
-import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
 import { Effect, Either, type Layer } from "effect";
 import {
   type AccountCallEffects,
@@ -42,7 +37,8 @@ import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
 export interface HostedConversationClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -142,7 +138,7 @@ export class HostedConversationClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
   messages(page: ReadPageQuery = {}): Promise<ConversationReadResult<ConversationMessagesAnswer>> {
@@ -249,13 +245,6 @@ export class HostedConversationClient {
     });
   }
 
-  /**
-   * @deprecated The promise face `messages`, `events`, `turns`, `clear`, and
-   * `rate` keep while their caller still awaits a `Promise` rather than
-   * holding a runtime edge of its own; deleted with `CloudFetch` in P12-04,
-   * at which point the caller runs `#call.ask`/`#call.send` on its own
-   * runtime instead.
-   */
   #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
     return Effect.runPromise(Effect.provide(effect, this.#client));
   }

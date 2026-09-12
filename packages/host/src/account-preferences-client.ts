@@ -1,3 +1,4 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCall,
   type AccountToken,
@@ -6,13 +7,8 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
-import {
-  type CloudFetch,
-  HTTP_METHOD,
-  isRecord,
-  isWireNumber,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
+import { HTTP_METHOD, isRecord, isWireNumber, type UnparsedWireValue } from "@sidecar/wire";
+import type { Layer } from "effect";
 
 export interface AccountPreferencesAnswer {
   preferences: AccountPreferences;
@@ -22,7 +18,8 @@ export interface AccountPreferencesAnswer {
 export interface AccountPreferencesClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -52,7 +49,7 @@ export class AccountPreferencesClient {
     this.#call = createAccountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
-      fetch: options.fetch,
+      httpClient: options.httpClient,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }

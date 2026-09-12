@@ -10,14 +10,14 @@ const LIST_ANSWER = {
 };
 
 function client(
-  fetch: ReturnType<typeof fakeCloudApi>["fetch"],
+  httpClient: ReturnType<typeof fakeCloudApi>["layer"],
   options: Partial<ConstructorParameters<typeof HostedVaultClient>[0]> = {},
 ) {
   return new HostedVaultClient({
     serviceBaseUrl: "https://tryluke.dev",
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
-    fetch,
+    httpClient,
     ...options,
   });
 }
@@ -27,7 +27,7 @@ it.effect("stores a key as a bearer-authenticated POST and reads the confirmatio
     const api = fakeCloudApi({ "POST /api/vault/key": { answer: () => ({ stored: true }) } });
 
     const answer = yield* Effect.promise(() =>
-      client(api.fetch).storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234abcd"),
+      client(api.layer).storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234abcd"),
     );
 
     assert.deepEqual(answer, { stored: true });
@@ -45,7 +45,7 @@ it.effect("stores a key as a bearer-authenticated POST and reads the confirmatio
 it.effect("a key the service would refuse by shape never travels", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({});
-    const vault = client(api.fetch);
+    const vault = client(api.layer);
 
     assert.equal(
       yield* Effect.promise(() => vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "")),
@@ -71,7 +71,7 @@ it.effect("lists stored entries without a body and validates the answer", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({ "GET /api/vault/keys": { answer: () => LIST_ANSWER } });
 
-    const keys = yield* Effect.promise(() => client(api.fetch).listKeys());
+    const keys = yield* Effect.promise(() => client(api.layer).listKeys());
 
     assert.deepEqual(keys, LIST_ANSWER.keys);
     assert.deepEqual(recordedRoutes(api.requests()), ["GET /api/vault/keys"]);
@@ -86,7 +86,7 @@ it.effect("deletes one provider's key and reads whether one was removed", () =>
     const api = fakeCloudApi({ "DELETE /api/vault/key": { answer: () => ({ deleted: true }) } });
 
     const answer = yield* Effect.promise(() =>
-      client(api.fetch).deleteKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR),
+      client(api.layer).deleteKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR),
     );
 
     assert.deepEqual(answer, { deleted: true });
@@ -107,7 +107,7 @@ it.effect("a refusal and an answer the vault contract does not admit both read a
     });
     assert.equal(
       yield* Effect.promise(() =>
-        client(refused.fetch).storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234"),
+        client(refused.layer).storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234"),
       ),
       undefined,
     );
@@ -117,6 +117,6 @@ it.effect("a refusal and an answer the vault contract does not admit both read a
         answer: () => ({ keys: [{ providerId: "openai", updatedAt: 1 }] }),
       },
     });
-    assert.equal(yield* Effect.promise(() => client(malformed.fetch).listKeys()), undefined);
+    assert.equal(yield* Effect.promise(() => client(malformed.layer).listKeys()), undefined);
   }),
 );
