@@ -74,7 +74,6 @@ export interface AwaitedSettingsStore {
     apiKey: string | undefined,
   ): Promise<SettingsUpdateResult>;
   readVaultSyncAccount(): Promise<string | undefined>;
-  setVaultSyncAccount(accountKey: string): Promise<void>;
   readCalendarAccounts(): Promise<readonly CalendarAccountCredential[]>;
   addCalendarAccount(
     accountId: string,
@@ -124,7 +123,6 @@ export function awaitedSettingsStore(
     readStoredApiKey: (providerId) => awaited(store.readStoredApiKey(providerId)),
     setApiKey: (providerId, apiKey) => awaited(store.setApiKey(providerId, apiKey)),
     readVaultSyncAccount: () => awaited(store.readVaultSyncAccount()),
-    setVaultSyncAccount: (accountKey) => awaited(store.setVaultSyncAccount(accountKey)),
     readCalendarAccounts: () => awaited(store.readCalendarAccounts()),
     addCalendarAccount: (accountId, refreshToken, selectedCalendarIds) =>
       awaited(store.addCalendarAccount(accountId, refreshToken, selectedCalendarIds)),

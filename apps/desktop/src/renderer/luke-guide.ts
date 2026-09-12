@@ -166,11 +166,10 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
     label: "Cloud providers",
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
-      `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. Local ` +
-      "providers such as Claude Code and Codex need no key and are observed on their own. " +
-      "While the Sync provider keys switch in the Sync section is on, a key saved while signed in " +
-      "is also stored encrypted with Luke's own service, which never sends one back; the " +
-      "switch is changed only by hand, and its own entry says what turning it moves.",
+      `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. The key ` +
+      "is held by Luke's own service, encrypted in its vault, and never stored on this Mac: it " +
+      "goes there in the same press that saves it, the service never sends one back, and " +
+      "deleting it from its row removes it there. Connecting needs the developer signed in.",
   };
 }
 

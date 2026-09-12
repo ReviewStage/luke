@@ -28,12 +28,7 @@ import {
 } from "../settings-views";
 import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
-import {
-  CredentialsSection,
-  IntegrationsSection,
-  KeySyncSection,
-  WorkspacesSection,
-} from "./connections-page";
+import { CredentialsSection, IntegrationsSection, WorkspacesSection } from "./connections-page";
 import type {
   AppleCalendarControl,
   CalendarControl,
@@ -294,7 +289,6 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.CONNECTIONS && connections && panelView && !search ? (
         <>
           <WorkspacesSection view={panelView} writes={writes} />
-          <KeySyncSection view={panelView} writes={writes} />
           <CredentialsSection input={connections} />
           <IntegrationsSection input={connections} view={panelView} writes={writes} />
           {/* Whatever the page holds that stands under no heading of its

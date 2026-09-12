@@ -13,6 +13,7 @@ export const CREDENTIAL_PLACEHOLDER = {
   [CREDENTIAL_SOURCE.NONE]: "Paste it here",
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead",
   [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace what is stored",
+  [CREDENTIAL_SOURCE.SERVICE]: "Replace what Luke's service holds",
 } as const satisfies Record<CredentialSource, string>;
 
 /**

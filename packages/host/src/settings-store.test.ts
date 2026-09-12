@@ -7,6 +7,7 @@ import { it } from "@effect/vitest";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
+import { VAULT_KEY_MAX_LENGTH, vaultKeyIsStorable } from "@sidecar/hosted";
 import { LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import {
@@ -152,12 +153,17 @@ function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverri
 
 function storeIn(
   directory: string,
-  options: { cipher?: SecretCipher; environment?: NodeJS.ProcessEnv } = {},
+  options: {
+    cipher?: SecretCipher;
+    environment?: NodeJS.ProcessEnv;
+    vaultKeyHeld?: SettingsStoreOptions["vaultKeyHeld"];
+  } = {},
 ): AwaitedSettingsStore {
   const config: SettingsStoreOptions = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
     overrides: overridesFor(options.environment ?? {}),
+    vaultKeyHeld: options.vaultKeyHeld ?? (() => false),
     fileSystem: FILE_SYSTEM,
   };
   return awaitedSettingsStore(new SettingsStore(config), RUNTIME);
@@ -185,6 +191,7 @@ test("a failed first load is retried before a later write", async (t) => {
       },
       cipher: testCipher(),
       overrides: overridesFor({}),
+      vaultKeyHeld: () => false,
       fileSystem: FILE_SYSTEM,
     }),
     RUNTIME,
@@ -249,7 +256,6 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   announceSessions: false,
   quietDuringMeetings: false,
-  syncProviderKeys: false,
   showOnAllDisplays: true,
   formFactor: PANEL_FORM_FACTOR.NOTCH,
   sessionFilters: [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX],
@@ -358,10 +364,9 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
   const stats = await fs.stat(path.join(directory, SETTINGS_FILE_NAME));
 
   assert.equal(reason, undefined);
-  assert.equal(
-    appSettingsView(settings).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-  );
+  // A cloud provider's row answers for the vault, never for the file: a key
+  // still kept here is one the migration has yet to hand over.
+  assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
   assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.AVAILABLE);
   assert.equal(stats.mode & 0o777, 0o600);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
@@ -405,17 +410,17 @@ test("decrypts once and re-decrypts only after the key changes", async (t) => {
       },
     },
   });
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
 
   const afterStore = decryptions;
-  for (let read = 0; read < 5; read += 1) await store.readApiKey(CONDUCTOR);
+  for (let read = 0; read < 5; read += 1) await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI);
   const afterReads = decryptions;
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
-  await store.readApiKey(CONDUCTOR);
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-replacement-key");
+  await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI);
 
   assert.equal(afterReads, afterStore, "a repeated read decrypted again");
   assert.ok(decryptions > afterReads, "a replaced key was not re-read");
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-replacement-key");
 });
 
 test("reads a stored key back from a new store instance", async (t) => {
@@ -427,7 +432,52 @@ test("reads a stored key back from a new store instance", async (t) => {
   assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
   assert.equal(
     appSettingsView(await reopened.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+    CREDENTIAL_SOURCE.NONE,
+  );
+});
+
+test("a key the door admits is one the vault stores, and each refusal names its own reason", () => {
+  // The cloud path holds a key to apiKeyRejection alone, so the vault's shape
+  // rule has to be inside it: the same length cap, and no whitespace.
+  const longest = "k".repeat(VAULT_KEY_MAX_LENGTH);
+  assert.equal(apiKeyRejection(longest), undefined);
+  assert.equal(vaultKeyIsStorable(longest), true);
+  assert.equal(apiKeyRejection(`${longest}k`), "That API key is too long.");
+  assert.equal(vaultKeyIsStorable(`${longest}k`), false);
+  for (const key of ["key with spaces", "key\twith\ttabs", "key\nwith\nnewlines"]) {
+    assert.equal(apiKeyRejection(key), "That API key contains unsupported characters.");
+    assert.equal(vaultKeyIsStorable(key), false);
+  }
+});
+
+test("a cloud provider's source is the vault's answer for the account signed in, whatever this Mac holds or reads", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const held = storeIn(directory, {
+    environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
+    vaultKeyHeld: () => true,
+  });
+  // The vault's list is the account's: signed out, a held key is nobody's to show.
+  assert.equal(
+    appSettingsView(await held.snapshot()).credentialSources[CONDUCTOR],
+    CREDENTIAL_SOURCE.NONE,
+  );
+  await held.setAccount({
+    accessToken: "access-token-secret",
+    refreshToken: "refresh-token-secret",
+    email: "developer@example.com",
+    name: "Developer",
+    provider: "github",
+  });
+  assert.equal(
+    appSettingsView(await held.snapshot()).credentialSources[CONDUCTOR],
+    CREDENTIAL_SOURCE.SERVICE,
+  );
+  const unheld = storeIn(directory, {
+    environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
+  });
+  assert.equal(
+    appSettingsView(await unheld.snapshot()).credentialSources[CONDUCTOR],
+    CREDENTIAL_SOURCE.NONE,
   );
 });
 
@@ -632,7 +682,7 @@ test("keeps each provider's key, environment fallback, and reported source separ
     settings.credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
   );
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENVIRONMENT);
+  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
   assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
   assert.equal(await store.readApiKey(CONDUCTOR), "conductor-environment");
 
@@ -697,7 +747,9 @@ test("falls back to an API key from the environment", async (t) => {
 
   const settings = appSettingsView(await store.snapshot());
 
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENVIRONMENT);
+  // The key resolves for a caller that asks, but a cloud provider's row does
+  // not answer for the shell: the vault is the one place its key connects from.
+  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
@@ -1364,13 +1416,13 @@ test("recovers from a corrupt settings file", async (t) => {
   await fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), "{ not json");
   const store = storeIn(directory);
 
-  const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  const { settings } = await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
 
   assert.equal(
-    appSettingsView(settings).credentialSources[CONDUCTOR],
+    appSettingsView(settings).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
   );
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
 });
 
 test("a voice reset forgets the voice, captions, and duck in one action", async (t) => {
@@ -1630,6 +1682,7 @@ it.effect("the store's own methods are effects a caller sequences itself", () =>
         directory: () => directory,
         cipher: testCipher(),
         overrides: overridesFor({}),
+        vaultKeyHeld: () => false,
         fileSystem: FILE_SYSTEM,
       });
 
@@ -1645,6 +1698,7 @@ it.effect("the store's own methods are effects a caller sequences itself", () =>
         directory: () => directory,
         cipher: testCipher(),
         overrides: overridesFor({}),
+        vaultKeyHeld: () => false,
         fileSystem: FILE_SYSTEM,
       });
       assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
@@ -1665,6 +1719,7 @@ it.effect("concurrent reads of an unread store read the file once", () =>
         },
         cipher: testCipher(),
         overrides: overridesFor({}),
+        vaultKeyHeld: () => false,
         fileSystem: FILE_SYSTEM,
       });
 
