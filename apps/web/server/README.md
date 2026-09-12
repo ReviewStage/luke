@@ -1224,10 +1224,19 @@ and tests against a Postgres service container. Every one of those is
 Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
 embeds PostgreSQL 18.3, and the CI service image is `postgres:18`, so a test
 that fails in any of them fails about the database the service actually
-runs, and a local `check.sh` is a reproduction on 18 already. A reproduction
-against a real Postgres needs an 18 of your own, migrated by `db:migrate`
-alone, because that is the runner which records what it applied, so run it
-first:
+runs, and a local `check.sh` is a reproduction on 18 already. On either
+dialect an opening of the test database is a database of that opening's own:
+a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
+names, made with `create database ... template ...` on the cluster's
+`postgres` maintenance database and dropped when the file closes it
+(`tests/support/store-test-postgres.ts`). Nothing writes to the named
+database itself after `db:migrate`, so a statement a test forgets to scope by
+account or conversation reaches its own file's rows and no other file's,
+which is the property `tests/store-database-isolation.test.ts` holds the
+harness to. A reproduction against a real Postgres needs an 18 of your own
+whose role may `create database`, migrated by `db:migrate` alone, because
+that is the runner which records what it applied and the tests copy what it
+recorded, so run it first:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate

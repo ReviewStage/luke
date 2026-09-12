@@ -50,6 +50,11 @@ jobs:
   # before a deployment's `db:migrate` finds it. The image is the major
   # production runs (Neon, 18.x), which is also the major PGlite embeds; a
   # test that fails here fails about the database the service actually runs.
+  # `db:migrate` migrates the `luke` database and nothing else writes to it:
+  # each test file clones it as a template into a database of its own and
+  # drops the clone when it is done (`tests/support/store-test-postgres.ts`),
+  # so a statement one file forgets to scope reaches no other file's rows here
+  # any more than it does on PGlite.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04

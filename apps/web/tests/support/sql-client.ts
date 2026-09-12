@@ -8,20 +8,20 @@ import { PGlite } from "@electric-sql/pglite";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { runWebMigrations } from "../../server/db/effect-migrator.js";
 import { createPool } from "../../server/db/index.js";
+import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres.js";
 
 /**
  * The `SqlClient` the store's own tests will read, standing over the same two
  * dialects `hosted-store-database.ts` already chooses between: PGlite in
  * process by default, so `check.sh` needs no service, and the Postgres named by
- * `LUKE_STORE_TEST_DATABASE_URL` in the CI job that has one. The Postgres half
- * is the production layer's own client; the PGlite half is the small connection
- * below, because no `@effect/sql-pglite` ships against the 3.x Effect line.
+ * `LUKE_STORE_TEST_DATABASE_URL` in the CI job that has one. Either way a
+ * build of the layer is a database of its own: a fresh PGlite, or a clone of
+ * the migrated Postgres dropped when the layer's scope closes
+ * (`store-test-postgres.ts`), so a file's unscoped statement reaches no other
+ * file's rows on either dialect. The Postgres half is the production layer's
+ * own client; the PGlite half is the small connection below, because no
+ * `@effect/sql-pglite` ships against the 3.x Effect line.
  */
-
-/** The env var naming a Postgres the store tests should run against instead of PGlite. */
-export const STORE_TEST_DATABASE_ENVIRONMENT = {
-  URL: "LUKE_STORE_TEST_DATABASE_URL",
-} as const;
 
 const ROW_MODE = {
   ARRAY: "array",
@@ -114,19 +114,32 @@ const pgliteSqlClient = pgliteSqlClientOver(openMigratedPglite);
 
 /**
  * A PGlite with nothing applied to it, which is what a test of the migration
- * runner itself needs: the shared Postgres a CI run points at has already been
+ * runner itself needs: the Postgres a CI run clones from has already been
  * migrated, so only an in-process database can stand in for a fresh one.
  */
 export const unmigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlError> =
   pgliteSqlClientOver(async () => new PGlite());
 
+/**
+ * The pool ends before the clone drops: the pool's finalizer is registered
+ * after the clone's in the same scope, and finalizers run in reverse.
+ */
 function postgresSqlClient(connectionString: string) {
-  return PgClient.layerFromPool({
-    acquire: Effect.acquireRelease(
-      Effect.sync(() => createPool(connectionString)),
-      (pool) => Effect.promise(() => pool.end()),
+  return Layer.unwrapScoped(
+    Effect.map(
+      Effect.acquireRelease(
+        Effect.promise(() => cloneStoreTestPostgres(connectionString)),
+        (clone) => Effect.promise(() => clone.drop()),
+      ),
+      (clone) =>
+        PgClient.layerFromPool({
+          acquire: Effect.acquireRelease(
+            Effect.sync(() => createPool(clone.connectionString)),
+            (pool) => Effect.promise(() => pool.end()),
+          ),
+        }),
     ),
-  });
+  );
 }
 
 const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
