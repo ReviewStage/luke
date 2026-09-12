@@ -23,7 +23,13 @@ import { type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
  */
 
 /** Where the clients live, relative to the repository root; `packages` stands for every package's `src`. */
-const CALLER_ROOTS = ["apps/desktop/src", "apps/ios", "packages", "scripts", "tools"] as const;
+export const CALLER_ROOTS = [
+  "apps/desktop/src",
+  "apps/ios",
+  "packages",
+  "scripts",
+  "tools",
+] as const;
 const PACKAGES_ROOT = "packages";
 const PACKAGE_SOURCE_DIRECTORY = "src";
 const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(["node_modules", "dist", ".build"]);
@@ -343,7 +349,16 @@ async function sourceFilesUnder(directory: string): Promise<readonly string[]> {
   return files.sort();
 }
 
-/** The directories scanned under a repository root: every caller root, with `packages` as each package's `src`. */
+/**
+ * The directories scanned under a repository root: every caller root, with
+ * `packages` as each package's `src`. A package directory holding no `src`
+ * contributes nothing: a checkout that has lived through a package's deletion
+ * keeps the directory with its ignored build output, and a fresh clone (CI's,
+ * every time) never has one, so a walk that threw on it was green in CI and
+ * dead on a developer's Mac. The absence is decided here, where the tree is
+ * enumerated, so the walk itself still fails loudly on a `readdir` that fails
+ * for any other reason.
+ */
 export async function callerDirectories(repoRoot: string): Promise<readonly string[]> {
   const directories: string[] = [];
   for (const root of CALLER_ROOTS) {
@@ -354,6 +369,10 @@ export async function callerDirectories(repoRoot: string): Promise<readonly stri
     const packages = await readdir(join(repoRoot, PACKAGES_ROOT), { withFileTypes: true });
     for (const entry of packages) {
       if (!entry.isDirectory()) continue;
+      const contents = await readdir(join(repoRoot, PACKAGES_ROOT, entry.name), {
+        withFileTypes: true,
+      });
+      if (!contents.some((child) => child.name === PACKAGE_SOURCE_DIRECTORY)) continue;
       directories.push(posix.join(PACKAGES_ROOT, entry.name, PACKAGE_SOURCE_DIRECTORY));
     }
   }
