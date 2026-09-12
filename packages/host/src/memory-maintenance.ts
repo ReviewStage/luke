@@ -1,5 +1,5 @@
 import type { BrainFlushMarkerStore } from "@sidecar/brain";
-import { carryOn, runMemoryHousekeeping } from "@sidecar/brain";
+import { runMemoryHousekeeping } from "@sidecar/brain";
 import type { StoreClient } from "@sidecar/brain/store";
 import {
   type HousekeepingPrompt,
@@ -14,12 +14,12 @@ import {
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
 import {
   type AgentRuntimeEffect,
-  type ExecutionRuntime,
   MEMORY_CAPTURE_PHASE,
   type MemoryCaptureResult,
   type MemoryCaptureTurn,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
+import { Effect } from "effect";
 
 /**
  * Memory maintenance as the host wires it: the capture each eligible
@@ -35,8 +35,6 @@ export interface MemoryMaintenanceDependencies {
   client: () => StoreClient;
   /** A runtime for the housekeeping runs, or nothing when no brain may stand. */
   createRuntime: () => AgentRuntimeEffect | undefined;
-  /** The runtime a housekeeping turn is a fiber of, since the memory provider's capture seam is still a promise. */
-  execution: ExecutionRuntime;
   workspaceDirectory: () => string;
   isTemporary: (sessionKey: SessionKey) => boolean;
   now: () => number;
@@ -46,7 +44,7 @@ export interface MemoryMaintenanceDependencies {
   onNotebookChanged?: () => void;
 }
 
-type MemoryCapture = (turn: MemoryCaptureTurn) => Promise<MemoryCaptureResult>;
+type MemoryCapture = (turn: MemoryCaptureTurn) => Effect.Effect<MemoryCaptureResult>;
 
 export interface MemoryMaintenance {
   /**
@@ -80,22 +78,22 @@ export function wireMemoryMaintenance(
     dependencies.persistent &&
     isMaintenanceEligibleConversation(sessionKey, dependencies.isTemporary(sessionKey));
 
-  const housekeeping = async (
+  const housekeeping = (
     turn: MemoryCaptureTurn,
     prompt: HousekeepingPrompt,
     dateStamp: string,
     signal: AbortSignal,
-  ): Promise<MemoryCaptureResult> => {
-    const runtime = dependencies.createRuntime();
-    if (!runtime) {
-      return {
-        outcome: MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED,
-        writes: 0,
-        reason: "no brain stands to run it",
-      };
-    }
-    const result = await carryOn(dependencies.execution)(
-      runMemoryHousekeeping({
+  ): Effect.Effect<MemoryCaptureResult> =>
+    Effect.gen(function* () {
+      const runtime = dependencies.createRuntime();
+      if (!runtime) {
+        return {
+          outcome: MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED,
+          writes: 0,
+          reason: "no brain stands to run it",
+        };
+      }
+      const result = yield* runMemoryHousekeeping({
         runtime,
         items: turn.items,
         prompt,
@@ -103,38 +101,43 @@ export function wireMemoryMaintenance(
         workspace: workspace(),
         signal,
         runId: dependencies.createId(),
-      }),
-    );
-    if (result.writes > 0) dependencies.onNotebookChanged?.();
-    return result;
-  };
+      });
+      if (result.writes > 0) dependencies.onNotebookChanged?.();
+      return result;
+    });
 
-  const flush: MemoryCapture = (turn) => {
-    const day = localDayStamp(dependencies.now());
-    return housekeeping(turn, memoryFlushPrompt(day), day, turn.signal);
-  };
+  const flush: MemoryCapture = (turn) =>
+    Effect.suspend(() => {
+      const day = localDayStamp(dependencies.now());
+      return housekeeping(turn, memoryFlushPrompt(day), day, turn.signal);
+    });
 
-  const resetCapture: MemoryCapture = async (turn) => {
-    if (turn.items.length === 0) {
-      return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE, writes: 0 };
-    }
-    const day = localDayStamp(dependencies.now());
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      MEMORY_FLUSH_DEFAULTS.RESET_CAPTURE_TIMEOUT_MS,
-    );
-    try {
-      return await housekeeping(
-        turn,
-        resetCapturePrompt(day),
-        day,
-        AbortSignal.any([turn.signal, controller.signal]),
+  const resetCapture: MemoryCapture = (turn) =>
+    Effect.suspend(() => {
+      if (turn.items.length === 0) {
+        return Effect.succeed({
+          outcome: MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE,
+          writes: 0,
+        });
+      }
+      const day = localDayStamp(dependencies.now());
+      const controller = new AbortController();
+      const timer = setTimeout(
+        () => controller.abort(),
+        MEMORY_FLUSH_DEFAULTS.RESET_CAPTURE_TIMEOUT_MS,
       );
-    } finally {
-      clearTimeout(timer);
-    }
-  };
+      return Effect.ensuring(
+        housekeeping(
+          turn,
+          resetCapturePrompt(day),
+          day,
+          AbortSignal.any([turn.signal, controller.signal]),
+        ),
+        Effect.sync(() => {
+          clearTimeout(timer);
+        }),
+      );
+    });
 
   const captureFor: MemoryMaintenance["captureFor"] = (sessionKey) => {
     if (!eligible(sessionKey)) return undefined;

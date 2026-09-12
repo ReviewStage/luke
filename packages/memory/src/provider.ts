@@ -21,7 +21,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema } from "effect";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "./defaults.js";
 import type { NotebookMemoryAccess } from "./notebook-memory.js";
 
@@ -172,46 +172,50 @@ export interface NotebookMemoryProviderSeams {
   /** Today's and yesterday's notes, read only for a conversation opening fresh. */
   readonly recentNotes: () => Promise<readonly DailyNote[]>;
   /** One housekeeping turn over a copy of the context; absent for a conversation whose memory is never captured. */
-  readonly capture?: (turn: MemoryCaptureTurn) => Promise<MemoryCaptureResult>;
+  readonly capture?: (turn: MemoryCaptureTurn) => Effect.Effect<MemoryCaptureResult>;
 }
 
 function rejection(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-async function search(
+function search(
   access: NotebookMemoryAccess | undefined,
   args: WireRecord,
   context: MemoryToolContext,
-): Promise<WireRecord> {
-  if (!access) return rejection(NOTEBOOK_MEMORY_REFUSAL.NO_INDEX);
+): Effect.Effect<WireRecord> {
+  if (!access) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.NO_INDEX));
   const query = text(args.query)?.replace(/\s+/g, " ").trim().slice(0, maximumMemoryQueryLength);
-  if (!query) return rejection(NOTEBOOK_MEMORY_REFUSAL.EMPTY_QUERY);
+  if (!query) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.EMPTY_QUERY));
   const maxResults =
     isWireNumber(args.max_results) && args.max_results > 0
       ? Math.min(Math.floor(args.max_results), maximumMemorySearchResults)
       : undefined;
-  return access.search({
-    query,
-    ...(maxResults !== undefined ? { maxResults } : undefined),
-    signal: context.signal,
-  });
+  return Effect.promise(() =>
+    access.search({
+      query,
+      ...(maxResults !== undefined ? { maxResults } : undefined),
+      signal: context.signal,
+    }),
+  );
 }
 
-async function get(
+function get(
   access: NotebookMemoryAccess | undefined,
   args: WireRecord,
-): Promise<WireRecord> {
-  if (!access) return rejection(NOTEBOOK_MEMORY_REFUSAL.NO_INDEX);
+): Effect.Effect<WireRecord> {
+  if (!access) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.NO_INDEX));
   const filePath = text(args.path)?.trim();
-  if (!filePath) return rejection(NOTEBOOK_MEMORY_REFUSAL.NOT_MEMORY_PATH);
+  if (!filePath) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.NOT_MEMORY_PATH));
   const from = isWireNumber(args.from) && args.from >= 1 ? Math.floor(args.from) : undefined;
   const lines = isWireNumber(args.lines) && args.lines >= 1 ? Math.floor(args.lines) : undefined;
-  return access.get({
-    path: filePath,
-    ...(from !== undefined ? { from } : undefined),
-    ...(lines !== undefined ? { lines } : undefined),
-  });
+  return Effect.promise(() =>
+    access.get({
+      path: filePath,
+      ...(from !== undefined ? { from } : undefined),
+      ...(lines !== undefined ? { lines } : undefined),
+    }),
+  );
 }
 
 /** The notebook bound to one scope, for one conversation. */
@@ -221,9 +225,11 @@ export function notebookMemoryProvider(seams: NotebookMemoryProviderSeams): Memo
   const guarded =
     (run: MemoryTool["execute"]): MemoryTool["execute"] =>
     (input, context) =>
-      owned(context.scope)
-        ? run(input, context)
-        : Promise.resolve(rejection(NOTEBOOK_MEMORY_REFUSAL.FOREIGN_SCOPE));
+      Effect.suspend(() =>
+        owned(context.scope)
+          ? run(input, context)
+          : Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.FOREIGN_SCOPE)),
+      );
   const executions = {
     [NOTEBOOK_MEMORY_TOOL.SEARCH]: guarded((input, context) =>
       search(seams.access, input, context),
@@ -235,22 +241,23 @@ export function notebookMemoryProvider(seams: NotebookMemoryProviderSeams): Memo
     execute: executions[shape.name],
   }));
 
-  const recall = async (
+  const recall = (
     scope: MemoryScope,
     history: MemoryRecallHistory,
-  ): Promise<MemoryRecallResult> => {
-    if (!owned(scope)) return { messages: [] };
-    const messages: MemoryRecallMessage[] = [];
-    const facts = rememberedFactsText(seams.facts());
-    if (facts !== undefined) messages.push({ id: NOTEBOOK_RECALL_ID.FACTS, content: facts });
-    if (history.items.length === 0) {
-      const notes = await seams.recentNotes();
-      if (notes.length > 0 && !history.signal.aborted) {
-        messages.push({ content: primedNotesText(notes) });
+  ): Effect.Effect<MemoryRecallResult> =>
+    Effect.gen(function* () {
+      if (!owned(scope)) return { messages: [] };
+      const messages: MemoryRecallMessage[] = [];
+      const facts = rememberedFactsText(seams.facts());
+      if (facts !== undefined) messages.push({ id: NOTEBOOK_RECALL_ID.FACTS, content: facts });
+      if (history.items.length === 0) {
+        const notes = yield* Effect.promise(() => seams.recentNotes());
+        if (notes.length > 0 && !history.signal.aborted) {
+          messages.push({ content: primedNotesText(notes) });
+        }
       }
-    }
-    return { messages };
-  };
+      return { messages };
+    });
 
   const capture = seams.capture;
   return {
@@ -258,13 +265,15 @@ export function notebookMemoryProvider(seams: NotebookMemoryProviderSeams): Memo
     ...(capture
       ? {
           capture: (turn: MemoryCaptureTurn) =>
-            owned(turn.scope)
-              ? capture(turn)
-              : Promise.resolve({
-                  outcome: MEMORY_CAPTURE_OUTCOME.SKIPPED,
-                  writes: 0,
-                  reason: NOTEBOOK_MEMORY_REFUSAL.FOREIGN_SCOPE,
-                }),
+            Effect.suspend(() =>
+              owned(turn.scope)
+                ? capture(turn)
+                : Effect.succeed({
+                    outcome: MEMORY_CAPTURE_OUTCOME.SKIPPED,
+                    writes: 0,
+                    reason: NOTEBOOK_MEMORY_REFUSAL.FOREIGN_SCOPE,
+                  }),
+            ),
         }
       : undefined),
     tools,

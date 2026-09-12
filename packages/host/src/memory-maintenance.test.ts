@@ -119,7 +119,6 @@ async function harness(
     persistent: true,
     client: () => store,
     createRuntime: () => fake.runtime,
-    execution: Runtime.defaultRuntime,
     workspaceDirectory: () => workspace,
     isTemporary: (sessionKey) => sessionKey === temporary,
     now: () => NOW,
@@ -152,22 +151,24 @@ test("the capture exists only for main and durable private threads, runs each ph
   assert.ok(h.maintenance.captureFor(h.thread));
   assert.equal(h.maintenance.captureFor(h.temporary), undefined);
   assert.equal(h.maintenance.flushMarkerFor(h.temporary), undefined);
-  const empty = await main(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, []));
+  const empty = await Effect.runPromise(main(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [])));
   assert.equal(empty.outcome, MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE);
   assert.equal(h.prompts.length, 0, "a reset over nothing runs no turn");
-  const flushed = await main(
-    turnOf(MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED, [{ type: "message" }]),
+  const flushed = await Effect.runPromise(
+    main(turnOf(MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED, [{ type: "message" }])),
   );
   assert.equal(flushed.outcome, MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE);
-  const reset = await main(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [{ type: "message" }]));
+  const reset = await Effect.runPromise(
+    main(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [{ type: "message" }])),
+  );
   assert.equal(reset.outcome, MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE);
   assert.deepEqual(h.prompts, [memoryFlushPrompt(TODAY).system, resetCapturePrompt(TODAY).system]);
   // A capture whose model fails is reported as failed, never as done.
   const failing = await harness(t, () => undefined);
   const failingMain = failing.maintenance.captureFor(MAIN_SESSION_KEY);
   assert.ok(failingMain);
-  const failed = await failingMain(
-    turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [{ type: "message" }]),
+  const failed = await Effect.runPromise(
+    failingMain(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [{ type: "message" }])),
   );
   assert.equal(failed.outcome, MEMORY_HOUSEKEEPING_OUTCOME.FAILED);
   failing.close();

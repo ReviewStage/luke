@@ -265,15 +265,18 @@ export class Maintenance {
       });
       if (!due) return;
       const cycle = generation.compactionCount;
-      const captured = yield* Effect.promise(
-        async () =>
-          await capture({
-            scope: memory.scope,
-            phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
-            operation: { generationId: generation.id, compactionCount: cycle },
-            items: [...context.checkpoint().items],
-            signal,
-          }).catch((error: Error) => failedHousekeeping(error.message)),
+      const captured = yield* Effect.catchAllDefect(
+        capture({
+          scope: memory.scope,
+          phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
+          operation: { generationId: generation.id, compactionCount: cycle },
+          items: [...context.checkpoint().items],
+          signal,
+        }),
+        (defect) =>
+          Effect.succeed(
+            failedHousekeeping(defect instanceof Error ? defect.message : String(defect)),
+          ),
       );
       if (this.#revoked(turnContext)) return;
       if (!housekeepingCompleted(captured.outcome)) {

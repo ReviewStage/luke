@@ -221,7 +221,7 @@ export function createTurnToolExecutor(
       const memory = dependencies.memory;
       const tool = memory ? memoryToolNamed(memory.provider, call.name) : undefined;
       if (!memory || !tool) return Effect.succeed(rejection(REFUSAL_REASON.NO_MEMORY));
-      const run = Effect.promise(() => tool.execute(input, { ...execution, scope: memory.scope }));
+      const run = tool.execute(input, { ...execution, scope: memory.scope });
       if (tool.effect === TOOL_EFFECT.WRITE) return performJournaled(call, execution, run);
       if (execution.isRevoked()) return Effect.succeed(rejection(REFUSAL_REASON.RUN_REVOKED));
       return run;

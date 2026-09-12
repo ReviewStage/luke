@@ -961,8 +961,14 @@ whose value must be owned by exactly one party.
 
 What keeps this one door is what the brain is still asked for in promises:
 `BrainAgent`'s own public surface — an ask, a wake, a child's task, a stop —
-and the housekeeping turn the memory provider's `capture` seam asks for. The
-`ToolExecutor` seam left that list in P12-15c and the read tool's
+and the reset's own capture, which `packages/host/src/brain/wiring.ts` awaits
+because `resetConversation` answers the host a promise rather than because
+the capture is one. The `MemoryProvider` seam left that list in P12-16a:
+`recall`, `capture`, and a memory tool's `execute` are each an `Effect` the
+turn's own fiber runs, so the flush before a compaction is one effect inside
+another and the host's memory maintenance builds the housekeeping turn's
+effect rather than carrying it. The
+`ToolExecutor` seam left the list in P12-15c and the read tool's
 whole-transcript read went with it into the tool loop's own fiber; what
 carries a read here now is the prefetch, whose slots are a promise memo until
 P12-02's own row moves them. A defect is squashed back to the error that
@@ -993,8 +999,12 @@ call before it runs and settles it after is one effect around another, and
 the batch the runtime already held uninterruptible is still what keeps a
 dispatched effect from being parted from its result. What stays a promise
 inside the executor is what the host hands it: the turn's checkpoint, the
-whole-transcript read, the child and workspace access, and the memory
-provider's own tools.
+whole-transcript read, and the child and workspace access. The memory
+provider's tools left that list in P12-16a; what is still a promise beneath
+them is the notebook index's own `search` and `get`, which read through the
+store client's port face, and the recent daily notes, which the OpenClaw
+workspace port answers. Both are wrapped where the provider is built
+(`packages/memory/src/provider.ts`) rather than where a call is dispatched.
 
 The rest of this package's Promise faces turned out to stand on
 `BrainAgent`'s own public surface rather than on the vocabulary's: a wake, an

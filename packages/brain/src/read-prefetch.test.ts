@@ -129,17 +129,18 @@ const ANY_RECORD: EffectSchema.Schema<unknown, UnparsedWireValue> = EffectSchema
 function answeringMemory(searches: WireRecord[]): MemoryDefinition {
   const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
   const provider: MemoryProvider = {
-    recall: async () => ({ messages: [] }),
+    recall: () => Effect.succeed({ messages: [] }),
     tools: [
       {
         name: PREFETCH_READ_KIND.MEMORY,
         description: "search",
         inputSchema: ANY_RECORD,
         effect: TOOL_EFFECT.READ,
-        execute: async (input) => {
-          searches.push(input);
-          return { status: ACTION_RESULT_STATUS.ACCEPTED, results: [] };
-        },
+        execute: (input) =>
+          Effect.sync(() => {
+            searches.push(input);
+            return { status: ACTION_RESULT_STATUS.ACCEPTED, results: [] };
+          }),
       },
     ],
   };
