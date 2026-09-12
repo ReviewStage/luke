@@ -41,12 +41,26 @@ export function refuseForeignNavigation(window: BrowserWindow, rendererUrl: stri
 }
 
 /**
- * The macOS dressing Luke's windows share: on every Space, out of Mission
- * Control, no traffic lights, and stationary so Show Desktop cannot slide
- * them away. The always-on-top level stays each window's own — the panel
- * rides above windows, the takeover above the menu bar too.
+ * The two levels a panel window stands at: above every app window as the
+ * panel, above the menu bar too as the takeover.
  */
-export function dressMacWindow(window: BrowserWindow): void {
+export const WINDOW_LEVEL = {
+  PANEL: "pop-up-menu",
+  TAKEOVER: "screen-saver",
+} as const;
+type WindowLevel = (typeof WINDOW_LEVEL)[keyof typeof WINDOW_LEVEL];
+
+/**
+ * Puts a window at one of Luke's levels and, on macOS, dresses it there: on
+ * every Space, out of Mission Control, no traffic lights, and stationary so
+ * Show Desktop cannot slide it away. The level and the dressing are one
+ * call because AppKit puts the managed collection behavior back on a window
+ * whose level changes, and a window carrying managed beside stationary is
+ * tiled by Mission Control like an ordinary app window — so every change of
+ * level goes through here and ends with the stationary flag asserted again.
+ */
+export function dressMacWindow(window: BrowserWindow, level: WindowLevel): void {
+  window.setAlwaysOnTop(true, level);
   if (process.platform !== "darwin") return;
   window.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true,

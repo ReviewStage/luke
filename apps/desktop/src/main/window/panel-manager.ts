@@ -20,7 +20,12 @@ import {
 import { channels } from "#shared/bridge";
 import type { DisplayDiagnostic, WindowMode } from "#shared/messages/session";
 import { readMacScreenGeometry } from "../native/screen-geometry";
-import { dressMacWindow, hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
+import {
+  dressMacWindow,
+  hardenedWebPreferences,
+  refuseForeignNavigation,
+  WINDOW_LEVEL,
+} from "./hardened-window";
 
 export interface PanelDuck {
   setExchangeActive(active: boolean): void;
@@ -366,7 +371,7 @@ export class PanelManager {
     // flight that lands on the housing has to draw.
     window.setBounds(display.bounds);
     if (taking) {
-      window.setAlwaysOnTop(true, "screen-saver");
+      dressMacWindow(window, WINDOW_LEVEL.TAKEOVER);
       // The takeover is the whole surface, so it starts by intercepting
       // everything; what it hands back once it has landed is its own to say,
       // through the same pointer interception every panel keeps.
@@ -412,7 +417,7 @@ export class PanelManager {
     this.#takeover = undefined;
     const window = this.#windows.get(displayId);
     if (window && !window.isDestroyed()) {
-      window.setAlwaysOnTop(true, "pop-up-menu");
+      dressMacWindow(window, WINDOW_LEVEL.PANEL);
       window.setIgnoreMouseEvents(true, { forward: true });
       window.setFocusable(this.modeFor(displayId) === "expanded" && this.#runMode.takesFocus);
     }
@@ -562,8 +567,7 @@ export class PanelManager {
   }
 
   #configure(window: BrowserWindow): void {
-    window.setAlwaysOnTop(true, "pop-up-menu");
-    dressMacWindow(window);
+    dressMacWindow(window, WINDOW_LEVEL.PANEL);
   }
 
   /**
