@@ -2,14 +2,15 @@
  * The brain's one door onto the host's `ExecutionRuntime`. A turn, the
  * maintenance behind it, the tool loop, and the housekeeping run are each a
  * fiber end to end; what is still a promise is the surface `BrainAgent`
- * answers a host on — an ask, a child's task, a stop — and the read
- * prefetch's own plan, which runs while the developer is still speaking and
- * has no fiber of its own. Both of those are promises because the seams above
- * and below them are, so the carrying happens once, here, rather than in each
- * file that holds one. The wake face left that surface in P12-16c: `wake`,
- * `rosterLook`, and `releaseHeld` are effects the host's composers run, and
- * the capture behind them reads its transcript delta on the caller's own
- * fiber.
+ * answers a host on — an ask, a child's task, a stop — which is a promise
+ * because the seams above and below it are, so the carrying happens once,
+ * here, rather than in each file that holds one. The wake face left that
+ * surface in P12-16c: `wake`, `rosterLook`, and `releaseHeld` are effects the
+ * host's composers run, and the capture behind them reads its transcript
+ * delta on the caller's own fiber. The read prefetch left it in P12-16h: a
+ * slot is forked onto the same runtime through `forkOn` in `./fork.js` and is
+ * a fiber from the words that open it, so its plan, its reads, and its
+ * summary carry nothing.
  *
  * A defect is squashed back to the error that caused it, so a store, a
  * listener, or an engine that threw reaches the caller as the error it threw

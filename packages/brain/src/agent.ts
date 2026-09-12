@@ -244,6 +244,7 @@ export class BrainAgent {
   readonly #cancel: (timer: ScheduledTimer) => void;
   readonly #report: (message: string) => void;
   readonly #carry: Carry;
+  readonly #execution: ExecutionRuntime;
   readonly #generations = new GenerationHolder();
   readonly #lease: BrainStoreLease;
   readonly #ledger: BrainRequestLedger;
@@ -307,7 +308,8 @@ export class BrainAgent {
         globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
       });
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
-    this.#carry = carryOn(options.execution ?? Runtime.defaultRuntime);
+    this.#execution = options.execution ?? Runtime.defaultRuntime;
+    this.#carry = carryOn(this.#execution);
     this.#lease = options.store.lease();
     this.#ledger = new BrainRequestLedger({
       store: options.store,
@@ -362,13 +364,11 @@ export class BrainAgent {
             conversationId: options.conversationId,
             roster: options.roster,
             readTranscript: (identity, signal) =>
-              this.#carry(
-                readWholeTranscript(identity, {
-                  read: (session) => options.readTranscript(session),
-                  signal,
-                  maximumChars: PREFETCH_BOUNDS.TRANSCRIPT_CHARS,
-                }),
-              ),
+              readWholeTranscript(identity, {
+                read: (session) => options.readTranscript(session),
+                signal,
+                maximumChars: PREFETCH_BOUNDS.TRANSCRIPT_CHARS,
+              }),
             // The policy a spoken ask's turn would resolve, resolved the same
             // way ahead of it, so a denied read is never begun.
             policy: async () => {
@@ -384,11 +384,9 @@ export class BrainAgent {
                 options.child,
               );
             },
-            carry: this.#carry,
+            execution: this.#execution,
             ...(options.memory ? { memory: options.memory } : undefined),
             now: this.#now,
-            schedule: this.#schedule,
-            cancel: this.#cancel,
             createId: options.createRunId,
             report: this.#report,
             ...(options.prefetch.trace ? { trace: options.prefetch.trace } : undefined),
