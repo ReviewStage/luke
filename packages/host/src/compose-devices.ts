@@ -15,7 +15,7 @@ import {
 } from "@sidecar/hosted";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { text, type WireRecord } from "@sidecar/wire";
-import { Duration, Effect, Fiber, Schedule, type Scope } from "effect";
+import { Duration, Effect, Fiber, Runtime, Schedule, type Scope } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
 import type { Composer } from "./composer.js";
@@ -317,6 +317,10 @@ export const composeDevices = (
 ): Effect.Effect<DevicesComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> =>
   Effect.gen(function* () {
     const { account, calendars } = dependencies;
+    // The device row's presence is read as a promise by the cadence below, so
+    // the calendars composer's own effect is run on the host's runtime here
+    // until that report is an effect too.
+    const runtime = yield* Effect.runtime<never>();
     const kernel: HostKernel = yield* HostKernelTag;
     const machinePresence = yield* MachinePresenceReader;
     const { runMode, report, now } = kernel;
@@ -341,7 +345,7 @@ export const composeDevices = (
         const at = now();
         return {
           activeUntil: activeUntilFrom(machinePresence.read?.(), at),
-          quietUntil: await calendars.meetingQuietUntil(at),
+          quietUntil: await Runtime.runPromise(runtime)(calendars.meetingQuietUntil(at)),
         };
       },
       report,

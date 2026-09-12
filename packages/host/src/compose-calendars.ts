@@ -26,7 +26,7 @@ import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Fiber, Option, Runtime, Schedule, type Scope } from "effect";
+import { Duration, Effect, Either, Fiber, Option, Runtime, Schedule, type Scope } from "effect";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -75,7 +75,7 @@ export interface CalendarsComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
   observedCalendars: () => readonly ObservedAccountCalendars[];
-  announcementsQuietNow: (at: number) => Promise<boolean>;
+  announcementsQuietNow: (at: number) => Effect.Effect<boolean>;
   /**
    * When the meeting hold standing at `at` ends; `null` once the calendars
    * have been observed and none stands; `undefined` before the first
@@ -83,10 +83,10 @@ export interface CalendarsComposer extends Composer {
    * It is the fact the device row reports and nothing decided from it; the
    * manual pause has no end and is no instant.
    */
-  meetingQuietUntil: (at: number) => Promise<number | null | undefined>;
+  meetingQuietUntil: (at: number) => Effect.Effect<number | null | undefined>;
   /** Whether the calendar step of onboarding still stands over the panel. */
   gateOwed: () => boolean;
-  gateOfferable: () => Promise<boolean>;
+  gateOfferable: () => Effect.Effect<boolean>;
   /** Whether the spoken introduction is owed to the signed-in developer, as the onboarding record has it. */
   introductionOwed: () => boolean;
   /** The onboarding record as it stands, for the beats that read their own moments out of it. */
@@ -122,7 +122,11 @@ export const composeCalendars = (
     const runtime = yield* Effect.runtime<never>();
     const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
-    const settingsStore = settings.awaitedStore;
+    const settingsStore = settings.store;
+    // The two readers below still take a promise for the one setting each
+    // reads, so those two seams keep the face until each reader answers
+    // effects itself.
+    const awaitedSettings = settings.awaitedStore;
     const late = yield* lateService<CalendarsLinks>();
     const links = (): CalendarsLinks => {
       const standing = late.unsafePeek();
@@ -133,7 +137,7 @@ export const composeCalendars = (
     };
 
     const googleCalendar = new GoogleCalendarReader({
-      readAccounts: () => settingsStore.readCalendarAccounts(),
+      readAccounts: () => awaitedSettings.readCalendarAccounts(),
       runtime,
     });
     const googleCalendarConsent = googleCalendarSignIn({
@@ -159,7 +163,7 @@ export const composeCalendars = (
       return result.value;
     };
     const appleCalendar = new AppleCalendarReader({
-      readConnection: () => settingsStore.readAppleCalendarConnection(),
+      readConnection: () => awaitedSettings.readAppleCalendarConnection(),
       runHelper: runAppleCalendarHelper,
       now,
     });
@@ -219,51 +223,54 @@ export const composeCalendars = (
       kernel.emit(GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED, { owed });
     }
 
-    async function settleCalendarOnboardingIfConnected(): Promise<void> {
-      if (!calendarOnboardingOwed(onboardingState)) return;
-      const connected = await settingsStore.calendarConnectionStored();
-      if (!connected || !calendarOnboardingOwed(onboardingState)) return;
-      writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
-    }
+    const settleCalendarOnboardingIfConnected = (): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (!calendarOnboardingOwed(onboardingState)) return;
+        const connected = yield* Effect.orDie(settingsStore.calendarConnectionStored());
+        if (!connected || !calendarOnboardingOwed(onboardingState)) return;
+        writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
+      });
 
-    async function calendarGateOfferable(): Promise<boolean> {
-      if (!calendarOnboardingGateOwed()) return false;
-      const snapshot = await settingsStore.snapshot();
-      if (!calendarOnboardingGateOwed()) return false;
-      return snapshot.status.appleCalendarAvailable || snapshot.status.calendarSignInAvailable;
-    }
+    const calendarGateOfferable = (): Effect.Effect<boolean> =>
+      Effect.gen(function* () {
+        if (!calendarOnboardingGateOwed()) return false;
+        const snapshot = yield* Effect.orDie(settingsStore.snapshot());
+        if (!calendarOnboardingGateOwed()) return false;
+        return snapshot.status.appleCalendarAvailable || snapshot.status.calendarSignInAvailable;
+      });
 
-    async function announcementsQuietNow(at: number): Promise<boolean> {
-      const paused = !(await settingsStore.get(APP_SETTING_SCHEMA.announceSessions.field));
-      const inMeeting =
-        !paused &&
-        calendarMeetings !== undefined &&
-        activeMeetingEnd(calendarMeetings, at) !== undefined;
-      // The introduction owed is a hold of its own: nothing else of Luke's
-      // speaks over the greeting, and what was held is re-decided once the
-      // completion takes the hold down, like a meeting's end.
-      const holding =
-        paused ||
-        spokenIntroductionOwed() ||
-        (inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)));
-      if (holding !== announcementsHeld) {
-        announcementsHeld = holding;
-        kernel.emit(GATEWAY_EVENT.ANNOUNCEMENTS_HELD_CHANGED, { held: holding });
-      }
-      return holding;
-    }
+    const announcementsQuietNow = (at: number): Effect.Effect<boolean> =>
+      Effect.gen(function* () {
+        const paused = !(yield* Effect.orDie(
+          settingsStore.get(APP_SETTING_SCHEMA.announceSessions.field),
+        ));
+        const inMeeting =
+          !paused &&
+          calendarMeetings !== undefined &&
+          activeMeetingEnd(calendarMeetings, at) !== undefined;
+        // The introduction owed is a hold of its own: nothing else of Luke's
+        // speaks over the greeting, and what was held is re-decided once the
+        // completion takes the hold down, like a meeting's end.
+        const holding =
+          paused ||
+          spokenIntroductionOwed() ||
+          (inMeeting &&
+            (yield* Effect.orDie(settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field))));
+        if (holding !== announcementsHeld) {
+          announcementsHeld = holding;
+          kernel.emit(GATEWAY_EVENT.ANNOUNCEMENTS_HELD_CHANGED, { held: holding });
+        }
+        return holding;
+      });
 
-    async function meetingQuietUntil(at: number): Promise<number | null | undefined> {
-      return quietUntilFrom(
-        calendarMeetings,
-        await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field),
-        at,
+    const meetingQuietUntil = (at: number): Effect.Effect<number | null | undefined> =>
+      Effect.map(
+        Effect.orDie(settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)),
+        (quietDuringMeetings) => quietUntilFrom(calendarMeetings, quietDuringMeetings, at),
       );
-    }
 
-    async function refreshAnnouncementHold(): Promise<void> {
-      await announcementsQuietNow(now());
-    }
+    const refreshAnnouncementHold = (): Effect.Effect<void> =>
+      Effect.asVoid(announcementsQuietNow(now()));
 
     /**
      * The meeting-boundary wake is a one-shot fiber rather than a fixed
@@ -339,28 +346,33 @@ export const composeCalendars = (
       run: refreshCalendarMeetings,
     });
 
-    async function pollAppleCalendarAccess(): Promise<void> {
-      if (!(await settingsStore.readAppleCalendarConnection())) return;
-      let access: string | undefined;
-      try {
-        access = await appleCalendar.status();
-      } catch (error) {
-        if (!appleAccessProbeFailing) {
+    const pollAppleCalendarAccess = (): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (!(yield* Effect.orDie(settingsStore.readAppleCalendarConnection()))) return;
+        // The probe's own failure is read out of the failure channel rather
+        // than caught around the yield: a rejection lifted into a fiber is a
+        // defect no `try` here would see, and one failed probe must not end
+        // the poll the schedule is repeating.
+        const probed = yield* Effect.either(
+          Effect.tryPromise({ try: () => appleCalendar.status(), catch: (error) => error }),
+        );
+        const access = Either.getOrUndefined(probed);
+        if (Either.isLeft(probed) && !appleAccessProbeFailing) {
+          const error = probed.left;
           report(
             `Calendar access probe failed: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
-      }
-      appleAccessProbeFailing = access === undefined;
-      if (access === undefined) return;
-      const drawnRevoked =
-        observedCalendars.find((held) => held.accountId === APPLE_CALENDAR_ID)?.revoked === true;
-      const probeRevoked = access !== APPLE_CALENDAR_ACCESS.FULL;
-      if (probeRevoked !== drawnRevoked) {
-        report(`Calendar access now reads ${access}; running a pass.`);
-        void loop.refresh();
-      }
-    }
+        appleAccessProbeFailing = access === undefined;
+        if (access === undefined) return;
+        const drawnRevoked =
+          observedCalendars.find((held) => held.accountId === APPLE_CALENDAR_ID)?.revoked === true;
+        const probeRevoked = access !== APPLE_CALENDAR_ACCESS.FULL;
+        if (probeRevoked !== drawnRevoked) {
+          report(`Calendar access now reads ${access}; running a pass.`);
+          void loop.refresh();
+        }
+      });
 
     /**
      * The two remaining timers are fixed-interval `Schedule`s forked into the
@@ -383,7 +395,7 @@ export const composeCalendars = (
           appleCalendar.forget();
           links().dropBriefings();
           kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: [] });
-          void refreshAnnouncementHold();
+          Runtime.runFork(runtime)(refreshAnnouncementHold());
         }),
       );
       yield* Effect.forkScoped(
@@ -395,7 +407,7 @@ export const composeCalendars = (
       if (process.platform === "darwin" && runMode.observesProviders) {
         yield* Effect.forkScoped(
           Effect.schedule(
-            Effect.promise(() => pollAppleCalendarAccess()),
+            pollAppleCalendarAccess(),
             Schedule.spaced(Duration.millis(APPLE_ACCESS_POLL_INTERVAL_MS)),
           ),
         );
@@ -422,9 +434,9 @@ export const composeCalendars = (
                     "Google did not answer with the account's calendars.",
                   );
                 }
-                return yield* Effect.promise(() =>
-                  settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [primaryId]),
-                );
+                return yield* settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [
+                  primaryId,
+                ]);
               }),
             (saved) =>
               Effect.sync(() => {
@@ -454,7 +466,7 @@ export const composeCalendars = (
         if (!isWireString(accountId)) return invalid("accountId must be a string");
         return Effect.map(
           settings.settingsWrite(
-            () => Effect.promise(() => settingsStore.removeCalendarAccount(accountId)),
+            () => settingsStore.removeCalendarAccount(accountId),
             (saved) =>
               Effect.sync(() => {
                 if (saved.reason) return;
@@ -491,7 +503,7 @@ export const composeCalendars = (
                   if (appleConnectGeneration !== generation) {
                     return {
                       status: ACTION_RESULT_STATUS.ACCEPTED,
-                      settings: yield* Effect.promise(() => settingsStore.snapshot()),
+                      settings: yield* settingsStore.snapshot(),
                     };
                   }
                   if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL) {
@@ -501,9 +513,7 @@ export const composeCalendars = (
                   }
                   const seed = outcome.defaultCalendarId ?? outcome.calendars[0]?.id;
                   stored = true;
-                  return yield* Effect.promise(() =>
-                    settingsStore.connectAppleCalendar(seed ? [seed] : []),
-                  );
+                  return yield* settingsStore.connectAppleCalendar(seed ? [seed] : []);
                 }),
               (saved) =>
                 Effect.sync(() => {
@@ -524,7 +534,7 @@ export const composeCalendars = (
       [GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE]: (params) =>
         Effect.map(
           settings.settingsWrite(
-            () => Effect.promise(() => settingsStore.disconnectAppleCalendar()),
+            () => settingsStore.disconnectAppleCalendar(),
             (saved) =>
               Effect.sync(() => {
                 if (saved.reason) return;
@@ -576,10 +586,7 @@ export const composeCalendars = (
             );
           }
           const result = yield* settings.settingsWrite(
-            () =>
-              Effect.promise(() =>
-                settingsStore.setCalendarSelected(accountId, calendarId, selected),
-              ),
+            () => settingsStore.setCalendarSelected(accountId, calendarId, selected),
             (saved) =>
               Effect.sync(() => {
                 if (saved.reason) return;
@@ -648,7 +655,7 @@ export const composeCalendars = (
         if (onboardingState?.calendarOnboardingRequiredAt !== undefined) return;
         const at = new Date(now()).toISOString();
         writeOnboardingState({ introductionRequiredAt: at, calendarOnboardingRequiredAt: at });
-        void settleCalendarOnboardingIfConnected();
+        Runtime.runFork(runtime)(settleCalendarOnboardingIfConnected());
       },
       armObservation: observation.arm,
       disarmObservation: observation.disarm,
@@ -660,7 +667,7 @@ export const composeCalendars = (
       // is its start alone.
       lifetime: Effect.sync(() => {
         onboardingState = onboarding.read();
-        void settleCalendarOnboardingIfConnected();
+        Runtime.runFork(runtime)(settleCalendarOnboardingIfConnected());
       }),
     };
   });

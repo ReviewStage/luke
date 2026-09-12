@@ -132,7 +132,8 @@ export const composeLive = (
     // The service's own idle, settle, and finalize timers, over the Effect
     // runtime this composition runs on rather than Node's own `setTimeout`, so
     // a test driving a `TestClock` drives them too.
-    const timers = liveSessionTimersOnRuntime(yield* Effect.runtime<never>());
+    const runtime = yield* Effect.runtime<never>();
+    const timers = liveSessionTimersOnRuntime(runtime);
 
     function markFirstAnnouncementSpoken(): void {
       const onboardingState = calendars.onboarding();
@@ -154,7 +155,10 @@ export const composeLive = (
       record: liveRecord,
       conversationEntries: () => brain.store.thread().entries(),
       roster: () => voiceRoster(observation.rosterForClients()),
-      quietNow: () => calendars.announcementsQuietNow(now()),
+      // `LiveSessionService` asks for the hold as a promise, so the calendars
+      // composer's effect is run on the host's own runtime here until that
+      // service answers effects itself.
+      quietNow: () => Runtime.runPromise(runtime)(calendars.announcementsQuietNow(now())),
       releaseHeldBriefings: (held) => links().releaseHeld(held),
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
       now: timers.now,
@@ -216,7 +220,7 @@ export const composeLive = (
       // The greeting comes first and speaks in its own session; the beats are
       // asked for again by the completion that takes the introduction down.
       if (calendars.introductionOwed()) return;
-      if (await calendars.gateOfferable()) {
+      if (await Runtime.runPromise(runtime)(calendars.gateOfferable())) {
         service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
         return;
       }
