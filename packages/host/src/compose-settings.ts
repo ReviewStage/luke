@@ -66,6 +66,8 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
  */
 interface SettingsLinks {
   refreshAccount: () => Effect.Effect<void, unknown>;
+  /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
+  cloudKeyHeld: () => void;
   applyVoiceCredential: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => void;
   reconcileSpeech: () => void;
@@ -430,6 +432,9 @@ export const composeSettings = (): Effect.Effect<
             }
             if (!(yield* vaultStillCurrent(era.generation, era.accountKey))) return;
             yield* emitSettings();
+            // A developer who already had a Conductor key in the vault has
+            // answered onboarding's key step before it was ever drawn.
+            if (vaultKeys.has(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR)) links().cloudKeyHeld();
           }),
         );
       });
@@ -501,6 +506,7 @@ export const composeSettings = (): Effect.Effect<
             return yield* refusedSettings("The account signed out while the key was being stored.");
           }
           vaultKeys.add(providerId);
+          links().cloudKeyHeld();
           yield* Effect.orDie(store.setApiKey(providerId, undefined));
         } else {
           const deleted = yield* Effect.promise(() => hostedVault.deleteKey(providerId));

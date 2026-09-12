@@ -156,6 +156,18 @@
   flex-shrink: 0;
 }
 
+/* The key step speaks for itself, since no beat announces it: one line
+   asking, one small line saying where the key lives, both at the settings
+   pages' scale like the rest of the gate. */
+.conductor-key-gate p {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.conductor-key-gate small {
+  margin-top: 6px;
+}
+
 /* Each source's own mark, at the size the account marks keep beside a label. */
 .calendar-gate .provider-mark {
   width: 14px;

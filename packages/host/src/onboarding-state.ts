@@ -24,6 +24,12 @@ export interface OnboardingState {
   arrivalSpokenAt?: string;
   /** When the first announcement after that sign-in was spoken. */
   arrivalFirstAnnouncementAt?: string;
+  /** When the install's first observed sign-in put the Conductor key gate up, ahead of the calendar's. */
+  conductorKeyOnboardingRequiredAt?: string;
+  /** When the key gate stopped standing: the vault came to hold a Conductor key. */
+  conductorKeyOnboardingSettledAt?: string;
+  /** When the developer declined the key step instead; the gate stands down the same way. */
+  conductorKeyOnboardingSkippedAt?: string;
   /** When the install's first observed sign-in put the calendar gate up. */
   calendarOnboardingRequiredAt?: string;
   /**
@@ -51,6 +57,9 @@ function onboardingStateFrom(record: WireRecord): OnboardingState | undefined {
   const arrivalSignedInAt = text(record.arrivalSignedInAt);
   const arrivalSpokenAt = text(record.arrivalSpokenAt);
   const arrivalFirstAnnouncementAt = text(record.arrivalFirstAnnouncementAt);
+  const conductorKeyOnboardingRequiredAt = text(record.conductorKeyOnboardingRequiredAt);
+  const conductorKeyOnboardingSettledAt = text(record.conductorKeyOnboardingSettledAt);
+  const conductorKeyOnboardingSkippedAt = text(record.conductorKeyOnboardingSkippedAt);
   const calendarOnboardingRequiredAt = text(record.calendarOnboardingRequiredAt);
   const calendarOnboardingSettledAt = text(record.calendarOnboardingSettledAt);
   const calendarOnboardingSkippedAt = text(record.calendarOnboardingSkippedAt);
@@ -60,6 +69,15 @@ function onboardingStateFrom(record: WireRecord): OnboardingState | undefined {
     ...(arrivalSignedInAt !== undefined ? { arrivalSignedInAt } : undefined),
     ...(arrivalSpokenAt !== undefined ? { arrivalSpokenAt } : undefined),
     ...(arrivalFirstAnnouncementAt !== undefined ? { arrivalFirstAnnouncementAt } : undefined),
+    ...(conductorKeyOnboardingRequiredAt !== undefined
+      ? { conductorKeyOnboardingRequiredAt }
+      : undefined),
+    ...(conductorKeyOnboardingSettledAt !== undefined
+      ? { conductorKeyOnboardingSettledAt }
+      : undefined),
+    ...(conductorKeyOnboardingSkippedAt !== undefined
+      ? { conductorKeyOnboardingSkippedAt }
+      : undefined),
     ...(calendarOnboardingRequiredAt !== undefined ? { calendarOnboardingRequiredAt } : undefined),
     ...(calendarOnboardingSettledAt !== undefined ? { calendarOnboardingSettledAt } : undefined),
     ...(calendarOnboardingSkippedAt !== undefined ? { calendarOnboardingSkippedAt } : undefined),

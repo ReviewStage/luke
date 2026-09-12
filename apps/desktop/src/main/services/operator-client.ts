@@ -144,7 +144,10 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
       state.update({ announcements: { held } });
     }),
     gateway.host.onCalendarOnboardingChanged((calendarOwed) => {
-      state.update({ onboarding: { calendarOwed } });
+      state.update({ onboarding: { ...state.snapshot().onboarding, calendarOwed } });
+    }),
+    gateway.host.onConductorKeyOnboardingChanged((conductorKeyOwed) => {
+      state.update({ onboarding: { ...state.snapshot().onboarding, conductorKeyOwed } });
     }),
     // The live session's phase is written down for the panels and handed to
     // the voice window as the event it is: a repeated wanted is a new ask,

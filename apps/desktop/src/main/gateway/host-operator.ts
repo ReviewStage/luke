@@ -75,6 +75,8 @@ export interface HostBootstrap {
   calendarOnboardingOwed: boolean;
   /** Whether the spoken introduction is owed to the signed-in developer, as the host's onboarding record has it. */
   introductionOwed: boolean;
+  /** Whether the Conductor key step of onboarding stands, ahead of the calendar's and of any row. */
+  conductorKeyOnboardingOwed: boolean;
   sessionReplay: { permitted: boolean; accountId?: string };
   voiceAvailable: boolean;
   agentTraceEnabled: boolean;
@@ -168,10 +170,17 @@ export interface HostOperator {
     rating: MessageRating,
   ): Promise<ConversationRateMessageResult>;
   onboardingState(): Promise<
-    { calendarOnboardingOwed: boolean; introductionOwed: boolean } | undefined
+    | {
+        calendarOnboardingOwed: boolean;
+        introductionOwed: boolean;
+        conductorKeyOnboardingOwed: boolean;
+      }
+    | undefined
   >;
   skipCalendarOnboarding(): Promise<void>;
   completeCalendarOnboarding(): Promise<void>;
+  /** The developer declined the Conductor key step; the Connections row stays the way to connect later. */
+  skipConductorKeyOnboarding(): Promise<void>;
   /** The introduction given to its end: the host writes the completion, drops its hold, and asks for the beats that waited. */
   completeIntroduction(): Promise<void>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
@@ -189,6 +198,7 @@ export interface HostOperator {
   onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onIntroductionChanged(listener: (owed: boolean) => void): () => void;
+  onConductorKeyOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
 }
@@ -451,6 +461,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? {
             calendarOnboardingOwed: answer.calendarOnboardingOwed === true,
             introductionOwed: answer.introductionOwed === true,
+            conductorKeyOnboardingOwed: answer.conductorKeyOnboardingOwed === true,
           }
         : undefined;
     },
@@ -458,6 +469,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     completeCalendarOnboarding: () =>
       fire(client.call(GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR)),
     completeIntroduction: () => fire(client.call(GATEWAY_METHOD.ONBOARDING_COMPLETE_INTRODUCTION)),
+    skipConductorKeyOnboarding: () =>
+      fire(client.call(GATEWAY_METHOD.ONBOARDING_SKIP_CONDUCTOR_KEY)),
     onSettingsChanged: (listener) =>
       on(
         GATEWAY_EVENT.SETTINGS_CHANGED,
@@ -528,6 +541,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onIntroductionChanged: (listener) =>
       on(
         GATEWAY_EVENT.INTRODUCTION_CHANGED,
+        (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
+        listener,
+      ),
+    onConductorKeyOnboardingChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CONDUCTOR_KEY_ONBOARDING_CHANGED,
         (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
         listener,
       ),

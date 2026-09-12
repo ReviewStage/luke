@@ -95,6 +95,8 @@ const GATEWAY_METHODS = {
   ONBOARDING_COMPLETE_CALENDAR: { name: "onboarding.completeCalendar", mutates: true },
   /** The spoken introduction was given to its end; the host records the moment and stands the introduction down for good. */
   ONBOARDING_COMPLETE_INTRODUCTION: { name: "onboarding.completeIntroduction", mutates: true },
+  /** The developer declined the Conductor key step of onboarding; the settings row stays the way to connect later. */
+  ONBOARDING_SKIP_CONDUCTOR_KEY: { name: "onboarding.skipConductorKey", mutates: true },
 } as const satisfies Record<string, MethodEntry>;
 
 export const GATEWAY_METHOD =
@@ -576,6 +578,8 @@ export const GATEWAY_EVENT = {
   CALENDAR_ONBOARDING_CHANGED: "calendarOnboarding.changed",
   /** Whether the spoken introduction is owed moved: the first sign-in this install observed put it up, or its completion took it down. */
   INTRODUCTION_CHANGED: "introduction.changed",
+  /** Whether the Conductor key step of onboarding stands moved: the first sign-in put it up, a key in the vault or the skip took it down. */
+  CONDUCTOR_KEY_ONBOARDING_CHANGED: "conductorKeyOnboarding.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
 } as const;

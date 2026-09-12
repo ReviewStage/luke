@@ -5,7 +5,11 @@ import {
 } from "@sidecar/analytics";
 import { brainRequestPending } from "@sidecar/brain/requests-wire";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { CREDENTIAL_PROVIDER_LIST, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDER_LIST,
+  CREDENTIAL_SOURCE,
+} from "@sidecar/credentials/vocabulary";
 import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
@@ -31,6 +35,7 @@ import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
 import { useAppActionCarrier } from "./app-action-carrier";
 import type { CalendarGateControl } from "./calendar-gate";
+import type { ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
 import { FeedbackSlot } from "./feedback-slot";
 import { LukeErrand } from "./luke-errand";
@@ -143,6 +148,7 @@ export function App(): React.JSX.Element {
   const calendars = state?.calendars ?? EMPTY_CALENDARS;
   const announcementsHeld = state?.announcements.held === true;
   const calendarOnboardingOwed = state?.onboarding.calendarOwed === true;
+  const conductorKeyOnboardingOwed = state?.onboarding.conductorKeyOwed === true;
   const outputAudio = state?.audio.outputAudio;
   const display = state?.window.display;
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
@@ -882,6 +888,25 @@ export function App(): React.JSX.Element {
   // own calendar block to review, until Done or the skip answers the step and
   // the record's broadcast takes it down.
   const gateSettings = settings;
+  // Onboarding's key step, drawn while the host says it stands: Connect is
+  // the Connections row's own entry, which opens the key page and the slot,
+  // and the gate falls on the host's word once the vault holds the key. The
+  // empty desk offers the same press once the step is behind us.
+  const providerConnect = {
+    connected:
+      gateSettings.credentialSources[CREDENTIAL_PROVIDER_ID.CONDUCTOR] !== CREDENTIAL_SOURCE.NONE,
+    onConnect: () => connections.credentials.connect(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
+  };
+  const conductorKeyGate: ConductorKeyGateControl | undefined = conductorKeyOnboardingOwed
+    ? {
+        connecting: connections.credentialEntry !== undefined,
+        onConnect: providerConnect.onConnect,
+        onSkip: () => {
+          changeTab(PANEL_TAB.SESSIONS);
+          tell(ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY);
+        },
+      }
+    : undefined;
   const calendarGate: CalendarGateControl | undefined =
     calendarOnboardingOwed &&
     (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
@@ -980,6 +1005,8 @@ export function App(): React.JSX.Element {
               ? { signInFailure: connections.signInFailure }
               : undefined)}
             {...(calendarGate ? { calendarGate } : undefined)}
+            {...(conductorKeyGate ? { conductorKeyGate } : undefined)}
+            providerConnect={providerConnect}
             list={sessions.list}
             sessionsSettled={sessionsSettled}
             view={sessions.view}

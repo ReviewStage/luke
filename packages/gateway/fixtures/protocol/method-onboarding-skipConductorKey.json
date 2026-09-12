@@ -1,0 +1,32 @@
+{
+  "request": {
+    "protocolVersion": 1,
+    "id": "request-onboarding-skipConductorKey",
+    "method": "onboarding.skipConductorKey",
+    "params": {
+      "case": "onboarding.skipConductorKey",
+      "note": "synthetic",
+      "detail": {
+        "flag": true,
+        "count": 2,
+        "absent": null,
+        "list": [
+          "first",
+          "second"
+        ]
+      }
+    },
+    "idempotencyKey": "key-onboarding-skipConductorKey"
+  },
+  "response": {
+    "id": "request-onboarding-skipConductorKey",
+    "ok": true,
+    "result": {
+      "answered": "onboarding.skipConductorKey"
+    },
+    "revision": {
+      "configuration": 7,
+      "sequence": 0
+    }
+  }
+}

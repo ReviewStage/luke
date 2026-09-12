@@ -13,6 +13,7 @@ import type {
 } from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
+import { ConductorKeyGate, type ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
@@ -170,6 +171,16 @@ export interface PanelBodyProps {
    * Assembled by the app, which knows all three.
    */
   calendarGate?: CalendarGateControl;
+  /**
+   * The Conductor key step of onboarding, present exactly while it stands:
+   * signed in and still owed. Ahead of the calendar step and of any row.
+   */
+  conductorKeyGate?: ConductorKeyGateControl;
+  /**
+   * Whether any cloud agent provider is connected, and the Connect press for
+   * the empty desk when none is: the same entry the Connections row runs.
+   */
+  providerConnect: { connected: boolean; onConnect: () => void };
   list: ArrangedSessions;
   /**
    * Whether the roster has been read at all yet. Until it has, an empty list
@@ -245,6 +256,8 @@ export function PanelBody({
   onBeginSignIn,
   signInFailure,
   calendarGate,
+  conductorKeyGate,
+  providerConnect,
   list,
   sessionsSettled,
   view,
@@ -300,7 +313,17 @@ export function PanelBody({
       </div>
     );
   }
-  // Onboarding's second gate, past the account's: the roster and the settings
+  // Onboarding's key step, past the account's gate and the spoken introduction:
+  // the roster waits behind it until the vault holds a Conductor key or the
+  // skip declines, so no desk is drawn before it can hold a real session.
+  if (conductorKeyGate) {
+    return (
+      <div className="body">
+        <ConductorKeyGate control={conductorKeyGate} onQuit={settings.onQuit} />
+      </div>
+    );
+  }
+  // Onboarding's calendar gate, past the key step: the roster and the settings
   // both wait behind it until the step is answered — Done over a connected
   // calendar, so Luke can tell a meeting from a moment to speak into, or the
   // skip declining it for good. A connection moves the gate to its review
@@ -423,7 +446,10 @@ export function PanelBody({
                   onWiden={() => onViewChange(widenedView(view))}
                 />
               ) : (
-                <EmptyState />
+                <EmptyState
+                  providerConnected={providerConnect.connected}
+                  onConnectProvider={providerConnect.onConnect}
+                />
               )
             ) : (
               // Runs are read over the drawn order, leaving rows and all: a

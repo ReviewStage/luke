@@ -20,6 +20,9 @@ async function fileIn(t: TestContext) {
 const MOMENTS = {
   introductionRequiredAt: SIGNED_IN_AT,
   introductionCompletedAt: SIGNED_IN_AT,
+  conductorKeyOnboardingRequiredAt: SIGNED_IN_AT,
+  conductorKeyOnboardingSettledAt: LATER,
+  conductorKeyOnboardingSkippedAt: LATER,
   arrivalSignedInAt: SIGNED_IN_AT,
   arrivalSpokenAt: LATER,
   arrivalFirstAnnouncementAt: LATER,
