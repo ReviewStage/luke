@@ -754,11 +754,13 @@ test("a queued turn keeps the origin it was queued under through running to sett
   const queued = await database.run(
     writer.enqueueTurn(target, {
       turnId: stream.turnId,
+      eveTurnId: "turn_3",
       origin: TURN_ORIGIN.SPOKEN,
       model: "gpt-fixture",
     }),
   );
   assert.deepEqual(queued, { ok: true, turnId: stream.turnId, effect: STORE_WRITE_EFFECT.WRITTEN });
+  assert.equal((await storedTurn(stream.turnId))?.eveTurnId, "turn_3");
   const twice = await database.run(
     writer.enqueueTurn(target, {
       turnId: stream.turnId,
@@ -789,6 +791,7 @@ test("a queued turn keeps the origin it was queued under through running to sett
   assert.equal(minted.ok, true);
   if (!minted.ok) return;
   assert.equal((await storedTurn(minted.turnId))?.origin, TURN_ORIGIN.ROSTER_DIFF);
+  assert.equal((await storedTurn(minted.turnId))?.eveTurnId, null);
 });
 
 test("a sequence already taken under the counter is the retry signal: the write lands on the next free position and the counter is re-aligned", async () => {

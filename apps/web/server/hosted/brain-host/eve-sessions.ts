@@ -6,7 +6,8 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 /**
  * The host's own calls into eve's HTTP API, made from a web function on the
  * developer's behalf: open the conversation's session with a first message,
- * follow up on the session it runs in, and cancel the turn under way. eve's
+ * follow up on the session it runs in, and cancel one turn by eve's own id
+ * for it. eve's
  * `Client` would make the same three requests, but its session handle keeps
  * the delivery id an accepted follow-up answers to itself, and that id is
  * what ties an ask to the turn eve later starts, so the requests are made
@@ -128,14 +129,19 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   open(message: EveMessage<Turn>): Promise<EveOpened>;
   /** Hands a message to the session the conversation runs in; eve's answer names the delivery its turn's events will carry. */
   send(sessionId: string, message: EveMessage<Turn>): Promise<EveSent>;
-  /** Asks eve to cancel the session's turn under way, or exactly the turn named where the caller knows eve's id for it. */
-  cancel(sessionId: string, eveTurnId?: string): Promise<EveCancelled>;
+  /**
+   * Asks eve to cancel exactly the turn named, by eve's own id for it. A turn
+   * no longer under way answers `no_active_turn` and the session's next turn
+   * is left running; there is no form of the call that names the session's
+   * turn under way, because between a caller's read and eve's answer that
+   * turn can be the one queued after the one the caller meant.
+   */
+  cancel(sessionId: string, eveTurnId: string): Promise<EveCancelled>;
 }
 
-/** What the host posts to eve: the message a turn opens with, or nothing for a cancel. */
+/** What the host posts to eve: the message a turn opens with, or the turn a cancel is scoped to. */
 interface EvePostBody {
   readonly message?: string;
-  /** eve's own id for the turn a cancel is scoped to; absent, the cancel is the session's turn under way. */
   readonly turnId?: string;
 }
 
@@ -250,11 +256,7 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
       }
     },
     async cancel(sessionId, eveTurnId) {
-      const response = await post(
-        `${sessionPath(sessionId)}/cancel`,
-        {},
-        eveTurnId === undefined ? {} : { turnId: eveTurnId },
-      );
+      const response = await post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId });
       const answer = readEither(cancelAnswer)(await bodyOf(response));
       if (!response.ok || Either.isLeft(answer)) {
         return { outcome: EVE_CANCEL_OUTCOME.FAILED, status: response.status };

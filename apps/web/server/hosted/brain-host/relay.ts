@@ -372,13 +372,17 @@ export class StreamRelay {
     const { origin, trigger } = BRAIN_HOST_TURN_KIND[kind];
     // The turn row is queued ahead of its start with what it will run under,
     // which is how the row comes to name eve's resolved model; the start
-    // then only moves it to running. A start the record does not come to
-    // hold, refused or thrown, keeps nothing in relay state, so the start eve
-    // emits again queues the row again rather than finding a turn under way.
+    // then only moves it to running. eve's own turn id rides on the row from
+    // here, because the store's id is a digest of it that nothing reverses,
+    // and a Stop on the row is scoped to eve's turn by reading it back. A
+    // start the record does not come to hold, refused or thrown, keeps
+    // nothing in relay state, so the start eve emits again queues the row
+    // again rather than finding a turn under way.
     try {
       const turnId = hostTurnId(standing.sessionId, eveTurnId);
       const queued = await this.#seams.writer.enqueueTurn(standing.target, {
         turnId,
+        eveTurnId,
         origin: TURN_ORIGIN_OF_HOST_TURN[kind],
         ...(standing.model !== undefined ? { model: standing.model } : undefined),
         ...(standing.promptHash !== undefined ? { promptHash: standing.promptHash } : undefined),

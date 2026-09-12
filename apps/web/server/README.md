@@ -1064,8 +1064,11 @@ consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
 turn's start where nothing queued it) through running to settled, cancelled,
-or failed, carrying the origin it was queued under, its usage split four ways,
-its response ids where the runtime has them, and its failure word. Each user
+or failed, carrying the origin it was queued under, eve's own id for the turn
+where the relay queued it (the store's id is a digest of it that nothing
+reverses, and a Stop on the row is scoped to eve's turn by reading it back),
+its usage split four ways, its response ids where the runtime has them, and
+its failure word. Each user
 message the turn opened with lands as its own row by the message's id. The
 turn's answer is one assistant message keyed by the turn's id, and while the
 turn runs that row is its journal: a tool call is written in `input-available`

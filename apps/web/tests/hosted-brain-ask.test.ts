@@ -35,6 +35,7 @@ import {
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { eveOrigin } from "../server/hosted/brain-host/eve-origin";
 import {
+  EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
   type EveMessage,
@@ -167,7 +168,7 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
 type EveCall =
   | { readonly kind: "open"; readonly message: EveMessage }
   | { readonly kind: "send"; readonly sessionId: string; readonly message: EveMessage }
-  | { readonly kind: "cancel"; readonly sessionId: string };
+  | { readonly kind: "cancel"; readonly sessionId: string; readonly eveTurnId: string | undefined };
 
 interface FakeEve extends EveSessions {
   readonly calls: EveCall[];
@@ -176,6 +177,12 @@ interface FakeEve extends EveSessions {
   /** Sessions eve has retired, so a follow-up to one reads as such. */
   readonly retired: Set<string>;
   failNext: number | undefined;
+  /** eve's turn under way, by eve's own id; a cancel naming it, or naming none, ends it. */
+  activeTurn: string | undefined;
+  /** The turns eve's cancels actually ended, in order. */
+  readonly cancelledTurns: string[];
+  /** What the world does while a cancel is on the wire, between the route's read and eve's answer. */
+  beforeCancel: () => Promise<void>;
 }
 
 function fakeEve(): FakeEve {
@@ -184,6 +191,9 @@ function fakeEve(): FakeEve {
     bearers: [],
     retired: new Set(),
     failNext: undefined,
+    activeTurn: undefined,
+    cancelledTurns: [],
+    beforeCancel: async () => {},
     async open(message) {
       eve.calls.push({ kind: "open", message });
       if (eve.failNext !== undefined) {
@@ -202,9 +212,20 @@ function fakeEve(): FakeEve {
         deliveryId: `delivery-${eve.calls.length}`,
       };
     },
-    async cancel(sessionId) {
-      eve.calls.push({ kind: "cancel", sessionId });
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED };
+    // eve's own cancel, as its route documents it: a cancel naming a turn ends that turn only
+    // where it is the one under way, and a cancel naming none ends whatever turn is under way.
+    async cancel(sessionId, eveTurnId?: string) {
+      eve.calls.push({ kind: "cancel", sessionId, eveTurnId });
+      await eve.beforeCancel();
+      if (
+        eve.activeTurn === undefined ||
+        (eveTurnId !== undefined && eveTurnId !== eve.activeTurn)
+      ) {
+        return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
+      }
+      eve.cancelledTurns.push(eve.activeTurn);
+      eve.activeTurn = undefined;
+      return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
     },
   };
   return eve;
@@ -329,6 +350,8 @@ interface TurnOverrides {
   readonly status?: TurnStatus;
   readonly settledAt?: Date;
   readonly cancelRequestedAt?: Date;
+  /** eve's own id for the turn, as the relay writes it at eve's start; absent, the row is the opener's inbox or one from before the column. */
+  readonly eveTurnId?: string;
 }
 
 async function turnRow(
@@ -341,11 +364,12 @@ async function turnRow(
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql`
         insert into turns (
-          user_id, conversation_id, origin, status,
+          user_id, conversation_id, origin, status, eve_turn_id,
           queued_at, started_at, settled_at, cancel_requested_at
         )
         values (
           ${userId}, ${conversationId}, ${TURN_ORIGIN.TYPED}, ${overrides.status ?? TURN_STATUS.RUNNING},
+          ${overrides.eveTurnId ?? null},
           ${new Date(NOW)}, ${new Date(NOW)}, ${overrides.settledAt ?? null}, ${overrides.cancelRequestedAt ?? null}
         )
         returning id
@@ -795,19 +819,21 @@ function cancelRequest(userId: string, id: string | undefined): Request {
   return turnRequest(userId, id, {}, "POST");
 }
 
-test("a Stop on a running turn is eve's cancel of the conversation's recorded session and a stamp on the row; on an ask still waiting it is a stamp on the record and reaches eve not at all", async () => {
+test("a Stop on a running turn is eve's cancel of that turn in the conversation's recorded session and a stamp on the row; on an ask still waiting it is a stamp on the record and reaches eve not at all", async () => {
   const userId = await database.createUser();
   const h = harness();
   const sessionId = mintSession();
   const conversationId = await conversation(userId, { runtimeSessionId: sessionId });
-  const turnId = await turnRow(userId, conversationId);
+  const turnId = await turnRow(userId, conversationId, { eveTurnId: "turn_1" });
+  h.eve.activeTurn = "turn_1";
   const cancelled = await database.run(
     handleBrainTurnCancel(h.options(cancelRequest(userId, turnId), userId)),
   );
   assert.equal(cancelled.status, 200);
   const answer = parse(hostedBrainTurnAnswerSchema, await body(cancelled));
   assert.equal(answer?.cancelRequestedAt, NOW);
-  assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId }]);
+  assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId, eveTurnId: "turn_1" }]);
+  assert.deepEqual(h.eve.cancelledTurns, ["turn_1"]);
   const [row] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
 
@@ -840,7 +866,7 @@ test("the in-process Stop answers what the cancel route answers: for a running t
   const other = await database.createUser();
   const h = harness();
   const recorded = await conversation(owner, { runtimeSessionId: mintSession() });
-  const running = await turnRow(owner, recorded);
+  const running = await turnRow(owner, recorded, { eveTurnId: "turn_1" });
   const unrecordedOwner = await database.createUser();
   const unrecorded = await conversation(unrecordedOwner);
   const orphan = await turnRow(unrecordedOwner, unrecorded);
@@ -899,6 +925,64 @@ test("the in-process Stop answers what the cancel route answers: for a running t
   });
   const [row] = await database.run(database.store.turns.named(unrecordedOwner, [orphan]));
   assert.equal(row?.cancelRequestedAt, null);
+});
+
+test("a Stop cancels only the turn it was aimed at: the intended turn ending while the cancel is on the wire leaves the next turn running, and the stamp lands on the intended row alone", async () => {
+  const userId = await database.createUser();
+  const h = harness();
+  const sessionId = mintSession();
+  const conversationId = await conversation(userId, { runtimeSessionId: sessionId });
+  const intended = await turnRow(userId, conversationId, { eveTurnId: "turn_1" });
+  h.eve.activeTurn = "turn_1";
+  let next: string | undefined;
+  h.eve.beforeCancel = async () => {
+    await settleTurn(intended, new Date(NOW));
+    next = await turnRow(userId, conversationId, { eveTurnId: "turn_2" });
+    h.eve.activeTurn = "turn_2";
+  };
+  const seams = {
+    store: database.store,
+    asks: h.asks,
+    writer,
+    eve: h.eve,
+    now: () => h.clock,
+  };
+  const outcome = await database.run(stopAsk(seams, userId, intended));
+  assert.equal(outcome.ok, true);
+  assert.deepEqual(h.eve.cancelledTurns, []);
+  assert.equal(h.eve.activeTurn, "turn_2");
+  assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId, eveTurnId: "turn_1" }]);
+  assert.ok(next);
+  const rows = await database.run(database.store.turns.named(userId, [intended, next]));
+  assert.deepEqual(
+    new Map(rows.map((row) => [row.eveTurnId, row.cancelRequestedAt?.getTime() ?? null])),
+    new Map([
+      ["turn_1", NOW],
+      ["turn_2", null],
+    ]),
+  );
+});
+
+test("a running row that names no eve turn takes the stamp alone: eve is asked nothing, since nothing of eve's stands under it to name", async () => {
+  const userId = await database.createUser();
+  const h = harness();
+  const sessionId = mintSession();
+  const conversationId = await conversation(userId, { runtimeSessionId: sessionId });
+  const unnamed = await turnRow(userId, conversationId);
+  h.eve.activeTurn = "turn_5";
+  const seams = {
+    store: database.store,
+    asks: h.asks,
+    writer,
+    eve: h.eve,
+    now: () => h.clock,
+  };
+  const outcome = await database.run(stopAsk(seams, userId, unnamed));
+  assert.deepEqual(outcome.ok && outcome.answer.cancelRequestedAt, NOW);
+  assert.deepEqual(h.eve.calls, []);
+  assert.equal(h.eve.activeTurn, "turn_5");
+  const [row] = await database.run(database.store.turns.named(userId, [unnamed]));
+  assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
 });
 
 test("the writer stamps a Stop on a turn the conversation holds once, and refuses a turn it does not hold and a conversation that does not stand", async () => {

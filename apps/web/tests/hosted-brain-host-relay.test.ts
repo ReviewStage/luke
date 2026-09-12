@@ -757,6 +757,7 @@ test("a second turn of the same session is another turn row, keyed from eve's ow
     turnRows.map((row) => row.id).sort(),
     [hostTurnId(standing.sessionId, "turn_0"), hostTurnId(standing.sessionId, "turn_1")].sort(),
   );
+  assert.deepEqual(turnRows.map((row) => row.eveTurnId).sort(), ["turn_0", "turn_1"]);
   assert.equal(
     (await readMessagesByConversationTyped(database.run, target.conversationId)).filter(
       (row) => row.role === MESSAGE_ROLE.USER,

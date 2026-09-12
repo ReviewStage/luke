@@ -172,27 +172,21 @@ test("a not-active follow-up is tried again on the SDK's own schedule, reads as 
   assert.deepEqual(retired.waits, [250, 500, 1_000]);
 });
 
-test("a cancel posts to the session's cancel route, scoped to eve's turn id where one is named, and reads whether eve had a turn to cancel", async () => {
+test("a cancel posts to the session's cancel route naming eve's turn id, and reads whether eve had that turn to cancel", async () => {
   const accepted = answering(200, { ok: true, sessionId: SESSION, status: "accepted" });
-  assert.deepEqual(await accepted.sessions.cancel(SESSION), {
+  assert.deepEqual(await accepted.sessions.cancel(SESSION, "turn_4"), {
     outcome: EVE_CANCEL_OUTCOME.ACCEPTED,
   });
   assert.equal(accepted.seen[0]?.url, `${ORIGIN}/eve/v1/session/${SESSION}/cancel`);
-  assert.deepEqual(accepted.seen[0]?.body, {});
-
-  const scoped = answering(200, { ok: true, sessionId: SESSION, status: "accepted" });
-  assert.deepEqual(await scoped.sessions.cancel(SESSION, "turn_4"), {
-    outcome: EVE_CANCEL_OUTCOME.ACCEPTED,
-  });
-  assert.deepEqual(scoped.seen[0]?.body, { turnId: "turn_4" });
+  assert.deepEqual(accepted.seen[0]?.body, { turnId: "turn_4" });
 
   const idle = answering(200, { ok: true, status: "no_active_turn" });
-  assert.deepEqual(await idle.sessions.cancel(SESSION), {
+  assert.deepEqual(await idle.sessions.cancel(SESSION, "turn_4"), {
     outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN,
   });
 
   const failed = answering(500, { ok: false });
-  assert.deepEqual(await failed.sessions.cancel(SESSION), {
+  assert.deepEqual(await failed.sessions.cancel(SESSION, "turn_4"), {
     outcome: EVE_CANCEL_OUTCOME.FAILED,
     status: 500,
   });
