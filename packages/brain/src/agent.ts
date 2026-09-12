@@ -238,12 +238,19 @@ export class BrainAgent {
    * forks its own fiber pumping `Stream.fromPubSub`, which is what keeps
    * delivery order and lets a listener subscribed mid-round hear only what
    * follows. Unsubscribing interrupts that fiber, so no subscription outlives
-   * its listener and nothing here needs a scope of the agent's own.
+   * its listener and nothing here needs a scope of the agent's own; stopping
+   * the agent shuts the pubsub down instead, which ends every pump whether or
+   * not its subscriber ever unsubscribed. A thrower stops none of the rest,
+   * the same guarantee `Emitter#fire` gave: the failure is logged rather than
+   * left to end that subscription's own pump.
    */
   onRunEvent(listener: (event: BrainRunEvent) => void): () => void {
     const fiber = Effect.runFork(
       Stream.runForEach(Stream.fromPubSub(this.#runEventsPubSub), (event) =>
-        Effect.sync(() => listener(event)),
+        Effect.catchAllDefect(
+          Effect.sync(() => listener(event)),
+          (defect) => Effect.logError("a listener failed while a run event was delivered", defect),
+        ),
       ),
     );
     return () => {
@@ -621,6 +628,11 @@ export class BrainAgent {
     await this.#queue;
     const retiring = this.#generations.standing();
     if (retiring) retireGeneration(retiring);
+    // Shutting the pubsub down ends every `Stream.fromPubSub` pump this agent
+    // ever forked, whether or not its subscriber ever called the unsubscribe
+    // it was handed back: a retired agent's followers stop hearing rather
+    // than parking a fiber for the rest of the process.
+    await Effect.runPromise(PubSub.shutdown(this.#runEventsPubSub));
   }
 
   #fireRunEvent(event: BrainRunEvent): void {
