@@ -59,7 +59,7 @@ it.effect(
       const h = yield* effectHarness({}, repository);
       yield* Effect.promise(() => h.agent.ready());
       assert.deepEqual(h.repository.state?.journal, [], "the orphaned row went with the restore");
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(answered([messageAction]), answered([message("")]));
       yield* advanceHarness(NOW + 3_000);
       // The action ran: the stale row was not mistaken for this turn's own result.
@@ -68,7 +68,7 @@ it.effect(
       // A second agent over the same store mints a different id for its first wake.
       yield* Effect.promise(() => h.agent.stop());
       const successor = yield* effectHarness({}, repository);
-      yield* Effect.promise(() => successor.agent.wake([edge(ABC)]));
+      yield* successor.agent.wake([edge(ABC)]);
       successor.client.answers.push(answered([messageAction]), answered([message("")]));
       yield* advanceHarness(NOW + 3_000);
       assert.equal(successor.performed.length, 1);

@@ -87,7 +87,7 @@ describe("wake queue", () => {
     Effect.gen(function* () {
       const h = yield* effectHarness();
       h.client.answers.push(quietAnswer(NOW + 60_000));
-      yield* Effect.promise(() => h.agent.wake([edge(ABC), edge(DEF)]));
+      yield* h.agent.wake([edge(ABC), edge(DEF)]);
       yield* advanceHarness(NOW + 3_000);
       assert.equal(h.client.inputs.length, 1);
       assert.equal(h.agent.pendingWakes(), 2);

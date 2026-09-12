@@ -711,7 +711,7 @@ it.effect(
       const inner = new FakeClient();
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       inner.answers.push(answered([message("")]));
       yield* advanceHarness(NOW + 3_000);
       const events = listen(h);
@@ -742,7 +742,7 @@ it.effect(
     Effect.gen(function* () {
       const h = yield* effectHarness();
       const events = listen(h);
-      yield* Effect.promise(() => h.agent.wake([edge(ABC)]));
+      yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(answered([readAbc]), answered([message("")]));
       yield* advanceHarness(NOW + 3_000);
       assert.equal(h.wholeReads.length, 1);
@@ -842,7 +842,7 @@ it.effect("a hold's release is told under its own origin", () =>
     const h = yield* effectHarness();
     const events = listen(h);
     h.client.answers.push(answered([message("")]));
-    h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+    yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
     yield* Effect.promise(() => settle());
     while (h.agent.busy()) yield* Effect.promise(() => settle());
     const [started] = ofKind(events, BRAIN_RUN_EVENT.TURN_STARTED);

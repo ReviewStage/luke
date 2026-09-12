@@ -460,7 +460,9 @@ for (const transport of [KEYED, HOSTED]) {
     assert.equal(limited?.status, BRAIN_REQUEST_STATUS.FAILED);
     assert.equal(h.performed.length, 0);
     // The cooldown stands: a wake is held rather than spent on a refusal.
-    h.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]);
+    await Effect.runPromise(
+      h.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]),
+    );
     await settle();
     assert.equal(h.agent.pendingWakes(), 1);
     await h.agent.stop();
@@ -505,7 +507,9 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
   const record = await h.ask("anything?");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(model.quietUntil(), NOW + 3_600_000);
-  h.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]);
+  await Effect.runPromise(
+    h.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]),
+  );
   await settle();
   assert.equal(h.agent.pendingWakes(), 1);
   assert.equal(upstream.calls.length, 0);
@@ -668,7 +672,9 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   const observing = new ScriptedRuntime([ACTION_TOOL.SEND_SESSION_MESSAGE]);
   const o = host(() => observing, model, repository);
   await o.agent.ready();
-  o.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]);
+  await Effect.runPromise(
+    o.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]),
+  );
   await settle();
   o.clock.now += 3_000;
   for (const timer of [...o.clock.timers.values()]) timer.callback();
@@ -704,7 +710,9 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
     outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
     reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
   });
-  responses.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]);
+  await Effect.runPromise(
+    responses.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]),
+  );
   await settle();
   responses.clock.now += 3_000;
   for (const timer of [...responses.clock.timers.values()]) timer.callback();

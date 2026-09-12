@@ -293,7 +293,7 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
 test("each conversation's standing context is built for its own key", async (t) => {
   const c = await composed(t);
   await c.wiring.rebuild();
-  c.wiring.rosterLook();
+  await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
   c.wiring.retire();
   await c.wiring.rebuild();
@@ -305,7 +305,7 @@ it.effect(
     Effect.gen(function* () {
       const c = yield* Effect.promise(() => composed(t));
       yield* Effect.promise(() => c.wiring.rebuild());
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       yield* Effect.promise(() =>
         until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2),
       );
@@ -349,12 +349,12 @@ it.effect(
       yield* waitFor(() => c.wiring.pendingNotices().length === 0);
       assert.deepEqual(c.wiring.pendingNotices(), []);
       // A second look at unchanged sessions opens no inference in either conversation.
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       yield* Effect.promise(() => pause(200));
       assert.equal(c.inputs.length, 3);
       // A session gone from the roster has its idle conversation stood down; the other stands.
       c.roster.splice(1, 1);
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       yield* Effect.promise(() => until(() => c.wiring.current(defKey) === undefined));
       assert.equal(c.wiring.current(defKey), undefined);
       assert.ok(c.wiring.current(abcKey));
@@ -367,7 +367,7 @@ test("a roster look opens a cloud session's conversation like a local one, reads
   const c = await composed(t);
   c.roster.push(cloudSession());
   await c.wiring.rebuild();
-  c.wiring.rosterLook();
+  await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.inputs.length >= 3 && c.wiring.pendingNotices().length === 3);
   const cloudKey = observedSessionKey(CLOUD);
   assert.ok(c.ensured.some((entry) => entry.sessionKey === cloudKey));
@@ -387,7 +387,7 @@ test("a roster look opens a cloud session's conversation like a local one, reads
   assert.ok(cloudNotice);
   assert.equal(cloudNotice.trigger, BRAIN_TURN_TRIGGER.ROSTER);
   // A second look at the unchanged cloud session opens no inference.
-  await c.wiring.rosterLook();
+  await Effect.runPromise(c.wiring.rosterLook());
   await pause(200);
   assert.equal(c.inputs.length, 3);
   // Gone from the roster, its idle conversation stands down like a local one's.
@@ -395,7 +395,7 @@ test("a roster look opens a cloud session's conversation like a local one, reads
     c.roster.findIndex((held) => held.providerId === conductor.id),
     1,
   );
-  c.wiring.rosterLook();
+  await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.wiring.current(cloudKey) === undefined);
   assert.ok(c.wiring.current(observedSessionKey(ABC)));
   c.wiring.retire();
@@ -409,7 +409,7 @@ it.effect(
       const c = yield* Effect.promise(() => composed(t));
       yield* Effect.promise(() => c.wiring.rebuild());
       const abcKey = observedSessionKey(ABC);
-      c.wiring.wake([
+      yield* c.wiring.wake([
         {
           kind: BRAIN_WAKE_KIND.ROSTER,
           identity: ABC,
@@ -424,7 +424,7 @@ it.effect(
       assert.equal(c.wiring.current()?.pendingWakes(), 0);
       assert.equal(c.wiring.current(observedSessionKey(DEF)), undefined);
       // A briefing decided by that conversation carries its source, and a held one is re-decided there.
-      c.wiring.releaseHeld([
+      yield* c.wiring.releaseHeld([
         { briefing: "abc finished", decidedAt: 1, sessionKey: abcKey },
         { briefing: "old news", decidedAt: 1 },
       ]);
@@ -450,7 +450,7 @@ it.effect(
       const c = yield* Effect.promise(() => composed(t));
       yield* Effect.promise(() => c.wiring.rebuild());
       const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
-      c.wiring.releaseHeld([
+      yield* c.wiring.releaseHeld([
         { briefing: "a session that has stood down", decidedAt: 1, sessionKey: goneKey },
       ]);
       const releases = () =>
@@ -490,7 +490,7 @@ it.effect(
       const c = yield* Effect.promise(() => composed(t, gate));
       yield* Effect.promise(() => c.wiring.rebuild());
       const abcKey = observedSessionKey(ABC);
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       yield* Effect.promise(() =>
         until(() => c.inputs.some((input) => itemTexts(input).join("\n").includes(SECRET("abc")))),
       );
@@ -501,7 +501,7 @@ it.effect(
         c.roster.findIndex((held) => held.providerSessionId === "abc"),
         1,
       );
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       // Nothing should stand it down while the analysis is still in flight:
       // give any wrongful teardown a full round to occur before asserting
       // its absence.
@@ -515,7 +515,7 @@ it.effect(
         until(() => c.wiring.pendingNotices().some((notice) => notice.label.includes("abc"))),
       );
       // The next look, with the analysis over and nothing owed, stands it down.
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       yield* Effect.promise(() => until(() => c.wiring.current(abcKey) === undefined));
       c.wiring.retire();
       yield* Effect.promise(() => c.wiring.rebuild());
@@ -529,7 +529,7 @@ it.effect(
       const c = yield* Effect.promise(() => composed(t));
       yield* Effect.promise(() => c.wiring.rebuild());
       const abcKey = observedSessionKey(ABC);
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 2));
       yield* Effect.promise(() => until(() => !(c.wiring.current(abcKey)?.busy() ?? true)));
       assert.equal(c.repositories.get(abcKey), 1);
@@ -539,8 +539,8 @@ it.effect(
         c.roster.findIndex((held) => held.providerSessionId === "abc"),
         1,
       );
-      c.wiring.rosterLook();
-      c.wiring.wake([
+      yield* c.wiring.rosterLook();
+      yield* c.wiring.wake([
         {
           kind: BRAIN_WAKE_KIND.ROSTER,
           identity: ABC,
@@ -566,7 +566,7 @@ it.effect(
       const c = yield* Effect.promise(() => composed(t));
       yield* Effect.promise(() => c.wiring.rebuild());
       const abcKey = observedSessionKey(ABC);
-      c.wiring.rosterLook();
+      yield* c.wiring.rosterLook();
       yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 2));
       yield* Effect.promise(() => until(() => !(c.wiring.current(abcKey)?.busy() ?? true)));
       assert.equal(c.repositories.get(abcKey), 1);
@@ -586,7 +586,7 @@ it.effect(
       assert.equal(c.writes.get(abcKey) ?? 0, writesBefore);
       // Reopened for a wake, the session's conversation stands on a second store
       // built after the first was let go, and it is the only one.
-      c.wiring.wake([
+      yield* c.wiring.wake([
         {
           kind: BRAIN_WAKE_KIND.ROSTER,
           identity: ABC,
@@ -627,15 +627,19 @@ test("two opens of one key landing in the same tick, a wake and a held briefing,
   const abcKey = observedSessionKey(ABC);
   assert.equal(c.repositories.get(abcKey), undefined);
   // Nothing stands for abc yet; both paths reach the same opening.
-  c.wiring.wake([
-    {
-      kind: BRAIN_WAKE_KIND.ROSTER,
-      identity: ABC,
-      session: session("abc"),
-      atMs: 1,
-    },
-  ]);
-  c.wiring.releaseHeld([{ briefing: "decided earlier", decidedAt: 1, sessionKey: abcKey }]);
+  await Effect.runPromise(
+    c.wiring.wake([
+      {
+        kind: BRAIN_WAKE_KIND.ROSTER,
+        identity: ABC,
+        session: session("abc"),
+        atMs: 1,
+      },
+    ]),
+  );
+  await Effect.runPromise(
+    c.wiring.releaseHeld([{ briefing: "decided earlier", decidedAt: 1, sessionKey: abcKey }]),
+  );
   await until(() => c.wiring.pendingNotices().length === 2);
   await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
   assert.ok(c.wiring.current(abcKey));
@@ -652,7 +656,7 @@ test("one observed conversation waiting on its model neither blocks another nor 
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("def")), release: () => undefined };
   const c = await composed(t, gate);
   await c.wiring.rebuild();
-  c.wiring.rosterLook();
+  await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 1);
   // def's inference is held; abc's has finished and left its notice.
   assert.equal(c.inputs.length, 2);
