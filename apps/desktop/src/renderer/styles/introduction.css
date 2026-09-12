@@ -1,34 +1,24 @@
 /* The one-time introduction takeover: a fullscreen stage that dims the
-   desktop, wakes the face, stages the detected rows on the app's own panel
-   surface, and springs the lot of them up into the notch. Everything drawn is
-   the app's own furniture — the panel's session rows, the wings, the sign-in
-   gate — on the same tokens, so what lands at the top of the screen is
-   pixel-for-pixel what the panel window draws the moment the takeover
-   closes. Everything layered here moves with transform and opacity alone;
-   the surface's size follows its content at once, never by animation. */
+   desktop, wakes the face, asks for the microphone, and springs Luke up into
+   the notch, where he greets from the capsule. No session row is drawn: a
+   desk Luke cannot observe yet is not pictured. Everything drawn is the
+   app's own furniture — the capsule, the wings, the sign-in gate — on the
+   same tokens, so what lands at the top of the screen is pixel-for-pixel
+   what the panel window draws the moment the takeover closes. Everything
+   layered here moves with transform and opacity alone; the surface's size
+   follows its content at once, never by animation. */
 
 .introduction-stage {
   position: fixed;
   inset: 0;
   overflow: clip;
-  /* The panel surface's flares turn the panel's corner — the same 0.489 the
-     panel presentation derives. */
-  --notch-concave-radius: calc(var(--panel-radius) * 0.489);
-  /* Where the panel stands mid-screen before the flight carries it up. */
-  --introduction-panel-stage-y: 40vh;
+  /* The flares are the presentation's own, from base.css: the takeover lands
+     in the capsule and stays there, so it must not force the panel's. */
   /* The face's stage size, named because the signature reveal's letters and
      centring shift all scale from it — the fractions arrive from the
      component, cut from the same generated table the face is drawn from. */
   --introduction-face-size: clamp(180px, 24vh, 260px);
   transition: opacity var(--duration-quick) var(--motion-exit);
-}
-
-/* The panel's own row-arrival vocabulary hides rows until the presentation
-   declares them arrived; before the flight the introduction has no
-   presentation, so its rows simply stand once their own staging lands them. */
-.introduction-stage .session-row {
-  opacity: 1;
-  transform: none;
 }
 
 /* The dimming itself: the window behind it is transparent, so this layer is
@@ -75,18 +65,12 @@
 
 /* While the wordmark is on stage the lockup slides the face to the word's L,
    so the whole word is what is centred. The shift is the lockup's own rather
-   than the anchor's, because the glow beneath must keep the stage's centre;
-   the rows arriving slide him back on the same spring the anchor rises on,
-   while the letters dissolve. */
+   than the anchor's, because the glow beneath must keep the stage's centre. */
 .introduction-lockup {
   transform: translateX(
     calc(-1 * var(--introduction-wordmark-shift, 0) * var(--introduction-face-size))
   );
   transition: transform var(--duration-shape) var(--spring);
-}
-
-.introduction-stage[data-lifted="true"] .introduction-lockup {
-  transform: translateX(0);
 }
 
 /* The something-is-here in the dark: a slow breath, held like every loop by
@@ -123,12 +107,6 @@
   50% {
     transform: translate(-50%, -50%) scale(1.1);
   }
-}
-
-/* The rows arriving is what nudges him upward: centre stage alone, standing
-   over the sessions once there are sessions to stand over. */
-.introduction-stage[data-lifted="true"] .introduction-face-anchor {
-  transform: translate(-50%, -50%) translateY(-16vh);
 }
 
 .introduction-face {
@@ -223,11 +201,8 @@
   transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-/* The word yields the stage: the rows arriving (or the flight, when a voice
-   that failed early glides off before any rows stand) dissolve the letters
-   while the anchor springs the face back to centre — the lockup collapses
-   into the face that goes on to live in the notch. */
-.introduction-stage[data-lifted="true"] .introduction-wordmark,
+/* The word yields the stage: the flight dissolves the letters as the face
+   leaves for the notch it goes on to live in. */
 .introduction-stage[data-flown="true"] .introduction-wordmark {
   opacity: 0;
 }
@@ -249,30 +224,6 @@
   animation-play-state: var(--face-motion);
 }
 
-/* The panel's content: one travelling group holding the app's own rows and
-   bands. It stands mid-screen for the detection and rides one spring up to
-   the top, where the real surface (mounted with the flight) meets it. Only
-   transform travels; the group's size is its content's, and the measure the
-   surface springs to. */
-.introduction-panel {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: min(var(--panel-width), 100vw);
-  padding: calc(var(--capsule-height) + 14px) var(--panel-inset) var(--panel-inset);
-  transform: translateX(-50%) translateY(var(--introduction-panel-stage-y));
-  transition: transform var(--duration-shape) var(--spring);
-  opacity: 0;
-}
-
-.introduction-stage[data-lifted="true"] .introduction-panel {
-  opacity: 1;
-  /* A fade alone: the arrive keyframes animate transform, and an animation's
-     transform replaces the element's own — the panel would render at its
-     untranslated spot for the animation's whole length. */
-  animation: introduction-fade-arrive var(--duration-fast) var(--motion-exit) backwards;
-}
-
 @keyframes introduction-fade-arrive {
   from {
     opacity: 0;
@@ -283,175 +234,11 @@
   }
 }
 
-.introduction-stage[data-flown="true"] .introduction-panel {
-  transform: translateX(-50%) translateY(0);
-}
-
 /* The real surface arrives with the flight: its bounds, corners, flares,
    and every presentation move are base.css's own — this only fades it in as
-   the flight carries the content up to meet it. */
+   the flight carries Luke up to meet it. */
 .introduction-stage .panel-surface {
   animation: introduction-fade-arrive var(--duration-shape) var(--motion-exit) backwards;
-}
-
-/* The list scrolls inside the panel exactly as the real one does: bounded to
-   the panel's own height ceiling less the strip and insets, overscroll kept
-   from chaining to the stage, and rows dissolving into the shape's edge on
-   the shared scroll fade rather than being cut. */
-.introduction-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: calc(var(--panel-height-max) - var(--capsule-height) - 14px - var(--panel-inset));
-  overflow-x: clip;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-  scrollbar-width: thin;
-  animation: scroll-edge-fade linear both;
-  animation-timeline: scroll(self block);
-  /* The return from the microphone aside: the rows wait out the surface's
-     whole spring back to the panel's bounds — the exit hold plus the shape —
-     so they never stand over desktop the shape does not yet back. Leaving
-     rides the exit rule below instead, exit-first as every shrink is. */
-  transition: opacity var(--duration-fast) var(--motion-exit)
-    calc(var(--duration-exit) + var(--duration-shape));
-}
-
-/* Standing down — or aside, while macOS's microphone dialog holds the room —
-   the rows leave first, the same exit-first ordering the real collapse
-   keeps, and the real surface follows them on its own spring into the
-   capsule's bounds, or the waiting slot's for the aside. */
-.introduction-stage[data-beat="glide"] .introduction-rows,
-.introduction-stage[data-beat="microphone-dialog"] .introduction-rows,
-.introduction-stage[data-beat="stand-down"] .introduction-rows,
-.introduction-stage[data-beat="done"] .introduction-rows {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--duration-exit) var(--motion-exit);
-}
-
-/* With its rows away the group is a footprint, not a surface: it keeps its
-   full layout box while only opacity has left, and the takeover's pointer
-   island is read off elementFromPoint — so an invisible group that still
-   hit-tests holds the window's interception across the whole box the panel
-   no longer draws, and swallows the clicks meant for what stands behind it:
-   the desktop, and macOS's own microphone dialog above all. */
-.introduction-stage[data-beat="glide"] .introduction-panel,
-.introduction-stage[data-beat="microphone-dialog"] .introduction-panel,
-.introduction-stage[data-beat="stand-down"] .introduction-panel,
-.introduction-stage[data-beat="done"] .introduction-panel {
-  pointer-events: none;
-}
-
-/* Away from the panel each row is its own solid card — no panel box around
-   the list, and nothing of the desktop reading through a row. They hold that
-   solidity through the whole flight *and* through the surface's own spring
-   from the capsule's bounds to the panel's, releasing only once the expanded
-   shape stands beneath them: translucency any earlier reads the desktop
-   through rows the panel does not yet back. The release rides the row's own
-   background transition from base.css. */
-.introduction-stage:not([data-settled="true"]) .introduction-rows .session-row {
-  background: var(--surface-overlay);
-}
-
-/* A row already asking for someone keeps its whole answer while solid: the
-   panel's attention fill is the accent at 9% over the shape, so the opaque
-   card mixes the same 9% into itself — the identical colour the translucent
-   fill lands on once the surface stands beneath it. Without this the solid
-   rule above out-specifies the tint and leaves the accent border ringing a
-   plain dark card. */
-.introduction-stage:not([data-settled="true"])
-  .introduction-rows
-  .session-row[data-state="urgency-attention"] {
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface-overlay));
-}
-
-/* Rows materialize with the panel's own stagger idiom, as a mount animation
-   with backwards fill so each holds its covered pose through its delay. Only
-   on the dark stage: past the flight the rows answer the tour's FLIP reorder
-   alone, and a re-evaluated delay must not replay a finished arrival. */
-.introduction-stage:not([data-flown="true"]) .introduction-rows .session-row {
-  animation: introduction-arrive var(--duration-fast) var(--spring) backwards;
-  animation-delay: calc(min(var(--row-index, 0), var(--row-fan-limit)) * var(--row-stagger));
-}
-
-@keyframes introduction-arrive {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* The practice beat's keycaps, drawn on the panel itself: the surface takes
-   their room at once, and they wait out the shape's whole travel like the
-   returning rows do, because practice arrives from the microphone aside with
-   the surface still springing back from the capsule — a shorter delay would
-   draw the caps over desktop the shape does not yet back. */
-.introduction-keycaps {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 18px;
-  --keycap-size: 32px;
-  --keycap-text: 15px;
-  animation: introduction-arrive var(--duration-fast) var(--spring) backwards;
-  animation-delay: calc(var(--duration-exit) + var(--duration-shape));
-}
-
-.introduction-keycaps-hold {
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 560;
-}
-
-/* A nudge while the beat waits: the caps hop once in a while, the way a hint
-   should — mostly still, never nagging. An endless loop, so its duration is
-   a literal and its play-state answers `--loop-motion`. */
-.introduction-keycaps .keycap-chord {
-  animation: introduction-keycap-hint 3.8s ease-in-out infinite;
-  animation-play-state: var(--loop-motion);
-}
-
-/* The caps answer the developer's own hands: while the talk key is truly
-   held, the drawn keys sit pressed, and the hint yields — a hop mid-press
-   would contradict the fingers it is mirroring. */
-.introduction-keycaps .keycap {
-  transition: transform var(--duration-hover) ease;
-}
-
-.introduction-keycaps[data-held="true"] .keycap {
-  transform: translateY(2px);
-}
-
-.introduction-keycaps[data-held="true"] .keycap-chord {
-  animation: none;
-}
-
-@keyframes introduction-keycap-hint {
-  0%,
-  86%,
-  100% {
-    transform: none;
-  }
-
-  90% {
-    transform: translateY(-5px);
-  }
-
-  94% {
-    transform: translateY(0);
-  }
-
-  97% {
-    transform: translateY(-2px);
-  }
 }
 
 /* Spoken into a silent output, the caption is the speech — the same posture

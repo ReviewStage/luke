@@ -95,8 +95,11 @@ export function sessionInstructions(scene: LiveScene): string {
  * The introduction's opening, sent as one `session.instructions.append` with
  * a null delegation once `session.started` arrives, which is the guide's way
  * to have the model speak before the caller has: the exact welcome text, its
- * language, and the instruction to greet at once and then listen. The voice
- * service sends it from the trusted side, so an accountless caller can open a
+ * language, and the instruction to greet at once and then stop. The greeting
+ * is scripted, not a conversation: the takeover never unmutes the session,
+ * so the developer cannot be heard, and the instruction says so rather than
+ * letting the model invite an answer nothing will carry. The voice service
+ * sends it from the trusted side, so an accountless caller can open a
  * bounded introduction and nothing else. The detected sessions it may mention
  * arrive as a developer message in the session's `input`, never inside this
  * text, which is why the welcome is fixed and only what follows it varies.
@@ -107,8 +110,10 @@ export function greetingInstruction(): string {
     "these words: \"Hi, I'm Luke. I've just moved in at the top of your screen, by the notch.\"",
     "Then say that when one of their coding agents needs them, hits an error, or finishes, you",
     "will say so. If a developer message above lists agents already running, mention one or two",
-    "by their titles as things you can already see. Keep it to two or three short sentences in",
-    "all, then pause and listen.",
+    'by their titles as things you can already see. Close with exactly these words: "Sign in,',
+    "and I'll get you set up.\" Keep it to three or four short sentences in all, then stop. This",
+    "is a one-way greeting: the developer's microphone is off, so do not ask them anything, do",
+    "not wait for a reply, and say nothing further.",
   ].join(" ");
 }
 
