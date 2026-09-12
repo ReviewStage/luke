@@ -132,7 +132,7 @@ function retryAfterMs(header: string | null, now: number): number | undefined {
  *
  * A read the provider answers only at a POSTed query endpoint — Conductor's
  * transcripts view — names its document here, and the separation a GET gives
- * for free is held the way the Linear tracker holds it: the document's text is
+ * for free is held by construction: the document's text is
  * fixed by the build, observation only ever sends a read, and an adapter
  * interpolates nothing into it beyond identifiers the same pass reported, each
  * validated against the shape its provider documents.

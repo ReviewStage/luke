@@ -47,8 +47,7 @@ export function CredentialsSection({ input }: { input: ConnectionInput }): React
         Providers
       </h2>
       <ConnectionRows section={CONNECTION_SECTION.PROVIDERS} input={input} />
-      {/* The same refusal the trackers' section explains: a Connect stilled by
-          missing storage needs its why in this section too. */}
+      {/* A Connect stilled by missing storage needs its why in this section too. */}
       {storageUnavailable(input) ? (
         <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p>
       ) : null}
@@ -136,9 +135,8 @@ export function CalendarIntegrations({
 }
 
 /**
- * The services Luke connects to that are not agents: the issue tracker and
- * the calendar. Both are signed into rather than pasted into, so each is a
- * mark, a name and one button, with its own one-line answer to what
+ * The services Luke connects to that are not agents: the calendars, signed
+ * into rather than pasted into, so each is a mark, a name and one button, with its own one-line answer to what
  * connecting it buys. The OpenAI key is not here: it lives at the top of the
  * Voice page, beside the feature it turns on.
  */

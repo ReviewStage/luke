@@ -180,7 +180,7 @@ export function acceptedActionOutput(
 
 /**
  * What carrying an action answered, before it is folded into the envelope:
- * the three words every adapter and tracker answers in, the lost answer, and
+ * the three words every adapter answers in, the lost answer, and
  * on an acceptance the two things a creation's answer may add. The created
  * session is already an identity here, composed by the performer that knows
  * which provider it asked.
