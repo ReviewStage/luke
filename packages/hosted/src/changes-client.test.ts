@@ -11,7 +11,7 @@ const EMPTY_CURSOR = encodeSequenceReadCursor([]);
 function client(options: Partial<ConstructorParameters<typeof HostedChangesClient>[0]> = {}) {
   return new HostedChangesClient({
     serviceBaseUrl: "https://tryluke.dev/",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     ...options,
   });

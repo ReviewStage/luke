@@ -22,9 +22,9 @@ const OPENED = "3c000000-0000-4000-8000-000000000009";
 function client(options: Partial<ConstructorParameters<typeof HostedConversationClient>[0]> = {}) {
   return new HostedConversationClient({
     serviceBaseUrl: "https://luke.test",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
-    readAccountKey: async () => "person",
+    readAccountKey: () => Effect.succeed("person"),
     ...options,
   });
 }

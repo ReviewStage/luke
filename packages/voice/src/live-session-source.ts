@@ -561,12 +561,13 @@ class ServiceLiveSessionSource {
 
   async #bearer(): Promise<string | undefined> {
     if (!this.#authorization) return undefined;
-    const token = await this.#authorization.readAccessToken().catch(() => undefined);
+    const token = await Runtime.runPromise(this.#runtime)(this.#authorization.readAccessToken());
     return token ? `Bearer ${token}` : undefined;
   }
 
   async #holder(): Promise<string | undefined> {
-    return this.#authorization?.readAccountKey?.().catch(() => undefined);
+    if (!this.#authorization?.readAccountKey) return undefined;
+    return Runtime.runPromise(this.#runtime)(this.#authorization.readAccountKey());
   }
 
   /** The handshake's headers: the bearer where one stands, and on a creation the device the session is opened for. */

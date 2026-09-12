@@ -17,6 +17,7 @@
     "apps/desktop/src/main/update-service.ts",
     "apps/web/eve/evals/brain-host.eval.ts",
     "apps/web/server/hosted/rate-brake.ts",
+    "apps/web/server/voice/openai.ts",
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",

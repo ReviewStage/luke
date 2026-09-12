@@ -21,7 +21,7 @@ function client(
 ) {
   return new HostedDeviceClient({
     serviceBaseUrl: "https://tryluke.dev/",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     httpClient,
     ...options,
@@ -105,7 +105,7 @@ it.effect("a forget at sign-out carries the departing token and never refreshes"
 
     const answer = yield* Effect.promise(() =>
       client(api.layer, {
-        readAccessToken: async () => "token-standing",
+        readAccessToken: () => Effect.succeed("token-standing"),
         refreshAccount: () =>
           Effect.sync(() => {
             refreshes += 1;
@@ -133,7 +133,7 @@ it.effect("a 401 refreshes the account and retries once on the new token", () =>
 
     const answer = yield* Effect.promise(() =>
       client(layerFromCloudFetch(fetch), {
-        readAccessToken: async () => tokens.shift(),
+        readAccessToken: () => Effect.succeed(tokens.shift()),
         refreshAccount: () =>
           Effect.sync(() => {
             refreshes += 1;
@@ -179,7 +179,7 @@ it.effect("a refusal, a malformed answer, or no token resolves to nothing", () =
     const signedOut = fakeCloudApi({});
     assert.equal(
       yield* Effect.promise(() =>
-        client(signedOut.layer, { readAccessToken: async () => undefined }).forget({
+        client(signedOut.layer, { readAccessToken: () => Effect.succeed(undefined) }).forget({
           deviceId: DEVICE_ID,
         }),
       ),

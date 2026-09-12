@@ -262,7 +262,7 @@ const HOSTED: Transport = {
   model: (upstream) =>
     new HostedModelAdapter({
       serviceBaseUrl: "https://luke.test",
-      readAccessToken: async () => "account-token",
+      readAccessToken: () => Effect.succeed("account-token"),
       refreshAccount: () => Effect.void,
       fetch: fakeService(upstream, allowance).fetch,
       now: () => NOW,
@@ -494,7 +494,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
   const exhausted = { remaining: 0 };
   const model = new HostedModelAdapter({
     serviceBaseUrl: "https://luke.test",
-    readAccessToken: async () => "account-token",
+    readAccessToken: () => Effect.succeed("account-token"),
     refreshAccount: () => Effect.void,
     fetch: fakeService(upstream, exhausted).fetch,
     now: () => NOW,

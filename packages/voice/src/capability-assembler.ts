@@ -19,7 +19,7 @@ import {
   type VoiceSource,
 } from "@sidecar/settings";
 import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import type { Effect, Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import {
   HostedLiveSessionSource,
   keyedLiveSessions,
@@ -227,11 +227,15 @@ export class VoiceCapabilityAssembler {
       accountSignedIn: this.#options.accountSignedIn(),
       chosenSource: voiceSource,
     });
+    const readAccount = () =>
+      Effect.tryPromise(() => this.#options.settings.readAccount()).pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
     const seams = {
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
-      readAccessToken: async () => (await this.#options.settings.readAccount())?.accessToken,
+      readAccessToken: () => Effect.map(readAccount(), (account) => account?.accessToken),
       refreshAccount: this.#options.refreshAccount,
-      readAccountKey: async () => (await this.#options.settings.readAccount())?.email,
+      readAccountKey: () => Effect.map(readAccount(), (account) => account?.email),
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
     const httpClient: Layer.Layer<HttpClient.HttpClient> | undefined = this.#options.fetch

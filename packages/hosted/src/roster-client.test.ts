@@ -51,7 +51,7 @@ const UNDATED: ObservedSession = {
 function client(options: Partial<ConstructorParameters<typeof HostedRosterClient>[0]> = {}) {
   return new HostedRosterClient({
     serviceBaseUrl: "https://tryluke.dev/",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     ...options,
   });
@@ -81,7 +81,7 @@ it.effect("the roster is a bearer GET of the stored snapshot, never asked fresh"
 it.effect("a read that answers nothing is nothing, not an empty roster", () =>
   Effect.gen(function* () {
     const answer = yield* Effect.provide(
-      client({ readAccessToken: async () => undefined }).observe(),
+      client({ readAccessToken: () => Effect.succeed(undefined) }).observe(),
       layerFromCloudFetch(() => {
         throw new Error("must not travel without an account");
       }),

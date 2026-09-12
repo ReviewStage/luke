@@ -294,6 +294,18 @@ runs them rather than the host's own. P7-03 deletes the runtime this class
 holds once that composer is a `Layer` and can hand the sender an edge to fork
 on instead.
 
+`createLiveUpstream#attach` in `apps/web/server/voice/openai.ts` is on the
+same allowlist: the hosted voice function's OpenAI upstream is plain callback code over `ws`'s
+`WebSocket`, never an `Effect` composition, and P12-14 made `CallCredential`'s
+`authorization` an Effect so `accountCall` never bridges a caller's own
+`Promise` internally. The one credential this upstream ever holds is
+`fixedBearer`'s, which answers `Effect.succeed` and nothing else, so
+`Effect.runSync` here runs no asynchronous work and defers nothing past the
+call that reads it; `Effect.runSync` stands in for the `await` this file held
+before the credential became an Effect. It goes if this file's WebSocket
+plumbing is ever rebuilt over `@effect/platform`'s `Socket`, which no PR in
+this plan schedules.
+
 `ServerBoundTransport#run` in `packages/gateway/src/transport.ts` is on the
 same allowlist, and it is what is left of the `GatewayServer` class P6-02
 introduced and P6-13 deleted. The server is its layers and there is no object

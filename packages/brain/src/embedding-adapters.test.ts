@@ -133,7 +133,7 @@ test("the hosted adapter reads the capabilities once and embeds through the cont
   );
   const adapter = new HostedEmbeddingAdapter({
     serviceBaseUrl: "https://luke.test/",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     fetch,
   });
@@ -163,7 +163,7 @@ test("a hosted service without the embed operation is a compatibility failure, n
   );
   const adapter = new HostedEmbeddingAdapter({
     serviceBaseUrl: "https://luke.test",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     fetch,
   });
@@ -175,7 +175,7 @@ test("a hosted service without the embed operation is a compatibility failure, n
   assert.equal(calls.length, 1, "nothing is posted to an operation the service does not offer");
   const noToken = new HostedEmbeddingAdapter({
     serviceBaseUrl: "https://luke.test",
-    readAccessToken: async () => undefined,
+    readAccessToken: () => Effect.succeed(undefined),
     refreshAccount: () => Effect.void,
     fetch,
   });

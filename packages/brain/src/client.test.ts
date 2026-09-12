@@ -65,14 +65,14 @@ function hosted(
   const refreshes: number[] = [];
   const transport = hostedBrainTransport({
     baseUrl: BASE,
-    readAccessToken: () => Promise.resolve(current),
+    readAccessToken: () => Effect.succeed(current),
     refreshAccount: () =>
       Effect.sync(() => {
         refreshes.push(1);
         current = queue.shift() ?? current;
         holder = holders?.shift() ?? holder;
       }),
-    ...(holders ? { readAccountKey: () => Promise.resolve(holder) } : undefined),
+    ...(holders ? { readAccountKey: () => Effect.succeed(holder) } : undefined),
     fetch,
     now: () => NOW,
   });

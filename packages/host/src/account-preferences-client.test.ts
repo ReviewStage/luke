@@ -31,7 +31,7 @@ function service(answers: Array<() => Response>) {
 function client(options: Partial<ConstructorParameters<typeof AccountPreferencesClient>[0]> = {}) {
   return new AccountPreferencesClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     ...options,
   });

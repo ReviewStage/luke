@@ -38,7 +38,7 @@ function senderWith(
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     httpClient: layerFromCloudFetch(fetch),
     now: () => NOON,
@@ -112,8 +112,8 @@ test("a batch queued under one account is never posted under another's bearer", 
   );
   const { sender } = sharingSender({
     httpClient: layerFromCloudFetch(fetch),
-    readAccessToken: async () => token,
-    readAccountKey: async () => account,
+    readAccessToken: () => Effect.succeed(token),
+    readAccountKey: () => Effect.succeed(account),
     // The sign-out and sign-in the refusal was the first sign of: the token
     // the retry would carry answers for somebody else.
     refreshAccount: () =>
@@ -144,7 +144,7 @@ test("a failed send drops its batch rather than retrying it behind the next one"
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     httpClient: layerFromCloudFetch(fetch),
     now: () => NOON,
@@ -169,7 +169,7 @@ test("signed out the queue waits rather than being spent", async () => {
     serviceBaseUrl: BASE_URL,
     appVersion: APP_VERSION,
     sends: true,
-    readAccessToken: async () => token,
+    readAccessToken: () => Effect.succeed(token),
     refreshAccount: () => Effect.void,
     httpClient: layerFromCloudFetch(fetch),
     now: () => NOON,
@@ -188,10 +188,11 @@ test("signed out the queue waits rather than being spent", async () => {
 test("a token the settings file could not answer leaves the batch queued", async () => {
   let readable = false;
   const { sender, requests } = sharingSender({
-    readAccessToken: async () => {
-      if (!readable) throw new Error("the settings file could not be read");
-      return "token-1";
-    },
+    readAccessToken: () =>
+      Effect.try(() => {
+        if (!readable) throw new Error("the settings file could not be read");
+        return "token-1";
+      }).pipe(Effect.orElseSucceed(() => undefined)),
   });
   sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
   await sender.flush();

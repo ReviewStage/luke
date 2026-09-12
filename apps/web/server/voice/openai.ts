@@ -1,5 +1,5 @@
 import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Effect, Either } from "effect";
 import { WebSocket } from "ws";
 import {
   type CloudFetch,
@@ -95,7 +95,10 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
     },
 
     async attach(sessionId) {
-      const authorization = await credential.authorization?.();
+      // The one credential this upstream ever holds is `fixedBearer`'s, which
+      // answers `Effect.succeed` and nothing else, so running it here defers
+      // no asynchronous work.
+      const authorization = credential.authorization && Effect.runSync(credential.authorization());
       const socket = new WebSocket(attachAddress(baseUrl, sessionId), {
         headers: authorization === undefined ? {} : { authorization },
         followRedirects: false,
