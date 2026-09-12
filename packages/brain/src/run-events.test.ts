@@ -7,7 +7,11 @@ import {
   unknownActionOutput,
 } from "@sidecar/actions";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import { TOOL_PART_STATE } from "@sidecar/session";
+import {
+  type ProviderTranscriptResult,
+  type SessionIdentity,
+  TOOL_PART_STATE,
+} from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import {
   ACTION_RESULT_STATUS,
@@ -45,6 +49,7 @@ import {
 } from "./harness.js";
 import { BRAIN_REQUEST_FAILURE, BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
 import {
+  answerOnlyReads,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
   type BrainRunEvent,
@@ -54,6 +59,7 @@ import {
   SLOW_STEP_KIND,
   slowStepOf,
   TOOL_CALL_SETTLEMENT,
+  toolCallOnlyReads,
   toolCallSettlementOf,
   turnOriginOf,
 } from "./run-events.js";
@@ -519,6 +525,107 @@ it.effect(
       assert.deepEqual(
         ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
         ["The tests pass.", "Nothing needs you!"],
+      );
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "an answer that asked only for a read relays its words while the read is still out, and the settle stands because a read leaves nothing uncertain",
+  () =>
+    Effect.gen(function* () {
+      let answer: (() => void) | undefined;
+      const read = new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      const reads: SessionIdentity[] = [];
+      const h = yield* effectHarness({
+        readTranscript: async (identity): Promise<ProviderTranscriptResult> => {
+          reads.push(identity);
+          await read;
+          return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
+        },
+      });
+      const events = listen(h);
+      h.client.answers.push(
+        answered([message("Two sessions are waiting."), readAbc]),
+        answered([message("Neither needs you.")]),
+      );
+      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "what did abc do?")));
+      yield* Effect.promise(() => settle());
+      assert.equal(reads.length, 1);
+      assert.deepEqual(relayed(events), [
+        { kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId },
+        { kind: BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence: "Two sessions are waiting." },
+        { kind: BRAIN_RUN_EVENT.SLOW_STEP, runId, step: SLOW_STEP_KIND.TRANSCRIPT_READ },
+      ]);
+      answer?.();
+      yield* Effect.promise(() => settle());
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
+        ["Two sessions are waiting.", "Neither needs you."],
+      );
+      assert.equal(ofKind(events, BRAIN_RUN_EVENT.ACTIONS_SETTLED).length, 1);
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "a relayed answer's trailing fragment is one sentence of its own, told once: the next answer's words add sentences after it rather than reopening it",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      const events = listen(h);
+      h.client.answers.push(
+        answered([message("abc is still running"), readAbc]),
+        answered([message("It just went green.")]),
+      );
+      const record = yield* Effect.promise(() => ask(h, "how is it going?"));
+      assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
+        ["abc is still running", "It just went green."],
+      );
+      yield* Effect.promise(() => h.agent.stop());
+    }),
+);
+
+it.effect(
+  "an answer that asked for a write holds its words until that write's result is journaled, and the settle waits with them",
+  () =>
+    Effect.gen(function* () {
+      const held = heldPerformer();
+      const h = yield* effectHarness({ actions: held.actions });
+      const events = listen(h);
+      h.client.answers.push(
+        answered([message("Sending."), messageAbc("send_1")]),
+        answered([message("Sent.")]),
+      );
+      const runId = acceptedRunId(
+        yield* Effect.promise(() => submit(h, "tell abc to run the tests")),
+      );
+      yield* Effect.promise(() => settle());
+      assert.equal(held.performed.length, 1);
+      // The write is out: neither the words beside its call nor the settle they
+      // would follow has been told.
+      assert.deepEqual(relayed(events), [
+        { kind: BRAIN_RUN_EVENT.SLOW_STEP, runId, step: SLOW_STEP_KIND.PROVIDER_WRITE },
+      ]);
+      for (const release of held.releases.splice(0)) release();
+      yield* Effect.promise(() => settle());
+      assert.deepEqual(
+        relayed(events).map((event) => event?.kind),
+        [
+          BRAIN_RUN_EVENT.SLOW_STEP,
+          BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+          BRAIN_RUN_EVENT.REPLY_SENTENCE,
+          BRAIN_RUN_EVENT.REPLY_SENTENCE,
+          BRAIN_RUN_EVENT.ENDED,
+        ],
+      );
+      assert.deepEqual(
+        ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
+        ["Sending.", "Sent."],
       );
       yield* Effect.promise(() => h.agent.stop());
     }),
@@ -1228,6 +1335,34 @@ test("the slow steps are the whole-transcript read and the performer's writes, o
     BRAIN_TURN_TRIGGER.ASK,
   );
   assert.equal(slowStepOf(noActions, ACTION_TOOL.SEND_SESSION_MESSAGE), undefined);
+});
+
+test("an answer relays its words as they form only when every call it made reads: a write, an act, and the tool that speaks each hold them, as does a name the policy does not offer", () => {
+  const full = resolveTurnToolPolicy(brainToolCatalog(), {}, BRAIN_TURN_TRIGGER.ASK);
+  assert.deepEqual(
+    [
+      BRAIN_TOOL.READ_TRANSCRIPT,
+      BRAIN_TOOL.LIST_SESSIONS,
+      BRAIN_TOOL.READ_WORKSPACE_FILE,
+      BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+      ACTION_TOOL.SEND_SESSION_MESSAGE,
+      BRAIN_TOOL.ANNOUNCE,
+      "no_such_tool",
+    ].map((name) => toolCallOnlyReads(full, name)),
+    [true, true, true, false, false, false, false],
+  );
+  assert.equal(answerOnlyReads(full, []), true);
+  assert.equal(answerOnlyReads(full, [BRAIN_TOOL.READ_TRANSCRIPT, BRAIN_TOOL.LIST_SESSIONS]), true);
+  assert.equal(
+    answerOnlyReads(full, [BRAIN_TOOL.READ_TRANSCRIPT, ACTION_TOOL.SEND_SESSION_MESSAGE]),
+    false,
+  );
+  const noReads = resolveTurnToolPolicy(
+    brainToolCatalog(),
+    { agent: { deny: [BRAIN_TOOL.READ_TRANSCRIPT] } },
+    BRAIN_TURN_TRIGGER.ASK,
+  );
+  assert.equal(toolCallOnlyReads(noReads, BRAIN_TOOL.READ_TRANSCRIPT), false);
 });
 
 test("a reply splits into its sentences at sentence ends and line breaks, trimmed, none empty", () => {

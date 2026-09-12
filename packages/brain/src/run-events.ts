@@ -19,8 +19,10 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
  * turn it is: a developer's ask, an observation, a hold's release, a child's
  * task, or a child's completion. Two audiences hear one stream. A relay into
  * a live conversation reads the recorded run's moments: the one step worth a
- * spoken update, the moment every action it took has its result journaled,
- * the final answer a sentence at a time once that moment has passed, and the
+ * spoken update, the moment every write it took has its result journaled,
+ * the answer a sentence at a time once that moment has passed — the words of
+ * a step that only read are the reply forming and are told as they come,
+ * since nothing they describe is still uncertain — and the
  * record's end. A writer keeping the conversation reads the turn whole: its
  * start and origin, each step as an inference answers and opens it, each
  * tool call before it runs and its output or error after, each reasoning
@@ -36,9 +38,9 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 export const BRAIN_RUN_EVENT = {
   /** The run began a step slow enough to be worth telling the developer about; fired once per run. */
   SLOW_STEP: "slow_step",
-  /** Every action the run dispatched has its result journaled; nothing it did is still uncertain. */
+  /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
-  /** One sentence of the final answer, in order, after the actions settled. */
+  /** One sentence of the answer, in order, after every write the run took has settled. */
   REPLY_SENTENCE: "reply_sentence",
   /** The run's record reached a terminal status. */
   ENDED: "ended",
@@ -293,6 +295,23 @@ export function slowStepOf(policy: EffectiveToolPolicy, name: string): SlowStepK
   }
   if (name === BRAIN_TOOL.READ_TRANSCRIPT) return SLOW_STEP_KIND.TRANSCRIPT_READ;
   return undefined;
+}
+
+/**
+ * Whether a call the policy offers only reads: not an act the performer
+ * carries, not a write, and not the tool that speaks, so nothing it began
+ * outlives the answer that asked for it. A name the policy does not offer is
+ * not vouched for, and reads as a call that is not a read.
+ */
+export function toolCallOnlyReads(policy: EffectiveToolPolicy, name: string): boolean {
+  const tool = policy.allowed.find((candidate) => candidate.schema.name === name);
+  if (!tool) return false;
+  return tool.execution !== TOOL_EXECUTION.PERFORMER && tool.effect === TOOL_EFFECT.READ;
+}
+
+/** Whether an answer's words may be relayed as they come: it asked for nothing, or for reads alone. */
+export function answerOnlyReads(policy: EffectiveToolPolicy, names: readonly string[]): boolean {
+  return names.every((name) => toolCallOnlyReads(policy, name));
 }
 
 const SENTENCE_BOUNDARY = /(?<=[.!?…]["'”’)\]]*)\s+|\n+/;

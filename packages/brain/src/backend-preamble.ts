@@ -6,8 +6,11 @@ import { BRAIN_PERSONA } from "./workspace-seeds.js";
  * How a turn is voiced. A spoken ask is delegated by the live voice model,
  * which carries Luke's persona itself and expects facts back, not sentences:
  * its turn runs under the GPT Live delegation guide's backend preamble
- * ("Start with your existing backend prompt"), word for word, and drops the
- * persona. Every other turn keeps the persona and no preamble.
+ * ("Start with your existing backend prompt") and drops the persona. The one
+ * line the guide does not write is the one this build's relay needs: a
+ * read-only answer's words are forwarded as soon as they form, so words
+ * written beside a call would be spoken as the answer. Every other turn keeps
+ * the persona and no preamble.
  */
 
 export const BACKEND_PREAMBLE: string = [
@@ -20,6 +23,9 @@ export const BACKEND_PREAMBLE: string = [
   "## Return the result",
   "Return the relevant facts, whether the task is complete, and what comes next.",
   "Use confirmed values. Do not invent a successful action.",
+  "When you call a tool, return no words in the same answer: the words of a",
+  "read are forwarded as soon as they form, so a line written before the",
+  "result is known would be spoken as though it were the answer.",
 ].join("\n");
 
 export type BrainPromptVoice = { readonly persona: string } | { readonly backendPreamble: string };

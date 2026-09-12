@@ -62,10 +62,12 @@ import {
  * when the peer offers itself for the talk key, or when Luke has something to
  * say and no session stands; it is seeded from Luke's own record alone; it is
  * fed every append the trusted side makes, each awaiting its acknowledgment;
- * it hands each delegation to the brain as a spoken ask, tells the session at
- * once that the ask is with Luke, and streams the reply back as commentary
- * once every action in the run has settled; it writes both speakers' settled
- * utterances into the record; and it closes gracefully on
+ * it hands each delegation to the brain as a spoken ask and streams the reply
+ * back as commentary once every action the run writes has settled — the words
+ * of a step that only read arrive as they form, and nothing is said of the
+ * ask's mere acceptance, which the delegation guide has the model answer from
+ * the conversation rather than from a status report; it writes both speakers'
+ * settled utterances into the record; and it closes gracefully on
  * idle, on the peer's hang-up, and on the drain,
  * recording the usage the final event confirms. The peer owns the microphone
  * and the hang-up; the trusted side owns every append and the close
@@ -91,10 +93,7 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
   ["transcript_read", "Luke is reading a session's transcript; this takes a moment."],
   ["provider_write", "Luke is carrying out the action; this takes a moment."],
 ]);
-const SLOW_STEP_GENERAL_NOTE = "Luke is still working on it; this takes a moment.";
-
-/** The quiet progress note an accepted ask earns at once, under its delegation, before any of its reply: the request is with Luke and no result exists yet. */
-const ASK_RECEIVED_NOTE = "Luke has the request and is working on it. No result yet.";
+const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
 
 /** Said once, under the delegation, when the developer's ask could not be put on record: an ask off the record is answered nowhere. */
 export const ASK_UNRECORDED_NOTE =
@@ -741,13 +740,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // that ends at once or speaks its first sentence during the write is
     // deferred into it rather than dropped; the record still precedes the
     // speech, because nothing deferred is spoken until the write lands. The
-    // progress note is enqueued ahead of the write, so the channel's order
-    // puts it before the reply's first commentary; it is thinking, not
-    // speech, and says nothing of the ask.
+    // acceptance itself is told nothing of: a note saying the ask is with
+    // Luke is what the model reads as license to narrate waiting, and the
+    // only thinking appends this exchange earns are the factual ones a slow
+    // step actually begun writes.
     const exchange = this.#registerExchange(session, submission.runId, delegationId);
-    session.channel.enqueue(async () => {
-      await session.channel.send(thinkingAppend(this.#input(delegationId, ASK_RECEIVED_NOTE)));
-    });
     exchange.pendingRecords += 1;
     const recorded = await this.#write({
       session,
@@ -820,6 +817,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         });
         return;
       }
+      // The brain tells the settle as soon as no write of the run is still
+      // out, which for a read-only run is at its first words, so the gate
+      // below releases the reply earlier without meaning anything weaker.
       case LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED:
         exchange.settled = true;
         for (const sentence of exchange.buffered.splice(0)) this.#speakSentence(exchange, sentence);

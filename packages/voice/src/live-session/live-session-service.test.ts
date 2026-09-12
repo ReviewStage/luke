@@ -507,25 +507,23 @@ test("a retained delegation dies with its session", async () => {
   assert.equal(f.brain.asks.length, 0);
 });
 
-test("a slow step earns one thinking append under the delegation, after the acceptance's own, and the reply streams only after the actions settled, each chunk awaiting its ack", async () => {
+test("a slow step earns the exchange's one thinking append, and the reply streams only after the actions settled, each chunk awaiting its ack", async () => {
   const f = fixture();
   const sideband = await f.open();
   sideband.acknowledgeThinkingAtOnce = false;
   sideband.input("Send the fix.", 0, 800);
   sideband.delegation("item_1", 900);
   await drainMicrotasks();
+  // The accepted ask itself is told nothing of; only a slow step actually begun writes a note.
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
   f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP, runId: "run-1", step: "provider_write" });
   f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP, runId: "run-1", step: "provider_write" });
-  await drainMicrotasks();
-  // The acceptance's thinking append is out awaiting its ack; the slow step's waits behind it.
-  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
-  sideband.acknowledge(0, 900, 920);
   await drainMicrotasks();
   const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-  assert.equal(thinking.length, 2);
+  assert.equal(thinking.length, 1);
   assert.deepEqual(
     thinking.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
-    ["item_1", "item_1"],
+    ["item_1"],
   );
   f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Sent." });
   await drainMicrotasks();
@@ -539,10 +537,10 @@ test("a slow step earns one thinking append under the delegation, after the acce
   await drainMicrotasks();
   // The slow step's thinking append is still awaiting its ack, so nothing else has left.
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-  sideband.acknowledge(1, 930, 950);
+  sideband.acknowledge(0, 930, 950);
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-  sideband.acknowledge(2, 1000, 1100);
+  sideband.acknowledge(1, 1000, 1100);
   await drainMicrotasks();
   const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
   assert.equal(commentary.length, 2);
@@ -556,33 +554,30 @@ test("a slow step earns one thinking append under the delegation, after the acce
   );
 });
 
-test("an accepted ask earns one thinking append under its delegation, ahead of the reply's first commentary; a refused one earns none", async () => {
+test("an accepted ask is told nothing of its own acceptance: the reply's commentary is the first thing on the channel, and a refused ask is answered with its refusal", async () => {
   const f = fixture();
   const sideband = await f.open();
   sideband.input("How is it going?", 0, 800);
   sideband.delegation("item_1", 900);
   await drainMicrotasks();
-  assert.deepEqual(
-    sideband.sent.map((event) => event.type),
-    [LIVE_CLIENT_EVENT.THINKING_APPEND],
-  );
+  assert.equal(sideband.sent.length, 0);
   f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
   f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Fine." });
   await drainMicrotasks();
   assert.deepEqual(
     sideband.sent.map((event) => event.type),
-    [LIVE_CLIENT_EVENT.THINKING_APPEND, LIVE_CLIENT_EVENT.COMMENTARY_APPEND],
+    [LIVE_CLIENT_EVENT.COMMENTARY_APPEND],
   );
   assert.deepEqual(
     sideband.sent.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
-    ["item_1", "item_1"],
+    ["item_1"],
   );
-  sideband.acknowledge(1, 1000, 1100);
+  sideband.acknowledge(0, 1000, 1100);
   f.brain.refuse = "not now";
   sideband.input("And now?", 2000, 2500);
   sideband.delegation("item_2", 2600);
   await drainMicrotasks();
-  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
 });
 
@@ -619,7 +614,7 @@ test("a delegation while the run is in flight steers it: one exchange, both runs
     runId: "run-2",
     end: LIVE_BRAIN_RUN_END.COMPLETED,
   });
-  sideband.acknowledge(2, 2500, 2600);
+  sideband.acknowledge(0, 2500, 2600);
   await f.clock.advance(f.clock.now + 1000);
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
 });
@@ -642,7 +637,7 @@ test("a run that ends without a reply is spoken as the standing note for how it 
     commentary[0] && "content" in commentary[0] && commentary[0].content,
     RUN_END_NOTE[LIVE_BRAIN_RUN_END.CANCELLED],
   );
-  sideband.acknowledge(1, 1000, 1100);
+  sideband.acknowledge(0, 1000, 1100);
   sideband.input("Again.", 2000, 2500);
   sideband.delegation("item_2", 2600);
   await drainMicrotasks();
@@ -1203,7 +1198,7 @@ test("run events landing while the ask's record write is out are deferred, then 
     commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
     "item_1",
   );
-  sideband.acknowledge(1, 1000, 1100);
+  sideband.acknowledge(0, 1000, 1100);
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
 });
@@ -1254,7 +1249,7 @@ test("an ask whose record write fails is answered with the unrecorded note once,
     commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
     "item_1",
   );
-  sideband.acknowledge(1, 1000, 1100);
+  sideband.acknowledge(0, 1000, 1100);
   f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Late." });
   f.brain.fire({
     kind: LIVE_BRAIN_RUN_EVENT.ENDED,
@@ -1298,7 +1293,7 @@ test("a steered ask whose sibling's record write fails is settled once every wri
     commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
     "item_1",
   );
-  sideband.acknowledge(2, 6000, 6100);
+  sideband.acknowledge(0, 6000, 6100);
   f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-2", sentence: "Late." });
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
