@@ -1107,8 +1107,8 @@ and two promise-returning reads, so the run happens in this one place rather
 than in each adapter: `ObservationPass#runPromise`, `promiseTranscriptReads`,
 and Codex's own `observe` all call it, and OMP's plugin is the same shape over
 the same two shared faces. Conductor's cloud pass joins it the same way: its
-own `observe`, its actions' one write, and its conversation reads' one
-credential-bound read are each effects now that `cloudPass` is, so its plugin
+own `observe` and its conversation reads' one credential-bound read are each
+effects now that `cloudPass` is, so its plugin
 calls the same face rather than a second one of its own, and its two local
 SQLite reads (`applications.ts`, `local-workspaces.ts`) call it too, each over
 `Effect.scoped(scopedReadOnlyDatabase(...))`. Superset's own host-state read
@@ -1128,7 +1128,12 @@ touches none of `runAdapterRead`'s actual callers, which are every one named
 above and stay inside `packages/providers` itself; the door goes only once
 each of those adapters' own plugins holds a fiber of its own to run its
 effects on rather than answering a `Promise` through this face, which is not
-yet scheduled on any row above.
+yet scheduled on any row above. P12-17 narrowed what the face answers for
+rather than deleting it: `dispatchAction` and every `ActionHandlers` member
+are Effects, so Conductor's one documented write composes into the caller's
+own fiber and runs nothing, and what still calls the face is the read half
+alone — the plugin seam's `observe(): Promise<...>` and the conversation
+read behind it, neither of which this row touches.
 
 The four hosted clients this document had not named until the lint rules made
 the list machine-readable — `HostedActionClient`'s `#run` in
@@ -1219,7 +1224,7 @@ design decision stated as such:
 | `gatewayTestHost`/`scopedGatewayService`, the suites' own scoped builds | P6-13 | P12-09 |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
-| `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | not yet — every caller stays inside `packages/providers`; P7-05 confirmed the host never called one directly |
+| `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | not yet — every caller stays inside `packages/providers`; P7-05 confirmed the host never called one directly, and P12-17 left only the reads calling it |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |

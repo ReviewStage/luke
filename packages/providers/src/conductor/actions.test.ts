@@ -5,7 +5,7 @@ import {
   dispatchAction,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
-import { admittedForTest } from "@sidecar/wire/testing";
+import { admittedForTest, runTest } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { CLOUD_ADAPTER_DEFAULTS } from "../shared/cloud-wire.js";
 import {
@@ -39,13 +39,15 @@ test("hands a user prompt to Conductor's documented message endpoint", async () 
   const plugin = pluginFor(api.layer);
   await plugin.observe();
 
-  const result = await dispatchAction(
-    plugin,
-    "message",
-    admittedForTest({
-      providerSessionId: "session-idle",
-      text: "Rebase onto main before continuing",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "message",
+      admittedForTest({
+        providerSessionId: "session-idle",
+        text: "Rebase onto main before continuing",
+      }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted" });
@@ -76,18 +78,20 @@ test("stops a working turn through Conductor's cancel endpoint, sending no body"
   const plugin = pluginFor(api.layer);
   await plugin.observe();
 
-  const result = await dispatchAction(
-    plugin,
-    "control",
-    admittedForTest({
-      providerSessionId: "session-working",
-      control: {
-        kind: ACTION_KIND.CONTROL,
-        id: "cancel-turn",
-        label: "Stop this turn",
-        controlKind: "stop",
-      },
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "control",
+      admittedForTest({
+        providerSessionId: "session-working",
+        control: {
+          kind: ACTION_KIND.CONTROL,
+          id: "cancel-turn",
+          label: "Stop this turn",
+          controlKind: "stop",
+        },
+      }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted" });
@@ -119,13 +123,15 @@ test("archives the workspace the user saw through Conductor's archive endpoint, 
 
   // Deliberately without a target: the route must be built from the control
   // the adapter itself advertised, never from the caller's copy of it.
-  const result = await dispatchAction(
-    plugin,
-    "control",
-    admittedForTest({
-      providerSessionId: "session-idle",
-      control: { kind: ACTION_KIND.CONTROL, id: "archive-workspace", label: "Archive" },
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "control",
+      admittedForTest({
+        providerSessionId: "session-idle",
+        control: { kind: ACTION_KIND.CONTROL, id: "archive-workspace", label: "Archive" },
+      }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted" });
@@ -173,18 +179,20 @@ test("refuses to archive a workspace no row advertised, before any request exist
   // A working workspace advertised only the turn's stop, so an archive ask
   // has nothing behind it and no request exists — whatever target the caller
   // writes into their copy of the control.
-  const result = await dispatchAction(
-    plugin,
-    "control",
-    admittedForTest({
-      providerSessionId: "session-working",
-      control: {
-        kind: ACTION_KIND.CONTROL,
-        id: "archive-workspace",
-        label: "Archive",
-        target: "workspace-active",
-      },
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "control",
+      admittedForTest({
+        providerSessionId: "session-working",
+        control: {
+          kind: ACTION_KIND.CONTROL,
+          id: "archive-workspace",
+          label: "Archive",
+          target: "workspace-active",
+        },
+      }),
+    ),
   );
 
   assert.deepEqual(result, {
@@ -219,13 +227,15 @@ test("renames the workspace behind an observed row through Conductor's rename en
     "workspace-active",
   );
 
-  const result = await dispatchAction(
-    plugin,
-    "renameWorkspace",
-    admittedForTest({
-      providerSessionId: "session-idle",
-      name: "Payments rollout",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "renameWorkspace",
+      admittedForTest({
+        providerSessionId: "session-idle",
+        name: "Payments rollout",
+      }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted" });
@@ -260,13 +270,15 @@ test("renames an observed chat itself through Conductor's session rename endpoin
     undefined,
   );
 
-  const result = await dispatchAction(
-    plugin,
-    "renameSession",
-    admittedForTest({
-      providerSessionId: "session-idle",
-      name: "Payments audit",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "renameSession",
+      admittedForTest({
+        providerSessionId: "session-idle",
+        name: "Payments audit",
+      }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted" });
@@ -295,13 +307,15 @@ test("refuses a chat rename for a session no pass observed, before any request e
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
-  const result = await dispatchAction(
-    plugin,
-    "renameSession",
-    admittedForTest({
-      providerSessionId: "session-unseen",
-      name: "Payments audit",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "renameSession",
+      admittedForTest({
+        providerSessionId: "session-unseen",
+        name: "Payments audit",
+      }),
+    ),
   );
 
   assert.deepEqual(result, {
@@ -330,13 +344,15 @@ test("refuses a rename for a session no pass observed, before any request exists
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
-  const result = await dispatchAction(
-    plugin,
-    "renameWorkspace",
-    admittedForTest({
-      providerSessionId: "session-unseen",
-      name: "Payments rollout",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "renameWorkspace",
+      admittedForTest({
+        providerSessionId: "session-unseen",
+        name: "Payments rollout",
+      }),
+    ),
   );
 
   assert.deepEqual(result, {
@@ -376,13 +392,15 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
   const plugin = pluginFor(api.layer);
   await plugin.observe();
 
-  const named = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({
-      providerProjectId: LUKE_PROJECT.id,
-      name: "fix the notch panel",
-    }),
+  const named = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: LUKE_PROJECT.id,
+        name: "fix the notch panel",
+      }),
+    ),
   );
 
   // The acceptance names the session the response did, so the surface can
@@ -400,10 +418,12 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
   // Left unnamed, the ask carries no name at all: Conductor generates one, and
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // an empty field is not the same request as an absent one.
-  const unnamed = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({ providerProjectId: LUKE_PROJECT.id }),
+  const unnamed = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({ providerProjectId: LUKE_PROJECT.id }),
+    ),
   );
   assert.deepEqual(unnamed, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), { projectId: LUKE_PROJECT.id });
@@ -420,10 +440,12 @@ test("an acceptance whose response names no session stays a plain acceptance", a
   const plugin = pluginFor(api.layer);
   await plugin.observe();
 
-  const result = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({ providerProjectId: LUKE_PROJECT.id }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({ providerProjectId: LUKE_PROJECT.id }),
+    ),
   );
 
   // Nothing named means nothing to wait on: the workspace stands unopened
@@ -444,13 +466,15 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A selection the build's table lists is sent exactly as documented, the
   // effort riding along when one was chosen.
-  const chosen = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({
-      providerProjectId: LUKE_PROJECT.id,
-      agentSelection: { agent: "claude", model: "sonnet", effort: "max" },
-    }),
+  const chosen = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: LUKE_PROJECT.id,
+        agentSelection: { agent: "claude", model: "sonnet", effort: "max" },
+      }),
+    ),
   );
   assert.deepEqual(chosen, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
@@ -461,13 +485,15 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
   });
 
   // No effort chosen sends none, so Conductor's default effort stands.
-  const effortless = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({
-      providerProjectId: LUKE_PROJECT.id,
-      agentSelection: { agent: "claude", model: "sonnet" },
-    }),
+  const effortless = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: LUKE_PROJECT.id,
+        agentSelection: { agent: "claude", model: "sonnet" },
+      }),
+    ),
   );
   assert.deepEqual(effortless, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
@@ -483,13 +509,15 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
     { agent: "claude", model: "gpt-5.5" },
     { agent: "claude", model: "sonnet", effort: "ultra" },
   ]) {
-    const unlisted = await dispatchAction(
-      plugin,
-      "createWorkspace",
-      admittedForTest({
-        providerProjectId: LUKE_PROJECT.id,
-        agentSelection,
-      }),
+    const unlisted = await runTest(
+      dispatchAction(
+        plugin,
+        "createWorkspace",
+        admittedForTest({
+          providerProjectId: LUKE_PROJECT.id,
+          agentSelection,
+        }),
+      ),
     );
     assert.deepEqual(unlisted, { status: "accepted", providerSessionId: "session-new" });
     assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
@@ -500,10 +528,12 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
   // No choice at all sends no agent and no model, so Conductor's own
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // defaults decide — an absent field is not the same request as a guessed one.
-  await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({ providerProjectId: LUKE_PROJECT.id }),
+  await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({ providerProjectId: LUKE_PROJECT.id }),
+    ),
   );
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
     projectId: LUKE_PROJECT.id,
@@ -521,10 +551,12 @@ test("refuses a creation ask for a project the last pass did not list", async ()
   await plugin.observe();
   const requestsBefore = api.requests.length;
 
-  const unlisted = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({ providerProjectId: "project-unknown" }),
+  const unlisted = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({ providerProjectId: "project-unknown" }),
+    ),
   );
 
   // No request exists for a project observation did not see.
@@ -545,13 +577,15 @@ test("hands an opening task to the first session the creation response names", a
   const plugin = pluginFor(api.layer);
   await plugin.observe();
 
-  const result = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({
-      providerProjectId: LUKE_PROJECT.id,
-      task: "Add a smoke test for the panel motion",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: LUKE_PROJECT.id,
+        task: "Add a smoke test for the panel motion",
+      }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted", providerSessionId: "session-new" });
@@ -579,13 +613,15 @@ test("reports a workspace whose task could not be delivered as exactly that", as
   const plugin = pluginFor(api.layer);
   await plugin.observe();
 
-  const result = await dispatchAction(
-    plugin,
-    "createWorkspace",
-    admittedForTest({
-      providerProjectId: LUKE_PROJECT.id,
-      task: "Add a smoke test",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "createWorkspace",
+      admittedForTest({
+        providerProjectId: LUKE_PROJECT.id,
+        task: "Add a smoke test",
+      }),
+    ),
   );
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -626,15 +662,17 @@ test("starts another agent in the workspace behind an observed row", async () =>
     "cursor",
   ]);
 
-  const result = await dispatchAction(
-    plugin,
-    "spawnAgent",
-    admittedForTest({
-      providerSessionId: "session-idle",
-      agent: "codex",
-      name: "xyz feature",
-      task: "Build the XYZ feature",
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "spawnAgent",
+      admittedForTest({
+        providerSessionId: "session-idle",
+        agent: "codex",
+        name: "xyz feature",
+        task: "Build the XYZ feature",
+      }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted" });
@@ -673,15 +711,17 @@ test("a stored model rides a new agent only as the pairing the table lists", asy
 
   // A model documented for the asked-for agent kind rides along, its effort
   // beside it when one was chosen.
-  const listed = await dispatchAction(
-    plugin,
-    "spawnAgent",
-    admittedForTest({
-      providerSessionId: "session-idle",
-      agent: "codex",
-      model: "gpt-5.6-sol",
-      effort: "ultra",
-    }),
+  const listed = await runTest(
+    dispatchAction(
+      plugin,
+      "spawnAgent",
+      admittedForTest({
+        providerSessionId: "session-idle",
+        agent: "codex",
+        model: "gpt-5.6-sol",
+        effort: "ultra",
+      }),
+    ),
   );
   assert.deepEqual(listed, { status: "accepted" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
@@ -699,14 +739,16 @@ test("a stored model rides a new agent only as the pairing the table lists", asy
     { model: "sonnet" },
     { model: "gpt-5.6-sol", effort: "not-a-level" },
   ] as const) {
-    const mismatched = await dispatchAction(
-      plugin,
-      "spawnAgent",
-      admittedForTest({
-        providerSessionId: "session-idle",
-        agent: "codex",
-        ...stored,
-      }),
+    const mismatched = await runTest(
+      dispatchAction(
+        plugin,
+        "spawnAgent",
+        admittedForTest({
+          providerSessionId: "session-idle",
+          agent: "codex",
+          ...stored,
+        }),
+      ),
     );
     assert.deepEqual(mismatched, { status: "accepted" });
     assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
@@ -737,21 +779,25 @@ test("refuses to start an agent the row never listed, before any request exists"
 
   // An agent kind the observation did not list, and a session the pass did
   // not emit, are both nowhere to land.
-  const unlisted = await dispatchAction(
-    plugin,
-    "spawnAgent",
-    admittedForTest({
-      providerSessionId: "session-idle",
-      agent: "acp",
-    }),
+  const unlisted = await runTest(
+    dispatchAction(
+      plugin,
+      "spawnAgent",
+      admittedForTest({
+        providerSessionId: "session-idle",
+        agent: "acp",
+      }),
+    ),
   );
-  const unobserved = await dispatchAction(
-    plugin,
-    "spawnAgent",
-    admittedForTest({
-      providerSessionId: "session-unseen",
-      agent: "claude",
-    }),
+  const unobserved = await runTest(
+    dispatchAction(
+      plugin,
+      "spawnAgent",
+      admittedForTest({
+        providerSessionId: "session-unseen",
+        agent: "claude",
+      }),
+    ),
   );
 
   assert.deepEqual(unlisted, {

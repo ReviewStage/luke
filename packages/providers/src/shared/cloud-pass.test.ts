@@ -9,6 +9,7 @@ import {
   agedStatus,
   dispatchAction,
   OBSERVATION_WINDOW,
+  type ProviderActionResult,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -21,6 +22,7 @@ import {
   HTTP_STATUS,
   jsonResponse,
   recordingHttpClient,
+  runTest,
 } from "@sidecar/wire/testing";
 import { Duration, Effect, Exit, Fiber, type Layer, TestClock } from "effect";
 import { test } from "vitest";
@@ -159,16 +161,17 @@ function stubPluginFor(
     },
   });
 
-  const write = async (route: CloudWriteRoute) => {
-    const key = await pass.readApiKey();
-    if (!key) {
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: `${STUB_PROVIDER.displayName}'s API key is no longer configured.`,
-      } as const;
-    }
-    return (await runAdapterRead(pass.write(key, route))).outcome;
-  };
+  const write = (route: CloudWriteRoute): Effect.Effect<ProviderActionResult> =>
+    Effect.flatMap(
+      Effect.promise(() => pass.readApiKey()),
+      (key) =>
+        key
+          ? Effect.map(pass.write(key, route), (written) => written.outcome)
+          : Effect.succeed<ProviderActionResult>({
+              status: ACTION_RESULT_STATUS.REJECTED,
+              reason: `${STUB_PROVIDER.displayName}'s API key is no longer configured.`,
+            }),
+    );
 
   return {
     provider: STUB_PROVIDER,
@@ -216,7 +219,7 @@ function stubPluginFor(
                 });
               }
               if (control.id !== STUB_APPROVE_CONTROL.id) {
-                return Promise.resolve({
+                return Effect.succeed<ProviderActionResult>({
                   status: ACTION_RESULT_STATUS.UNSUPPORTED,
                   reason: UNSUPPORTED_BY_OBSERVATION,
                 });
@@ -238,10 +241,12 @@ test("answers unsupported explicitly when no observed route exists", async () =>
   const observesOnly = stubPluginFor(stubClient().layer, { routesNothing: true });
   for (const plugin of [routed, observesOnly]) {
     assert.deepEqual(
-      await dispatchAction(
-        plugin,
-        "message",
-        admittedForTest({ providerSessionId: "missing", text: "hello" }),
+      await runTest(
+        dispatchAction(
+          plugin,
+          "message",
+          admittedForTest({ providerSessionId: "missing", text: "hello" }),
+        ),
       ),
       {
         status: ACTION_RESULT_STATUS.UNSUPPORTED,
@@ -579,10 +584,12 @@ test("sends a user message through the route and body the provider documents", a
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await plugin.observe();
 
-  const result = await dispatchAction(
-    plugin,
-    "message",
-    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "message",
+      admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+    ),
   );
 
   assert.deepEqual(result, { status: "accepted" });
@@ -605,10 +612,12 @@ test("refuses to send once the credential is gone, whatever was observed with it
   const observationRequests = stub.requests.length;
 
   apiKey = undefined;
-  const result = await dispatchAction(
-    plugin,
-    "message",
-    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "message",
+      admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+    ),
   );
 
   // A refusal with the actual reason, not "unsupported": the session
@@ -628,13 +637,13 @@ test("reports what became of a send the provider refused", async () => {
   const message = { providerSessionId: "session-one", text: "go on" };
 
   status = HTTP_STATUS.UNAUTHORIZED;
-  const unauthorized = await dispatchAction(plugin, "message", admittedForTest(message));
+  const unauthorized = await runTest(dispatchAction(plugin, "message", admittedForTest(message)));
   status = HTTP_STATUS.NOT_FOUND;
-  const missing = await dispatchAction(plugin, "message", admittedForTest(message));
+  const missing = await runTest(dispatchAction(plugin, "message", admittedForTest(message)));
   status = HTTP_STATUS.CONFLICT;
-  const conflicted = await dispatchAction(plugin, "message", admittedForTest(message));
+  const conflicted = await runTest(dispatchAction(plugin, "message", admittedForTest(message)));
   status = HTTP_STATUS.SERVER_ERROR;
-  const failed = await dispatchAction(plugin, "message", admittedForTest(message));
+  const failed = await runTest(dispatchAction(plugin, "message", admittedForTest(message)));
 
   assert.equal(unauthorized.status, "rejected");
   assert.equal(missing.status, "rejected");
@@ -653,10 +662,12 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
   await plugin.observe();
 
   failWrites = true;
-  const result = await dispatchAction(
-    plugin,
-    "message",
-    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "message",
+      admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+    ),
   );
 
   // A thrown request cannot say whether it landed — the provider may
@@ -677,10 +688,12 @@ test("a write answered with an unnamed status makes the next refresh ask", async
   await plugin.observe();
 
   status = HTTP_STATUS.SERVER_ERROR;
-  const result = await dispatchAction(
-    plugin,
-    "message",
-    admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "message",
+      admittedForTest({ providerSessionId: "session-one", text: "go on" }),
+    ),
   );
 
   assert.equal(result.status, "rejected");
@@ -704,13 +717,15 @@ test("a write runs on the deadline its own route asked for", async () => {
   await plugin.observe();
 
   const startedAt = performance.now();
-  const result = await dispatchAction(
-    plugin,
-    "control",
-    admittedForTest({
-      providerSessionId: "session-slow",
-      control: STUB_SLOW_ACTION_CONTROL,
-    }),
+  const result = await runTest(
+    dispatchAction(
+      plugin,
+      "control",
+      admittedForTest({
+        providerSessionId: "session-slow",
+        control: STUB_SLOW_ACTION_CONTROL,
+      }),
+    ),
   );
 
   assert.equal(result.status, "rejected");
@@ -746,29 +761,35 @@ test("runs an advertised control through its documented route, sending no body",
   await plugin.observe();
   const observationRequests = stub.requests.length;
 
-  const approved = await dispatchAction(
-    plugin,
-    "control",
-    admittedForTest({
-      providerSessionId: "session-plan",
-      control: STUB_APPROVE_CONTROL,
-    }),
+  const approved = await runTest(
+    dispatchAction(
+      plugin,
+      "control",
+      admittedForTest({
+        providerSessionId: "session-plan",
+        control: STUB_APPROVE_CONTROL,
+      }),
+    ),
   );
-  const unadvertised = await dispatchAction(
-    plugin,
-    "control",
-    admittedForTest({
-      providerSessionId: "session-quiet",
-      control: STUB_APPROVE_CONTROL,
-    }),
+  const unadvertised = await runTest(
+    dispatchAction(
+      plugin,
+      "control",
+      admittedForTest({
+        providerSessionId: "session-quiet",
+        control: STUB_APPROVE_CONTROL,
+      }),
+    ),
   );
-  const unknown = await dispatchAction(
-    plugin,
-    "control",
-    admittedForTest({
-      providerSessionId: "session-plan",
-      control: { kind: ACTION_KIND.CONTROL, id: "terminate", label: "Terminate" },
-    }),
+  const unknown = await runTest(
+    dispatchAction(
+      plugin,
+      "control",
+      admittedForTest({
+        providerSessionId: "session-plan",
+        control: { kind: ACTION_KIND.CONTROL, id: "terminate", label: "Terminate" },
+      }),
+    ),
   );
 
   assert.deepEqual(approved, { status: "accepted" });

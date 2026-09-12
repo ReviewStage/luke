@@ -246,21 +246,20 @@ const UNSUPPORTED: ProviderActionResult = {
  * action takes. Whether the ask may run at all is admission's answer, asked
  * separately below; what this exercises is what the provider does with one.
  */
-async function askAction(
+function actionEffect(
   plugin: SessionProviderPlugin,
   kind: AdvertisedActionKind,
   providerSessionId: string,
-  overrides: ActionOverrides = {},
-): Promise<ProviderActionResult | ProviderWorkspaceResult> {
+  overrides: ActionOverrides,
+): Effect.Effect<ProviderActionResult | ProviderWorkspaceResult> {
   const observation = observationFor(plugin, providerSessionId);
   const input = <Request>(request: Request): Admitted<ActionInput<Request>> =>
     admittedForTest({ request, observation });
   switch (kind) {
     case ACTION_KIND.MESSAGE:
       return (
-        (await plugin.actions?.message?.(
-          input({ text: overrides.text ?? UNSUPPORTED_MESSAGE_TEXT }),
-        )) ?? UNSUPPORTED
+        plugin.actions?.message?.(input({ text: overrides.text ?? UNSUPPORTED_MESSAGE_TEXT })) ??
+        Effect.succeed(UNSUPPORTED)
       );
     case ACTION_KIND.CONTROL: {
       const control = overrides.control ?? {
@@ -268,33 +267,44 @@ async function askAction(
         id: "contract-unadvertised-control",
         label: "Never advertised",
       };
-      return (await plugin.actions?.control?.(input({ control }))) ?? UNSUPPORTED;
+      return plugin.actions?.control?.(input({ control })) ?? Effect.succeed(UNSUPPORTED);
     }
     case ACTION_KIND.ADD_AGENT: {
       // The dispatcher resolves the target from the advertisement, so the
       // suite hands over exactly what the advertisement named.
       const advertised = observation && advertisedActionFor(observation, ACTION_KIND.ADD_AGENT);
       return (
-        (await plugin.actions?.spawnAgent?.(
+        plugin.actions?.spawnAgent?.(
           input({
             spawnTarget: advertised?.target ?? providerSessionId,
             agent: overrides.agent ?? "contract-unadvertised-agent",
           }),
-        )) ?? UNSUPPORTED
+        ) ?? Effect.succeed(UNSUPPORTED)
       );
     }
     case ACTION_KIND.RENAME_SESSION:
-      return (await plugin.actions?.renameSession?.(input({ name: "contract" }))) ?? UNSUPPORTED;
+      return (
+        plugin.actions?.renameSession?.(input({ name: "contract" })) ?? Effect.succeed(UNSUPPORTED)
+      );
     case ACTION_KIND.RENAME_WORKSPACE: {
       const advertised =
         observation && advertisedActionFor(observation, ACTION_KIND.RENAME_WORKSPACE);
       return (
-        (await plugin.actions?.renameWorkspace?.(
+        plugin.actions?.renameWorkspace?.(
           input({ renameTarget: advertised?.target ?? providerSessionId, name: "contract" }),
-        )) ?? UNSUPPORTED
+        ) ?? Effect.succeed(UNSUPPORTED)
       );
     }
   }
+}
+
+function askAction(
+  plugin: SessionProviderPlugin,
+  kind: AdvertisedActionKind,
+  providerSessionId: string,
+  overrides: ActionOverrides = {},
+): Promise<ProviderActionResult | ProviderWorkspaceResult> {
+  return runTest(actionEffect(plugin, kind, providerSessionId, overrides));
 }
 
 /** What an action's request carries from the observation's own advertisement. */
@@ -522,13 +532,15 @@ export function describeProviderContract(
         // Asked the one way an action reaches a provider at all: `dispatchAction`
         // resolves the advertised entry from the plugin's own latest roster,
         // so the caller's rewritten copy never becomes a route.
-        await dispatchAction(
-          plugin,
-          "control",
-          admittedForTest({
-            providerSessionId: fixtures.sessionId,
-            control: { ...targeted, target: "contract-rewritten-target" },
-          }),
+        await runTest(
+          dispatchAction(
+            plugin,
+            "control",
+            admittedForTest({
+              providerSessionId: fixtures.sessionId,
+              control: { ...targeted, target: "contract-rewritten-target" },
+            }),
+          ),
         );
 
         const issued = recordedRoutes(api.requests()).slice(requestsAfterPass);
@@ -786,13 +798,15 @@ export function describeProviderContract(
     await assertGoldenJson(golden("projects.json"), projects);
     // Asked the one way an action reaches a provider at all, so what refuses an
     // unreported project is the same resolution production runs.
-    const created = await dispatchAction(
-      plugin,
-      "createWorkspace",
-      admittedForTest({
-        providerProjectId: fixtures.absentProjectId,
-        task: "This creation must never reach a provider.",
-      }),
+    const created = await runTest(
+      dispatchAction(
+        plugin,
+        "createWorkspace",
+        admittedForTest({
+          providerProjectId: fixtures.absentProjectId,
+          task: "This creation must never reach a provider.",
+        }),
+      ),
     );
 
     assert.notEqual(

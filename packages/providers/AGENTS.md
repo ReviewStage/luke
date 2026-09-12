@@ -13,7 +13,9 @@ display name, with no files, hook, or credential behind them.
 
 ## A provider validates nothing about whether an action may run
 
-`dispatchAction` and every provider write take an already-admitted request. What a
+`dispatchAction` and every provider write take an already-admitted request and
+answer an `Effect`, so a write is described where it is asked for and run only
+on the fiber the caller composes it into. What a
 provider answers for is its own route — the advertised control, spawn target,
 rename target, or listed project it reads back from its own latest pass — and the
 provider's documented shape.
