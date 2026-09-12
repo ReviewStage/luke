@@ -159,9 +159,10 @@ main and WebRTC media needs no fetch.
 
 The spoken introduction in `renderer/introduction/` is a peer of the same
 kind, over the same `LiveCall`, with the introduction's own two acts behind
-it: `ACT_KIND.INTRODUCTION_CREATE_SESSION` carries the offer and the detected
-titles (bounded to `INTRODUCTION_SEED_BOUNDS`) to the accountless session the
-main process holds, and `ACT_KIND.INTRODUCTION_END_SESSION` is the hang-up.
+it: `ACT_KIND.INTRODUCTION_CREATE_SESSION` carries the offer, whose title seed
+(bounded to `INTRODUCTION_SEED_BOUNDS`) the takeover fills with nothing, to the
+accountless session the main process holds, and
+`ACT_KIND.INTRODUCTION_END_SESSION` is the hang-up.
 The order is the Live guide's greeting before the caller speaks: the
 microphone is asked for first, at the developer's press, and the session
 opens only once it is granted; the greeting is the voice service's, the
