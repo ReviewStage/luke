@@ -282,10 +282,12 @@ test("a spoken ask runs a turn through the ask door and is spoken from the servi
   );
   const rows = await readMessagesByConversationTyped(database.run, target.conversationId);
   // One user row stands for one spoken ask: the developer's words as the session transcribed
-  // them, under the delegation's id. The question as eve received it is on the ask's record,
-  // never a second line.
-  const userRows = rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => row.clientId);
-  assert.deepEqual(userRows, ["dl_1"]);
+  // them, under the delegation's id, which is the ask's id too, and tied to the turn the ask
+  // ran. The question as eve received it is on the ask's record, never a second line.
+  const userRows = rows
+    .filter((row) => row.role === MESSAGE_ROLE.USER)
+    .map((row) => [row.clientId, row.turnId]);
+  assert.deepEqual(userRows, [["dl_1", hostTurnId(recorded, FIRST_EVE_TURN)]]);
   const [session] = await readVoiceSessionByLiveSessionId(database.run, f.liveSessionId);
   assert.ok(session);
   const segments = await readVoiceTranscriptSegmentsBySession(

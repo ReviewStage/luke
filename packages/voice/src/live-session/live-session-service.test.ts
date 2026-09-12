@@ -375,7 +375,7 @@ test("a delegation is claimed once, composed from the transcript since the previ
   sideband.delegation("item_1", 2500);
   await drainMicrotasks();
   assert.equal(f.brain.asks.length, 1);
-  assert.deepEqual(f.brain.asks[0]?.submissionId, "id-1");
+  assert.deepEqual(f.brain.asks[0]?.submissionId, "item_1");
   assert.equal(f.record.developer.length, 1);
   assert.deepEqual(
     {
