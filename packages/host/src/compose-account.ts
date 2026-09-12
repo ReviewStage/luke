@@ -99,8 +99,10 @@ export const composeAccount = (
     // The runtime the host is being built on, threaded through
     // `VoiceCapabilityAssembler` to every model adapter it builds, so the
     // promise each of those still answers is run on the host's own runtime
-    // rather than on an ambient default one. This composer runs nothing on it
-    // itself.
+    // rather than on an ambient default one, and what this composer runs on it
+    // itself: `applyVoiceCredential`'s transition below, and the settings
+    // change the account's own `onChange` asks for from a synchronous body
+    // that has no fiber to yield on.
     const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<AccountLinks>();
     const links = (): AccountLinks => {
@@ -144,7 +146,11 @@ export const composeAccount = (
         if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
         if (signedIn && !wasSignedIn) links().onFirstSignIn();
         kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(account));
-        void settings.emitSettings();
+        // The settings change on the host's own runtime rather than an ambient
+        // default one, forked because nothing here waits for it, exactly as
+        // the promise it replaced was not waited for. The run allowlist entry
+        // (`docs/adr/0001-effect.md`) goes when `onChange` answers an Effect.
+        Runtime.runFork(runtime)(settings.emitSettings());
         void emitSessionReplay();
         if (signedIn && !wasSignedIn) {
           settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});

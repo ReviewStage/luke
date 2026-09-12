@@ -1,3 +1,4 @@
+import type { PlatformError } from "@effect/platform/Error";
 import * as FileSystem from "@effect/platform/FileSystem";
 import {
   PRODUCT_EVENT,
@@ -32,7 +33,7 @@ import {
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Cause, Effect, Option } from "effect";
+import { Cause, Effect, Option, Queue } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
@@ -40,7 +41,7 @@ import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { heldProductEvents } from "./held-product-events.js";
-import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
+import { providerKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { SettingsStore, type StoredAccount } from "./settings-store.js";
 import { type AwaitedSettingsStore, awaitedSettingsStore } from "./settings-store-awaited.js";
@@ -75,7 +76,7 @@ export interface SettingsComposer extends Composer {
   /** One count per provider per day, as the observation pass makes it. */
   recordProductEventOncePerDay: ProductEventSender["recordOncePerDay"];
   emitSettingsSnapshot: (settings: SettingsUpdateResult["settings"], reporter?: string) => void;
-  emitSettings: () => Promise<void>;
+  emitSettings: () => Effect.Effect<void>;
   refusedSettings: (reason: string) => Effect.Effect<SettingsUpdateResult>;
   /**
    * One settings write and, when it landed, its host side effects and the
@@ -89,9 +90,13 @@ export interface SettingsComposer extends Composer {
     refusal: string,
     reporter: string | undefined,
   ) => Effect.Effect<SettingsUpdateResult>;
-  reconcileProviderKeyVault: () => void;
-  reconcileAccountPreferences: () => Promise<void>;
-  /** The developer's own preference write, on its way to the account behind it. */
+  reconcileProviderKeyVault: () => Effect.Effect<void>;
+  reconcileAccountPreferences: () => Effect.Effect<void>;
+  /**
+   * The developer's own preference write, on its way to the account behind it,
+   * offered rather than run: the observation composer asks for one from a
+   * promise-shaped body that has no fiber to yield on.
+   */
   pushAccountPreferences: () => void;
   /** The account behind the hydrated preferences changed; the next push hydrates again. */
   forgetAccountPreferenceHydration: () => void;
@@ -175,53 +180,79 @@ export const composeSettings = (): Effect.Effect<
           : Effect.succeed(undefined),
       refreshAccount: () => links().refreshAccount(),
       readAccountKey: () =>
-        Effect.tryPromise(() => readAccountPreferenceAccountKey()).pipe(
-          Effect.orElseSucceed(() => undefined),
-        ),
+        readAccountPreferenceAccountKey().pipe(Effect.orElseSucceed(() => undefined)),
     });
-    const vaultSync = new ProviderKeyVaultSync({
+    const vaultSync = yield* providerKeyVaultSync({
       vault: hostedVault,
-      readStoredApiKey: (providerId) => awaitedStore.readStoredApiKey(providerId),
-      account: async () => {
-        const held = await awaitedStore.readAccount();
-        if (!held) return undefined;
-        const vaultAccount: VaultSyncAccount = { email: held.email };
-        if (held.id) vaultAccount.id = held.id;
-        return vaultAccount;
-      },
+      readStoredApiKey: (providerId) => store.readStoredApiKey(providerId),
+      account: () =>
+        Effect.map(store.readAccount(), (held) => {
+          if (!held) return undefined;
+          const vaultAccount: VaultSyncAccount = { email: held.email };
+          if (held.id) vaultAccount.id = held.id;
+          return vaultAccount;
+        }),
       tenant: {
-        read: () => awaitedStore.readVaultSyncAccount(),
-        write: (accountKey) => awaitedStore.setVaultSyncAccount(accountKey),
+        read: () => store.readVaultSyncAccount(),
+        write: (accountKey) => store.setVaultSyncAccount(accountKey),
       },
     });
 
     let accountPreferencesHydratedAccount: string | undefined;
-    let accountPreferencesSync: Promise<void> = Promise.resolve();
 
-    function reconcileProviderKeyVault(): void {
-      void awaitedStore
-        .snapshot()
-        .then((settings) =>
-          settings.stored.syncProviderKeys ? vaultSync.apply(true, { claim: false }) : undefined,
-        );
+    /**
+     * One account-preferences action and the name its failure is reported
+     * under. Every one of them rides this queue, so a reconcile and a push
+     * cannot interleave into a snapshot that agrees with neither, exactly as
+     * the one promise chain they were written on held them.
+     */
+    interface AccountPreferencesAction {
+      readonly label: string;
+      readonly work: Effect.Effect<void, unknown>;
     }
+    const accountPreferencesActions = yield* Queue.unbounded<AccountPreferencesAction>();
 
-    async function readAccountPreferenceAccountKey(): Promise<string | undefined> {
-      return (await awaitedStore.readAccount())?.email;
-    }
+    /**
+     * An action offered rather than run: the hands and loops that ask for one
+     * are not all fibers, and an offer onto an unbounded queue is what every
+     * one of them can make where it stands.
+     */
+    const queueAccountPreferencesSync = (
+      label: string,
+      work: Effect.Effect<void, unknown>,
+    ): void => {
+      Queue.unsafeOffer(accountPreferencesActions, { label, work });
+    };
 
-    function queueAccountPreferencesSync(label: string, work: () => Promise<void>): Promise<void> {
-      const queued = accountPreferencesSync.then(work, work).catch((error) => {
-        report(
-          `Account preferences ${label} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
-      accountPreferencesSync = queued.then(
-        () => undefined,
-        () => undefined,
+    const failureReason = (cause: Cause.Cause<unknown>): string => {
+      const error = Cause.squash(cause);
+      return error instanceof Error ? error.message : String(error);
+    };
+
+    /** The queue drained one action at a time, for as long as the fiber running it stands. */
+    const drainAccountPreferencesSync = Queue.take(accountPreferencesActions).pipe(
+      Effect.flatMap(({ label, work }) =>
+        Effect.catchAllCause(work, (cause) =>
+          // An interruption is this fiber being ended rather than the action
+          // going wrong; every other way it could not be carried, a defect
+          // included, is the line the promise chain's own `catch` reported.
+          Cause.isInterruptedOnly(cause)
+            ? Effect.interrupt
+            : Effect.sync(() => {
+                report(`Account preferences ${label} failed: ${failureReason(cause)}`);
+              }),
+        ),
+      ),
+      Effect.forever,
+    );
+
+    const reconcileProviderKeyVault = (): Effect.Effect<void> =>
+      Effect.flatMap(Effect.orDie(store.snapshot()), (settings) =>
+        settings.stored.syncProviderKeys ? vaultSync.apply(true, { claim: false }) : Effect.void,
       );
-      return queued;
-    }
+
+    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
+      Effect.map(store.readAccount(), (account) => account?.email);
 
     function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
       return Object.keys(preferences).length === 0;
@@ -231,15 +262,16 @@ export const composeSettings = (): Effect.Effect<
       return JSON.stringify(left) === JSON.stringify(right);
     }
 
-    async function accountPreferenceHydrationBaseline(
+    const accountPreferenceHydrationBaseline = (
       accountEmail: string,
-    ): Promise<AccountPreferences> {
-      const baseline = await awaitedStore.accountPreferencesSyncBaseline(accountEmail);
-      if (baseline !== undefined) return baseline;
-      const preferences = await awaitedStore.accountPreferences();
-      await awaitedStore.setAccountPreferencesSyncBaseline(accountEmail, preferences);
-      return preferences;
-    }
+    ): Effect.Effect<AccountPreferences, PlatformError> =>
+      Effect.gen(function* () {
+        const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
+        if (baseline !== undefined) return baseline;
+        const preferences = yield* store.accountPreferences();
+        yield* store.setAccountPreferencesSyncBaseline(accountEmail, preferences);
+        return preferences;
+      });
 
     function isAccountPreferenceField(field: AppSettingField): field is AccountPreferenceField {
       return ACCOUNT_PREFERENCE_FIELDS.some((candidate) => candidate === field);
@@ -252,74 +284,82 @@ export const composeSettings = (): Effect.Effect<
       });
     }
 
-    async function reconcileAccountPreferences(): Promise<void> {
-      return queueAccountPreferencesSync("reconcile", async () => {
-        const accountKey = await readAccountPreferenceAccountKey();
-        if (!accountKey) return;
-        await hydrateAccountPreferences(accountKey);
+    const reconcileAccountPreferences = (): Effect.Effect<void> =>
+      Effect.sync(() => {
+        queueAccountPreferencesSync(
+          "reconcile",
+          Effect.gen(function* () {
+            const accountKey = yield* readAccountPreferenceAccountKey();
+            if (!accountKey) return;
+            yield* hydrateAccountPreferences(accountKey);
+          }),
+        );
       });
-    }
 
-    async function hydrateAccountPreferences(accountKey: string): Promise<boolean> {
-      const baseline = await accountPreferenceHydrationBaseline(accountKey);
-      if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
-      const remote = await accountPreferencesClient.readPreferences();
-      if (!remote || (await readAccountPreferenceAccountKey()) !== accountKey) return false;
+    const hydrateAccountPreferences = (accountKey: string): Effect.Effect<boolean, PlatformError> =>
+      Effect.gen(function* () {
+        const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
+        if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+        const remote = yield* accountPreferencesClient.readPreferences();
+        if (!remote || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
 
-      if (!remote.hasStoredSnapshot) {
-        const preferences = await awaitedStore.accountPreferences();
-        if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
-        if (!accountPreferencesEmpty(preferences)) {
-          const written = await accountPreferencesClient.writePreferences(preferences);
-          if (!written || (await readAccountPreferenceAccountKey()) !== accountKey) return false;
+        if (!remote.hasStoredSnapshot) {
+          const preferences = yield* store.accountPreferences();
+          if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+          if (!accountPreferencesEmpty(preferences)) {
+            const written = yield* accountPreferencesClient.writePreferences(preferences);
+            if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+          }
+          if (!(yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences))) {
+            return false;
+          }
+          accountPreferencesHydratedAccount = accountKey;
+          return true;
         }
-        if (!(await awaitedStore.setAccountPreferencesSyncBaseline(accountKey, preferences))) {
-          return false;
-        }
+
+        const saved = yield* store.applyAccountPreferences(remote.preferences, {
+          accountEmail: accountKey,
+          preferences: baseline,
+        });
+        if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
         accountPreferencesHydratedAccount = accountKey;
+        const preferences = yield* store.accountPreferences();
+        if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+        if (saved.changed.length > 0) {
+          yield* applyAccountPreferenceSideEffects(saved, saved.changed);
+        }
+        if (!accountPreferencesSame(preferences, remote.preferences)) {
+          const written = yield* accountPreferencesClient.writePreferences(preferences);
+          if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return true;
+        }
+        yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
         return true;
-      }
-
-      const saved = await awaitedStore.applyAccountPreferences(remote.preferences, {
-        accountEmail: accountKey,
-        preferences: baseline,
       });
-      if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
-      accountPreferencesHydratedAccount = accountKey;
-      const preferences = await awaitedStore.accountPreferences();
-      if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
-      if (saved.changed.length > 0) {
-        await applyAccountPreferenceSideEffects(saved, saved.changed);
-      }
-      if (!accountPreferencesSame(preferences, remote.preferences)) {
-        const written = await accountPreferencesClient.writePreferences(preferences);
-        if (!written || (await readAccountPreferenceAccountKey()) !== accountKey) return true;
-      }
-      await awaitedStore.setAccountPreferencesSyncBaseline(accountKey, preferences);
-      return true;
-    }
 
     function pushAccountPreferences(): void {
-      void queueAccountPreferencesSync("write", async () => {
-        const accountKey = await readAccountPreferenceAccountKey();
-        if (!accountKey) return;
-        if (
-          accountPreferencesHydratedAccount !== accountKey &&
-          !(await hydrateAccountPreferences(accountKey))
-        ) {
-          return;
-        }
-        const preferences = await awaitedStore.accountPreferences();
-        if (
-          (await readAccountPreferenceAccountKey()) !== accountKey ||
-          accountPreferencesHydratedAccount !== accountKey
-        ) {
-          return;
-        }
-        const written = await accountPreferencesClient.writePreferences(preferences);
-        if (!written || (await readAccountPreferenceAccountKey()) !== accountKey) return;
-        await awaitedStore.setAccountPreferencesSyncBaseline(accountKey, preferences);
-      });
+      queueAccountPreferencesSync(
+        "write",
+        Effect.gen(function* () {
+          const accountKey = yield* readAccountPreferenceAccountKey();
+          if (!accountKey) return;
+          if (
+            accountPreferencesHydratedAccount !== accountKey &&
+            !(yield* hydrateAccountPreferences(accountKey))
+          ) {
+            return;
+          }
+          const preferences = yield* store.accountPreferences();
+          if (
+            (yield* readAccountPreferenceAccountKey()) !== accountKey ||
+            accountPreferencesHydratedAccount !== accountKey
+          ) {
+            return;
+          }
+          const written = yield* accountPreferencesClient.writePreferences(preferences);
+          if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return;
+          yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
+        }),
+      );
     }
 
     const recordProductEvent: RecordProductEvent = (name, properties) =>
@@ -335,9 +375,10 @@ export const composeSettings = (): Effect.Effect<
       });
     }
 
-    async function emitSettings(): Promise<void> {
-      emitSettingsSnapshot(await awaitedStore.snapshot());
-    }
+    const emitSettings = (): Effect.Effect<void> =>
+      Effect.map(Effect.orDie(store.snapshot()), (snapshot) => {
+        emitSettingsSnapshot(snapshot);
+      });
 
     function recordSettingUpdate(
       field: AppSettingField,
@@ -355,33 +396,33 @@ export const composeSettings = (): Effect.Effect<
       setVoice: (voice) => links().setVoice(voice),
       applyVoiceCredential: () => links().applyVoiceCredential(),
       reconcileSpeech: () => links().reconcileSpeech(),
-      applyVaultSync: (syncProviderKeys) => void vaultSync.apply(syncProviderKeys, { claim: true }),
+      applyVaultSync: (syncProviderKeys) => vaultSync.apply(syncProviderKeys, { claim: true }),
       emitSettings,
     });
 
-    async function applyHostSettingSideEffect(
+    const applyHostSettingSideEffect = (
       field: AppSettingField,
       settings: SettingsUpdateResult["settings"],
-    ): Promise<void> {
-      await sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
-    }
+    ): Effect.Effect<void> =>
+      sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
 
-    async function applyAccountPreferenceSideEffects(
+    const applyAccountPreferenceSideEffects = (
       result: SettingsUpdateResult,
       changed: readonly AccountPreferenceField[],
-    ): Promise<void> {
-      for (const field of changed) {
-        await applyHostSettingSideEffect(field, result.settings);
-      }
-      if (
-        changed.includes(APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
-        changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
-        changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
-      ) {
-        await links().broadcastWorkspaceProjects();
-      }
-      emitSettingsSnapshot(result.settings);
-    }
+    ): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        for (const field of changed) {
+          yield* applyHostSettingSideEffect(field, result.settings);
+        }
+        if (
+          changed.includes(APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
+          changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
+          changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
+        ) {
+          yield* Effect.promise(() => links().broadcastWorkspaceProjects());
+        }
+        emitSettingsSnapshot(result.settings);
+      });
 
     const refusedSettings = (reason: string): Effect.Effect<SettingsUpdateResult> =>
       Effect.map(Effect.orDie(store.snapshot()), (settings) => ({
@@ -431,9 +472,9 @@ export const composeSettings = (): Effect.Effect<
             (saved) =>
               saved.reason
                 ? Effect.void
-                : Effect.promise(async () => {
+                : Effect.gen(function* () {
                     recordSettingUpdate(field, saved.settings);
-                    await applyHostSettingSideEffect(field, saved.settings);
+                    yield* applyHostSettingSideEffect(field, saved.settings);
                   }),
             "Could not save that setting on this system.",
             reporterOf(params),
@@ -467,9 +508,9 @@ export const composeSettings = (): Effect.Effect<
             (saved) =>
               saved.reason
                 ? Effect.void
-                : Effect.promise(async () => {
+                : Effect.gen(function* () {
                     recordSettingUpdate(field, saved.settings);
-                    await applyHostSettingSideEffect(field, saved.settings);
+                    yield* applyHostSettingSideEffect(field, saved.settings);
                   }),
             "Could not save that setting on this system.",
             reporterOf(params),
@@ -487,13 +528,13 @@ export const composeSettings = (): Effect.Effect<
             (saved) =>
               saved.reason
                 ? Effect.void
-                : Effect.promise(async () => {
+                : Effect.gen(function* () {
                     recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
                     for (const field of APP_SETTING_FIELDS) {
                       const definition = APP_SETTING_SCHEMA[field];
                       if (!("resetScope" in definition) || definition.resetScope !== scope)
                         continue;
-                      await applyHostSettingSideEffect(field, saved.settings);
+                      yield* applyHostSettingSideEffect(field, saved.settings);
                     }
                   }),
             "Could not reset those settings on this system.",
@@ -516,12 +557,12 @@ export const composeSettings = (): Effect.Effect<
             (saved) =>
               saved.reason
                 ? Effect.void
-                : Effect.promise(async () => {
+                : Effect.gen(function* () {
                     if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-                      await links().applyVoiceCredential();
-                      await emitSettings();
+                      yield* Effect.promise(() => links().applyVoiceCredential());
+                      yield* emitSettings();
                     }
-                    void vaultSync.keySaved(
+                    yield* vaultSync.keySaved(
                       providerId,
                       apiKey,
                       saved.settings.stored.syncProviderKeys,
@@ -575,17 +616,26 @@ export const composeSettings = (): Effect.Effect<
       link: (next) => {
         late.unsafeSet(next);
       },
-      lifetime: startedAndStopped(
-        Effect.sync(() => {
-          void awaitedStore.snapshot();
-          productEvents.arm();
-          productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
-          productEvents.markDayActive();
-          if (runMode.sendsNetwork) productEvents.start();
-        }),
-        Effect.sync(() => {
-          productEvents.stop();
-        }),
-      ),
+      lifetime: Effect.gen(function* () {
+        yield* startedAndStopped(
+          Effect.sync(() => {
+            productEvents.arm();
+            productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
+            productEvents.markDayActive();
+            if (runMode.sendsNetwork) productEvents.start();
+          }),
+          Effect.sync(() => {
+            productEvents.stop();
+          }),
+        );
+        // The settings read once so the file is warm for the composers built
+        // after this one, waited on by none of them.
+        yield* Effect.forkScoped(Effect.ignore(store.snapshot()));
+        // The two chains this composer holds, each drained by a fiber of the
+        // composer's own lifetime scope: the scope closing interrupts both
+        // before the stop above gives back what the start took.
+        yield* Effect.forkScoped(drainAccountPreferencesSync);
+        yield* Effect.forkScoped(vaultSync.actions);
+      }),
     };
   });
