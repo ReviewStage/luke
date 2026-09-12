@@ -43,11 +43,12 @@ The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
 `GITHUB_CLIENT_SECRET`.
 
-`vercel.json` uses a legacy `routes` entry for `/api/auth/(.*)` because Vercel's
-zero-config `api/` detection treats `[...all].js` as a single dynamic segment and
-adds a hard 404 for deeper API paths. A `rewrites` entry runs after that detected
-filesystem routing phase, so it cannot reach the Better Auth handler; keep this
-rule in `routes`, ahead of the detected routes.
+The web service's `routes` in `vercel.json` carry a legacy entry for
+`/api/auth/(.*)` because Vercel's zero-config `api/` detection treats
+`[...all].js` as a single dynamic segment and adds a hard 404 for deeper API
+paths. A `rewrites` entry runs after that detected filesystem routing phase, so
+it cannot reach the Better Auth handler; keep this rule in `routes`, ahead of
+the detected routes.
 
 Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
 so every database the application reaches already carries the clients, including
@@ -174,6 +175,30 @@ at the `VOICE_SERVICE_PATH` paths and the desktop posts feedback to
 `/api/feedback`. Reverting the PR that introduced the tree is one
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
+
+The Vercel project is two services in one deployment, declared under `services`
+in `vercel.json`, which Vercel reads only while the project's Framework Preset
+is Services. `web` is this app at its root and carries the migrate-and-seed
+build, the install filter, the ignore rule, and the `routes` above unchanged.
+`eve` is the hosted brain: its root is `eve/`, the flat eve app root described
+below, whose own `package.json` declares `eve`, so the service's install pulls
+`@luke/eve` beside this app and its build is a plain `pnpm exec eve build` run
+in that root. eve resolves that directory as its app root and writes its Build
+Output there, which is where static-build reads a service's output, so nothing
+relocates it and no variable of eve's own is set by hand. The block is one
+isolated declaration with no shared keys, so replacing it with a generated
+service later is removing a block rather than untangling one (LUKE-183).
+Public routing is the top-level `rewrites`:
+`/eve/v1/*` enters the eve service and everything else the web service, and a
+service's own routes run only once a request has entered it. That is why the
+generated `/api/` rewrites live under the web service's `routes` and the
+generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
+level beside `services`: Vercel ignores one there rather than erroring, so a
+file generated into the old location would pass every check and 404 every
+`/api/` route in production. The project's
+environment variables reach both services alike, and each service's own
+`ignoreCommand` is what skips its build, so a commit that changes nothing under
+`apps/web`, `packages`, or the workspace manifests deploys neither.
 
 ## Where a function runs an Effect
 
@@ -1170,12 +1195,13 @@ app root with its own `package.json` (`@luke/eve`, a workspace member whose one
 dependency is `eve`) and its evals under `eve/evals/`. The layout is
 load-bearing for the deployment: eve resolves the directory that holds
 `agent.ts` and declares `eve` as its app root, and writes its build output
-there (`.vercel/output` under Vercel, `.output` locally), so the eve Vercel
-project's Root Directory is `apps/web/eve` and its build command is a plain
-`eve build`. A directory named `agent` under `apps/web` would resolve as eve's
-nested layout instead, with the app root at `apps/web` and the output one level
-above where that project reads it, which is what the earlier co-located shape
-had to relocate by hand through eve's internal environment variables. The
+there (`.vercel/output` under Vercel, `.output` locally), so the eve service's
+root is `eve` and its build command is a plain `pnpm exec eve build`, run by
+static-build in that root and read back from it. A directory named `agent`
+under `apps/web` would resolve as eve's nested layout instead, with the app
+root at `apps/web` and the output one level above where the service reads it,
+which an earlier shape of this block relocated by hand through eve's internal
+environment variables. The
 agent still reaches `server/` by relative import and nothing else: neither
 package depends on the other, so `pnpm install --filter @luke/web...` pulls
 nothing of eve's and the web build never traces into `eve/` (the function

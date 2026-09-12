@@ -116,11 +116,14 @@ test("drift is read from both halves: a table behind the routes, and a vercel.js
     await rewritesDrifted(scratchWeb(apiRewritesSource(generated.slice(1)), config)),
     true,
   );
-  // SAFETY: the text is this app's own committed vercel.json, which the generator's schema decoded whole in the assertion above; only its routes array is moved here.
-  const reordered = JSON.parse(config) as { routes: readonly Rewrite[] };
-  const [first, ...rest] = reordered.routes;
+  // SAFETY: the text is this app's own committed vercel.json, which the generator's schema decoded whole in the assertion above; only the web service's routes array is moved here.
+  const reordered = JSON.parse(config) as {
+    services: { web: { routes: readonly Rewrite[] } };
+  };
+  const [first, ...rest] = reordered.services.web.routes;
   assert.ok(first);
-  const swapped = `${JSON.stringify({ ...reordered, routes: [...rest, first] }, null, 2)}\n`;
+  const web = { ...reordered.services.web, routes: [...rest, first] };
+  const swapped = `${JSON.stringify({ ...reordered, services: { ...reordered.services, web } }, null, 2)}\n`;
   assert.equal(await rewritesDrifted(scratchWeb(table, swapped)), true);
 });
 
