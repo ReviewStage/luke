@@ -57,7 +57,7 @@ it.effect(
         ],
       });
       const h = yield* effectHarness({}, repository);
-      yield* Effect.promise(() => h.agent.ready());
+      yield* h.agent.ready();
       assert.deepEqual(h.repository.state?.journal, [], "the orphaned row went with the restore");
       yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(answered([messageAction]), answered([message("")]));
@@ -66,14 +66,14 @@ it.effect(
       assert.equal(h.performed.length, 1);
       const first = h.executions[0]?.runId;
       // A second agent over the same store mints a different id for its first wake.
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
       const successor = yield* effectHarness({}, repository);
       yield* successor.agent.wake([edge(ABC)]);
       successor.client.answers.push(answered([messageAction]), answered([message("")]));
       yield* advanceHarness(NOW + 3_000);
       assert.equal(successor.performed.length, 1);
       assert.notEqual(successor.executions[0]?.runId, first);
-      yield* Effect.promise(() => successor.agent.stop());
+      yield* successor.agent.stop();
     }),
 );
 
@@ -85,14 +85,14 @@ it.effect(
         actions: performerWith(() => Promise.reject(new Error("socket closed after send"))).actions,
       });
       h.client.answers.push(answered([messageAction("call_1")]), failedAnswer("network"));
-      const record = yield* Effect.promise(() => ask(h, "send it"));
+      const record = yield* ask(h, "send it");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
       assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
       assert.equal(record?.performedActions, 0);
       assert.equal(record?.unknownActions, 1);
 
       const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
-      yield* Effect.promise(() => relaunched.agent.ready());
+      yield* relaunched.agent.ready();
       assert.equal(relaunched.agent.requests()[0]?.unknownActions, 1);
 
       // A confirmed refusal, by contrast, is a refusal: nothing unknown about it.
@@ -103,7 +103,7 @@ it.effect(
         answered([messageAction("call_1")]),
         answered([message("Refused.")]),
       );
-      const refused = yield* Effect.promise(() => ask(refusing, "send it"));
+      const refused = yield* ask(refusing, "send it");
       assert.equal(refused?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       assert.equal(refused?.unknownActions, 0);
       assert.equal(refused?.performedActions, 0);
@@ -115,10 +115,10 @@ it.effect("an interrupted run's started actions are counted unknown at the next 
     const held = heldPerformer();
     const h = yield* effectHarness({ actions: held.actions });
     h.client.answers.push(answered([messageAction("call_1")]));
-    yield* Effect.promise(() => submit(h, "send"));
+    yield* submit(h, "send");
     yield* Effect.promise(() => settle());
     const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
-    yield* Effect.promise(() => relaunched.agent.ready());
+    yield* relaunched.agent.ready();
     const record = relaunched.agent.requests()[0];
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
     assert.equal(record?.unknownActions, 1);

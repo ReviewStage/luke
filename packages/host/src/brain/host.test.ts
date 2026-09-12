@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { BrainAgent } from "@sidecar/brain";
-import { Effect } from "effect";
+import { type BrainAgent, carryOn } from "@sidecar/brain";
+import { Effect, Runtime } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./host.js";
 
@@ -13,16 +13,18 @@ function fakeAgent(name: string, log: string[]) {
   });
   // SAFETY: the host reads only `stop` off an agent; the fixture stands in for the rest.
   const agent = {
-    stop: () => {
-      log.push(`stop ${name}`);
-      return stopped;
-    },
+    stop: () =>
+      Effect.suspend(() => {
+        log.push(`stop ${name}`);
+        return Effect.promise(() => stopped);
+      }),
   } as unknown as BrainAgent;
   return { agent, release: () => release?.() };
 }
 
 function host(log: string[]) {
   return new BrainHost({
+    carry: carryOn(Runtime.defaultRuntime),
     follow: (agent) => {
       log.push(`follow ${agent === undefined ? "none" : "agent"}`);
       return async () => {
@@ -37,7 +39,7 @@ test("retiring withdraws the agent at once and begins its stop before any await"
   const log: string[] = [];
   const brains = host(log);
   const a = fakeAgent("a", log);
-  void brains.replace(() => a.agent);
+  void brains.replace(() => Effect.succeed(a.agent));
   a.release();
   return brains.settled().then(() => {
     assert.equal(brains.current(), a.agent);
@@ -56,20 +58,24 @@ it.effect(
       const a = fakeAgent("a", log);
       const b = fakeAgent("b", log);
       const c = fakeAgent("c", log);
-      yield* Effect.promise(() => brains.replace(() => a.agent));
+      yield* Effect.promise(() => brains.replace(() => Effect.succeed(a.agent)));
       assert.equal(brains.current(), a.agent);
 
       // Transition B retires A and waits on A's slow stop; transition C arrives
       // meanwhile. B must install nothing, and C must not install until A has
       // stopped.
-      const second = brains.replace(() => {
-        log.push("build b");
-        return b.agent;
-      });
-      const third = brains.replace(() => {
-        log.push("build c");
-        return c.agent;
-      });
+      const second = brains.replace(() =>
+        Effect.sync(() => {
+          log.push("build b");
+          return b.agent;
+        }),
+      );
+      const third = brains.replace(() =>
+        Effect.sync(() => {
+          log.push("build c");
+          return c.agent;
+        }),
+      );
       assert.equal(brains.current(), undefined);
       // A fixed, small number of fiber yields: enough for B's already-queued
       // step to start and suspend on A's still-unreleased stop, and no more,
@@ -88,12 +94,14 @@ test("a build decided after a newer transition is stopped rather than installed,
   const brains = host(log);
   const a = fakeAgent("a", log);
   let newer: Promise<void> | undefined;
-  const older = brains.replace(() => {
-    // The build itself asks for another transition — the same shape as a
-    // capability changing while the previous build is deciding.
-    newer = brains.replace(() => undefined);
-    return a.agent;
-  });
+  const older = brains.replace(() =>
+    Effect.sync(() => {
+      // The build itself asks for another transition — the same shape as a
+      // capability changing while the previous build is deciding.
+      newer = brains.replace(() => Effect.succeed(undefined));
+      return a.agent;
+    }),
+  );
   a.release();
   await older;
   await newer;
@@ -108,11 +116,13 @@ test("a retirement while an earlier replacement waits on a stop leaves that buil
   const brains = host(log);
   const a = fakeAgent("a", log);
   const b = fakeAgent("b", log);
-  await brains.replace(() => a.agent);
-  const replacing = brains.replace(() => {
-    log.push("build b");
-    return b.agent;
-  });
+  await brains.replace(() => Effect.succeed(a.agent));
+  const replacing = brains.replace(() =>
+    Effect.sync(() => {
+      log.push("build b");
+      return b.agent;
+    }),
+  );
   // The source goes away before A has finished stopping: nothing may install.
   brains.retire();
   a.release();
@@ -120,7 +130,7 @@ test("a retirement while an earlier replacement waits on a stop leaves that buil
   assert.equal(brains.current(), undefined);
   assert.ok(!log.includes("build b"));
   // A later transition with no capability publishes the empty list once.
-  await brains.replace(() => undefined);
+  await brains.replace(() => Effect.succeed(undefined));
   assert.equal(log.filter((entry) => entry === "publish empty").length, 1);
 });
 
@@ -128,11 +138,11 @@ test("the follower outlives the stop it relays, and retires once the stop settle
   const log: string[] = [];
   const brains = host(log);
   const a = fakeAgent("a", log);
-  await brains.replace(() => a.agent);
+  await brains.replace(() => Effect.succeed(a.agent));
   brains.retire();
   assert.deepEqual(log, ["follow agent", "stop a"]);
   a.release();
-  await brains.replace(() => undefined);
+  await brains.replace(() => Effect.succeed(undefined));
   assert.deepEqual(log, ["follow agent", "stop a", "unfollow", "publish empty"]);
 });
 
@@ -140,23 +150,27 @@ test("a build that throws fails its own transition, and the next transition stil
   const log: string[] = [];
   const brains = host(log);
   await assert.rejects(
-    brains.replace(() => {
-      throw new Error("client refused");
-    }),
+    brains.replace(() =>
+      Effect.sync((): BrainAgent | undefined => {
+        throw new Error("client refused");
+      }),
+    ),
     /client refused/,
   );
   assert.equal(brains.current(), undefined);
 
   const b = fakeAgent("b", log);
   b.release();
-  await brains.replace(() => b.agent);
+  await brains.replace(() => Effect.succeed(b.agent));
   assert.equal(brains.current(), b.agent);
 
   let laterBuilds = 0;
-  await brains.replace(() => {
-    laterBuilds += 1;
-    return undefined;
-  });
+  await brains.replace(() =>
+    Effect.sync(() => {
+      laterBuilds += 1;
+      return undefined;
+    }),
+  );
   assert.equal(laterBuilds, 1);
   assert.equal(brains.current(), undefined);
   assert.deepEqual(log, ["follow agent", "stop b", "unfollow", "publish empty"]);
@@ -166,6 +180,7 @@ test("a rejected drain fails the transition that waited on it, and the next tran
   const log: string[] = [];
   let followed = 0;
   const brains = new BrainHost({
+    carry: carryOn(Runtime.defaultRuntime),
     follow: () => {
       followed += 1;
       log.push(`follow ${followed}`);
@@ -179,13 +194,13 @@ test("a rejected drain fails the transition that waited on it, and the next tran
   });
   const a = fakeAgent("a", log);
   a.release();
-  await brains.replace(() => a.agent);
+  await brains.replace(() => Effect.succeed(a.agent));
   const b = fakeAgent("b", log);
   b.release();
   // Retiring a queues its rejecting drain; the replacement that waits on it
   // fails as its caller's transition, and b is never installed.
   await assert.rejects(
-    brains.replace(() => b.agent),
+    brains.replace(() => Effect.succeed(b.agent)),
     /publication refused/,
   );
   assert.equal(brains.current(), undefined);
@@ -195,9 +210,9 @@ test("a rejected drain fails the transition that waited on it, and the next tran
   // after it retires that agent and publishes empty.
   const c = fakeAgent("c", log);
   c.release();
-  await brains.replace(() => c.agent);
+  await brains.replace(() => Effect.succeed(c.agent));
   assert.equal(brains.current(), c.agent);
-  await brains.replace(() => undefined);
+  await brains.replace(() => Effect.succeed(undefined));
   assert.deepEqual(log.slice(-3), ["stop c", "unfollow", "publish empty"]);
 });
 
@@ -210,29 +225,33 @@ test("a superseded build's rejecting stop fails the older transition, and the ne
   });
   // SAFETY: the host reads only `stop` off an agent; the fixture stands in for the rest.
   const first = {
-    stop: () => {
-      log.push("stop first");
-      return firstStop;
-    },
+    stop: () =>
+      Effect.suspend(() => {
+        log.push("stop first");
+        return Effect.promise(() => firstStop);
+      }),
   } as unknown as BrainAgent;
-  // SAFETY: as above; this one's stop rejects.
+  // SAFETY: as above; this one's stop fails.
   const stale = {
-    stop: () => {
-      log.push("stop stale");
-      return Promise.reject(new Error("stale stop refused"));
-    },
+    stop: () =>
+      Effect.suspend(() => {
+        log.push("stop stale");
+        return Effect.die(new Error("stale stop refused"));
+      }),
   } as unknown as BrainAgent;
-  await brains.replace(() => first);
+  await brains.replace(() => Effect.succeed(first));
   const later = fakeAgent("later", log);
   later.release();
   // The older transition's build is decided while first's stop is still out;
   // by then the newer transition has been asked for, so the stale agent is
   // stopped rather than installed, and its refusal is the older caller's.
   let newer: Promise<void> | undefined;
-  const older = brains.replace(() => {
-    newer = brains.replace(() => later.agent);
-    return stale;
-  });
+  const older = brains.replace(() =>
+    Effect.sync(() => {
+      newer = brains.replace(() => Effect.succeed(later.agent));
+      return stale;
+    }),
+  );
   releaseFirstStop?.();
   await assert.rejects(older, /stale stop refused/);
   assert.ok(newer);
@@ -251,6 +270,7 @@ test("a retirement queued alone has its rejection handled before any transition 
   try {
     let followed = 0;
     const brains = new BrainHost({
+      carry: carryOn(Runtime.defaultRuntime),
       follow: () => {
         followed += 1;
         return () => Promise.reject(new Error(`drain ${followed} refused`));
@@ -259,16 +279,16 @@ test("a retirement queued alone has its rejection handled before any transition 
     });
     const a = fakeAgent("a", log);
     a.release();
-    await brains.replace(() => a.agent);
+    await brains.replace(() => Effect.succeed(a.agent));
     brains.retire();
     // A slow credential apply stands between the retire and the rebuild.
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(unhandled, 0);
     await assert.rejects(
-      brains.replace(() => undefined),
+      brains.replace(() => Effect.succeed(undefined)),
       /drain 1 refused/,
     );
-    await brains.replace(() => undefined);
+    await brains.replace(() => Effect.succeed(undefined));
     assert.deepEqual(log.slice(-1), ["publish empty"]);
   } finally {
     process.off("unhandledRejection", onUnhandled);

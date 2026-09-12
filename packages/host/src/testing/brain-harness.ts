@@ -4,6 +4,7 @@ import {
   BrainAgent,
   type BrainAgentOptions,
   BrainStateStore,
+  carryOn,
   LOOK_SUBJECT,
   responsesModelAnswer,
   toolLoopRuntimeOver,
@@ -17,6 +18,7 @@ import {
 } from "@sidecar/brain/testing";
 import { MAIN_SESSION_KEY, type ModelResponse } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { type Effect, Runtime } from "effect";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";
 import { operatorOverBrain } from "./operator-over-brain.js";
@@ -52,9 +54,14 @@ export async function brainHarness() {
     now: () => NOW,
   });
   const broadcasts: (readonly BrainRequestSnapshot[])[] = [];
+  // The agents this harness builds take no execution of their own, so the
+  // carry here is over the same default runtime they run their turns on.
+  const carry = carryOn(Runtime.defaultRuntime);
   const host = new BrainHost({
+    carry,
     follow: (agent) =>
       followBrainRequests(agent, {
+        carry,
         broadcastRequests: (snapshots) => {
           broadcasts.push(snapshots);
         },
@@ -76,9 +83,12 @@ export async function brainHarness() {
     }
     return runIds;
   };
-  const build = (client: BareResponsesModel, options: Partial<BrainAgentOptions> = {}) => {
+  const build = (
+    client: BareResponsesModel,
+    options: Partial<BrainAgentOptions> = {},
+  ): Effect.Effect<BrainAgent> => {
     const model = bareModelAdapter(client);
-    return new BrainAgent({
+    return BrainAgent.make({
       conversationId: MAIN_SESSION_KEY,
       observes: { kind: LOOK_SUBJECT.NONE },
       ...options,

@@ -46,8 +46,11 @@ export interface AskLedgerOptions {
   seam: AgentSeam;
   store: BrainStateStore;
   createRunId: () => string;
-  /** Opens one turn for the asks a drain handed over; the runner's own. */
-  runAsk: (inputs: readonly AskInput[]) => Promise<void>;
+  /**
+   * Opens one turn for the asks a drain handed over, on a fiber of its own:
+   * the drain is the queue's, and nothing on this side waits for the turn.
+   */
+  runAsk: (inputs: readonly AskInput[]) => void;
   /** The execution under way, for steering and interrupt. */
   active: () => ActiveExecution | undefined;
   /** Disarms the wake window before an ask's turn opens with the inbox as it stands. */
@@ -454,7 +457,7 @@ export class AskLedger {
     // The ask's turn opens with the inbox as it stands, so the window a wake
     // armed has nothing left to open and is disarmed.
     this.#options.disarmWakes();
-    void this.#options.runAsk(inputs);
+    this.#options.runAsk(inputs);
   }
 
   /**

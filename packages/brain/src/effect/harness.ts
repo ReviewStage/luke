@@ -93,7 +93,10 @@ export const effectHarness = (
     yield* TestClock.setTime(NOW);
     const runtime = yield* Effect.runtime<never>();
     const { now, schedule, cancel } = timerSeamFromRuntime(runtime);
-    return plainHarness({ execution: runtime, now, schedule, cancel, ...overrides }, repository);
+    return yield* plainHarness(
+      { execution: runtime, now, schedule, cancel, ...overrides },
+      repository,
+    );
   });
 
 /**

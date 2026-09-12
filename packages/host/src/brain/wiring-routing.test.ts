@@ -337,13 +337,11 @@ it.effect(
       assert.ok(notices.every((notice) => notice.trigger === BRAIN_TURN_TRIGGER.ROSTER));
       const main = c.wiring.current();
       assert.ok(main);
-      const accepted = yield* Effect.promise(() =>
-        main.submitAsk({
-          submissionId: "s-1",
-          question: "what happened?",
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        }),
-      );
+      const accepted = yield* main.submitAsk({
+        submissionId: "s-1",
+        question: "what happened?",
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      });
       assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       yield* Effect.promise(() => until(() => c.inputs.length >= 3));
       yield* waitFor(() => c.wiring.pendingNotices().length === 0);
@@ -664,15 +662,17 @@ test("one observed conversation waiting on its model neither blocks another nor 
   assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: abc");
   const main = c.wiring.current();
   assert.ok(main);
-  const accepted = await main.submitAsk({
-    submissionId: "s-2",
-    question: "are you there?",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  const accepted = await Effect.runPromise(
+    main.submitAsk({
+      submissionId: "s-2",
+      question: "are you there?",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
   // Main answered while def's analysis was still held.
-  const record = await main.waitAsk(runId, 10_000);
+  const record = await Effect.runPromise(main.waitAsk(runId, 10_000));
   await until(() => c.inputs.length >= 3 && c.wiring.lanes.snapshot("agent").active === 1);
   assert.equal(record?.status, "succeeded");
   assert.equal(c.inputs.length, 3);

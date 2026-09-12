@@ -12,7 +12,7 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
-import { Effect, TestClock } from "effect";
+import { Effect, Fiber, TestClock } from "effect";
 import { type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {
@@ -120,12 +120,12 @@ it.effect("stop opens nothing more, and a captured observation stays for the nex
   Effect.gen(function* () {
     const h = yield* effectHarness();
     yield* h.agent.wake([edge(ABC)]);
-    yield* Effect.promise(() => h.agent.stop());
+    yield* h.agent.stop();
     assert.equal(h.agent.pendingWakes(), 1);
     assert.equal(h.repository.state?.inbox.length, 1);
     yield* advanceHarness(NOW + 10_000);
     assert.equal(h.client.inputs.length, 0);
-    assert.deepEqual(yield* Effect.promise(() => submit(h, "hello?")), {
+    assert.deepEqual(yield* submit(h, "hello?"), {
       outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
       reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
     });
@@ -201,7 +201,7 @@ it.effect(
       assert.equal(wireRecord(unparsedWire(only?.transcript_delta))?.status, "unsupported");
       assert.equal(wireRecord(unparsedWire(only?.session))?.status, SESSION_STATUS.WORKING);
       assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -230,7 +230,7 @@ it.effect("a cloud session seen working and then reported failed opens a look fo
       .find((captured) => captured.session?.status === SESSION_STATUS.ERROR);
     assert.ok(entry);
     assert.equal(entry.session?.error, "The agent stopped on an error.");
-    yield* Effect.promise(() => h.agent.stop());
+    yield* h.agent.stop();
   }),
 );
 
@@ -251,7 +251,7 @@ it.effect("two identical cloud looks capture once", () =>
     assert.equal(h.persisted.length, captures);
     assert.equal(h.client.inputs.length, 1);
     assert.equal(h.agent.pendingWakes(), 0);
-    yield* Effect.promise(() => h.agent.stop());
+    yield* h.agent.stop();
   }),
 );
 
@@ -283,13 +283,13 @@ it.effect("a roster look is skipped while the client is quiet or a turn is in fl
       await slow;
       return respond(input, options);
     };
-    const asked = ask(h, "what's up?");
+    const asked = yield* Effect.fork(ask(h, "what's up?"));
     yield* Effect.promise(() => settle());
     yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 0);
     release?.();
-    yield* Effect.promise(() => asked);
+    yield* Fiber.join(asked);
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 1);
 
@@ -299,7 +299,7 @@ it.effect("a roster look is skipped while the client is quiet or a turn is in fl
     yield* Effect.promise(() => settle());
     assert.equal(h.client.inputs.length, 2);
     assert.equal(h.traces.at(-1)?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
-    yield* Effect.promise(() => h.agent.stop());
+    yield* h.agent.stop();
   }),
 );
 
@@ -372,13 +372,13 @@ it.effect(
         Array.from({ length: 25 }, (_, index) => `PIECE_${index + 1}`),
       );
       assert.equal(stored?.captureCursors["claude-code"]?.abc, "abc-25");
-      yield* Effect.promise(() => quiet.agent.stop());
+      yield* quiet.agent.stop();
 
       // A relaunch reads what was captured without touching the transcript: the
       // first turn opens with the oldest twenty, the next look with the rest.
       const relaunched = yield* effectHarness(reading(), quiet.repository);
       relaunched.client.answers.push(answered([message("")]), answered([message("")]));
-      yield* Effect.promise(() => relaunched.agent.ready());
+      yield* relaunched.agent.ready();
       yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
       yield* Effect.promise(() => settle());
       assert.equal(relaunched.sinceReads.length, 0);
@@ -507,7 +507,7 @@ it.effect(
         h.repository.state?.captureCursors["claude-code"]?.abc,
         String(transcript.length),
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -543,7 +543,7 @@ it.effect(
       assert.equal(holding?.holding_for_developer, true);
       assert.equal(closed?.status, SESSION_STATUS.COMPLETE);
       assert.equal(closed?.completion_cause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -554,15 +554,15 @@ it.effect(
       const inner = new FakeClient();
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
-      acceptedRunId(yield* Effect.promise(() => submit(h, "first?")));
+      acceptedRunId(yield* submit(h, "first?"));
       yield* Effect.promise(() => settle());
-      const queued = acceptedRunId(yield* Effect.promise(() => submit(h, "second, queued")));
+      const queued = acceptedRunId(yield* submit(h, "second, queued"));
       yield* h.agent.wake([edge(DEF)]);
       yield* Effect.promise(() => settle());
       assert.equal(h.agent.pendingWakes(), 1);
       // The process dies with the first running, the second steered or queued, and a captured observation waiting.
       const relaunched = yield* effectHarness({}, fakeBrainStateRepository(h.repository.state));
-      yield* Effect.promise(() => relaunched.agent.ready());
+      yield* relaunched.agent.ready();
       assert.equal(relaunched.agent.request(queued)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
       assert.equal(relaunched.agent.pendingWakes(), 1);
       relaunched.client.answers.push(answered([message("")]));

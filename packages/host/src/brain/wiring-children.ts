@@ -1,6 +1,6 @@
-import type { BrainAgent, BrainChildAccess } from "@sidecar/brain";
+import { type BrainAgent, type BrainChildAccess, carryOn } from "@sidecar/brain";
 import { ChildRunService, type ChildStore, type ScheduledTimer } from "@sidecar/runtime";
-import type { ModelAdapter } from "@sidecar/runtime/vocabulary";
+import type { ExecutionRuntime, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   CHILD_RUN_STATUS,
   type ChildRunRecord,
@@ -43,6 +43,12 @@ export interface ChildWiringDependencies {
   report: (message: string) => void;
   /** The model adapter the credential policy built, or nothing when it built none. */
   model: () => ModelAdapter | undefined;
+  /**
+   * The runtime the brain's conversations run on. The child service's own
+   * seams are promises — it is an OpenClaw port — so a conversation's effects
+   * are carried to them here, on that same runtime.
+   */
+  execution: ExecutionRuntime;
 }
 
 /** What the brain wiring lends delegation: its conversations, opened and closed only through it. */
@@ -84,6 +90,7 @@ export function wireChildren(
   dependencies: ChildWiringDependencies,
   host: ChildWiringHost,
 ): ChildWiring {
+  const carry = carryOn(dependencies.execution);
   const openChild = (record: ChildRunRecord, fork?: readonly WireRecord[]) =>
     host.open(record.childSessionKey, fork);
 
@@ -96,9 +103,9 @@ export function wireChildren(
       start: async (record, fork) => {
         const agent = await openChild(record, fork);
         if (!agent) return { started: false, reason: "no model stands to run the child" };
-        const run = await agent.runChildTask(record.task, record.childRunId);
+        const run = await carry(agent.runChildTask(record.task, record.childRunId));
         if (!run) return { started: false, reason: "the child's run was refused" };
-        return { started: true, done: run.done };
+        return { started: true, done: carry(run.done) };
       },
       resume: async (record) => {
         const agent = await openChild(record);
@@ -107,7 +114,7 @@ export function wireChildren(
         // at its conversation's load, is the end the runtime can vouch for;
         // a child whose run was never recorded ends unknown on the strength
         // of its requester's receipt alone.
-        const adopted = await agent.adoptChildRun(record.childRunId);
+        const adopted = await carry(agent.adoptChildRun(record.childRunId));
         return {
           started: true,
           done: Promise.resolve(
@@ -121,7 +128,7 @@ export function wireChildren(
       cancel: async (record) => {
         const agent = host.current(record.childSessionKey);
         if (!agent) return true;
-        return agent.cancelChildRun(record.childRunId);
+        return carry(agent.cancelChildRun(record.childRunId));
       },
       archive: async (record) => {
         await host.closeConversation(record.childSessionKey);
@@ -142,7 +149,7 @@ export function wireChildren(
         // is never handed a sibling's result.
         const agent = await host.open(completion.destination);
         if (!agent) return { delivered: false, reason: "no brain stands for the requester" };
-        return agent.deliverChildCompletion(completion, record);
+        return carry(agent.deliverChildCompletion(completion, record));
       },
     },
   });

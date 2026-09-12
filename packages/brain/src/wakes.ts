@@ -52,7 +52,7 @@ export interface WakeCaptureOptions {
   /** Whether a turn or the maintenance holds the context; a look waits for it. */
   turnInFlight: () => boolean;
   /** Runs one turn the capture opened, settled whole; the runner's own. */
-  turn: (plan: TurnPlan) => Promise<TurnResult>;
+  turn: (plan: TurnPlan) => Effect.Effect<TurnResult>;
 }
 
 /**
@@ -153,7 +153,7 @@ export class WakeCapture {
       if (this.#seam.stopped()) return;
       const generation = this.#seam.generation();
       if (!generation) {
-        yield* Effect.promise(() => this.#seam.ready());
+        yield* this.#seam.ready();
         return yield* this.rosterLook();
       }
       const looks = this.#ownLooks(this.#options.roster(), this.#seam.now());
@@ -167,14 +167,20 @@ export class WakeCapture {
       if (this.#options.quietUntil() !== undefined) return;
       if (captured === 0 && generation.inbox.length === 0) return;
       this.#queue.take();
-      void this.#seam.queueTurn(BRAIN_TURN_TRIGGER.ROSTER, () =>
-        this.#options.turn({
-          generation,
-          trigger: BRAIN_TURN_TRIGGER.ROSTER,
-          deliveries: new SteeredDeliveries(),
-          events: inboxEvents(generation.inbox),
-          open: (attached, openedAt) => [wakeInputText(attached, openedAt)],
-        }),
+      // Detached rather than forked, for the reason the flush below is: the
+      // turn joins the conversation's queue in this step rather than in a
+      // scheduler task of its own.
+      this.#seam.detach(
+        this.#seam.queueTurn(
+          BRAIN_TURN_TRIGGER.ROSTER,
+          this.#options.turn({
+            generation,
+            trigger: BRAIN_TURN_TRIGGER.ROSTER,
+            deliveries: new SteeredDeliveries(),
+            events: inboxEvents(generation.inbox),
+            open: (attached, openedAt) => [wakeInputText(attached, openedAt)],
+          }),
+        ),
       );
     });
   }
@@ -211,7 +217,7 @@ export class WakeCapture {
    */
   #capture(events: readonly BrainWakeEvent[]): Effect.Effect<number> {
     const work = Effect.gen(this, function* () {
-      yield* Effect.promise(() => this.#seam.ready());
+      yield* this.#seam.ready();
       const generation = this.#seam.generation();
       if (!generation || this.#seam.stopped() || generation.abort.signal.aborted) return 0;
       const fresh = events.filter(
@@ -345,30 +351,37 @@ export class WakeCapture {
     if (this.#seam.stopped()) return;
     const generation = this.#seam.generation();
     if (!generation) {
-      void this.#seam.ready().then(() => this.#queue.requeue(events, 0));
+      this.#seam.detach(
+        Effect.flatMap(this.#seam.ready(), () => Effect.sync(() => this.#queue.requeue(events, 0))),
+      );
       return;
     }
-    void this.#seam.queueTurn(BRAIN_TURN_TRIGGER.WAKE, async () => {
-      // The turn opens with the inbox as it stands, not the wakes that armed
-      // the window: a capture that landed since rides along, and one a
-      // failed turn left standing is tried again.
-      const inbox = inboxEvents(generation.inbox);
-      if (inbox.length === 0) return;
-      const result = await this.#options.turn({
-        generation,
-        trigger: BRAIN_TURN_TRIGGER.WAKE,
-        deliveries: new SteeredDeliveries(),
-        events: inbox,
-        open: (attached, now) => [wakeInputText(attached, now)],
-      });
-      if (
-        result.outcome === TURN_OUTCOME.QUIET &&
-        !this.#seam.stopped() &&
-        generation === this.#seam.generation()
-      ) {
-        this.#queue.requeue(inbox, this.#queue.quietDelay(result.until));
-      }
-    });
+    this.#seam.detach(
+      this.#seam.queueTurn(
+        BRAIN_TURN_TRIGGER.WAKE,
+        Effect.gen(this, function* () {
+          // The turn opens with the inbox as it stands, not the wakes that armed
+          // the window: a capture that landed since rides along, and one a
+          // failed turn left standing is tried again.
+          const inbox = inboxEvents(generation.inbox);
+          if (inbox.length === 0) return;
+          const result = yield* this.#options.turn({
+            generation,
+            trigger: BRAIN_TURN_TRIGGER.WAKE,
+            deliveries: new SteeredDeliveries(),
+            events: inbox,
+            open: (attached, now) => [wakeInputText(attached, now)],
+          });
+          if (
+            result.outcome === TURN_OUTCOME.QUIET &&
+            !this.#seam.stopped() &&
+            generation === this.#seam.generation()
+          ) {
+            this.#queue.requeue(inbox, this.#queue.quietDelay(result.until));
+          }
+        }),
+      ),
+    );
   }
 }
 

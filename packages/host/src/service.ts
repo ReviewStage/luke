@@ -326,9 +326,7 @@ export function createGatewayService(
           reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
         });
       }
-      const result = yield* Effect.promise(() =>
-        agent.submitAsk({ submissionId, origin, question }),
-      );
+      const result = yield* agent.submitAsk({ submissionId, origin, question });
       return submissionResultToWire(result);
     });
 
@@ -358,7 +356,7 @@ export function createGatewayService(
         const runId = read.identifier("runId");
         const agent = brain.agentForRun(runId);
         if (!agent) return yield* Effect.fail(new NotFoundRefusal({ message: REFUSAL.NO_RUN }));
-        const cancelled = yield* Effect.promise(() => agent.cancelAsk(runId));
+        const cancelled = yield* agent.cancelAsk(runId);
         return cancelled ? { record: brainRequestRecordToWire(cancelled) } : {};
       }),
     ),
@@ -367,9 +365,8 @@ export function createGatewayService(
     [GATEWAY_METHOD.RUN_WAIT]: reading((read) =>
       Effect.gen(function* () {
         const runId = read.identifier("runId");
-        const waited = yield* Effect.promise(async () =>
-          brain.agentForRun(runId)?.waitAsk(runId, askWaitMs),
-        );
+        const waited = yield* brain.agentForRun(runId)?.waitAsk(runId, askWaitMs) ??
+          Effect.succeed(undefined);
         return {
           ...(waited ? { record: brainRequestRecordToWire(waited) } : undefined),
           speak: false,

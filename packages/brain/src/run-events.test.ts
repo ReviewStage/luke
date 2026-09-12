@@ -78,10 +78,12 @@ import {
   userMetadataOf,
 } from "./ui-messages.js";
 
-function listen(h: Harness): BrainRunEvent[] {
-  const events: BrainRunEvent[] = [];
-  h.agent.onRunEvent((event) => events.push(event));
-  return events;
+function listen(h: Harness): Effect.Effect<BrainRunEvent[]> {
+  return Effect.gen(function* () {
+    const events: BrainRunEvent[] = [];
+    yield* h.agent.onRunEvent((event) => events.push(event));
+    return events;
+  });
 }
 
 /** The four moments a live relay reads, and nothing the record's writer reads beside them. */
@@ -183,12 +185,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answered([readAbc]),
         answered([message("The tests pass. Nothing needs you!")]),
       );
-      const record = yield* Effect.promise(() => ask(h, "how is it going?"));
+      const record = yield* ask(h, "how is it going?");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       const runId = record?.runId ?? "";
       assert.deepEqual(relayed(events), [
@@ -204,7 +206,7 @@ it.effect(
           usage: { inputTokens: 200, outputTokens: 0, cachedInputTokens: 0, reasoningTokens: 0 },
         },
       ]);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -213,7 +215,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answeredUnder("resp_1", [readAbc], { input: 900, output: 40, cached: 768, reasoning: 30 }),
         answeredUnder("resp_2", [message("The tests pass. Nothing needs you!")], {
@@ -223,8 +225,11 @@ it.effect(
           reasoning: 0,
         }),
       );
-      const record = yield* Effect.promise(() => ask(h, "how is it going?"));
+      const record = yield* ask(h, "how is it going?");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      // The turn's own end is told after the record's, so the whole sequence is
+      // read once every subscription has been pumped rather than at the record.
+      yield* Effect.promise(() => settle());
       const runId = record?.runId ?? "";
       assert.deepEqual(kinds(events), [
         BRAIN_RUN_EVENT.TURN_STARTED,
@@ -324,7 +329,7 @@ it.effect(
       });
       assert.deepEqual(ended?.usage, turnEnded?.usage);
       assert.deepEqual(ended?.responseIds, turnEnded?.responseIds);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -333,7 +338,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answeredUnder("resp_1", [messageAbc("send_1")], {
           input: 900,
@@ -348,7 +353,7 @@ it.effect(
           reasoning: 0,
         }),
       );
-      const record = yield* Effect.promise(() => ask(h, "tell abc to run the tests"));
+      const record = yield* ask(h, "tell abc to run the tests");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       const usage = {
         inputTokens: 1900,
@@ -367,7 +372,7 @@ it.effect(
       assert.deepEqual(ended.responseIds, ["resp_1", "resp_2"]);
       assert.deepEqual(ended.usage, usage);
       assert.equal(events.filter((event) => event.kind === BRAIN_RUN_EVENT.ENDED).length, 1);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -376,13 +381,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answered([message("Sending."), messageAbc("send_1")]),
         answered([messageAbc("send_2")]),
         answered([message("Both sent.")]),
       );
-      const record = yield* Effect.promise(() => ask(h, "tell them to run the tests, twice"));
+      const record = yield* ask(h, "tell them to run the tests, twice");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       assert.equal(h.performed.length, 2);
       assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
@@ -424,7 +429,7 @@ it.effect(
           UI_PART_TYPE.TEXT,
         ],
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -444,10 +449,11 @@ it.effect(
     Effect.gen(function* () {
       const client = new HangingClient();
       const h = yield* effectHarness({ client });
-      const events = listen(h);
+      const events = yield* listen(h);
       client.answers.push(answered([message("Hello there.")]));
-      const first = yield* Effect.promise(() => ask(h, "hello"));
+      const first = yield* ask(h, "hello");
       assert.equal(first?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      yield* Effect.promise(() => settle());
       assert.deepEqual(kinds(events.filter((event) => RELAY_KINDS.has(event.kind))), [
         BRAIN_RUN_EVENT.ACTIONS_SETTLED,
         BRAIN_RUN_EVENT.REPLY_SENTENCE,
@@ -456,10 +462,10 @@ it.effect(
       events.length = 0;
 
       client.hang = true;
-      const accepted = yield* Effect.promise(() => submit(h, "wait forever"));
+      const accepted = yield* submit(h, "wait forever");
       const runId = acceptedRunId(accepted);
       yield* Effect.promise(() => settle());
-      yield* Effect.promise(() => h.agent.cancelAsk(runId));
+      yield* h.agent.cancelAsk(runId);
       yield* Effect.promise(() => settle());
       assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
       // The run opened its turn before hanging, so the turn's start and its
@@ -480,7 +486,7 @@ it.effect(
       assert.equal(turnEnded?.status, BRAIN_REQUEST_STATUS.CANCELLED);
       assert.equal(turnEnded?.usage, undefined);
       assert.deepEqual(turnEnded?.responseIds, []);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -491,9 +497,9 @@ it.effect(
       const inner = new FakeClient();
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
-      const events = listen(h);
+      const events = yield* listen(h);
       inner.answers.push(answered([message("The tests pass. Nothing needs you!")]));
-      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "how is it going?")));
+      const runId = acceptedRunId(yield* submit(h, "how is it going?"));
       yield* Effect.promise(() => settle());
       // The next save is the turn's final checkpoint: no tool answered, so
       // nothing was checkpointed between the start and the answer.
@@ -526,7 +532,7 @@ it.effect(
         ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
         ["The tests pass.", "Nothing needs you!"],
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -546,12 +552,12 @@ it.effect(
           return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
         },
       });
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answered([message("Two sessions are waiting."), readAbc]),
         answered([message("Neither needs you.")]),
       );
-      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "what did abc do?")));
+      const runId = acceptedRunId(yield* submit(h, "what did abc do?"));
       yield* Effect.promise(() => settle());
       assert.equal(reads.length, 1);
       assert.deepEqual(relayed(events), [
@@ -566,7 +572,7 @@ it.effect(
         ["Two sessions are waiting.", "Neither needs you."],
       );
       assert.equal(ofKind(events, BRAIN_RUN_EVENT.ACTIONS_SETTLED).length, 1);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -575,18 +581,18 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answered([message("abc is still running"), readAbc]),
         answered([message("It just went green.")]),
       );
-      const record = yield* Effect.promise(() => ask(h, "how is it going?"));
+      const record = yield* ask(h, "how is it going?");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       assert.deepEqual(
         ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
         ["abc is still running", "It just went green."],
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -596,14 +602,12 @@ it.effect(
     Effect.gen(function* () {
       const held = heldPerformer();
       const h = yield* effectHarness({ actions: held.actions });
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answered([message("Sending."), messageAbc("send_1")]),
         answered([message("Sent.")]),
       );
-      const runId = acceptedRunId(
-        yield* Effect.promise(() => submit(h, "tell abc to run the tests")),
-      );
+      const runId = acceptedRunId(yield* submit(h, "tell abc to run the tests"));
       yield* Effect.promise(() => settle());
       assert.equal(held.performed.length, 1);
       // The write is out: neither the words beside its call nor the settle they
@@ -627,7 +631,7 @@ it.effect(
         ofKind(events, BRAIN_RUN_EVENT.REPLY_SENTENCE).map((event) => event.sentence),
         ["Sending.", "Sent."],
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -637,17 +641,15 @@ it.effect(
     Effect.gen(function* () {
       const held = heldPerformer();
       const h = yield* effectHarness({ actions: held.actions });
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(
         answered([message("Sending."), messageAbc("send_1")]),
         answered([message("Sent.")]),
       );
-      const runId = acceptedRunId(
-        yield* Effect.promise(() => submit(h, "tell abc to run the tests")),
-      );
+      const runId = acceptedRunId(yield* submit(h, "tell abc to run the tests"));
       yield* Effect.promise(() => settle());
       assert.equal(held.performed.length, 1);
-      yield* Effect.promise(() => h.agent.cancelAsk(runId));
+      yield* h.agent.cancelAsk(runId);
       for (const release of held.releases.splice(0)) release();
       yield* Effect.promise(() => settle());
       assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
@@ -656,7 +658,7 @@ it.effect(
         BRAIN_RUN_EVENT.ENDED,
       ]);
       assert.deepEqual(kinds(events).at(-1), BRAIN_RUN_EVENT.TURN_ENDED);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -667,9 +669,9 @@ it.effect(
       const inner = new FakeClient();
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
-      const events = listen(h);
+      const events = yield* listen(h);
       inner.answers.push(answered([readAbc]), answered([message("Read it.")]));
-      const runId = acceptedRunId(yield* Effect.promise(() => submit(h, "what did abc do?")));
+      const runId = acceptedRunId(yield* submit(h, "what did abc do?"));
       yield* Effect.promise(() => settle());
       // The next save is the checkpoint after the read's result; refusing it
       // leaves that result unrecorded until the final write carries it.
@@ -682,7 +684,7 @@ it.effect(
       );
       held.release(false);
       yield* Effect.promise(() => settle());
-      const record = yield* Effect.promise(() => h.agent.waitAsk(runId, 1));
+      const record = yield* h.agent.waitAsk(runId, 1);
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
       assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
       assert.equal(record?.text, "Read it.");
@@ -700,7 +702,7 @@ it.effect(
         BRAIN_RUN_EVENT.ENDED,
         BRAIN_RUN_EVENT.TURN_ENDED,
       ]);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -714,12 +716,12 @@ it.effect(
       yield* h.agent.wake([edge(ABC)]);
       inner.answers.push(answered([message("")]));
       yield* advanceHarness(NOW + 3_000);
-      const events = listen(h);
+      const events = yield* listen(h);
       // An observation turn takes no steered words, so the ask waits in the queue.
-      const waiting = acceptedRunId(yield* Effect.promise(() => submit(h, "later")));
+      const waiting = acceptedRunId(yield* submit(h, "later"));
       yield* Effect.promise(() => settle());
       assert.equal(h.agent.request(waiting)?.status, BRAIN_REQUEST_STATUS.QUEUED);
-      yield* Effect.promise(() => h.agent.cancelAsk(waiting));
+      yield* h.agent.cancelAsk(waiting);
       assert.deepEqual(events, [
         {
           kind: BRAIN_RUN_EVENT.ENDED,
@@ -732,7 +734,7 @@ it.effect(
       ]);
       gated.open();
       yield* Effect.promise(() => settle());
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -741,7 +743,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(answered([readAbc]), answered([message("")]));
       yield* advanceHarness(NOW + 3_000);
@@ -791,7 +793,7 @@ it.effect(
       );
       const [turnEnded] = ofKind(events, BRAIN_RUN_EVENT.TURN_ENDED);
       assert.equal(turnEnded?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -800,11 +802,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(answered([message("Looked into it.")]));
-      const run = yield* Effect.promise(() => h.agent.runChildTask("look into it", "child-run-1"));
+      const run = yield* h.agent.runChildTask("look into it", "child-run-1");
       assert.ok(run);
-      yield* Effect.promise(() => run.done);
+      yield* run.done;
+      yield* Effect.promise(() => settle());
       assert.deepEqual(kinds(events), [
         BRAIN_RUN_EVENT.TURN_STARTED,
         BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
@@ -833,14 +836,14 @@ it.effect(
       const [ended] = ofKind(events, BRAIN_RUN_EVENT.ENDED);
       assert.equal(ended?.runId, run.runId);
       assert.equal(ended?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
 it.effect("a hold's release is told under its own origin", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
-    const events = listen(h);
+    const events = yield* listen(h);
     h.client.answers.push(answered([message("")]));
     yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
     yield* Effect.promise(() => settle());
@@ -854,7 +857,7 @@ it.effect("a hold's release is told under its own origin", () =>
       source: OBSERVATION_SOURCE.HOLD_RELEASE,
     });
     assert.deepEqual(kinds(events).at(-1), BRAIN_RUN_EVENT.TURN_ENDED);
-    yield* Effect.promise(() => h.agent.stop());
+    yield* h.agent.stop();
   }),
 );
 
@@ -863,10 +866,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(answered([SUMMARIZED_REASONING, message("Only abc.")]));
-      const record = yield* Effect.promise(() => ask(h, "who is waiting?"));
+      const record = yield* ask(h, "who is waiting?");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+      yield* Effect.promise(() => settle());
       assert.deepEqual(kinds(events), [
         BRAIN_RUN_EVENT.TURN_STARTED,
         BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
@@ -898,7 +902,7 @@ it.effect(
         },
         { type: UI_PART_TYPE.TEXT, text: "Only abc.", state: UI_PART_STATE.DONE },
       ]);
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -909,9 +913,9 @@ it.effect(
       const h = yield* effectHarness({
         actions: performerWith(async () => refusedActionOutput("not now")).actions,
       });
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(answered([messageAbc("send_x")]), answered([message("It refused.")]));
-      const record = yield* Effect.promise(() => ask(h, "tell abc to run the tests"));
+      const record = yield* ask(h, "tell abc to run the tests");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       const [settled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
       assert.deepEqual(settled?.settlement, {
@@ -933,7 +937,7 @@ it.effect(
         },
         errorText: "not now",
       });
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -944,9 +948,9 @@ it.effect(
       const h = yield* effectHarness({
         actions: performerWith(async () => unknownActionOutput("the node closed first")).actions,
       });
-      const events = listen(h);
+      const events = yield* listen(h);
       h.client.answers.push(answered([messageAbc("send_u")]), answered([message("Unsure.")]));
-      const record = yield* Effect.promise(() => ask(h, "tell abc to run the tests"));
+      const record = yield* ask(h, "tell abc to run the tests");
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       const [settled] = ofKind(events, BRAIN_RUN_EVENT.TOOL_CALL_SETTLED);
       assert.deepEqual(settled?.settlement, {
@@ -967,7 +971,7 @@ it.effect(
         },
         output: { status: ACTION_OUTPUT_STATUS.UNKNOWN, reason: "the node closed first" },
       });
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -978,22 +982,19 @@ it.effect(
       const inner = new FakeClient();
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
-      const events = listen(h);
+      const events = yield* listen(h);
       inner.answers.push(
         answered([message("First alone.")]),
         answered([message("Both answered.")]),
       );
-      const first = acceptedRunId(yield* Effect.promise(() => submit(h, "first?")));
+      const first = acceptedRunId(yield* submit(h, "first?"));
       yield* Effect.promise(() => settle());
-      const second = acceptedRunId(yield* Effect.promise(() => submit(h, "second?")));
+      const second = acceptedRunId(yield* submit(h, "second?"));
       yield* Effect.promise(() => settle());
       assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
       gated.open();
       yield* Effect.promise(() => settle());
-      assert.equal(
-        (yield* Effect.promise(() => h.agent.waitAsk(second, 1)))?.status,
-        BRAIN_REQUEST_STATUS.SUCCEEDED,
-      );
+      assert.equal((yield* h.agent.waitAsk(second, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       assertOneTurn(events, first);
       // The steered words are told as they are taken, before the inference that
       // was running answers, so the two steps' boundaries follow both asks; the
@@ -1021,7 +1022,7 @@ it.effect(
         ofKind(events, BRAIN_RUN_EVENT.ENDED).map((event) => event.runId),
         [second, first],
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -1032,20 +1033,17 @@ it.effect(
       const inner = new FakeClient();
       const gated = gatedClient(inner);
       const h = yield* effectHarness({ client: gated.client });
-      const events = listen(h);
+      const events = yield* listen(h);
       inner.answers.push(answered([message("Alone again.")]));
-      const first = acceptedRunId(yield* Effect.promise(() => submit(h, "first?")));
+      const first = acceptedRunId(yield* submit(h, "first?"));
       yield* Effect.promise(() => settle());
-      const second = acceptedRunId(yield* Effect.promise(() => submit(h, "second?")));
+      const second = acceptedRunId(yield* submit(h, "second?"));
       yield* Effect.promise(() => settle());
-      yield* Effect.promise(() => h.agent.cancelAsk(second));
+      yield* h.agent.cancelAsk(second);
       assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
       gated.open();
       yield* Effect.promise(() => settle());
-      assert.equal(
-        (yield* Effect.promise(() => h.agent.waitAsk(first, 1)))?.status,
-        BRAIN_REQUEST_STATUS.SUCCEEDED,
-      );
+      assert.equal((yield* h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
       assertOneTurn(events, first);
       assert.deepEqual(kinds(events), [
         BRAIN_RUN_EVENT.TURN_STARTED,
@@ -1067,7 +1065,7 @@ it.effect(
           [first, BRAIN_REQUEST_STATUS.SUCCEEDED],
         ],
       );
-      yield* Effect.promise(() => h.agent.stop());
+      yield* h.agent.stop();
     }),
 );
 
@@ -1080,20 +1078,15 @@ it.effect("every ask's turn is prepared with the spoken origin and told under it
         return PLAIN_PREPARATION(turn);
       },
     });
-    const events = listen(h);
+    const events = yield* listen(h);
     h.client.answers.push(answered([message("Yes.")]), answered([message("No.")]));
-    const spoken = yield* Effect.promise(() =>
-      h.agent.submitAsk({
-        submissionId: "spoken-1",
-        question: "is it done?",
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-      }),
-    );
-    yield* Effect.promise(() => h.agent.waitAsk(acceptedRunId(spoken), 60_000));
-    assert.equal(
-      (yield* Effect.promise(() => ask(h, "and now?")))?.status,
-      BRAIN_REQUEST_STATUS.SUCCEEDED,
-    );
+    const spoken = yield* h.agent.submitAsk({
+      submissionId: "spoken-1",
+      question: "is it done?",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    });
+    yield* h.agent.waitAsk(acceptedRunId(spoken), 60_000);
+    assert.equal((yield* ask(h, "and now?"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     // The turn each ask opens, in order; the maintenance queued behind either
     // one runs on its own schedule and is no part of what an ask's turn is
     // prepared with.
@@ -1122,7 +1115,7 @@ it.effect("every ask's turn is prepared with the spoken origin and told under it
         .map((event) => event.message.metadata),
       [SPOKEN_ASK, SPOKEN_ASK],
     );
-    yield* Effect.promise(() => h.agent.stop());
+    yield* h.agent.stop();
   }),
 );
 
@@ -1130,21 +1123,21 @@ it.effect("a listener that throws ends no run, and stops hearing nothing further
   Effect.gen(function* () {
     const h = yield* effectHarness();
     let heardByThrower = 0;
-    h.agent.onRunEvent(() => {
+    yield* h.agent.onRunEvent(() => {
       heardByThrower += 1;
       throw new Error("listener");
     });
     const heardByOthers: BrainRunEvent[] = [];
-    h.agent.onRunEvent((event) => heardByOthers.push(event));
+    yield* h.agent.onRunEvent((event) => heardByOthers.push(event));
     h.client.answers.push(answered([message("Fine.")]));
-    const record = yield* Effect.promise(() => ask(h, "hello"));
+    const record = yield* ask(h, "hello");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record?.text, "Fine.");
     // A throw stops none of the rest: the thrower keeps hearing every event
     // that follows its own throw, and a sibling subscription is unaffected.
     assert.ok(heardByThrower > 1);
     assert.ok(heardByOthers.length >= heardByThrower);
-    yield* Effect.promise(() => h.agent.stop());
+    yield* h.agent.stop();
   }),
 );
 

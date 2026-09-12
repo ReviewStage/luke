@@ -9,6 +9,7 @@ import {
   type BrainPersistedState,
   type BrainStateRepository,
   BrainStateStore,
+  carryOn,
   LOOK_SUBJECT,
   responsesModelAnswer,
   toolLoopRuntimeOver,
@@ -133,30 +134,38 @@ async function composed(t: TestContext) {
   // the harness's close whatever the test asserted.
   const followers = new Map<BrainAgent, () => Promise<void>>();
   const build = (client: BareResponsesModel) => {
-    const agent = new BrainAgent({
-      conversationId: MAIN_SESSION_KEY,
-      runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
-      observes: { kind: LOOK_SUBJECT.NONE },
-      prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-      actions: fakeActionPerformer().actions,
-      roster: () => ({ text: "- abc", identities: [] }),
-      // The standing context as the main process renders it: the recent
-      // thread, so a line the Clear left anywhere would reach the model.
-      standingContext: () =>
-        conversationLinesText(recentConversationEntries(thread.entries()), []) ?? "",
-      readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
-      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
-      deliver: () => undefined,
-      store,
-      createRunId: () => `run-${++ids}`,
-      report: () => undefined,
-      now: () => clock,
-    });
-    followers.set(agent, followBrainRequests(agent, { broadcastRequests: () => undefined }));
+    const agent = Effect.runSync(
+      BrainAgent.make({
+        conversationId: MAIN_SESSION_KEY,
+        runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
+        observes: { kind: LOOK_SUBJECT.NONE },
+        prepareTurn: () => ({ prompt: "instructions", layers: {} }),
+        actions: fakeActionPerformer().actions,
+        roster: () => ({ text: "- abc", identities: [] }),
+        // The standing context as the main process renders it: the recent
+        // thread, so a line the Clear left anywhere would reach the model.
+        standingContext: () =>
+          conversationLinesText(recentConversationEntries(thread.entries()), []) ?? "",
+        readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+        readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+        deliver: () => undefined,
+        store,
+        createRunId: () => `run-${++ids}`,
+        report: () => undefined,
+        now: () => clock,
+      }),
+    );
+    followers.set(
+      agent,
+      followBrainRequests(agent, {
+        carry: carryOn(Runtime.defaultRuntime),
+        broadcastRequests: () => undefined,
+      }),
+    );
     return agent;
   };
   const stop = async (agent: BrainAgent) => {
-    await agent.stop();
+    await Effect.runPromise(agent.stop());
     await followers.get(agent)?.();
     followers.delete(agent);
   };
@@ -568,7 +577,7 @@ it.effect(
       // The rebuild: a new agent over the same store, while the rows are still on disk.
       const rebuiltClient = heldClient();
       const rebuilt = c.build(rebuiltClient);
-      yield* Effect.promise(() => rebuilt.ready());
+      yield* rebuilt.ready();
       const during = yield* Effect.promise(() => c.submit(rebuilt, "during the wait"));
       yield* waitFor(() => rebuiltClient.inputs.length > 0);
       rebuiltClient.release(reply("ok"));

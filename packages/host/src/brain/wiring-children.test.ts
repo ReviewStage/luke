@@ -331,11 +331,13 @@ function delegatingScript(childReply = "the change renamed one module"): Script 
 async function ask(c: Composed, question: string, submissionId = "s-1"): Promise<string> {
   const main = c.wiring.current();
   assert.ok(main);
-  const accepted = await main.submitAsk({
-    submissionId,
-    question,
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  const accepted = await Effect.runPromise(
+    main.submitAsk({
+      submissionId,
+      question,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   return accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
 }
@@ -357,7 +359,7 @@ it.effect(
       );
       const main = c.wiring.current();
       assert.ok(main);
-      const record = yield* Effect.promise(() => main.waitAsk(runId, 1));
+      const record = yield* main.waitAsk(runId, 1);
       assert.equal(record?.status, "succeeded");
       const child = [...c.children.values()][0];
       assert.ok(child);
@@ -485,9 +487,7 @@ it.effect(
       // Main first says something memorable, so its context holds a secret to fork.
       const first = yield* Effect.promise(() => ask(c, "remember this", "s-0"));
       yield* waitFor(() => c.wiring.current() !== undefined);
-      yield* Effect.promise(
-        () => c.wiring.current()?.waitAsk(first, 1) ?? Promise.resolve(undefined),
-      );
+      yield* c.wiring.current()?.waitAsk(first, 1) ?? Effect.succeed(undefined);
       yield* Effect.promise(() => ask(c, "now fork a child", "s-fork"));
       yield* waitFor(() =>
         [...c.children.values()].some((record) => record.status === CHILD_RUN_STATUS.COMPLETED),
@@ -594,7 +594,7 @@ it("a reset capture that was skipped reports nothing, while one that failed is s
     const main = c.wiring.current();
     assert.ok(main);
     const runId = await ask(c, "remember this");
-    await main.waitAsk(runId, 60_000);
+    await Effect.runPromise(main.waitAsk(runId, 60_000));
     assert.equal(await c.wiring.resetConversation(MAIN_SESSION_KEY), true);
     assert.equal(captures, 1, "the capture ran over the context the reset let go of");
     c.wiring.retire();

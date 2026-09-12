@@ -1,6 +1,5 @@
 import type { EffectiveToolPolicy } from "@sidecar/runtime";
 import {
-  type ExecutionRuntime,
   type MemoryDefinition,
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -14,7 +13,6 @@ import {
 import type { Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
 import { Deferred, Duration, Effect, Fiber, FiberId, Option } from "effect";
-import { type ForkOn, forkOn } from "./effect/fork.js";
 import { whenAborted } from "./effect/settled.js";
 import { anticipatedAskInputText, prefetchedReadsInputText } from "./input-items.js";
 import type { BrainRoster } from "./performer.js";
@@ -166,14 +164,6 @@ export interface ReadPrefetchOptions {
    * policy again when it enters what was read.
    */
   policy: () => Promise<EffectiveToolPolicy>;
-  /**
-   * The runtime a slot is forked onto. A prefetch runs while the developer is
-   * still speaking rather than inside a turn, so the slot opens a fiber of
-   * its own here, and the words that supersede it, the take that outlasts its
-   * wait, and the drop that abandons it each end it as that fiber's
-   * interruption.
-   */
-  execution: ExecutionRuntime;
   memory?: MemoryDefinition;
   now: () => number;
   createId: () => string;
@@ -232,7 +222,6 @@ function answered(output: WireRecord): boolean {
 export class ReadPrefetch implements TurnReadPrefetch {
   readonly #options: ReadPrefetchOptions;
   readonly #planTool: ToolSchema;
-  readonly #fork: ForkOn;
   readonly #factsListeners = new Set<(facts: BrainAnticipationFacts) => void>();
   #slot: Slot | undefined;
   /** The reads made under the standing memo, by tool then arguments, so a re-plan naming the same read reads once. */
@@ -245,7 +234,6 @@ export class ReadPrefetch implements TurnReadPrefetch {
   constructor(options: ReadPrefetchOptions, planTool: ToolSchema) {
     this.#options = options;
     this.#planTool = planTool;
-    this.#fork = forkOn(options.execution);
   }
 
   /** Hears each summary the voice may append; a listener is told only for a slot still standing when the summary lands. */
@@ -261,28 +249,33 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * nothing new; more words supersede the plan under way, whose reads still
    * finish into the memo, and plan again.
    */
-  anticipate(anticipation: BrainAnticipation): void {
-    if (this.#unavailable) return;
-    const standing = this.#slot;
-    if (
-      standing &&
-      standing.id === anticipation.id &&
-      standing.partialAsk === anticipation.partialAsk
-    ) {
-      return;
-    }
-    if (standing) this.#abandon(standing);
-    const slot: Slot = {
-      id: anticipation.id,
-      partialAsk: anticipation.partialAsk,
-      startedAt: this.#options.now(),
-      abort: new AbortController(),
-      ready: Deferred.unsafeMake(FiberId.none),
-      fiber: undefined,
-      readyAt: undefined,
-    };
-    this.#slot = slot;
-    slot.fiber = this.#fork(this.#run(slot, anticipation));
+  anticipate(anticipation: BrainAnticipation): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (this.#unavailable) return;
+      const standing = this.#slot;
+      if (
+        standing &&
+        standing.id === anticipation.id &&
+        standing.partialAsk === anticipation.partialAsk
+      ) {
+        return;
+      }
+      if (standing) this.#abandon(standing);
+      const slot: Slot = {
+        id: anticipation.id,
+        partialAsk: anticipation.partialAsk,
+        startedAt: this.#options.now(),
+        abort: new AbortController(),
+        ready: Deferred.unsafeMake(FiberId.none),
+        fiber: undefined,
+        readyAt: undefined,
+      };
+      this.#slot = slot;
+      // A daemon's, not the caller's: the words that opened the slot are said
+      // in a fiber that ends with them, and the slot outlives it until the
+      // spoken ask takes what it read or the next words supersede it.
+      slot.fiber = yield* Effect.forkDaemon(this.#run(slot, anticipation));
+    });
   }
 
   /**

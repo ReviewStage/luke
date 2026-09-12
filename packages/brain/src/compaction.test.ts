@@ -14,6 +14,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import {
@@ -333,30 +334,32 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
     createContext: () => new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY),
   });
   const reports: string[] = [];
-  const agent = new BrainAgent({
-    conversationId: MAIN_SESSION_KEY,
-    runtime,
-    observes: { kind: LOOK_SUBJECT.NONE },
-    prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-    actions: fakeActionPerformer().actions,
-    roster: () => ({ text: "none", identities: [] }),
-    standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
-    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
-    deliver: () => undefined,
-    store,
-    createRunId: () => `run-${++ids}`,
-    report: (message) => {
-      reports.push(message);
-    },
-    now: () => NOW,
-    schedule: (callback) => {
-      const handle = {};
-      setImmediate(callback);
-      return handle;
-    },
-    cancel: () => undefined,
-  });
+  const agent = Effect.runSync(
+    BrainAgent.make({
+      conversationId: MAIN_SESSION_KEY,
+      runtime,
+      observes: { kind: LOOK_SUBJECT.NONE },
+      prepareTurn: () => ({ prompt: "instructions", layers: {} }),
+      actions: fakeActionPerformer().actions,
+      roster: () => ({ text: "none", identities: [] }),
+      standingContext: () => "",
+      readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
+      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
+      deliver: () => undefined,
+      store,
+      createRunId: () => `run-${++ids}`,
+      report: (message) => {
+        reports.push(message);
+      },
+      now: () => NOW,
+      schedule: (callback) => {
+        const handle = {};
+        setImmediate(callback);
+        return handle;
+      },
+      cancel: () => undefined,
+    }),
+  );
   return { agent, store, reports };
 }
 
@@ -402,12 +405,14 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
   });
   const { agent } = agentOver(model, repository);
   const events: BrainRunEvent[] = [];
-  agent.onRunEvent((event) => events.push(event));
-  const accepted = await agent.submitAsk({
-    submissionId: "s1",
-    question: "hello",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  Effect.runSync(agent.onRunEvent((event) => events.push(event)));
+  const accepted = await Effect.runPromise(
+    agent.submitAsk({
+      submissionId: "s1",
+      question: "hello",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await settle();
   const record = agent.requests()[0];
@@ -440,7 +445,7 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
   assert.equal(items.length, 3);
   assert.deepEqual(items.slice(1).map(isUserMessageItem), [true, false]);
   assert.equal(repository.state?.compactionCount, 1);
-  await agent.stop();
+  await Effect.runPromise(agent.stop());
 });
 
 test("a required compaction that fails ends the run recoverably and leaves the context exactly as it was", async () => {
@@ -470,11 +475,13 @@ test("a required compaction that fails ends the run recoverably and leaves the c
   const repository = fakeBrainStateRepository(planted);
   const before = planted.items;
   const { agent } = agentOver(model, repository);
-  const accepted = await agent.submitAsk({
-    submissionId: "s1",
-    question: "hello",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  const accepted = await Effect.runPromise(
+    agent.submitAsk({
+      submissionId: "s1",
+      question: "hello",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await settle();
   const record = agent.requests()[0];
@@ -484,5 +491,5 @@ test("a required compaction that fails ends the run recoverably and leaves the c
   assert.equal(responded, 0);
   assert.deepEqual(repository.state?.items, before);
   assert.deepEqual(repository.transcripts, []);
-  await agent.stop();
+  await Effect.runPromise(agent.stop());
 });

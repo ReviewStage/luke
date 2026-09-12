@@ -61,6 +61,7 @@ import {
   type WorkspaceSeeding,
   writeWorkspaceFile,
 } from "@sidecar/runtime";
+import { withLane } from "@sidecar/runtime/effect";
 import {
   type AgentRuntimeEffect,
   CONVERSATION_KIND,
@@ -337,8 +338,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     const held = conversations.get(sessionKey);
     if (held) return held;
     const host = new BrainHost({
+      carry: carryOn(dependencies.execution),
       follow: (agent) =>
         followBrainRequests(agent, {
+          carry: carryOn(dependencies.execution),
           broadcastRequests: (records) => {
             latestRecords.set(sessionKey, records);
             broadcast();
@@ -530,7 +533,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     store: BrainStateStore,
     sessionKey: SessionKey,
     fork: readonly WireRecord[] | undefined,
-  ): BrainAgent => {
+  ): Effect.Effect<BrainAgent> => {
     const listed: ListedSkills = { skills: [] };
     const { reasoningEffort, maximumOutputTokens } = snapshot.configuration;
     // An observed conversation looks at its one session and reports each
@@ -550,12 +553,12 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // A spoken ask reaches main, so main alone reads ahead of one.
     const prefetchModel =
       sessionKey === MAIN_SESSION_KEY ? dependencies.prefetchModel?.() : undefined;
-    return new BrainAgent({
+    return BrainAgent.make({
       conversationId: sessionKey,
       observes: observed
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
         : { kind: LOOK_SUBJECT.NONE },
-      lane: (trigger, work) => lanes.run(laneFor(trigger), work),
+      lane: (trigger, work) => withLane(lanes, laneFor(trigger), work),
       notice: observed ? (report) => recordNotice(report, observed) : () => {},
       openingNotes: sessionKey === MAIN_SESSION_KEY ? openingNotes : NO_OPENING_NOTES,
       ...(childRecord ? { child: { depth: childRecord.depth } } : undefined),
@@ -634,19 +637,21 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     model: ModelAdapter | undefined,
     fork?: readonly WireRecord[],
   ): Promise<void> =>
-    opened.host.replace(() => {
-      if (!model) {
-        if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
-        return undefined;
-      }
-      return build(
-        model,
-        publishConfiguration(dependencies.credential()),
-        opened.store,
-        sessionKey,
-        fork,
-      );
-    });
+    opened.host.replace(() =>
+      Effect.suspend(() => {
+        if (!model) {
+          if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
+          return Effect.succeed(undefined);
+        }
+        return build(
+          model,
+          publishConfiguration(dependencies.credential()),
+          opened.store,
+          sessionKey,
+          fork,
+        );
+      }),
+    );
 
   // Conversations standing down, until their store is let go.
   const closings = new Map<SessionKey, Promise<void>>();
@@ -870,7 +875,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       // meanwhile waits on this closing rather than building a second store
       // on the same envelope.
       opened.host.retire();
-      await opened.host.replace(() => undefined);
+      await opened.host.replace(() => Effect.succeed(undefined));
       opened.clock.stop();
       opened.unsubscribe();
       conversations.delete(sessionKey);
@@ -954,7 +959,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       const opened = openConversation(sessionKey);
       const agent = opened.host.current();
       if (memory && capture && agent) {
-        const items = await agent.contextSnapshot().catch(() => undefined);
+        const items = await carryOn(dependencies.execution)(
+          Effect.catchAllDefect(agent.contextSnapshot(), () => Effect.succeed(undefined)),
+        );
         if (items && items.length > 0) {
           const result = await carryOn(dependencies.execution)(
             Effect.catchAllDefect(

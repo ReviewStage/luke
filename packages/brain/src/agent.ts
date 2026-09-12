@@ -15,7 +15,7 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Fiber, PubSub, Runtime, Stream } from "effect";
+import { Effect, Exit, PubSub, Runtime, Scope, Stream } from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -93,7 +93,7 @@ interface BrainPrefetchOptions {
 }
 
 /** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
-type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
+type BrainLane = <A>(trigger: BrainTurnTrigger, work: Effect.Effect<A>) => Effect.Effect<A>;
 
 export interface BrainAgentOptions {
   /** The conversation this agent is: the key every run event names, which is the conversation's id in this build. */
@@ -256,11 +256,16 @@ export class BrainAgent {
   readonly #prefetch: ReadPrefetch | undefined;
   #turnsQueued = 0;
   #restored: Promise<void> | undefined;
-  #queue: Promise<unknown> = Promise.resolve();
+  /**
+   * The conversation's serial queue: one permit, taken for the whole of a
+   * turn and handed to the waiters in the order they asked, so the turns of
+   * one conversation never overlap however many edges opened them.
+   */
+  readonly #serial = Effect.unsafeMakeSemaphore(1);
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
   #incompatibleReported: string | undefined;
-  readonly #runEventsPubSub: PubSub.PubSub<BrainRunEvent> = Effect.runSync(PubSub.unbounded());
+  readonly #runEvents: PubSub.PubSub<BrainRunEvent>;
 
   /**
    * What every turn tells as it goes, whichever kind opened it. A recorded
@@ -272,32 +277,61 @@ export class BrainAgent {
    * its end, each event stamped with the conversation, the turn, and its
    * place in the turn's sequence. A listener that throws ends no turn.
    *
-   * Published from `#fireRunEvent` into `#runEventsPubSub`; each subscription
-   * forks its own fiber pumping `Stream.fromPubSub`, which is what keeps
-   * delivery order and lets a listener subscribed mid-round hear only what
-   * follows. Unsubscribing interrupts that fiber, so no subscription outlives
-   * its listener and nothing here needs a scope of the agent's own; stopping
-   * the agent shuts the pubsub down instead, which ends every pump whether or
-   * not its subscriber ever unsubscribed. A thrower stops none of the rest,
-   * the same guarantee `Emitter#fire` gave: the failure is logged rather than
-   * left to end that subscription's own pump.
+   * Published from `#fireRunEvent` into `#runEvents`; subscribing is an
+   * effect its caller runs, which takes the subscription on the caller's own
+   * fiber and then forks a fiber pumping it, so a listener hears everything
+   * published after the effect it ran and nothing before it: a fork alone
+   * would take the subscription a scheduler task later, and the events of
+   * that gap would reach nobody. The pump is what keeps delivery order.
+   * Unsubscribing interrupts that fiber, which closes the subscription's own
+   * scope, so no subscription outlives its listener and nothing here needs a
+   * scope of the agent's own; stopping the agent shuts the pubsub down
+   * instead, which ends every pump whether or not its subscriber ever
+   * unsubscribed. A thrower stops none of the rest, the same guarantee
+   * `Emitter#fire` gave: the failure is logged rather than left to end that
+   * subscription's own pump.
    */
-  onRunEvent(listener: (event: BrainRunEvent) => void): () => void {
-    const fiber = Effect.runFork(
-      Stream.runForEach(Stream.fromPubSub(this.#runEventsPubSub), (event) =>
-        Effect.catchAllDefect(
-          Effect.sync(() => listener(event)),
-          (defect) => Effect.logError("a listener failed while a run event was delivered", defect),
+  onRunEvent(listener: (event: BrainRunEvent) => void): Effect.Effect<() => void> {
+    return Effect.gen(this, function* () {
+      const scope = yield* Scope.make();
+      const events = yield* Scope.extend(
+        Stream.fromPubSub(this.#runEvents, { scoped: true }),
+        scope,
+      );
+      const fiber = yield* Effect.forkDaemon(
+        Effect.ensuring(
+          Stream.runForEach(events, (event) =>
+            Effect.catchAllDefect(
+              Effect.sync(() => listener(event)),
+              (defect) =>
+                Effect.logError("a listener failed while a run event was delivered", defect),
+            ),
+          ),
+          Scope.close(scope, Exit.void),
         ),
-      ),
-    );
-    return () => {
-      Effect.runFork(Fiber.interrupt(fiber));
-    };
+      );
+      return () => {
+        fiber.unsafeInterruptAsFork(fiber.id());
+      };
+    });
   }
 
-  constructor(options: BrainAgentOptions) {
+  /**
+   * The agent as an effect: everything of it is built synchronously except
+   * the pubsub its run events are published into, which Effect gives no
+   * constructor for that is not itself an effect. A host yields one where it
+   * built one before, and nothing in the class runs an effect of its own.
+   */
+  static make(options: BrainAgentOptions): Effect.Effect<BrainAgent> {
+    return Effect.map(
+      PubSub.unbounded<BrainRunEvent>(),
+      (runEvents) => new BrainAgent(options, runEvents),
+    );
+  }
+
+  private constructor(options: BrainAgentOptions, runEvents: PubSub.PubSub<BrainRunEvent>) {
     this.#options = options;
+    this.#runEvents = runEvents;
     this.#now = options.now ?? Date.now;
     this.#schedule =
       options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
@@ -335,7 +369,7 @@ export class BrainAgent {
     });
     const seam: AgentSeam = {
       now: this.#now,
-      carry: this.#carry,
+      detach: (work) => this.#detach(work),
       schedule: this.#schedule,
       cancel: this.#cancel,
       report: this.#report,
@@ -384,7 +418,6 @@ export class BrainAgent {
                 options.child,
               );
             },
-            execution: this.#execution,
             ...(options.memory ? { memory: options.memory } : undefined),
             now: this.#now,
             createId: options.createRunId,
@@ -435,7 +468,8 @@ export class BrainAgent {
       seam,
       store: options.store,
       createRunId: options.createRunId,
-      runAsk: (inputs) => this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#turns.runAsk(inputs)),
+      runAsk: (inputs) =>
+        this.#detach(this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, this.#turns.runAsk(inputs))),
       active: () => this.#turns.active(),
       disarmWakes: () => this.#wakes.take(),
       cancelMaintenance: () => this.#maintenance.cancel(),
@@ -498,9 +532,11 @@ export class BrainAgent {
    * Every entry point awaits this itself; a host that wants the records
    * before its first ask awaits it here.
    */
-  ready(): Promise<void> {
-    this.#restored ??= this.#restore();
-    return this.#restored;
+  ready(): Effect.Effect<void> {
+    return Effect.promise(() => {
+      this.#restored ??= this.#restore();
+      return this.#restored;
+    });
   }
 
   /**
@@ -509,12 +545,14 @@ export class BrainAgent {
    * The checkpoint, the requests, and the journal are all kept as they are;
    * the way forward is a runtime that reads them or a Clear.
    */
-  async incompatibility(): Promise<string | undefined> {
-    await this.ready();
-    const generation = this.#generations.standing();
-    if (!generation) return undefined;
-    const opened = await generation.opened;
-    return opened.kind === CONTEXT_OPENING.INCOMPATIBLE ? opened.reason : undefined;
+  incompatibility(): Effect.Effect<string | undefined> {
+    return Effect.gen(this, function* () {
+      yield* this.ready();
+      const generation = this.#generations.standing();
+      if (!generation) return undefined;
+      const opened = yield* Effect.promise(() => generation.opened);
+      return opened.kind === CONTEXT_OPENING.INCOMPATIBLE ? opened.reason : undefined;
+    });
   }
 
   /** Every acknowledged run this generation holds, oldest acceptance first. */
@@ -544,9 +582,11 @@ export class BrainAgent {
    * submission id its relay minted: that origin is what prepares its turn
    * under the backend preamble, and it needs no entry of its own.
    */
-  async submitAsk(submission: BrainSubmission): Promise<BrainSubmissionResult> {
-    await this.ready();
-    return this.#asks.submit(submission);
+  submitAsk(submission: BrainSubmission): Effect.Effect<BrainSubmissionResult> {
+    return Effect.gen(this, function* () {
+      yield* this.ready();
+      return yield* Effect.promise(() => this.#asks.submit(submission));
+    });
   }
 
   /**
@@ -554,9 +594,11 @@ export class BrainAgent {
    * will need to begin now. Nothing is recorded and nothing is promised: the
    * spoken ask that follows takes what was read, or it expires.
    */
-  anticipateAsk(anticipation: BrainAnticipation): void {
-    if (this.#stopped) return;
-    this.#prefetch?.anticipate(anticipation);
+  anticipateAsk(anticipation: BrainAnticipation): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (this.#stopped) return Effect.void;
+      return this.#prefetch?.anticipate(anticipation) ?? Effect.void;
+    });
   }
 
   /** Whatever was read ahead is forgotten: the session that was speaking is gone. */
@@ -574,9 +616,11 @@ export class BrainAgent {
    * out first. A wait that runs out changes nothing about the run, and a run
    * this generation does not know answers nothing.
    */
-  async waitAsk(runId: string, timeoutMs: number): Promise<BrainRequestRecord | undefined> {
-    await this.ready();
-    return this.#asks.wait(runId, timeoutMs);
+  waitAsk(runId: string, timeoutMs: number): Effect.Effect<BrainRequestRecord | undefined> {
+    return Effect.gen(this, function* () {
+      yield* this.ready();
+      return yield* Effect.promise(() => this.#asks.wait(runId, timeoutMs));
+    });
   }
 
   /**
@@ -586,9 +630,11 @@ export class BrainAgent {
    * is kept, known or unknown — because cancelling cannot undo a message
    * already sent.
    */
-  async cancelAsk(runId: string): Promise<BrainRequestRecord | undefined> {
-    await this.ready();
-    return this.#asks.cancel(runId);
+  cancelAsk(runId: string): Effect.Effect<BrainRequestRecord | undefined> {
+    return Effect.gen(this, function* () {
+      yield* this.ready();
+      return yield* Effect.promise(() => this.#asks.cancel(runId));
+    });
   }
 
   /**
@@ -598,19 +644,22 @@ export class BrainAgent {
    * only once it is itself written: a mark the store refused is not held in
    * memory either, so the next report tries the whole step again.
    */
-  markConversationRecorded(runId: string, recordedAt: number): Promise<boolean> {
+  markConversationRecorded(runId: string, recordedAt: number): Effect.Effect<boolean> {
     return this.#mark(runId, PENDING_MARK_FIELD.CONVERSATION_RECORDED_AT, recordedAt);
   }
 
   /** Marks a run's own ask as written into a host's thread, on the same terms; the desktop's host writes no ask line and never calls it. */
-  markAskRecorded(runId: string, recordedAt: number): Promise<boolean> {
+  markAskRecorded(runId: string, recordedAt: number): Effect.Effect<boolean> {
     return this.#mark(runId, PENDING_MARK_FIELD.ASK_RECORDED_AT, recordedAt);
   }
 
-  async #mark(runId: string, field: PendingMarkField, recordedAt: number): Promise<boolean> {
-    await this.ready();
-    const generation = this.#generations.standing();
-    return generation ? this.#ledger.mark(generation, runId, field, recordedAt) : false;
+  #mark(runId: string, field: PendingMarkField, recordedAt: number): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      yield* this.ready();
+      const generation = this.#generations.standing();
+      if (!generation) return false;
+      return yield* Effect.promise(() => this.#ledger.mark(generation, runId, field, recordedAt));
+    });
   }
 
   /**
@@ -641,21 +690,27 @@ export class BrainAgent {
       if (!generation) {
         // The state is still loading: the briefings wait for the generation
         // they will be re-decided in.
-        yield* Effect.promise(() => this.ready());
+        yield* this.ready();
         return yield* this.releaseHeld(held);
       }
       this.#wakes.take();
-      void this.#queueTurn(BRAIN_TURN_TRIGGER.HOLD_RELEASED, () =>
-        this.#turns.turn({
-          generation,
-          trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
-          deliveries: new SteeredDeliveries(),
-          events: inboxEvents(generation.inbox),
-          open: (attached: readonly BrainWakeEvent[], now: number) => [
-            ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
-            holdReleasedInputText(held, now),
-          ],
-        }),
+      // Detached rather than forked: the turn must be counted queued and
+      // standing in line for the permit before this returns, or a stop that
+      // followed it could drain a queue the turn had not yet joined.
+      this.#detach(
+        this.#queueTurn(
+          BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+          this.#turns.turn({
+            generation,
+            trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+            deliveries: new SteeredDeliveries(),
+            events: inboxEvents(generation.inbox),
+            open: (attached: readonly BrainWakeEvent[], now: number) => [
+              ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
+              holdReleasedInputText(held, now),
+            ],
+          }),
+        ),
       );
     });
   }
@@ -669,17 +724,17 @@ export class BrainAgent {
   runChildTask(
     task: string,
     childRunId: string,
-  ): Promise<{ readonly runId: string; readonly done: Promise<ChildEnd> } | undefined> {
+  ): Effect.Effect<{ readonly runId: string; readonly done: Effect.Effect<ChildEnd> } | undefined> {
     return this.#children.runTask(task, childRunId);
   }
 
   /** The end of a child run this conversation already holds, or nothing when no run stands for the id. */
-  adoptChildRun(childRunId: string): Promise<ChildEnd | undefined> {
+  adoptChildRun(childRunId: string): Effect.Effect<ChildEnd | undefined> {
     return this.#children.adopt(childRunId);
   }
 
   /** Cancels the run named as a child's, answering only once the run has actually ended. */
-  cancelChildRun(childRunId: string): Promise<boolean> {
+  cancelChildRun(childRunId: string): Effect.Effect<boolean> {
     return this.#children.cancelRun(childRunId);
   }
 
@@ -687,7 +742,7 @@ export class BrainAgent {
   deliverChildCompletion(
     completion: ChildCompletionRecord,
     record: ChildRunRecord,
-  ): Promise<BrainCompletionDelivery> {
+  ): Effect.Effect<BrainCompletionDelivery> {
     return this.#children.deliver(completion, record);
   }
 
@@ -697,50 +752,56 @@ export class BrainAgent {
    * transcript read, a run's own action preparation — settles, and the queue
    * drains behind it. Unfinished runs are recorded as interrupted: the agent
    * stopping — a key or account changing, the app quitting — is not the
-   * developer's cancel, and the record says which. Synchronous up to the
-   * revocation, so a host can withdraw the old agent's standing before its
-   * first await of a transition.
+   * developer's cancel, and the record says which. Revoking is the whole of its
+   * synchronous head, so a host running this withdraws the old agent's
+   * standing before the effect suspends for the first time.
    */
-  async stop(): Promise<void> {
-    this.#stopped = true;
-    this.#maintenance.cancel();
-    this.#wakes.clear();
-    const waiting = this.#asks.takeWaiting();
-    this.#unsubscribeStore?.();
-    this.#unsubscribeStore = undefined;
-    this.#generations.standing()?.abort.abort();
-    this.#asks.abortAll();
-    this.#prefetch?.drop();
-    // An acceptance whose write is still out settles before the stop does:
-    // its caller hears the durable answer, its run is recorded interrupted,
-    // and nothing of it is left to land on the agent that comes next.
-    await this.#asks.drainPendingSubmissions();
-    await this.#asks.settleWaiting(waiting);
-    const generation = this.#generations.standing();
-    if (generation) {
-      for (const record of this.requests()) {
-        if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
-          await this.#ledger.settleRun(
-            generation,
-            record.runId,
-            BRAIN_REQUEST_STATUS.INTERRUPTED,
-            {},
-          );
+  stop(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      this.#stopped = true;
+      this.#maintenance.cancel();
+      this.#wakes.clear();
+      const waiting = this.#asks.takeWaiting();
+      this.#unsubscribeStore?.();
+      this.#unsubscribeStore = undefined;
+      this.#generations.standing()?.abort.abort();
+      this.#asks.abortAll();
+      this.#prefetch?.drop();
+      // An acceptance whose write is still out settles before the stop does:
+      // its caller hears the durable answer, its run is recorded interrupted,
+      // and nothing of it is left to land on the agent that comes next.
+      yield* Effect.promise(() => this.#asks.drainPendingSubmissions());
+      yield* Effect.promise(() => this.#asks.settleWaiting(waiting));
+      const generation = this.#generations.standing();
+      if (generation) {
+        for (const record of this.requests()) {
+          if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
+            yield* Effect.promise(() =>
+              this.#ledger.settleRun(
+                generation,
+                record.runId,
+                BRAIN_REQUEST_STATUS.INTERRUPTED,
+                {},
+              ),
+            );
+          }
         }
       }
-    }
-    await this.#queue;
-    const retiring = this.#generations.standing();
-    if (retiring) retireGeneration(retiring);
-    // Shutting the pubsub down ends every `Stream.fromPubSub` pump this agent
-    // ever forked, whether or not its subscriber ever called the unsubscribe
-    // it was handed back: a retired agent's followers stop hearing rather
-    // than parking a fiber for the rest of the process.
-    await Effect.runPromise(PubSub.shutdown(this.#runEventsPubSub));
+      // The queue is drained by taking its one permit: every turn already
+      // queued stands ahead of this in the order it always did.
+      yield* this.#serial.withPermits(1)(Effect.void);
+      const retiring = this.#generations.standing();
+      if (retiring) retireGeneration(retiring);
+      // Shutting the pubsub down ends every `Stream.fromPubSub` pump this agent
+      // ever forked, whether or not its subscriber ever called the unsubscribe
+      // it was handed back: a retired agent's followers stop hearing rather
+      // than parking a fiber for the rest of the process.
+      yield* PubSub.shutdown(this.#runEvents);
+    });
   }
 
   #fireRunEvent(event: BrainRunEvent): void {
-    Effect.runSync(PubSub.publish(this.#runEventsPubSub, event));
+    this.#runEvents.unsafeOffer(event);
   }
 
   /**
@@ -748,28 +809,54 @@ export class BrainAgent {
    * reset capture; nothing when no context is loaded. The engine itself is
    * never handed out.
    */
-  async contextSnapshot(): Promise<readonly WireRecord[] | undefined> {
-    const generation = this.#generations.standing();
-    if (!generation) return undefined;
-    const standing = await generation.opened;
-    if (standing.kind !== CONTEXT_OPENING.LOADED) return undefined;
-    return [...standing.context.checkpoint().items];
+  contextSnapshot(): Effect.Effect<readonly WireRecord[] | undefined> {
+    return Effect.gen(this, function* () {
+      const generation = this.#generations.standing();
+      if (!generation) return undefined;
+      const standing = yield* Effect.promise(() => generation.opened);
+      if (standing.kind !== CONTEXT_OPENING.LOADED) return undefined;
+      return [...standing.context.checkpoint().items];
+    });
   }
 
   /** Queues a turn behind this conversation's own, and runs it under the host's lane for its trigger. */
-  #queueTurn<T>(trigger: BrainTurnTrigger, work: () => Promise<T>): Promise<T> {
+  #queueTurn<A>(trigger: BrainTurnTrigger, work: Effect.Effect<A>): Effect.Effect<A> {
     const lane = this.#options.lane;
-    return this.#enqueue(() => (lane ? lane(trigger, work) : work()));
+    return this.#enqueue(lane ? lane(trigger, work) : work);
   }
 
-  #enqueue<T>(work: () => Promise<T>): Promise<T> {
-    this.#turnsQueued += 1;
-    const settled = () => {
-      this.#turnsQueued -= 1;
-    };
-    const run = this.#queue.then(work, work);
-    this.#queue = run.then(settled, settled);
-    return run;
+  /**
+   * The conversation's serial queue. A turn is counted queued from the moment
+   * its fiber asks for the permit until it has given the permit back, so
+   * `busy()` answers for what waits as well as for what runs, and the count is
+   * given back however the turn ends, interruption included.
+   */
+  #enqueue<A>(work: Effect.Effect<A>): Effect.Effect<A> {
+    return Effect.acquireUseRelease(
+      Effect.sync(() => {
+        this.#turnsQueued += 1;
+      }),
+      () => this.#serial.withPermits(1)(work),
+      () =>
+        Effect.sync(() => {
+          this.#turnsQueued -= 1;
+        }),
+    );
+  }
+
+  /**
+   * Runs one of this conversation's effects on a fiber of its own, beginning
+   * it before this returns. Every turn nobody waits for goes through here —
+   * the ask ledger's drain, the wake window's flush and its roster look, the
+   * housekeeping a settled turn leaves behind, and a hold's release — because
+   * the runtime starts the work on the calling stack: the turn takes its
+   * place in the conversation's queue, and is counted busy, in the same step
+   * that asked for it. `Effect.forkDaemon` would only schedule the fiber, and
+   * a stop arriving before it ran would drain a queue the turn had not yet
+   * joined.
+   */
+  #detach(work: Effect.Effect<unknown>): void {
+    void this.#carry(work);
   }
 
   #generationFrom(state: BrainPersistedState): Generation {

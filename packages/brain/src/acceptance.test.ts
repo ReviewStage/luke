@@ -304,36 +304,38 @@ function host(
     lastActivityAt: NOW,
     advertises: [{ kind: ACTION_KIND.MESSAGE }],
   });
-  const agent = new BrainAgent({
-    conversationId: MAIN_SESSION_KEY,
-    runtime: runtimeOver(model),
-    observes: { kind: LOOK_SUBJECT.NONE },
-    prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-    actions: fakeActionPerformer({
-      sessions: [session],
-      carry: async (action) => {
-        performed.push(action.kind);
-        return performer();
-      },
-    }).actions,
-    roster: () => ({ text: "- abc", identities: [ABC], sessions: session ? [session] : [] }),
-    standingContext: () => "Durable facts: none.",
-    readTranscriptSince: async () => ({
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      text: "transcript delta",
-      cursor: "c1",
-      truncated: false,
+  const agent = Effect.runSync(
+    BrainAgent.make({
+      conversationId: MAIN_SESSION_KEY,
+      runtime: runtimeOver(model),
+      observes: { kind: LOOK_SUBJECT.NONE },
+      prepareTurn: () => ({ prompt: "instructions", layers: {} }),
+      actions: fakeActionPerformer({
+        sessions: [session],
+        carry: async (action) => {
+          performed.push(action.kind);
+          return performer();
+        },
+      }).actions,
+      roster: () => ({ text: "- abc", identities: [ABC], sessions: session ? [session] : [] }),
+      standingContext: () => "Durable facts: none.",
+      readTranscriptSince: async () => ({
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        text: "transcript delta",
+        cursor: "c1",
+        truncated: false,
+      }),
+      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
+      deliver: () => undefined,
+      store,
+      createRunId: () => `run-${++ids}`,
+      report: () => undefined,
+      now: () => clock.now,
+      schedule: clock.schedule,
+      cancel: clock.cancel,
+      ...overrides,
     }),
-    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
-    deliver: () => undefined,
-    store,
-    createRunId: () => `run-${++ids}`,
-    report: () => undefined,
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
-    ...overrides,
-  });
+  );
   return {
     agent,
     repository,
@@ -341,14 +343,16 @@ function host(
     clock,
     performed,
     ask: async (question) => {
-      const accepted = await agent.submitAsk({
-        submissionId: `sub-${++ids}`,
-        question,
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-      });
+      const accepted = await Effect.runPromise(
+        agent.submitAsk({
+          submissionId: `sub-${++ids}`,
+          question,
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        }),
+      );
       assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED, JSON.stringify(accepted));
       const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-      return agent.waitAsk(runId, 60_000);
+      return Effect.runPromise(agent.waitAsk(runId, 60_000));
     },
   };
 }
@@ -397,7 +401,7 @@ for (const transport of [KEYED, HOSTED]) {
     const stored = h.repository.state;
     assert.equal(stored?.journal.length, 2);
     assert.equal(stored?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
-    await h.agent.stop();
+    await Effect.runPromise(h.agent.stop());
   });
 
   test(`${transport.name}: a cancel mid-run refuses the action not yet dispatched and keeps the one that ran`, async () => {
@@ -418,16 +422,18 @@ for (const transport of [KEYED, HOSTED]) {
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     );
-    const accepted = await h.agent.submitAsk({
-      submissionId: "cancel-me",
-      question: "send twice",
-      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    });
+    const accepted = await Effect.runPromise(
+      h.agent.submitAsk({
+        submissionId: "cancel-me",
+        question: "send twice",
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      }),
+    );
     assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
     await settle();
-    await h.agent.cancelAsk(accepted.runId);
+    await Effect.runPromise(h.agent.cancelAsk(accepted.runId));
     releaseSecond?.();
-    const record = await h.agent.waitAsk(accepted.runId, 60_000);
+    const record = await Effect.runPromise(h.agent.waitAsk(accepted.runId, 60_000));
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.CANCELLED);
     assert.equal(record?.performedActions, 1);
     assert.equal(h.performed.length, 1);
@@ -440,7 +446,7 @@ for (const transport of [KEYED, HOSTED]) {
       outputs.length,
       items.filter((item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length,
     );
-    await h.agent.stop();
+    await Effect.runPromise(h.agent.stop());
   });
 
   test(`${transport.name}: malformed output, a provider-declared failure, and a rate limit each end the run honestly with nothing done`, async () => {
@@ -465,7 +471,7 @@ for (const transport of [KEYED, HOSTED]) {
     );
     await settle();
     assert.equal(h.agent.pendingWakes(), 1);
-    await h.agent.stop();
+    await Effect.runPromise(h.agent.stop());
   });
 
   test(`${transport.name}: persistence interrupted before an action refuses the action; interrupted after it keeps the result and blocks the next`, async () => {
@@ -475,7 +481,7 @@ for (const transport of [KEYED, HOSTED]) {
       () => payload([message("done")]),
     ]);
     const h = host(toolLoopRuntimeOver, transport.model(upstream), repository);
-    await h.agent.ready();
+    await Effect.runPromise(h.agent.ready());
     // Acceptance and start land; the checkpoint before the action is refused.
     let writes = 0;
     const landed = repository.save;
@@ -488,7 +494,7 @@ for (const transport of [KEYED, HOSTED]) {
     assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
     assert.equal(h.performed.length, 0);
     assert.equal(record?.performedActions, 0);
-    await h.agent.stop();
+    await Effect.runPromise(h.agent.stop());
   });
 }
 
@@ -513,7 +519,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
   await settle();
   assert.equal(h.agent.pendingWakes(), 1);
   assert.equal(upstream.calls.length, 0);
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });
 
 /**
@@ -664,14 +670,14 @@ test("a runtime that is not Responses drives the same host: actions journaled th
     (item) => item.scripted === CONTEXT_INPUT_KIND.TOOL_RESULT,
   );
   assert.equal(outputs.length, 3);
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 
   // An observation turn runs over the same runtime, with the roster's deltas
   // read by the host and the action the policy allows carried through the same
   // executor, journaled while it ran and let go of once the turn committed.
   const observing = new ScriptedRuntime([ACTION_TOOL.SEND_SESSION_MESSAGE]);
   const o = host(() => observing, model, repository);
-  await o.agent.ready();
+  await Effect.runPromise(o.agent.ready());
   await Effect.runPromise(
     o.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]),
   );
@@ -682,7 +688,7 @@ test("a runtime that is not Responses drives the same host: actions journaled th
   assert.deepEqual(o.performed, [ACTION_KIND.MESSAGE]);
   assert.equal(repository.state?.cursors[claude.id]?.abc, "c1");
   assert.equal(repository.state?.journal.length, 1, "the ask's journal alone stays");
-  await o.agent.stop();
+  await Effect.runPromise(o.agent.stop());
 });
 
 test("the Responses runtime refuses a valid checkpoint of the scripted runtime: turns are refused as incompatible, and the checkpoint, requests, and journal stay whole", async () => {
@@ -694,18 +700,20 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   );
   const first = await scripted.ask("scripted first");
   assert.equal(first?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
-  await scripted.agent.stop();
+  await Effect.runPromise(scripted.agent.stop());
   const before = repository.state;
   assert.ok(before);
 
   const upstream = fakeUpstream([() => payload([message("never asked")])]);
   const responses = host(toolLoopRuntimeOver, KEYED.model(upstream), repository);
-  await responses.agent.ready();
-  const refused = await responses.agent.submitAsk({
-    submissionId: "over-foreign",
-    question: "hello?",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  await Effect.runPromise(responses.agent.ready());
+  const refused = await Effect.runPromise(
+    responses.agent.submitAsk({
+      submissionId: "over-foreign",
+      question: "hello?",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.deepEqual(refused, {
     outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
     reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
@@ -725,16 +733,16 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   assert.deepEqual(after?.requests, before.requests);
   assert.deepEqual(after?.journal, before.journal);
   assert.equal(responses.agent.requests().length, 1);
-  await responses.agent.stop();
+  await Effect.runPromise(responses.agent.stop());
 
   // The scripted runtime reads it again, and a Clear is the other way forward.
   const again = host(() => new ScriptedRuntime([]), KEYED.model(fakeUpstream([])), repository);
-  assert.equal(await again.agent.incompatibility(), undefined);
+  assert.equal(await Effect.runPromise(again.agent.incompatibility()), undefined);
   assert.equal((await again.ask("still scripted"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   await again.store.clear(NOW + 10);
   await settle();
   assert.equal(repository.state?.checkpointFormat, undefined);
-  await again.agent.stop();
+  await Effect.runPromise(again.agent.stop());
 });
 
 /**
@@ -777,16 +785,18 @@ test("an ingest held across a cancel that resolves after the successor turn bega
   ]);
   const h = host(heldIngestRuntime, KEYED.model(upstream), repository);
   HeldIngestEngine.hold = true;
-  const accepted = await h.agent.submitAsk({
-    submissionId: "held",
-    question: "first",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
+  const accepted = await Effect.runPromise(
+    h.agent.submitAsk({
+      submissionId: "held",
+      question: "first",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+  );
   assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   await settle();
   assert.equal(HeldIngestEngine.held.length, 1, "the model's answer is being ingested");
-  await h.agent.cancelAsk(accepted.runId);
-  const cancelled = await h.agent.waitAsk(accepted.runId, 60_000);
+  await Effect.runPromise(h.agent.cancelAsk(accepted.runId));
+  const cancelled = await Effect.runPromise(h.agent.waitAsk(accepted.runId, 60_000));
   assert.equal(cancelled?.status, BRAIN_REQUEST_STATUS.CANCELLED);
 
   // The successor turn opens on the restored context and runs to its reply.
@@ -801,7 +811,7 @@ test("an ingest held across a cancel that resolves after the successor turn bega
   // A third turn reads the same context again, and still finds nothing of them.
   upstream.answers.push(() => payload([message("third")]));
   await h.ask("third");
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });
 
 test("a model failure after a recorded act restores the context to the action's committed boundary: the action, its result, and the record survive and are read again", async () => {
@@ -845,7 +855,7 @@ test("a model failure after a recorded act restores the context to the action's 
         item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
     ),
   );
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });
 
 /**
@@ -916,7 +926,7 @@ test("a keyed turn and a hosted turn send the same prompt upstream, built from t
     const [call] = upstream.calls;
     assert.ok(call && isWireString(call.body.instructions));
     sent.push(call.body.instructions);
-    await h.agent.stop();
+    await Effect.runPromise(h.agent.stop());
   }
   const [keyed, hosted] = sent;
   assert.ok(keyed && hosted);
@@ -984,5 +994,5 @@ test("a conversation that starts fresh is primed once with the recent daily note
     1,
     "the second turn carries the first's notes and recalls none anew",
   );
-  await h.agent.stop();
+  await Effect.runPromise(h.agent.stop());
 });

@@ -198,14 +198,13 @@ it starts the work on the runtime it was handed rather than building a
 second one, so this is that runtime's own edge for as long as the seam it
 answers still takes closures instead of an effect. It goes once `BrainAgent`
 answers `Clock` and `Scope` directly instead.
-`forkOn` in `packages/brain/src/effect/fork.ts` is on the same list for the
-same reason read the other way: P12-16h gave the read prefetch's slot a fiber
-of its own, and a slot opens where no fiber of the caller's stands — a live
-session saying `anticipateAsk` while the developer is still speaking. The fork
-starts that fiber on the `ExecutionRuntime` the host handed the agent rather
-than on a runtime of its own, nothing is awaited through it, and the value the
-turn later takes travels through the slot's own `Deferred` instead. It goes
-once `anticipateAsk` answers an effect the host forks itself.
+`forkOn` in `packages/brain/src/effect/fork.ts` was on the same list for one
+release and P12-16g deleted the file: `anticipateAsk` answers an
+`Effect<void>` now, so the slot's fiber is an `Effect.forkDaemon` inside the
+effect the caller runs rather than a run of the prefetch's own, and what runs
+it is the live brain adapter on the runtime it already carries the spoken ask
+on. Nothing is awaited either way — the effect ends when the fiber is open,
+and the value the turn later takes travels through the slot's own `Deferred`.
 The `ScheduledTimer` type alias itself — the opaque handle a
 `schedule`/`cancel` pair traffics in — still names a real constraint two
 things forced back into a dedicated declaration file rather than an inline
@@ -1092,11 +1091,19 @@ in either, for the two waits a fiber's interruption cannot state: one held
 under an uninterruptible region, where only the signal can end it, and one
 whose value must be owned by exactly one party.
 
-What keeps this one door is what the brain is still asked for in promises:
-`BrainAgent`'s own public surface — an ask, a child's task, a stop — and the
-reset's own capture, which `packages/host/src/brain/wiring.ts` awaits because
-`resetConversation` answers the host a promise rather than because the capture
-is one. The wake face left that surface in P12-16c, named below. The
+What keeps this one door is what the brain is still asked for in promises,
+and since P12-16g that is nothing of `BrainAgent`'s own surface: the ask face
+left it with the queue beneath it, so an ask, a wait, a cancel, a mark, a
+context snapshot, a stop, the four child verbs, and a run-event subscription
+are each an `Effect` its caller runs. What holds a promise is the host above
+the agent — `BrainHost`'s transition chain, the publication chain's marks,
+the child service's four executor seams, the live brain adapter's spoken ask
+and its subscription, and `resetConversation`'s capture, which
+`packages/host/src/brain/wiring.ts` awaits because the reset answers the host
+a promise rather than because the capture is one — and the two edges inside
+the agent that a timer calls with nowhere to answer, which `AgentSeam#detach`
+carries in one place rather than in each. The wake face left that surface in
+P12-16c, named below. The
 `MemoryProvider` seam left that list in P12-16a:
 `recall`, `capture`, and a memory tool's `execute` are each an `Effect` the
 turn's own fiber runs, so the flush before a compaction is one effect inside
@@ -1107,7 +1114,7 @@ whole-transcript read went with it into the tool loop's own fiber. The read
 prefetch left this door in P12-16h, which gave a slot the fiber it had been
 missing: the policy it resolves, the planner's call, the reads it named, the
 summary, and the whole-transcript read the agent builds for it all run in that
-fiber, forked through `forkOn` above, and a supersession, a take past its
+fiber, forked inside `anticipate`'s own effect, and a supersession, a take past its
 wait, and a drop each end the slot as that fiber's interruption rather than as
 a signal raced against a carried promise. A memoized read keeps the shape
 P12-16b gave it — one answer however many times it is asked for — as the join
@@ -1116,16 +1123,30 @@ that supersede a slot must leave a read already out to finish into the memo
 for the plan that follows. A defect is squashed back to the error that
 caused it, so a store, a listener, or an engine that threw reaches the caller
 as the error it threw rather than as the fiber failure that carried it.
-P12-04 deletes it with those seams. What still awaits this door after P12-16c
-is these and nothing else: the turn runner's `runAsk` and `turn`, because
-the conversation's own serial queue and the host's lane both take a
-`() => Promise<T>`; `Maintenance`'s housekeeping turn, which rides that same
-queue; the generation's context open, which `generationFrom` must hold as a
-promise so the object is built in one synchronous statement; and
-`resetConversation`'s capture in the host. Each is named
-where it stands, and the ask face — with the conversation's serial queue and
-the host's lane beneath it — is what moves the turn runner's two and the
-maintenance's one.
+P12-04 deletes it with those seams. What still awaits this door after P12-16g
+is these and nothing else: the generation's context open, which
+`generationFrom` must hold as a promise so the object is built in one
+synchronous statement; `AgentSeam#detach`, which every turn nobody waits for
+is begun through — the ask ledger's drain, the wake window's flush and its
+roster look, the housekeeping a settled turn leaves behind, and a hold's
+release — because a run begins the work on the calling stack while
+`Effect.forkDaemon` only schedules a fiber, and a turn must stand in the
+conversation's queue, counted busy, in the step that asked for it rather than
+a scheduler task later, or a stop arriving between the two would drain a queue
+the turn had not yet joined; and, in the host,
+`BrainHost`'s build and stop, `followBrainRequests`' marks, `wireChildren`'s
+four executor seams, `brainAgentLiveBrain`'s ask and subscription, and
+`resetConversation`'s capture. The turn runner's `runAsk` and `turn` and
+`Maintenance`'s housekeeping turn came off it in P12-16g with the queue they
+rode: `BrainAgent#enqueue`, `#queueTurn`, and the host's `BrainLane` each take
+an `Effect` now — the lane is `@sidecar/runtime/effect`'s `withLane` over the
+same `LaneScheduler` — and the conversation's serialization is one
+`Effect.unsafeMakeSemaphore(1)` permit taken for the whole of a turn where a
+promise chain stood, so the turns of a conversation are handed the permit in
+the order they asked for it, a stop drains the queue by taking that permit,
+and `busy()` counts a turn from the moment its fiber asks until it has given
+the permit back. What is left in the host is promise-shaped because the seam
+above it is, not because anything of the brain's is.
 
 What the door does not carry is the other two seams. `ModelAdapter` and
 `ContextEngine` stay as the host hands them in, because each is owned above
@@ -1191,19 +1212,29 @@ and an effect here could only ever be run. The fourth, the run event
 subscriber, is on the allowlist for the reason below rather than exempt from
 one.
 
-`BrainAgent#onRunEvent` in `packages/brain/src/agent.ts` is on the allowlist:
-its callers still hold a plain callback and an unsubscribe function rather
-than a `Stream`, so each subscription forks its own fiber pumping
-`Stream.fromPubSub` at `Effect.runFork` and answers an unsubscribe that
-interrupts it at another. Every rule a listener could observe under the old
-`Emitter` still holds — subscription order, a listener subscribed mid-round
-hearing only what follows, a thrower stopping none of the rest — because the
-pump is the same `Stream.runForEach` either way; what changed is that the
-fiber belongs to the subscription rather than to a scope the agent owned, so
-`stop()` closes no scope of its own for this any more. The bridge this
+`packages/brain/src/agent.ts` is off this allowlist since P12-16g, and the
+three runs it was on it for went together. `BrainAgent#onRunEvent` is an
+`Effect<() => void>` its caller runs: it takes the subscription on the
+caller's own fiber — `Stream.fromPubSub(pubsub, { scoped: true })` extended
+into a scope of the subscription's own — and only then forks the fiber that
+pumps it, because a bare `Effect.forkDaemon` would take the subscription a
+scheduler task later and the events of that gap would reach nobody. The
+unsubscribe interrupts that fiber, whose `ensuring` closes the scope. Every
+rule a listener could observe under the old `Emitter` still holds —
+subscription order, a listener subscribed mid-round hearing only what follows,
+a thrower stopping none of the rest — because the pump is the same
+`Stream.runForEach` it always was. `#fireRunEvent` publishes with the pubsub's
+own `unsafeOffer` rather than `Effect.runSync(PubSub.publish(...))`, which is
+the same statement without a fiber around it: a publish into a shut-down
+pubsub answers false there as it did here. And the pubsub itself is made
+inside `BrainAgent.make(options): Effect<BrainAgent>`, the Effect-shaped
+constructor every builder now yields — the host's wiring, the two test
+harnesses, and the suites that stand an agent up by hand — so the one
+`Effect.runSync(PubSub.unbounded())` the class was written around is gone with
+the `new BrainAgent(` that made it necessary. `stop()` yields
+`PubSub.shutdown` on its own fiber for the same reason. The bridge all this
 replaced — `eventFromStream` and the scope built at construction to hold it —
-is deleted with `packages/wire/src/effect/event.ts` itself, and this entry
-stands until a subscriber reads the stream directly.
+is deleted with `packages/wire/src/effect/event.ts` itself.
 
 `AccountSessionManager` in `packages/credentials/src/account/session-manager.ts`
 is off the allowlist: `AccountSessionManager.make` is the effect that builds
@@ -1414,8 +1445,7 @@ design decision stated as such:
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
 | `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
 | `carryOn`, the brain's one promise door onto the host's `ExecutionRuntime` | P12-02 | P12-04 |
-| `forkOn`, the read prefetch's fork of its slot onto the host's `ExecutionRuntime` | P12-16h | once `anticipateAsk` answers an effect the host forks itself |
-| `BrainAgent#onRunEvent`'s per-subscription fiber over `Stream.fromPubSub` | P5-06 | once a subscriber reads the stream directly |
+| `BrainAgent#onRunEvent`'s per-subscription fiber over `Stream.fromPubSub`, an `Effect<() => void>` since P12-16g rather than a run | P5-06 | once a subscriber reads the stream directly |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |

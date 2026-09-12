@@ -1,4 +1,4 @@
-import { BRAIN_RUN_EVENT, type BrainAgent, type BrainRunEvent } from "@sidecar/brain";
+import { BRAIN_RUN_EVENT, type BrainAgent, type BrainRunEvent, carryOn } from "@sidecar/brain";
 import {
   BRAIN_ASK_REFUSAL,
   BRAIN_REQUEST_ORIGIN,
@@ -15,6 +15,7 @@ import {
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
+import { Effect } from "effect";
 
 /** What the adapter says when no brain stands to take the ask at all. */
 const NO_BRAIN_REFUSAL = BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT];
@@ -77,69 +78,90 @@ function liveRunEventOf(event: BrainRunEvent): LiveBrainRunEvent | undefined {
  * `submitAsk` here — the host composes it from the live transcript — so
  * following the agent at submission is following every run it will report.
  * Following the same agent twice is one subscription.
+ *
+ * Built as an effect on the composer's own runtime, because what the service
+ * holds on this side is a promise and a callback: the ask it awaits, and the
+ * subscription it takes from an agent that only stands once a spoken ask has
+ * reached it. Each of those is one of the agent's effects carried on the
+ * runtime the composer already runs the brain on, so a subscription's pump
+ * fiber lives exactly as long as the composition that took it.
  */
-export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): LiveBrain {
-  const listeners = new Set<(event: LiveBrainRunEvent) => void>();
-  const factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
-  const subscribed = new WeakSet<LiveBrainAgent>();
+export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): Effect.Effect<LiveBrain> {
+  return Effect.gen(function* () {
+    const carry = carryOn(yield* Effect.runtime<never>());
+    const listeners = new Set<(event: LiveBrainRunEvent) => void>();
+    const factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
+    const subscribed = new WeakSet<LiveBrainAgent>();
 
-  function follow(agent: LiveBrainAgent): void {
-    if (subscribed.has(agent)) return;
-    subscribed.add(agent);
-    agent.onRunEvent((event) => {
-      const translated = liveRunEventOf(event);
-      if (!translated) return;
-      for (const listener of [...listeners]) listener(translated);
-    });
-    // The brain keys an anticipation by the string the service handed it,
-    // which is the service's own row number; it goes back as the number it
-    // came from, and a key that is not one names no row and is dropped.
-    agent.onAnticipationFacts?.((facts) => {
-      const rowId = Number(facts.id);
-      if (!Number.isInteger(rowId)) return;
-      for (const listener of [...factsListeners]) listener({ rowId, text: facts.text });
-    });
-  }
+    function follow(agent: LiveBrainAgent): void {
+      if (subscribed.has(agent)) return;
+      subscribed.add(agent);
+      void carry(
+        agent.onRunEvent((event) => {
+          const translated = liveRunEventOf(event);
+          if (!translated) return;
+          for (const listener of [...listeners]) listener(translated);
+        }),
+      );
+      // The brain keys an anticipation by the string the service handed it,
+      // which is the service's own row number; it goes back as the number it
+      // came from, and a key that is not one names no row and is dropped.
+      agent.onAnticipationFacts?.((facts) => {
+        const rowId = Number(facts.id);
+        if (!Number.isInteger(rowId)) return;
+        for (const listener of [...factsListeners]) listener({ rowId, text: facts.text });
+      });
+    }
 
-  return {
-    anticipate: (anticipation) => {
-      const agent = options.agent();
-      if (!agent?.anticipateAsk) return;
-      follow(agent);
-      agent.anticipateAsk({
-        id: String(anticipation.rowId),
-        partialAsk: anticipation.partialAsk,
-        recentTurns: anticipation.recentTurns,
-      });
-    },
-    dropAnticipation: () => {
-      options.agent()?.dropAnticipation?.();
-    },
-    onAnticipationFacts: (listener) => {
-      factsListeners.add(listener);
-      return () => {
-        factsListeners.delete(listener);
-      };
-    },
-    submitAsk: async (ask) => {
-      const agent = options.agent();
-      if (!agent) return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: NO_BRAIN_REFUSAL };
-      follow(agent);
-      const result = await agent.submitAsk({
-        submissionId: ask.submissionId,
-        question: ask.question,
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-      });
-      if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-        return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: result.runId };
-      }
-      return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: BRAIN_ASK_REFUSAL[result.reason] };
-    },
-    onRunEvent: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
+    return {
+      anticipate: (anticipation) => {
+        const agent = options.agent();
+        if (!agent?.anticipateAsk) return;
+        follow(agent);
+        // Nothing waits for the slot: the effect only opens the fiber it runs
+        // in, and the spoken ask that follows takes what it read or does not.
+        void carry(
+          agent.anticipateAsk({
+            id: String(anticipation.rowId),
+            partialAsk: anticipation.partialAsk,
+            recentTurns: anticipation.recentTurns,
+          }),
+        );
+      },
+      dropAnticipation: () => {
+        options.agent()?.dropAnticipation?.();
+      },
+      onAnticipationFacts: (listener) => {
+        factsListeners.add(listener);
+        return () => {
+          factsListeners.delete(listener);
+        };
+      },
+      submitAsk: async (ask) => {
+        const agent = options.agent();
+        if (!agent) return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: NO_BRAIN_REFUSAL };
+        follow(agent);
+        const result = await carry(
+          agent.submitAsk({
+            submissionId: ask.submissionId,
+            question: ask.question,
+            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+          }),
+        );
+        if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
+          return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: result.runId };
+        }
+        return {
+          outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+          refusal: BRAIN_ASK_REFUSAL[result.reason],
+        };
+      },
+      onRunEvent: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    };
+  });
 }

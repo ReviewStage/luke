@@ -317,96 +317,102 @@ export type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime">> & {
 export function harness(
   overrides: HarnessOverrides = {},
   repository = fakeBrainStateRepository(),
-): Harness {
-  const client = new FakeClient();
-  const { client: clientOverride, execution, ...agentOverrides } = overrides;
-  const model = adapterOf(clientOverride ?? client);
-  const runtime = toolLoopOver(model);
-  // The store reads the same clock the agent does, so a test advancing time
-  // moves both rather than leaving the envelope stamped at the fixed start.
-  const now = agentOverrides.now ?? (() => NOW);
-  const deliveries: BrainDelivery[] = [];
-  const persisted: BrainPersistedState[] = [];
-  const store = new BrainStateStore({
-    automaticReset: true,
-    repository: {
-      load: () => repository.load(),
-      save: async (state, transcript) => {
-        const landed = await repository.save(state, transcript);
-        if (landed) persisted.push(state);
-        return landed;
+): Effect.Effect<Harness> {
+  return Effect.gen(function* () {
+    const client = new FakeClient();
+    const { client: clientOverride, execution, ...agentOverrides } = overrides;
+    const model = adapterOf(clientOverride ?? client);
+    const runtime = toolLoopOver(model);
+    // The store reads the same clock the agent does, so a test advancing time
+    // moves both rather than leaving the envelope stamped at the fixed start.
+    const now = agentOverrides.now ?? (() => NOW);
+    const deliveries: BrainDelivery[] = [];
+    const persisted: BrainPersistedState[] = [];
+    const store = new BrainStateStore({
+      automaticReset: true,
+      repository: {
+        load: () => repository.load(),
+        save: async (state, transcript) => {
+          const landed = await repository.save(state, transcript);
+          if (landed) persisted.push(state);
+          return landed;
+        },
       },
-    },
-    createGenerationId: () => `gen-${nextRunId()}`,
-    now,
-  });
-  const traces: BrainTurnTraceRecord[] = [];
-  const sinceReads: Harness["sinceReads"] = [];
-  const wholeReads: SessionIdentity[] = [];
-  const fake = performerWith(undefined);
-  const { performed, executions } = fake;
-  const actions: BrainActionPerformer = agentOverrides.actions ?? fake.actions;
-  // The notebook as the host wires it, over no index and an empty notebook;
-  // its two writes are action tools and reach the performer under test like
-  // every other action, through no seam of the provider's.
-  const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
-  const agent = new BrainAgent({
-    conversationId: MAIN_SESSION_KEY,
-    runtime,
-    prepareTurn: PLAIN_PREPARATION,
-    observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
-    actions,
-    memory: {
-      scope,
-      provider: notebookMemoryProvider({
+      createGenerationId: () => `gen-${nextRunId()}`,
+      now,
+    });
+    const traces: BrainTurnTraceRecord[] = [];
+    const sinceReads: Harness["sinceReads"] = [];
+    const wholeReads: SessionIdentity[] = [];
+    const fake = performerWith(undefined);
+    const { performed, executions } = fake;
+    const actions: BrainActionPerformer = agentOverrides.actions ?? fake.actions;
+    // The notebook as the host wires it, over no index and an empty notebook;
+    // its two writes are action tools and reach the performer under test like
+    // every other action, through no seam of the provider's.
+    const scope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID };
+    const agent = yield* BrainAgent.make({
+      conversationId: MAIN_SESSION_KEY,
+      runtime,
+      prepareTurn: PLAIN_PREPARATION,
+      observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
+      actions,
+      memory: {
         scope,
-        access: undefined,
-        facts: () => [],
-        recentNotes: async () => [],
+        provider: notebookMemoryProvider({
+          scope,
+          access: undefined,
+          facts: () => [],
+          recentNotes: async () => [],
+        }),
+      },
+      roster: () => ({
+        text: "Currently observed sessions:\n- abc\n- def",
+        identities: [ABC, DEF],
       }),
-    },
-    roster: () => ({ text: "Currently observed sessions:\n- abc\n- def", identities: [ABC, DEF] }),
-    standingContext: () => "Durable facts: none.",
-    readTranscriptSince: async (identity, cursor): Promise<ProviderTranscriptSinceResult> => {
-      sinceReads.push({ identity, cursor });
-      // The transcript grows once: a read from its cursor finds nothing new.
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        text: cursor === undefined ? `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}` : "",
-        cursor: `${identity.providerSessionId}-cursor`,
-        truncated: false,
-      };
-    },
-    readTranscript: async (identity): Promise<ProviderTranscriptResult> => {
-      wholeReads.push(identity);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
-    },
-    deliver: (delivery) => {
-      deliveries.push(delivery);
-    },
-    store,
-    createRunId: () => `run-${nextRunId()}`,
-    trace: (record) => {
-      traces.push(record);
-    },
-    report: () => {},
-    ...(execution ? { execution } : undefined),
-    ...agentOverrides,
+      standingContext: () => "Durable facts: none.",
+      readTranscriptSince: async (identity, cursor): Promise<ProviderTranscriptSinceResult> => {
+        sinceReads.push({ identity, cursor });
+        // The transcript grows once: a read from its cursor finds nothing new.
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          text:
+            cursor === undefined ? `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}` : "",
+          cursor: `${identity.providerSessionId}-cursor`,
+          truncated: false,
+        };
+      },
+      readTranscript: async (identity): Promise<ProviderTranscriptResult> => {
+        wholeReads.push(identity);
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
+      },
+      deliver: (delivery) => {
+        deliveries.push(delivery);
+      },
+      store,
+      createRunId: () => `run-${nextRunId()}`,
+      trace: (record) => {
+        traces.push(record);
+      },
+      report: () => {},
+      ...(execution ? { execution } : undefined),
+      ...agentOverrides,
+    });
+    return {
+      agent,
+      runtime,
+      client,
+      repository,
+      store,
+      deliveries,
+      persisted,
+      performed,
+      executions,
+      traces,
+      sinceReads,
+      wholeReads,
+    };
   });
-  return {
-    agent,
-    runtime,
-    client,
-    repository,
-    store,
-    deliveries,
-    persisted,
-    performed,
-    executions,
-    traces,
-    sinceReads,
-    wholeReads,
-  };
 }
 
 let submissions = 0;
@@ -421,17 +427,19 @@ export function submissionsIssued(): number {
 }
 
 /** Submits an ask and waits as long as it takes, answering the terminal record. */
-export async function ask(h: Harness, question: string): Promise<BrainRequestRecord | undefined> {
-  const accepted = await submit(h, question);
-  if (accepted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
-  return h.agent.waitAsk(accepted.runId, 10 * 24 * 60 * 60 * 1000);
+export function ask(h: Harness, question: string): Effect.Effect<BrainRequestRecord | undefined> {
+  return Effect.gen(function* () {
+    const accepted = yield* submit(h, question);
+    if (accepted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
+    return yield* h.agent.waitAsk(accepted.runId, 10 * 24 * 60 * 60 * 1000);
+  });
 }
 
 export function submit(
   h: Harness,
   question: string,
   submissionId?: string,
-): Promise<BrainSubmissionResult> {
+): Effect.Effect<BrainSubmissionResult> {
   return h.agent.submitAsk({
     submissionId: submissionId ?? `submission-${nextSubmission()}`,
     question,
@@ -593,11 +601,13 @@ export function gatedClient(inner: FakeClient) {
 export const OLD_SECRET = "OLD_SECRET_FROM_PRIOR_GENERATION";
 
 /** A completed run on a harness whose repository never refuses, for the save-ordering regressions. */
-export async function completedRun(h: Harness, question = "hello"): Promise<string> {
-  h.client.answers.push(answered([message("Hi.")]));
-  const record = await ask(h, question);
-  assert.ok(record);
-  return record.runId;
+export function completedRun(h: Harness, question = "hello"): Effect.Effect<string> {
+  return Effect.gen(function* () {
+    h.client.answers.push(answered([message("Hi.")]));
+    const record = yield* ask(h, question);
+    assert.ok(record);
+    return record.runId;
+  });
 }
 
 /** Holds the next save until released, answering true unless told otherwise; later saves pass through. */
@@ -668,8 +678,8 @@ export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
   };
 }
 
-export function agentOn(runtime: AgentRuntimeEffect, h: Harness) {
-  return new BrainAgent({
+export function agentOn(runtime: AgentRuntimeEffect, h: Harness): Effect.Effect<BrainAgent> {
+  return BrainAgent.make({
     conversationId: MAIN_SESSION_KEY,
     runtime,
     prepareTurn: PLAIN_PREPARATION,

@@ -6,6 +6,7 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
   BrainAgent,
   BrainStateStore,
+  carryOn,
   hostedBrainToolCatalog,
   LOOK_SUBJECT,
   toolLoopRuntimeOver,
@@ -22,7 +23,7 @@ import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/set
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { scriptedOpenSocket } from "@sidecar/voice/testing";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Runtime } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./brain/host.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
@@ -145,6 +146,7 @@ function composition() {
     },
   });
   const host = new BrainHost({
+    carry: carryOn(Runtime.defaultRuntime),
     follow: () => async () => undefined,
     publishEmpty: () => undefined,
   });
@@ -155,26 +157,28 @@ function composition() {
   const builds: string[] = [];
   let runs = 0;
   const rebuild = () =>
-    host.replace(() => {
-      const model = assembler.brainModel;
-      if (!model) return undefined;
-      builds.push(model.model ?? "hosted");
-      return new BrainAgent({
-        conversationId: MAIN_SESSION_KEY,
-        runtime: toolLoopRuntimeOver(model),
-        observes: { kind: LOOK_SUBJECT.NONE },
-        prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-        actions: fakeActionPerformer().actions,
-        roster: () => ({ text: "none", identities: [] }),
-        standingContext: () => "",
-        readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),
-        readTranscript: async () => ({ status: "unsupported", reason: "no" }),
-        deliver: () => undefined,
-        store,
-        createRunId: () => `run-${runs++}`,
-        report: () => undefined,
-      });
-    });
+    host.replace(() =>
+      Effect.suspend(() => {
+        const model = assembler.brainModel;
+        if (!model) return Effect.succeed(undefined);
+        builds.push(model.model ?? "hosted");
+        return BrainAgent.make({
+          conversationId: MAIN_SESSION_KEY,
+          runtime: toolLoopRuntimeOver(model),
+          observes: { kind: LOOK_SUBJECT.NONE },
+          prepareTurn: () => ({ prompt: "instructions", layers: {} }),
+          actions: fakeActionPerformer().actions,
+          roster: () => ({ text: "none", identities: [] }),
+          standingContext: () => "",
+          readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),
+          readTranscript: async () => ({ status: "unsupported", reason: "no" }),
+          deliver: () => undefined,
+          store,
+          createRunId: () => `run-${runs++}`,
+          report: () => undefined,
+        });
+      }),
+    );
   const transition = () =>
     Effect.runPromise(
       transitionVoiceSource({
@@ -298,13 +302,11 @@ for (const held of Object.values(HELD_READ)) {
         const live = c.assembler.liveSessions;
 
         // A run stands on the correct successor, its model turn outstanding.
-        const accepted = yield* Effect.promise(() =>
-          hostedAgent.submitAsk({
-            submissionId: "s-1",
-            question: "still there?",
-            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-          }),
-        );
+        const accepted = yield* hostedAgent.submitAsk({
+          submissionId: "s-1",
+          question: "still there?",
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        });
         assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
         const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
         yield* waitFor(() => hostedAgent.request(runId)?.status === BRAIN_REQUEST_STATUS.RUNNING);
@@ -325,10 +327,10 @@ for (const held of Object.values(HELD_READ)) {
         assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
 
         c.releaseTurn();
-        const record = yield* Effect.promise(() => hostedAgent.waitAsk(runId, 10_000));
+        const record = yield* hostedAgent.waitAsk(runId, 10_000);
         assert.notEqual(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
         assert.ok(record && record.status !== BRAIN_REQUEST_STATUS.RUNNING);
-        yield* Effect.promise(() => hostedAgent.stop());
+        yield* hostedAgent.stop();
       }),
   );
 }
@@ -355,7 +357,7 @@ it.effect(
       assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
       assert.equal(c.host.current(), keyedAgent);
       assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
-      yield* Effect.promise(() => keyedAgent.stop());
+      yield* keyedAgent.stop();
     }),
 );
 
@@ -411,5 +413,5 @@ test("transitions that do not overlap each install in turn", async () => {
   assert.ok(second);
   assert.notEqual(second, first);
   assert.deepEqual(c.builds, ["gpt-5.6-terra", "hosted"]);
-  await second.stop();
+  await Effect.runPromise(second.stop());
 });
