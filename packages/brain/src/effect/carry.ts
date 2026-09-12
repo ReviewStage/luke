@@ -21,11 +21,27 @@ import { Cause, type Effect, Exit, ManagedRuntime, Runtime } from "effect";
 /** Carries an effect to the promise a caller of the brain still holds, on the runtime the host handed in. */
 export type Carry = <Value>(effect: Effect.Effect<Value>) => Promise<Value>;
 
-export const carryOn = (execution: ExecutionRuntime): Carry => {
-  const exits: <Value>(effect: Effect.Effect<Value>) => Promise<Exit.Exit<Value>> =
+/**
+ * Runs an effect to its `Exit` on the given runtime, dispatching between a
+ * `ManagedRuntime` and a plain `Runtime` once rather than at each caller. The
+ * one thing `Carry` itself cannot state — a caller's own `AbortSignal`,
+ * joined to the run so an aborted call ends as this fiber's own interruption
+ * — is this function's second, optional argument; `BrainTransport#send` and
+ * `tracedModelAdapter` are the two callers that still read a signal this way,
+ * because the `ModelAdapter` they answer is a promise, not a fiber.
+ */
+export const runtimeExit =
+  (execution: ExecutionRuntime) =>
+  <Value, Failure = never>(
+    effect: Effect.Effect<Value, Failure>,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<Exit.Exit<Value, Failure>> =>
     ManagedRuntime.TypeId in execution
-      ? (effect) => execution.runPromiseExit(effect)
-      : Runtime.runPromiseExit(execution);
+      ? execution.runPromiseExit(effect, options)
+      : Runtime.runPromiseExit(execution)(effect, options);
+
+export const carryOn = (execution: ExecutionRuntime): Carry => {
+  const exits = runtimeExit(execution);
   return (effect) =>
     exits(effect).then((exit) => {
       if (Exit.isSuccess(exit)) return exit.value;

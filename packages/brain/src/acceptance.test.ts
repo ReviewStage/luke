@@ -61,6 +61,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
@@ -249,7 +250,7 @@ const KEYED: Transport = {
   model: (upstream) =>
     new OpenAiModelAdapter({
       apiKey: "sk-test",
-      fetch: upstream.fetch,
+      httpClient: layerFromCloudFetch(upstream.fetch),
       now: () => NOW,
       report: () => undefined,
     }),
@@ -264,7 +265,7 @@ const HOSTED: Transport = {
       serviceBaseUrl: "https://luke.test",
       readAccessToken: () => Effect.succeed("account-token"),
       refreshAccount: () => Effect.void,
-      fetch: fakeService(upstream, allowance).fetch,
+      httpClient: layerFromCloudFetch(fakeService(upstream, allowance).fetch),
       now: () => NOW,
       report: () => undefined,
     }),
@@ -496,7 +497,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
     serviceBaseUrl: "https://luke.test",
     readAccessToken: () => Effect.succeed("account-token"),
     refreshAccount: () => Effect.void,
-    fetch: fakeService(upstream, exhausted).fetch,
+    httpClient: layerFromCloudFetch(fakeService(upstream, exhausted).fetch),
     now: () => NOW,
     report: () => undefined,
   });

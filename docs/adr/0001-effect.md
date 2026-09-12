@@ -248,17 +248,27 @@ the refusal as the `Refusal` the action journal records and rethrowing a roster
 read's own failure. Its callers reach it across the `ToolExecutor` seam and
 the web's action endpoint, neither of which answers an effect yet — a turn is
 a fiber from P12-02 on, but the tool call it dispatches still crosses a
-promise — so it goes in P12-04 with that seam.
+promise. P12-04 turned out to be the CloudFetch/HttpClient family alone; this
+door waits on the `ToolExecutor` seam in `@sidecar/runtime/vocabulary`
+answering an effect, a change to the tool-dispatch shape rather than a
+transport, so it is re-pointed at P12-15 instead.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is the fifth: every caller of the brain's model transport still holds a
 promise, not a fiber, so the request effect built over `@sidecar/hosted`'s
 `accountCall` is run to a promise there, joining the caller's own
-`AbortSignal` to the run exactly as `createAccountCall` does. It goes in
-P12-04b with the rest of that family, because what keeps it is the
-`ModelAdapter` interface's own promise: `compaction.ts` is a port of OpenClaw
-`b7528507` that awaits `model.respond` and imports nothing from `effect`, so
-no adapter above this transport can answer an effect while that port stands.
+`AbortSignal` to the run exactly as `createAccountCall` does. P12-04d moved
+what it runs on: `BrainTransport` takes an `execution?: ExecutionRuntime`
+(the host's own, captured once in `compose-account.ts` as
+`Effect.runtime<never>()` and threaded through `VoiceCapabilityAssembler` to
+every adapter it builds) and `runCall` runs through `@sidecar/brain`'s shared
+`runtimeExit(execution)` — the same door `tracedModelAdapter` runs through —
+rather than the ambient default runtime `Effect.runPromiseExit` read before.
+It is permanent alongside `tracedModelAdapter`, because what keeps both is
+the `ModelAdapter` interface's own promise: `compaction.ts` is a port of
+OpenClaw `b7528507` that awaits `model.respond` and imports nothing from
+`effect`, so no adapter above this transport can answer an effect while that
+port stands.
 
 `createAccountCall` in `packages/hosted/src/account-call.ts` is the sixth: it
 provides the caller's own `httpClient` layer, or `FetchHttpClient.layer` for
@@ -604,11 +614,15 @@ composer would gain the class nothing. The plan schedules no PR that states
 this class's own methods as Effects, and this row is where that is recorded.
 
 `tracedModelAdapter` in `packages/devtrace/src/brain-trace.ts` is on the same
-terms as `runCall`: the traced `respond` still answers the `ModelAdapter`
-interface's promise, so the `Effect.withSpan` wrapping the wrapped adapter's
-call is run to that promise here. It goes together with
-`BrainTransport#send`'s `runCall` in P12-04b, and for the same reason: it can
-stop answering a promise only when the `ModelAdapter` it wraps does.
+terms as `runCall`, permanently: the traced `respond` still answers the
+`ModelAdapter` interface's promise, so the `Effect.withSpan` wrapping the
+wrapped adapter's call is run to that promise here, through the same
+`runtimeExit(execution)` door `runCall` runs through, on the `execution` its
+own caller (`compose-account.ts`) hands it — P12-04d's one shared adaptor for
+both, in place of the two separate `Effect.runPromiseExit` calls each ran to
+the ambient default runtime before. It stands beside `BrainTransport#send`'s
+`runCall` for the same reason: it can stop answering a promise only when the
+`ModelAdapter` it wraps does, which is never while `compaction.ts` stands.
 
 `timedRequest` in `packages/credentials/src/account/client.ts` and
 `LinearIssueTracker#post` in `packages/credentials/src/linear/tracker.ts` are
@@ -769,7 +783,14 @@ actually rate-limited. P10-05..10 deletes the door once the routes that call it
 run their own Effects under `HttpApi` and reach `RateBrake.check` directly.
 
 `carryOn` in `packages/brain/src/effect/carry.ts` is the brain's one door onto
-the host's `ExecutionRuntime`, and P12-02 made it the only one. A turn is a
+the host's `ExecutionRuntime`, and P12-02 made it the only one for
+`BrainAgent`'s own surface. `runtimeExit`, the dispatch between a
+`ManagedRuntime` and a plain `Runtime` `carryOn` is built over, is exported
+beside it since P12-04d for the two narrower callers that still need their
+own exit-handling on top of it rather than `Carry`'s own throw-on-failure
+shape: `BrainTransport#send`'s `runCall` and `tracedModelAdapter`'s traced
+`respond`, in `@sidecar/brain`'s own `client.ts` and `@sidecar/devtrace`'s
+`brain-trace.ts`. A turn is a
 fiber end to end from `TurnRunner` inward: the opening words, the deltas, the
 recall, and the tool loop all run in one fiber the turn's `AbortSignal`
 interrupts — the developer's cancel, the deadline, the agent stopping, the
@@ -814,9 +835,10 @@ compares it by reference, and it folds the context through the same adapter
 inside `compaction.ts`, which is an OpenClaw port and so imports nothing from
 `effect`. An Effect-shaped counterpart for any of the three would therefore
 need a promise view built back out of it inside the brain, which is the same
-run in another file rather than one less. They move in P12-04b, and the two shims that stand on them — `BrainTransport#send`'s
-`runCall` and `tracedModelAdapter`'s traced `respond` — name P12-04b below for
-that reason.
+run in another file rather than one less — so `ModelAdapter` stays
+Promise-shaped permanently, like the other two, and the two shims that stand
+on it — `BrainTransport#send`'s `runCall` and `tracedModelAdapter`'s traced
+`respond` — are permanent rows for the same reason, named below.
 
 The rest of this package's Promise faces turned out to stand on
 `BrainAgent`'s own public surface rather than on the vocabulary's: a wake, an
@@ -896,7 +918,10 @@ because reverse order and closing once are exactly what it guarantees: the
 abort signal every wait of the generation settles on, and the context the
 runtime opened behind it, are its two finalizers, and both run synchronously,
 so the close is a `runSync` rather than a stop or a replacement waiting on a
-dispose. `state-store.ts` keeps its own compare-and-set against the envelope
+dispose. That synchronous shape is exactly what the storage rule requires, so
+this row is re-pointed at P12-15 with no expectation it becomes an
+`Effect.runPromise*` shim at all — deleting it would mean giving the fence
+back the latency it exists to avoid. `state-store.ts` keeps its own compare-and-set against the envelope
 it last observed standing, because it is ported from OpenClaw `b7528507` and
 imports nothing from `effect`; its Effect surface stays in
 `state-store.effect.ts`. What P12-02 took out of this file is the open: the
@@ -1016,8 +1041,8 @@ design decision stated as such:
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
 | `cloudFetchFromHttpClient` | P1-07 | P12-04b |
 | `timersFromRuntime` | P2-01 | P12-03 |
-| `admit()` Promise door over `admitEffect()` | P4-01 | P12-04 |
-| `BrainTransport#send`'s internal `runCall` | P5-05 | P12-04b |
+| `admit()` Promise door over `admitEffect()` | P4-01 | P12-15 — blocked on the `ToolExecutor` seam answering an effect; P12-04 turned out to be the CloudFetch/HttpClient family alone |
+| `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `snapshot-roster.ts`, `compose-devices.ts`, and `compose-conversation.ts`'s `runClientEffect`, over the three clients above | P12-04b | pending — once `ObservationLoop`'s `run`, `deviceCadence`'s beat, and the Conversation poll's pager are each a fiber |
@@ -1030,7 +1055,7 @@ design decision stated as such:
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | not yet — every caller stays inside `packages/providers`; P7-05 confirmed the host never called one directly |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
-| `tracedModelAdapter`'s traced `respond` | P6-05 | P12-04b |
+| `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |
 | `LinearIssueTracker#post` | P4-03 | P12-04b |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04b |
@@ -1047,7 +1072,7 @@ design decision stated as such:
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
 | `HostedStoreRun`, the edge runner the hosted store's still-promise-shaped callers are handed, and `BrainHostSeams.run` beside it | P10-11a | P10-16 — P10-15 took `HostedStore` itself off it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
-| `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-04 |
+| `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | with `LoopbackConsent`'s `signIn` door, once `AccountSessionManager` answers effects |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |

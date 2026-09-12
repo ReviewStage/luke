@@ -10,7 +10,7 @@ import {
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
 import type { LiveDiagnostics } from "@sidecar/live";
-import type { EmbeddingAdapter, ModelAdapter } from "@sidecar/runtime/vocabulary";
+import type { EmbeddingAdapter, ExecutionRuntime, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -97,6 +97,8 @@ export interface VoiceCapabilityAssemblerOptions {
   /** This installation's device row id, for the hosted session's handshake; absent or answering nothing, the handshake names no device. */
   deviceId?: () => string | undefined;
   fetch?: typeof fetch;
+  /** The runtime a brain model's own request effects are run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  execution?: ExecutionRuntime;
   report?: (message: string) => void;
   /**
    * Decorates the model adapter the policy builds, so a traced development
@@ -231,23 +233,26 @@ export class VoiceCapabilityAssembler {
       Effect.tryPromise(() => this.#options.settings.readAccount()).pipe(
         Effect.orElseSucceed(() => undefined),
       );
+    const httpClient: Layer.Layer<HttpClient.HttpClient> | undefined = this.#options.fetch
+      ? layerFromCloudFetch(this.#options.fetch)
+      : undefined;
     const seams = {
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
       readAccessToken: () => Effect.map(readAccount(), (account) => account?.accessToken),
       refreshAccount: this.#options.refreshAccount,
       readAccountKey: () => Effect.map(readAccount(), (account) => account?.email),
-      ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
+      ...(httpClient ? { httpClient } : undefined),
+      ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
     };
-    const httpClient: Layer.Layer<HttpClient.HttpClient> | undefined = this.#options.fetch
-      ? layerFromCloudFetch(this.#options.fetch)
-      : undefined;
     const voice = await this.#options.settings
       .get(APP_SETTING_SCHEMA.voice.field)
       .catch(() => undefined);
     if (!isCurrent()) return { latest: false, isCurrent };
 
     const builtBrainModel = policy.useKey
-      ? openAiModelAdapter(apiKey)
+      ? openAiModelAdapter(apiKey, {
+          ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
+        })
       : policy.useHosted
         ? new HostedModelAdapter(seams)
         : undefined;
@@ -256,7 +261,10 @@ export class VoiceCapabilityAssembler {
         ? this.#options.wrapBrainModel(builtBrainModel)
         : builtBrainModel;
     const builtPrefetchModel = policy.useKey
-      ? openAiModelAdapter(apiKey, { model: BRAIN_PREFETCH_MODEL })
+      ? openAiModelAdapter(apiKey, {
+          model: BRAIN_PREFETCH_MODEL,
+          ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
+        })
       : policy.useHosted
         ? new HostedModelAdapter({ ...seams, respondOperation: RESPONSES_OPERATION.PREFETCH })
         : undefined;
@@ -268,7 +276,8 @@ export class VoiceCapabilityAssembler {
       policy.useKey && apiKey
         ? new OpenAiEmbeddingAdapter({
             apiKey,
-            ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
+            ...(httpClient ? { httpClient } : undefined),
+            ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
           })
         : policy.useHosted
           ? new HostedEmbeddingAdapter(seams)

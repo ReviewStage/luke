@@ -8,7 +8,7 @@ export {
 } from "./agent.js";
 export { BACKEND_PREAMBLE, type BrainPromptVoice, brainPromptVoice } from "./backend-preamble.js";
 export { toolLoopRuntimeOver } from "./builtins.js";
-export { type Carry, carryOn } from "./effect/carry.js";
+export { type Carry, carryOn, runtimeExit } from "./effect/carry.js";
 export {
   BRAIN_EMBEDDING_MODEL,
   BRAIN_EMBEDDINGS_PATH,
