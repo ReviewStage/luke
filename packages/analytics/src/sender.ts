@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCallEffects,
@@ -9,8 +10,7 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { scheduleRepeat } from "@sidecar/runtime/effect";
-import { type CloudFetch, HTTP_METHOD, positiveInteger } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
 import { Duration, Effect, Exit, type Layer, Runtime, Schedule, Scope } from "effect";
 import {
   PRODUCT_EVENT,
@@ -49,7 +49,8 @@ export interface ProductEventSenderOptions extends AccountToken {
   appVersion: string;
   /** `runMode.sendsNetwork`. False makes every record a no-op. */
   sends: boolean;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
@@ -108,7 +109,7 @@ export class ProductEventSender {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
     this.#runtime = options.runtime ?? Runtime.defaultRuntime;
     this.#appVersion = options.appVersion;
     this.#sends = options.sends;

@@ -1,9 +1,9 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import * as HttpBody from "@effect/platform/HttpBody";
 import * as HttpClient from "@effect/platform/HttpClient";
 import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
-  type CloudFetch,
   HTTP_STATUS,
   type HttpMethod,
   positiveInteger,
@@ -13,8 +13,16 @@ import {
   WireValueSchema,
   withoutTrailingSlash,
 } from "@sidecar/wire";
-import { layerFromCloudFetch, webResponseFromClientResponse } from "@sidecar/wire/effect";
-import { Cause, Data, Duration, Effect, type Schema as EffectSchema, Exit } from "effect";
+import { webResponseFromClientResponse } from "@sidecar/wire/effect";
+import {
+  Cause,
+  Data,
+  Duration,
+  Effect,
+  type Schema as EffectSchema,
+  Exit,
+  type Layer,
+} from "effect";
 import type { AccountToken } from "./account-token.js";
 
 const ACCOUNT_CALL_DEFAULTS = {
@@ -113,11 +121,14 @@ export interface AccountCallOptions {
 }
 
 /**
- * @deprecated The `fetch` seam a caller not yet holding an `HttpClient` hands
- * over; deleted with `CloudFetch` in P12-04.
+ * @deprecated The options {@link createAccountCall} still takes for a caller
+ * that awaits a `Promise` rather than holding a runtime edge of its own;
+ * deleted once every caller of `createAccountCall` takes `accountCall`
+ * instead.
  */
 export interface AccountFetchCallOptions extends AccountCallOptions {
-  fetch?: CloudFetch | undefined;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient> | undefined;
 }
 
 /**
@@ -432,14 +443,15 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
 }
 
 /**
- * The same call as a promise, over the caller's own `fetch`.
+ * The same call as a promise, over the caller's own `HttpClient`.
  *
  * @deprecated Superseded by {@link accountCall}, which takes the ambient
- * `HttpClient` and answers effects; deleted with `CloudFetch` in P12-04.
+ * `HttpClient` and answers effects; deleted once every remaining caller
+ * (`apps/web`'s hosted PostHog and voice routes) takes `accountCall` instead.
  */
 export function createAccountCall(options: AccountFetchCallOptions): AccountCall {
   const call = accountCall(options);
-  const client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+  const client = options.httpClient ?? FetchHttpClient.layer;
 
   async function run<Answer>(
     effect: Effect.Effect<Answer, never, HttpClient.HttpClient>,

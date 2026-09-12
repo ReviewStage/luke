@@ -1,6 +1,7 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
-import type { CloudFetch, WireRecord } from "@sidecar/wire";
-import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import type { WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
 import { Effect, type Schema as EffectSchema, Either, type Layer } from "effect";
 import {
   type AccountCallEffects,
@@ -25,7 +26,8 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 export interface HostedDeviceClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -88,7 +90,7 @@ export class HostedDeviceClient {
   constructor(options: HostedDeviceClientOptions) {
     this.#options = options;
     this.#call = this.#callOn(accountBearer(options));
-    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
   register(request: DeviceRegisterRequest): Promise<DeviceRegisterAnswer | undefined> {

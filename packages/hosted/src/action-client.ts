@@ -1,7 +1,8 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
-import { type CloudFetch, HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import { HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
 import { Effect, type Schema as EffectSchema, Either, type Layer } from "effect";
 import {
   type AccountCallEffects,
@@ -22,7 +23,8 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 export interface HostedActionClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -112,7 +114,7 @@ export class HostedActionClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
   sendMessage(target: HostedActionTarget, text: string): Promise<HostedActionOutcome> {

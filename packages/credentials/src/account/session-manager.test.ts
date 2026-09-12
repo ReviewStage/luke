@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
 import { Effect, Exit, Fiber } from "effect";
 import { test } from "vitest";
@@ -130,7 +131,7 @@ function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>
   return new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: fetchStub,
+    httpClient: layerFromCloudFetch(fetchStub),
   });
 }
 

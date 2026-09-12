@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { MESSAGE_RATING, type WireValue } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import {
@@ -19,12 +20,12 @@ const FIXTURE_DIRECTORY = path.join(fileURLToPath(import.meta.url), "../../fixtu
 const OPENED = "3c000000-0000-4000-8000-000000000009";
 
 function client(
-  fetch: ReturnType<typeof fakeCloudApi>["fetch"],
+  httpClient: ReturnType<typeof fakeCloudApi>["layer"],
   options: Partial<ConstructorParameters<typeof HostedConversationClient>[0]> = {},
 ) {
   return new HostedConversationClient({
     serviceBaseUrl: "https://luke.test",
-    fetch,
+    httpClient,
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
     readAccountKey: async () => "person",
@@ -53,9 +54,9 @@ it.effect(
 
       const [read, eventsRead, turnsRead] = yield* Effect.promise(() =>
         Promise.all([
-          client(api.fetch).messages(page),
-          client(api.fetch).events(),
-          client(api.fetch).turns({ after: "dHVybg" }),
+          client(api.layer).messages(page),
+          client(api.layer).events(),
+          client(api.layer).turns({ after: "dHVybg" }),
         ]),
       );
 
@@ -84,7 +85,7 @@ it.effect(
           status: HTTP_STATUS.SERVER_ERROR,
         },
       });
-      assert.deepEqual(yield* Effect.promise(() => client(unreadable.fetch).messages()), {
+      assert.deepEqual(yield* Effect.promise(() => client(unreadable.layer).messages()), {
         ok: false,
         failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW,
         row,
@@ -96,7 +97,7 @@ it.effect(
           status: HTTP_STATUS.SERVER_ERROR,
         },
       });
-      assert.deepEqual(yield* Effect.promise(() => client(unavailable.fetch).messages()), {
+      assert.deepEqual(yield* Effect.promise(() => client(unavailable.layer).messages()), {
         ok: false,
         failure: CONVERSATION_READ_FAILURE.UNANSWERED,
       });
@@ -106,14 +107,16 @@ it.effect(
           answer: () => ({ groups: "not a page" }),
         },
       });
-      assert.deepEqual(yield* Effect.promise(() => client(malformed.fetch).events()), {
+      assert.deepEqual(yield* Effect.promise(() => client(malformed.layer).events()), {
         ok: false,
         failure: CONVERSATION_READ_FAILURE.UNANSWERED,
       });
 
-      const faulted = client(() => {
-        throw new TypeError("offline");
-      });
+      const faulted = client(
+        layerFromCloudFetch(() => {
+          throw new TypeError("offline");
+        }),
+      );
       assert.deepEqual(yield* Effect.promise(() => faulted.turns()), {
         ok: false,
         failure: CONVERSATION_READ_FAILURE.UNANSWERED,
@@ -129,7 +132,7 @@ it.effect("Clear posts nothing but the bearer, and reads the main it opened", ()
       },
     });
 
-    const answer = yield* Effect.promise(() => client(api.fetch).clear());
+    const answer = yield* Effect.promise(() => client(api.layer).clear());
 
     assert.deepEqual(answer, { opened: OPENED, openedAt: 1_757_505_600_000, cleared: 2 });
     assert.deepEqual(recordedRoutes(api.requests()), [
@@ -154,7 +157,7 @@ it.effect(
       });
 
       const written = yield* Effect.promise(() =>
-        client(api.fetch).rate(RATED_MESSAGE, { rating: MESSAGE_RATING.DOWN, deviceId: DEVICE }),
+        client(api.layer).rate(RATED_MESSAGE, { rating: MESSAGE_RATING.DOWN, deviceId: DEVICE }),
       );
 
       assert.deepEqual(written, { ok: true, answer: { id: RATING_EVENT, seq: 7 } });
@@ -182,7 +185,7 @@ it.effect(
         },
       });
       assert.deepEqual(
-        yield* Effect.promise(() => client(notFound.fetch).rate(RATED_MESSAGE, request)),
+        yield* Effect.promise(() => client(notFound.layer).rate(RATED_MESSAGE, request)),
         {
           ok: false,
           refusal: CONVERSATION_RATE_REFUSAL.NOT_FOUND,
@@ -196,7 +199,7 @@ it.effect(
         },
       });
       assert.deepEqual(
-        yield* Effect.promise(() => client(notRateable.fetch).rate(RATED_MESSAGE, request)),
+        yield* Effect.promise(() => client(notRateable.layer).rate(RATED_MESSAGE, request)),
         { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_RATEABLE },
       );
 
@@ -207,7 +210,7 @@ it.effect(
         },
       });
       assert.deepEqual(
-        yield* Effect.promise(() => client(unavailable.fetch).rate(RATED_MESSAGE, request)),
+        yield* Effect.promise(() => client(unavailable.layer).rate(RATED_MESSAGE, request)),
         { ok: false, refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED },
       );
 
@@ -217,7 +220,7 @@ it.effect(
         },
       });
       assert.deepEqual(
-        yield* Effect.promise(() => client(admittedButUnread.fetch).rate(RATED_MESSAGE, request)),
+        yield* Effect.promise(() => client(admittedButUnread.layer).rate(RATED_MESSAGE, request)),
         { ok: false, refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED },
       );
 
@@ -225,7 +228,7 @@ it.effect(
       const untouched = fakeCloudApi({});
       assert.deepEqual(
         yield* Effect.promise(() =>
-          client(untouched.fetch).rate(RATED_MESSAGE, { rating: MESSAGE_RATING.UP, deviceId: "" }),
+          client(untouched.layer).rate(RATED_MESSAGE, { rating: MESSAGE_RATING.UP, deviceId: "" }),
         ),
         { ok: false, refusal: CONVERSATION_RATE_REFUSAL.UNANSWERED },
       );

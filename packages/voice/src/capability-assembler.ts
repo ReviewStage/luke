@@ -1,3 +1,4 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   BRAIN_PREFETCH_MODEL,
   HostedEmbeddingAdapter,
@@ -17,7 +18,8 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
-import type { Effect } from "effect";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
+import type { Effect, Layer } from "effect";
 import {
   HostedLiveSessionSource,
   keyedLiveSessions,
@@ -232,6 +234,9 @@ export class VoiceCapabilityAssembler {
       readAccountKey: async () => (await this.#options.settings.readAccount())?.email,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
+    const httpClient: Layer.Layer<HttpClient.HttpClient> | undefined = this.#options.fetch
+      ? layerFromCloudFetch(this.#options.fetch)
+      : undefined;
     const voice = await this.#options.settings
       .get(APP_SETTING_SCHEMA.voice.field)
       .catch(() => undefined);
@@ -271,7 +276,7 @@ export class VoiceCapabilityAssembler {
         ? keyedLiveSessions(apiKey, {
             openSocket,
             ...(voice ? { voice } : undefined),
-            ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
+            ...(httpClient ? { httpClient } : undefined),
           })
         : policy.useHosted
           ? new HostedLiveSessionSource({

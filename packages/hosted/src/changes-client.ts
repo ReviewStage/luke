@@ -1,6 +1,7 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
-import type { CloudFetch, WireRecord } from "@sidecar/wire";
-import { layerFromCloudFetch, readEither } from "@sidecar/wire/effect";
+import type { WireRecord } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
 import { Effect, Either, type Layer } from "effect";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
@@ -15,7 +16,8 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 export interface HostedChangesClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -55,7 +57,7 @@ export class HostedChangesClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
   poll(request: ChangesRequest): Promise<ChangesAnswer | undefined> {
@@ -75,12 +77,6 @@ export class HostedChangesClient {
     );
   }
 
-  /**
-   * @deprecated The promise face `poll` keeps while its caller still awaits a
-   * `Promise` rather than holding a runtime edge of its own; deleted with
-   * `CloudFetch` in P12-04, at which point the caller runs `#call.ask` on its
-   * own runtime instead.
-   */
   #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
     return Effect.runPromise(Effect.provide(effect, this.#client));
   }

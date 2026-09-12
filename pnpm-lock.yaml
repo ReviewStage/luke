@@ -1074,6 +1074,9 @@ importers:
 
   packages/voice:
     dependencies:
+      '@effect/platform':
+        specifier: 'catalog:'
+        version: 0.97.2(effect@3.22.2)
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../brain

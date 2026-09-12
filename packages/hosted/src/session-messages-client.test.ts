@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CLOUD_AGENT_PROVIDER_ID, CONVERSATION_MESSAGE_AUTHOR } from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedSessionMessagesClient } from "./session-messages-client.js";
@@ -16,7 +17,7 @@ function client(fetch: CloudFetch) {
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
   });
 }
 

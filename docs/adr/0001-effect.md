@@ -168,7 +168,7 @@ The strangler shims in the table below are on that allowlist for as long as they
 promise, because that is what the `CloudFetch` seam its callers still hold
 answers, so the bridge is where the effect is run until every one of them takes
 a client instead. It is the migration's own scaffolding rather than a second
-runtime for the product to live on, and it goes in P12-04 with the seam.
+runtime for the product to live on, and it goes in P12-04b with the seam.
 
 `timerSeamFromRuntime` answers the `now`/`schedule`/`cancel` seam a caller
 still injected with those closures reads from an Effect runtime's own
@@ -224,23 +224,29 @@ is the fifth: every caller of the brain's model transport still holds a
 promise, not a fiber, so the request effect built over `@sidecar/hosted`'s
 `accountCall` is run to a promise there, joining the caller's own
 `AbortSignal` to the run exactly as `createAccountCall` does. It goes in
-P12-04 with the rest of that family, because what keeps it is the
+P12-04b with the rest of that family, because what keeps it is the
 `ModelAdapter` interface's own promise: `compaction.ts` is a port of OpenClaw
 `b7528507` that awaits `model.respond` and imports nothing from `effect`, so
 no adapter above this transport can answer an effect while that port stands.
 
 `createAccountCall` in `packages/hosted/src/account-call.ts` is the sixth: it
-provides `layerFromCloudFetch` over the caller's own `fetch`, joins the
-caller's `AbortSignal` to the run, and answers the `Promise` its callers still
-hold. It goes in P12-04 with the `CloudFetch` seam. `HostedChangesClient`'s,
-`HostedRosterClient`'s, and `HostedConversationClient`'s own `#run` in
-`changes-client.ts`, `roster-client.ts`, and `conversation-client.ts` are the
-seventh, on the same terms: each of these three holds `accountCall` directly
-rather than `createAccountCall`, because none of their public methods takes a
-caller's own `AbortSignal`, so each keeps its own `layerFromCloudFetch` layer
-beside the call and runs the effect there to answer the `Promise` its own
-public methods still keep. They go in P12-04 too, once a caller of these
-clients runs the effect on its own runtime edge instead.
+provides the caller's own `httpClient` layer, or `FetchHttpClient.layer` for
+the ambient ones, joins the caller's `AbortSignal` to the run, and answers
+the `Promise` its callers still hold. P12-04 moved every caller inside this
+package onto `accountCall` directly and deleted the `CloudFetch` seam this
+door used to take its layer from; what is left is the promise door itself,
+kept for its two remaining callers outside this package — the web app's
+hosted PostHog batch and its voice session mint — and deleted once both take
+`accountCall` instead. `HostedChangesClient`'s, `HostedRosterClient`'s, and
+`HostedConversationClient`'s own `#run` in `changes-client.ts`,
+`roster-client.ts`, and `conversation-client.ts` are the seventh, on the same
+terms: each of these three holds `accountCall` directly rather than
+`createAccountCall`, because none of their public methods takes a caller's
+own `AbortSignal`, so each keeps its own `httpClient` layer (a test's fake,
+or `FetchHttpClient.layer`) beside the call and runs the effect there to
+answer the `Promise` its own public methods still keep. They are deleted once
+a caller of these clients — today, only `@sidecar/host`'s composers — runs
+the effect on its own runtime edge instead.
 
 `ProductEventSender`'s `start`, `stop`, and `flush` in
 `packages/analytics/src/sender.ts` are the eighth, on the same terms as
@@ -554,17 +560,20 @@ this class's own methods as Effects, and this row is where that is recorded.
 terms as `runCall`: the traced `respond` still answers the `ModelAdapter`
 interface's promise, so the `Effect.withSpan` wrapping the wrapped adapter's
 call is run to that promise here. It goes together with
-`BrainTransport#send`'s `runCall` in P12-04, and for the same reason: it can
+`BrainTransport#send`'s `runCall` in P12-04b, and for the same reason: it can
 stop answering a promise only when the `ModelAdapter` it wraps does.
 
 `timedRequest` in `packages/credentials/src/account/client.ts` and
 `LinearIssueTracker#post` in `packages/credentials/src/linear/tracker.ts` are
-on the same allowlist: both build a request over the ambient `HttpClient`
-from a `CloudFetch`-shaped `fetch` option, exactly as `createAccountCall`
-does, and both still answer their callers — `AccountClient`,
-`deleteHostedAccount`, and `LinearIssueTracker`'s `observe`/`execute` — a
-Promise rather than a fiber, so each runs its request to a promise in place.
-Both go with `CloudFetch` and `layerFromCloudFetch` in P12-04.
+on the same allowlist: both build a request over the ambient `HttpClient` and
+both still answer their callers — `AccountClient`, `deleteHostedAccount`, and
+`LinearIssueTracker`'s `observe`/`execute` — a Promise rather than a fiber, so
+each runs its request to a promise in place. `AccountClient`'s and
+`deleteHostedAccount`'s own `httpClient` option is a `Layer` a test hands over
+in place of `FetchHttpClient.layer` since P12-04 deleted the `CloudFetch`
+seam it used to build that layer from; `LinearIssueTracker#post` still builds
+its layer from a `CloudFetch`-shaped `fetch` option. Both go in P12-04b, once
+each answers a fiber instead of a promise.
 
 `LoopbackConsent`'s `signIn` in
 `packages/credentials/src/loopback-consent.ts` runs nothing any more, and is
@@ -579,12 +588,12 @@ than a door's own — and the calendars composer had already moved in P7-06,
 calling `signInEffect()` through `Runtime.runPromise` on the runtime its own
 layer runs on. `timedRequest` in
 `packages/credentials/src/linear/oauth.ts` is beside its namesake in
-`account/client.ts` and on exactly the same terms: Linear's three OAuth
-calls — the code exchange, the refresh, and the revocation — each build a
-request over the ambient `HttpClient` from a `CloudFetch`-shaped `fetch`
+`account/client.ts` and on exactly the same terms, unmigrated: Linear's three
+OAuth calls — the code exchange, the refresh, and the revocation — each build
+a request over the ambient `HttpClient` from a `CloudFetch`-shaped `fetch`
 option and each still answer their callers a Promise, so the request is run
 to one in place. It goes with `CloudFetch` and `layerFromCloudFetch` in
-P12-04.
+P12-04b.
 
 `packages/credentials/src/single-flight.ts` is on the allowlist for one
 `Effect.runSync`, and no longer for a promise door over it: P7-13c deleted
@@ -755,8 +764,8 @@ compares it by reference, and it folds the context through the same adapter
 inside `compaction.ts`, which is an OpenClaw port and so imports nothing from
 `effect`. An Effect-shaped counterpart for any of the three would therefore
 need a promise view built back out of it inside the brain, which is the same
-run in another file rather than one less. They move in P12-04, and the two shims that stand on them — `BrainTransport#send`'s
-`runCall` and `tracedModelAdapter`'s traced `respond` — name P12-04 below for
+run in another file rather than one less. They move in P12-04b, and the two shims that stand on them — `BrainTransport#send`'s
+`runCall` and `tracedModelAdapter`'s traced `respond` — name P12-04b below for
 that reason.
 
 The rest of this package's Promise faces turned out to stand on
@@ -886,12 +895,16 @@ the list machine-readable — `HostedActionClient`'s `#run` in
 stand on exactly the terms `changes-client.ts`, `roster-client.ts`, and
 `conversation-client.ts` do: each holds `accountCall` directly, none of its
 public methods takes a caller's own `AbortSignal`, and each runs its request
-effect over its own `layerFromCloudFetch` layer to the Promise those methods
-answer. They go in P12-04 with the seam. `feedbackCourier` in
+effect over its own `httpClient` layer (a test's fake, or
+`FetchHttpClient.layer` for the ambient one — P12-04 deleted the `CloudFetch`
+seam these four used to build that layer from) to the Promise those methods
+answer. They go in P12-04b with the seam. `feedbackCourier` in
 `packages/feedback/src/delivery.ts` is the same shape one package over: the
 courier its callers hold answers a Promise, so the delivery effect is run over
-a client built from the caller's own `fetch` right there, and it goes in P12-04
-too.
+the caller's own `httpClient` layer or `FetchHttpClient.layer` right there —
+P12-04 deleted the `CloudFetch` seam this door used to build that layer from
+too — and it goes in P12-04b once its own caller runs the effect on its own
+runtime edge instead.
 
 `runTest` in `packages/wire/src/testing/effect.ts` is the test harness's own
 door on the same terms: a suite still written on `node:assert` outside
@@ -943,12 +956,12 @@ design decision stated as such:
 | --- | --- | --- |
 | `s.*` facade over Effect Schema | P1-02 | P12-08 |
 | TaggedErrors carry legacy `code` strings on wire | P3-04 onward | never — the wire is the compatibility surface |
-| `cloudFetchFromHttpClient` | P1-07 | P12-04 |
+| `cloudFetchFromHttpClient` | P1-07 | P12-04b |
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `admit()` Promise door over `admitEffect()` | P4-01 | P12-04 |
-| `BrainTransport#send`'s internal `runCall` | P5-05 | P12-04 |
-| `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
-| `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
+| `BrainTransport#send`'s internal `runCall` | P5-05 | P12-04b |
+| `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
+| `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |
@@ -958,10 +971,10 @@ design decision stated as such:
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | not yet — every caller stays inside `packages/providers`; P7-05 confirmed the host never called one directly |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
-| `tracedModelAdapter`'s traced `respond` | P6-05 | P12-04 |
-| `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
-| `LinearIssueTracker#post` | P4-03 | P12-04 |
-| `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
+| `tracedModelAdapter`'s traced `respond` | P6-05 | P12-04b |
+| `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |
+| `LinearIssueTracker#post` | P4-03 | P12-04b |
+| `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04b |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | P7-13c — the calendars composer's methods answer effects since P7-13 |
 | `timerSeamFromRuntime` (`packages/runtime/src/effect/timer-seam.ts`) | P12-03 | once `children.effect.ts`/`queue.effect.ts` answer `Clock`/`Scope` directly |
 | `timerSeamFromRuntime` (`packages/host/src/effect/timer-seam.ts`) | P12-03 | once `compose-live.ts` answers `Clock`/`Scope` directly |

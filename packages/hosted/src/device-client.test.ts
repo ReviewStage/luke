@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import {
   fakeCloudApi,
   HTTP_STATUS,
@@ -15,14 +16,14 @@ const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
 function client(
-  fetch: ReturnType<typeof fakeCloudApi>["fetch"],
+  httpClient: ReturnType<typeof fakeCloudApi>["layer"],
   options: Partial<ConstructorParameters<typeof HostedDeviceClient>[0]> = {},
 ) {
   return new HostedDeviceClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
-    fetch,
+    httpClient,
     ...options,
   });
 }
@@ -34,7 +35,7 @@ it.effect("registers the installation as a bearer-authenticated POST and reads t
     });
 
     const answer = yield* Effect.promise(() =>
-      client(api.fetch).register({
+      client(api.layer).register({
         platform: DEVICE_PLATFORM.MACOS,
         installationId: INSTALLATION_ID,
       }),
@@ -55,7 +56,7 @@ it.effect("registers the installation as a bearer-authenticated POST and reads t
 it.effect("a request the service would refuse by shape never travels", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({});
-    const devices = client(api.fetch);
+    const devices = client(api.layer);
 
     assert.equal(
       yield* Effect.promise(() =>
@@ -84,7 +85,7 @@ it.effect("a forget is a DELETE naming the device and reads whether a row went",
       "DELETE /api/devices": { answer: () => ({ deleted: false }) },
     });
 
-    const answer = yield* Effect.promise(() => client(api.fetch).forget({ deviceId: DEVICE_ID }));
+    const answer = yield* Effect.promise(() => client(api.layer).forget({ deviceId: DEVICE_ID }));
 
     assert.deepEqual(answer, { deleted: false });
     assert.deepEqual(recordedRoutes(api.requests()), ["DELETE /api/devices"]);
@@ -103,7 +104,7 @@ it.effect("a forget at sign-out carries the departing token and never refreshes"
     let refreshes = 0;
 
     const answer = yield* Effect.promise(() =>
-      client(api.fetch, {
+      client(api.layer, {
         readAccessToken: async () => "token-standing",
         refreshAccount: () =>
           Effect.sync(() => {
@@ -131,7 +132,7 @@ it.effect("a 401 refreshes the account and retries once on the new token", () =>
     );
 
     const answer = yield* Effect.promise(() =>
-      client(fetch, {
+      client(layerFromCloudFetch(fetch), {
         readAccessToken: async () => tokens.shift(),
         refreshAccount: () =>
           Effect.sync(() => {
@@ -158,7 +159,7 @@ it.effect("a refusal, a malformed answer, or no token resolves to nothing", () =
       },
     });
     assert.equal(
-      yield* Effect.promise(() => client(refused.fetch).forget({ deviceId: DEVICE_ID })),
+      yield* Effect.promise(() => client(refused.layer).forget({ deviceId: DEVICE_ID })),
       undefined,
     );
 
@@ -167,7 +168,7 @@ it.effect("a refusal, a malformed answer, or no token resolves to nothing", () =
     });
     assert.equal(
       yield* Effect.promise(() =>
-        client(malformed.fetch).register({
+        client(malformed.layer).register({
           platform: DEVICE_PLATFORM.MACOS,
           installationId: INSTALLATION_ID,
         }),
@@ -178,7 +179,7 @@ it.effect("a refusal, a malformed answer, or no token resolves to nothing", () =
     const signedOut = fakeCloudApi({});
     assert.equal(
       yield* Effect.promise(() =>
-        client(signedOut.fetch, { readAccessToken: async () => undefined }).forget({
+        client(signedOut.layer, { readAccessToken: async () => undefined }).forget({
           deviceId: DEVICE_ID,
         }),
       ),

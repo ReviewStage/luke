@@ -9,14 +9,14 @@ const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const EMPTY_CURSOR = encodeSequenceReadCursor([]);
 
 function client(
-  fetch: ReturnType<typeof fakeCloudApi>["fetch"],
+  httpClient: ReturnType<typeof fakeCloudApi>["layer"],
   options: Partial<ConstructorParameters<typeof HostedChangesClient>[0]> = {},
 ) {
   return new HostedChangesClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
-    fetch,
+    httpClient,
     ...options,
   });
 }
@@ -32,7 +32,7 @@ it.effect(
       });
 
       const answer = yield* Effect.promise(() =>
-        client(api.fetch).poll({
+        client(api.layer).poll({
           deviceId: DEVICE_ID,
           activeUntil: 1_757_505_900_000,
           quietUntil: null,
@@ -58,7 +58,7 @@ it.effect("an instant left out travels as left out, so the service leaves the on
       },
     });
 
-    const answer = yield* Effect.promise(() => client(api.fetch).poll({ deviceId: DEVICE_ID }));
+    const answer = yield* Effect.promise(() => client(api.layer).poll({ deviceId: DEVICE_ID }));
 
     assert.equal(answer?.seen, false);
     assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { deviceId: DEVICE_ID });
@@ -72,7 +72,7 @@ it.effect(
       const refused = fakeCloudApi({});
       assert.equal(
         yield* Effect.promise(() =>
-          client(refused.fetch).poll({ deviceId: "mac", activeUntil: 1 }),
+          client(refused.layer).poll({ deviceId: "mac", activeUntil: 1 }),
         ),
         undefined,
       );
@@ -82,7 +82,7 @@ it.effect(
         "POST /api/changes": { answer: () => ({ seen: "yes" }) },
       });
       assert.equal(
-        yield* Effect.promise(() => client(malformed.fetch).poll({ deviceId: DEVICE_ID })),
+        yield* Effect.promise(() => client(malformed.layer).poll({ deviceId: DEVICE_ID })),
         undefined,
       );
       assert.equal(malformed.requests().length, 1);

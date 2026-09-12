@@ -1,10 +1,10 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import * as HttpBody from "@effect/platform/HttpBody";
 import * as HttpClient from "@effect/platform/HttpClient";
 import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import type * as HttpClientResponse from "@effect/platform/HttpClientResponse";
-import { type CloudFetch, HTTP_METHOD, text } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
-import { Data, Duration, Effect } from "effect";
+import { HTTP_METHOD, text } from "@sidecar/wire";
+import { Data, Duration, Effect, type Layer } from "effect";
 import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
@@ -134,11 +134,8 @@ export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): Feedbac
 }
 
 export interface FeedbackDeliveryFetchOptions extends FeedbackDeliveryOptions {
-  /**
-   * @deprecated The `fetch` seam a caller not yet holding an `HttpClient`
-   * hands over; deleted with `CloudFetch` in P12-04.
-   */
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
 }
 
 /** The promise-answering face of {@link FeedbackDeliveryEffects}. */
@@ -152,9 +149,9 @@ export interface FeedbackDeliveryCourier {
  * this never answers with nothing; only the address can be overridden, for
  * testing the path against a local server.
  *
- * @deprecated Provides `layerFromCloudFetch` over the caller's own `fetch`
- * and runs the effect; superseded by {@link feedbackDelivery}, which answers
- * effects over the ambient `HttpClient`. Deleted with `CloudFetch` in P12-04.
+ * @deprecated Runs the effect over the caller's own `HttpClient`; superseded
+ * by {@link feedbackDelivery}, which answers effects over the ambient
+ * `HttpClient` directly.
  */
 export function feedbackDeliveryFromEnvironment(
   options: FeedbackDeliveryFetchOptions = {},
@@ -166,7 +163,7 @@ export function feedbackDeliveryFromEnvironment(
       ? undefined
       : { requestTimeoutMs: options.requestTimeoutMs }),
   });
-  const client = layerFromCloudFetch(options.fetch ?? ((input, init) => fetch(input, init)));
+  const client = options.httpClient ?? FetchHttpClient.layer;
   return {
     deliver: (submission) =>
       Effect.runPromise(Effect.provide(delivery.deliver(submission), client)),

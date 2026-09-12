@@ -1,3 +1,4 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountToken,
   CALL_FAULT,
@@ -37,7 +38,6 @@ import {
   liveSessionConfig,
 } from "@sidecar/live";
 import {
-  type CloudFetch,
   HTTP_METHOD,
   HTTP_STATUS,
   positiveInteger,
@@ -47,7 +47,7 @@ import {
   withoutTrailingSlash,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Duration, Effect, Either, Fiber, Runtime, Schedule } from "effect";
+import { Data, Duration, Effect, Either, Fiber, type Layer, Runtime, Schedule } from "effect";
 import type { HeldSocket } from "./held-socket.js";
 import {
   type LiveSideband,
@@ -211,7 +211,8 @@ export interface KeyedLiveSessionOptions {
   voice?: string;
   /** The API's `/v1` base; the attach address is derived from it by scheme alone. */
   baseUrl?: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   requestTimeoutMs?: number;
 }
@@ -231,7 +232,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
   readonly #configuredVoice: LiveVoice;
   #voice: LiveVoice;
   readonly #baseUrl: string;
-  readonly #fetch: CloudFetch | undefined;
+  readonly #httpClient: Layer.Layer<HttpClient.HttpClient> | undefined;
   readonly #requestTimeoutMs: number;
   readonly #outcome: OutcomeRecord;
   #sidebandAttached = false;
@@ -245,7 +246,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
     this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? OPENAI_LIVE_DEFAULTS.BASE_URL);
-    this.#fetch = options.fetch;
+    this.#httpClient = options.httpClient;
     this.#requestTimeoutMs = positiveInteger(
       options.requestTimeoutMs,
       OPENAI_LIVE_DEFAULTS.REQUEST_TIMEOUT_MS,
@@ -267,7 +268,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
     const call = createAccountCall({
       baseUrl: this.#baseUrl,
       credential: fixedBearer(this.#apiKey),
-      fetch: this.#fetch,
+      httpClient: this.#httpClient,
       requestTimeoutMs: this.#requestTimeoutMs,
     });
     const session = liveSessionConfig({
