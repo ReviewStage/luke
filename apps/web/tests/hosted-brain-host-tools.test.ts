@@ -138,9 +138,9 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
       whole: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
     workspace: {
-      read: async () => ({ ok: false, reason: "not read in these tests" }),
-      write: async () => ({ ok: false, reason: "not written in these tests" }),
-      loadSkill: async () => ({ ok: false, reason: "no skills" }),
+      read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
+      write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
+      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
     },
     now: () => NOW,
   };

@@ -68,46 +68,51 @@ function delegation() {
   const cancelled: string[] = [];
   const children: BrainChildAccess = {
     sessionKey: MAIN_SESSION_KEY,
-    spawn: async (ask) => {
-      spawns.push(ask);
-      return ask.label === "refused"
-        ? { accepted: false, reason: CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT, detail: "5 active" }
-        : {
-            accepted: true,
-            receipt: {
-              childId: "child-2",
-              childSessionKey: childSessionKey("child-2"),
-              childRunId: "child-2-run",
-              context: CHILD_CONTEXT_MODE.ISOLATED,
-              contextNote: "started isolated",
-              depth: 1,
-            },
-          };
-    },
-    list: async () => [{ record: childRecord("child-1", "summary"), completion: COMPLETION }],
-    cancel: async (childId) => {
-      if (childId !== "child-1") return undefined;
-      cancelled.push(childId);
-      return { ok: true, remaining: [] };
-    },
-    conversations: async () => [
-      {
-        sessionKey: MAIN_SESSION_KEY,
-        kind: CONVERSATION_KIND.MAIN,
-        name: "main",
-        createdAt: NOW,
-        lastActivityAt: NOW,
-      },
-      {
-        sessionKey: childSessionKey("child-0"),
-        kind: CONVERSATION_KIND.CHILD,
-        name: "archived",
-        createdAt: NOW,
-        lastActivityAt: NOW,
-        archivedAt: NOW,
-      },
-    ],
-    lines: async (childId) => (childId === "child-1" ? ["ask: hi", "reply: done"] : undefined),
+    spawn: (ask) =>
+      Effect.sync(() => {
+        spawns.push(ask);
+        return ask.label === "refused"
+          ? { accepted: false, reason: CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT, detail: "5 active" }
+          : {
+              accepted: true,
+              receipt: {
+                childId: "child-2",
+                childSessionKey: childSessionKey("child-2"),
+                childRunId: "child-2-run",
+                context: CHILD_CONTEXT_MODE.ISOLATED,
+                contextNote: "started isolated",
+                depth: 1,
+              },
+            };
+      }),
+    list: () =>
+      Effect.succeed([{ record: childRecord("child-1", "summary"), completion: COMPLETION }]),
+    cancel: (childId) =>
+      Effect.sync(() => {
+        if (childId !== "child-1") return undefined;
+        cancelled.push(childId);
+        return { ok: true, remaining: [] };
+      }),
+    conversations: () =>
+      Effect.succeed([
+        {
+          sessionKey: MAIN_SESSION_KEY,
+          kind: CONVERSATION_KIND.MAIN,
+          name: "main",
+          createdAt: NOW,
+          lastActivityAt: NOW,
+        },
+        {
+          sessionKey: childSessionKey("child-0"),
+          kind: CONVERSATION_KIND.CHILD,
+          name: "archived",
+          createdAt: NOW,
+          lastActivityAt: NOW,
+          archivedAt: NOW,
+        },
+      ]),
+    lines: (childId) =>
+      Effect.succeed(childId === "child-1" ? ["ask: hi", "reply: done"] : undefined),
   };
   return { children, spawns, cancelled };
 }

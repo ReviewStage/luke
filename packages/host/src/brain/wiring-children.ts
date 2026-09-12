@@ -11,6 +11,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 
 /**
  * Delegation as the main process composes it. The service owns the records
@@ -153,26 +154,39 @@ export function wireChildren(
     };
     return {
       sessionKey,
-      spawn: (ask) => {
-        const model = dependencies.model()?.model;
-        return service.spawn({
-          ...ask,
-          agentId: DEFAULT_AGENT_ID,
-          requesterSessionKey: sessionKey,
-          requesterDepth: childRecordOf(service, sessionKey)?.depth ?? 0,
-          ...(model ? { model } : undefined),
-          sameAgent: true,
-        });
-      },
-      list: async () =>
-        service.childrenOf(sessionKey).map((record) => ({
-          record,
-          completion: service.completion(record.childId),
-        })),
-      cancel: async (childId) => (own(childId) ? service.cancel(childId) : undefined),
-      conversations: async () => dependencies.conversationDirectory(),
-      lines: async (childId, limit) =>
-        own(childId) ? ((await service.lines(childId, limit)) ?? []) : undefined,
+      spawn: (ask) =>
+        Effect.promise(() => {
+          const model = dependencies.model()?.model;
+          return service.spawn({
+            ...ask,
+            agentId: DEFAULT_AGENT_ID,
+            requesterSessionKey: sessionKey,
+            requesterDepth: childRecordOf(service, sessionKey)?.depth ?? 0,
+            ...(model ? { model } : undefined),
+            sameAgent: true,
+          });
+        }),
+      list: () =>
+        Effect.sync(() =>
+          service.childrenOf(sessionKey).map((record) => ({
+            record,
+            completion: service.completion(record.childId),
+          })),
+        ),
+      cancel: (childId) =>
+        Effect.suspend(() =>
+          own(childId) ? Effect.promise(() => service.cancel(childId)) : Effect.succeed(undefined),
+        ),
+      conversations: () => Effect.sync(() => dependencies.conversationDirectory()),
+      lines: (childId, limit) =>
+        Effect.suspend(() =>
+          own(childId)
+            ? Effect.map(
+                Effect.promise(() => service.lines(childId, limit)),
+                (lines) => lines ?? [],
+              )
+            : Effect.succeed(undefined),
+        ),
     };
   };
 

@@ -96,17 +96,19 @@ function fakeWorkspace(files: Map<string, string>) {
   return {
     writes,
     access: {
-      read: async (name: string) => {
-        const content = files.get(name);
-        return content === undefined
-          ? { ok: false as const, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND }
-          : { ok: true as const, content };
-      },
-      write: async (name: string, content: string) => {
-        files.set(name, content);
-        writes.push(name);
-        return { ok: true as const, chars: content.length };
-      },
+      read: (name: string) =>
+        Effect.sync(() => {
+          const content = files.get(name);
+          return content === undefined
+            ? { ok: false as const, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND }
+            : { ok: true as const, content };
+        }),
+      write: (name: string, content: string) =>
+        Effect.sync(() => {
+          files.set(name, content);
+          writes.push(name);
+          return { ok: true as const, chars: content.length };
+        }),
     },
   };
 }
@@ -209,11 +211,8 @@ test("an interrupted flush keeps the write it already made and is not reported c
   const files = new Map<string, string>();
   const workspace = fakeWorkspace(files);
   const original = workspace.access.write;
-  workspace.access.write = async (name, content) => {
-    const written = await original(name, content);
-    controller.abort();
-    return written;
-  };
+  workspace.access.write = (name, content) =>
+    Effect.tap(original(name, content), () => Effect.sync(() => controller.abort()));
   const result = await Effect.runPromise(
     runMemoryHousekeeping({
       runtime: runtimeOver(model),

@@ -189,7 +189,8 @@ interface Slot {
 }
 
 interface MemoEntry {
-  promise: Promise<WireRecord>;
+  /** The read as one effect however many times it is asked for: `Effect.cached` holds the first answer. */
+  read: Effect.Effect<WireRecord>;
   readAt: number;
 }
 
@@ -448,10 +449,13 @@ export class ReadPrefetch implements TurnReadPrefetch {
       this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "no plan");
       return undefined;
     }
-    const held = await Promise.all(
-      reads
-        .filter((read) => policy.allows(read.kind))
-        .map((read) => this.#read(read, roster, sessions, offered.options)),
+    const held = await this.#options.carry(
+      Effect.all(
+        reads
+          .filter((read) => policy.allows(read.kind))
+          .map((read) => this.#read(read, roster, sessions, offered.options)),
+        { concurrency: "unbounded" },
+      ),
     );
     if (slot.abort.signal.aborted) {
       this.#traceOutcome(slot, BRAIN_PREFETCH_OUTCOME.FAILED, chars, 0, "superseded");
@@ -481,27 +485,30 @@ export class ReadPrefetch implements TurnReadPrefetch {
   }
 
   /** One planned read through its module, memoized by its arguments, and dropped when it answered anything but an answer. */
-  async #read(
+  #read(
     read: PlannedRead,
     roster: BrainRoster,
     sessions: readonly Session[],
     options: readonly PrefetchSessionOption[],
-  ): Promise<HeldRead | undefined> {
-    const { name, args, about } = this.#invocationOf(read, sessions, options);
-    const argumentsJson = JSON.stringify(args);
-    const output = await this.#memoized(name, argumentsJson, () =>
-      this.#execute(read, args, roster),
-    );
-    if (!answered(output)) return undefined;
-    const status = text(output.status);
-    return {
-      callId: this.#options.createId(),
-      name,
-      argumentsJson,
-      outputJson: JSON.stringify(output),
-      ...(status ? { status } : undefined),
-      about,
-    };
+  ): Effect.Effect<HeldRead | undefined> {
+    return Effect.gen(this, function* () {
+      const { name, args, about } = this.#invocationOf(read, sessions, options);
+      const argumentsJson = JSON.stringify(args);
+      const memoized = yield* this.#memoized(name, argumentsJson, () =>
+        this.#execute(read, args, roster),
+      );
+      const output = yield* memoized;
+      if (!answered(output)) return undefined;
+      const status = text(output.status);
+      return {
+        callId: this.#options.createId(),
+        name,
+        argumentsJson,
+        outputJson: JSON.stringify(output),
+        ...(status ? { status } : undefined),
+        about,
+      };
+    });
   }
 
   #invocationOf(
@@ -527,46 +534,60 @@ export class ReadPrefetch implements TurnReadPrefetch {
     };
   }
 
+  /**
+   * The read under the standing memo: a read of the same tool with the same
+   * arguments inside the memo's own window answers from the first one rather
+   * than reaching the module again. What the memo holds is the read as an
+   * `Effect.cached` effect — one answer however many times it is yielded —
+   * so the memo is entered on the slot's own fiber rather than through a
+   * promise, and a read that failed is held as the refusal it answered.
+   */
   #memoized(
     name: string,
     argumentsJson: string,
-    execute: () => Promise<WireRecord>,
-  ): Promise<WireRecord> {
-    const byArguments = this.#memo.get(name) ?? new Map<string, MemoEntry>();
-    this.#memo.set(name, byArguments);
-    const standing = byArguments.get(argumentsJson);
-    const now = this.#options.now();
-    if (standing && now - standing.readAt <= PREFETCH_BOUNDS.TTL_MS) return standing.promise;
-    const promise = execute().catch(() => rejection(REFUSAL_REASON.READ_FAILED));
-    byArguments.set(argumentsJson, { promise, readAt: now });
-    return promise;
+    execute: () => Effect.Effect<WireRecord>,
+  ): Effect.Effect<Effect.Effect<WireRecord>> {
+    return Effect.gen(this, function* () {
+      const byArguments = this.#memo.get(name) ?? new Map<string, MemoEntry>();
+      this.#memo.set(name, byArguments);
+      const standing = byArguments.get(argumentsJson);
+      const now = this.#options.now();
+      if (standing && now - standing.readAt <= PREFETCH_BOUNDS.TTL_MS) return standing.read;
+      const read = yield* Effect.cached(
+        Effect.catchAllDefect(execute(), () =>
+          Effect.succeed(rejection(REFUSAL_REASON.READ_FAILED)),
+        ),
+      );
+      byArguments.set(argumentsJson, { read, readAt: now });
+      return read;
+    });
   }
 
   /** The read itself, through the same module a turn's call reaches, under a standing that is nobody's turn. */
-  #execute(read: PlannedRead, args: WireRecord, roster: BrainRoster): Promise<WireRecord> {
-    const signal = this.#reads.signal;
-    const standing: ReadToolContext = {
-      conversationId: this.#options.conversationId,
-      turnId: this.#options.createId(),
-      runId: this.#options.createId(),
-      origin: RUN_ORIGIN.USER,
-      isRevoked: () => signal.aborted,
-      signal,
-      roster: { text: roster.text, identities: roster.identities },
-      readTranscript: (identity) =>
-        Effect.promise(() => this.#options.readTranscript(identity, signal)),
-    };
-    // Every module here answers an effect; this slot's memo is a promise, so
-    // the read is carried onto the host's runtime through the brain's one door.
-    if (read.kind === PREFETCH_READ_KIND.TRANSCRIPT) {
-      const module = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
-      if (!module) return Promise.resolve(rejection(REFUSAL_REASON.NOT_OFFERED));
-      return this.#options.carry(module.execute(args, standing));
-    }
-    const memory = this.#options.memory;
-    const tool = memory ? memoryToolNamed(memory.provider, read.kind) : undefined;
-    if (!memory || !tool) return Promise.resolve(rejection(REFUSAL_REASON.NO_MEMORY));
-    return this.#options.carry(tool.execute(args, { ...standing, scope: memory.scope }));
+  #execute(read: PlannedRead, args: WireRecord, roster: BrainRoster): Effect.Effect<WireRecord> {
+    return Effect.suspend(() => {
+      const signal = this.#reads.signal;
+      const standing: ReadToolContext = {
+        conversationId: this.#options.conversationId,
+        turnId: this.#options.createId(),
+        runId: this.#options.createId(),
+        origin: RUN_ORIGIN.USER,
+        isRevoked: () => signal.aborted,
+        signal,
+        roster: { text: roster.text, identities: roster.identities },
+        readTranscript: (identity) =>
+          Effect.promise(() => this.#options.readTranscript(identity, signal)),
+      };
+      if (read.kind === PREFETCH_READ_KIND.TRANSCRIPT) {
+        const module = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
+        if (!module) return Effect.succeed(rejection(REFUSAL_REASON.NOT_OFFERED));
+        return module.execute(args, standing);
+      }
+      const memory = this.#options.memory;
+      const tool = memory ? memoryToolNamed(memory.provider, read.kind) : undefined;
+      if (!memory || !tool) return Effect.succeed(rejection(REFUSAL_REASON.NO_MEMORY));
+      return tool.execute(args, { ...standing, scope: memory.scope });
+    });
   }
 
   /**

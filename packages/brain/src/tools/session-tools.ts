@@ -72,13 +72,13 @@ interface BrainChildListing {
 export interface BrainChildAccess {
   /** The conversation these tools belong to, which the listing marks current. */
   readonly sessionKey: SessionKey;
-  spawn(ask: BrainChildSpawnAsk): Promise<ChildSpawnOutcome>;
-  list(): Promise<readonly BrainChildListing[]>;
+  spawn(ask: BrainChildSpawnAsk): Effect.Effect<ChildSpawnOutcome>;
+  list(): Effect.Effect<readonly BrainChildListing[]>;
   /** Cancels one of this conversation's children and its descendants; nothing for a child that is not its own. */
-  cancel(childId: string): Promise<ChildCancellation | undefined>;
-  conversations(): Promise<readonly ConversationRecord[]>;
+  cancel(childId: string): Effect.Effect<ChildCancellation | undefined>;
+  conversations(): Effect.Effect<readonly ConversationRecord[]>;
   /** One of this conversation's children's conversation lines, most recent last; nothing for a child that is not its own. */
-  lines(childId: string, limit: number): Promise<readonly string[] | undefined>;
+  lines(childId: string, limit: number): Effect.Effect<readonly string[] | undefined>;
 }
 
 export interface SessionToolContext extends ToolContext {
@@ -303,12 +303,7 @@ const SESSIONS_SPAWN: SessionToolModule = {
         policy: context.policy,
         fork: () => context.fork(),
       };
-      return context.journal(
-        Effect.map(
-          Effect.promise(() => children.spawn(ask)),
-          spawnOutcomeRecord,
-        ),
-      );
+      return context.journal(Effect.map(children.spawn(ask), spawnOutcomeRecord));
     });
   },
 };
@@ -329,16 +324,14 @@ const SUBAGENTS: SessionToolModule = {
         const childId = text(input.child_id);
         if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
         return yield* context.journal(
-          Effect.map(
-            Effect.promise(() => children.cancel(childId)),
-            (cancelled) =>
-              cancelled
-                ? cancellationRecord(childId, cancelled)
-                : rejection(REFUSAL_REASON.UNKNOWN_CHILD),
+          Effect.map(children.cancel(childId), (cancelled) =>
+            cancelled
+              ? cancellationRecord(childId, cancelled)
+              : rejection(REFUSAL_REASON.UNKNOWN_CHILD),
           ),
         );
       }
-      const listed = yield* Effect.promise(() => children.list());
+      const listed = yield* children.list();
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         children: listed.map(({ record, completion }) => childSummaryRecord(record, completion)),
@@ -359,7 +352,7 @@ const SESSIONS_LIST: SessionToolModule = {
       const children = context.children;
       if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
       if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-      const directory = yield* Effect.promise(() => children.conversations());
+      const directory = yield* children.conversations();
       return conversationListingRecord(directory, children.sessionKey);
     });
   },
@@ -382,7 +375,7 @@ const SESSIONS_HISTORY: SessionToolModule = {
         isWireNumber(input.limit) && input.limit > 0
           ? Math.min(Math.floor(input.limit), maximumSessionsConversationLines)
           : maximumSessionsConversationLines;
-      const lines = yield* Effect.promise(() => children.lines(childId, limit));
+      const lines = yield* children.lines(childId, limit);
       if (!lines) return rejection(REFUSAL_REASON.UNKNOWN_CHILD);
       return { status: ACTION_RESULT_STATUS.ACCEPTED, lines: [...lines] };
     });

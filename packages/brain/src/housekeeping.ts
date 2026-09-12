@@ -137,7 +137,7 @@ export function runMemoryHousekeeping(
         }
         const name = isWireString(args.name) ? args.name : "";
         if (call.name === BRAIN_TOOL.READ_WORKSPACE_FILE) {
-          const read = yield* Effect.promise(() => options.workspace.read(name));
+          const read = yield* options.workspace.read(name);
           return read.ok
             ? answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, content: read.content })
             : rejection(read.reason);
@@ -146,7 +146,7 @@ export function runMemoryHousekeeping(
           return rejection(HOUSEKEEPING_REFUSAL.NOT_TODAYS_NOTE);
         }
         const content = isWireString(args.content) ? args.content : "";
-        const existing = yield* Effect.promise(() => options.workspace.read(name));
+        const existing = yield* options.workspace.read(name);
         if (!existing.ok && existing.reason !== WORKSPACE_FILE_REFUSAL.NOT_FOUND) {
           return rejection(existing.reason);
         }
@@ -155,7 +155,7 @@ export function runMemoryHousekeeping(
           return rejection(HOUSEKEEPING_REFUSAL.NOT_APPEND_ONLY);
         }
         if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-        const written = yield* Effect.promise(() => options.workspace.write(name, content));
+        const written = yield* options.workspace.write(name, content);
         if (!written.ok) return rejection(written.reason);
         writes += 1;
         return answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, chars: written.chars });

@@ -69,9 +69,10 @@ export function wireMemoryMaintenance(
   dependencies: MemoryMaintenanceDependencies,
 ): MemoryMaintenance {
   const workspace = () => ({
-    read: (name: string) => readWorkspaceFile(dependencies.workspaceDirectory(), name),
+    read: (name: string) =>
+      Effect.promise(() => readWorkspaceFile(dependencies.workspaceDirectory(), name)),
     write: (name: string, content: string) =>
-      writeWorkspaceFile(dependencies.workspaceDirectory(), name, content),
+      Effect.promise(() => writeWorkspaceFile(dependencies.workspaceDirectory(), name, content)),
   });
 
   const eligible = (sessionKey: SessionKey): boolean =>

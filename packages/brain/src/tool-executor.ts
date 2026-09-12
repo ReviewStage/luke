@@ -74,9 +74,12 @@ export interface ToolExecutorDependencies {
   readonly children: BrainChildAccess | undefined;
   /** The memory provider bound to this conversation's scope, when the host wired one; absent, the memory tools refuse. */
   readonly memory: MemoryDefinition | undefined;
-  readonly readWhole: (identity: SessionIdentity, context: TurnContext) => Promise<WireRecord>;
+  readonly readWhole: (
+    identity: SessionIdentity,
+    context: TurnContext,
+  ) => Effect.Effect<WireRecord>;
   /** Checkpoints the turn's context and journal; false when the store refused, after which no action may run. */
-  readonly checkpoint: (context: TurnContext) => Promise<boolean>;
+  readonly checkpoint: (context: TurnContext) => Effect.Effect<boolean>;
   readonly runRevoked: (run: RunControl) => boolean;
   readonly now: () => number;
 }
@@ -192,7 +195,7 @@ export function createTurnToolExecutor(
         argumentsJson: call.argumentsJson,
         startedAt: dependencies.now(),
       });
-      if (!(yield* Effect.promise(() => dependencies.checkpoint(context)))) {
+      if (!(yield* dependencies.checkpoint(context))) {
         generation.journal.forget(run.runId, call.callId);
         run.checkpointFailed = true;
         return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
@@ -240,8 +243,7 @@ export function createTurnToolExecutor(
         return read.execute(input, {
           ...execution,
           roster: { text: roster.text, identities: roster.identities },
-          readTranscript: (identity) =>
-            Effect.promise(() => dependencies.readWhole(identity, context)),
+          readTranscript: (identity) => dependencies.readWhole(identity, context),
         });
       }
       if (call.name === ANNOUNCE_TOOL.name) {

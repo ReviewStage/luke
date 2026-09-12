@@ -474,9 +474,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   ): BrainWorkspaceAccess => {
     const directory = snapshot.configuration.workspaceDirectory;
     return {
-      read: (name) => readWorkspaceFile(directory, name),
-      write: (name, content) => writeWorkspaceFile(directory, name, content),
-      loadSkill: (location) => loadSkill(location, listed.skills),
+      read: (name) => Effect.promise(() => readWorkspaceFile(directory, name)),
+      write: (name, content) => Effect.promise(() => writeWorkspaceFile(directory, name, content)),
+      loadSkill: (location) => Effect.promise(() => loadSkill(location, listed.skills)),
     };
   };
 

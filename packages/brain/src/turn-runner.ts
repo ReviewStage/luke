@@ -962,14 +962,13 @@ export class TurnRunner {
           children: this.#options.children,
           memory: this.#options.memory,
           readWhole: (identity, readContext) =>
-            this.#seam.carry(
-              readWholeTranscript(identity, {
-                read: (session) => this.#options.readTranscript(session),
-                signal: readContext.signal,
-                maximumChars: BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS,
-              }),
-            ),
-          checkpoint: (checkpointContext) => this.#seam.ledger.checkpoint(checkpointContext),
+            readWholeTranscript(identity, {
+              read: (session) => this.#options.readTranscript(session),
+              signal: readContext.signal,
+              maximumChars: BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS,
+            }),
+          checkpoint: (checkpointContext) =>
+            Effect.promise(() => this.#seam.ledger.checkpoint(checkpointContext)),
           runRevoked: (checked) => this.#seam.runRevoked(checked),
           now: this.#seam.now,
         },
