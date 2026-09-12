@@ -471,10 +471,22 @@ calendars composer's `startObservation` and `stopObservation` in
 `disarmObservation` over a gate of the same shape, so the held-notice release
 and the Apple access poll are fibers in the scope an arming runs in and what
 the disarm gives back is a finalizer registered before them. That file stays
-on the allowlist for the two runs the gate does not reach: the
-meeting-boundary wake, forked and interrupted from inside an observation pass
-the loop still runs as a promise, and the Google consent trip its own method
-handler runs on the runtime the layer was built on.
+on the allowlist for what the gate does not reach, which P12-14e changed the
+shape of: the Google consent trip is yielded inside its own handler now, and
+what is run there instead is the meeting-boundary wake, forked and
+interrupted from inside an observation pass the loop still runs as a promise,
+and the two effects the composer's own promise-shaped edges start — the
+announcement hold refreshed from the arming's finalizer, and the onboarding
+settle decided from a Gateway handler's synchronous body — each forked onto
+the runtime the layer was built on rather than an ambient default one.
+
+`compose-live.ts` and `compose-devices.ts` each gained one such run in
+P12-14e, on the runtime each already holds: the calendars composer's
+`announcementsQuietNow`, `gateOfferable`, and `meetingQuietUntil` are effects
+since that PR, and the two readers of them that are not — `LiveSessionService`'s
+`quietNow` option and the device row's own presence report — run one there
+until each answers effects itself. Both files were already on this list for
+their own reasons, so neither is a new row.
 
 `compose-account.ts` is off the handed-runtime list since P12-14b: the three
 `Runtime.runPromise` calls that ran the account gate's links for a session
@@ -617,10 +629,11 @@ what took the store's place on the allowlist, and it is the store's own
 methods as the promises their unmigrated callers still hold, run on the
 runtime the host is composed on. The callers are the reason it exists rather
 than the store: the calendars, observation, and live composers reach the
-store from promise-shaped bodies of their own — the calendars composer's five
-write handlers moved in P12-14d with `settingsWrite` and read it through
-`Effect.promise` at each seam until P12-14e takes the rest of that file — the
-settings composer's account-preferences and provider-key-vault chains are
+store from promise-shaped bodies of their own — the calendars composer left
+in P12-14e, and what it still reads through the face is the one setting each
+of its two readers takes as a promise option (`GoogleCalendarReader`'s
+`readAccounts` and `AppleCalendarReader`'s `readConnection`), until each
+reader answers effects itself — the settings composer's account-preferences and provider-key-vault chains are
 promise queues,
 `session-action-performer.ts` reads one field inside a promise, and
 `@sidecar/voice`'s `VoiceSettings` is a promise-shaped interface the
