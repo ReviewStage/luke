@@ -66,15 +66,17 @@ export class DesktopTag extends Context.Tag("@luke/desktop/Desktop")<
  * layer is what the operator's attach rides behind and what the drain
  * registers its last finalizer in, so the close runs the drain before any
  * composer stops; then the operator, which is what carries the bootstrap
- * every later decision is made from; then the windows, which are what a
- * bootstrap that never arrived must not be drawn over. The updater is not one
- * of these steps: it reads and spends the last-run-version mark and begins
- * its own timed check in the assembly itself, ahead of every step here, so it
- * has already moved before the windows below read its snapshot in their own
- * bootstrap.
+ * every later decision is made from; then the updater, which reads and spends
+ * the last-run-version mark, so a standup that failed or was quit must not
+ * have spent it; then the windows, which are what a bootstrap that never
+ * arrived must not be drawn over, and which read the updater's snapshot in
+ * their own bootstrap. The updater's own scope is not one of these steps —
+ * `createUpdateServiceHost` already forked its fibers into the assembly's own
+ * scope and registered its stop as that scope's finalizer — only the one
+ * `start()` call the version mark's ordering still needs is here.
  */
 const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, HostAssemblyTag> => {
-  const { config, state, telemetry, native, operator, windows } = services;
+  const { config, state, telemetry, native, operator, updates, windows } = services;
   const { report } = config;
   const channels = Layer.effectDiscard(Effect.sync(() => registerDesktopIpc(services)));
   const machine = layersInOrder([
@@ -107,6 +109,7 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
   );
   const throughWindows = layersInOrder([
     serviceLayer(operator, report),
+    Layer.effectDiscard(Effect.sync(() => updates.start())),
     serviceLayer(windows, report),
   ]).pipe(Layer.provideMerge(hostStandingLayer), Layer.provideMerge(machine));
   return stateBroadcast.pipe(Layer.provideMerge(throughWindows));

@@ -260,10 +260,8 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
       }),
     ),
   );
-  // Building the layer is what starts the service now, since it forks its
-  // fibers into this scope directly rather than answering a promise a caller
-  // starts separately.
   const updates = await runtime.runPromise(UpdatesTag);
+  updates.start();
   assert.ok(events, "the engine was never wired");
   events.onDownloaded("9.9.9");
   updates.install();

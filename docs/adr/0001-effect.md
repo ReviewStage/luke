@@ -302,22 +302,27 @@ promises, so there is no scope here to hold the fiber yet.
 
 `UpdateService`'s `start`, `stop`, and `#armPublishingRetry` in
 `apps/desktop/src/main/update-service.ts` are not on this allowlist any more,
-and P8-08 is why: `update-service-host.ts` is now the Effect
-`createUpdateServiceHost` builds inside its own `Scope.Scope` requirement,
-composed into `compose-desktop.ts`'s assembly (`Layer.scoped(DesktopTag, ...)`
-rather than `Layer.effect`) ahead of every other launch step, so the timed
-check, the first check, and a publishing retry each fork into the launch's
-own scope directly — `UpdateService`'s constructor takes that scope as
-`options.scope` instead of making one of its own, and `stop()` interrupts the
-two tracked fibers and the pending retry by hand rather than closing anything,
-since the scope is not this class's to close. `update-service.test.ts` still
-constructs the class with no scope, which is the one case it keeps owning and
-closing one of its own, so every one of its assertions on `start`/`stop`
-timing stands unchanged. The publishing retry still steps `Schedule#step`
-directly rather than driving it through a `ScheduleDriver`, for the same
-reason as before: the driver's own `next` sleeps out the delay it returns
-where this needs the delay back, to arm a cancellable fiber a fresh check can
-still collapse mid-wait.
+and P8-08 is why: `update-service-host.ts`'s `createUpdateServiceHost` is now
+an Effect built inside its own `Scope.Scope` requirement, composed into
+`compose-desktop.ts`'s assembly (`Layer.scoped(DesktopTag, ...)` rather than
+`Layer.effect`), so the timed check, the first check, and a publishing retry
+each fork into the launch's own scope directly — `UpdateService`'s constructor
+takes that scope as `options.scope` instead of making one of its own, and
+`stop()` interrupts the two tracked fibers and the pending retry by hand
+rather than closing anything, since the scope is not this class's to close.
+Construction is not what starts it, though: the version mark `start()` spends
+must not survive a standup that failed or was quit before reaching the
+operator, exactly as before, so `createUpdateServiceHost`'s own `start()` is
+called from a step of `launchSteps`'s `throughWindows` in the same position
+the old `serviceLayer(updates, report)` held — after the operator's, before
+the windows' — rather than from the assembly that built it. `update-service.test.ts`
+still constructs the class with no scope, which is the one case it keeps
+owning and closing one of its own, so every one of its assertions on
+`start`/`stop` timing stands unchanged. The publishing retry still steps
+`Schedule#step` directly rather than driving it through a `ScheduleDriver`,
+for the same reason as before: the driver's own `next` sleeps out the delay
+it returns where this needs the delay back, to arm a cancellable fiber a
+fresh check can still collapse mid-wait.
 
 `AppStateStore`'s `snapshot`, `update`, and `touch` in
 `apps/desktop/src/main/app-state.ts` are not on this allowlist, and P8-07 is

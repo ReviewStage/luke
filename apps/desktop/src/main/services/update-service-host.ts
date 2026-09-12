@@ -8,6 +8,13 @@ import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "../update-se
 import type { DesktopConfig } from "./desktop-config";
 
 export interface UpdateServiceHost {
+  /**
+   * Begins the timed check, once the launch has reached the point it must:
+   * after the operator's own standup, which the version mark this spends must
+   * not survive a standup that failed or was quit before reaching here. Safe
+   * to call on a build with nothing to install; does nothing then.
+   */
+  start: () => void;
   check: () => Promise<UpdateSnapshot>;
   install: () => void;
   openLatestRelease: () => void;
@@ -45,7 +52,9 @@ export interface UpdateServiceHostDependencies {
  * launch's own scope closing at quit rather than a scope this function made
  * and had to give back itself. `UpdateService` holds the feed, the schedule,
  * and the retry budget; what is here is when it begins and the counted event
- * each press files.
+ * each press files. Construction alone does not start it: the caller's own
+ * `start()` is what the launch calls once it has reached the right point in
+ * its own order, never this function's own return.
  */
 export function createUpdateServiceHost(
   dependencies: UpdateServiceHostDependencies,
@@ -94,9 +103,11 @@ export function createUpdateServiceHost(
     // takes back: a check firing into a process already draining reads the
     // fixed feed for a build that is leaving.
     yield* Effect.addFinalizer(() => Effect.sync(() => service.stop()));
-    if (config.runMode.sendsNetwork) service.start();
 
     return {
+      start: () => {
+        if (config.runMode.sendsNetwork) service.start();
+      },
       check: () => {
         recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
           update_action: PRODUCT_UPDATE_ACTION.CHECK,
