@@ -6,7 +6,7 @@ import { recordVoiceSeconds, spendHostedMeter, spendIntroductionMeter } from "..
 import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { VoiceService } from "./service.js";
-import { voiceSessionRecord } from "./session-record.js";
+import { promisedVoiceSessionRecord, voiceSessionRecord } from "./session-record.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function
@@ -42,7 +42,7 @@ export function voiceFunctionServer() {
     apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,
-    record: voiceSessionRecord(runWeb),
+    record: promisedVoiceSessionRecord(runWeb, voiceSessionRecord()),
   });
   return service.server;
 }

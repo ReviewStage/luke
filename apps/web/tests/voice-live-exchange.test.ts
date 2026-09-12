@@ -7,7 +7,7 @@ import {
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { Effect, Schema } from "effect";
+import { Effect, Exit, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
@@ -37,7 +37,7 @@ import {
   type LiveServerEventType,
 } from "../server/live";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
-import { voiceSessionRecord } from "../server/voice/session-record";
+import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, sessionStarted } from "./support/live-events";
@@ -94,7 +94,10 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = voiceSessionRecord(database.run, () => NOW);
+const sessionRecord = promisedVoiceSessionRecord(
+  database.run,
+  voiceSessionRecord(() => NOW),
+);
 
 /** An eve session id of this test's own: the relay names a turn by session and eve turn, so a counted id would collide across the files that share one database on CI. */
 function mintEveSession(): string {
@@ -196,26 +199,34 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
   });
   const eve = fakeEve();
   const reports: string[] = [];
-  const exchange = hostedLiveExchange({
-    userId: target.userId,
-    liveSessionId,
-    conversationId: target.conversationId,
-    context: { keys: KEYS },
-    run: database.run,
-    writer,
-    eve,
-    source: () => source,
-    conversationEntries: () => [],
-    emit: () => undefined,
-    now: () => NOW,
-    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
-    cancel: (timer) => {
-      // SAFETY: a timer this composition cancels is one the scheduler above made, a Node timeout.
-      clearTimeout(timer as NodeJS.Timeout);
-    },
-    createId: () => randomUUID(),
-    report: (message) => reports.push(message),
-  });
+  // The socket's own scope, as the attachment opens one: the exchange is built in it and the test's own stop closes it.
+  const scope = await database.run(Scope.make());
+  const standing = await database.run(
+    Scope.extend(
+      hostedLiveExchange({
+        userId: target.userId,
+        liveSessionId,
+        conversationId: target.conversationId,
+        context: { keys: KEYS },
+        run: database.run,
+        writer,
+        eve,
+        source: () => source,
+        conversationEntries: () => [],
+        emit: () => undefined,
+        now: () => NOW,
+        schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+        cancel: (timer) => {
+          // SAFETY: a timer this composition cancels is one the scheduler above made, a Node timeout.
+          clearTimeout(timer as NodeJS.Timeout);
+        },
+        createId: () => randomUUID(),
+        report: (message) => reports.push(message),
+      }),
+      scope,
+    ),
+  );
+  const exchange = { ...standing, stop: () => database.run(Scope.close(scope, Exit.void)) };
   const created = await exchange.service.createSession("offer");
   assert.ok(created);
   socket.receive(sessionStarted(liveSessionId));

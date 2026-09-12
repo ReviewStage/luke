@@ -7,7 +7,7 @@ import {
   type LiveSessionServiceOptions,
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Queue, Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
@@ -17,6 +17,7 @@ import {
   type HostedStore,
   hostedStore,
   type VoiceTarget,
+  type VoiceWriteResult,
   voiceWriter,
 } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
@@ -45,6 +46,14 @@ import { observedSideband } from "./live-sideband.js";
  * is the route's composition's decision, by build. The account's quiet is not this composition's: a held offer is
  * `speech.held` on the record and never open here, so the service's own hold
  * stands empty and releases nothing.
+ *
+ * The composition is a scope's, not a socket callback's: it is built in the
+ * `Scope` its caller opened for the socket, the fiber that reports what the
+ * record made of each live event is forked into that scope, and the four
+ * endings the exchange used to run from a `stop` of its own — the brain's
+ * follows, the briefing look, the session's graceful close, and the wait on
+ * every record write already started — are finalizers of it, in that order,
+ * so closing the scope when the socket detaches is the whole of the ending.
  */
 
 export interface HostedLiveExchangeOptions {
@@ -54,7 +63,7 @@ export interface HostedLiveExchangeOptions {
   /** The account's standing main, which the spoken asks and the record land in. */
   readonly conversationId: string;
   readonly context: HostedStoreContext;
-  /** The promise face this composition's own effects — the store's reads, the ask record, the voice writer — are run to, since the voice service drives them from socket callbacks. */
+  /** The edge's runner the record, the brain, and the briefing look are still handed, for the reads each of those three answers a promise from; P12-18d2 takes it off them. */
   readonly run: WebStoreRun;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
@@ -101,7 +110,7 @@ export interface AttachedSession {
  */
 export type ExchangeAttachment = (
   session: AttachedSession,
-) => Promise<HostedLiveExchange | undefined>;
+) => Promise<AttachedExchange | undefined>;
 
 export interface HostedLiveExchange {
   readonly service: LiveSessionService<HostedBriefingDelivery>;
@@ -112,8 +121,17 @@ export interface HostedLiveExchange {
    * Runs a session the route created for the desktop: the record observes its
    * sideband ahead of the service, and the service stands it without seeding.
    */
-  adopt(opened: AdoptableSession): Promise<boolean>;
-  /** Ends the follows and the briefing look, closes the session gracefully, and waits for every record write already started. */
+  adopt(opened: AdoptableSession): Effect.Effect<boolean>;
+}
+
+/**
+ * The exchange as the service holds one: the composition above with the close
+ * of the scope it was built in, which is what ends the follows and the
+ * briefing look, closes the session gracefully, and waits for every record
+ * write already started. The service detaching is that close and nothing
+ * else, so nothing of the exchange outlives the socket.
+ */
+export interface AttachedExchange extends HostedLiveExchange {
   stop(): Promise<void>;
 }
 
@@ -136,111 +154,145 @@ const findVoiceSessionDeviceId = SqlSchema.findOne({
     ),
 });
 
-export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLiveExchange {
-  const { userId, liveSessionId, conversationId, context, run, writer, report } = options;
-  const store = hostedStore(context);
-  const target: VoiceTarget = {
-    userId,
-    liveSessionId,
-    conversation: { userId, conversationId },
-  };
-  const voice = voiceWriter({ store: writer });
-  const record = hostedLiveRecord({ run, writer: voice, target });
-  const brain = hostedLiveBrain({
-    userId,
-    conversationId,
-    run,
-    asks: {
-      asks: askRecord(),
-      eve: options.eve,
-      now: options.now,
-    },
-    store,
-    report,
-  });
+/**
+ * What the record made of one live event, as the fiber below says it: the
+ * refusal or the failure in the words the report carries, or nothing where
+ * the write landed.
+ */
+function writeReport(write: Promise<VoiceWriteResult>): Promise<string | undefined> {
+  return write.then(
+    (result) => (result.ok ? undefined : `The record refused a live event: ${result.refusal}`),
+    (error: Error) => `The record could not take a live event: ${error.message}`,
+  );
+}
 
-  /** The device the session's row names now, read at each look so a row completed after creation is seen. */
-  function deviceId(): Promise<string | undefined> {
-    return run(
-      Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
-        Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullable(found.deviceId))),
+export function hostedLiveExchange(
+  options: HostedLiveExchangeOptions,
+): Effect.Effect<HostedLiveExchange, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const { userId, liveSessionId, conversationId, context, run, writer, report } = options;
+    const store = hostedStore(context);
+    const target: VoiceTarget = {
+      userId,
+      liveSessionId,
+      conversation: { userId, conversationId },
+    };
+    const voice = voiceWriter({ store: writer });
+    const record = hostedLiveRecord({ run, writer: voice, target });
+    yield* Effect.addFinalizer(() => Effect.promise(() => record.drained()));
+    /**
+     * Every event the record was handed, in arrival order, as what it had to
+     * report of it. The observation itself stays where the event arrives, so a
+     * delta's place in the record's own sequence is still its arrival and the
+     * ask written under a delegation still follows every delta ahead of it;
+     * what this fiber carries is the reporting, on the socket's own scope,
+     * rather than a promise left to settle wherever the session has gone.
+     */
+    const written = yield* Queue.unbounded<Promise<string | undefined>>();
+    yield* Effect.forkScoped(
+      Effect.forever(
+        Effect.flatMap(
+          Effect.flatMap(Queue.take(written), (pending) => Effect.promise(() => pending)),
+          (message) => (message === undefined ? Effect.void : Effect.sync(() => report(message))),
+        ),
       ),
     );
-  }
-
-  const briefings = hostedBriefings({
-    userId,
-    run,
-    speech: { writer },
-    offers: store.speech,
-    tools: CATALOG_TOOL_SET,
-    deviceId,
-    deliver: (delivery) => service.deliverBriefing(delivery),
-    now: options.now,
-    report,
-  });
-
-  /** The sideband with the record listening ahead of the service, on every session, created or adopted. */
-  const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
-    return async () =>
-      observedSideband(await attach(), (event) => {
-        void record.observe(event).then(
-          (result) => {
-            if (!result.ok) report(`The record refused a live event: ${result.refusal}`);
-          },
-          (error: Error) => report(`The record could not take a live event: ${error.message}`),
-        );
-      });
-  };
-
-  const source = (): LiveSessionSource | undefined => {
-    const inner = options.source?.();
-    if (!inner) return undefined;
-    return {
-      ...inner,
-      create: async (input) => {
-        const opened = await inner.create(input);
-        if (!opened) return undefined;
-        const observed: LiveSessionOpened = { ...opened, attach: observing(() => opened.attach()) };
-        return observed;
+    const brain = hostedLiveBrain({
+      userId,
+      conversationId,
+      run,
+      asks: {
+        asks: askRecord(),
+        eve: options.eve,
+        now: options.now,
       },
+      store,
+      report,
+    });
+
+    /** The device the session's row names now, read at each look so a row completed after creation is seen. */
+    function deviceId(): Promise<string | undefined> {
+      return run(
+        Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
+          Option.getOrUndefined(
+            Option.flatMap(row, (found) => Option.fromNullable(found.deviceId)),
+          ),
+        ),
+      );
+    }
+
+    const briefings = hostedBriefings({
+      userId,
+      run,
+      speech: { writer },
+      offers: store.speech,
+      tools: CATALOG_TOOL_SET,
+      deviceId,
+      deliver: (delivery) => service.deliverBriefing(delivery),
+      now: options.now,
+      report,
+    });
+
+    /** The sideband with the record listening ahead of the service, on every session, created or adopted. */
+    const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
+      return async () =>
+        observedSideband(await attach(), (event) => {
+          Queue.unsafeOffer(written, writeReport(record.observe(event)));
+        });
     };
-  };
 
-  const service = new LiveSessionService<HostedBriefingDelivery>({
-    source,
-    brain,
-    record,
-    conversationEntries: options.conversationEntries,
-    quietNow: async () => false,
-    releaseHeldBriefings: () => undefined,
-    emit: options.emit,
-    now: options.now,
-    schedule: options.schedule,
-    cancel: options.cancel,
-    createId: options.createId,
-    report,
-    ...(options.trace ? { trace: options.trace } : undefined),
-    onBriefingAppend: (delivery, eventId) =>
-      voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
+    const source = (): LiveSessionSource | undefined => {
+      const inner = options.source?.();
+      if (!inner) return undefined;
+      return {
+        ...inner,
+        create: async (input) => {
+          const opened = await inner.create(input);
+          if (!opened) return undefined;
+          const observed: LiveSessionOpened = {
+            ...opened,
+            attach: observing(() => opened.attach()),
+          };
+          return observed;
+        },
+      };
+    };
+
+    const service = new LiveSessionService<HostedBriefingDelivery>({
+      source,
+      brain,
+      record,
+      conversationEntries: options.conversationEntries,
+      quietNow: async () => false,
+      releaseHeldBriefings: () => undefined,
+      emit: options.emit,
+      now: options.now,
+      schedule: options.schedule,
+      cancel: options.cancel,
+      createId: options.createId,
+      report,
+      ...(options.trace ? { trace: options.trace } : undefined),
+      onBriefingAppend: (delivery, eventId) =>
+        voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
+    });
+
+    yield* Effect.addFinalizer(() => Effect.promise(() => service.stop()));
+    yield* Effect.addFinalizer(() => Effect.sync(() => briefings.stop()));
+    yield* Effect.addFinalizer(() => Effect.sync(() => brain.stop()));
+
+    return {
+      service,
+      brain,
+      briefings,
+      store,
+      adopt: (opened) =>
+        Effect.promise(() =>
+          service.adoptSession({
+            sessionId: opened.sessionId,
+            attach: observing(() => opened.attach()),
+            started: opened.started,
+          }),
+        ),
+    };
   });
-
-  return {
-    service,
-    brain,
-    briefings,
-    store,
-    adopt: (opened) =>
-      service.adoptSession({
-        sessionId: opened.sessionId,
-        attach: observing(() => opened.attach()),
-        started: opened.started,
-      }),
-    async stop() {
-      brain.stop();
-      briefings.stop();
-      await service.stop();
-      await record.drained();
-    },
-  };
 }

@@ -4,7 +4,7 @@ import { DEVICE_PLATFORM } from "@sidecar/hosted";
 import { test } from "vitest";
 import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { registerDevice } from "../server/hosted/device-store";
-import { voiceSessionRecord } from "../server/voice/session-record";
+import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { readVoiceSessionByLiveSessionId } from "./support/store-rows";
 
@@ -15,7 +15,10 @@ test("a registered session names its account, keeps its first owner, and answers
   try {
     const owner = await opened.createUser();
     const other = await opened.createUser();
-    const record = voiceSessionRecord(opened.run, () => NOW);
+    const record = promisedVoiceSessionRecord(
+      opened.run,
+      voiceSessionRecord(() => NOW),
+    );
     await record.register({ userId: owner, sessionId: "live_r" });
     await record.register({ userId: other, sessionId: "live_r" });
 
@@ -48,7 +51,10 @@ test("usage snapshots overwrite one another unconfirmed, the close confirms the 
   const opened = await openHostedStoreTestDatabase();
   try {
     const owner = await opened.createUser();
-    const record = voiceSessionRecord(opened.run, () => NOW);
+    const record = promisedVoiceSessionRecord(
+      opened.run,
+      voiceSessionRecord(() => NOW),
+    );
     await record.register({ userId: owner, sessionId: "live_u" });
     await record.noteUsage({ sessionId: "live_u", seconds: 10 });
     await record.noteUsage({ sessionId: "live_u", seconds: 25 });
@@ -92,7 +98,10 @@ test("a session names the device the handshake claimed only where the account ho
   try {
     const owner = await opened.createUser();
     const other = await opened.createUser();
-    const record = voiceSessionRecord(opened.run, () => NOW);
+    const record = promisedVoiceSessionRecord(
+      opened.run,
+      voiceSessionRecord(() => NOW),
+    );
     const { deviceId } = await opened.run(
       registerDevice({
         id: randomUUID(),

@@ -36,7 +36,7 @@ import {
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { frameText, routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
-import type { AttachedSession, ExchangeAttachment, HostedLiveExchange } from "./live-exchange.js";
+import type { AttachedExchange, AttachedSession, ExchangeAttachment } from "./live-exchange.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
 import {
@@ -46,7 +46,7 @@ import {
   relaySession,
   SOCKET_CLOSE_CODE,
 } from "./relay.js";
-import type { VoiceSessionRecord } from "./session-record.js";
+import type { PromisedVoiceSessionRecord } from "./session-record.js";
 
 /**
  * The hosted voice service: the part of Luke's own deployment that holds the
@@ -134,7 +134,7 @@ export interface VoiceServiceOptions {
   model?: string | undefined;
   accounts: VoiceAccounts;
   /** The `voice_sessions` row of each signed-in session; the introduction, with no account, writes none. */
-  record: VoiceSessionRecord;
+  record: PromisedVoiceSessionRecord;
   /**
    * The hosted exchange to stand on each signed-in session, adopted over the
    * same sideband the relay pipes; absent, the service only pipes, and the
@@ -226,7 +226,7 @@ export class VoiceService {
   readonly #options: VoiceServiceOptions;
   readonly #log: Log;
   readonly #accounts: VoiceAccounts;
-  readonly #record: VoiceSessionRecord;
+  readonly #record: PromisedVoiceSessionRecord;
   readonly #upstream: LiveUpstream | undefined;
   readonly #sockets: WebSocketServer;
   readonly #http = http.createServer((request, response) => {
@@ -460,7 +460,7 @@ export class VoiceService {
   async #attachExchange(
     route: VoiceRoute,
     session: AttachedSession,
-  ): Promise<{ exchange: HostedLiveExchange | undefined } | { refused: true }> {
+  ): Promise<{ exchange: AttachedExchange | undefined } | { refused: true }> {
     const attachment = this.#options.exchange;
     if (attachment === undefined) return { exchange: undefined };
     try {
@@ -481,7 +481,7 @@ export class VoiceService {
   }
 
   /** The exchange's stop, whose failure is the service's to report and never the relay's to inherit. */
-  async #stopExchange(exchange: HostedLiveExchange): Promise<void> {
+  async #stopExchange(exchange: AttachedExchange): Promise<void> {
     try {
       await exchange.stop();
     } catch {

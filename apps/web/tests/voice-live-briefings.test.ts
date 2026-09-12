@@ -24,7 +24,7 @@ import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { claimSpeech, offerSpeech, SPEECH_OFFER } from "../server/hosted/store/speech";
 import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/live-briefings";
-import { voiceSessionRecord } from "../server/voice/session-record";
+import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
@@ -63,7 +63,10 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = voiceSessionRecord(database.run, () => NOW);
+const sessionRecord = promisedVoiceSessionRecord(
+  database.run,
+  voiceSessionRecord(() => NOW),
+);
 const speech = { writer };
 
 async function account(): Promise<ConversationTarget> {
