@@ -1238,10 +1238,21 @@ names, made with `create database ... template ...` on the cluster's
 database itself after `db:migrate`, so a statement a test forgets to scope by
 account or conversation reaches its own file's rows and no other file's,
 which is the property `tests/store-database-isolation.test.ts` holds the
-harness to. A reproduction against a real Postgres needs an 18 of your own
-whose role may `create database`, migrated by `db:migrate` alone, because
-that is the runner which records what it applied and the tests copy what it
-recorded, so run it first:
+harness to. Which files `test:store` runs is read from the files, not kept
+in a list: `scripts/store-tests.ts` selects every `tests/**/*.test.ts` whose
+source imports one of the three doors under `tests/support`
+(`hosted-store-database`, `sql-client`, `store-test-postgres`), because
+`LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
+door cannot meet a Postgres whatever it does. A new store test is therefore
+in the set the moment it imports its harness, and `package.json` is not
+edited. The runner then reads vitest's JSON report back and fails, naming
+each file, when the files vitest ran are not exactly the files selected;
+`tests/store-tests.test.ts` holds the selection to the files that use a
+door's exports, so a file reaching a door by some other path is a named
+difference rather than a quiet absence. A reproduction against a real
+Postgres needs an 18 of your own whose role may `create database`, migrated
+by `db:migrate` alone, because that is the runner which records what it
+applied and the tests copy what it recorded, so run it first:
 
 ```sh
 DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
