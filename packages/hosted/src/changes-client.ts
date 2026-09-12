@@ -1,8 +1,7 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, type Layer } from "effect";
+import { Effect, Either } from "effect";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
@@ -16,8 +15,6 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 export interface HostedChangesClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
-  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -49,7 +46,6 @@ function changesRecord(request: ChangesRequest): WireRecord {
  */
 export class HostedChangesClient {
   readonly #call: AccountCallEffects;
-  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedChangesClientOptions) {
     this.#call = accountCall({
@@ -57,27 +53,22 @@ export class HostedChangesClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  poll(request: ChangesRequest): Promise<ChangesAnswer | undefined> {
+  poll(
+    request: ChangesRequest,
+  ): Effect.Effect<ChangesAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Either.getOrUndefined(
       readEither(changesRequestSchema)(changesRecord(request)),
     );
-    if (admitted === undefined) return Promise.resolve(undefined);
-    return this.#run(
-      this.#call.ask(
-        {
-          method: CHANGES_METHOD,
-          path: HOSTED_SERVICE_PATH.CHANGES,
-          body: JSON.stringify(changesRecord(admitted)),
-        },
-        changesAnswerSchema,
-      ),
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return this.#call.ask(
+      {
+        method: CHANGES_METHOD,
+        path: HOSTED_SERVICE_PATH.CHANGES,
+        body: JSON.stringify(changesRecord(admitted)),
+      },
+      changesAnswerSchema,
     );
-  }
-
-  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
-    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }

@@ -8,15 +8,11 @@ import { encodeSequenceReadCursor } from "./reads-wire.js";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const EMPTY_CURSOR = encodeSequenceReadCursor([]);
 
-function client(
-  httpClient: ReturnType<typeof fakeCloudApi>["layer"],
-  options: Partial<ConstructorParameters<typeof HostedChangesClient>[0]> = {},
-) {
+function client(options: Partial<ConstructorParameters<typeof HostedChangesClient>[0]> = {}) {
   return new HostedChangesClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
     refreshAccount: () => Effect.void,
-    httpClient,
     ...options,
   });
 }
@@ -31,12 +27,13 @@ it.effect(
         },
       });
 
-      const answer = yield* Effect.promise(() =>
-        client(api.layer).poll({
+      const answer = yield* Effect.provide(
+        client().poll({
           deviceId: DEVICE_ID,
           activeUntil: 1_757_505_900_000,
           quietUntil: null,
         }),
+        api.layer,
       );
 
       assert.deepEqual(answer, { seen: true, messages: EMPTY_CURSOR, events: EMPTY_CURSOR });
@@ -58,7 +55,7 @@ it.effect("an instant left out travels as left out, so the service leaves the on
       },
     });
 
-    const answer = yield* Effect.promise(() => client(api.layer).poll({ deviceId: DEVICE_ID }));
+    const answer = yield* Effect.provide(client().poll({ deviceId: DEVICE_ID }), api.layer);
 
     assert.equal(answer?.seen, false);
     assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { deviceId: DEVICE_ID });
@@ -71,9 +68,7 @@ it.effect(
     Effect.gen(function* () {
       const refused = fakeCloudApi({});
       assert.equal(
-        yield* Effect.promise(() =>
-          client(refused.layer).poll({ deviceId: "mac", activeUntil: 1 }),
-        ),
+        yield* Effect.provide(client().poll({ deviceId: "mac", activeUntil: 1 }), refused.layer),
         undefined,
       );
       assert.deepEqual(refused.requests(), []);
@@ -82,7 +77,7 @@ it.effect(
         "POST /api/changes": { answer: () => ({ seen: "yes" }) },
       });
       assert.equal(
-        yield* Effect.promise(() => client(malformed.layer).poll({ deviceId: DEVICE_ID })),
+        yield* Effect.provide(client().poll({ deviceId: DEVICE_ID }), malformed.layer),
         undefined,
       );
       assert.equal(malformed.requests().length, 1);

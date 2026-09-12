@@ -1,4 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   ACTION_KIND,
@@ -14,7 +13,7 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { HTTP_METHOD } from "@sidecar/wire";
-import { Effect, type Layer } from "effect";
+import type { Effect } from "effect";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import { type ObserveAnswer, type ObservedSession, observeAnswerSchema } from "./observe-wire.js";
@@ -24,8 +23,6 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 export interface HostedRosterClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
-  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   requestTimeoutMs?: number;
 }
 
@@ -40,7 +37,6 @@ export interface HostedRosterClientOptions extends AccountToken {
  */
 export class HostedRosterClient {
   readonly #call: AccountCallEffects;
-  readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: HostedRosterClientOptions) {
     this.#call = accountCall({
@@ -48,29 +44,20 @@ export class HostedRosterClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  observe(): Promise<ObserveAnswer | undefined> {
-    return this.#run(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.OBSERVE },
-        observeAnswerSchema,
-      ),
+  observe(): Effect.Effect<ObserveAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.OBSERVE },
+      observeAnswerSchema,
     );
   }
 
-  projects(): Promise<HostedProjectsAnswer | undefined> {
-    return this.#run(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.PROJECTS },
-        hostedProjectsAnswerSchema,
-      ),
+  projects(): Effect.Effect<HostedProjectsAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.PROJECTS },
+      hostedProjectsAnswerSchema,
     );
-  }
-
-  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
-    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }
 

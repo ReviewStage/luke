@@ -239,14 +239,18 @@ kept for its two remaining callers outside this package — the web app's
 hosted PostHog batch and its voice session mint — and deleted once both take
 `accountCall` instead. `HostedChangesClient`'s, `HostedRosterClient`'s, and
 `HostedConversationClient`'s own `#run` in `changes-client.ts`,
-`roster-client.ts`, and `conversation-client.ts` are the seventh, on the same
-terms: each of these three holds `accountCall` directly rather than
-`createAccountCall`, because none of their public methods takes a caller's
-own `AbortSignal`, so each keeps its own `httpClient` layer (a test's fake,
-or `FetchHttpClient.layer`) beside the call and runs the effect there to
-answer the `Promise` its own public methods still keep. They are deleted once
-a caller of these clients — today, only `@sidecar/host`'s composers — runs
-the effect on its own runtime edge instead.
+`roster-client.ts`, and `conversation-client.ts` were the seventh; P12-04b
+deleted it, so `observe`, `projects`, `poll`, `messages`, `events`, `turns`,
+`clear`, and `rate` now answer the effect over the ambient `HttpClient`
+directly rather than a promise each class ran to itself. Their callers —
+`@sidecar/host`'s `snapshot-roster.ts`, `compose-devices.ts`, and
+`compose-conversation.ts` — are new entries on this same allowlist instead:
+`ObservationLoop`'s `run` callback, `deviceCadence`'s beat, and the
+Conversation poll's pager are each still a promise or a plain async callback
+rather than a fiber of their own, so `drawSnapshotRoster`, `drawSnapshotProjects`,
+the device poll, and `compose-conversation.ts`'s `runClientEffect` each run
+the client's effect to a promise over `FetchHttpClient.layer` right where the
+work is needed, and are deleted once their own callback is a fiber instead.
 
 `ProductEventSender`'s `start`, `stop`, and `flush` in
 `packages/analytics/src/sender.ts` are the eighth, on the same terms as
@@ -962,6 +966,7 @@ design decision stated as such:
 | `BrainTransport#send`'s internal `runCall` | P5-05 | P12-04b |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
+| `@sidecar/host`'s `snapshot-roster.ts`, `compose-devices.ts`, and `compose-conversation.ts`'s `runClientEffect`, over the three clients above | P12-04b | pending — once `ObservationLoop`'s `run`, `deviceCadence`'s beat, and the Conversation poll's pager are each a fiber |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |

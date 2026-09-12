@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type { StoredAccount } from "@sidecar/credentials";
 import {
   type ChangesAnswer,
@@ -327,7 +328,11 @@ export const composeDevices = (
     const cadence = yield* deviceCadence({
       client: {
         register: (request) => devicesClient.register(request),
-        poll: (request) => changesClient.poll(request),
+        // `poll` answers an effect over the ambient `HttpClient`, run to a
+        // promise here because this cadence's own beat is still a promise;
+        // on the `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`.
+        poll: (request) =>
+          Effect.runPromise(Effect.provide(changesClient.poll(request), FetchHttpClient.layer)),
         forget: (request, departing) => devicesClient.forget(request, departing),
       },
       state: deviceStateFile(() => kernel.stateRoot, report),

@@ -88,31 +88,34 @@ is the promise face the migration keeps: it provides the caller's own
 `httpClient` layer, or `FetchHttpClient.layer` for the ambient ones, runs the
 effect, and is the one place a caller's `AbortSignal` is read at all — it
 joins the signal to the run, and the interruption it raises is the network
-fault that signal's reason names. Every client in this package now holds
-`accountCall` directly instead: none of their methods takes a caller's own
-`AbortSignal`, so each builds the `HttpClient` layer once, from its own
-`httpClient` option (a test's fake) or `FetchHttpClient.layer` (the ambient
-fetch client), and each Promise-returning method provides that layer to the
-effect it built and runs it with `Effect.runPromise`, so a caller of any of
-these six classes still awaits a promise and the Effect face never crosses
-their boundary. `device-client.ts`, `vault-client.ts`, `changes-client.ts`'s
-`poll`, and `conversation-client.ts`'s `clear`, `messages`, `events`, and
-`turns` all read their answers with `ask` directly against the Effect schema
-each wire module declares (`changesAnswerSchema`, `conversationClearAnswerSchema`,
-and so on); `action-client.ts` keeps reading its answer by hand off the
-`send`ed response, unchanged, because what it distinguishes is the status a
-fault or a refusal left the call in rather than a validated body, and
-`roster-client.ts`'s `observe` reads `observe-wire.ts`'s own
-`observeAnswerSchema` the same way `ask` does. `conversation-client.ts`'s
-per-resource reads and its rating still read the raw `Response` through
-`send`, because the unreadable-row refusal and the two rating refusals need
-the body under a status `ask` would already have discarded. `createAccountCall`
-itself stands only for its two remaining callers outside this package — the
-web app's hosted PostHog batch and its voice session mint — and is deleted
-once both take `accountCall` instead. Both are on the barrel, because a
-caller outside this package can hold one too: `@sidecar/analytics`'s
-`ProductEventSender` is the first, its own flush cadence an effect over
-`accountCall` rather than the promise face.
+fault that signal's reason names; it stands only for its two remaining
+callers outside this package — the web app's hosted PostHog batch and its
+voice session mint — and is deleted once both take `accountCall` instead.
+`action-client.ts`, `device-client.ts`, `session-messages-client.ts`, and
+`vault-client.ts` hold `accountCall` directly rather than `createAccountCall`,
+because none of their public methods takes a caller's own `AbortSignal`, so
+each builds the `HttpClient` layer once, from its own `httpClient` option (a
+test's fake) or `FetchHttpClient.layer` (the ambient fetch client), and each
+Promise-returning method provides that layer to the effect it built and runs
+it with `Effect.runPromise`, so a caller of any of these four classes still
+awaits a promise and the Effect face never crosses their boundary.
+`device-client.ts` and `vault-client.ts` read their answers with `ask`
+directly against the Effect schema each wire module declares
+(`deviceRegisterAnswerSchema`, `vaultKeyStoreAnswerSchema`, and so on);
+`action-client.ts` keeps reading its answer by hand off the `send`ed
+response, because what it distinguishes is the status a fault or a refusal
+left the call in rather than a validated body. `roster-client.ts`'s
+`observe`/`projects`, `changes-client.ts`'s `poll`, and
+`conversation-client.ts`'s `messages`/`events`/`turns`/`clear`/`rate` answer
+the effect over the ambient `HttpClient` directly instead, with none of the
+`httpClient`-layer or `#run` machinery the other four still carry: a caller
+inside `@sidecar/host` (`snapshot-roster.ts`, `compose-devices.ts`,
+`compose-conversation.ts`) provides `FetchHttpClient.layer` and runs the
+effect itself, at the one point each still answers a promise or a plain
+callback rather than a fiber of its own. Every hosted client is on the
+barrel, because a caller outside this package can hold one too:
+`@sidecar/analytics`'s `ProductEventSender` is the first, its own flush
+cadence an effect over `accountCall` rather than the promise face.
 
 ## The live contract is a socket's opening frames
 

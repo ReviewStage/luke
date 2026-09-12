@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import {
   type HostedProjectsAnswer,
   type HostedRosterClient,
@@ -9,6 +10,7 @@ import {
   PROVIDER_IDENTITY_BY_ID,
   type SessionRoster,
 } from "@sidecar/session";
+import { Effect } from "effect";
 
 export interface SnapshotRosterDependencies {
   client: Pick<HostedRosterClient, "observe">;
@@ -26,10 +28,15 @@ export interface SnapshotRosterDependencies {
  * leaves the last roster standing, the way a failed provider pass always
  * did, and says so; the next tick is the retry. A pass stopped while its
  * read was out draws nothing over the empty roster the stop published.
+ *
+ * `client.observe()` answers an effect over the ambient `HttpClient`, run to
+ * a promise here over `FetchHttpClient.layer` because `ObservationLoop`'s own
+ * `run` callback is still a promise; on the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md` until that loop's callback is a fiber.
  */
 export async function drawSnapshotRoster(dependencies: SnapshotRosterDependencies): Promise<void> {
   const { client, registry, isCurrent, report } = dependencies;
-  const answer = await client.observe();
+  const answer = await Effect.runPromise(Effect.provide(client.observe(), FetchHttpClient.layer));
   if (!isCurrent()) return;
   if (!answer) {
     report("Roster snapshot could not be read; the last roster stands.");
@@ -78,13 +85,15 @@ export function snapshotProjects(
  * service's stored snapshot lists for the account's keys, so the brain and
  * the settings rows offer exactly what a creation is admitted against. A
  * read that answers nothing leaves the last list standing and says so; a
- * pass stopped while its read was out replaces nothing.
+ * pass stopped while its read was out replaces nothing. `client.projects()`
+ * is run to a promise the same way `drawSnapshotRoster` runs `observe()`,
+ * and for the same reason.
  */
 export async function drawSnapshotProjects(
   dependencies: SnapshotProjectsDependencies,
 ): Promise<readonly ObservedWorkspaceProject[] | undefined> {
   const { client, isCurrent, report } = dependencies;
-  const answer = await client.projects();
+  const answer = await Effect.runPromise(Effect.provide(client.projects(), FetchHttpClient.layer));
   if (!isCurrent()) return undefined;
   if (!answer) {
     report("Workspace projects could not be read; the last list stands.");
