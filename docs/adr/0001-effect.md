@@ -471,15 +471,19 @@ meeting-boundary wake, forked and interrupted from inside an observation pass
 the loop still runs as a promise, and the Google consent trip its own method
 handler runs on the runtime the layer was built on.
 
-`compose-account.ts`'s three `Runtime.runPromise` calls are the one run this
-gate's conversion added, and they are on the handed-runtime list rather than
-the shim list: `AccountSessionManager` awaits `startCapabilities`,
-`stopCapabilities`, and `onSignOut` as promises, and each is now an effect the
-host links in, run on the runtime the assembly is being built on — captured
-once with `Effect.runtime<never>()` — so a sign-in and the fibers it arms
-stand on one runtime rather than on a default one reached for where the work
-lives. They go when `AccountSessionManager` answers effects itself, which is
-the same PR that deletes `LoopbackConsent`'s `signIn` door.
+`compose-account.ts` is off the handed-runtime list since P12-14b: the three
+`Runtime.runPromise` calls that ran the account gate's links for a session
+manager awaiting promises are gone, because `AccountSessionManager` answers
+effects itself now. The composer still captures `Effect.runtime<never>()`,
+because P12-04d threads that runtime through `VoiceCapabilityAssembler` to
+`BrainTransport` and `tracedModelAdapter`, each of which runs on it under its
+own permanent row above; what this file no longer holds is a run of its own.
+`startCapabilities` and `stopCapabilities` are the links' own effects behind
+an `Effect.suspend`, which is what keeps a link read no earlier than the call
+that needs it, and `onSignOut` is `releaseDevice` directly. What the composer still lifts is
+the settings store's three account reads and writes, each an `Effect.promise`
+at the seam rather than a run made inside the session manager, until P12-14c
+takes the store itself onto effects.
 
 P7-13 finished the boundary those pairs sit behind: a `GatewayMethodTable`
 entry is an `Effect<WireValue | undefined, GatewayRefusal>` rather than a
@@ -644,27 +648,35 @@ interruption alike. Its last caller moved in P7-13c —
 `packages/credentials/src/account/session-manager.ts` is an effect that forks
 the trip as a fiber every concurrent ask joins, so the held promise that used
 to be the de-duplication is a `Fiber` and the scope is the asking run's rather
-than a door's own — and the calendars composer had already moved in P7-06,
+than a door's own — and the trip's own `exchange` option answers an effect
+since P12-14b, so the manager's exchange stores the tokens and opens the
+capability gate inside the trip's fiber rather than through a run of its own
+(the calendar's exchange, still a promise below, is lifted at that seam) — and
+the calendars composer had already moved in P7-06,
 calling `signInEffect()` through `Runtime.runPromise` on the runtime its own
 layer runs on. `timedRequest` in `packages/credentials/src/linear/oauth.ts`
 stood here on exactly the terms its namesake in `account/client.ts` does; the
 Linear integration and its files are gone from the tree, so the entry names a
 file this repository no longer holds.
 
-`packages/credentials/src/single-flight.ts` is on the allowlist for one
-`Effect.runSync`, and no longer for a promise door over it: P7-13c deleted
-`singleFlight`, so `singleFlightEffect` is the whole of the module and
+`packages/credentials/src/single-flight.ts` is on the allowlist for two runs
+and no longer for a promise door over them: P7-13c deleted `singleFlight`, so
+`singleFlightEffect` is the whole of the module and
 `AccountSessionManager.refreshOnce` is the Effect it answers, joined by the
 hosted clients through `AccountToken.refreshAccount` and `CallCredential.renew`
 — both effects now, which is what deleted `account-call.ts`'s own
-`Effect.tryPromise` around the renewal. What the run is still for is narrow and
-deliberate: the check-and-create of the one `Deferred` every concurrent caller
-joins happens the instant the returned closure is called, before the Effect it
-hands back is ever run, so the decision and the refresh's own start stay one
-uninterruptible step however late — or whether — a caller runs the await. The
-refresh token rotates when spent, so two flights racing would have the loser
-spend an already-rotated token and read the endpoint's `invalid_grant` as a
-revocation.
+`Effect.tryPromise` around the renewal. What the runs are still for is narrow
+and deliberate: the check-and-create of the one `Deferred` every concurrent
+caller joins happens the instant the returned closure is called, before the
+Effect it hands back is ever run, so the decision (`Effect.runSync`) and the
+flight it decided on (`Effect.runFork`, since P12-14b, where the flight
+became an Effect the manager hands in rather than a promise it started) stay
+one uninterruptible step however late — or whether — a caller runs the await.
+The flight is a daemon of the default runtime rather than a fiber of whoever
+asked first, because a caller that gives up on its await must not take the
+rotation the others are waiting on with it. The refresh token rotates when
+spent, so two flights racing would have the loser spend an already-rotated
+token and read the endpoint's `invalid_grant` as a revocation.
 
 `GoogleCalendarReader`'s `#run` in `packages/calendar/src/reader.ts` and
 `exchangeGoogleCode` in `packages/calendar/src/oauth.ts` are on the allowlist
@@ -1080,7 +1092,7 @@ design decision stated as such:
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face the four promise-shaped contracts above `apps/web`'s effects are handed (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | once eve's tool and stream contracts, the turn event stream, and the voice service's socket-driven compositions answer effects themselves |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-15 — the fence must stay synchronous, so this is bookkeeping rather than a scheduled deletion |
-| `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | with `LoopbackConsent`'s `signIn` door, once `AccountSessionManager` answers effects |
+| `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |

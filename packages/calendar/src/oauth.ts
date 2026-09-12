@@ -304,11 +304,13 @@ export function googleCalendarSignIn(
       return authorization.toString();
     },
     exchange: (input) =>
-      exchangeGoogleCode(
-        config,
-        input,
-        options.httpClient ?? FetchHttpClient.layer,
-        options.runtime,
+      Effect.promise(() =>
+        exchangeGoogleCode(
+          config,
+          input,
+          options.httpClient ?? FetchHttpClient.layer,
+          options.runtime,
+        ),
       ),
     openExternal: options.openExternal,
     timeoutMs: options.timeoutMs,

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { fakeHttpClientLayer, type JsonValue } from "@sidecar/wire/testing";
+import { Effect, Exit } from "effect";
 import { test } from "vitest";
 import {
   ACCOUNT_FAILURE_ACTION,
@@ -351,53 +353,57 @@ test("an expired token's refusal reads as refresh-and-retry, a service no does n
 
 const ISSUED_TOKENS = { accessToken: "issued-access", refreshToken: "issued-refresh" };
 
-test("accepted account tokens stay active", async () => {
-  const revoked: string[] = [];
-  const result = await withIssuedAccountTokens({
-    issue: async () => ISSUED_TOKENS,
-    use: async (tokens) => tokens.accessToken,
-    revoke: async (refreshToken) => {
-      revoked.push(refreshToken);
-    },
-  });
+it.effect("accepted account tokens stay active", () =>
+  Effect.gen(function* () {
+    const revoked: string[] = [];
+    const result = yield* withIssuedAccountTokens({
+      issue: Effect.succeed(ISSUED_TOKENS),
+      use: (tokens) => Effect.succeed(tokens.accessToken),
+      revoke: (refreshToken) =>
+        Effect.sync(() => {
+          revoked.push(refreshToken);
+        }),
+    });
 
-  assert.equal(result, ISSUED_TOKENS.accessToken);
-  assert.deepEqual(revoked, []);
-});
+    assert.equal(result, ISSUED_TOKENS.accessToken);
+    assert.deepEqual(revoked, []);
+  }),
+);
 
-test("a failed account completion revokes every issued refresh token", async () => {
-  const revoked: string[] = [];
-  await assert.rejects(
-    withIssuedAccountTokens({
-      issue: async () => ISSUED_TOKENS,
-      use: async () => {
-        throw new Error("identity failed");
-      },
-      revoke: async (refreshToken) => {
-        revoked.push(refreshToken);
-      },
-    }),
-    /identity failed/,
-  );
+it.effect("a failed account completion revokes every issued refresh token", () =>
+  Effect.gen(function* () {
+    const revoked: string[] = [];
+    const failure = new Error("identity failed");
+    const outcome = yield* Effect.exit(
+      withIssuedAccountTokens({
+        issue: Effect.succeed(ISSUED_TOKENS),
+        use: () => Effect.fail(failure),
+        revoke: (refreshToken) =>
+          Effect.sync(() => {
+            revoked.push(refreshToken);
+          }),
+      }),
+    );
 
-  assert.deepEqual(revoked, [ISSUED_TOKENS.refreshToken]);
-});
+    assert.deepEqual(outcome, Exit.fail(failure));
+    assert.deepEqual(revoked, [ISSUED_TOKENS.refreshToken]);
+  }),
+);
 
-test("revocation failure preserves the sign-in failure", async () => {
-  const revokeFailures: unknown[] = [];
-  await assert.rejects(
-    withIssuedAccountTokens({
-      issue: async () => ISSUED_TOKENS,
-      use: async () => {
-        throw new Error("storage failed");
-      },
-      revoke: async () => {
-        throw new Error("revocation failed");
-      },
-      onRevokeFailure: (error) => revokeFailures.push(error),
-    }),
-    /storage failed/,
-  );
+it.effect("revocation failure preserves the sign-in failure", () =>
+  Effect.gen(function* () {
+    const revokeFailures: Error[] = [];
+    const failure = new Error("storage failed");
+    const outcome = yield* Effect.exit(
+      withIssuedAccountTokens({
+        issue: Effect.succeed(ISSUED_TOKENS),
+        use: () => Effect.fail(failure),
+        revoke: () => Effect.fail(new Error("revocation failed")),
+        onRevokeFailure: (error) => revokeFailures.push(error),
+      }),
+    );
 
-  assert.equal(revokeFailures.length, 1);
-});
+    assert.deepEqual(outcome, Exit.fail(failure));
+    assert.equal(revokeFailures.length, 1);
+  }),
+);

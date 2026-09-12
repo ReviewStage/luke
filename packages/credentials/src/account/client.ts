@@ -327,20 +327,24 @@ export async function deleteHostedAccount(options: AccountDeletionOptions): Prom
   }
 }
 
-/** Ensures credentials rejected before sign-in completes do not outlive the failed attempt. */
-export async function withIssuedAccountTokens<T>(options: {
-  issue: () => Promise<AccountTokens>;
-  use: (tokens: AccountTokens) => Promise<T>;
-  revoke: (refreshToken: string) => Promise<void>;
+/**
+ * Ensures credentials rejected before sign-in completes do not outlive the
+ * failed attempt. The revocation runs on the way out of any end the use did
+ * not reach — a failure, a defect, or an interruption — because a refresh
+ * token nobody holds is the same live credential however the attempt ended.
+ */
+export function withIssuedAccountTokens<A>(options: {
+  issue: Effect.Effect<AccountTokens, Error>;
+  use: (tokens: AccountTokens) => Effect.Effect<A, Error>;
+  revoke: (refreshToken: string) => Effect.Effect<void, Error>;
   onRevokeFailure?: (error: Error) => void;
-}): Promise<T> {
-  const tokens = await options.issue();
-  try {
-    return await options.use(tokens);
-  } catch (error) {
-    await options.revoke(tokens.refreshToken).catch((revokeError) => {
-      options.onRevokeFailure?.(revokeError);
-    });
-    throw error;
-  }
+}): Effect.Effect<A, Error> {
+  return Effect.gen(function* () {
+    const tokens = yield* options.issue;
+    return yield* Effect.onError(options.use(tokens), () =>
+      Effect.catchAll(options.revoke(tokens.refreshToken), (error) =>
+        Effect.sync(() => options.onRevokeFailure?.(error)),
+      ),
+    );
+  });
 }

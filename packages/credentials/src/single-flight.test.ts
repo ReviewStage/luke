@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Deferred, Effect, Exit } from "effect";
 import { singleFlightEffect } from "./single-flight.js";
 
 it.effect(
@@ -8,27 +8,25 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let runs = 0;
-      let release: (() => void) | undefined;
-      const refresh = singleFlightEffect(
-        () =>
-          new Promise<void>((resolve) => {
-            runs += 1;
-            release = resolve;
-          }),
+      const release = yield* Deferred.make<void>();
+      const refresh = singleFlightEffect(() =>
+        Effect.gen(function* () {
+          runs += 1;
+          yield* Deferred.await(release);
+        }),
       );
 
       const first = yield* Effect.fork(refresh());
       const second = yield* Effect.fork(refresh());
       assert.equal(runs, 1);
 
-      release?.();
+      yield* Deferred.succeed(release, undefined);
       yield* Effect.all([first, second].map((fiber) => fiber.await));
 
       // A finished flight is over: the next ask holds the newly rotated token
       // and may start a refresh of its own.
       const third = yield* Effect.fork(refresh());
       assert.equal(runs, 2);
-      release?.();
       yield* third.await;
     }),
 );
@@ -36,10 +34,16 @@ it.effect(
 it.effect("a failed flight fails every waiter and still ends, so the next ask can try again", () =>
   Effect.gen(function* () {
     let runs = 0;
-    const refresh = singleFlightEffect(async () => {
-      runs += 1;
-      throw new Error("token endpoint unreachable");
-    });
+    const refresh = singleFlightEffect(() =>
+      Effect.gen(function* () {
+        runs += 1;
+        // The flight suspends once before it fails, as every refresh that
+        // reaches the token endpoint does: a body that fails without ever
+        // suspending is over before a second ask can join it.
+        yield* Effect.yieldNow();
+        return yield* Effect.fail(new Error("token endpoint unreachable"));
+      }),
+    );
 
     const first = yield* Effect.fork(refresh());
     const second = yield* Effect.fork(refresh());

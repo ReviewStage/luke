@@ -48,10 +48,11 @@ function harness(
       Deferred.unsafeDone(armed, Exit.succeed(input));
       return `https://example.test/consent?state=${encodeURIComponent(input.state)}`;
     },
-    exchange: async (input) => {
-      exchanges.push(input);
-      return { token: "granted" };
-    },
+    exchange: (input) =>
+      Effect.sync(() => {
+        exchanges.push(input);
+        return { token: "granted" };
+      }),
     openExternal: (url) => {
       opened.push(url);
     },
@@ -284,7 +285,7 @@ it.effect("a refused exchange draws the attention card and carries its own reaso
   Effect.gen(function* () {
     const armed = yield* Deferred.make<LoopbackAuthorization>();
     const { consent } = harness(armed, {
-      exchange: async () => ({ reason: "Example refused the sign-in exchange." }),
+      exchange: () => Effect.succeed({ reason: "Example refused the sign-in exchange." }),
     });
 
     const waiting = yield* trip(consent);
@@ -308,11 +309,12 @@ it.effect("the first valid callback claims the one-time code; a second is spent"
     const finishExchange = yield* Deferred.make<Grant>();
     const armed = yield* Deferred.make<LoopbackAuthorization>();
     const { consent } = harness(armed, {
-      exchange: (input) => {
-        exchanges.push(input);
-        Deferred.unsafeDone(running, Exit.succeed(input));
-        return Effect.runPromise(Deferred.await(finishExchange));
-      },
+      exchange: (input) =>
+        Effect.suspend(() => {
+          exchanges.push(input);
+          Deferred.unsafeDone(running, Exit.succeed(input));
+          return Deferred.await(finishExchange);
+        }),
     });
 
     const waiting = yield* trip(consent);
@@ -339,10 +341,10 @@ it.effect("a claimed code whose exchange answered nothing still ends the trip", 
   Effect.gen(function* () {
     const armed = yield* Deferred.make<LoopbackAuthorization>();
     const { consent } = harness(armed, {
-      // The contract says an exchange never throws. One that breaks it has
+      // The contract says an exchange never fails. One that breaks it has
       // still spent the code, and the deadline no longer stands, so the trip
       // has to end on the flow's own refusal rather than listen forever.
-      exchange: () => Promise.reject(new Error("exchange broke its contract")),
+      exchange: () => Effect.die(new Error("exchange broke its contract")),
     });
 
     const waiting = yield* trip(consent);
@@ -373,10 +375,11 @@ it.effect("the deadline leaves a claimed callback alone", () =>
     const armed = yield* Deferred.make<LoopbackAuthorization>();
     const { consent } = harness(armed, {
       timeoutMs: 20,
-      exchange: (input) => {
-        Deferred.unsafeDone(running, Exit.succeed(input));
-        return Effect.runPromise(Deferred.await(finishExchange));
-      },
+      exchange: (input) =>
+        Effect.suspend(() => {
+          Deferred.unsafeDone(running, Exit.succeed(input));
+          return Deferred.await(finishExchange);
+        }),
     });
 
     const waiting = yield* trip(consent);
@@ -439,11 +442,12 @@ it.effect("a callback already claimed is left to finish when the trip is cancell
     const finishExchange = yield* Deferred.make<Grant>();
     const armed = yield* Deferred.make<LoopbackAuthorization>();
     const { consent } = harness(armed, {
-      exchange: (input) => {
-        exchanges.push(input);
-        Deferred.unsafeDone(running, Exit.succeed(input));
-        return Effect.runPromise(Deferred.await(finishExchange));
-      },
+      exchange: (input) =>
+        Effect.suspend(() => {
+          exchanges.push(input);
+          Deferred.unsafeDone(running, Exit.succeed(input));
+          return Deferred.await(finishExchange);
+        }),
     });
 
     const waiting = yield* trip(consent);
