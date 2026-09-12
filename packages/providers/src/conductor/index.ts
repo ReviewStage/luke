@@ -1,5 +1,6 @@
+import type * as HttpClient from "@effect/platform/HttpClient";
 import { type ProviderSessionObservation, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
-import type { CloudFetch } from "@sidecar/wire";
+import type { Layer } from "effect";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
 import { runAdapterRead } from "../shared/promise-face.js";
@@ -20,7 +21,8 @@ import {
 export interface ConductorPluginOptions {
   readApiKey: () => Promise<string | undefined>;
   baseUrl?: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
   onDiagnostic?: AdapterDiagnosticCallback;

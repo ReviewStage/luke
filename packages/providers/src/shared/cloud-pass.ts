@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import * as Headers from "@effect/platform/Headers";
 import * as HttpBody from "@effect/platform/HttpBody";
 import * as HttpClient from "@effect/platform/HttpClient";
@@ -13,7 +14,6 @@ import {
   type SessionProviderPlugin,
 } from "@sidecar/session";
 import {
-  type CloudFetch,
   HTTP_STATUS,
   resolveOptions,
   unparsedWire,
@@ -21,8 +21,7 @@ import {
   WireValueSchema,
   wireRecord,
 } from "@sidecar/wire";
-import { httpClientFromCloudFetch } from "@sidecar/wire/effect";
-import { Cause, Duration, Effect, Option } from "effect";
+import { Cause, Duration, Effect, type Layer, Option } from "effect";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,
@@ -117,7 +116,8 @@ export interface CloudPassInput {
   /** Resolves the credential at observation time so a settings change applies immediately. */
   readApiKey: () => Promise<string | undefined>;
   baseUrl?: string;
-  fetch?: CloudFetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
   /**
@@ -185,8 +185,6 @@ export interface CloudPass {
   reportDiagnostic(kind: AdapterDiagnosticKind, error: Error): void;
 }
 
-const defaultFetch: CloudFetch = (url, init) => fetch(url, init);
-
 function resolveBaseUrl(input: CloudPassInput): string {
   const fromEnvironment = input.baseUrlEnvironmentVariable
     ? process.env[input.baseUrlEnvironmentVariable]?.trim()
@@ -222,13 +220,13 @@ const readBody = HttpClientResponse.schemaBodyJson(WireValueSchema);
 /**
  * The shared half of every cloud provider: credential handling, its own
  * refresh cadence, the failure rules that decide whether a snapshot survives,
- * bounded read-only requests over an `HttpClient` built from the adapter's own
- * `CloudFetch`, and the one authenticated write.
+ * bounded read-only requests over the ambient `HttpClient`, and the one
+ * authenticated write.
  */
 export function cloudPass(input: CloudPassInput): CloudPass {
   const provider = input.provider;
   const baseUrl = resolveBaseUrl(input);
-  const client = httpClientFromCloudFetch(input.fetch ?? defaultFetch);
+  const client = input.httpClient ?? FetchHttpClient.layer;
   const now = input.now ?? Date.now;
   const { minimumRefreshIntervalMs } = resolveOptions(
     input,
@@ -252,7 +250,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
 
   const provideClient = <Answer, Error>(
     effect: Effect.Effect<Answer, Error, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer, Error> => Effect.provideService(effect, HttpClient.HttpClient, client);
+  ): Effect.Effect<Answer, Error> => Effect.provide(effect, client);
 
   /**
    * One observer must never abort the shared refresh pass, so a settings read

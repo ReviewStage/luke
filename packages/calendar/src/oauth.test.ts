@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
 import { Effect, Fiber } from "effect";
 import { test } from "vitest";
@@ -93,8 +94,7 @@ test("the exchange carries the desktop client's secret and the verifier", async 
   const grant = await exchangeGoogleCode(
     { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET },
     { code: "auth-code", redirectUri: "http://127.0.0.1:4321/oauth/callback", codeVerifier: "v" },
-    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
-    fakeFetch as typeof globalThis.fetch,
+    layerFromCloudFetch(fakeFetch),
   );
   assert.deepEqual(grant, { refreshToken: "1//refresh-token", accessToken: "at-1" });
 
@@ -122,11 +122,9 @@ test("every way the exchange can fail is a sentence, never a throw", async () =>
   const { fetch: refusing } = recordingFetch(
     () => new Response("no", { status: HTTP_STATUS.UNAUTHORIZED }),
   );
-  assert.deepEqual(
-    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
-    await exchangeGoogleCode(config, input, refusing as typeof globalThis.fetch),
-    { reason: "Google refused the sign-in exchange." },
-  );
+  assert.deepEqual(await exchangeGoogleCode(config, input, layerFromCloudFetch(refusing)), {
+    reason: "Google refused the sign-in exchange.",
+  });
 
   const { fetch: tokenless } = recordingFetch(
     () =>
@@ -135,16 +133,12 @@ test("every way the exchange can fail is a sentence, never a throw", async () =>
         headers: { "content-type": "application/json" },
       }),
   );
-  assert.deepEqual(
-    // SAFETY: Recording fetch matches globalThis.fetch for test harness injection.
-    await exchangeGoogleCode(config, input, tokenless as typeof globalThis.fetch),
-    { reason: "Google answered the sign-in without a token." },
-  );
+  assert.deepEqual(await exchangeGoogleCode(config, input, layerFromCloudFetch(tokenless)), {
+    reason: "Google answered the sign-in without a token.",
+  });
 
   const offline = () => Promise.reject(new Error("offline"));
-  assert.deepEqual(
-    // SAFETY: Rejected fetch matches globalThis.fetch for test harness injection.
-    await exchangeGoogleCode(config, input, offline as typeof globalThis.fetch),
-    { reason: "The sign-in exchange with Google did not complete." },
-  );
+  assert.deepEqual(await exchangeGoogleCode(config, input, layerFromCloudFetch(offline)), {
+    reason: "The sign-in exchange with Google did not complete.",
+  });
 });

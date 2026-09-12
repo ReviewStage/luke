@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import type { JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "@sidecar/wire/testing";
 import { test } from "vitest";
@@ -66,8 +67,7 @@ function readerWith(
       clientId: "test-client.apps.googleusercontent.com",
       clientSecret: "GOCSPX-test-secret",
     }),
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    fetchImplementation: fetch as typeof globalThis.fetch,
+    httpClient: layerFromCloudFetch(fetch),
     now: () => NOW,
   });
   return { reader, requests };

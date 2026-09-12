@@ -817,9 +817,11 @@ still the injected `schedule`/`cancel` seam a real elapsed-time wait stands
 behind rather than anything the queue runs.
 
 `cloudPass` in `packages/providers/src/shared/cloud-pass.ts` no longer needs an
-allowlist entry: its reads and its one write are effects over an `HttpClient`
-built from the caller's own `CloudFetch`, the 429 cadence is a `Schedule`
-stepped on the fiber's clock, and `run`, `write`, and `credentialBoundRead` are
+allowlist entry: its reads and its one write are effects over the ambient
+`HttpClient` — `FetchHttpClient.layer`, or a test's own `httpClient` layer,
+since P12-04c deleted the `CloudFetch` seam this pass used to build one from
+— the 429 cadence is a `Schedule` stepped on the fiber's clock, and `run`,
+`write`, and `credentialBoundRead` are
 themselves effects now that Conductor — the one adapter that rides it — is on
 them too. `Cause.squash` is still what `runAdapterRead` rethrows at the door
 where `SessionProviderPlugin` still holds a promise, so the `AdapterFailure` a

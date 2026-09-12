@@ -1,3 +1,4 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import * as HttpBody from "@effect/platform/HttpBody";
 import * as HttpClient from "@effect/platform/HttpClient";
 import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
@@ -12,7 +13,6 @@ import {
   type WireValue,
   WireValueSchema,
 } from "@sidecar/wire";
-import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, type Layer, Runtime } from "effect";
 import {
   CALENDAR_LOOKAHEAD_MS,
@@ -163,8 +163,8 @@ export interface GoogleCalendarReaderOptions {
   readAccounts: () => Promise<readonly CalendarAccountCredential[]>;
   /** The OAuth client this build carries, without which a grant buys nothing. */
   signInConfig?: () => GoogleCalendarSignInConfig | undefined;
-  /** Injectable so tests exercise the reader without a network. */
-  fetchImplementation?: typeof fetch;
+  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
   runtime?: Runtime.Runtime<never>;
@@ -191,8 +191,7 @@ export class GoogleCalendarReader {
   constructor(options: GoogleCalendarReaderOptions) {
     this.#readAccounts = options.readAccounts;
     this.#signInConfig = options.signInConfig ?? googleCalendarSignInConfig;
-    const fetchImplementation = options.fetchImplementation ?? fetch;
-    this.#client = layerFromCloudFetch((url, init) => fetchImplementation(url, init));
+    this.#client = options.httpClient ?? FetchHttpClient.layer;
     this.#now = options.now ?? Date.now;
     this.#runtime = options.runtime ?? Runtime.defaultRuntime;
   }

@@ -1,5 +1,6 @@
 import type { ProviderSessionObservation, SessionProviderPlugin } from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
+import { layerFromCloudFetch } from "@sidecar/wire/effect";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { conductorPlugin } from "../conductor/index.js";
@@ -319,7 +320,7 @@ export function pluginFor(
   return conductorPlugin({
     readApiKey: overrides.readApiKey ?? (async () => apiKey),
     baseUrl: TEST_BASE_URL,
-    fetch,
+    httpClient: layerFromCloudFetch(fetch),
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.reported ? { reported: overrides.reported } : undefined),
