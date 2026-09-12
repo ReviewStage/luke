@@ -147,6 +147,13 @@ const AccessTokenRowSchema = Schema.Struct({
 
 const ISSUED_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
 
+/** What the adapter answers for the row: its scopes as an array and its instants as `Date`s. */
+const StoredAccessTokenSchema = Schema.Struct({
+  scopes: Schema.Array(Schema.String),
+  createdAt: Schema.DateFromSelf,
+  expiresAt: Schema.DateFromSelf,
+});
+
 /**
  * The write every sign-in ends on, taken through Better Auth's own adapter
  * rather than the seeder's raw statement: the token exchange stores the
@@ -174,6 +181,7 @@ test("Better Auth's own adapter writes an access token's scopes into the migrate
     });
     const context = await auth.$context;
     const issued = new Date("2026-09-12T00:00:00.000Z");
+    const expires = new Date(issued.getTime() + 60 * 60 * 1000);
     const token = "access-token-under-test";
     await context.adapter.create({
       model: "oauthAccessToken",
@@ -182,7 +190,7 @@ test("Better Auth's own adapter writes an access token's scopes into the migrate
         clientId: DESKTOP_OAUTH_CLIENT.id,
         scopes: [...ISSUED_SCOPES],
         createdAt: issued,
-        expiresAt: new Date(issued.getTime() + 60 * 60 * 1000),
+        expiresAt: expires,
       },
     });
 
@@ -191,10 +199,11 @@ test("Better Auth's own adapter writes an access token's scopes into the migrate
       where: [{ field: "token", value: token }],
     });
     assert.ok(stored);
+    const decoded = Schema.decodeUnknownSync(StoredAccessTokenSchema)(stored);
+    assert.deepEqual(decoded.scopes, [...ISSUED_SCOPES]);
     assert.deepEqual(
-      Schema.decodeUnknownSync(Schema.Struct({ scopes: Schema.Array(Schema.String) }))(stored)
-        .scopes,
-      [...ISSUED_SCOPES],
+      [decoded.createdAt.getTime(), decoded.expiresAt.getTime()],
+      [issued.getTime(), expires.getTime()],
     );
 
     const rows = await runtime.runPromise(

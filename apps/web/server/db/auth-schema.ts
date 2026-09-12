@@ -1,14 +1,23 @@
 import { relations } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
+/**
+ * Every instant the auth tables hold is `timestamp with time zone`, which is
+ * what migration 0026 made the columns. Drizzle reads a column declared
+ * without the flag by appending a UTC offset to the driver's text, so on a
+ * `timestamptz` value the read would stand on the date parser discarding the
+ * second offset rather than on the declared type.
+ */
+const instant = (name: string) => timestamp(name, { withTimezone: true });
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
+  createdAt: instant("created_at").defaultNow().notNull(),
+  updatedAt: instant("updated_at")
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
@@ -20,10 +29,10 @@ export const session = pgTable(
   "session",
   {
     id: text("id").primaryKey(),
-    expiresAt: timestamp("expires_at").notNull(),
+    expiresAt: instant("expires_at").notNull(),
     token: text("token").notNull().unique(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: instant("created_at").defaultNow().notNull(),
+    updatedAt: instant("updated_at")
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
     ipAddress: text("ip_address"),
@@ -47,12 +56,12 @@ export const account = pgTable(
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at"),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+    accessTokenExpiresAt: instant("access_token_expires_at"),
+    refreshTokenExpiresAt: instant("refresh_token_expires_at"),
     scope: text("scope"),
     password: text("password"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    createdAt: instant("created_at").defaultNow().notNull(),
+    updatedAt: instant("updated_at")
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
@@ -65,9 +74,9 @@ export const verification = pgTable(
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
+    expiresAt: instant("expires_at").notNull(),
+    createdAt: instant("created_at").defaultNow().notNull(),
+    updatedAt: instant("updated_at")
       .defaultNow()
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
@@ -79,8 +88,8 @@ export const jwks = pgTable("jwks", {
   id: text("id").primaryKey(),
   publicKey: text("public_key").notNull(),
   privateKey: text("private_key").notNull(),
-  createdAt: timestamp("created_at").notNull(),
-  expiresAt: timestamp("expires_at"),
+  createdAt: instant("created_at").notNull(),
+  expiresAt: instant("expires_at"),
 });
 
 export const oauthClient = pgTable(
@@ -95,8 +104,8 @@ export const oauthClient = pgTable(
     subjectType: text("subject_type"),
     scopes: text("scopes").array(),
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at"),
-    updatedAt: timestamp("updated_at"),
+    createdAt: instant("created_at"),
+    updatedAt: instant("updated_at"),
     name: text("name"),
     uri: text("uri"),
     icon: text("icon"),
@@ -135,10 +144,10 @@ export const oauthRefreshToken = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
-    expiresAt: timestamp("expires_at"),
-    createdAt: timestamp("created_at"),
-    revoked: timestamp("revoked"),
-    authTime: timestamp("auth_time"),
+    expiresAt: instant("expires_at"),
+    createdAt: instant("created_at"),
+    revoked: instant("revoked"),
+    authTime: instant("auth_time"),
     scopes: text("scopes").array().notNull(),
   },
   (table) => [
@@ -164,8 +173,8 @@ export const oauthAccessToken = pgTable(
     refreshId: text("refresh_id").references(() => oauthRefreshToken.id, {
       onDelete: "cascade",
     }),
-    expiresAt: timestamp("expires_at"),
-    createdAt: timestamp("created_at"),
+    expiresAt: instant("expires_at"),
+    createdAt: instant("created_at"),
     scopes: text("scopes").array().notNull(),
   },
   (table) => [
@@ -186,8 +195,8 @@ export const oauthConsent = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
     scopes: text("scopes").array().notNull(),
-    createdAt: timestamp("created_at"),
-    updatedAt: timestamp("updated_at"),
+    createdAt: instant("created_at"),
+    updatedAt: instant("updated_at"),
   },
   (table) => [
     index("oauthConsent_clientId_idx").on(table.clientId),
