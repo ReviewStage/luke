@@ -1,37 +1,32 @@
 /**
- * A composer as a `Layer`: its `start` runs when the layer is built and its
- * `stop` when the scope the layer was built in closes, so that scope is the
- * composer's lifetime and closing it is its stop. Nothing of a composer's own
- * body is converted here — each start and stop is the promise the composer
- * already answers, wrapped — so a rejection of either is a defect until the
- * composer's own PR types its failures.
+ * A composer as a `Layer`: the lifetime it answers runs when the layer is
+ * built and the finalizers that lifetime registered run when the scope the
+ * layer was built in closes, so that scope is the composer's lifetime and
+ * closing it is its stop.
  */
 import type { GatewayMethodTable } from "@sidecar/gateway";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, type Scope } from "effect";
 import { type Composer, type DuplicateGatewayMethod, foldMethods } from "../composer.js";
 
 /**
- * The stop is registered before the start runs, not as the release of a
- * successful acquire: a composer's `stop` is written to give back what a
- * partial or failed `start` allocated, so a start that throws after opening
- * its store is still stopped when the failed build releases what began.
- * The start itself runs to its end like an acquire, so an interruption never
- * leaves a stop standing over a start still under way.
- *
- * What the composer arms is run after that start and in the same scope, so
- * its own finalizers run before the stop rather than through a handle the
- * stop was handed back.
+ * A lifetime written as the two halves a concern that holds something has:
+ * what it begins, and what gives that back. The stop is registered before the
+ * start runs, not as the release of a successful acquire, because a
+ * composer's stop is written to give back what a partial or failed start
+ * allocated, so a start that throws after opening its store is still stopped
+ * when the failed build releases what began. The start itself runs to its end
+ * like an acquire, so an interruption never leaves a stop standing over a
+ * start still under way; whatever the lifetime arms after this runs
+ * interruptibly, in the same scope, so its own finalizers run before the stop.
  */
-export const composerLayer = (composer: Composer): Layer.Layer<never> =>
-  Layer.scopedDiscard(
+export const startedAndStopped = (
+  start: Effect.Effect<void>,
+  stop: Effect.Effect<void>,
+): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.uninterruptible(
     Effect.zipRight(
-      Effect.uninterruptible(
-        Effect.zipRight(
-          Effect.addFinalizer(() => Effect.promise(() => composer.stop())),
-          Effect.promise(() => composer.start()),
-        ),
-      ),
-      composer.armed ?? Effect.void,
+      Effect.addFinalizer(() => stop),
+      start,
     ),
   );
 

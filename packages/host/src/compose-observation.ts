@@ -527,10 +527,11 @@ export const composeObservation = (
       link: (next) => {
         late.unsafeSet(next);
       },
-      start: async () => undefined,
-      stop: async () => {
-        unsubscribeSessions?.();
-        unsubscribeSessions = undefined;
-      },
+      lifetime: Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          unsubscribeSessions?.();
+          unsubscribeSessions = undefined;
+        }),
+      ),
     };
   });

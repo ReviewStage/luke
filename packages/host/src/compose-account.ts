@@ -299,14 +299,14 @@ export const composeAccount = (
       link: (next) => {
         late.unsafeSet(next);
       },
-      start: async () => {
+      // The session manager holds no timer this host started: what a sign-in
+      // began is stopped by the capabilities it started, so this lifetime is
+      // its start alone and registers nothing to give back.
+      lifetime: Effect.gen(function* () {
         account = runMode.requiresAccount
-          ? await settings.store.accountSnapshot()
+          ? yield* Effect.promise(() => settings.store.accountSnapshot())
           : { status: ACCOUNT_STATUS.SIGNED_OUT };
         session.initialize(account);
-      },
-      // The session manager holds no timer this host started: what a sign-in
-      // began is stopped by the capabilities it started, not here.
-      stop: async () => undefined,
+      }),
     };
   });

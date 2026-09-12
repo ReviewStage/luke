@@ -5,16 +5,13 @@ import { Data, type Effect, Either, type Scope } from "effect";
 export interface Composer {
   /** The methods this concern answers. Disjoint from every other composer's. */
   readonly methods: GatewayMethodTable;
-  /** What this concern begins: timers, subscriptions, loops, stores. */
-  start: () => Promise<void>;
   /**
-   * What this concern arms once its `start` has run, in the scope its
-   * lifetime is: a cadence whose disarm is that scope closing rather than a
-   * handle `stop` has to be handed back.
+   * What this concern begins — timers, subscriptions, loops, stores — in the
+   * scope its lifetime is: running it is the concern started, and the
+   * finalizers it registers are the whole of its stop, so closing that scope
+   * is the stop and there is no handle to hand back.
    */
-  readonly armed?: Effect.Effect<void, never, Scope.Scope>;
-  /** Stops exactly what `start` began; safe to call when `start` never ran, and safe to call twice. */
-  stop: () => Promise<void>;
+  readonly lifetime: Effect.Effect<void, never, Scope.Scope>;
 }
 
 /**

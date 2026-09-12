@@ -20,7 +20,7 @@ import {
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Context, Data, Deferred, Effect, Layer, Ref, type Scope } from "effect";
 import type { Composer } from "../composer.js";
-import { composerLayer, layersInOrder } from "./composer.js";
+import { layersInOrder } from "./composer.js";
 
 /** The drain's steps did not run to their end; what they could not settle is what the next launch marks interrupted. */
 export class HostDrainError extends Data.TaggedError("HostDrainError")<{
@@ -116,7 +116,9 @@ export class HostTag extends Context.Tag("@sidecar/host/Host")<HostTag, Standing
  */
 export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = Layer.unwrapEffect(
   Effect.map(HostAssemblyTag, (assembly) => {
-    const composers = layersInOrder(assembly.startOrder.map(composerLayer));
+    const composers = layersInOrder(
+      assembly.startOrder.map((composer) => Layer.scopedDiscard(composer.lifetime)),
+    );
     const armed = Layer.scopedDiscard(assembly.armed);
     const standing = Layer.scoped(
       HostTag,

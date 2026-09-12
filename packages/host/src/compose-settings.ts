@@ -35,6 +35,7 @@ import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sid
 import { Effect, Option } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
+import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
@@ -528,15 +529,17 @@ export const composeSettings = (): Effect.Effect<
       link: (next) => {
         late.unsafeSet(next);
       },
-      start: async () => {
-        void store.snapshot();
-        productEvents.arm();
-        productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
-        productEvents.markDayActive();
-        if (runMode.sendsNetwork) productEvents.start();
-      },
-      stop: async () => {
-        productEvents.stop();
-      },
+      lifetime: startedAndStopped(
+        Effect.sync(() => {
+          void store.snapshot();
+          productEvents.arm();
+          productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
+          productEvents.markDayActive();
+          if (runMode.sendsNetwork) productEvents.start();
+        }),
+        Effect.sync(() => {
+          productEvents.stop();
+        }),
+      ),
     };
   });
