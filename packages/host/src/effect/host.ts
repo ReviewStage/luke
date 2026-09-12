@@ -15,7 +15,7 @@ import {
   type GatewayShutdownOptions,
   type GatewayShutdownReport,
   type GatewayShutdownSteps,
-  shutdownGateway,
+  shutdownGatewayEffect,
 } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Context, Data, Deferred, Effect, Layer, Ref } from "effect";
@@ -56,10 +56,12 @@ export const hostDrain = (
     const claimed = yield* Ref.make(false);
     const outcome = yield* Deferred.make<GatewayShutdownReport, HostDrainError>();
     const run = (options: GatewayShutdownOptions) =>
-      Effect.tryPromise({
-        try: () => shutdownGateway(steps, options),
-        catch: (cause) => new HostDrainError({ cause }),
-      }).pipe(
+      shutdownGatewayEffect(steps, options).pipe(
+        // A step that threw is a defect of the coordinator's own effect, since
+        // the steps it runs are promises it did not write; it is the drain's
+        // named refusal here rather than a defect that would take the close
+        // down with it.
+        Effect.catchAllDefect((cause) => new HostDrainError({ cause })),
         Effect.tap((settled) =>
           Effect.sync(() => {
             report(

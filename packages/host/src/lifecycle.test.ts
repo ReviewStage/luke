@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
-import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGateway } from "@sidecar/gateway";
+import { GATEWAY_SHUTDOWN_DEFAULTS, shutdownGatewayEffect } from "@sidecar/gateway";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   seedWorkspaceThenStartMemory,
   shutdownStepsClosingLiveSession,
   shutdownStepsFlushingEvents,
 } from "./lifecycle.js";
+
+/** The shutdown as a promise, since these bodies are plain tests rather than fibers. */
+const runShutdown = (
+  steps: Parameters<typeof shutdownGatewayEffect>[0],
+  options: Parameters<typeof shutdownGatewayEffect>[1],
+) => Effect.runPromise(shutdownGatewayEffect(steps, options));
 
 test("a workspace seed that fails is reported and the memory index still starts, after the seed and not before", async () => {
   const order: string[] = [];
@@ -74,7 +81,7 @@ test("the flush begins as admissions close and is waited for before the unresolv
       };
     });
   });
-  const report = shutdownGateway(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
+  const report = runShutdown(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
   await drainMicrotasks(1);
   assert.deepEqual(order, ["close", "flush:start", "cancel", "settled"]);
   settleFlush?.();
@@ -90,7 +97,7 @@ test("a flush that never answers ends the shutdown at the deadline with the runs
     baseSteps(order),
     () => new Promise<void>(() => undefined),
   );
-  const outcome = await shutdownGateway(steps, { deadlineMs: 20 });
+  const outcome = await runShutdown(steps, { deadlineMs: 20 });
   assert.equal(outcome.settled, false);
   assert.deepEqual(outcome.cancelled, ["run-1"]);
   assert.equal(outcome.unresolved, 0);
@@ -102,7 +109,7 @@ test("a flush that rejects is a count nobody has, not a failed quit", async () =
   const steps = shutdownStepsFlushingEvents(baseSteps(order), () =>
     Promise.reject(new Error("offline")),
   );
-  const outcome = await shutdownGateway(steps, {
+  const outcome = await runShutdown(steps, {
     deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS,
   });
   assert.equal(outcome.settled, true);
@@ -131,7 +138,7 @@ test("the live session's close begins with the cancellations and is waited for b
       };
     });
   });
-  const report = shutdownGateway(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
+  const report = runShutdown(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS });
   await drainMicrotasks(1);
   assert.deepEqual(order, ["close", "live:close", "cancel", "settled"]);
   settleClose?.();
@@ -146,13 +153,13 @@ test("a session whose final event never comes ends the shutdown at the deadline,
     baseSteps(order),
     () => new Promise<void>(() => undefined),
   );
-  const outcome = await shutdownGateway(hanging, { deadlineMs: 20 });
+  const outcome = await runShutdown(hanging, { deadlineMs: 20 });
   assert.equal(outcome.settled, false);
   assert.deepEqual(outcome.cancelled, ["run-1"]);
 
   const throwing = shutdownStepsClosingLiveSession(baseSteps([]), async () => {
     throw new Error("socket gone");
   });
-  const settled = await shutdownGateway(throwing, { deadlineMs: 20 });
+  const settled = await runShutdown(throwing, { deadlineMs: 20 });
   assert.equal(settled.settled, true);
 });

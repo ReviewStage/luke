@@ -83,8 +83,10 @@ no method at all: it is this installation's device row on the service,
 registered when the account gate opens, kept warm by the change-signal poll,
 and forgotten at sign-out on the departing account's own token. The poll's
 cadence is a `Schedule` on a fiber forked into a `Scope` the registration
-makes at its start, so the sign-out's stop closes that scope and no handle is
-kept only to be handed back; `Effect.schedule` and not `Effect.repeat`,
+forks at its start from the one the composer was built in, so the sign-out's
+stop closes that scope and no handle is kept only to be handed back, and the
+host's own close ends the poll whatever became of the stop; `Effect.schedule`
+and not `Effect.repeat`,
 because the beat the start awaited is the first one and the cadence stands
 one interval on from it. Each poll
 restates two facts of this machine and decides nothing from them: the instant
@@ -98,9 +100,9 @@ being built on: the store's asks and every run of a conversation's tool loop
 are fibers of that one runtime, never of a default one built where the work
 lives. The calendars composer holds three
 observation-driven timers of its own — the held-notice release, the Apple
-access poll, and the meeting-boundary wake — each forked into one `Scope` this
-composer makes at `startObservation` and closes at `stopObservation`, so a
-sign-out's stop ends all three at once; the first two are fixed `Schedule`s on
+access poll, and the meeting-boundary wake — each forked into one `Scope`
+`startObservation` forks from the composer's own and `stopObservation` closes,
+so a sign-out's stop ends all three at once; the first two are fixed `Schedule`s on
 that scope, exactly as the devices composer's poll is, and the third is a
 one-shot fiber the composer re-arms itself, because its delay is recomputed
 from the meetings every observation pass just read rather than held fixed.
@@ -147,12 +149,25 @@ argument, in the order the composers are built.
 
 The quit is the closing of the one scope `hostLayer` was built in, and the
 scope's finalizers are its order: the drain first, registered last of all
-(`hostDrain`: admissions closed, everything under way cancelled, a bounded
-wait for it to settle, whatever did not settle written down as unresolved for
+(`hostDrain` over `@sidecar/gateway`'s `shutdownGatewayEffect`, on the clock
+of whoever asked rather than through a promise door of its own: admissions
+closed, everything under way cancelled, a bounded wait for it to settle,
+whatever did not settle written down as unresolved for
 the next launch's recovery), then the loops disarmed, then every composer's
-stop in the reverse of its start, and only then the store closed. A stop
+stop in the reverse of its start, and only then the store closed. A step that
+threw is the drain's own named refusal rather than a defect the close carries.
+A stop
 that fails strands none of its siblings and surfaces in the close's own
-`Cause`. The drain runs once whichever door asks for it — `Host.stop()` under
+`Cause`. What a stop misses the close still ends: every cadence a composer
+arms at the account gate's own edges — the observation loops, the device
+poll, the calendars' three timers, the hourly conversation maintenance —
+forks its scope from the one that composer was built in
+(`@sidecar/runtime/effect`'s `cadenceHome`), so those fibers run on the host's
+own runtime rather than an ambient default one and are interrupted by the same
+close, and one armed after it forks from a scope already closed, which
+interrupts what it forked at once. Their `start` and `stop` stay, because what
+arms them is the gate opening and closing rather than the composer's own
+lifetime: a sign-out disarms them while the host still stands. The drain runs once whichever door asks for it — `Host.stop()` under
 the caller's own deadline, or the scope closing with the defaults — and every
 later ask is answered with that outcome, so the admissions close and the runs
 are cancelled once however many times the quit arrives. `Host.stop()` is

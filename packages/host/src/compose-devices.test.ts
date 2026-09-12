@@ -3,10 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
+import { type CadenceHome, cadenceHome } from "@sidecar/runtime/effect";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Duration, Effect, type Runtime, TestClock } from "effect";
+import { Duration, Effect, TestClock } from "effect";
 import { test } from "vitest";
 import {
   DEVICE_STATE_FILE,
@@ -63,7 +64,7 @@ function fakeClient(answers: {
 function cadence(
   directory: string,
   client: DeviceCadenceClient,
-  runtime: Runtime.Runtime<never>,
+  home: CadenceHome,
   mint: () => string = () => INSTALLATION_ID,
   presence: () => DevicePresenceReport = () => PRESENT,
   reported: string[] = [],
@@ -76,7 +77,7 @@ function cadence(
     report: (message) => {
       reported.push(message);
     },
-    runtime,
+    home,
   });
 }
 
@@ -98,14 +99,14 @@ function storedState(directory: string): DeviceState | undefined {
   return isRecord(parsed) ? deviceStateFrom(parsed) : undefined;
 }
 
-it.effect(
+it.scoped(
   "a first start mints the installation id once, registers as a Mac, polls at once with the presence read, and keeps the row's id",
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       const { client, calls } = fakeClient({});
-      const subject = cadence(directory, client, runtime);
+      const subject = cadence(directory, client, home);
 
       yield* Effect.promise(() => subject.start());
 
@@ -135,14 +136,14 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "the installation id outlives a sign-out and a relaunch, so a re-sign-in re-keys the one row",
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       const first = fakeClient({});
-      const subject = cadence(directory, first.client, runtime);
+      const subject = cadence(directory, first.client, home);
       yield* Effect.promise(() => subject.start());
       yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
 
@@ -158,7 +159,7 @@ it.effect(
       assert.equal(first.calls.length, settled, "a stopped cadence keeps no beat");
 
       const relaunched = fakeClient({ register: () => ({ deviceId: OTHER_DEVICE_ID }) });
-      const next = cadence(directory, relaunched.client, runtime, () => {
+      const next = cadence(directory, relaunched.client, home, () => {
         throw new Error("a stored installation id is never minted again");
       });
       yield* Effect.promise(() => next.start());
@@ -171,12 +172,12 @@ it.effect(
     }),
 );
 
-it.effect("a stop without a departing account ends the cadence and forgets nothing", (t) =>
+it.scoped("a stop without a departing account ends the cadence and forgets nothing", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
-    const runtime = yield* Effect.runtime<never>();
+    const home = yield* cadenceHome;
     const { client, calls } = fakeClient({});
-    const subject = cadence(directory, client, runtime);
+    const subject = cadence(directory, client, home);
     yield* Effect.promise(() => subject.start());
 
     yield* Effect.promise(() => subject.stop({ forget: false }));
@@ -191,12 +192,12 @@ it.effect("a stop without a departing account ends the cadence and forgets nothi
   }),
 );
 
-it.effect(
+it.scoped(
   "each poll moves last seen and carries the presence read at that poll, and a row the service no longer holds is registered again",
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       const seen = [true, true, false];
       const ids = [DEVICE_ID, OTHER_DEVICE_ID];
       const reports: DevicePresenceReport[] = [
@@ -208,13 +209,7 @@ it.effect(
         register: () => ({ deviceId: ids.shift() ?? OTHER_DEVICE_ID }),
         poll: () => ({ seen: seen.shift() ?? true }),
       });
-      const subject = cadence(
-        directory,
-        client,
-        runtime,
-        undefined,
-        () => reports.shift() ?? PRESENT,
-      );
+      const subject = cadence(directory, client, home, undefined, () => reports.shift() ?? PRESENT);
       yield* Effect.promise(() => subject.start());
 
       yield* nextBeat();
@@ -236,15 +231,15 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a registration that did not land is tried again by the next beat, and a late answer installs nothing",
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       let answer: { deviceId: string } | undefined;
       const { client, calls } = fakeClient({ register: () => answer });
-      const subject = cadence(directory, client, runtime);
+      const subject = cadence(directory, client, home);
 
       yield* Effect.promise(() => subject.start());
       assert.equal(subject.deviceId(), undefined);
@@ -271,7 +266,7 @@ it.effect(
           });
         },
       };
-      const racing = cadence(directory, slow, runtime);
+      const racing = cadence(directory, slow, home);
       yield* Effect.promise(() => racing.start());
       yield* nextBeat();
       yield* Effect.promise(() => racing.stop({ forget: false }));
@@ -285,17 +280,17 @@ it.effect(
     }),
 );
 
-it.effect("a beat that fails is reported and the cadence keeps its own beat", (t) =>
+it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
-    const runtime = yield* Effect.runtime<never>();
+    const home = yield* cadenceHome;
     const reported: string[] = [];
     let failing = false;
     const { client, calls } = fakeClient({});
     const subject = cadence(
       directory,
       client,
-      runtime,
+      home,
       undefined,
       () => {
         if (failing) throw new Error("the calendar could not be read");
@@ -320,12 +315,12 @@ it.effect("a beat that fails is reported and the cadence keeps its own beat", (t
   }),
 );
 
-it.effect(
+it.scoped(
   "a registration still on the wire at sign-out lands before the next account registers",
   (t) =>
     Effect.gen(function* () {
       const directory = yield* Effect.promise(() => temporaryDirectory(t));
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       let release: (() => void) | undefined;
       const ids = [DEVICE_ID, OTHER_DEVICE_ID];
       const { client, calls } = fakeClient({});
@@ -342,7 +337,7 @@ it.effect(
             resolve({ deviceId });
           }),
       };
-      const subject = cadence(directory, gated, runtime);
+      const subject = cadence(directory, gated, home);
       const departing = subject.start();
       yield* Effect.promise(() => subject.stop({ forget: { accessToken: "leaving" } }));
 

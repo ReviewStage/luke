@@ -6,7 +6,7 @@
  * shutdown never fabricates a completion for work it cut off, and an effect
  * whose outcome the cut left unknown stays unknown.
  */
-import { Cause, Duration, Effect, Exit, Ref } from "effect";
+import { Duration, Effect, Ref } from "effect";
 
 export const GATEWAY_SHUTDOWN_DEFAULTS = {
   DEADLINE_MS: 10_000,
@@ -90,24 +90,4 @@ export function shutdownGatewayEffect(
     const unresolved = yield* Effect.promise(() => steps.persistUnresolved());
     return { settled, cancelled, unresolved, elapsedMs: now() - startedAt };
   });
-}
-
-/**
- * The Promise-facing door over {@link shutdownGatewayEffect} for the host's
- * coordinator, which still holds a plain async quit rather than a fiber. A
- * step that throws is rethrown exactly as it was raised, the way `await`ing
- * the same steps directly always has, rather than as `Effect.runPromise`'s
- * own `FiberFailure` wrapping: the exit is read and its cause squashed to the
- * one value a step actually threw.
- *
- * @deprecated Strangler shim over {@link shutdownGatewayEffect}; P7-10 (the
- * drain) composes the host's quit as an effect directly and deletes this door.
- */
-export async function shutdownGateway(
-  steps: GatewayShutdownSteps,
-  options: GatewayShutdownOptions = {},
-): Promise<GatewayShutdownReport> {
-  const exit = await Effect.runPromiseExit(shutdownGatewayEffect(steps, options));
-  if (Exit.isSuccess(exit)) return exit.value;
-  throw Cause.squash(exit.cause);
 }

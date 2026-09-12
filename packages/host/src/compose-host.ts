@@ -13,6 +13,7 @@ import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationSupervisor } from "@sidecar/runtime";
+import { cadenceHome } from "@sidecar/runtime/effect";
 import {
   isTerminalChildRunStatus,
   MAIN_SESSION_KEY,
@@ -147,6 +148,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const options = yield* HostSeamsObject;
     const runMode = yield* RunMode;
     const { report } = yield* Reporter;
+    const home = yield* cadenceHome;
     const { now } = kernel;
 
     const settings = yield* composeSettings();
@@ -157,6 +159,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const devices = yield* composeDevices({ account, calendars });
     const conversation = composeConversation({
       kernel,
+      home,
       settings,
       account,
       devices,

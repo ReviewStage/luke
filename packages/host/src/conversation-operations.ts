@@ -1,6 +1,12 @@
+import {
+  type CadenceHome,
+  closeCadenceScope,
+  forkIntoCadence,
+  openCadenceScope,
+} from "@sidecar/runtime/effect";
 import type { ConversationRecord, SessionKey } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
-import { Duration, Effect, Exit, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, Schedule } from "effect";
 import {
   type ConversationDeleteOutcome,
   deleteConversationFlow,
@@ -65,15 +71,17 @@ export const CONVERSATION_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 export interface ConversationMaintenanceDependencies {
   store: Pick<StoreWiring, "runMaintenance">;
   brain: Pick<BrainWiring, "busyConversations">;
-  /** The runtime the cadence is forked on, for a caller (a test today) that holds its own. */
-  runtime?: Runtime.Runtime<never>;
+  /** Where the cadence's fibers live: the host's runtime and the scope this call forks its own from. */
+  home?: CadenceHome;
 }
 
 /**
  * Maintenance runs at every live launch — interrupted archive publications
  * retried first — and then on its own hourly clock, keeping the
  * conversations with a run under way whatever their age. Answers the stop,
- * which closes the scope the cadence's fiber was forked into. `Effect.repeat`
+ * which closes the scope the cadence's fiber was forked into; that scope is a
+ * child of the home the brain composer was built in, so the host's own close
+ * ends the cadence whatever became of the stop. `Effect.repeat`
  * rather than `Effect.schedule`: the launch's own first pass is the cadence's
  * first repetition rather than one a caller awaits separately, exactly as the
  * `setInterval` this replaces ran its first pass at once. A pass that fails
@@ -83,7 +91,7 @@ export interface ConversationMaintenanceDependencies {
 export function startConversationMaintenance(
   dependencies: ConversationMaintenanceDependencies,
 ): () => void {
-  const runtime = dependencies.runtime ?? Runtime.defaultRuntime;
+  const home = dependencies.home;
   const pass = Effect.catchAllCause(
     Effect.promise(() =>
       dependencies.store
@@ -92,17 +100,15 @@ export function startConversationMaintenance(
     ),
     () => Effect.void,
   );
-  const scope = Runtime.runSync(runtime)(Scope.make());
-  Runtime.runSync(runtime)(
-    Effect.provideService(
-      Effect.forkScoped(
-        Effect.repeat(pass, Schedule.spaced(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS))),
-      ),
-      Scope.Scope,
-      scope,
+  const scope = openCadenceScope(home);
+  forkIntoCadence(
+    home,
+    scope,
+    Effect.forkScoped(
+      Effect.repeat(pass, Schedule.spaced(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS))),
     ),
   );
   return () => {
-    Runtime.runFork(runtime)(Scope.close(scope, Exit.void));
+    closeCadenceScope(home, scope);
   };
 }

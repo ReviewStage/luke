@@ -73,6 +73,13 @@ export {
   type WorkspaceIoOperation,
   writeWorkspaceFileEffect,
 } from "../workspace.effect.js";
+export {
+  type CadenceHome,
+  cadenceHome,
+  closeCadenceScope,
+  forkIntoCadence,
+  openCadenceScope,
+} from "./cadence.js";
 export { Builtins, BuiltinsLive, resolveConfigurationEffect } from "./registry.js";
 export {
   scheduleOnce,

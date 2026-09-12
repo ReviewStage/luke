@@ -22,11 +22,17 @@ import {
 } from "@sidecar/gateway";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationLoop } from "@sidecar/runtime";
+import {
+  cadenceHome,
+  closeCadenceScope,
+  forkIntoCadence,
+  openCadenceScope,
+} from "@sidecar/runtime/effect";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Exit, Fiber, Option, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, Fiber, Option, Runtime, Schedule, type Scope } from "effect";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -111,11 +117,12 @@ export interface CalendarsDependencies {
  */
 export const composeCalendars = (
   dependencies: CalendarsDependencies,
-): Effect.Effect<CalendarsComposer, never, HostKernelTag> =>
+): Effect.Effect<CalendarsComposer, never, HostKernelTag | Scope.Scope> =>
   Effect.gen(function* () {
     const { settings, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
     const runtime = yield* Effect.runtime<never>();
+    const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
     const late = yield* lateService<CalendarsLinks>();
@@ -263,21 +270,19 @@ export const composeCalendars = (
       const boundary = nextMeetingBoundary(calendarMeetings, at);
       if (boundary === undefined) return;
       const scope = observationScope;
-      boundaryFiber = Runtime.runSync(runtime)(
-        Effect.provideService(
-          Effect.forkScoped(
-            Effect.sleep(Duration.millis(boundary - at + 1)).pipe(
-              Effect.zipRight(
-                Effect.sync(() => {
-                  boundaryFiber = undefined;
-                  links().reconcileSpeech();
-                  armQuietBoundaryTimer();
-                }),
-              ),
+      boundaryFiber = forkIntoCadence(
+        home,
+        scope,
+        Effect.forkScoped(
+          Effect.sleep(Duration.millis(boundary - at + 1)).pipe(
+            Effect.zipRight(
+              Effect.sync(() => {
+                boundaryFiber = undefined;
+                links().reconcileSpeech();
+                armQuietBoundaryTimer();
+              }),
             ),
           ),
-          Scope.Scope,
-          scope,
         ),
       );
     }
@@ -316,6 +321,7 @@ export const composeCalendars = (
 
     const loop = new ObservationLoop({
       gate: observationGate,
+      home,
       intervalMs: CALENDAR_REFRESH_INTERVAL_MS,
       run: refreshCalendarMeetings,
     });
@@ -350,31 +356,27 @@ export const composeCalendars = (
      */
     function startObservation(): void {
       if (observationScope !== undefined) return;
-      const scope = Runtime.runSync(runtime)(Scope.make());
+      const scope = openCadenceScope(home);
       observationScope = scope;
-      Runtime.runSync(runtime)(
-        Effect.provideService(
-          Effect.forkScoped(
-            Effect.schedule(
-              Effect.sync(() => links().reconcileSpeech()),
-              Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
-            ),
+      forkIntoCadence(
+        home,
+        scope,
+        Effect.forkScoped(
+          Effect.schedule(
+            Effect.sync(() => links().reconcileSpeech()),
+            Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
           ),
-          Scope.Scope,
-          scope,
         ),
       );
       if (process.platform === "darwin" && runMode.observesProviders) {
-        Runtime.runSync(runtime)(
-          Effect.provideService(
-            Effect.forkScoped(
-              Effect.schedule(
-                Effect.promise(() => pollAppleCalendarAccess()),
-                Schedule.spaced(Duration.millis(APPLE_ACCESS_POLL_INTERVAL_MS)),
-              ),
+        forkIntoCadence(
+          home,
+          scope,
+          Effect.forkScoped(
+            Effect.schedule(
+              Effect.promise(() => pollAppleCalendarAccess()),
+              Schedule.spaced(Duration.millis(APPLE_ACCESS_POLL_INTERVAL_MS)),
             ),
-            Scope.Scope,
-            scope,
           ),
         );
       }
@@ -386,7 +388,7 @@ export const composeCalendars = (
       // Closing is not awaited, for the same reason cancelling a timer never
       // was: what it has to guarantee is that no further beat starts, never
       // that the fiber has already ended.
-      if (scope !== undefined) Runtime.runFork(runtime)(Scope.close(scope, Exit.void));
+      if (scope !== undefined) closeCadenceScope(home, scope);
       if (boundaryFiber !== undefined) {
         const fiber = boundaryFiber;
         boundaryFiber = undefined;

@@ -12,8 +12,15 @@ import {
   HostedDeviceClient,
   isDeviceWireId,
 } from "@sidecar/hosted";
+import {
+  type CadenceHome,
+  cadenceHome,
+  closeCadenceScope,
+  forkIntoCadence,
+  openCadenceScope,
+} from "@sidecar/runtime/effect";
 import { text, type WireRecord } from "@sidecar/wire";
-import { Duration, Effect, Exit, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, Schedule, type Scope } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
 import type { Composer } from "./composer.js";
@@ -93,8 +100,8 @@ export interface DeviceCadenceOptions {
   pollIntervalMs?: number;
   /** Hears a beat that failed; the cadence keeps its own beat either way. */
   report?: (message: string) => void;
-  /** The runtime the cadence is forked on, for a caller (a test today) that holds its own. */
-  runtime?: Runtime.Runtime<never>;
+  /** Where the cadence's fibers live: the host's runtime and the scope each registration forks its own from. */
+  home?: CadenceHome;
 }
 
 export interface DeviceCadence {
@@ -127,7 +134,7 @@ export interface DeviceCadence {
  */
 export function deviceCadence(options: DeviceCadenceOptions): DeviceCadence {
   const intervalMs = options.pollIntervalMs ?? DEVICE_POLL_INTERVAL_MS;
-  const runtime = options.runtime ?? Runtime.defaultRuntime;
+  const home = options.home;
   let generation = 0;
   /** The scope the cadence's fiber is forked into, held for as long as a registration stands. */
   let scope: Scope.CloseableScope | undefined;
@@ -218,12 +225,10 @@ export function deviceCadence(options: DeviceCadenceOptions): DeviceCadence {
   function arm(target: Scope.CloseableScope, gen: number): void {
     if (scope !== target) return;
     const pass = Effect.promise(() => settle(() => beat(gen)));
-    Runtime.runSync(runtime)(
-      Effect.provideService(
-        Effect.forkScoped(Effect.schedule(pass, Schedule.spaced(Duration.millis(intervalMs)))),
-        Scope.Scope,
-        target,
-      ),
+    forkIntoCadence(
+      home,
+      target,
+      Effect.forkScoped(Effect.schedule(pass, Schedule.spaced(Duration.millis(intervalMs)))),
     );
   }
 
@@ -234,7 +239,7 @@ export function deviceCadence(options: DeviceCadenceOptions): DeviceCadence {
     deviceId: () => options.state.read()?.deviceId,
     async start(): Promise<void> {
       if (scope !== undefined) return;
-      const next = Runtime.runSync(runtime)(Scope.make());
+      const next = openCadenceScope(home);
       scope = next;
       const gen = ++generation;
       await settle(() => beat(gen));
@@ -247,7 +252,7 @@ export function deviceCadence(options: DeviceCadenceOptions): DeviceCadence {
       // Closing is not awaited, for the same reason cancelling a timer never
       // was: what it has to guarantee is that no further beat starts, never
       // that the fiber has already ended.
-      if (closing !== undefined) Runtime.runFork(runtime)(Scope.close(closing, Exit.void));
+      if (closing !== undefined) closeCadenceScope(home, closing);
       if (stopOptions.forget === false) return;
       const deviceId = options.state.read()?.deviceId;
       if (deviceId === undefined) return;
@@ -301,11 +306,11 @@ export interface DevicesDependencies {
  */
 export const composeDevices = (
   dependencies: DevicesDependencies,
-): Effect.Effect<DevicesComposer, never, HostKernelTag> =>
+): Effect.Effect<DevicesComposer, never, HostKernelTag | Scope.Scope> =>
   Effect.gen(function* () {
     const { account, calendars } = dependencies;
     const kernel: HostKernel = yield* HostKernelTag;
-    const runtime = yield* Effect.runtime<never>();
+    const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
 
     const credential = { serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token };
@@ -328,7 +333,7 @@ export const composeDevices = (
         };
       },
       report,
-      runtime,
+      home,
     });
 
     async function register(): Promise<void> {

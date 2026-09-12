@@ -183,8 +183,19 @@ a `Schedule` forked into a `Scope` the loop owns, but the composers that arm it
 are still promises calling two synchronous methods, so the scope is made and
 closed there rather than built around them. `stop` closes the scope without
 awaiting it, dropping it first so a pass the interruption has not reached yet
-finds the loop disarmed; P7-10 deletes both once every composer that arms a
-loop is a `Layer` and the scope is the host's own.
+finds the loop disarmed. P7-10 finished the half of this that the drain's own
+guarantee turns on: the loop is handed a `CadenceHome`
+(`packages/runtime/src/effect/cadence.ts`) rather than a bare `Runtime`, so
+each `start` forks its scope from the one its composer was built in and runs
+its fiber on the host's own runtime, and the host's close ends the cadence
+whatever became of the `stop` that should have. `openCadenceScope`,
+`forkIntoCadence`, and `closeCadenceScope` are on the allowlist as that
+module's own runs: they are the same runs the armings they were factored out
+of already made, in one place rather than four, and each goes with the caller
+that made it. What stays is the pair itself,
+and it is not the host's lifetime wearing a promise face: what arms these
+loops is the account gate opening and closing, so a sign-out has to disarm
+them while the host still stands. They go once that gate is an effect.
 
 `admit()` in `packages/actions/src/admit.ts` is the fourth: the gauntlet is
 `admitEffect()`, an Effect failing with an `AdmitRefusal`, and `admit()` runs it
@@ -295,10 +306,11 @@ functions, so the scope is made and closed here instead of built around it.
 `Effect.repeat` rather than `Effect.schedule`: nothing here awaits a first
 pass separately, so the cadence's own first repetition is the launch's pass,
 exactly as the interval it replaces ran its callback once before arming.
-P7-10 deletes this once every composer that arms a loop is a `Layer` and the
-scope is the host's own: P7-08 made the brain composer an effect over the
-kernel's tag, but its `start` and `stop` are still the `Composer` interface's
-promises, so there is no scope here to hold the fiber yet.
+P7-10 closed the scope half: the call takes the brain composer's own
+`CadenceHome` and forks its scope from the one that composer was built in, so
+the hourly pass runs on the host's runtime and the host's close ends it. The
+stop the brain's own `stop` still calls is what remains, and it goes with the
+`Composer` interface's promises.
 
 `UpdateService`'s `start`, `stop`, and `#armPublishingRetry` in
 `apps/desktop/src/main/update-service.ts` are on the same allowlist, on the
@@ -336,10 +348,9 @@ own fork over `changes` and its every other caller turned out to be this
 file's own tests, which now watch `changes` itself instead.
 
 `deviceCadence`'s `start` and `stop` in `packages/host/src/compose-devices.ts`
-are on the allowlist: the poll's cadence is a `Schedule` on a fiber forked
-into a `Scope` these two make and close, on their own `Runtime.runSync`/
-`runFork`, because the devices composer that calls them at the account gate's
-own edges is still a pair of promises. The calendars composer's
+are on the allowlist: the poll's cadence is a `Schedule` on a fiber these two
+fork and interrupt, because the devices composer that calls them at the
+account gate's own edges is still a pair of promises. The calendars composer's
 `startObservation` and `stopObservation` in
 `packages/host/src/compose-calendars.ts` are on the same allowlist, for the
 same reason: the held-notice release and the Apple access poll are
@@ -348,23 +359,30 @@ the meeting-boundary wake is a one-shot fiber the composer re-arms itself on
 every observation pass into that same scope, but the composer that calls
 `startObservation`/`stopObservation` — `compose-host.ts`'s own
 `startAccountCapabilities`/`stopAccountCapabilities`, at the account gate's
-edges — is still a pair of promises, so the scope is made and closed by these
-two functions rather than built around them. `stopObservation` closes the
+edges — is still a pair of promises, so the arming and the disarming are these
+two functions rather than a build around them. `stopObservation` closes the
 scope, and interrupts the boundary wake's own fiber if one still stands,
 without awaiting either: what it has to guarantee is that nothing more fires,
-never that a fiber has already ended. P7-10 deletes both pairs once the
-host's own drain owns a scope these fibers can be forked into directly.
+never that a fiber has already ended. P7-10 took the orphan out of both: each
+arming forks its scope from the one its composer was built in, through the
+shared `CadenceHome`, so the host's own close interrupts what a disarm missed
+and an arming after that close forks from a scope already closed, which
+interrupts what it forked at once. The pairs themselves stand while the gate
+that calls them is a promise.
 
-`shutdownGateway` in `packages/gateway/src/shutdown.ts` is on the same
-allowlist: the coordinator's fixed quit order — admissions closed, the
-cancellation and the settling raced against one shared deadline, whatever a
-cut step already produced kept in a `Ref`, and the unresolved count always
-persisted after — is `shutdownGatewayEffect`, an `Effect.timeoutTo` over a
-sequential effect built from the host's own `GatewayShutdownSteps` promises,
-but the host's coordinator (`packages/host/src/compose-host.ts`) still holds
-a plain async `stop()` over those same promise-returning steps, so
-`shutdownGateway` runs the effect to that promise in place. P7-10 (the drain)
-composes the host's quit as an effect directly and deletes this door.
+`shutdownGateway`, the promise door in `packages/gateway/src/shutdown.ts`, is
+gone: P7-10 composes the host's quit as an effect directly. The coordinator's
+fixed quit order — admissions closed, the cancellation and the settling raced
+against one shared deadline, whatever a cut step already produced kept in a
+`Ref`, and the unresolved count always persisted after — is
+`shutdownGatewayEffect` and nothing else, which `hostDrain`
+(`packages/host/src/effect/host.ts`) pipes directly, reading a step that threw
+out of the defect channel as its own `HostDrainError` exactly as the door's
+squash-and-rethrow used to. It therefore runs on the clock of whoever asked
+for it rather than on a default runtime the door built, which is what the
+drain's own suite now measures on the live clock, since what those two tests
+state is the deadline itself.
+
 `retryAttachWhileDetached` in `packages/gateway/src/attachment.ts` is on the
 allowlist too, and for its own reason rather than a caller's: nothing in this
 build composes it yet — the client this policy is for is one that can
@@ -775,7 +793,7 @@ design decision stated as such:
 | `streamFromEvent`/`eventFromStream` | P1-06 | P12-06 |
 | `cloudFetchFromHttpClient` | P1-07 | P12-04 |
 | `timersFromRuntime` | P2-01 | P12-03 |
-| `ObservationLoop`'s `start`/`stop` over its own `Scope` | P2-04 | P7-10 |
+| `ObservationLoop`'s `start`/`stop`, the arming the account gate calls | P2-04 | with the gate's own promises; P7-10 made the scope the host's |
 | `admit()` Promise door over `admitEffect()` | P4-01 | P12-02 |
 | `BrainTransport#send`'s internal `runCall` | P5-05 | P12-04 |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
@@ -816,11 +834,11 @@ design decision stated as such:
 | `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
 | `UpdateService`'s `start`/`stop`/`#armPublishingRetry` over its own `Scope` | P8-03 | once `update-service-host.ts`'s composer is a `Layer` of its own |
 | `mergeMethods`, the throwing fold over `foldMethods` | P7-02 | P12-05 |
-| `startConversationMaintenance`'s own `Scope` | P7-05 | P7-10 |
+| `startConversationMaintenance`'s stop, over a scope the host now owns | P7-05 | with the brain composer's own promises; P7-10 made the scope the host's |
 | `AppStateStore`'s `subscribe`, the Set-backed callback face beside `snapshot`/`update`/`touch` | P8-02 | P8-07 |
-| `deviceCadence`'s `start`/`stop` over their own `Scope` | P7-09 | P7-10 |
+| `deviceCadence`'s `start`/`stop`, the arming the account gate calls | P7-09 | with the gate's own promises; P7-10 made the scope the host's |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
-| The calendars composer's `startObservation`/`stopObservation` over their own `Scope` | P7-06 | P7-10 |
+| The calendars composer's `startObservation`/`stopObservation`, the arming the account gate calls | P7-06 | with the gate's own promises; P7-10 made the scope the host's |
 | `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 

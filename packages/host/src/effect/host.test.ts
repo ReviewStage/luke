@@ -298,7 +298,10 @@ describe("the drain", () => {
     },
   });
 
-  it.effect(
+  // The drain runs on the clock of whoever asked for it, now that no promise
+  // door detaches it onto the default runtime, and what these two measure is
+  // the deadline itself rather than a schedule a test drives.
+  it.live(
     "past its deadline counts what did not settle rather than waiting on it, and runs once for every ask",
     () =>
       Effect.gen(function* () {
@@ -320,7 +323,7 @@ describe("the drain", () => {
       }),
   );
 
-  it.effect("steps that fail are the named refusal, reported once and answered to every ask", () =>
+  it.live("steps that fail are the named refusal, reported once and answered to every ask", () =>
     Effect.gen(function* () {
       const reports: string[] = [];
       const broken = new Error("the envelopes could not be read");

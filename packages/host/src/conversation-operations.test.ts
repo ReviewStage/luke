@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { cadenceHome } from "@sidecar/runtime/effect";
 import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
@@ -102,11 +103,11 @@ test("a cutoff the store cannot read refuses the deletion after the marker, with
   assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
 });
 
-it.effect(
+it.scoped(
   "maintenance runs at the launch, preserving the busy conversations, and again on its own hourly clock, stopping with its scope",
   () =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const home = yield* cadenceHome;
       const runs: (readonly SessionKey[])[] = [];
       const stop = startConversationMaintenance({
         store: {
@@ -116,7 +117,7 @@ it.effect(
           },
         },
         brain: { busyConversations: () => [THREAD] },
-        runtime,
+        home,
       });
       yield* Effect.promise(() => drainMicrotasks(20));
       assert.deepEqual(runs, [[THREAD]]);
