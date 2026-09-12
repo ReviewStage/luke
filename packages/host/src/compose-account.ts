@@ -319,7 +319,11 @@ export const composeAccount = (
           const snapshot = yield* Effect.orDie(session.deleteEverywhere());
           // Only a deletion that landed stands recording down for the run.
           sessionReplayEndedByDeletion = true;
-          yield* Effect.fork(emitSessionReplay);
+          // Forked as a daemon rather than a plain fork: the handler's own
+          // fiber ends the moment this returns, and a fork supervised by it
+          // would be interrupted with it, dropping the very reply that is
+          // supposed to stand recording down.
+          yield* Effect.forkDaemon(emitSessionReplay);
           return { account: carried(snapshot) };
         }),
     };
