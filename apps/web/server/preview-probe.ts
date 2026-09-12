@@ -248,7 +248,7 @@ export interface ProbeReport {
 export const PROBE_REQUEST_INIT: RequestInit = { redirect: "manual" };
 
 /** A dropped connection is retried a few times; an answer, whatever its status, is never retried. */
-const TRANSPORT_RETRY = Schedule.exponential(Duration.seconds(1)).pipe(
+export const TRANSPORT_RETRY = Schedule.exponential(Duration.seconds(1)).pipe(
   Schedule.intersect(Schedule.recurs(3)),
 );
 const PROBE_CONCURRENCY = 4;

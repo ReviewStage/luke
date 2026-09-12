@@ -101,9 +101,11 @@ failure; the treadmill is the one that can eat a night.
    trigger a deployment.
 4. **Dean redeploys the PR's existing preview from the dashboard.** Not a new
    commit: a push would rebuild under the old detection and prove nothing. The
-   redeploy's build log is the only evidence of the services shape, because
-   the preview URL is behind Deployment Protection and cannot be probed from
-   a sandbox.
+   redeploy's build log is one half of the evidence; the other is the probe
+   below, which a sandbox cannot send by hand while the preview URL stays
+   behind Deployment Protection, and which CI's Preview probe job sends for
+   it once the project opens one of the two doors
+   `apps/web/server/preview-probe.ts` documents.
 5. **Dean reads the two log facts and the eight probes** (below) and reports
    them as they are.
 6. **The worker presses within the minute** by starting the enqueue watcher
@@ -177,7 +179,9 @@ is served and was the one fact the first sitting got right.
 `apps/web/scripts/preview-probe.ts --url <address>` sends these probes to a
 deployment, over the whole list the callers check derives rather than these
 eight alone, and judges each answer by whose it is; it is also the read of
-production after a merge.
+production after a merge. CI's Preview probe workflow runs the same script
+against every PR's own preview, found through the head's GitHub deployment
+record, once the repository variable `PREVIEW_PROBE_DOOR` names the door.
 
 A 401, 405, or 426 each mean the handler is there and refusing the caller.
 **A 404 of Vercel's own anywhere is the failure** (the platform marks its
