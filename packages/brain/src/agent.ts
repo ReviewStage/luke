@@ -245,8 +245,8 @@ export class BrainAgent {
    * `docs/adr/0001-effect.md` allowlist on the same terms as this file's
    * other seams: every subscriber here still holds a plain `Event`, not a
    * `Stream`, so the bridge is built once, synchronously, over a scope this
-   * agent owns and closes in `stop()`. P5-14b deletes it once a turn runs on
-   * a fiber of the agent's own and a subscriber can read the stream directly.
+   * agent owns and closes in `stop()`. P12-06 deletes it with
+   * `eventFromStream` itself, once a subscriber reads the stream directly.
    */
   readonly onRunEvent: Event<BrainRunEvent> = Effect.runSync(
     Effect.provideService(

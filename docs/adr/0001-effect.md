@@ -198,9 +198,11 @@ runs of their own.
 is the fifth: every caller of the brain's model transport still holds a
 promise, not a fiber, so the request effect built over `@sidecar/hosted`'s
 `accountCall` is run to a promise there, joining the caller's own
-`AbortSignal` to the run exactly as `createAccountCall` does. P7-08b moves a
-model adapter onto the brain's own runtime, at which point this request runs on
-it instead and `runCall` goes with it.
+`AbortSignal` to the run exactly as `createAccountCall` does. It goes in
+P12-04 with the rest of that family, because what keeps it is the
+`ModelAdapter` interface's own promise: `compaction.ts` is a port of OpenClaw
+`b7528507` that awaits `model.respond` and imports nothing from `effect`, so
+no adapter above this transport can answer an effect while that port stands.
 
 `createAccountCall` in `packages/hosted/src/account-call.ts` is the sixth: it
 provides `layerFromCloudFetch` over the caller's own `fetch`, joins the
@@ -448,7 +450,8 @@ this class's own methods as Effects, and this row is where that is recorded.
 terms as `runCall`: the traced `respond` still answers the `ModelAdapter`
 interface's promise, so the `Effect.withSpan` wrapping the wrapped adapter's
 call is run to that promise here. It goes together with
-`BrainTransport#send`'s `runCall` in P7-08b.
+`BrainTransport#send`'s `runCall` in P12-04, and for the same reason: it can
+stop answering a promise only when the `ModelAdapter` it wraps does.
 
 `timedRequest` in `packages/credentials/src/account/client.ts` and
 `LinearIssueTracker#post` in `packages/credentials/src/linear/tracker.ts` are
@@ -582,9 +585,9 @@ the allowlist too: its own caller still holds a `Promise<Settled<...>>` for
 the flush marker's write outcome, so `writeFlushMarkerEffect` — an
 `Effect.retry` over `@sidecar/memory/effect`'s `markerWriteSchedule`, the same
 bound `MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS` states — is run to that
-promise here rather than on a fiber of its own. It goes in P7-08b once the
-brain composes onto the host's own `Layer` and this write reaches a runtime
-edge of its own.
+promise here rather than on a fiber of its own. It goes in P12-02, with the
+turn runner: this write is made inside the housekeeping turn, so it reaches a
+fiber of its own exactly when that turn does.
 
 `settledUnlessAborted` and `claimedUnlessAborted` in
 `packages/brain/src/settled.ts` are on the allowlist on the same terms: the
@@ -620,9 +623,9 @@ it awaits reaches a run already going. P7-08 is what began handing it a
 runtime rather than letting it take the default: `toolLoopRuntimeOver` takes
 an execution, and the host's brain composer passes the runtime its own layer
 is being built on, so every run of the tool loop is a fiber of the host's
-runtime. P7-08b deletes the door and the `AgentRuntime` shape with it, once
-`BrainAgent`'s own methods are effects and the host holds every run as a
-fiber it forked.
+runtime. P12-02 deletes the door and the `AgentRuntime` shape with it, with
+the turn runner that holds it: a run stops being a promise exactly when the
+turn that carries it is a fiber.
 
 What the door does not carry is the other three seams. `ModelAdapter`,
 `ContextEngine`, and `ToolExecutor` stay as the host hands them in, because
@@ -632,19 +635,32 @@ compares it by reference, and it folds the context through the same adapter
 inside `compaction.ts`, which is an OpenClaw port and so imports nothing from
 `effect`. An Effect-shaped counterpart for any of the three would therefore
 need a promise view built back out of it inside the brain, which is the same
-run in another file rather than one less. They move with the host's layers in
-P7-08b, and the two shims that stand on them — `BrainTransport#send`'s
-`runCall` and `tracedModelAdapter`'s traced `respond` — name P7-08b below for
+run in another file rather than one less. They move in P12-04, and the two shims that stand on them — `BrainTransport#send`'s
+`runCall` and `tracedModelAdapter`'s traced `respond` — name P12-04 below for
 that reason. The `Settled` waits in the turn runner's own `#recall` stand for
 the same reason and go with the door itself in P12-02.
 
 The rest of this package's Promise faces turned out to stand on
 `BrainAgent`'s own public surface rather than on the vocabulary's: a wake, an
 ask, a run event's subscriber, and the generation a replacement installs are
-each answered to a host that holds a promise and not a fiber, so `WakeQueue`,
-`AskLedger#submit`, `GenerationHolder`, and the agent's own `eventFromStream`
-bridge cannot hold a fiber until `BrainAgent`'s methods are effects. Those
-four name P7-08b below too.
+each answered to a host that holds a promise and not a fiber. Three of those
+four needed no fiber at all, and P7-08b took the runs out rather than moving
+them: the wakes waiting for a turn (`packages/brain/src/wake-queue.ts`), the
+pending-submission map (`AskLedger`), and which generation stands
+(`GenerationHolder`) are each read and written in one uninterrupted step of
+the calling turn, with nothing to wait on, so each holds its state in a
+`MutableRef` — a cell whose get and set are statements — instead of in a
+`Ref`, a `Queue`, or a `SynchronizedRef` reached through `Effect.runSync`.
+What they guarantee is unchanged and is still what their own suites assert:
+the same observation delivered twice is one wake, past the capacity the
+oldest goes, a requeue prepends unbounded, an in-flight duplicate submission
+joins the first rather than opening a second run, and a successor generation
+stands before the caller's next statement so a result of the generation it
+replaced installs nothing. A `SynchronizedRef` would still be wrong for the
+ask ledger for the reason it always was — its permit is one turn later, which
+let a housekeeping turn the decision means to outrank slip in ahead of it —
+and an effect here could only ever be run. The agent's own `eventFromStream`
+bridge is the one of the four that stays, and it names P12-06 below.
 
 `BrainAgent`'s own construction in `packages/brain/src/agent.ts` is on the
 allowlist too: `onRunEvent` still answers the `Event<BrainRunEvent>` its
@@ -654,33 +670,13 @@ handed it, so the scope is made and the bridge built with a `runSync` at
 construction. Closing that scope in `stop()` runs to a promise instead,
 since interrupting the bridge's own daemon pump — parked waiting on the
 pubsub whenever nothing has fired since the last event — is not guaranteed
-to settle synchronously. P7-08b deletes both runs once a turn runs on a fiber
-of the agent's own and a subscriber can read the `Stream` directly.
+to settle synchronously. P12-06 deletes both runs, with `eventFromStream`
+itself: the bridge cannot outlive the `Event` its subscribers hold, and it
+cannot go before it.
 
-`WakeQueue`'s `push`, `take`, `requeue`, and `clear` in
-`packages/brain/src/wake-queue.ts` are on the allowlist too: the wakes
-themselves live in `packages/brain/src/effect/wake-queue.ts`'s `Queue`, and
-every operation that module answers is one that never suspends — an
-unbounded queue's offer always succeeds at once, and a stream bounded to a
-size already read never waits for a next element — so each is run with
-`Effect.runSync` rather than moved to a fiber of the class's own. The
-coalescing timer itself is untouched, since it is still the injected
-`schedule`/`cancel` seam a real elapsed-time wait stands behind, not
-something this bridge runs. P7-08b deletes the bridge once the turn runner and
-`WakeCapture`, its one caller, hold a fiber of their own instead of this
-class.
-
-`AskLedger#submit` in `packages/brain/src/asks.ts` is on the allowlist too, and
-a plain `Ref` rather than a `SynchronizedRef`: the pending-submission map's
-decision — an in-flight duplicate joins the first, a mismatched question or
-origin under the same id is a conflict, and only a submission that is neither
-cancels housekeeping and starts `#accept` — is itself synchronous, and a
-`SynchronizedRef`'s own permit acquisition is one turn later even when
-uncontended, which let a housekeeping turn this decision means to outrank slip
-in ahead of it; a plain `Ref`'s `modify` never suspends, so `Effect.runSync`
-answers in the same turn the caller's own `await` resumes in, exactly as the
-hand-rolled `Map` did. It goes in P7-08b once this class runs on a fiber of its
-own rather than answering a caller's `Promise`.
+The coalescing timer the wake queue arms is untouched by that, since it is
+still the injected `schedule`/`cancel` seam a real elapsed-time wait stands
+behind rather than anything the queue runs.
 
 `cloudPass` in `packages/providers/src/shared/cloud-pass.ts` no longer needs an
 allowlist entry: its reads and its one write are effects over an `HttpClient`
@@ -706,25 +702,22 @@ window it groups on is settled on the stream's own terms in
 `packages/providers/AGENTS.md` — which leaves nothing in that package forking
 a fiber of its own.
 
-`GenerationHolder` in `packages/brain/src/generation-holder.ts` and
-`retireGeneration` in `packages/brain/src/generation.ts` are on the allowlist
-for the same reason and under the same rule as `AskLedger#submit`. Which
-generation stands is a plain `Ref` whose `modify` takes the whole decision at
-once — the announcement names the generation already held, or a successor is
-built and installed over it — and a plain `Ref`'s `modify` never suspends, so
-the fence a replacement raises is up before the caller's next statement,
+`retireGeneration` in `packages/brain/src/generation.ts` is on the allowlist,
+and the holder beside it is not any more. Which generation stands is a
+`MutableRef` now, read and written as statements, so the fence a replacement
+raises is up before the caller's next statement with no run anywhere in it —
 which is what the storage rule means by a synchronous fence: the successor is
 announced and the dead generation stands nowhere before any disk is waited
-on. What a generation owns is a `Scope` of its own, and retiring it is one
-`Scope.close` whose finalizers — the abort signal every wait of the
-generation settles on, and the context the runtime opened behind it — run in
-reverse order and every one of them synchronously, so the close is a
-`runSync` too rather than a stop or a replacement waiting on a dispose.
-`state-store.ts` keeps its own compare-and-set against the envelope it last
-observed standing, because it is ported from OpenClaw `b7528507` and imports
-nothing from `effect`; its Effect surface stays in `state-store.effect.ts`.
-P7-08b deletes both runs once the agent's turns run on fibers of its own and
-the adoption is decided inside one.
+on. What a generation owns is a `Scope` of its own, and that stays a `Scope`,
+because reverse order and closing once are exactly what it guarantees: the
+abort signal every wait of the generation settles on, and the context the
+runtime opened behind it, are its two finalizers, and both run synchronously,
+so the close is a `runSync` rather than a stop or a replacement waiting on a
+dispose. `state-store.ts` keeps its own compare-and-set against the envelope
+it last observed standing, because it is ported from OpenClaw `b7528507` and
+imports nothing from `effect`; its Effect surface stays in
+`state-store.effect.ts`. P12-02 deletes this run with the turn runner, once a
+generation is retired inside the fiber that replaced it.
 
 `runAdapterRead` in the same package's `promise-face.ts` is the one face every
 adapter answers a `SessionProviderPlugin` from. Claude Code's and Codex's reads
@@ -776,7 +769,7 @@ design decision stated as such:
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `ObservationLoop`'s `start`/`stop` over its own `Scope` | P2-04 | P7-10 |
 | `admit()` Promise door over `admitEffect()` | P4-01 | P12-02 |
-| `BrainTransport#send`'s internal `runCall` | P5-05 | P7-08b |
+| `BrainTransport#send`'s internal `runCall` | P5-05 | P12-04 |
 | `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04 |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04 |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
@@ -788,7 +781,7 @@ design decision stated as such:
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
 | `runAdapterRead`, every adapter's Promise face over its read effects | P6-11a | not yet — every caller stays inside `packages/providers`; P7-05 confirmed the host never called one directly |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
-| `tracedModelAdapter`'s traced `respond` | P6-05 | P7-08b |
+| `tracedModelAdapter`'s traced `respond` | P6-05 | P12-04 |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04 |
 | `LinearIssueTracker#post` | P4-03 | P12-04 |
 | `singleFlight`'s Promise-returning closure, over `singleFlightEffect` | P4-03 | the account's caller once `AccountSessionManager.refresh` answers an Effect |
@@ -801,19 +794,17 @@ design decision stated as such:
 | `LiveVoiceBridgeTag` / `liveVoiceBridgeLayer(bridge)` over the plain `LiveVoiceBridge` object | P6-08 | P9-03 — its one caller is the renderer's orchestrator |
 | `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
 | `Settled` Promise signatures | P5-01 | P12-02 |
-| `promiseAgentRuntime`, the `Promise` door over `AgentRuntimeEffect` | P5-14b | P7-08b |
-| `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P7-08b |
-| `WakeQueue`'s `push`/`take`/`requeue`/`clear` over `Effect.runSync` | P5-02 | P7-08b |
+| `promiseAgentRuntime`, the `Promise` door over `AgentRuntimeEffect` | P5-14b | P12-02 |
+| `BrainAgent`'s own `eventFromStream` bridge over its run events | P5-06 | P12-06 |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
-| `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P7-08b |
+| `Maintenance`'s `#writeFlushMarker` over its own `Effect.runPromise` | P5-13 | P12-02 |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | with `BrainStateRepository`, `NotebookMemoryStore`, and `ChildStore`; unscheduled |
 | `HostedStoreRun`, the hosted store's promise door over its `@effect/sql` modules | P10-11a | P10-15 |
 | `HostedStoreTestDatabase.db`, the store test harness's Drizzle handle beside its `sql` client, narrowed by P10-14c5 to the three `BrainHostSeams`/`HostedStoreContext` wiring sites | P10-14c | P10-15 |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P10-05..10 |
-| `AskLedger#submit`'s pending-map decision over its own `Effect.runSync` | P5-03 | P7-08b |
-| `GenerationHolder`'s `Ref` decision and `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P7-08b |
+| `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | P12-02 |
 | `hostSeamLayers(options)`/`hostKernelLayerFromSeams(options)`, the host seams stood up from one object, and `createHostKernel` beside them | P7-01 | P12-05 |
 | `composeHost`'s `start()`/`stop()` adaptor over `hostLayer`, and `hostLayerFromSeams(options)` beside it | P7-02 | P12-05 |
 | `UpdateService`'s `start`/`stop`/`#armPublishingRetry` over its own `Scope` | P8-03 | once `update-service-host.ts`'s composer is a `Layer` of its own |
@@ -823,7 +814,6 @@ design decision stated as such:
 | `deviceCadence`'s `start`/`stop` over their own `Scope` | P7-09 | P7-10 |
 | `LinearCredentials`'s renewal, running `singleFlightEffect` over a handed-in `Runtime` | P7-06 | once `LinearCredentials` answers an Effect itself |
 | The calendars composer's `startObservation`/`stopObservation` over their own `Scope` | P7-06 | P7-10 |
-| `AgentSeamTag` / `agentSeamLayer(seam)` over the plain `AgentSeam` object | P5-07 | P7-08b |
 | Legacy gateway envelope via a custom `RpcSerialization` | P6-01 | never — the protocol is the contract |
 
 The two permanent entries are not unfinished work. A `GATEWAY_ERROR` code and

@@ -64,8 +64,9 @@ function errorName(cause: unknown): string | undefined {
  * @deprecated `BrainTransport#send` is a promise-facing strangler shim on the
  * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: it runs the
  * call effect here because every caller still holds a promise, not a fiber.
- * P5-14b moves a turn onto the brain's own runtime, at which point this
- * request runs there instead and `runCall` goes with it.
+ * P12-04 deletes it with the rest of that door family; what keeps it until
+ * then is the `ModelAdapter` promise above it, which `compaction.ts` — an
+ * OpenClaw port that imports nothing from `effect` — awaits.
  */
 async function runCall(
   effect: Effect.Effect<CallAnswer, never, HttpClient.HttpClient>,

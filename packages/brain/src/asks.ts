@@ -6,7 +6,7 @@ import {
 } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
-import { Effect, Ref } from "effect";
+import { MutableRef } from "effect";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -72,20 +72,20 @@ export class AskLedger {
   /**
    * The same key finds the first answer, the same key with other words or
    * another origin is a conflict, and an in-flight duplicate joins the first
-   * rather than starting a second effect: one `Ref` makes the read of this
-   * map and the write that registers a fresh submission one atomic step, so
-   * a retry racing the submission that is still being accepted can never
-   * open a second run under the same id. A plain `Ref` rather than a
-   * `SynchronizedRef` is deliberate: the decision this guards is itself
-   * synchronous — a submission that starts fresh cancels housekeeping and
-   * opens `#accept` in the same turn a developer's ask always has, never a
-   * turn later — and a `SynchronizedRef`'s permit is exactly one turn later,
-   * which let a housekeeping turn this same decision means to outrank slip
-   * in ahead of it.
+   * rather than starting a second effect: the read of this map and the write
+   * that registers a fresh submission are one uninterrupted step of the
+   * calling turn, so a retry racing the submission that is still being
+   * accepted can never open a second run under the same id. The cell is a
+   * `MutableRef` rather than a `Ref` or a `SynchronizedRef` for that reason:
+   * the decision it guards is itself synchronous — a submission that starts
+   * fresh cancels housekeeping and opens `#accept` in the same turn a
+   * developer's ask always has, never a turn later — a `SynchronizedRef`'s
+   * permit is exactly one turn later, which let a housekeeping turn this
+   * decision means to outrank slip in ahead of it, and a `Ref` says the same
+   * thing as an effect that could only be run here.
    */
-  readonly #pendingSubmissions: Ref.Ref<Map<string, PendingSubmission>> = Ref.unsafeMake(
-    new Map<string, PendingSubmission>(),
-  );
+  readonly #pendingSubmissions: MutableRef.MutableRef<Map<string, PendingSubmission>> =
+    MutableRef.make(new Map<string, PendingSubmission>());
   readonly #listeners = new Set<BrainRequestsListener>();
   /** Where an ask that arrives while this conversation is busy waits, under the queue's own mode and bounds. */
   readonly #queue: PendingInputQueue;
@@ -141,7 +141,7 @@ export class AskLedger {
 
   /** Settles once every acceptance still being written has landed or been refused. */
   async drainPendingSubmissions(): Promise<void> {
-    const pending = Effect.runSync(Ref.get(this.#pendingSubmissions));
+    const pending = MutableRef.get(this.#pendingSubmissions);
     await Promise.all([...pending.values()].map((entry) => entry.result.catch(() => undefined)));
   }
 
@@ -203,8 +203,8 @@ export class AskLedger {
     }
     // The generation's context is awaited before the pending checks below, so
     // that two retries of one id racing this point read the same generation;
-    // the check and the registration themselves are one atomic step on the
-    // `Ref` below, so neither can slip past the other regardless.
+    // the check and the registration themselves are one uninterrupted step
+    // below, so neither can slip past the other regardless.
     const opened = await generation.opened;
     if (generation !== this.#seam.generation() || this.#seam.stopped()) {
       return {
@@ -235,17 +235,10 @@ export class AskLedger {
      * at the door, and only a submission that is none of those starts
      * `#accept` and registers its promise for the next retry to find.
      *
-     * `Ref.modify`'s callback runs only once the effect below is actually
-     * executed, so `#accept` is invoked no earlier than that — never at the
-     * moment this decision is merely being described — and, being a plain
-     * `Ref`, that execution never suspends: `cancelMaintenance` still runs in
-     * the same turn a caller's `await` on this method resumes in, exactly as
-     * it did before this map moved behind an Effect primitive.
-     *
-     * This is `Effect.runSync` outside a runtime edge, the strangler shim
-     * `docs/adr/0001-effect.md` lists for `AskLedger#submit`; it goes with
-     * P5-14b's turn runner, once this class runs on a fiber of its own rather
-     * than answering a caller's `Promise`.
+     * The decision is described here and applied below in one step that
+     * suspends nowhere, so `#accept` is invoked exactly where the map is
+     * written and `cancelMaintenance` still runs in the same turn a caller's
+     * `await` on this method resumes in.
      */
     const decideSubmission = (
       pending: Map<string, PendingSubmission>,
@@ -288,7 +281,8 @@ export class AskLedger {
       registered.set(submission.submissionId, { question, origin: submission.origin, result });
       return [{ kind: "started", result }, registered];
     };
-    const decision = Effect.runSync(Ref.modify(this.#pendingSubmissions, decideSubmission));
+    const [decision, registered] = decideSubmission(MutableRef.get(this.#pendingSubmissions));
+    MutableRef.set(this.#pendingSubmissions, registered);
     if (decision.kind === "answer") return decision.result;
     try {
       return await decision.result;
@@ -299,15 +293,12 @@ export class AskLedger {
 
   /** Forgets a submission's pending entry once its own answer has settled, never one that replaced it. */
   #forgetPending(submissionId: string, result: Promise<BrainSubmissionResult>): void {
-    Effect.runSync(
-      Ref.update(this.#pendingSubmissions, (pending) => {
-        const held = pending.get(submissionId);
-        if (held?.result !== result) return pending;
-        const next = new Map(pending);
-        next.delete(submissionId);
-        return next;
-      }),
-    );
+    const pending = MutableRef.get(this.#pendingSubmissions);
+    const held = pending.get(submissionId);
+    if (held?.result !== result) return;
+    const next = new Map(pending);
+    next.delete(submissionId);
+    MutableRef.set(this.#pendingSubmissions, next);
   }
 
   async #accept(
