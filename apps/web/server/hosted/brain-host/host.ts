@@ -1,4 +1,4 @@
-import type { SqlClient } from "@effect/sql";
+import { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import type { LanguageModel } from "ai";
 import { Effect, type ParseResult } from "effect";
@@ -14,9 +14,10 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
+import type { WebStoreRun } from "../../runtime.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
-import { type FiberStoreRunner, fiberStoreRunner, type Promised } from "../fiber-runner.js";
+import { type Promised, runOverClient } from "../fiber-runner.js";
 import { type AskDeliveryBinding, askRecord } from "../store/asks.js";
 import { type ConversationTarget, promptHashOf, type StoreWriter } from "../store/index.js";
 import { offerBriefing } from "./announce.js";
@@ -166,7 +167,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
    * eve's own stream handler and holds no state of its own, so one stands per
    * event rather than one per host.
    */
-  const relayOver = (run: FiberStoreRunner, writer: StoreWriter) =>
+  const relayOver = (run: WebStoreRun, writer: StoreWriter) =>
     new StreamRelay({
       writer: {
         consume: (target, event) => run(writer.consume(target, event)),
@@ -212,7 +213,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     });
 
   /** The ask record as the relay takes it: the two bindings, each run to the promise its seam answers. */
-  const promisedAsks = (run: FiberStoreRunner): Promised<AskDeliveryBinding> => {
+  const promisedAsks = (run: WebStoreRun): Promised<AskDeliveryBinding> => {
     const asks = askRecord();
     return {
       bindDeliveries: (target, deliveryIds, turnId) =>
@@ -347,7 +348,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         if (!standing.ok) {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.refusal };
         }
-        const run = yield* fiberStoreRunner;
+        const client = yield* SqlClient.SqlClient;
+        const run = runOverClient(client);
         const { userId } = binding.target;
         const roster = () => run(rosterOf(userId));
         const transcripts = hostedTranscriptReads({
@@ -373,7 +375,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             roster,
             carrier,
             transcripts,
-            workspace: hostedWorkspaceAccess(run, seams.store(), userId, seams.now),
+            workspace: hostedWorkspaceAccess(client, seams.store(), userId, seams.now),
             now: seams.now,
           },
           {
@@ -414,7 +416,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   new Date(seams.now()),
                 )
             : undefined;
-        const run = yield* fiberStoreRunner;
+        const client = yield* SqlClient.SqlClient;
+        const run = runOverClient(client);
         const writer = yield* seams.writer();
         yield* Effect.promise(() =>
           relayOver(run, writer).handle(event, {

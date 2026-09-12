@@ -17,6 +17,7 @@
   "runShims": [
     "apps/desktop/src/main/update-service.ts",
     "apps/web/eve/evals/brain-host.eval.ts",
+    "apps/web/server/hosted/fiber-runner.ts",
     "apps/web/server/hosted/rate-brake.ts",
     "apps/web/server/voice/openai.ts",
     "apps/web/tests/support/hosted-store-database.ts",
@@ -52,7 +53,6 @@
   ],
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
-    "apps/web/server/hosted/fiber-runner.ts",
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-live.ts",
     "packages/runtime/src/children.effect.ts",

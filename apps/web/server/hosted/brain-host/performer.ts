@@ -23,13 +23,13 @@ import {
   type WireRecord,
   workspaceAgentModels,
 } from "../../core.js";
+import type { WebStoreRun } from "../../runtime.js";
 import {
   type ActionExecutionAnswer,
   type ActionRoster,
   actionRosterFor,
   type HostedSessionActionKind,
 } from "../action-execute.js";
-import type { FiberStoreRunner } from "../fiber-runner.js";
 import type { ObservedRoster } from "../observed-roster.js";
 import type { HostedStore } from "../store/index.js";
 import type { HostedWorkspaceDefaults } from "./defaults.js";
@@ -236,7 +236,7 @@ function serially<Value>(userId: string, write: () => Promise<Value>): Promise<V
 
 /** The facts table as the carrier writes it: the same bounds the desktop's notebook keeps, one account's rows. */
 export function hostedFactsWriter(
-  run: FiberStoreRunner,
+  run: WebStoreRun,
   store: Pick<HostedStore, "facts">,
   userId: string,
   now: () => number,
