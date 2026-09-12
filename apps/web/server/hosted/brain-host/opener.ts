@@ -73,12 +73,14 @@ import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-e
  * ran leaves its releases uncarried for the next release's drain to carry.
  *
  * The one change the opener refuses to derive is one across a stale gap.
- * The bookmark's instant is the snapshot it was kept from, and the snapshot's
- * is the pass that wrote it; a bookmark trailing the snapshot by more than
- * `OBSERVATION_TICK.STALE_GAP_MS` means no visit has handed a change over
- * for that long — the cron paused, a deploy left a gap, the secret rotated,
- * the provider refused every pass, or eve refused every turn — and what
- * changed in between is history the roster already shows, not news. The
+ * The bookmark's instant is the snapshot it was last kept level with — a
+ * visit that finds nothing to wake keeps it level all the same, so an idle
+ * roster is never mistaken for a gap — and the snapshot's is the pass that
+ * wrote it; a bookmark trailing the snapshot by more than
+ * `OBSERVATION_TICK.STALE_GAP_MS` means no visit has caught the brain up for
+ * that long — the cron paused, a deploy left a gap, the secret rotated, the
+ * provider refused every pass, or eve refused every turn — and what changed
+ * in between is history the roster already shows, not news. The
  * visit reseeds the bookmark from the snapshot as it stands, over the
  * bookmark's own instant, wakes nothing, and counts the reseed in its
  * outcome, so the tick's answer says it happened. The next change under the
@@ -256,10 +258,11 @@ function settledChange(seams: TurnOpenerSeams, userId: string): OpenerEffect<Set
     if (bookmark.state === CONSUMED_ROSTER.UNREADABLE) return yield* replace(bookmark.observedAt);
     const heard = decodeObservedRoster(bookmark.roster.body);
     if (heard === undefined) return yield* replace(bookmark.roster.observedAt);
-    // A bookmark trailing the snapshot past the stale gap has had no change handed over for that
-    // long, and what changed in between is history the roster shows rather than news: the bookmark
-    // is reseeded from the snapshot as it stands, over its own instant, and nothing is woken from
-    // the gap. The gap is the two rows' own instants apart, never the clock's reading.
+    // A bookmark trailing the snapshot past the stale gap has not been caught up for that long — an
+    // empty visit keeps it level below, so this is never an idle roster — and what changed in between
+    // is history the roster shows rather than news: the bookmark is reseeded from the snapshot as it
+    // stands, over its own instant, and nothing is woken from the gap. The gap is the two rows' own
+    // instants apart, never the clock's reading.
     const gap = snapshot.observedAt - bookmark.roster.observedAt;
     if (gap > OBSERVATION_TICK.STALE_GAP_MS) {
       seams.report(
@@ -279,11 +282,15 @@ function settledChange(seams: TurnOpenerSeams, userId: string): OpenerEffect<Set
       from: bookmark.roster.observedAt,
       diff: rosterDiff(consumed, current),
     };
-    // Nothing to wake, but a provider taken from the snapshot still has to reach the bookmark, or the
-    // same adoption is made on every visit and the bookmark never settles on the new key.
+    // Nothing to wake, and the bookmark is kept level with the snapshot all the same, over its own
+    // instant: its instant is what the stale gap reads as when the brain was last caught up, so an
+    // idle roster must move it as a woken change does, and a provider taken from the snapshot on a
+    // key change must reach it or the same adoption is made on every visit. A visit whose pass left
+    // the snapshot standing, and whose bookmark already holds it, writes nothing.
     if (
       rosterDiffIsEmpty(change.diff) &&
-      encodeObservedRoster(consumed) !== encodeObservedRoster(heard)
+      (snapshot.observedAt !== change.from ||
+        encodeObservedRoster(consumed) !== encodeObservedRoster(heard))
     ) {
       yield* seams.store.roster.keepConsumed(userId, snapshot, change.from);
     }

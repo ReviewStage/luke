@@ -47,7 +47,8 @@ export const OBSERVATION_TICK = {
   /**
    * How far the brain's bookmark may trail the snapshot before what changed
    * between the two is history rather than news. The pass runs about once a
-   * minute and a visit that could not hand its change over derives it again
+   * minute, a visit with nothing to wake keeps the bookmark level with the
+   * snapshot, and one that could not hand its change over derives it again
    * the next minute, so a bookmark further behind than this means the
    * schedule or the brain was out for that long: a paused cron, a deploy
    * gap, a rotated secret, a provider that refused every pass, eve refusing

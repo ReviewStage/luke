@@ -1304,10 +1304,12 @@ carries the sessions it woke and keeps the earlier roster for the rest, so
 each of them derives again next tick. A first visit finds no bookmark and
 adopts the snapshot whole, waking nothing, as the first pass records no
 change against nothing. The one change the opener refuses to derive is
-one across a stale gap: the bookmark's instant is the snapshot it was kept
-from, and a bookmark trailing the snapshot the pass just wrote by more than
-`OBSERVATION_TICK.STALE_GAP_MS` (five minutes, against a once-a-minute
-schedule) means no visit has handed a change over for that long — the cron
+one across a stale gap: the bookmark's instant is the snapshot it was last
+kept level with — a visit that finds nothing to wake keeps it level all the
+same, so an idle roster never reads as a gap — and a bookmark trailing the
+snapshot the pass just wrote by more than `OBSERVATION_TICK.STALE_GAP_MS`
+(five minutes, against a once-a-minute schedule) means no visit has caught
+the brain up for that long — the cron
 paused, a deploy left a gap, `CRON_SECRET` rotated, the provider refused every
 pass, or eve refused every turn. What changed in between is history the
 roster already shows, not news: the visit reseeds the bookmark from the

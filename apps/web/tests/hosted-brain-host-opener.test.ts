@@ -873,6 +873,61 @@ test("a bookmark trailing the snapshot past the stale gap is reseeded from the s
   assert.equal((await bookmarkOf(userId))?.observedAt, resumedAt + 60_000);
 });
 
+test("a roster unchanged for longer than the stale gap is idle, not an outage: each empty visit keeps the bookmark level with the snapshot, no reseed is counted, and the first change after the idle stretch wakes", async () => {
+  const idle = roster([observation("s-1"), observation("s-2")]);
+  const userId = await accountSeeing(idle);
+  const { eve, handed } = fakeEve();
+  // One pass a minute for longer than the gap, each reading the same roster.
+  const minutes = Math.ceil(OBSERVATION_TICK.STALE_GAP_MS / 60_000) + 1;
+  let previous = NOW;
+  for (let minute = 1; minute <= minutes; minute += 1) {
+    const at = NOW + minute * 60_000;
+    await passed(userId, idle, at, previous);
+    const visit = seams({ eve, roster: hostedRosterFrom(idle, at) });
+    assert.deepEqual(await database.run(openAccountTurns(visit, userId)), {
+      observation: 0,
+      holdRelease: 0,
+      failed: 0,
+      reseeded: 0,
+    });
+    assert.equal(visit.reports.length, 0);
+    assert.equal((await bookmarkOf(userId))?.observedAt, at);
+    previous = at;
+  }
+  assert.equal(handed.length, 0);
+
+  const changed = roster([
+    observation("s-1", { status: SESSION_STATUS.WAITING }),
+    observation("s-2"),
+  ]);
+  const at = previous + 60_000;
+  await passed(userId, changed, at, previous);
+  assert.deepEqual(
+    await database.run(
+      openAccountTurns(seams({ eve, roster: hostedRosterFrom(changed, at) }), userId),
+    ),
+    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
+  );
+  assert.deepEqual(
+    handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
+    [["s-1"]],
+  );
+});
+
+test("a visit whose pass left the snapshot standing, with the bookmark already level, writes nothing", async () => {
+  const idle = roster([observation("s-1")]);
+  const userId = await accountSeeing(idle);
+  const { eve } = fakeEve();
+  const visit = seams({ eve, roster: hostedRosterFrom(idle, NOW) });
+  assert.deepEqual(await database.run(openObservationTurns(visit, userId)), {
+    observation: 0,
+    holdRelease: 0,
+    failed: 0,
+    reseeded: 0,
+  });
+  assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW, sessions: ["s-1"] });
+});
+
 test("a bookmark trailing the snapshot by exactly the stale gap is still news: the change wakes and nothing is reseeded", async () => {
   const userId = await accountSeeing(roster([observation("s-1")]));
   const at = NOW + OBSERVATION_TICK.STALE_GAP_MS;
