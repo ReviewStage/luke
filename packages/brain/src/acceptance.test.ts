@@ -936,12 +936,13 @@ test("a conversation that starts fresh is primed once with the recent daily note
   const memory: MemoryDefinition = {
     scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
     provider: {
-      recall: async (_scope, history) => {
-        histories.push(history.items.length);
-        if (history.items.length > 0) return { messages: [] };
-        const notes = await recentDailyNotes(root, now);
-        return { messages: notes.length > 0 ? [{ content: primedNotesText(notes) }] : [] };
-      },
+      recall: (_scope, history) =>
+        Effect.gen(function* () {
+          histories.push(history.items.length);
+          if (history.items.length > 0) return { messages: [] };
+          const notes = yield* Effect.promise(() => recentDailyNotes(root, now));
+          return { messages: notes.length > 0 ? [{ content: primedNotesText(notes) }] : [] };
+        }),
       tools: [],
     },
   };

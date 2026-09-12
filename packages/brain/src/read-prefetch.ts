@@ -556,17 +556,17 @@ export class ReadPrefetch implements TurnReadPrefetch {
       readTranscript: (identity) =>
         Effect.promise(() => this.#options.readTranscript(identity, signal)),
     };
+    // Every module here answers an effect; this slot's memo is a promise, so
+    // the read is carried onto the host's runtime through the brain's one door.
     if (read.kind === PREFETCH_READ_KIND.TRANSCRIPT) {
       const module = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
       if (!module) return Promise.resolve(rejection(REFUSAL_REASON.NOT_OFFERED));
-      // The module answers an effect; this slot's memo is a promise, so the
-      // read is carried onto the host's runtime through the brain's one door.
       return this.#options.carry(module.execute(args, standing));
     }
     const memory = this.#options.memory;
     const tool = memory ? memoryToolNamed(memory.provider, read.kind) : undefined;
     if (!memory || !tool) return Promise.resolve(rejection(REFUSAL_REASON.NO_MEMORY));
-    return tool.execute(args, { ...standing, scope: memory.scope });
+    return this.#options.carry(tool.execute(args, { ...standing, scope: memory.scope }));
   }
 
   /**

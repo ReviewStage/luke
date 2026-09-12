@@ -579,12 +579,13 @@ it("a reset capture that was skipped reports nothing, while one that failed is s
       memory: () => ({
         scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
         provider: {
-          recall: async () => ({ messages: [] }),
-          capture: async (turn) => {
-            captures += 1;
-            assert.equal(turn.phase, MEMORY_CAPTURE_PHASE.RESET_REQUESTED);
-            return { outcome, writes: 0, reason: "not an eligible private conversation" };
-          },
+          recall: () => Effect.succeed({ messages: [] }),
+          capture: (turn) =>
+            Effect.sync(() => {
+              captures += 1;
+              assert.equal(turn.phase, MEMORY_CAPTURE_PHASE.RESET_REQUESTED);
+              return { outcome, writes: 0, reason: "not an eligible private conversation" };
+            }),
           tools: [],
         },
       }),

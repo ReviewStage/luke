@@ -391,7 +391,7 @@ function memoryDefinition() {
   const definition: MemoryDefinition = {
     scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
     provider: {
-      recall: async () => ({ messages: [] }),
+      recall: () => Effect.succeed({ messages: [] }),
       tools: Object.values(NOTEBOOK_MEMORY_TOOL).map((name) => ({
         name,
         description: name,
@@ -399,11 +399,12 @@ function memoryDefinition() {
           EffectSchema.Struct({}).annotations({ parseOptions: { onExcessProperty: "ignore" } }).ast,
         ),
         effect: TOOL_EFFECT.READ,
-        execute: async (input, context) => {
-          inputs.push(input);
-          contexts.push(context);
-          return { status: ACTION_RESULT_STATUS.ACCEPTED };
-        },
+        execute: (input, context) =>
+          Effect.sync(() => {
+            inputs.push(input);
+            contexts.push(context);
+            return { status: ACTION_RESULT_STATUS.ACCEPTED };
+          }),
       })),
     },
   };

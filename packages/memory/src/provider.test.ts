@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { TOOL_EFFECT } from "@sidecar/runtime";
 import {
   MEMORY_CAPTURE_OUTCOME,
@@ -12,6 +13,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type { NotebookMemoryAccess } from "./notebook-memory.js";
 import {
@@ -61,10 +63,11 @@ function harness(overrides: Partial<NotebookMemoryProviderSeams> = {}) {
     recentNotes: async () => [
       { name: "2026-09-10.md", path: "memory/2026-09-10.md", content: "- shipped" },
     ],
-    capture: async (turn) => {
-      seen.captures.push(turn);
-      return { outcome: MEMORY_CAPTURE_OUTCOME.COMPLETED, writes: 1 };
-    },
+    capture: (turn) =>
+      Effect.sync(() => {
+        seen.captures.push(turn);
+        return { outcome: MEMORY_CAPTURE_OUTCOME.COMPLETED, writes: 1 };
+      }),
     ...overrides,
   });
   return { provider, seen };
@@ -98,78 +101,94 @@ test("the two tools are the notebook's reads, in catalog order, each a module wh
   );
 });
 
-test("recall renders the facts under a stable id every turn and the recent notes unkeyed into an empty history alone", async () => {
-  const { provider } = harness();
-  const fresh = await provider.recall(SCOPE, { items: [], signal: NEVER });
-  assert.deepEqual(
-    fresh.messages.map((message) => message.id),
-    [NOTEBOOK_RECALL_ID.FACTS, undefined],
-  );
-  const ongoing = await provider.recall(SCOPE, { items: [{ type: "message" }], signal: NEVER });
-  assert.deepEqual(
-    ongoing.messages.map((message) => message.id),
-    [NOTEBOOK_RECALL_ID.FACTS],
-  );
-  assert.equal(ongoing.messages[0]?.content, fresh.messages[0]?.content);
-  const empty = harness({ facts: () => [], recentNotes: async () => [] });
-  assert.deepEqual((await empty.provider.recall(SCOPE, { items: [], signal: NEVER })).messages, []);
-});
+it.effect(
+  "recall renders the facts under a stable id every turn and the recent notes unkeyed into an empty history alone",
+  () =>
+    Effect.gen(function* () {
+      const { provider } = harness();
+      const fresh = yield* provider.recall(SCOPE, { items: [], signal: NEVER });
+      assert.deepEqual(
+        fresh.messages.map((message) => message.id),
+        [NOTEBOOK_RECALL_ID.FACTS, undefined],
+      );
+      const ongoing = yield* provider.recall(SCOPE, {
+        items: [{ type: "message" }],
+        signal: NEVER,
+      });
+      assert.deepEqual(
+        ongoing.messages.map((message) => message.id),
+        [NOTEBOOK_RECALL_ID.FACTS],
+      );
+      assert.equal(ongoing.messages[0]?.content, fresh.messages[0]?.content);
+      const empty = harness({ facts: () => [], recentNotes: async () => [] });
+      const recalled = yield* empty.provider.recall(SCOPE, { items: [], signal: NEVER });
+      assert.deepEqual(recalled.messages, []);
+    }),
+);
 
-test("a search is bounded before the index sees it, a read passes its window whole, and a missing index refuses both", async () => {
-  const { provider, seen } = harness();
-  const search = memoryToolNamed(provider, NOTEBOOK_MEMORY_TOOL.SEARCH);
-  const get = memoryToolNamed(provider, NOTEBOOK_MEMORY_TOOL.GET);
-  assert.ok(search && get);
-  const long = "x".repeat(maximumMemoryQueryLength + 50);
-  await search.execute({ query: `  deploy   ${long}`, max_results: 99 }, context());
-  assert.equal(seen.searches[0]?.query.length, maximumMemoryQueryLength);
-  assert.equal(seen.searches[0]?.maxResults, maximumMemorySearchResults);
-  await search.execute({ query: "deploy", max_results: 3.7 }, context());
-  assert.deepEqual(seen.searches[1], { query: "deploy", maxResults: 3 });
-  const emptyQuery = await search.execute({ query: "   " }, context());
-  assert.equal(emptyQuery.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(emptyQuery.reason, NOTEBOOK_MEMORY_REFUSAL.EMPTY_QUERY);
-  await get.execute({ path: " MEMORY.md ", from: 2, lines: 0 }, context());
-  assert.deepEqual(seen.gets[0], { path: "MEMORY.md", from: 2 });
-  const noPath = await get.execute({ path: "" }, context());
-  assert.equal(noPath.reason, NOTEBOOK_MEMORY_REFUSAL.NOT_MEMORY_PATH);
-  const indexless = harness({ access: undefined });
-  for (const name of [NOTEBOOK_MEMORY_TOOL.SEARCH, NOTEBOOK_MEMORY_TOOL.GET]) {
-    const tool = memoryToolNamed(indexless.provider, name);
-    assert.ok(tool);
-    const refused = await tool.execute({ query: "q", path: "MEMORY.md" }, context());
-    assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-    assert.equal(refused.reason, NOTEBOOK_MEMORY_REFUSAL.NO_INDEX);
-  }
-});
+it.effect(
+  "a search is bounded before the index sees it, a read passes its window whole, and a missing index refuses both",
+  () =>
+    Effect.gen(function* () {
+      const { provider, seen } = harness();
+      const search = memoryToolNamed(provider, NOTEBOOK_MEMORY_TOOL.SEARCH);
+      const get = memoryToolNamed(provider, NOTEBOOK_MEMORY_TOOL.GET);
+      assert.ok(search && get);
+      const long = "x".repeat(maximumMemoryQueryLength + 50);
+      yield* search.execute({ query: `  deploy   ${long}`, max_results: 99 }, context());
+      assert.equal(seen.searches[0]?.query.length, maximumMemoryQueryLength);
+      assert.equal(seen.searches[0]?.maxResults, maximumMemorySearchResults);
+      yield* search.execute({ query: "deploy", max_results: 3.7 }, context());
+      assert.deepEqual(seen.searches[1], { query: "deploy", maxResults: 3 });
+      const emptyQuery = yield* search.execute({ query: "   " }, context());
+      assert.equal(emptyQuery.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(emptyQuery.reason, NOTEBOOK_MEMORY_REFUSAL.EMPTY_QUERY);
+      yield* get.execute({ path: " MEMORY.md ", from: 2, lines: 0 }, context());
+      assert.deepEqual(seen.gets[0], { path: "MEMORY.md", from: 2 });
+      const noPath = yield* get.execute({ path: "" }, context());
+      assert.equal(noPath.reason, NOTEBOOK_MEMORY_REFUSAL.NOT_MEMORY_PATH);
+      const indexless = harness({ access: undefined });
+      for (const name of [NOTEBOOK_MEMORY_TOOL.SEARCH, NOTEBOOK_MEMORY_TOOL.GET]) {
+        const tool = memoryToolNamed(indexless.provider, name);
+        assert.ok(tool);
+        const refused = yield* tool.execute({ query: "q", path: "MEMORY.md" }, context());
+        assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+        assert.equal(refused.reason, NOTEBOOK_MEMORY_REFUSAL.NO_INDEX);
+      }
+    }),
+);
 
-test("a provider answers only for the scope it was built over", async () => {
-  const { provider, seen } = harness();
-  assert.deepEqual((await provider.recall(OTHER, { items: [], signal: NEVER })).messages, []);
-  const refusals: WireRecord[] = [];
-  for (const tool of provider.tools) {
-    refusals.push(await tool.execute({ query: "q" }, context(OTHER)));
-  }
-  assert.deepEqual(
-    refusals.map((refusal) => [refusal.status, refusal.reason]),
-    provider.tools.map(() => [
-      ACTION_RESULT_STATUS.REJECTED,
-      NOTEBOOK_MEMORY_REFUSAL.FOREIGN_SCOPE,
-    ]),
-  );
-  assert.ok(provider.capture);
-  const turn: MemoryCaptureTurn = {
-    scope: OTHER,
-    phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
-    operation: { generationId: "gen-1", compactionCount: 0 },
-    items: [],
-    signal: NEVER,
-  };
-  assert.equal((await provider.capture(turn)).outcome, MEMORY_CAPTURE_OUTCOME.SKIPPED);
-  const owned = await provider.capture({ ...turn, scope: SCOPE });
-  assert.equal(owned.outcome, MEMORY_CAPTURE_OUTCOME.COMPLETED);
-  assert.equal(seen.captures.length, 1);
-});
+it.effect("a provider answers only for the scope it was built over", () =>
+  Effect.gen(function* () {
+    const { provider, seen } = harness();
+    const foreign = yield* provider.recall(OTHER, { items: [], signal: NEVER });
+    assert.deepEqual(foreign.messages, []);
+    const refusals: WireRecord[] = [];
+    for (const tool of provider.tools) {
+      refusals.push(yield* tool.execute({ query: "q" }, context(OTHER)));
+    }
+    assert.deepEqual(
+      refusals.map((refusal) => [refusal.status, refusal.reason]),
+      provider.tools.map(() => [
+        ACTION_RESULT_STATUS.REJECTED,
+        NOTEBOOK_MEMORY_REFUSAL.FOREIGN_SCOPE,
+      ]),
+    );
+    assert.ok(provider.capture);
+    const turn: MemoryCaptureTurn = {
+      scope: OTHER,
+      phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
+      operation: { generationId: "gen-1", compactionCount: 0 },
+      items: [],
+      signal: NEVER,
+    };
+    const skipped = yield* provider.capture(turn);
+    assert.equal(skipped.outcome, MEMORY_CAPTURE_OUTCOME.SKIPPED);
+    const owned = yield* provider.capture({ ...turn, scope: SCOPE });
+    assert.equal(owned.outcome, MEMORY_CAPTURE_OUTCOME.COMPLETED);
+    assert.equal(seen.captures.length, 1);
+  }),
+);
 
 test("a provider built without a capture offers none, so a conversation whose memory is never captured has nothing to call", () => {
   const uncaptured = notebookMemoryProvider({

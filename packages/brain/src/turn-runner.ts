@@ -856,11 +856,16 @@ export class TurnRunner {
       }
       const memory = this.#options.memory;
       if (!memory) return { opening: [], standing: [] };
-      const recalled = yield* awaited(() =>
-        memory.provider
-          .recall(memory.scope, { items: context.checkpoint().items, signal: turnContext.signal })
-          .catch((error: Error) => {
-            this.#seam.report(`Memory recall failed: ${error.message}`);
+      const recalled = yield* Effect.catchAllDefect(
+        memory.provider.recall(memory.scope, {
+          items: context.checkpoint().items,
+          signal: turnContext.signal,
+        }),
+        (defect) =>
+          Effect.sync(() => {
+            this.#seam.report(
+              `Memory recall failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+            );
             return { messages: [] };
           }),
       );

@@ -24,6 +24,7 @@ import {
   brainPromptVoice,
   brainToolCatalog,
   brainToolNotes,
+  carryOn,
   LOOK_SUBJECT,
   resolveTurnToolPolicy,
   runOriginOf,
@@ -79,6 +80,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { SESSION_STATUS, type Session, type SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -928,16 +930,24 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       if (memory && capture && agent) {
         const items = await agent.contextSnapshot().catch(() => undefined);
         if (items && items.length > 0) {
-          const result = await capture({
-            scope: memory.scope,
-            phase: MEMORY_CAPTURE_PHASE.RESET_REQUESTED,
-            operation: {
-              generationId: opened.store.generationId() ?? "",
-              compactionCount: opened.store.current()?.compactionCount ?? 0,
-            },
-            items,
-            signal: RESET_CAPTURE_SIGNAL,
-          }).catch((error: Error) => failedHousekeeping(error.message));
+          const result = await carryOn(dependencies.execution)(
+            Effect.catchAllDefect(
+              capture({
+                scope: memory.scope,
+                phase: MEMORY_CAPTURE_PHASE.RESET_REQUESTED,
+                operation: {
+                  generationId: opened.store.generationId() ?? "",
+                  compactionCount: opened.store.current()?.compactionCount ?? 0,
+                },
+                items,
+                signal: RESET_CAPTURE_SIGNAL,
+              }),
+              (defect) =>
+                Effect.succeed(
+                  failedHousekeeping(defect instanceof Error ? defect.message : String(defect)),
+                ),
+            ),
+          );
           if (housekeepingFellShort(result.outcome)) {
             dependencies.report(
               `Reset capture did not complete (${result.outcome}${result.reason ? `: ${result.reason}` : ""}); ${result.writes} note write(s) stand and the reset proceeds`,

@@ -19,6 +19,7 @@ import {
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { BrainAgent, type BrainFlushMarkerStore, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
@@ -174,7 +175,11 @@ function agentWith(
     now: () => NOW,
     memory: {
       scope: SCOPE,
-      provider: { recall: async () => ({ messages: [] }), capture, tools: [] },
+      provider: {
+        recall: () => Effect.succeed({ messages: [] }),
+        capture: (turn) => Effect.promise(() => capture(turn)),
+        tools: [],
+      },
     },
     ...(launch.marker ? { flushMarker: launch.marker } : undefined),
   });

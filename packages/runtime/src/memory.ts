@@ -1,5 +1,5 @@
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
-import type { Schema } from "effect";
+import type { Effect, Schema } from "effect";
 import type { ToolExecutionContext } from "./execution.js";
 import type { RunOrigin } from "./identifiers.js";
 import type { TOOL_EFFECT } from "./registry.js";
@@ -12,7 +12,9 @@ import type { TOOL_EFFECT } from "./registry.js";
  * of; and `tools`, the model-facing calls the provider owns. The host owns
  * the scope, the timing, and the journal; the provider owns storage,
  * retrieval, and what it lets a call do. Nothing here reads inside a
- * provider's item, and nothing here reaches a model.
+ * provider's item, and nothing here reaches a model. `recall`, `capture`, and
+ * a tool's `execute` each answer an `Effect` their caller runs on the fiber
+ * the turn already is; nothing here runs one.
  */
 
 export const MEMORY_SCOPE_KIND = {
@@ -119,13 +121,13 @@ export interface MemoryTool {
   readonly description: string;
   readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
   readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
-  execute(input: WireRecord, context: MemoryToolContext): Promise<WireRecord>;
+  execute(input: WireRecord, context: MemoryToolContext): Effect.Effect<WireRecord>;
 }
 
 export interface MemoryProvider {
-  recall(scope: MemoryScope, history: MemoryRecallHistory): Promise<MemoryRecallResult>;
+  recall(scope: MemoryScope, history: MemoryRecallHistory): Effect.Effect<MemoryRecallResult>;
   /** Absent on a provider bound to a conversation whose memory is never captured. */
-  capture?(turn: MemoryCaptureTurn): Promise<MemoryCaptureResult>;
+  capture?(turn: MemoryCaptureTurn): Effect.Effect<MemoryCaptureResult>;
   readonly tools: readonly MemoryTool[];
 }
 

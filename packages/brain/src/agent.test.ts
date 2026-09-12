@@ -703,7 +703,7 @@ it.effect(
         memory: {
           scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID },
           provider: {
-            recall: () => new Promise<never>(() => undefined),
+            recall: () => Effect.never,
             tools: [],
           },
         },
