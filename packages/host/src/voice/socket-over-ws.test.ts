@@ -4,11 +4,23 @@ import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
+import { it } from "@effect/vitest";
 import { SOCKET_OPEN_FAULT, socketOpened } from "@sidecar/voice";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { WebSocketServer } from "ws";
-import { drainMicrotasks } from "../testing/index.js";
 import { openSocketOverWs } from "./socket-over-ws.js";
+
+/** Gives the fiber scheduler turns until `condition` holds, or fails the test if it never does. */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
 
 /** A local upgrade endpoint that admits a bearer and refuses everything else with a status. */
 async function server(options: { bearer: string; refuseWith: number }) {
@@ -139,25 +151,33 @@ async function serverSpeakingWithTheHandshake(frames: readonly string[]) {
   };
 }
 
-test("frames in the same chunk as the handshake response reach a consumer that subscribes after the open settles, in order", async () => {
-  const spoken = [
-    JSON.stringify({ type: "session.started" }),
-    JSON.stringify({ type: "session.input_audio.muted" }),
-  ];
-  const endpoint = await serverSpeakingWithTheHandshake(spoken);
-  try {
-    const opening = await openSocketOverWs(endpoint.url, {});
-    assert.ok(socketOpened(opening));
-    // One more turn than the continuation already cost: the frames must still be waiting.
-    await drainMicrotasks(1);
-    const types: string[] = [];
-    opening.socket.onMessage((data) => {
-      // SAFETY: the test wrote these frames as JSON objects with a string type.
-      types.push((JSON.parse(data) as { type: string }).type);
-    });
-    assert.deepEqual(types, ["session.started", "session.input_audio.muted"]);
-    opening.socket.close();
-  } finally {
-    await endpoint.close();
-  }
-});
+it.effect(
+  "frames in the same chunk as the handshake response reach a consumer that subscribes after the open settles, in order",
+  () =>
+    Effect.gen(function* () {
+      const spoken = [
+        JSON.stringify({ type: "session.started" }),
+        JSON.stringify({ type: "session.input_audio.muted" }),
+      ];
+      const endpoint = yield* Effect.promise(() => serverSpeakingWithTheHandshake(spoken));
+      try {
+        const opening = yield* Effect.promise(() => openSocketOverWs(endpoint.url, {}));
+        assert.ok(socketOpened(opening));
+        // One more turn than the continuation already cost: the frames must still be waiting.
+        let tickPassed = false;
+        queueMicrotask(() => {
+          tickPassed = true;
+        });
+        yield* waitFor(() => tickPassed);
+        const types: string[] = [];
+        opening.socket.onMessage((data) => {
+          // SAFETY: the test wrote these frames as JSON objects with a string type.
+          types.push((JSON.parse(data) as { type: string }).type);
+        });
+        assert.deepEqual(types, ["session.started", "session.input_audio.muted"]);
+        opening.socket.close();
+      } finally {
+        yield* Effect.promise(() => endpoint.close());
+      }
+    }),
+);

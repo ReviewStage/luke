@@ -1,5 +1,7 @@
 import type { ScheduledTimer } from "./children.js";
 
+export type { ScheduledTimer } from "./children.js";
+
 /**
  * How input that arrives while a conversation is busy is queued, ported from
  * OpenClaw `b7528507`'s reply queue. A conversation runs one execution at a

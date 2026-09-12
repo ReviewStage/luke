@@ -1,12 +1,28 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import { maximumAskLength } from "@sidecar/session";
+import { Effect } from "effect";
 import { test } from "vitest";
-import { drainMicrotasks, operatorOverBrain } from "../testing/index.js";
+import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
 
 const NOW = 1_800_000_000_000;
+
+/**
+ * Polls a synchronous condition by yielding to Effect's own fiber scheduler,
+ * which correctly interleaves with real pending Promises.
+ */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
 
 type RecordOverrides = { [K in keyof BrainRequestRecord]?: BrainRequestRecord[K] | undefined };
 
@@ -119,105 +135,115 @@ test("a run's end is marked taken once, at the moment it settled, decided agains
   assert.equal(marked.length, 2);
 });
 
-test("a retired follower stops between two records, and the second waits for a live report", async () => {
-  const marked: string[] = [];
-  const live = [record({ runId: "run-1" }), record({ runId: "run-2" })];
-  let holdMark: (() => void) | undefined;
-  const agent: Pick<BrainAgent, "request" | "markConversationRecorded"> = {
-    request: (runId) => live.find((entry) => entry.runId === runId),
-    markConversationRecorded: (runId) =>
-      new Promise((resolve) => {
-        marked.push(runId);
-        holdMark = () => resolve(true);
-      }),
-  };
-  let following = true;
-  const publishing = publishRuns(agent, live, () => following);
-  await drainMicrotasks(1);
-  assert.deepEqual(marked, ["run-1"]);
-  following = false;
-  holdMark?.();
-  await publishing;
-  assert.deepEqual(marked, ["run-1"]);
-});
-
-test("following a brain relays every report, marks the ended runs, and stops when unfollowed", async () => {
-  let listener: ((records: readonly BrainRequestRecord[]) => void) | undefined;
-  const marked: string[] = [];
-  const ready = record({ status: BRAIN_REQUEST_STATUS.INTERRUPTED, text: undefined });
-  // The live records, which the mark lands on as the real agent's would.
-  const live = new Map([
-    ["run-1", ready],
-    ["run-2", record({ runId: "run-2" })],
-  ]);
-  // SAFETY: the follower reads only these members off the agent.
-  const agent = {
-    subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
-      listener = next;
-      return () => {
-        listener = undefined;
+it.effect(
+  "a retired follower stops between two records, and the second waits for a live report",
+  () =>
+    Effect.gen(function* () {
+      const marked: string[] = [];
+      const live = [record({ runId: "run-1" }), record({ runId: "run-2" })];
+      let holdMark: (() => void) | undefined;
+      const agent: Pick<BrainAgent, "request" | "markConversationRecorded"> = {
+        request: (runId) => live.find((entry) => entry.runId === runId),
+        markConversationRecorded: (runId) =>
+          new Promise((resolve) => {
+            marked.push(runId);
+            holdMark = () => resolve(true);
+          }),
       };
-    },
-    ready: () => Promise.resolve(),
-    requests: () => [ready],
-    request: (runId: string) => live.get(runId),
-    markConversationRecorded: async (runId: string, at: number) => {
-      marked.push(runId);
-      const held = live.get(runId);
-      if (held) live.set(runId, { ...held, conversationRecordedAt: at });
-      return true;
-    },
-  } as unknown as BrainAgent;
-  const broadcasts: (readonly BrainRequestRecord[])[] = [];
-  const unfollow = followBrainRequests(agent, {
-    broadcastRequests: (snapshots) => broadcasts.push(snapshots),
-  });
-  await drainMicrotasks(1);
-  await drainMicrotasks(1);
-  // The launch's interrupted run is marked and relayed once it is read.
-  assert.equal(broadcasts.length, 1);
-  assert.deepEqual(marked, ["run-1"]);
-  listener?.([{ ...ready, conversationRecordedAt: NOW + 2 }, record({ runId: "run-2" })]);
-  await drainMicrotasks(1);
-  await drainMicrotasks(1);
-  assert.equal(broadcasts.length, 2);
-  assert.deepEqual(marked, ["run-1", "run-2"]);
-  unfollow();
-  assert.equal(listener, undefined);
-});
+      let following = true;
+      const publishing = publishRuns(agent, live, () => following);
+      yield* waitFor(() => marked.length === 1);
+      assert.deepEqual(marked, ["run-1"]);
+      following = false;
+      holdMark?.();
+      yield* Effect.promise(() => publishing);
+      assert.deepEqual(marked, ["run-1"]);
+    }),
+);
 
-test("a retired follower relays nothing a late report carries", async () => {
-  let listener: ((records: readonly BrainRequestRecord[]) => void) | undefined;
-  let releaseReady: (() => void) | undefined;
-  const marked: string[] = [];
-  // SAFETY: the follower reads only these four members off the agent.
-  const agent = {
-    subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
-      listener = next;
-      return () => undefined;
-    },
-    ready: () =>
-      new Promise<void>((resolve) => {
-        releaseReady = resolve;
-      }),
-    requests: () => [record()],
-    request: () => record(),
-    markConversationRecorded: async (runId: string) => {
-      marked.push(runId);
-      return true;
-    },
-  } as unknown as BrainAgent;
-  const broadcasts: (readonly BrainRequestRecord[])[] = [];
-  const unfollow = followBrainRequests(agent, {
-    broadcastRequests: (snapshots) => broadcasts.push(snapshots),
-  });
-  unfollow();
-  releaseReady?.();
-  listener?.([record()]);
-  await drainMicrotasks(1);
-  assert.deepEqual(broadcasts, []);
-  assert.deepEqual(marked, []);
-});
+it.effect(
+  "following a brain relays every report, marks the ended runs, and stops when unfollowed",
+  () =>
+    Effect.gen(function* () {
+      let listener: ((records: readonly BrainRequestRecord[]) => void) | undefined;
+      const marked: string[] = [];
+      const ready = record({ status: BRAIN_REQUEST_STATUS.INTERRUPTED, text: undefined });
+      // The live records, which the mark lands on as the real agent's would.
+      const live = new Map([
+        ["run-1", ready],
+        ["run-2", record({ runId: "run-2" })],
+      ]);
+      // SAFETY: the follower reads only these members off the agent.
+      const agent = {
+        subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
+          listener = next;
+          return () => {
+            listener = undefined;
+          };
+        },
+        ready: () => Promise.resolve(),
+        requests: () => [ready],
+        request: (runId: string) => live.get(runId),
+        markConversationRecorded: async (runId: string, at: number) => {
+          marked.push(runId);
+          const held = live.get(runId);
+          if (held) live.set(runId, { ...held, conversationRecordedAt: at });
+          return true;
+        },
+      } as unknown as BrainAgent;
+      const broadcasts: (readonly BrainRequestRecord[])[] = [];
+      const unfollow = followBrainRequests(agent, {
+        broadcastRequests: (snapshots) => broadcasts.push(snapshots),
+      });
+      // The launch's interrupted run is marked and relayed once it is read.
+      yield* waitFor(() => broadcasts.length === 1 && marked.length === 1);
+      assert.equal(broadcasts.length, 1);
+      assert.deepEqual(marked, ["run-1"]);
+      listener?.([{ ...ready, conversationRecordedAt: NOW + 2 }, record({ runId: "run-2" })]);
+      yield* waitFor(() => broadcasts.length === 2 && marked.length === 2);
+      assert.equal(broadcasts.length, 2);
+      assert.deepEqual(marked, ["run-1", "run-2"]);
+      unfollow();
+      assert.equal(listener, undefined);
+    }),
+);
+
+it.effect("a retired follower relays nothing a late report carries", () =>
+  Effect.gen(function* () {
+    let listener: ((records: readonly BrainRequestRecord[]) => void) | undefined;
+    let releaseReady: (() => void) | undefined;
+    const marked: string[] = [];
+    // SAFETY: the follower reads only these four members off the agent.
+    const agent = {
+      subscribe: (next: (records: readonly BrainRequestRecord[]) => void) => {
+        listener = next;
+        return () => undefined;
+      },
+      ready: () =>
+        new Promise<void>((resolve) => {
+          releaseReady = resolve;
+        }),
+      requests: () => [record()],
+      request: () => record(),
+      markConversationRecorded: async (runId: string) => {
+        marked.push(runId);
+        return true;
+      },
+    } as unknown as BrainAgent;
+    const broadcasts: (readonly BrainRequestRecord[])[] = [];
+    const unfollow = followBrainRequests(agent, {
+      broadcastRequests: (snapshots) => broadcasts.push(snapshots),
+    });
+    unfollow();
+    releaseReady?.();
+    listener?.([record()]);
+    // Nothing should happen after retirement: give any wrongful follow-up a
+    // full round to occur before asserting its absence.
+    for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    assert.deepEqual(broadcasts, []);
+    assert.deepEqual(marked, []);
+  }),
+);
 
 test("a refused mark leaves the end for the next report, and a retired follower marks nothing late", async () => {
   let markRefused = true;

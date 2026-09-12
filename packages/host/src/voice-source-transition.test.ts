@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -23,8 +24,18 @@ import { scriptedOpenSocket } from "@sidecar/voice/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./brain/host.js";
-import { drainMicrotasks } from "./testing/index.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
+
+/** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
 
 const HELD_READ = {
   SOURCE: "source",
@@ -64,6 +75,11 @@ class HeldSettings implements VoiceSettings {
   get<Field extends keyof typeof APP_SETTING_SCHEMA>(field: Field) {
     // SAFETY: the schema's own default for the field being read.
     return this.#maybeHold(HELD_READ.PREFERENCE, () => APP_SETTING_SCHEMA[field].default as never);
+  }
+
+  /** How many reads are currently held open, waiting for `release()`. */
+  pendingReads(): number {
+    return this.#gates.length;
   }
 
   readAccount(): Promise<{ accessToken: string } | undefined> {
@@ -264,113 +280,125 @@ test("a newer transition that removes every capability at that boundary leaves n
 });
 
 for (const held of Object.values(HELD_READ)) {
-  test(`an older transition whose ${held} read finishes late publishes nothing over the account the newer one chose, and the newer agent's run is not interrupted`, async () => {
-    const c = composition();
-    c.settings.holdNext = held;
-    const older = c.transition();
-    await drainMicrotasks(20);
-    c.settings.source = VOICE_SOURCE.ACCOUNT;
-    assert.equal(await c.transition(), true);
-    assertHostedSet(c);
-    const hostedAgent = c.host.current();
-    assert.ok(hostedAgent);
-    const reportsAfterNewer = c.reports.length;
-    const warmsAfterNewer = c.warms.length;
-    const live = c.assembler.liveSessions;
+  it.effect(
+    `an older transition whose ${held} read finishes late publishes nothing over the account the newer one chose, and the newer agent's run is not interrupted`,
+    () =>
+      Effect.gen(function* () {
+        const c = composition();
+        c.settings.holdNext = held;
+        const older = c.transition();
+        yield* waitFor(() => c.settings.pendingReads() > 0);
+        c.settings.source = VOICE_SOURCE.ACCOUNT;
+        assert.equal(yield* Effect.promise(() => c.transition()), true);
+        assertHostedSet(c);
+        const hostedAgent = c.host.current();
+        assert.ok(hostedAgent);
+        const reportsAfterNewer = c.reports.length;
+        const warmsAfterNewer = c.warms.length;
+        const live = c.assembler.liveSessions;
 
-    // A run stands on the correct successor, its model turn outstanding.
-    const accepted = await hostedAgent.submitAsk({
-      submissionId: "s-1",
-      question: "still there?",
-      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    });
-    assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-    const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-    await drainMicrotasks(20);
-    assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+        // A run stands on the correct successor, its model turn outstanding.
+        const accepted = yield* Effect.promise(() =>
+          hostedAgent.submitAsk({
+            submissionId: "s-1",
+            question: "still there?",
+            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+          }),
+        );
+        assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+        const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
+        yield* waitFor(() => hostedAgent.request(runId)?.status === BRAIN_REQUEST_STATUS.RUNNING);
+        assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
 
-    // The older read answers now, with the key source it was started under.
-    c.settings.source = VOICE_SOURCE.KEY;
-    c.settings.release();
-    assert.equal(await older, false);
-    await c.host.settled();
-    // Nothing of the older set was published, not even in part.
-    assertHostedSet(c);
-    assert.equal(c.assembler.liveSessions, live);
-    assert.equal(c.host.current(), hostedAgent);
-    assert.equal(c.reports.length, reportsAfterNewer);
-    assert.equal(c.warms.length, warmsAfterNewer);
-    assert.deepEqual(c.builds, ["hosted"]);
-    assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+        // The older read answers now, with the key source it was started under.
+        c.settings.source = VOICE_SOURCE.KEY;
+        c.settings.release();
+        assert.equal(yield* Effect.promise(() => older), false);
+        yield* Effect.promise(() => c.host.settled());
+        // Nothing of the older set was published, not even in part.
+        assertHostedSet(c);
+        assert.equal(c.assembler.liveSessions, live);
+        assert.equal(c.host.current(), hostedAgent);
+        assert.equal(c.reports.length, reportsAfterNewer);
+        assert.equal(c.warms.length, warmsAfterNewer);
+        assert.deepEqual(c.builds, ["hosted"]);
+        assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
 
-    c.releaseTurn();
-    const record = await hostedAgent.waitAsk(runId, 10_000);
-    assert.notEqual(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
-    assert.ok(record && record.status !== BRAIN_REQUEST_STATUS.RUNNING);
-    await hostedAgent.stop();
-  });
+        c.releaseTurn();
+        const record = yield* Effect.promise(() => hostedAgent.waitAsk(runId, 10_000));
+        assert.notEqual(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+        assert.ok(record && record.status !== BRAIN_REQUEST_STATUS.RUNNING);
+        yield* Effect.promise(() => hostedAgent.stop());
+      }),
+  );
 }
 
-test("the reverse order holds too: a late account read never overrides a newer key selection", async () => {
-  const c = composition();
-  c.settings.source = VOICE_SOURCE.ACCOUNT;
-  c.settings.holdNext = HELD_READ.SOURCE;
-  const older = c.transition();
-  await drainMicrotasks(20);
-  c.settings.source = VOICE_SOURCE.KEY;
-  assert.equal(await c.transition(), true);
-  assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
-  const keyedAgent = c.host.current();
-  assert.ok(keyedAgent);
+it.effect(
+  "the reverse order holds too: a late account read never overrides a newer key selection",
+  () =>
+    Effect.gen(function* () {
+      const c = composition();
+      c.settings.source = VOICE_SOURCE.ACCOUNT;
+      c.settings.holdNext = HELD_READ.SOURCE;
+      const older = c.transition();
+      yield* waitFor(() => c.settings.pendingReads() > 0);
+      c.settings.source = VOICE_SOURCE.KEY;
+      assert.equal(yield* Effect.promise(() => c.transition()), true);
+      assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
+      const keyedAgent = c.host.current();
+      assert.ok(keyedAgent);
 
-  c.settings.source = VOICE_SOURCE.ACCOUNT;
-  c.settings.release();
-  assert.equal(await older, false);
-  await c.host.settled();
-  assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
-  assert.equal(c.host.current(), keyedAgent);
-  assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
-  await keyedAgent.stop();
-});
+      c.settings.source = VOICE_SOURCE.ACCOUNT;
+      c.settings.release();
+      assert.equal(yield* Effect.promise(() => older), false);
+      yield* Effect.promise(() => c.host.settled());
+      assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
+      assert.equal(c.host.current(), keyedAgent);
+      assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
+      yield* Effect.promise(() => keyedAgent.stop());
+    }),
+);
 
-test("a late read cannot resurrect a capability the newer transition removed", async () => {
-  const c = composition();
-  assert.equal(await c.transition(), true);
-  assert.ok(c.host.current());
-  c.settings.holdNext = HELD_READ.SOURCE;
-  const older = c.transition();
-  await drainMicrotasks(20);
-  // The key is removed and the account signed out: nothing may stand.
-  c.settings.key = undefined;
-  c.gate.accountSignedIn = false;
-  assert.equal(await c.transition(), true);
-  await c.host.settled();
-  assertAbsentSet(c);
-  const reportsAfterRemoval = c.reports.length;
-  const warmsAfterRemoval = c.warms.length;
+it.effect("a late read cannot resurrect a capability the newer transition removed", () =>
+  Effect.gen(function* () {
+    const c = composition();
+    assert.equal(yield* Effect.promise(() => c.transition()), true);
+    assert.ok(c.host.current());
+    c.settings.holdNext = HELD_READ.SOURCE;
+    const older = c.transition();
+    yield* waitFor(() => c.settings.pendingReads() > 0);
+    // The key is removed and the account signed out: nothing may stand.
+    c.settings.key = undefined;
+    c.gate.accountSignedIn = false;
+    assert.equal(yield* Effect.promise(() => c.transition()), true);
+    yield* Effect.promise(() => c.host.settled());
+    assertAbsentSet(c);
+    const reportsAfterRemoval = c.reports.length;
+    const warmsAfterRemoval = c.warms.length;
 
-  // The older read answers as if the key were still there.
-  c.settings.key = "personal-key";
-  c.settings.release();
-  assert.equal(await older, false);
-  await c.host.settled();
-  assertAbsentSet(c);
-  assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
-  assert.equal(c.reports.length, reportsAfterRemoval);
-  assert.equal(c.warms.length, warmsAfterRemoval);
+    // The older read answers as if the key were still there.
+    c.settings.key = "personal-key";
+    c.settings.release();
+    assert.equal(yield* Effect.promise(() => older), false);
+    yield* Effect.promise(() => c.host.settled());
+    assertAbsentSet(c);
+    assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
+    assert.equal(c.reports.length, reportsAfterRemoval);
+    assert.equal(c.warms.length, warmsAfterRemoval);
 
-  // A closed gate is the same removal from the other side.
-  c.settings.holdNext = HELD_READ.SOURCE;
-  const heldAgain = c.transition();
-  await drainMicrotasks(20);
-  c.gate.credentialsUsable = false;
-  assert.equal(await c.transition(), true);
-  c.settings.release();
-  assert.equal(await heldAgain, false);
-  await c.host.settled();
-  assertAbsentSet(c);
-  assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
-});
+    // A closed gate is the same removal from the other side.
+    c.settings.holdNext = HELD_READ.SOURCE;
+    const heldAgain = c.transition();
+    yield* waitFor(() => c.settings.pendingReads() > 0);
+    c.gate.credentialsUsable = false;
+    assert.equal(yield* Effect.promise(() => c.transition()), true);
+    c.settings.release();
+    assert.equal(yield* Effect.promise(() => heldAgain), false);
+    yield* Effect.promise(() => c.host.settled());
+    assertAbsentSet(c);
+    assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
+  }),
+);
 
 test("transitions that do not overlap each install in turn", async () => {
   const c = composition();

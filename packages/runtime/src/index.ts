@@ -111,6 +111,7 @@ export {
   type ToolPlacement,
   UI_MESSAGE_ITEM_FORMAT,
 } from "./registry.js";
+export type { ScheduledTimer } from "./scheduled-timer.js";
 export {
   discoverSkills,
   eligibleSkills,

@@ -1,12 +1,25 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { BrainStateRepository } from "@sidecar/brain";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Runtime } from "effect";
-import { test } from "vitest";
-import { drainMicrotasks } from "../testing/index.js";
+import { Effect, Runtime } from "effect";
 import { type BrainWiringDependencies, wireBrain } from "./wiring.js";
+
+/**
+ * Polls a synchronous condition by yielding to Effect's own fiber scheduler,
+ * which correctly interleaves with real pending Promises.
+ */
+function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
 
 /**
  * The brain wiring reaches a conversation's store only when a brain may
@@ -78,22 +91,24 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
   return { wiring, loads };
 }
 
-test("with no model to run on, a rebuild opens no conversation and loads no store", async () => {
-  const { wiring, loads } = dependencies();
-  const brains = wireBrain(wiring);
-  await brains.rebuild();
-  assert.deepEqual(loads, []);
-  assert.equal(brains.current(), undefined);
-  assert.deepEqual(brains.allRequests(), []);
-  assert.deepEqual(brains.busyConversations(), []);
-  // Asking for a store is what opens one, and only the one asked for.
-  brains.store();
-  await drainMicrotasks(1);
-  assert.deepEqual(loads, [MAIN_SESSION_KEY]);
-  await brains.openConversation(threadSessionKey("t-1"));
-  await drainMicrotasks(1);
-  assert.deepEqual(loads, [MAIN_SESSION_KEY, threadSessionKey("t-1")]);
-  assert.equal(brains.current(threadSessionKey("t-1")), undefined);
-  await brains.closeConversation(threadSessionKey("t-1"));
-  brains.retire();
-});
+it.effect("with no model to run on, a rebuild opens no conversation and loads no store", () =>
+  Effect.gen(function* () {
+    const { wiring, loads } = dependencies();
+    const brains = wireBrain(wiring);
+    yield* Effect.promise(() => brains.rebuild());
+    assert.deepEqual(loads, []);
+    assert.equal(brains.current(), undefined);
+    assert.deepEqual(brains.allRequests(), []);
+    assert.deepEqual(brains.busyConversations(), []);
+    // Asking for a store is what opens one, and only the one asked for.
+    brains.store();
+    yield* waitFor(() => loads.length === 1);
+    assert.deepEqual(loads, [MAIN_SESSION_KEY]);
+    yield* Effect.promise(() => brains.openConversation(threadSessionKey("t-1")));
+    yield* waitFor(() => loads.length === 2);
+    assert.deepEqual(loads, [MAIN_SESSION_KEY, threadSessionKey("t-1")]);
+    assert.equal(brains.current(threadSessionKey("t-1")), undefined);
+    yield* Effect.promise(() => brains.closeConversation(threadSessionKey("t-1")));
+    brains.retire();
+  }),
+);

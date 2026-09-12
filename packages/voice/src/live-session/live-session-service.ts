@@ -43,7 +43,7 @@ import {
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
-import { AppendChannel, type ScheduledTimer } from "./append-channel.js";
+import { AppendChannel, type TimerHandle } from "./append-channel.js";
 import { closeGracefully, SIDEBAND_CLOSE_OUTCOME } from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,
@@ -181,8 +181,8 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   releaseHeldBriefings: (held: readonly Delivery[]) => void;
   emit: (change: VoiceLiveSessionChanged) => void;
   now: () => number;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
+  schedule: (callback: () => void, delayMs: number) => TimerHandle;
+  cancel: (timer: TimerHandle) => void;
   createId: () => string;
   report: (message: string) => void;
   trace?: (record: LiveTraceRecord) => void;
@@ -223,13 +223,13 @@ interface StandingSession {
   readonly writtenRows: Set<number>;
   /** When each utterance's first fragment arrived, on this host's clock: the instant its line is recorded at, so a Clear's cutoff refuses what was begun before it. */
   readonly rowBeganAt: Map<number, number>;
-  readonly settleTimers: Map<TranscriptSpeaker, ScheduledTimer>;
+  readonly settleTimers: Map<TranscriptSpeaker, TimerHandle>;
   idleReported: boolean;
-  idleTimer: ScheduledTimer | undefined;
+  idleTimer: TimerHandle | undefined;
   /** The lines about the desk this session was actually given, so the next refresh says only what it does not already hold. */
   rosterTold: RosterTold | undefined;
   /** The debounce behind the developer's latest fragment, after which the words so far are anticipated. */
-  anticipateTimer: ScheduledTimer | undefined;
+  anticipateTimer: TimerHandle | undefined;
   /** The utterance last handed to the brain to read ahead of, by row and by its words then, so the same words are not handed twice and a summary is matched to the words it was read for. */
   anticipated: { rowId: number; text: string } | undefined;
   /** The row whose read-ahead summary was already appended; one per utterance. */
@@ -263,7 +263,7 @@ interface Exchange {
   late: string[];
   spokenChunks: number;
   slowStepTold: boolean;
-  finalize: ScheduledTimer | undefined;
+  finalize: TimerHandle | undefined;
   end: LiveBrainRunEnd | undefined;
 }
 
@@ -319,7 +319,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   readonly #stopRunEvents: () => void;
   /** The latest roster seen, held until the debounce settles; one append answers however many changes arrived. */
   #rosterPending: readonly RosterSeedSession[] | undefined;
-  #rosterTimer: ScheduledTimer | undefined;
+  #rosterTimer: TimerHandle | undefined;
   readonly #stopFacts: () => void;
 
   constructor(options: LiveSessionServiceOptions<Delivery>) {

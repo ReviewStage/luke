@@ -61,8 +61,9 @@
     "apps/desktop/src/main/app-state.ts",
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-account.ts",
-    "packages/host/src/effect/timer-seam.ts",
-    "packages/runtime/src/effect/timer-seam.ts",
+    "packages/host/src/compose-live.ts",
+    "packages/runtime/src/children.effect.ts",
+    "packages/runtime/src/queue.effect.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [

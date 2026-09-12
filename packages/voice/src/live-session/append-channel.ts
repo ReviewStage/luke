@@ -1,9 +1,9 @@
 import { LIVE_CLIENT_EVENT, type LiveAppendEvent } from "@sidecar/live";
 import type { LiveSideband } from "../live-socket.js";
-import type { ScheduledTimer } from "../scheduled-timer.js";
+import type { TimerHandle } from "../scheduled-timer.js";
 import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
 
-export type { ScheduledTimer } from "../scheduled-timer.js";
+export type { TimerHandle } from "../scheduled-timer.js";
 
 /**
  * The host's sends on one session, in order, each awaiting the acknowledgment
@@ -29,7 +29,7 @@ interface AwaitingSpeech {
 
 interface PendingAck {
   resolve: (acknowledgment: Acknowledgment) => void;
-  timer: ScheduledTimer;
+  timer: TimerHandle;
   /** For a commentary append: registered to await its speech the instant the acknowledgment lands, before any output delta can follow it. */
   onSpoken: (() => void) | undefined;
 }
@@ -49,8 +49,8 @@ export interface SendOptions {
 export interface AppendChannelOptions {
   sideband: LiveSideband;
   now: () => number;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
+  schedule: (callback: () => void, delayMs: number) => TimerHandle;
+  cancel: (timer: TimerHandle) => void;
   report: (message: string) => void;
   trace: LiveTrace;
 }

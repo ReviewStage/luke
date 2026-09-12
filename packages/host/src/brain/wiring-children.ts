@@ -1,5 +1,5 @@
 import type { BrainAgent, BrainChildAccess } from "@sidecar/brain";
-import { ChildRunService, type ChildStore } from "@sidecar/runtime";
+import { ChildRunService, type ChildStore, type ScheduledTimer } from "@sidecar/runtime";
 import type { ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   CHILD_RUN_STATUS,
@@ -11,7 +11,6 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import type { ScheduledTimer } from "../scheduled-timer.js";
 
 /**
  * Delegation as the main process composes it. The service owns the records

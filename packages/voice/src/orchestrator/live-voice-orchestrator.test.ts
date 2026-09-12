@@ -8,7 +8,6 @@ import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { drainMicrotasks } from "../testing.js";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -178,6 +177,11 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   };
 }
 
+/** Lets the orchestrator's own forked fibers, on `Runtime.defaultRuntime`, run their queued microtasks. */
+async function settleFibers(ticks = 30): Promise<void> {
+  for (let turn = 0; turn < ticks; turn += 1) await Promise.resolve();
+}
+
 function row(
   rowId: number,
   kind: ConversationEntryKind,
@@ -251,7 +255,7 @@ test("a press during a session opened for Luke's speech unmutes it once started,
   assert.ok(call);
   assert.deepEqual(call.openings, [{ byPress: false }]);
   const pressed = f.beginTalk();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(f.calls.length, 1);
   call.started();
   await pressed;
@@ -306,11 +310,11 @@ test("a press without the microphone asks for it, and a refusal opens nothing", 
   await f.beginTalk();
   assert.equal(f.microphoneAsks(), 1);
   assert.equal(f.calls.length, 0);
-  await drainMicrotasks();
+  await settleFibers();
   assert.notEqual(f.views.at(-1)?.voiceError, undefined);
   f.setMicrophone(true);
   const pressed = f.beginTalk();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(f.calls.length, 1);
   f.latest()?.started();
   await pressed;
@@ -326,7 +330,7 @@ test("a key let go of while the microphone dialog stands opens the session muted
     }),
   );
   const pressed = f.beginTalk();
-  await drainMicrotasks();
+  await settleFibers();
   await f.endTalk();
   grant?.(true);
   await pressed;
@@ -345,7 +349,7 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   const first = f.latest();
   assert.ok(first);
   first.started();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(first.unmutes, 0);
   assert.equal(first.status, LIVE_STATUS.MUTED);
   // A second wanted while it stands opens nothing more.
@@ -373,17 +377,17 @@ test("wanted opens a session with no device, closing hangs it up, and a session 
   assert.notEqual(second, first);
   assert.deepEqual(second.openings, [{ byPress: false }]);
   second.started();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(second.unmutes, 1);
   // A closing that names another session is not this call's.
   f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: lost });
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(second.closes, 0);
   f.obey({
     phase: LIVE_SESSION_PHASE.CLOSING,
     sessionId: sessionIdOf(second),
   });
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(second.closes, 1);
 });
 
@@ -410,7 +414,7 @@ test("a session lost after the key was let go of does not listen again on the ne
   assert.ok(second);
   assert.notEqual(second, first);
   second.started();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(second.unmutes, 0);
 });
 
@@ -428,14 +432,14 @@ test("a session closed by the host's own decision does not listen again on the n
     sessionId: sessionIdOf(first),
     reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
   });
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(first.closes, 1);
   f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
   const second = f.latest();
   assert.ok(second);
   assert.notEqual(second, first);
   second.started();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(second.unmutes, 0);
 });
 
@@ -448,7 +452,7 @@ test("a session that refuses to open leaves no call standing, and the next press
   first.started();
   await pressed;
   assert.equal(first.unmutes, 0);
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.FAILED);
   const again = f.beginTalk();
   assert.equal(f.calls.length, 2);
@@ -458,11 +462,11 @@ test("a session that refuses to open leaves no call standing, and the next press
 
 test("the view reports each edge once, counts the exchange on its opening edge under who opened it, and carries the captions", async () => {
   const f = fixture();
-  await drainMicrotasks();
+  await settleFibers();
   const pressed = f.beginTalk();
   const call = f.latest();
   assert.ok(call);
-  await drainMicrotasks();
+  await settleFibers();
   assert.deepEqual(
     f.views.map((view) => view.voiceStatus),
     [LIVE_STATUS.IDLE, LIVE_STATUS.CONNECTING],
@@ -471,7 +475,7 @@ test("the view reports each edge once, counts the exchange on its opening edge u
   assert.equal(f.views.at(-1)?.talkOpening, true);
   call.started();
   await pressed;
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.LISTENING);
   assert.equal(f.views.at(-1)?.talkOpening, false);
   assert.equal(f.views.at(-1)?.spokenAskPending, true);
@@ -481,7 +485,7 @@ test("the view reports each edge once, counts the exchange on its opening edge u
     row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions"),
   ]);
   call.settle(LIVE_STATUS.SPEAKING);
-  await drainMicrotasks();
+  await settleFibers();
   const speaking = f.views.at(-1);
   assert.equal(speaking?.spokenAskPending, false);
   assert.deepEqual(speaking?.lukeCaptions, ["Two sessions"]);
@@ -494,7 +498,7 @@ test("the view reports each edge once, counts the exchange on its opening edge u
     row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me", true),
     row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished"),
   ]);
-  await drainMicrotasks();
+  await settleFibers();
   assert.deepEqual(
     f.views.at(-1)?.liveConversationEntries.map((entry) => entry.kind),
     [CONVERSATION_ENTRY_KIND.REPLY],
@@ -511,11 +515,11 @@ test("captions are withheld when neither the preference nor a silent output asks
   call.started();
   call.events.onCaptions([row(1, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions")]);
   call.settle(LIVE_STATUS.SPEAKING);
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(f.views.at(-1)?.lukeCaptions, undefined);
   assert.deepEqual(f.openings.filter(Boolean), [{ microphoneCall: false }]);
   f.surround({ ...SURROUNDINGS, captionsEnabled: false, outputSilent: true });
-  await drainMicrotasks();
+  await settleFibers();
   assert.deepEqual(f.views.at(-1)?.lukeCaptions, ["Two sessions"]);
 });
 
@@ -527,16 +531,16 @@ test("voice turning off closes the standing session, and stop closes it and repo
   call.started();
   await pressed;
   f.surround({ ...SURROUNDINGS, voiceAvailable: false });
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(call.closes, 1);
   const g = fixture();
   const opened = g.beginTalk();
   g.latest()?.started();
   await opened;
-  await drainMicrotasks();
+  await settleFibers();
   const reports = g.views.length;
   await g.stop();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(g.latest()?.closes, 1);
   assert.equal(g.views.length, reports);
 });
@@ -550,10 +554,10 @@ test("an ended session releases once, whether it ends itself or stop interrupts 
   await pressed;
   // The call ends itself, without the orchestrator having asked it to.
   call.settle(LIVE_STATUS.IDLE);
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(call.closes, 1);
   await f.stop();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(call.closes, 1);
 });
 
@@ -567,7 +571,7 @@ test("stop interrupts a call still opening, and releases it once the open settle
   call.started();
   await pressed;
   await stopped;
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(call.closes, 1);
 });
 
@@ -583,7 +587,7 @@ test("the host closing an older session leaves a call still waiting for its own 
     sessionId: "old",
     reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
   });
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(call.closes, 0);
   call.started();
   await pressed;
@@ -623,11 +627,11 @@ test("a session pausing between Luke's sentences is one exchange, counted once",
   assert.ok(call);
   call.started();
   call.settle(LIVE_STATUS.SPEAKING);
-  await drainMicrotasks();
+  await settleFibers();
   call.settle(LIVE_STATUS.MUTED);
-  await drainMicrotasks();
+  await settleFibers();
   call.settle(LIVE_STATUS.SPEAKING);
-  await drainMicrotasks();
+  await settleFibers();
   assert.deepEqual(f.openings.filter(Boolean), [{ microphoneCall: false }]);
 });
 
@@ -638,14 +642,14 @@ test("both speakers stand together in the view, and a speaker moving under a sti
   assert.ok(call);
   call.started();
   await pressed;
-  await drainMicrotasks();
+  await settleFibers();
   const listening = f.views.at(-1);
   assert.equal(listening?.listening, true);
   assert.equal(listening?.lukeSpeaking, false);
   // Luke answering over the open microphone: the status names him, and the
   // developer is still being heard.
   call.report(LIVE_STATUS.SPEAKING, { listening: true, lukeSpeaking: true });
-  await drainMicrotasks();
+  await settleFibers();
   const both = f.views.at(-1);
   assert.equal(both?.voiceStatus, LIVE_STATUS.SPEAKING);
   assert.equal(both?.listening, true);
@@ -653,7 +657,7 @@ test("both speakers stand together in the view, and a speaker moving under a sti
   const reports = f.views.length;
   // The key coming up under the same answer moves no status, and is still a view.
   call.report(LIVE_STATUS.SPEAKING, { listening: false, lukeSpeaking: true });
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(f.views.length, reports + 1);
   assert.equal(f.views.at(-1)?.listening, false);
   assert.equal(f.views.at(-1)?.lukeSpeaking, true);
@@ -679,7 +683,7 @@ test("a session lost while both speakers stood listens again on the next", async
   assert.ok(second);
   assert.notEqual(second, first);
   second.started();
-  await drainMicrotasks();
+  await settleFibers();
   assert.equal(second.unmutes, 1);
   // Nobody is heard on a call that is gone, whatever it was carrying when it went.
   assert.equal(f.views.at(-1)?.lukeSpeaking, false);

@@ -1,19 +1,17 @@
-import type { ScheduledTimer } from "../scheduled-timer.js";
-
-export type { ScheduledTimer } from "../scheduled-timer.js";
-
 /**
  * How long a voice failure stays on the caption strip. The strip takes no
  * pointer, so time is its only dismissal: long enough to be read twice, short
  * enough that the shape does not wear a fault all afternoon. The next attempt
  * clears it sooner — connecting starts by reporting nothing wrong.
  */
+import type { TimerHandle } from "../scheduled-timer.js";
+
 export const VOICE_ERROR_NOTICE_MS = 12_000;
 
 export interface NoticeStripOptions {
   onChanged(): void;
-  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel?: (timer: ScheduledTimer) => void;
+  schedule?: (callback: () => void, delayMs: number) => TimerHandle;
+  cancel?: (timer: TimerHandle) => void;
 }
 
 /**
@@ -27,8 +25,8 @@ export class NoticeStrip {
   readonly #options: NoticeStripOptions;
   #error: string | undefined;
   #notice: string | undefined;
-  #errorTimer: ScheduledTimer | undefined;
-  #noticeTimer: ScheduledTimer | undefined;
+  #errorTimer: TimerHandle | undefined;
+  #noticeTimer: TimerHandle | undefined;
 
   constructor(options: NoticeStripOptions) {
     this.#options = options;
@@ -77,16 +75,16 @@ export class NoticeStrip {
   }
 
   #arm(
-    standing: ScheduledTimer | undefined,
+    standing: TimerHandle | undefined,
     message: string | undefined,
     expire: () => void,
-  ): ScheduledTimer | undefined {
+  ): TimerHandle | undefined {
     this.#cancel(standing);
     if (message === undefined) return undefined;
     return (this.#options.schedule ?? setTimeout)(expire, VOICE_ERROR_NOTICE_MS);
   }
 
-  #cancel(timer: ScheduledTimer | undefined): void {
+  #cancel(timer: TimerHandle | undefined): void {
     if (timer === undefined) return;
     // SAFETY: the handle is whatever `schedule ?? setTimeout` returned, and
     // the fallbacks are paired — a handle from `setTimeout` can only reach

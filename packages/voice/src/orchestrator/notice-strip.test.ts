@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { NoticeStrip, type ScheduledTimer, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
+import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
 
 function strip() {
   const expiries: { at: number; fire: () => void }[] = [];
-  const cancelled: ScheduledTimer[] = [];
+  const cancelled: unknown[] = [];
   let changes = 0;
   const subject = new NoticeStrip({
     onChanged: () => {

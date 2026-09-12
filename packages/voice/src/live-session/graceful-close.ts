@@ -5,7 +5,7 @@ import {
   type LiveSessionClosed,
 } from "@sidecar/live";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
-import type { ScheduledTimer } from "./append-channel.js";
+import type { TimerHandle } from "./append-channel.js";
 
 /**
  * The graceful close the conversations guide prescribes, over the sideband
@@ -33,8 +33,8 @@ export type SidebandCloseResult =
 
 export interface GracefulCloseOptions {
   eventId: string;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
+  schedule: (callback: () => void, delayMs: number) => TimerHandle;
+  cancel: (timer: TimerHandle) => void;
   timeoutMs?: number;
 }
 

@@ -1,5 +1,6 @@
 export type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 export { type LiveSideband, type LiveSocket, sidebandOverSocket } from "../live-socket.js";
+export type { TimerHandle } from "./append-channel.js";
 export {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
