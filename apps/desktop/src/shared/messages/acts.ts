@@ -147,6 +147,7 @@ export const ACT_KIND = {
   FEEDBACK_SEND: "feedback.send",
   ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
   ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
+  ONBOARDING_SKIP_CONDUCTOR_KEY: "onboarding.skipConductorKey",
   /**
    * The introduction's own GPT Live session: the takeover's SDP offer, with
    * the titles field the service admits left empty, handed to the accountless voice service,
@@ -622,6 +623,7 @@ export const ACT = {
   },
   [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: press("Could not skip that step on this system."),
   [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: press("Could not settle that step on this system."),
+  [ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY]: press("Could not skip that step on this system."),
   [ACT_KIND.INTRODUCTION_CREATE_SESSION]: {
     payload: record({
       sdp: exactText(LIVE_SDP_MAX_CHARACTERS),

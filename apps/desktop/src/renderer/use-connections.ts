@@ -10,6 +10,7 @@ import type { ConsentConnectEntry } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { PANEL_PRESENTATION } from "./panel-state";
+import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import type { AppleCalendarControl, CalendarControl } from "./settings/controls";
 import {
   PANEL_STAND_DOWN,
@@ -27,6 +28,12 @@ export interface UseConnectionsOptions {
   consentConnectHeld: RefObject<boolean>;
   /** Where leaving the slot this connection stood down to comes back to. */
   standDownPage: RefObject<SettingsView>;
+  /**
+   * Which tab that return lands on: Settings for an entry begun on a row,
+   * the roster for one begun from the key gate or the empty desk, which
+   * promised sessions and not a settings page.
+   */
+  standDownTab: RefObject<PanelTab>;
   /** Brings the panel forward around what a landed sign-in just unlocked. */
   expand: () => void;
   calendars: readonly ObservedAccountCalendars[];
@@ -38,6 +45,8 @@ export interface Connections {
   credentialEntry: CredentialEntry | undefined;
   /** Opens the key entry directly, which only the evidence run needs. */
   beginEntry: (providerId: CredentialProviderId) => void;
+  /** The Connect press made where the roster would be, which comes back to the roster. */
+  connectFromRoster: (providerId: CredentialProviderId) => void;
   cancelEntry: () => void;
   /** Which entry the slot shape is drawn around, read as the render draws it. */
   slotOccupant: RefObject<SlotOccupant>;
@@ -93,7 +102,15 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       >,
     [act, tell],
   );
-  const { surface, credentialHeld, consentConnectHeld, standDownPage, expand, calendars } = options;
+  const {
+    surface,
+    credentialHeld,
+    consentConnectHeld,
+    standDownPage,
+    standDownTab,
+    expand,
+    calendars,
+  } = options;
   const { presentation: presentationOf, applyPresentation, cancelHover } = surface;
   /**
    * Which entry the slot shape is drawn around — a key being pasted or a
@@ -156,6 +173,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       // Every consent block stands under Integrations, so that is where a
       // cancelled or refused sign-in comes back to.
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.CONSENT });
+      standDownTab.current = PANEL_TAB.SETTINGS;
       consentConnect.begin({ serviceId, busy: false });
       consentConnect.commit();
     },
@@ -236,10 +254,11 @@ export function useConnections(options: UseConnectionsOptions): Connections {
       // Where the entry's row is drawn, remembered before the trip to the
       // slot so coming back lands on the page the entry began on.
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
+      standDownTab.current = PANEL_TAB.SETTINGS;
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
-    [credentialsEntry.begin, standDownPage],
+    [credentialsEntry.begin, standDownPage, standDownTab],
   );
 
   /**
@@ -255,13 +274,24 @@ export function useConnections(options: UseConnectionsOptions): Connections {
    * fixes.
    */
   const connectEntry = useCallback(
-    (providerId: CredentialProviderId) => {
+    (providerId: CredentialProviderId, returnTo: PanelTab = PANEL_TAB.SETTINGS) => {
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
+      standDownTab.current = returnTo;
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
       tell(ACT_KIND.CREDENTIAL_OPEN_API_KEYS, { providerId });
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: true });
     },
-    [credentialsEntry.begin, standDownPage],
+    [credentialsEntry.begin, standDownPage, standDownTab],
+  );
+
+  /**
+   * The same Connect, pressed where the roster would be — the key gate or the
+   * empty desk — so what comes back after the slot is the roster those
+   * promised, not the Connections page the row's own press returns to.
+   */
+  const connectFromRoster = useCallback(
+    (providerId: CredentialProviderId) => connectEntry(providerId, PANEL_TAB.SESSIONS),
+    [connectEntry],
   );
 
   /**
@@ -381,6 +411,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
     credentials,
     credentialEntry: credentialsEntry.entry,
     beginEntry,
+    connectFromRoster,
     cancelEntry: credentialsEntry.cancel,
     slotOccupant,
     consentEntry: consentConnect.entry,

@@ -35,6 +35,7 @@ import {
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
+import { conductorKeyOnboardingOwed } from "./conductor-key-onboarding-flow.js";
 import { quietUntilFrom } from "./device-presence.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { introductionOwed } from "./introduction-flow.js";
@@ -89,6 +90,10 @@ export interface CalendarsComposer extends Composer {
   gateOfferable: () => Promise<boolean>;
   /** Whether the spoken introduction is owed to the signed-in developer, as the onboarding record has it. */
   introductionOwed: () => boolean;
+  /** Whether the Conductor key step of onboarding stands, as the record has it. */
+  keyGateOwed: () => boolean;
+  /** The vault holds a Conductor key: the key step is answered, if it stood. */
+  settleKeyGate: () => void;
   /** The onboarding record as it stands, for the beats that read their own moments out of it. */
   onboarding: () => OnboardingState | undefined;
   writeOnboarding: (moment: OnboardingState) => void;
@@ -184,6 +189,7 @@ export const composeCalendars = (
     let onboardingState: OnboardingState | undefined;
     let announcedCalendarGateOwed: boolean | undefined;
     let announcedIntroductionOwed: boolean | undefined;
+    let announcedKeyGateOwed: boolean | undefined;
 
     function calendarOnboardingGateOwed(): boolean {
       return runMode.requiresAccount && calendarOnboardingOwed(onboardingState);
@@ -191,6 +197,10 @@ export const composeCalendars = (
 
     function spokenIntroductionOwed(): boolean {
       return runMode.requiresAccount && introductionOwed(onboardingState);
+    }
+
+    function conductorKeyGateOwed(): boolean {
+      return runMode.requiresAccount && conductorKeyOnboardingOwed(onboardingState);
     }
 
     /**
@@ -214,9 +224,20 @@ export const composeCalendars = (
         // speaks over the greeting, dropped here so what waited is re-decided.
         links().reconcileSpeech();
       }
+      const keyGate = conductorKeyGateOwed();
+      if (keyGate !== announcedKeyGateOwed) {
+        announcedKeyGateOwed = keyGate;
+        kernel.emit(GATEWAY_EVENT.CONDUCTOR_KEY_ONBOARDING_CHANGED, { owed: keyGate });
+      }
       if (owed === announcedCalendarGateOwed) return;
       announcedCalendarGateOwed = owed;
       kernel.emit(GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED, { owed });
+    }
+
+    function settleKeyGate(): void {
+      if (!conductorKeyOnboardingOwed(onboardingState)) return;
+      writeOnboardingState({ conductorKeyOnboardingSettledAt: new Date(now()).toISOString() });
+      links().requestOnboardingBeat();
     }
 
     async function settleCalendarOnboardingIfConnected(): Promise<void> {
@@ -601,7 +622,18 @@ export const composeCalendars = (
         Effect.sync(() => ({
           calendarOnboardingOwed: calendarOnboardingGateOwed(),
           introductionOwed: spokenIntroductionOwed(),
+          conductorKeyOnboardingOwed: conductorKeyGateOwed(),
         })),
+      [GATEWAY_METHOD.ONBOARDING_SKIP_CONDUCTOR_KEY]: () =>
+        Effect.sync(() => {
+          if (conductorKeyOnboardingOwed(onboardingState)) {
+            writeOnboardingState({
+              conductorKeyOnboardingSkippedAt: new Date(now()).toISOString(),
+            });
+            links().requestOnboardingBeat();
+          }
+          return {};
+        }),
       // The completion is the host's write, so the record has one writer and
       // the hold above comes down on the same event the client learns from;
       // the beats that waited behind the greeting are asked for again here.
@@ -640,17 +672,23 @@ export const composeCalendars = (
       gateOwed: calendarOnboardingGateOwed,
       gateOfferable: calendarGateOfferable,
       introductionOwed: spokenIntroductionOwed,
+      keyGateOwed: conductorKeyGateOwed,
+      settleKeyGate,
       onboarding: () => onboardingState,
       writeOnboarding: writeOnboardingState,
       recordFirstSignIn: () => {
-        // The first sign-in ever observed is where the spoken introduction and
-        // the calendar step of onboarding go up, in that order: recorded on
-        // disk rather than derived, so quitting at either and relaunching
-        // finds it standing, and an install signed in before this edge was
-        // recorded has none to record.
+        // The first sign-in ever observed is where the spoken introduction,
+        // the Conductor key step, and the calendar step of onboarding go up,
+        // in that order: recorded on disk rather than derived, so quitting at
+        // any and relaunching finds it standing, and an install signed in
+        // before this edge was recorded has none to record.
         if (onboardingState?.calendarOnboardingRequiredAt !== undefined) return;
         const at = new Date(now()).toISOString();
-        writeOnboardingState({ introductionRequiredAt: at, calendarOnboardingRequiredAt: at });
+        writeOnboardingState({
+          introductionRequiredAt: at,
+          conductorKeyOnboardingRequiredAt: at,
+          calendarOnboardingRequiredAt: at,
+        });
         void settleCalendarOnboardingIfConnected();
       },
       armObservation: observation.arm,

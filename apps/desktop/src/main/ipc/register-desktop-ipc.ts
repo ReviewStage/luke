@@ -107,6 +107,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.UPDATE_OPEN_CHANGELOG]: () => updates.openChangelog(),
     [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: () => operator.host.skipCalendarOnboarding(),
     [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: () => operator.host.completeCalendarOnboarding(),
+    [ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY]: () => operator.host.skipConductorKeyOnboarding(),
     // The takeover's own session, answered only while it holds the panel and
     // only on a run that reaches the network at all: the offer goes to the
     // accountless voice service with the signed-in developer's first name as
