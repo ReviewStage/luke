@@ -1,4 +1,4 @@
-import { Cause, Effect, Either, Fiber } from "effect";
+import { Cause, Effect, Either, Fiber, PubSub, type Scope, Stream } from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackConsent,
@@ -98,13 +98,22 @@ export interface AccountSessionManagerOptions {
    * to say so. A failure here never holds up the sign-out.
    */
   onSignOut?: (account: StoredAccount) => Effect.Effect<void, Error>;
-  onChange: (account: AccountSnapshot) => void;
 }
 
 export class AccountSessionManager {
   readonly #options: AccountSessionManagerOptions;
   /** One refresh however many callers ask for it at once; every ask joins the flight already under way. */
   readonly refreshOnce: () => Effect.Effect<void, unknown>;
+  readonly #changesPubSub: PubSub.PubSub<AccountSnapshot> = Effect.runSync(PubSub.unbounded());
+  /**
+   * Every snapshot this session settles on, in order, as the subscription a
+   * subscriber's own fiber pumps rather than a callback this class runs: the
+   * subscribe is the acquire (`Stream.fromPubSub`'s own `scoped: true`) and
+   * the subscriber's scope closing is the release, so nothing here holds a
+   * handle to give back.
+   */
+  readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope> =
+    Stream.fromPubSub(this.#changesPubSub, { scoped: true });
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
   #signInRunning: Fiber.RuntimeFiber<AccountSnapshot, Error> | undefined;
@@ -113,6 +122,10 @@ export class AccountSessionManager {
   constructor(options: AccountSessionManagerOptions) {
     this.#options = options;
     this.refreshOnce = singleFlightEffect(() => this.refresh());
+  }
+
+  #publishChange(): Effect.Effect<void> {
+    return PubSub.publish(this.#changesPubSub, this.#account).pipe(Effect.asVoid);
   }
 
   get snapshot(): AccountSnapshot {
@@ -155,7 +168,7 @@ export class AccountSessionManager {
     return Effect.gen(this, function* () {
       this.#generation += 1;
       this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
-      this.#options.onChange(this.#account);
+      yield* this.#publishChange();
       const stored = yield* this.#options.store.readAccount();
       if (stored && this.#options.onSignOut) {
         yield* reportingFailure(this.#options.onSignOut(stored), "Account sign-out release failed");
@@ -168,7 +181,7 @@ export class AccountSessionManager {
         { concurrency: 2 },
       );
       this.#account = cleared;
-      this.#options.onChange(this.#account);
+      yield* this.#publishChange();
       return stored;
     });
   }
@@ -208,7 +221,7 @@ export class AccountSessionManager {
         if (sameIdentity(stored, identity.right)) return;
         if (!(yield* this.#storeCurrent(generation, mergedIdentity(stored, identity.right))))
           return;
-        this.#options.onChange(this.#account);
+        yield* this.#publishChange();
         return;
       }
       if (!accessTokenNeedsRefresh(identity.left)) return;
@@ -240,7 +253,7 @@ export class AccountSessionManager {
           });
           const merged = mergedIdentity({ ...stored, ...tokens }, next);
           if (!(yield* this.#storeCurrent(generation, merged))) return;
-          this.#options.onChange(this.#account);
+          yield* this.#publishChange();
         }),
       );
     });
@@ -267,7 +280,7 @@ export class AccountSessionManager {
         if (this.#signInRunning) return yield* restore(Fiber.join(this.#signInRunning));
         this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };
         const generation = ++this.#generation;
-        this.#options.onChange(this.#account);
+        yield* this.#publishChange();
         const consent = this.#consent(provider, generation);
         this.#cancelSignIn = () => consent.cancel();
         // `Effect.interruptible` because a fork inherits the mask above, and
@@ -289,7 +302,7 @@ export class AccountSessionManager {
     return Effect.gen(this, function* () {
       const outcome = yield* Effect.scoped(consent.signInEffect());
       if (!("reason" in outcome)) {
-        this.#options.onChange(this.#account);
+        yield* this.#publishChange();
         return this.#account;
       }
       if (this.#isCurrent(generation)) yield* this.signOut();
@@ -380,7 +393,7 @@ export class AccountSessionManager {
       const next = yield* this.#options.store.setAccount(stored);
       if (!this.#isCurrent(generation)) return false;
       this.#account = next;
-      this.#options.onChange(this.#account);
+      yield* this.#publishChange();
       return true;
     });
   }

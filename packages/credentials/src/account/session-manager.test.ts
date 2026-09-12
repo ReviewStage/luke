@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer, HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
-import { Deferred, Effect, Exit, Fiber, Option } from "effect";
+import { Deferred, Effect, Exit, Fiber, Option, type Scope, Stream } from "effect";
 import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -22,59 +22,77 @@ function manager(options: {
   client?: AccountClient;
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
-}) {
-  let stored = options.stored;
-  const changes: string[] = [];
-  const events: string[] = [];
-  const authorizations: { redirectUri: string; state: string }[] = [];
-  // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
-  const fixtureClient = {
-    revoke: options.revoke ?? (async () => undefined),
-    userInfo: async () => STORED,
-    refresh: async () => ({ accessToken: "new-access", refreshToken: "new-refresh" }),
-    authorizeUrl: (input: { redirectUri: string; state: string }) => {
-      authorizations.push(input);
-      return `https://accounts.example/authorize?state=${encodeURIComponent(input.state)}`;
-    },
-    exchangeCode:
-      options.exchangeCode ??
-      (async () => ({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
-  } as unknown as AccountClient;
-  const instance = new AccountSessionManager({
-    client: options.client ?? fixtureClient,
-    store: {
-      readAccount: () => Effect.sync(() => stored),
-      setAccount: (next) =>
-        Effect.sync(() => {
-          stored = next;
-          return { status: ACCOUNT_STATUS.SIGNED_IN, ...next };
-        }),
-      clearAccount: () =>
-        Effect.gen(function* () {
-          if (options.beforeClear) yield* options.beforeClear;
-          stored = undefined;
-          return { status: ACCOUNT_STATUS.SIGNED_OUT };
-        }),
-    },
-    hostedServiceBaseUrl: "https://example.com",
-    requiresAccount: true,
-    openExternal: async () => undefined,
-    startCapabilities: Effect.sync(() => {
-      events.push("start");
-    }),
-    stopCapabilities: Effect.sync(() => {
-      events.push("stop");
-    }),
-    ...(options.onSignOut ? { onSignOut: options.onSignOut } : undefined),
-    onChange: (account) => changes.push(account.status),
+}): Effect.Effect<
+  {
+    instance: AccountSessionManager;
+    changes: string[];
+    events: string[];
+    authorizations: { redirectUri: string; state: string }[];
+    stored: () => StoredAccount | undefined;
+  },
+  never,
+  Scope.Scope
+> {
+  return Effect.gen(function* () {
+    let stored = options.stored;
+    const changes: string[] = [];
+    const events: string[] = [];
+    const authorizations: { redirectUri: string; state: string }[] = [];
+    // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
+    const fixtureClient = {
+      revoke: options.revoke ?? (async () => undefined),
+      userInfo: async () => STORED,
+      refresh: async () => ({ accessToken: "new-access", refreshToken: "new-refresh" }),
+      authorizeUrl: (input: { redirectUri: string; state: string }) => {
+        authorizations.push(input);
+        return `https://accounts.example/authorize?state=${encodeURIComponent(input.state)}`;
+      },
+      exchangeCode:
+        options.exchangeCode ??
+        (async () => ({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
+    } as unknown as AccountClient;
+    const instance = new AccountSessionManager({
+      client: options.client ?? fixtureClient,
+      store: {
+        readAccount: () => Effect.sync(() => stored),
+        setAccount: (next) =>
+          Effect.sync(() => {
+            stored = next;
+            return { status: ACCOUNT_STATUS.SIGNED_IN, ...next };
+          }),
+        clearAccount: () =>
+          Effect.gen(function* () {
+            if (options.beforeClear) yield* options.beforeClear;
+            stored = undefined;
+            return { status: ACCOUNT_STATUS.SIGNED_OUT };
+          }),
+      },
+      hostedServiceBaseUrl: "https://example.com",
+      requiresAccount: true,
+      openExternal: async () => undefined,
+      startCapabilities: Effect.sync(() => {
+        events.push("start");
+      }),
+      stopCapabilities: Effect.sync(() => {
+        events.push("stop");
+      }),
+      ...(options.onSignOut ? { onSignOut: options.onSignOut } : undefined),
+    });
+    // The subscriber every test is: a fiber forked into the test's own scope,
+    // pumping every snapshot the instance settles on, exactly as
+    // `compose-account.ts`'s `lifetime` does over the same `changes` stream.
+    const subscription = yield* instance.changes;
+    yield* Effect.forkScoped(
+      Stream.runForEach(subscription, (account) => Effect.sync(() => changes.push(account.status))),
+    );
+    return { instance, changes, events, authorizations, stored: () => stored };
   });
-  return { instance, changes, events, authorizations, stored: () => stored };
 }
 
-it.effect("sign out closes capabilities, clears storage, broadcasts, then revokes", () =>
+it.scoped("sign out closes capabilities, clears storage, broadcasts, then revokes", () =>
   Effect.gen(function* () {
     const calls: string[] = [];
-    const subject = manager({
+    const subject = yield* manager({
       stored: STORED,
       revoke: async () => {
         calls.push("revoke");
@@ -82,6 +100,9 @@ it.effect("sign out closes capabilities, clears storage, broadcasts, then revoke
     });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
     yield* subject.instance.signOut({ revokeRemote: true });
+    // The subscriber is a separate fiber pumping the published snapshots, so
+    // enough turns are given for it to have drained both before they are read.
+    yield* Effect.repeatN(Effect.yieldNow(), 20);
     assert.deepEqual(subject.events, ["stop"]);
     assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
     assert.deepEqual(calls, ["revoke"]);
@@ -89,12 +110,12 @@ it.effect("sign out closes capabilities, clears storage, broadcasts, then revoke
   }),
 );
 
-it.effect(
+it.scoped(
   "sign out releases the departing account while its token still stands, and a failed release never holds it up",
   () =>
     Effect.gen(function* () {
       const order: string[] = [];
-      const subject = manager({
+      const subject = yield* manager({
         stored: STORED,
         revoke: async () => {
           order.push("revoke");
@@ -117,10 +138,10 @@ it.effect(
     }),
 );
 
-it.effect("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
+it.scoped("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
   Effect.gen(function* () {
     const holding = yield* Deferred.make<void>();
-    const subject = manager({ stored: STORED, beforeClear: Deferred.await(holding) });
+    const subject = yield* manager({ stored: STORED, beforeClear: Deferred.await(holding) });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
 
     const signingOut = yield* Effect.fork(subject.instance.signOut());
@@ -140,9 +161,9 @@ it.effect("a sign-out interrupted mid-way runs to the cleared account rather tha
   }),
 );
 
-it.effect("refresh keeps a valid stored account signed in without rewriting it", () =>
+it.scoped("refresh keeps a valid stored account signed in without rewriting it", () =>
   Effect.gen(function* () {
-    const subject = manager({ stored: STORED });
+    const subject = yield* manager({ stored: STORED });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
     yield* subject.instance.refresh();
     assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
@@ -172,11 +193,11 @@ function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>
   });
 }
 
-it.effect(
+it.scoped(
   "a renewal a network cannot carry keeps the stored account standing, never a sign-out",
   () =>
     Effect.gen(function* () {
-      const subject = manager({
+      const subject = yield* manager({
         stored: STORED,
         client: refreshingClient(() => {
           throw new TypeError("fetch failed");
@@ -191,11 +212,11 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a renewal the service refuses with invalid_grant is the one path that signs the account out",
   () =>
     Effect.gen(function* () {
-      const subject = manager({
+      const subject = yield* manager({
         stored: STORED,
         client: refreshingClient(() =>
           Promise.resolve(
@@ -220,9 +241,9 @@ async function armed(authorizations: readonly unknown[]): Promise<void> {
   while (authorizations.length === 0) await new Promise((resolve) => setImmediate(resolve));
 }
 
-it.effect("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
+it.scoped("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
   Effect.gen(function* () {
-    const subject = manager({});
+    const subject = yield* manager({});
     const pending = yield* Effect.fork(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
     yield* Effect.promise(() => armed(subject.authorizations));
 
@@ -231,9 +252,9 @@ it.effect("a withdrawn sign-in settles signed out rather than reporting a failur
   }),
 );
 
-it.effect("an exchange the account refuses is a failure the panel can report", () =>
+it.scoped("an exchange the account refuses is a failure the panel can report", () =>
   Effect.gen(function* () {
-    const subject = manager({
+    const subject = yield* manager({
       exchangeCode: () => Promise.reject(new Error("Account refused the exchange")),
     });
     const refused = yield* Effect.fork(
