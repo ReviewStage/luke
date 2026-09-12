@@ -759,6 +759,11 @@ test("a message answered again at a fresh sequence stands once, where its latest
       ],
     ],
   );
+  // Within the group the developer's line precedes the reply, by the store's sequence alone.
+  assert.deepEqual(
+    sync.snapshot().groups[0]?.messages.map((message) => message.message.role),
+    [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
+  );
   // The moved message is still the one a rating finds, at its new place.
   assert.deepEqual(sync.rateable(messageId(2)), { announcement: false });
   // The same page again moves nothing.

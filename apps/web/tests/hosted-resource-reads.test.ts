@@ -61,6 +61,7 @@ import {
   readEventsByMessage,
   readMessageById,
   readMessagesByConversation,
+  readMessagesByConversationTyped,
 } from "./support/store-rows";
 
 /**
@@ -574,6 +575,78 @@ test("a device that read a spoken line before its turn took it reads the line ag
   await late.catchUp();
   assert.deepEqual(late.ordered(), expected);
   assert.equal(late.cursor, early.cursor);
+});
+
+test("a line the turn takes with its journal already open still precedes the reply: the journal moves behind it, and a device that previewed the journal reads both again in the store's order", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(userId);
+  const target = { userId, conversationId: main };
+  const delegationId = "dl_late_attach";
+  const asks = promisedAsks(database.run);
+  const ask = await asks.record({
+    userId,
+    conversationId: main,
+    clientId: delegationId,
+    origin: ASK_ORIGIN.SPOKEN,
+    question: "what needs me?",
+    createdAt: new Date(NOW),
+  });
+  // The voice writer's cut lands before the ask learned its turn, so it stands unattached.
+  const line = await database.run(
+    writer.recordUserMessage(target, {
+      clientId: delegationId,
+      turnOfAsk: true,
+      text: "What needs me?",
+      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+    }),
+  );
+  assert.ok(line.ok);
+  // The turn's first step opens the journal before the received message that takes the line in.
+  const turn = await insertTurn(userId, main, {
+    origin: TURN_ORIGIN.SPOKEN,
+    status: TURN_STATUS.RUNNING,
+    queuedAt: new Date(NOW + 1000),
+  });
+  const journal = await insertMessage(userId, main, 2, {
+    clientId: turn,
+    turnId: turn,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_REPLY,
+    parts: [{ type: "text", text: "One", state: "streaming" }],
+    finishedAt: null,
+  });
+  const device = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+  await device.catchUp();
+  assert.deepEqual(device.ordered(), [
+    [line.id, line.id],
+    [turn, journal],
+  ]);
+
+  await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
+  const attached = await database.run(writer.attachAskLines(target, turn));
+  assert.deepEqual(attached, { ok: true, attached: [line.id] });
+
+  // Read in sequence: both moved past the sequences they stood at, the line ahead of the journal.
+  const bySeq = await readMessagesByConversationTyped(database.run, main);
+  assert.deepEqual(
+    bySeq.map((row) => [row.id, row.turnId]),
+    [
+      [line.id, turn],
+      [journal, turn],
+    ],
+  );
+  assert.ok((bySeq[0]?.seq ?? 0) > 2);
+  assert.ok((bySeq[1]?.seq ?? 0) > (bySeq[0]?.seq ?? 0));
+
+  await device.catchUp();
+  assert.deepEqual(device.ordered(), [
+    [turn, line.id],
+    [turn, journal],
+  ]);
+  assert.equal(device.groups.has(line.id), false);
+  const late = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+  await late.catchUp();
+  assert.deepEqual(late.ordered(), device.ordered());
 });
 
 test("a message's replay slot never leaves the service, and the stored row keeps it", async () => {
