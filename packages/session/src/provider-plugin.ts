@@ -4,6 +4,7 @@ import {
   reshapeAdmitted,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/wire";
+import { Effect } from "effect";
 import type {
   ProviderActionResult,
   ProviderConversationResult,
@@ -86,12 +87,14 @@ export type ConversationPage = Omit<ProviderConversationRequest, "providerSessio
  * below take the plain input — a read is not a write and admits nothing.
  */
 export interface ActionHandlers {
-  message(input: Admitted<ActionInput<{ readonly text: string }>>): Promise<ProviderActionResult>;
+  message(
+    input: Admitted<ActionInput<{ readonly text: string }>>,
+  ): Effect.Effect<ProviderActionResult>;
   /** The control is the entry the observation advertised, never the caller's copy. */
   control(
     input: Admitted<ActionInput<{ readonly control: AdvertisedControl }>>,
-  ): Promise<ProviderActionResult>;
-  createWorkspace(input: Admitted<WorkspaceCreationInput>): Promise<ProviderWorkspaceResult>;
+  ): Effect.Effect<ProviderActionResult>;
+  createWorkspace(input: Admitted<WorkspaceCreationInput>): Effect.Effect<ProviderWorkspaceResult>;
   spawnAgent(
     input: Admitted<
       ActionInput<{
@@ -104,7 +107,7 @@ export interface ActionHandlers {
         readonly effort?: string;
       }>
     >,
-  ): Promise<ProviderWorkspaceResult>;
+  ): Effect.Effect<ProviderWorkspaceResult>;
   renameWorkspace(
     input: Admitted<
       ActionInput<{
@@ -113,10 +116,10 @@ export interface ActionHandlers {
         readonly name: string;
       }>
     >,
-  ): Promise<ProviderActionResult>;
+  ): Effect.Effect<ProviderActionResult>;
   renameSession(
     input: Admitted<ActionInput<{ readonly name: string }>>,
-  ): Promise<ProviderActionResult>;
+  ): Effect.Effect<ProviderActionResult>;
 }
 
 export interface ReadHandlers {
@@ -175,7 +178,7 @@ type ActionDispatchers = {
   [Kind in PluginActionKind]: (
     plugin: SessionProviderPlugin,
     request: PluginActionRequests[Kind],
-  ) => Promise<PluginActionResults[Kind]>;
+  ) => Effect.Effect<PluginActionResults[Kind]>;
 };
 
 function observationFor(
@@ -186,27 +189,27 @@ function observationFor(
 }
 
 const ACTION_DISPATCHERS: ActionDispatchers = {
-  async message(plugin, request) {
+  message(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
-    if (!observation) return unsupportedByObservation;
+    if (!observation) return Effect.succeed(unsupportedByObservation);
     const handler = plugin.actions?.message;
-    if (!handler) return unsupportedByObservation;
+    if (!handler) return Effect.succeed(unsupportedByObservation);
     return handler(reshapeAdmitted(request, { request: { text: request.text }, observation }));
   },
 
-  async control(plugin, request) {
+  control(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
     // The advertised control — not the caller's copy of it — is what the
     // handler is given, so whatever it targets is the thing the last pass
     // actually saw, and nothing a caller sends can redirect it.
     const advertised = observation && advertisedControl(observation, request.control.id);
-    if (!observation || !advertised) return unsupportedByObservation;
+    if (!observation || !advertised) return Effect.succeed(unsupportedByObservation);
     const handler = plugin.actions?.control;
-    if (!handler) return unsupportedByObservation;
+    if (!handler) return Effect.succeed(unsupportedByObservation);
     return handler(reshapeAdmitted(request, { request: { control: advertised }, observation }));
   },
 
-  async createWorkspace(plugin, request) {
+  createWorkspace(plugin, request) {
     // The target is part of resolving *which* project, not a field to pass
     // along: a provider may report one repository on several hosts under one
     // project id, and a creation that named a host must land on that host's.
@@ -218,27 +221,27 @@ const ACTION_DISPATCHERS: ActionDispatchers = {
           (request.providerTargetId === undefined ||
             candidate.providerTargetId === request.providerTargetId),
       );
-    if (!project) return unsupportedByObservation;
+    if (!project) return Effect.succeed(unsupportedByObservation);
 
     const { name, task } = request;
     // The task is held to the project's own word for it here, because the
     // project is the plugin's own: it comes back off the pass the plugin ran,
     // not out of the ask.
     if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
-      return {
+      return Effect.succeed({
         status: ACTION_RESULT_STATUS.REJECTED,
         reason: "This project takes no opening task.",
-      };
+      });
     }
     if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
-      return {
+      return Effect.succeed({
         status: ACTION_RESULT_STATUS.REJECTED,
         reason: "This project needs an opening task to create a workspace.",
-      };
+      });
     }
 
     const handler = plugin.actions?.createWorkspace;
-    if (!handler) return unsupportedByObservation;
+    if (!handler) return Effect.succeed(unsupportedByObservation);
     return handler(
       reshapeAdmitted(request, {
         project,
@@ -252,17 +255,17 @@ const ACTION_DISPATCHERS: ActionDispatchers = {
     );
   },
 
-  async spawnAgent(plugin, request) {
+  spawnAgent(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
-    if (!observation) return unsupportedByObservation;
+    if (!observation) return Effect.succeed(unsupportedByObservation);
     // The advertised list — not the caller's word — is what the handler is
     // given, so an agent kind is only ever one the last pass promised.
     const addAgent = advertisedActionFor(observation, ACTION_KIND.ADD_AGENT);
     const agent = addAgent?.agents.find((candidate) => candidate === request.agent);
-    if (!addAgent || !agent) return unsupportedByObservation;
+    if (!addAgent || !agent) return Effect.succeed(unsupportedByObservation);
 
     const handler = plugin.actions?.spawnAgent;
-    if (!handler) return unsupportedByObservation;
+    if (!handler) return Effect.succeed(unsupportedByObservation);
     return handler(
       reshapeAdmitted(request, {
         request: {
@@ -278,17 +281,17 @@ const ACTION_DISPATCHERS: ActionDispatchers = {
     );
   },
 
-  async renameWorkspace(plugin, request) {
+  renameWorkspace(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
     // The advertised target — not the caller's word — is what the handler is
     // given, so a rename only ever lands on the workspace the last pass
     // promised.
     const advertised =
       observation && advertisedActionFor(observation, ACTION_KIND.RENAME_WORKSPACE);
-    if (!observation || !advertised) return unsupportedByObservation;
+    if (!observation || !advertised) return Effect.succeed(unsupportedByObservation);
 
     const handler = plugin.actions?.renameWorkspace;
-    if (!handler) return unsupportedByObservation;
+    if (!handler) return Effect.succeed(unsupportedByObservation);
     return handler(
       reshapeAdmitted(request, {
         request: { renameTarget: advertised.target, name: request.name },
@@ -297,11 +300,11 @@ const ACTION_DISPATCHERS: ActionDispatchers = {
     );
   },
 
-  async renameSession(plugin, request) {
+  renameSession(plugin, request) {
     const observation = observationFor(plugin, request.providerSessionId);
-    if (!observation) return unsupportedByObservation;
+    if (!observation) return Effect.succeed(unsupportedByObservation);
     const handler = plugin.actions?.renameSession;
-    if (!handler) return unsupportedByObservation;
+    if (!handler) return Effect.succeed(unsupportedByObservation);
     return handler(reshapeAdmitted(request, { request: { name: request.name }, observation }));
   },
 };
@@ -319,14 +322,16 @@ export function dispatchAction<Kind extends PluginActionKind>(
   plugin: SessionProviderPlugin,
   kind: Kind,
   request: PluginActionRequests[Kind],
-): Promise<PluginActionResults[Kind]> {
+): Effect.Effect<PluginActionResults[Kind]> {
   // SAFETY: the table is keyed by the same action kind the request and result
   // types are, so the entry this key selects takes and answers exactly these.
   const dispatch = ACTION_DISPATCHERS[kind] as (
     plugin: SessionProviderPlugin,
     request: PluginActionRequests[Kind],
-  ) => Promise<PluginActionResults[Kind]>;
-  return dispatch(plugin, request);
+  ) => Effect.Effect<PluginActionResults[Kind]>;
+  // Suspended, so the roster the target is resolved from is the one standing
+  // when the action runs rather than the one standing when it was described.
+  return Effect.suspend(() => dispatch(plugin, request));
 }
 
 /**

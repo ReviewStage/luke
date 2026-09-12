@@ -6,6 +6,7 @@ import {
   type ProviderWorkspaceResult,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { CloudPass } from "../shared/cloud-pass.js";
 import { WRITE_SUBJECT } from "../shared/cloud-pass.js";
 import {
@@ -13,7 +14,6 @@ import {
   type CloudWriteRoute,
   textFromRecord,
 } from "../shared/cloud-wire.js";
-import { runAdapterRead } from "../shared/promise-face.js";
 import {
   CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
   CONDUCTOR_CANCEL_ADVERTISEMENT,
@@ -107,101 +107,107 @@ const MISSING_KEY: ProviderActionResult = {
 };
 
 /** One documented write, under the key as it stands at the moment of the action. */
-async function write(
+function write(
   pass: CloudPass,
   route: CloudWriteRoute,
   subject?: (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT],
-): Promise<{ outcome: ProviderActionResult; body?: WireRecord }> {
-  const apiKey = await pass.readApiKey();
-  if (!apiKey) return { outcome: MISSING_KEY };
-  return runAdapterRead(pass.write(apiKey, route, subject));
+): Effect.Effect<{ outcome: ProviderActionResult; body?: WireRecord }> {
+  return Effect.flatMap(
+    Effect.promise(() => pass.readApiKey()),
+    (apiKey) =>
+      apiKey ? pass.write(apiKey, route, subject) : Effect.succeed({ outcome: MISSING_KEY }),
+  );
 }
+
+/** What one write became, as an action answers it. */
+const outcomeOf = (
+  written: Effect.Effect<{ outcome: ProviderActionResult; body?: WireRecord }>,
+): Effect.Effect<ProviderActionResult> => Effect.map(written, (answered) => answered.outcome);
 
 export function conductorActions(pass: CloudPass): ActionHandlers {
   return {
-    async message({ request, observation }) {
-      return (
-        await write(
-          pass,
-          CONDUCTOR_WRITE_ROUTE.message(observation.providerSessionId, request.text),
-        )
-      ).outcome;
-    },
+    message: ({ request, observation }) =>
+      outcomeOf(
+        write(pass, CONDUCTOR_WRITE_ROUTE.message(observation.providerSessionId, request.text)),
+      ),
 
-    async control({ request, observation }) {
-      const { control } = request;
-      if (control.id === CONDUCTOR_CANCEL_ADVERTISEMENT.id) {
-        return (await write(pass, CONDUCTOR_WRITE_ROUTE.cancelTurn(observation.providerSessionId)))
-          .outcome;
-      }
-      if (control.id === CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID && control.target) {
-        return (await write(pass, CONDUCTOR_WRITE_ROUTE.archiveWorkspace(control.target))).outcome;
-      }
-      return {
-        status: ACTION_RESULT_STATUS.UNSUPPORTED,
-        reason: "This provider has no such control.",
-      };
-    },
+    control: ({ request, observation }) =>
+      Effect.suspend(() => {
+        const { control } = request;
+        if (control.id === CONDUCTOR_CANCEL_ADVERTISEMENT.id) {
+          return outcomeOf(
+            write(pass, CONDUCTOR_WRITE_ROUTE.cancelTurn(observation.providerSessionId)),
+          );
+        }
+        if (control.id === CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID && control.target) {
+          return outcomeOf(write(pass, CONDUCTOR_WRITE_ROUTE.archiveWorkspace(control.target)));
+        }
+        return Effect.succeed<ProviderActionResult>({
+          status: ACTION_RESULT_STATUS.UNSUPPORTED,
+          reason: "This provider has no such control.",
+        });
+      }),
 
-    async renameSession({ request, observation }) {
-      return (
-        await write(
+    renameSession: ({ request, observation }) =>
+      outcomeOf(
+        write(
           pass,
           CONDUCTOR_WRITE_ROUTE.renameSession(observation.providerSessionId, request.name),
-        )
-      ).outcome;
-    },
+        ),
+      ),
 
-    async renameWorkspace({ request }) {
-      // The workspace to rename is the observation's own advertised target, so
-      // a rename lands on the workspace of the row the user acted on, under
-      // the credential that observed it.
-      return (
-        await write(
+    // The workspace to rename is the observation's own advertised target, so
+    // a rename lands on the workspace of the row the user acted on, under
+    // the credential that observed it.
+    renameWorkspace: ({ request }) =>
+      outcomeOf(
+        write(
           pass,
           CONDUCTOR_WRITE_ROUTE.renameWorkspace(request.renameTarget, request.name),
           WRITE_SUBJECT.WORKSPACE,
-        )
-      ).outcome;
-    },
+        ),
+      ),
 
-    async spawnAgent({ request }) {
-      // The model and effort arrive only when the stored selection names
-      // exactly this agent kind, and are held to the build's table once more
-      // here as the whole they were chosen as: the provider answers for its
-      // own writes, and an effort must not outlive the model it was chosen
-      // beside.
-      const chosen =
-        request.model &&
-        isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, {
-          agent: request.agent,
-          model: request.model,
-          ...(request.effort ? { effort: request.effort } : undefined),
-        })
-          ? { model: request.model, effort: request.effort }
-          : undefined;
-      return (
-        await write(pass, {
-          segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
-          body: {
-            // The target is the workspace id the observation itself
-            // advertised, so the route acts on what the user was shown.
-            [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: request.spawnTarget,
-            [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: request.agent,
-            ...(chosen ? { [CONDUCTOR_SESSION_CREATE_FIELD.MODEL]: chosen.model } : undefined),
-            ...(chosen?.effort
-              ? { [CONDUCTOR_SESSION_CREATE_FIELD.EFFORT]: chosen.effort }
-              : undefined),
-            ...(request.name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: request.name } : undefined),
-            // The opening task rides the creation itself: `POST /v0/sessions`
-            // documents taking the first message inline.
-            ...(request.task
-              ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: request.task }
-              : undefined),
-          },
-        })
-      ).outcome;
-    },
+    spawnAgent: ({ request }) =>
+      Effect.suspend(() => {
+        // The model and effort arrive only when the stored selection names
+        // exactly this agent kind, and are held to the build's table once more
+        // here as the whole they were chosen as: the provider answers for its
+        // own writes, and an effort must not outlive the model it was chosen
+        // beside.
+        const chosen =
+          request.model &&
+          isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, {
+            agent: request.agent,
+            model: request.model,
+            ...(request.effort ? { effort: request.effort } : undefined),
+          })
+            ? { model: request.model, effort: request.effort }
+            : undefined;
+        return outcomeOf(
+          write(pass, {
+            segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
+            body: {
+              // The target is the workspace id the observation itself
+              // advertised, so the route acts on what the user was shown.
+              [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: request.spawnTarget,
+              [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: request.agent,
+              ...(chosen ? { [CONDUCTOR_SESSION_CREATE_FIELD.MODEL]: chosen.model } : undefined),
+              ...(chosen?.effort
+                ? { [CONDUCTOR_SESSION_CREATE_FIELD.EFFORT]: chosen.effort }
+                : undefined),
+              ...(request.name
+                ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: request.name }
+                : undefined),
+              // The opening task rides the creation itself: `POST /v0/sessions`
+              // documents taking the first message inline.
+              ...(request.task
+                ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: request.task }
+                : undefined),
+            },
+          }),
+        );
+      }),
 
     createWorkspace: (input) => createWorkspace(pass, input),
   };
@@ -214,72 +220,77 @@ export function conductorActions(pass: CloudPass): ActionHandlers {
  * named. The task deliberately does not ride the creation: Conductor's
  * creation endpoint documents no prompt field.
  */
-async function createWorkspace(
+function createWorkspace(
   pass: CloudPass,
   input: Parameters<ActionHandlers["createWorkspace"]>[0],
-): Promise<ProviderWorkspaceResult> {
-  const { project, name, task, agentSelection } = input;
-  // The chosen agent, model, and effort ride together, and only as a
-  // selection the build's table lists — the provider answers for its own
-  // writes, so a value that slipped past the store is dropped here rather
-  // than sent.
-  const chosen =
-    agentSelection && isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, agentSelection)
-      ? agentSelection
-      : undefined;
-  const created = await write(
-    pass,
-    {
-      segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
-      body: {
-        [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
-        ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : undefined),
-        ...(chosen
-          ? {
-              [CONDUCTOR_WORKSPACE_FIELD.AGENT]: chosen.agent,
-              [CONDUCTOR_WORKSPACE_FIELD.MODEL]: chosen.model,
-              ...(chosen.effort
-                ? { [CONDUCTOR_WORKSPACE_FIELD.EFFORT]: chosen.effort }
-                : undefined),
-            }
-          : undefined),
+): Effect.Effect<ProviderWorkspaceResult> {
+  return Effect.gen(function* () {
+    const { project, name, task, agentSelection } = input;
+    // The chosen agent, model, and effort ride together, and only as a
+    // selection the build's table lists — the provider answers for its own
+    // writes, so a value that slipped past the store is dropped here rather
+    // than sent.
+    const chosen =
+      agentSelection && isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, agentSelection)
+        ? agentSelection
+        : undefined;
+    const created = yield* write(
+      pass,
+      {
+        segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
+        body: {
+          [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
+          ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : undefined),
+          ...(chosen
+            ? {
+                [CONDUCTOR_WORKSPACE_FIELD.AGENT]: chosen.agent,
+                [CONDUCTOR_WORKSPACE_FIELD.MODEL]: chosen.model,
+                ...(chosen.effort
+                  ? { [CONDUCTOR_WORKSPACE_FIELD.EFFORT]: chosen.effort }
+                  : undefined),
+              }
+            : undefined),
+        },
       },
-    },
-    WRITE_SUBJECT.PROJECT,
-  );
-  if (created.outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) return created.outcome;
+      WRITE_SUBJECT.PROJECT,
+    );
+    if (created.outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) return created.outcome;
 
-  // The id the response named rides the acceptance — an identifier only,
-  // never an address — so the surface can open the workspace once an
-  // observation pass reports that session itself. The body it was read from
-  // never leaves this module.
-  const createdSessionId = textFromRecord(created.body ?? {}, CONDUCTOR_WORKSPACE_FIELD.SESSION_ID);
-  const landed: ProviderWorkspaceResult = {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
-  };
-  if (!task) return landed;
+    // The id the response named rides the acceptance — an identifier only,
+    // never an address — so the surface can open the workspace once an
+    // observation pass reports that session itself. The body it was read from
+    // never leaves this module.
+    const createdSessionId = textFromRecord(
+      created.body ?? {},
+      CONDUCTOR_WORKSPACE_FIELD.SESSION_ID,
+    );
+    const landed: ProviderWorkspaceResult = {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
+    };
+    if (!task) return landed;
 
-  if (!createdSessionId) {
+    if (!createdSessionId) {
+      return {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason:
+          "The workspace was created, but its opening task was not delivered: " +
+          "Conductor did not say which session takes the opening message.",
+      };
+    }
+    const delivered = yield* write(
+      pass,
+      CONDUCTOR_WRITE_ROUTE.message(createdSessionId, task),
+      WRITE_SUBJECT.SESSION,
+    );
+    if (delivered.outcome.status === ACTION_RESULT_STATUS.ACCEPTED) return landed;
     return {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason:
-        "The workspace was created, but its opening task was not delivered: " +
-        "Conductor did not say which session takes the opening message.",
+      reason: `The workspace was created, but its opening task was not delivered: ${
+        delivered.outcome.status === ACTION_RESULT_STATUS.REJECTED
+          ? delivered.outcome.reason
+          : "the provider documents no way to hand it over."
+      }`,
     };
-  }
-  const delivered = await write(
-    pass,
-    CONDUCTOR_WRITE_ROUTE.message(createdSessionId, task),
-    WRITE_SUBJECT.SESSION,
-  );
-  if (delivered.outcome.status === ACTION_RESULT_STATUS.ACCEPTED) return landed;
-  return {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: `The workspace was created, but its opening task was not delivered: ${
-      delivered.outcome.status === ACTION_RESULT_STATUS.REJECTED
-        ? delivered.outcome.reason
-        : "the provider documents no way to hand it over."
-    }`,
-  };
+  });
 }

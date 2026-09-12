@@ -370,10 +370,7 @@ export function executeSessionAction(options: {
       name: Kind,
       ask: PluginActionRequests[Kind],
     ): Effect.Effect<ActionExecutionAnswer> =>
-      Effect.map(
-        Effect.promise(() => dispatchAction(plugin, name, ask)),
-        fromProviderResult,
-      );
+      Effect.map(dispatchAction(plugin, name, ask), fromProviderResult);
 
     return admitEffect(request, admissionOver(plugin, roster)).pipe(
       Effect.flatMap(
