@@ -3,7 +3,10 @@ import { eslintCompatPlugin } from "@oxlint/plugins";
 import { noChainedTypeAssertionsRule } from "./rules/no-chained-type-assertions.ts";
 import { noConditionalEmptyObjectSpreadRule } from "./rules/no-conditional-empty-object-spread.ts";
 import { noKnownValueWideningRule } from "./rules/no-known-value-widening.ts";
+import { noNodeTestRule } from "./rules/no-node-test.ts";
+import { noRawAsyncPrimitivesRule } from "./rules/no-raw-async-primitives.ts";
 import { noReflectRule } from "./rules/no-reflect.ts";
+import { noRunPromiseOutsideEdgesRule } from "./rules/no-run-promise-outside-edges.ts";
 import { noRuntimeTypeofRule } from "./rules/no-runtime-typeof.ts";
 import { noUnknownParametersRule } from "./rules/no-unknown-parameters.ts";
 import { noUnknownReturnsRule } from "./rules/no-unknown-returns.ts";
@@ -17,7 +20,10 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-chained-type-assertions": noChainedTypeAssertionsRule,
     "no-conditional-empty-object-spread": noConditionalEmptyObjectSpreadRule,
     "no-known-value-widening": noKnownValueWideningRule,
+    "no-node-test": noNodeTestRule,
+    "no-raw-async-primitives": noRawAsyncPrimitivesRule,
     "no-reflect": noReflectRule,
+    "no-run-promise-outside-edges": noRunPromiseOutsideEdgesRule,
     "no-runtime-typeof": noRuntimeTypeofRule,
     "no-unknown-parameters": noUnknownParametersRule,
     "no-unknown-returns": noUnknownReturnsRule,

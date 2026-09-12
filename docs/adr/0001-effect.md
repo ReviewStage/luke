@@ -787,6 +787,59 @@ each of those adapters' own plugins holds a fiber of its own to run its
 effects on rather than answering a `Promise` through this face, which is not
 yet scheduled on any row above.
 
+`disposableFromScope` in `packages/wire/src/effect/scope.ts` is on the
+allowlist as the bridge's own close: an `IDisposable`'s `dispose()` cannot be
+awaited, so the scope is closed with `Effect.runSyncExit` here and a failure
+rethrown rather than carried in a fiber nobody holds. It goes in P12-06 with
+the seam.
+
+The four hosted clients this document had not named until the lint rules made
+the list machine-readable — `HostedActionClient`'s `#run` in
+`packages/hosted/src/action-client.ts`, `DeviceClient`'s `#ask` in
+`device-client.ts`, `SessionMessagesClient`'s `#run` in
+`session-messages-client.ts`, and `VaultClient`'s `#run` in `vault-client.ts` —
+stand on exactly the terms `changes-client.ts`, `roster-client.ts`, and
+`conversation-client.ts` do: each holds `accountCall` directly, none of its
+public methods takes a caller's own `AbortSignal`, and each runs its request
+effect over its own `layerFromCloudFetch` layer to the Promise those methods
+answer. They go in P12-04 with the seam. `feedbackCourier` in
+`packages/feedback/src/delivery.ts` is the same shape one package over: the
+courier its callers hold answers a Promise, so the delivery effect is run over
+a client built from the caller's own `fetch` right there, and it goes in P12-04
+too.
+
+`runTest` in `packages/wire/src/testing/effect.ts` is the test harness's own
+door on the same terms: a suite still written on `node:assert` outside
+`it.effect` holds a `Promise`, so the effect is run to one here, over the layer
+the caller supplied or none. It goes when the last such suite is an
+`it.effect`; no PR in this plan is that one yet.
+
+Two entries are a suite's edge and a command's rather than the product's.
+`openMigratedPglite` in `apps/web/tests/support/sql-client.ts` builds a
+`ManagedRuntime` over a PGlite for the length of one migration and disposes it,
+which is what lets the store's suites run the web's own migrations against a
+database that did not exist before the test. `apps/web/eve/evals/brain-host.eval.ts`
+does the same for one eval's Postgres pool and hands the runner it makes to the
+fixtures that read through it. Each is the edge of the run it is in, and each
+stands while that suite does.
+
+The list above is also data. `tools/oxlint/anti-slop/effect-edges.json` is its
+machine-readable twin: the same paths under `runtimeEdges`, `runShims`, and
+`runOnHandedRuntime`, beside a fourth list, `rawAsyncPrimitives`, naming every
+file a raw timer, promise, abort controller, or `fs.watch` still lives in.
+`anti-slop/no-run-promise-outside-edges` and `anti-slop/no-raw-async-primitives`
+read it, so both rules are the linter's rather than review's, and the two
+directions are enforced in two places: a file that starts running an Effect
+without a row fails the lint, and a row that outlived the code it was written
+for, or that this section never names, fails `scripts/repository-checks.sh`. A
+test body is exempt by extension rather than by a row of its own, because a
+test is its own edge and a never-settling `new Promise` is how several suites
+here stand in for a service that never answers. `anti-slop/no-node-test` is the
+third rule of that set and needs no list at all: every TypeScript test in the
+repository runs on vitest, and the `.mjs` harness under `test:harness` is
+exempt by extension, which is what it replaced a `scripts/repository-checks.sh`
+grep to say.
+
 ## Strangler shims and their deletions
 
 Old and new coexist behind a named shim rather than in a long-lived branch, so

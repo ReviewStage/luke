@@ -1456,7 +1456,12 @@ migration runs.
   roots. Everything between
   them returns an Effect and lets its caller decide when to run it. A runtime
   built where the work lives is a second runtime, and two runtimes are two
-  copies of every service a `Context.Tag` was supposed to identify.
+  copies of every service a `Context.Tag` was supposed to identify. The rule is
+  `anti-slop/no-run-promise-outside-edges`, which reads those edges and the
+  shims still on the ADR's own allowlist from
+  `tools/oxlint/anti-slop/effect-edges.json`, the ADR list's machine-readable
+  twin; a shim that has to answer a promise is a row there and in the ADR both,
+  and `scripts/repository-checks.sh` refuses a row that outlived either.
 - **Scope, not dispose.** A resource is acquired and released by
   `Effect.acquireRelease` in a `Scope`, and a composition is a `Layer`. The
   reverse-order teardown and the aggregated failures that `DisposableStore`
@@ -1468,6 +1473,11 @@ migration runs.
   attempt counter. The delay table stays data — a schedule is composed from it,
   so the cadence is still readable as a list of numbers — and a scope closing is
   what stops the loop, not a flag another fiber reads.
+  `anti-slop/no-raw-async-primitives` is that rule, and it reaches the rest of
+  the family too: `new Promise` where a `Deferred` or an `Effect.async` states
+  the same thing, `new AbortController` where a fiber's interruption does, and
+  `fs.watch` where a `Stream` does. Its allowlist is the same file, holding
+  every unconverted file by name, and a package already migrated adds none.
 - **TestClock, not a fake clock.** Time in a test is advanced through
   `TestClock`, and interruption is tested by interrupting a fiber. An injected
   `now`/`schedule` seam, a `FakeClock`, and a microtask drain were each a way of
