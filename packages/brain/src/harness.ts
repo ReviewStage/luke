@@ -129,8 +129,7 @@ export function performerWith(carry: FakeActionPerformerOptions["carry"]) {
 
 export function edge(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
   return {
-    kind: BRAIN_WAKE_KIND.HOOK,
-    hookEvent: "Stop",
+    kind: BRAIN_WAKE_KIND.ROSTER,
     identity,
     session: session(identity.providerSessionId),
     atMs,

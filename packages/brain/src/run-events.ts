@@ -82,7 +82,7 @@ export const BRAIN_TURN_ORIGIN = {
   TYPED: "typed",
   /** A developer's ask spoken, relayed by the voice service. */
   SPOKEN: "spoken",
-  /** A provider's hook or the roster look on the observation pass. */
+  /** A wake for one session, or the roster look on the observation pass. */
   OBSERVATION: "observation",
   /** A hold's release of briefings decided earlier. */
   HOLD_RELEASE: "hold_release",

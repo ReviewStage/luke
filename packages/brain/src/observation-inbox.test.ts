@@ -65,7 +65,7 @@ it.effect(
       const wake = itemText(input[0]);
       assert.equal(wake.split(`${TRANSCRIPT_SECRET} for abc`).length - 1, 1);
       assert.equal(wake.split(`${TRANSCRIPT_SECRET} for def`).length - 1, 1);
-      // Each batch captures from the capture cursor: the second hook for abc reads
+      // Each batch captures from the capture cursor: the second edge for abc reads
       // from where the first left off and finds nothing new, so the turn carries
       // abc's delta once.
       assert.deepEqual(h.sinceReads, [
@@ -327,7 +327,7 @@ it.effect("a conversation that observes no session opens no look, however the ro
 );
 
 it.effect(
-  "a hook delivered twice is one wake, and every distinct capture is kept until a turn consumes it",
+  "an edge delivered twice is one wake, and every distinct capture is kept until a turn consumes it",
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness();
@@ -344,7 +344,7 @@ it.effect(
   "captures past a turn's depth are kept whole across a relaunch and read in order, none dropped",
   () =>
     Effect.gen(function* () {
-      // Each hook reads a distinct piece of transcript; the model is quiet, so
+      // Each edge reads a distinct piece of transcript; the model is quiet, so
       // nothing consumes what is captured.
       let piece = 0;
       const reading = (): Partial<BrainAgentOptions> => ({
@@ -473,7 +473,7 @@ it.effect(
           truncated: false,
         }),
       });
-      // Neither the look nor the provider's own hook opens an inference over an
+      // Neither the look nor a wake opens an inference over an
       // exchange being heard first-hand, and nothing is written down to open one
       // later — but the capture cursor moves past what was said.
       h.agent.rosterLook();
@@ -524,7 +524,6 @@ it.effect(
         h.agent.wake([
           {
             ...edge(ABC),
-            hookEvent: "PermissionRequest",
             session: session("abc", { holdingForDeveloper: true }),
           },
           {

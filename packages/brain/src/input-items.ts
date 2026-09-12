@@ -7,7 +7,7 @@ import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-even
  * The words a turn opens with, each a marker naming what kind of turn it is
  * and then the observed values as JSON behind it. The marker is the whole of
  * the instruction; everything after it is data the instructions tell the
- * model to read as data, however a title, a hook, or a transcript is phrased.
+ * model to read as data, however a title, a status, or a transcript is phrased.
  * These are text: the context engine decides what item a provider takes them
  * as, so the host composes them without knowing any provider's shapes.
  */
@@ -41,7 +41,6 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
   return {
     kind: event.kind,
     at: new Date(event.atMs).toISOString(),
-    ...(event.hookEvent ? { hook: event.hookEvent } : undefined),
     provider_id: event.identity.providerId,
     provider_session_id: event.identity.providerSessionId,
     ...(event.session

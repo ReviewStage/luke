@@ -34,8 +34,7 @@ function itemBody(text: string): WireRecord {
 
 test("a wake item carries each event's observed fields and transcript delta as data", () => {
   const event: BrainWakeEvent = {
-    kind: BRAIN_WAKE_KIND.HOOK,
-    hookEvent: "Stop",
+    kind: BRAIN_WAKE_KIND.ROSTER,
     identity: { providerId: claude.id, providerSessionId: "abc" },
     session: session(),
     transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
@@ -45,9 +44,8 @@ test("a wake item carries each event's observed fields and transcript delta as d
   assert.deepEqual(body, {
     events: [
       {
-        kind: "hook",
+        kind: BRAIN_WAKE_KIND.ROSTER,
         at: new Date(NOW).toISOString(),
-        hook: "Stop",
         provider_id: "claude-code",
         provider_session_id: "abc",
         session: {
@@ -70,7 +68,7 @@ test("an ask item carries the question and the events that arrived since the las
       "what's running?",
       [
         {
-          kind: BRAIN_WAKE_KIND.HOOK,
+          kind: BRAIN_WAKE_KIND.ROSTER,
           identity: { providerId: claude.id, providerSessionId: "abc" },
           atMs: NOW,
         },

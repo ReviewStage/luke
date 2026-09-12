@@ -29,8 +29,9 @@ const ROLE_LINES: readonly string[] = [
 const TURN_LINES: readonly string[] = [
   "The turns.",
   "",
-  `A turn opening with ${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} means agents changed: a provider's hook`,
-  "fired or a status moved, and each event carries what the agent's transcript gained since you",
+  `A turn opening with ${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} means agents changed: a status, error,`,
+  "or activity moved, or a session appeared or left, and each event carries what the agent's",
+  "transcript gained since you",
   `last looked. Read more if the delta does not settle it (${BRAIN_TOOL.READ_TRANSCRIPT} for one`,
   `agent's recent transcript in full, ${BRAIN_TOOL.LIST_SESSIONS} for a fresher roster), then either`,
   `call ${BRAIN_TOOL.ANNOUNCE} once, covering every agent worth mentioning in one breath, or do`,

@@ -198,8 +198,8 @@ export interface BrainAgentOptions {
 }
 
 /**
- * The brain: one long-lived agent that is woken by the agents' hooks and by
- * its own look at the roster, asked things by the developer, and
+ * The brain: one long-lived agent that is woken by the host's edges for its
+ * session and by its own look at the roster, asked things by the developer, and
  * answers with briefings for the voice to speak and actions for the host to
  * carry. Nothing detects a change on its behalf: the roster look carries
  * what stands and what each transcript gained, and the brain notices what is

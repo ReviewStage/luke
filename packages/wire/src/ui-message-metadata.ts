@@ -63,7 +63,11 @@ export const MessageChannelSchema = EffectSchema.Literal(...Object.values(MESSAG
  * hands a turn beside its own words.
  */
 export const OBSERVATION_SOURCE = {
-  /** A provider's hook reported a session's turn ending or a tool holding. */
+  /**
+   * A wake opened the turn: an edge the host handed in for one session,
+   * outside the scheduled look. Spelled `hook` because the stored rows an
+   * earlier build wrote carry it, and this build reads those rows.
+   */
   HOOK: "hook",
   /** The roster look on the observation pass. */
   ROSTER_LOOK: "roster_look",
