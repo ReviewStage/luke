@@ -8,11 +8,8 @@
     "node": "24.x"
   },
   "scripts": {
-    "auth:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://schema:generate@127.0.0.1:5432/luke} pnpm dlx @better-auth/cli@1.4.21 generate --config server/auth.ts --output server/db/auth-schema.ts --yes && pnpm exec biome check --write server/db/auth-schema.ts",
     "auth:seed": "tsx server/seed-clients.ts",
     "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist-server && tsx scripts/prerender.ts && tsx scripts/bundle-functions.ts",
-    "db:check": "drizzle-kit check",
-    "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx server/db/migrate.ts",
     "dev": "vite",
     "functions:rewrites": "tsx scripts/function-rewrites.ts --write",
@@ -25,7 +22,6 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "4.0.65",
-    "@better-auth/drizzle-adapter": "1.6.29",
     "@better-auth/oauth-provider": "1.6.29",
     "@effect/experimental": "catalog:",
     "@effect/platform": "catalog:",
@@ -50,9 +46,9 @@
     "@tailwindcss/vite": "4.3.3",
     "ai": "catalog:",
     "better-auth": "1.6.29",
-    "drizzle-orm": "0.45.2",
     "effect": "catalog:",
     "eve": "0.53.1",
+    "kysely": "0.29.5",
     "marked": "18.0.9",
     "pg": "8.23.0",
     "posthog-js": "1.418.3",
@@ -63,8 +59,8 @@
     "ws": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
     "@electric-sql/pglite": "0.5.8",
     "@types/node": "catalog:web",
     "@types/pg": "8.21.0",
@@ -72,7 +68,6 @@
     "@types/react-dom": "19.2.4",
     "@types/ws": "8.18.1",
     "@vitejs/plugin-react": "5.1.2",
-    "drizzle-kit": "0.31.10",
     "esbuild": "0.27.7",
     "tsx": "catalog:",
     "typescript": "catalog:web",
