@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import * as SqlClient from "@effect/sql/SqlClient";
-import { Effect, Schema } from "effect";
+import { Effect, Exit, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -23,14 +23,17 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { claimSpeech, offerSpeech, SPEECH_OFFER } from "../server/hosted/store/speech";
-import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/live-briefings";
+import {
+  type HostedBriefingDelivery,
+  type HostedBriefings,
+  hostedBriefings,
+} from "../server/voice/live-briefings";
 import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
   insertDevice,
-  readVoiceSessionByLiveSessionId,
   setDeviceQuietUntil,
   setVoiceSessionDeviceId,
 } from "./support/store-rows";
@@ -147,35 +150,50 @@ const VoiceSessionDeviceRowSchema = Schema.Struct({
 interface Stand {
   readonly deliveries: HostedBriefingDelivery[];
   readonly reports: string[];
-  readonly briefings: ReturnType<typeof hostedBriefings>;
+  readonly briefings: HostedBriefings;
+  /** The socket's own scope as the attachment opens one; closing it ends the looking. */
+  readonly stop: () => Promise<void>;
 }
 
-function stand(
+async function stand(
   target: ConversationTarget,
   liveSessionId: string,
   pollMs = 5,
   now: () => number = () => NOW,
   offersPerLook = 8,
-): Stand {
+): Promise<Stand> {
   const deliveries: HostedBriefingDelivery[] = [];
   const reports: string[] = [];
-  const briefings = hostedBriefings({
-    userId: target.userId,
-    run: database.run,
-    speech,
-    offers: database.store.speech,
-    tools: CATALOG_TOOL_SET,
-    deviceId: async () => {
-      const [row] = await readVoiceSessionByLiveSessionId(database.run, liveSessionId);
-      if (row === undefined) return undefined;
-      return Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).device_id ?? undefined;
-    },
-    deliver: (delivery) => deliveries.push(delivery),
-    now,
-    report: (message) => reports.push(message),
-    bounds: { POLL_MS: pollMs, OFFERS_PER_LOOK: offersPerLook },
-  });
-  return { deliveries, reports, briefings };
+  const scope = await database.run(Scope.make());
+  const briefings = await database.run(
+    Scope.extend(
+      hostedBriefings({
+        userId: target.userId,
+        speech,
+        offers: database.store.speech,
+        tools: CATALOG_TOOL_SET,
+        deviceId: Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          const [row] = yield* sql`
+            select device_id from voice_sessions where live_session_id = ${liveSessionId}
+          `;
+          if (row === undefined) return undefined;
+          return Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).device_id ?? undefined;
+        }),
+        deliver: (delivery) => deliveries.push(delivery),
+        now,
+        report: (message) => reports.push(message),
+        bounds: { POLL_MS: pollMs, OFFERS_PER_LOOK: offersPerLook },
+      }),
+      scope,
+    ),
+  );
+  return {
+    deliveries,
+    reports,
+    briefings,
+    stop: () => database.run(Scope.close(scope, Exit.void)),
+  };
 }
 
 async function until(predicate: () => boolean, what: string): Promise<void> {
@@ -189,10 +207,10 @@ async function until(predicate: () => boolean, what: string): Promise<void> {
 test("an offered briefing is read, claimed as the session's device, and delivered with its claim, once; a second look finds it claimed and delivers nothing", async () => {
   const target = await account();
   const deviceId = await device(target.userId);
-  const f = stand(target, await voiceSession(target.userId, deviceId));
+  const f = await stand(target, await voiceSession(target.userId, deviceId));
   const messageId = await offered(target, "One agent finished.");
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(
     f.deliveries.map((delivery) => [
       delivery.briefing,
@@ -207,17 +225,17 @@ test("an offered briefing is read, claimed as the session's device, and delivere
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, null],
     [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, deviceId],
   ]);
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.equal(f.deliveries.length, 1);
   assert.deepEqual(f.reports, []);
 });
 
 test("a session whose row names no device claims nothing and delivers nothing, and says so once per look", async () => {
   const target = await account();
-  const f = stand(target, await voiceSession(target.userId, undefined));
+  const f = await stand(target, await voiceSession(target.userId, undefined));
   const messageId = await offered(target, "Another is waiting on you.");
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(f.deliveries, []);
   assert.deepEqual(await speechEventsOf(messageId), [
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, null],
@@ -229,14 +247,14 @@ test("an offer another device claimed first is not delivered here", async () => 
   const target = await account();
   const mine = await device(target.userId);
   const other = await device(target.userId);
-  const f = stand(target, await voiceSession(target.userId, mine));
+  const f = await stand(target, await voiceSession(target.userId, mine));
   const messageId = await offered(target, "Claimed elsewhere.");
   assert.equal(
     (await database.run(claimSpeech(speech, target.userId, messageId, other, NOW))).ok,
     true,
   );
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(f.deliveries, []);
   assert.deepEqual(await speechEventsOf(messageId), [
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, null],
@@ -247,7 +265,7 @@ test("an offer another device claimed first is not delivered here", async () => 
 test("an offer the record refuses to claim, here one past its expiry while still reading as offered, delivers nothing", async () => {
   const target = await account();
   const deviceId = await device(target.userId);
-  const f = stand(
+  const f = await stand(
     target,
     await voiceSession(target.userId, deviceId),
     5,
@@ -255,7 +273,7 @@ test("an offer the record refuses to claim, here one past its expiry while still
   );
   const messageId = await offered(target, "Too late.");
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(f.deliveries, []);
   assert.deepEqual(await speechEventsOf(messageId), [
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, null],
@@ -265,7 +283,7 @@ test("an offer the record refuses to claim, here one past its expiry while still
 test("an offer whose announcement has no words this build can read is left standing, unclaimed, rather than claimed and never spoken", async () => {
   const target = await account();
   const deviceId = await device(target.userId);
-  const f = stand(target, await voiceSession(target.userId, deviceId));
+  const f = await stand(target, await voiceSession(target.userId, deviceId));
   const written = await database.run(
     writer.recordUserMessage(target, {
       clientId: randomUUID(),
@@ -276,7 +294,7 @@ test("an offer whose announcement has no words this build can read is left stand
   assert.ok(written.ok);
   assert.equal((await database.run(offerSpeech(speech, target.userId, written.id, NOW))).ok, true);
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(f.deliveries, []);
   assert.deepEqual(await speechEventsOf(written.id), [
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, null],
@@ -288,10 +306,10 @@ test("a delivered briefing is decided at the claim, not the offer: an offer minu
   const target = await account();
   const deviceId = await device(target.userId);
   const later = NOW + 5 * 60_000;
-  const f = stand(target, await voiceSession(target.userId, deviceId), 5, () => later);
+  const f = await stand(target, await voiceSession(target.userId, deviceId), 5, () => later);
   await offered(target, "Five minutes ago.");
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(
     f.deliveries.map((delivery) => [delivery.briefing, delivery.decidedAt]),
     [["Five minutes ago.", later]],
@@ -302,7 +320,7 @@ test("offers other devices hold claims on do not take the look's page from a new
   const target = await account();
   const mine = await device(target.userId);
   const other = await device(target.userId);
-  const f = stand(target, await voiceSession(target.userId, mine), 5, () => NOW, 2);
+  const f = await stand(target, await voiceSession(target.userId, mine), 5, () => NOW, 2);
   const first = await offered(target, "Claimed elsewhere, one.");
   const second = await offered(target, "Claimed elsewhere, two.");
   assert.equal(
@@ -315,7 +333,7 @@ test("offers other devices hold claims on do not take the look's page from a new
   );
   const third = await offered(target, "Still offered.");
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(
     f.deliveries.map((delivery) => delivery.claim.messageId),
     [third],
@@ -327,10 +345,10 @@ test("while a device of the account reports quiet ahead, the look claims nothing
   const deviceId = await device(target.userId);
   const quiet = await device(target.userId);
   await setDeviceQuietUntil(database.run, quiet, new Date(NOW + 60_000));
-  const f = stand(target, await voiceSession(target.userId, deviceId));
+  const f = await stand(target, await voiceSession(target.userId, deviceId));
   const messageId = await offered(target, "Into a meeting.");
 
-  await f.briefings.look();
+  await database.run(f.briefings.look);
   assert.deepEqual(f.deliveries, []);
   assert.deepEqual(await speechEventsOf(messageId), [
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, null],
@@ -340,12 +358,12 @@ test("while a device of the account reports quiet ahead, the look claims nothing
 test("start looks on the schedule and stop ends it: an offer after the stop is not taken", async () => {
   const target = await account();
   const deviceId = await device(target.userId);
-  const f = stand(target, await voiceSession(target.userId, deviceId));
-  f.briefings.start();
-  f.briefings.start();
+  const f = await stand(target, await voiceSession(target.userId, deviceId));
+  await database.run(f.briefings.start);
+  await database.run(f.briefings.start);
   await offered(target, "First.");
   await until(() => f.deliveries.length === 1, "the first briefing");
-  f.briefings.stop();
+  await f.stop();
   await offered(target, "Second.");
   await sleep(60);
   assert.deepEqual(

@@ -679,7 +679,10 @@ arrives: the writer cuts the developer's ask from the segments already on
 record before the delegation's offset, and the API may deliver the delegation
 ahead of the deltas it is about, so the event is consumed only when the
 service asks for the developer's utterance to be written, after every delta
-that arrived ahead of that ask has taken its place. The write answers true
+that arrived ahead of that ask has taken its place. That order is a queue's:
+one fiber of the socket's scope makes every write, taking them from a queue
+each arrival puts one on, so where an event lands in the sequence is decided
+where it arrives rather than by whichever fiber reached the store first. The write answers true
 only when the ask is on record, which is what keeps the service's own rule —
 the record precedes the speech — over Postgres. `server/voice/live-sideband.ts`
 reads the upstream socket as the `LiveSideband` the service consumes, and
@@ -702,9 +705,10 @@ The run the service keys an exchange by is the ask's id, since eve names a
 turn only once it starts; the brain follows the ask through `askStanding` on
 a schedule, projects its turn's events with the same `projectTurnEvents` C7's
 stream serves, and translates each back to the ask's id. There is no HTTP hop
-and so no second function ceiling to re-attach across. A turn that does not
-end inside the follow bound, or an ask the record no longer holds, is told as
-a failed end so the exchange settles rather than waiting forever. On the eve
+and so no second function ceiling to re-attach across. Each follow is a fiber of the socket's own scope, so
+the socket detaching interrupts it and nothing is emitted after. A turn that
+does not end inside the follow bound, or an ask the record no longer holds,
+is told as a failed end so the exchange settles rather than waiting forever. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
 mid-turn is the slow step and the actions settling. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask. One
@@ -753,7 +757,10 @@ on its own message; while a session stands, the look reads the account's open
 offers on a schedule and, for each still merely offered, reads the
 announcement's words (`server/hosted/briefing-words.ts`, the same read the
 push pass makes), claims the offer as the device the session belongs to
-through `claimSpeech`, and only then hands it to the service to speak. The
+through `claimSpeech`, and only then hands it to the service to speak. One
+look is an effect its caller composes; the schedule the exchange's start puts
+them on is a fiber of the socket's scope, so that scope's close is what ends
+the looking. The
 order is a rule and the type is what keeps it: the hosted delivery carries the
 `SpeechClaim` that `claimSpeech` alone mints, so a briefing delivered without
 a landed claim does not compile, and `repository-checks.sh` refuses the brand
@@ -787,12 +794,17 @@ turn the record cannot write. The service's `onBriefingAppend` seam tells the vo
 writer which message a briefing's last append carries, so the session's own
 voice past the append marks the briefing spoken. The composition is a scope's:
 `hostedLiveExchange` answers an effect built in the `Scope` its caller opened
-for the socket, the fiber that reports what the record made of each live event
-is forked into that scope, and the four endings the exchange used to run from
-a `stop` of its own — the brain's follows, the briefing look, the session's
-graceful close, and the wait on every record write already started — are
-finalizers of it in that order, so closing the scope is the whole of the
-ending. Nothing attaches this to the
+for the socket, and every fiber the session runs is forked into that scope —
+the one that reports what the record made of each live event, the one that
+makes every record write in arrival order, the brain's follow of each
+accepted ask, and the briefing look on its schedule — so closing the scope
+interrupts each of them. The session's graceful close and the wait on every
+record write already started are finalizers of the same scope, added so their
+reverse order is the order the exchange's old `stop` ran them. No composition
+below the exchange holds a runner: what the promise-shaped doors above them
+answer from — `LiveRecord`'s two utterance writes and `LiveBrain`'s
+submission — is run over the client that scope was built on, through
+`runOverClient`. Nothing attaches this to the
 sessions route; that is the desktop cutover's, by build.
 
 ### The exchange on the sessions route

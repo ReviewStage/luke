@@ -17,7 +17,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
-import { Schema } from "effect";
+import { Schema, Scope } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -170,10 +170,14 @@ class FakeBrain implements LiveBrain {
 }
 
 /** The service composed as the voice service composes it: the record observing the sideband ahead of the service. */
-function stand(live: VoiceTarget) {
+async function stand(live: VoiceTarget) {
   const clock = new ManualClock();
   const brain = new FakeBrain();
-  const record = hostedLiveRecord({ run: database.run, writer, target: live });
+  // The socket's own scope, as the attachment opens one: the fiber that makes every write is forked into it.
+  const scope = await database.run(Scope.make());
+  const record = await database.run(
+    Scope.extend(hostedLiveRecord({ writer, target: live }), scope),
+  );
   const socket = new FakeLiveSocket();
   // The session acknowledges every thinking append at once, as the real one
   // does for an append that speaks nothing; the acknowledgment is a server
@@ -297,7 +301,7 @@ const WRITTEN = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN } as const;
 
 test("a spoken ask is the one message, cut from the segments including a delta that arrived after the delegation, and the reply is spoken under the delegation once the ask is on record", async () => {
   const live = await target();
-  const f = stand(live);
+  const f = await stand(live);
   await f.open();
 
   f.socket.receive(said("Hi there.", 0, 900));
@@ -340,7 +344,7 @@ test("a spoken ask is the one message, cut from the segments including a delta t
 
 test("an utterance that settled before its delegation arrived is still the delegation's ask on record before its reply is spoken", async () => {
   const live = await target();
-  const f = stand(live);
+  const f = await stand(live);
   await f.open();
 
   f.socket.receive(heard("Open the failing one.", 1000, 2200));
@@ -373,7 +377,7 @@ test("an utterance that settled before its delegation arrived is still the deleg
 
 test("a delegation delivered ahead of the words it is about is held, and is the ask on record once the service composes it on the words", async () => {
   const live = await target();
-  const f = stand(live);
+  const f = await stand(live);
   await f.open();
 
   f.socket.receive(delegated("dl_early", 2500));
@@ -399,7 +403,7 @@ test("a delegation delivered ahead of the words it is about is held, and is the 
 
 test("an ask the record refuses is answered with the unrecorded note alone, and its reply is dropped", async () => {
   const live = await target(false);
-  const f = stand(live);
+  const f = await stand(live);
   await f.open();
 
   f.socket.receive(heard("Stop the fixture.", 600, 1800));
@@ -419,7 +423,10 @@ test("an ask the record refuses is answered with the unrecorded note alone, and 
 
 test("the record door answers from the stream: a delegation is held until its ask is written, a repeated write is the same message, an unseen delegation is refused, and neither an undelegated utterance nor Luke's words reach a row", async () => {
   const live = await target();
-  const record = hostedLiveRecord({ run: database.run, writer, target: live });
+  const scope = await database.run(Scope.make());
+  const record = await database.run(
+    Scope.extend(hostedLiveRecord({ writer, target: live }), scope),
+  );
   const utterance = {
     rowId: 1,
     voiceSessionId: live.liveSessionId,

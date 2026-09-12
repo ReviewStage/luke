@@ -14,10 +14,19 @@ import type { WebStoreRun } from "../runtime.js";
  * so the relay composes into the effect `relay` already answers, and with them
  * went the `Promised` mapped type this file used to declare.
  *
+ * The voice service's compositions take it on the same terms: `LiveRecord`'s
+ * two utterance writes and `LiveBrain`'s submission are promises
+ * `@sidecar/voice` declares, so `hostedLiveRecord` and `hostedLiveBrain` read
+ * `SqlClient` once where the socket's scope builds them and run those
+ * promises here. Nothing else of either is a promise: the record's writes,
+ * each ask's follow, and the briefing look are fibers of that scope.
+ *
  * @deprecated A strangler shim. It goes with the promise-shaped callers that
  * still call it — `hostedFactsWriter`, `hostedTranscriptReads`, and the roster
  * reader — in P12-18g, which needs the brain's own tool contracts to answer
- * effects first.
+ * effects first, and with the voice compositions' two when `@sidecar/voice`'s
+ * `LiveRecord` and `LiveBrain` answer effects, which no PR in this plan
+ * schedules.
  */
 export function runOverClient(client: SqlClient.SqlClient): WebStoreRun {
   return (effect) =>

@@ -75,7 +75,6 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         liveSessionId: session.sessionId,
         conversationId,
         context: deps.context,
-        run: deps.run,
         writer: deps.writer,
         eve: deps.eve(session.accountId),
         conversationEntries: deps.conversationEntries ?? NO_ENTRIES,
@@ -94,7 +93,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
       });
       if (!adopted) return yield* Effect.fail(new ExchangeCannotStand());
       // The look at the account's open offers runs for as long as the session stands; the scope's close ends it.
-      exchange.briefings.start();
+      yield* exchange.briefings.start;
       return exchange;
     });
 

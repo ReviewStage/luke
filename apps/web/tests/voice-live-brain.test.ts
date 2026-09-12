@@ -9,7 +9,7 @@ import {
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
@@ -127,26 +127,33 @@ interface Stand {
   readonly brain: HostedLiveBrain;
   readonly events: LiveBrainRunEvent[];
   readonly reports: string[];
+  /** The socket's own scope as the attachment opens one; closing it interrupts every follow under way. */
+  readonly stop: () => Promise<void>;
 }
 
-function stand(
+async function stand(
   target: ConversationTarget,
   bounds: NonNullable<HostedLiveBrainOptions["bounds"]> = QUICK,
   store: HostedLiveBrainOptions["store"] = database.store,
-): Stand {
+): Promise<Stand> {
   const eve = fakeEve();
   const events: LiveBrainRunEvent[] = [];
   const reports: string[] = [];
-  const brain = hostedLiveBrain({
-    userId: target.userId,
-    run: database.run,
-    asks: { asks: askEffects, eve, now: () => NOW },
-    store,
-    report: (message) => reports.push(message),
-    bounds,
-  });
+  const scope = await database.run(Scope.make());
+  const brain = await database.run(
+    Scope.extend(
+      hostedLiveBrain({
+        userId: target.userId,
+        asks: { asks: askEffects, eve, now: () => NOW },
+        store,
+        report: (message) => reports.push(message),
+        bounds,
+      }),
+      scope,
+    ),
+  );
   brain.onRunEvent((event) => events.push(event));
-  return { eve, brain, events, reports };
+  return { eve, brain, events, reports, stop: () => database.run(Scope.close(scope, Exit.void)) };
 }
 
 /** The eve session an accepted ask was handed to, from the record; a follow-up would read it the same way. */
@@ -173,7 +180,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await account();
-      const f = stand(target);
+      const f = await stand(target);
       const submissionId = randomUUID();
       const ask = { submissionId, question: "Developer: what needs me?" };
 
@@ -193,7 +200,7 @@ it.effect(
       const again = await f.brain.submitAsk(ask);
       assert.deepEqual(again, accepted);
       assert.equal(f.eve.opened.length, 1);
-      f.brain.stop();
+      await f.stop();
     }),
 );
 
@@ -202,7 +209,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await account();
-      const f = stand(target);
+      const f = await stand(target);
       const ask = { submissionId: randomUUID(), question: "q" };
       const accepted = await f.brain.submitAsk(ask);
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
@@ -252,7 +259,7 @@ it.effect(
         LIVE_BRAIN_RUN_END.COMPLETED,
       );
       assert.deepEqual(f.reports, []);
-      f.brain.stop();
+      await f.stop();
     }),
 );
 
@@ -261,7 +268,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await account();
-      const f = stand(target);
+      const f = await stand(target);
       f.eve.failNext = 502;
       const refused = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
       assert.deepEqual(refused, {
@@ -274,7 +281,7 @@ it.effect(
       );
       await sleep(QUICK.POLL_MS * 4);
       assert.deepEqual(f.events, []);
-      f.brain.stop();
+      await f.stop();
     }),
 );
 
@@ -283,7 +290,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await account();
-      const f = stand(target, BOUNDED);
+      const f = await stand(target, BOUNDED);
       const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -293,7 +300,7 @@ it.effect(
         { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
       ]);
       assert.equal(f.reports.length, 1);
-      f.brain.stop();
+      await f.stop();
     }),
 );
 
@@ -308,7 +315,7 @@ it.effect(
         seq: 0,
         path: [],
       };
-      const f = stand(target, QUICK, {
+      const f = await stand(target, QUICK, {
         turns: database.store.turns,
         messages: { ...database.store.messages, byClientId: () => Effect.succeed(unreadable) },
       });
@@ -328,7 +335,7 @@ it.effect(
         { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
       ]);
       assert.equal(f.reports.length, 1);
-      f.brain.stop();
+      await f.stop();
     }),
 );
 
@@ -337,7 +344,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const target = await account();
-      const f = stand(target);
+      const f = await stand(target);
       const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -346,18 +353,18 @@ it.effect(
       assert.deepEqual(f.events, [
         { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
       ]);
-      f.brain.stop();
+      await f.stop();
     }),
 );
 
 it.effect("stop ends every follow: a turn that completes after it reaches no listener", () =>
   Effect.promise(async () => {
     const target = await account();
-    const f = stand(target);
+    const f = await stand(target);
     const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
     assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
     if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-    f.brain.stop();
+    await f.stop();
     await play(spokenTurn(FIRST_EVE_TURN, NOW), {
       sessionId: await sessionOf(target, accepted.runId),
       target,
