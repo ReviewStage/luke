@@ -25,19 +25,16 @@ export type HeldArrival = { readonly frame: string } | { readonly close: SocketC
  */
 export interface HeldSocket extends LiveSocket {
   /**
-   * The first frame held, or the close that came before any frame, for a
-   * handshake that reads one answer and hands everything after it on. The
-   * hold stands throughout: the frames behind the answer wait for the first
-   * `onMessage` listener, which is what closes the gap between a handshake
-   * that settled and a consumer that subscribes in the continuation.
+   * Hands a handshake the first frame held, or the close that came before any
+   * frame, and answers the way `onMessage` does: with the function that
+   * withdraws the wait. The hold stands throughout: the frames behind the
+   * answer wait for the first `onMessage` listener, which is what closes the
+   * gap between a handshake that settled and a consumer that subscribes in
+   * the continuation. A wait withdrawn on its deadline hands nothing to
+   * anyone, and what arrives afterwards is held for the consumer like any
+   * other frame rather than delivered to a waiter nobody will read.
    */
-  takeFirst(): Promise<HeldArrival>;
-  /**
-   * Withdraws a `takeFirst` still waiting, for a handshake that gave up on its
-   * deadline: what arrives afterwards is held for the consumer like any other
-   * frame rather than handed to a waiter nobody will read.
-   */
-  cancelFirst(): void;
+  takeFirst(listener: (arrival: HeldArrival) => void): () => void;
 }
 
 /**
@@ -123,21 +120,20 @@ export function holdSocket(socket: LiveSocket): HeldSocket {
         closeListeners.delete(listener);
       };
     },
-    takeFirst: () =>
-      new Promise<HeldArrival>((resolve) => {
-        const first = heldFrames?.shift();
-        if (first !== undefined) {
-          resolve({ frame: first });
-          return;
-        }
-        if (heldClose !== undefined) {
-          resolve({ close: heldClose });
-          return;
-        }
-        waiting = resolve;
-      }),
-    cancelFirst: () => {
-      waiting = undefined;
+    takeFirst: (listener) => {
+      const first = heldFrames?.shift();
+      if (first !== undefined) {
+        listener({ frame: first });
+        return () => undefined;
+      }
+      if (heldClose !== undefined) {
+        listener({ close: heldClose });
+        return () => undefined;
+      }
+      waiting = listener;
+      return () => {
+        if (waiting === listener) waiting = undefined;
+      };
     },
   };
 }

@@ -590,14 +590,14 @@ class ServiceLiveSessionSource {
         // The wait is withdrawn before the outcome is written, so the close the caller answers a
         // deadline with, or a frame arriving late, is held for the consumer and records nothing
         // over the deadline's own outcome.
-        socket.cancelFirst();
+        withdraw();
         this.#outcome.record(
           LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
           "no answer before the deadline",
         );
         settle(undefined);
       }, this.#requestTimeoutMs);
-      void socket.takeFirst().then((arrival) => {
+      const withdraw = socket.takeFirst((arrival) => {
         if (settled) return;
         if ("close" in arrival) {
           this.#outcome.record(
