@@ -44,6 +44,8 @@ export interface HostedLiveRecordOptions {
 export interface HostedLiveRecord extends LiveRecord {
   /** One server event of the session's stream, in arrival order; answers what the writer did with it. */
   observe(event: LiveServerEvent): Promise<VoiceWriteResult>;
+  /** Settles once every write started so far has landed or failed; a caller closing the session waits on it so no write is cut. */
+  drained(): Promise<void>;
 }
 
 /** A delegation is held for the ask that names it, and the stream itself writes nothing for it yet. */
@@ -80,5 +82,6 @@ export function hostedLiveRecord({ writer, target }: HostedLiveRecordOptions): H
       }
     },
     writeLukeUtterance: () => Promise.resolve(true),
+    drained: () => chain.then(() => undefined),
   };
 }

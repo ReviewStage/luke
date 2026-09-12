@@ -48,7 +48,7 @@ export interface LiveUpstreamOptions {
 
 export interface LiveUpstream {
   create(config: LiveSessionConfig, sdpOffer: string): Promise<LiveCreateResult>;
-  /** Resolves once the sideband is open, or rejects when it could not attach within the timeout. */
+  /** Resolves once the sideband is open and paused, so nothing it speaks is emitted before a consumer listens, or rejects when it could not attach within the timeout. */
   attach(sessionId: string): Promise<WebSocket>;
 }
 
@@ -106,6 +106,13 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
         }, attachTimeoutMs);
         socket.once("open", () => {
           clearTimeout(timer);
+          // Paused here, inside the open handler, and not by the caller: the
+          // bytes that followed the handshake response are re-queued on the
+          // stream and flushed on the next tick, which runs before any promise
+          // continuation, so a frame in that same chunk would otherwise be
+          // emitted to nobody. The service resumes the socket once every
+          // consumer listens, and reads then what arrived meanwhile.
+          socket.pause();
           resolve(socket);
         });
         socket.once("error", (error) => {

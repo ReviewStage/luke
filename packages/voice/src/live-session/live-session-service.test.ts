@@ -358,6 +358,83 @@ test("a created session is seeded from the record alone, attached before the ans
   );
 });
 
+test("an adopted session is stood without asking the source and without a seed: nothing is created, nothing is sent before the session speaks, and a delegation reaches the brain as on a created session", async () => {
+  const f = fixture();
+  f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
+  const sideband = new FakeSideband();
+  const adopted = await f.service.adoptSession({
+    sessionId: "sess-adopted",
+    attach: async () => sideband,
+    started: false,
+  });
+  assert.equal(adopted, true);
+  assert.deepEqual(f.creates, []);
+  assert.deepEqual(f.seeds, []);
+  assert.deepEqual(sideband.sent, []);
+  sideband.started("sess-adopted");
+  await drainMicrotasks();
+  assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.STARTED]);
+  assert.deepEqual(sideband.sent, []);
+  sideband.input("What needs me", 1000, 1800);
+  sideband.delegation("item_1", 2500);
+  await drainMicrotasks();
+  assert.equal(f.brain.asks.length, 1);
+});
+
+test("a session adopted as already started is speakable at once: it hears no session.started again, so a briefing delivered to it is appended without waiting, where one adopted as not yet started waits for the start", async () => {
+  const running = fixture();
+  const runningSideband = new FakeSideband();
+  assert.equal(
+    await running.service.adoptSession({
+      sessionId: "sess-running",
+      attach: async () => runningSideband,
+      started: true,
+    }),
+    true,
+  );
+  assert.deepEqual(phases(running.changes), [
+    LIVE_SESSION_PHASE.CREATED,
+    LIVE_SESSION_PHASE.STARTED,
+  ]);
+  running.service.deliverBriefing({
+    briefing: "Nukualofa finished.",
+    decidedAt: running.clock.now,
+  });
+  await drainMicrotasks();
+  assert.equal(appends(runningSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+
+  const fresh = fixture();
+  const freshSideband = new FakeSideband();
+  assert.equal(
+    await fresh.service.adoptSession({
+      sessionId: "sess-fresh",
+      attach: async () => freshSideband,
+      started: false,
+    }),
+    true,
+  );
+  fresh.service.deliverBriefing({ briefing: "Nukualofa finished.", decidedAt: fresh.clock.now });
+  await drainMicrotasks();
+  assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  freshSideband.started("sess-fresh");
+  await drainMicrotasks();
+  assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+});
+
+test("an adopted session whose sideband cannot attach is not stood: the adopt answers false and the session is announced closed as sideband-failed", async () => {
+  const f = fixture();
+  const adopted = await f.service.adoptSession({
+    sessionId: "sess-unreachable",
+    attach: async () => {
+      throw new Error("the sideband never opened");
+    },
+    started: false,
+  });
+  assert.equal(adopted, false);
+  assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.CLOSED]);
+  assert.equal(f.changes.at(-1)?.reason, "sideband-failed");
+});
+
 test("no source means no session and nothing announced", async () => {
   const f = fixture();
   f.sourceAvailable = false;
