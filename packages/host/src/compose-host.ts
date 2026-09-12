@@ -43,7 +43,6 @@ import {
   RunMode,
   type SecretCipher,
   ShutdownSignal,
-  type StoreWorker,
 } from "./effect/seams.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
@@ -64,7 +63,7 @@ export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 
 /**
  * The order the launch has to keep: the account is read before anything
- * gated on it, the store is open before the brain's credential transition
+ * gated on it, the brain's workspace is seeded before its credential transition
  * installs a runtime over it, and the loops are armed only once every owner
  * of one has started. The quit is this order reversed.
  */
@@ -98,7 +97,6 @@ export const hostAssemblyLayer: Layer.Layer<
   | SecretCipher
   | AppIdentity
   | MachinePresenceReader
-  | StoreWorker
   | ShutdownSignal
   | FileSystem.FileSystem
 > = Layer.scoped(
@@ -226,7 +224,6 @@ export const hostAssemblyLayer: Layer.Layer<
       onFirstSignIn: calendars.recordFirstSignIn,
       retireBrain: () => brain.wiring.retire(),
       rebuildBrain: () => brain.wiring.rebuild(),
-      syncMemory: brain.syncMemory,
       releaseDevice: (stored) => devices.release(stored),
       deviceId: () => devices.deviceId(),
     });
@@ -303,14 +300,10 @@ export const hostAssemblyLayer: Layer.Layer<
         configuration: () => brain.wiring.configuration(),
         updateConfiguration: (patch) => brain.wiring.updateConfiguration(patch),
       },
-      conversations: brain.conversations,
-      memory: {
-        status: () =>
-          Effect.map(brain.memoryMode, (mode) => ({
-            mode,
-            entries: brain.store.rememberedFacts().length,
-          })),
-      },
+      conversations: brain.operations,
+      // This Mac holds no notebook: the remembered facts and their index are
+      // the hosted brain's, so the status names no entries and no mode.
+      memory: { status: () => Effect.succeed({ entries: 0 }) },
       observedSessionCount: observation.observedSessionCount,
       nodes: kernel.nodes,
       now,
@@ -323,8 +316,7 @@ export const hostAssemblyLayer: Layer.Layer<
      * The explicit quit's steps. Admissions close at the server; every run and
      * child under way is cancelled; the followers' publication is let finish,
      * so an end already reached stands in Conversation; and what did not settle is
-     * counted rather than finished: the store's load at the next start marks
-     * an unsettled run interrupted and replays nothing.
+     * counted rather than finished, since nothing of it reaches the next launch.
      */
     const drainSteps: GatewayShutdownSteps = yield* shutdownStepsFlushingEvents(
       {
@@ -353,14 +345,13 @@ export const hostAssemblyLayer: Layer.Layer<
         }),
         awaitSettled: Effect.suspend(() => brain.wiring.publicationSettled()),
         persistUnresolved: Effect.sync(() => {
-          // What the next launch will find: the records as the stores last
-          // persisted them, read from the envelopes rather than from memory. A
-          // cancellation whose write did not land leaves its run queued or
-          // running on disk, and that is what the load marks interrupted and
-          // never replays, so it is counted here as unresolved.
+          // The records as the envelopes last took them, read from the
+          // envelopes rather than from the agents. A cancellation whose write
+          // did not land leaves its run queued or running there, and that is
+          // counted here as unresolved.
           const keys = new Set<SessionKey>([
             MAIN_SESSION_KEY,
-            ...brain.store.directory().map((entry) => entry.sessionKey),
+            ...brain.conversations.directory().map((entry) => entry.sessionKey),
           ]);
           let unresolved = 0;
           for (const key of keys) {
@@ -433,7 +424,6 @@ export const hostLayer: Layer.Layer<
   | SecretCipher
   | AppIdentity
   | MachinePresenceReader
-  | StoreWorker
   | ShutdownSignal
   | FileSystem.FileSystem
 > = Layer.provide(hostStandingLayer, hostAssemblyLayer);

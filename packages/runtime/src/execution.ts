@@ -325,13 +325,13 @@ export interface ModelAdapter {
   quietUntil(): number | undefined;
 }
 
-export interface EmbeddingIdentity {
+interface EmbeddingIdentity {
   readonly provider: string;
   readonly model: string;
   readonly dimensions: number;
 }
 
-export type EmbeddingBatch =
+type EmbeddingBatch =
   | {
       readonly outcome: typeof MODEL_RESPONSE_OUTCOME.ANSWERED;
       readonly vectors: readonly (readonly number[])[];

@@ -46,8 +46,6 @@ export {
   ShutdownSignal,
   type ShutdownSignalSeam,
   StateRoot,
-  StoreWorker,
-  type StoreWorkerSource,
 } from "./seams.js";
 export {
   SETTINGS_OVERRIDE_VARIABLE,

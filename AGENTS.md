@@ -162,9 +162,9 @@ decision is re-evaluated once Effect 4 has a stable release and all three ship
 An Effect describes work; only a runtime edge runs one. The edges are listed
 in `tools/oxlint/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
 (the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
-(the layer that runtime is built from), `apps/desktop/src/main/store-worker.ts`
-and `packages/brain/src/store/worker-entry.ts` (the store's worker thread, its
-own edge because a worker starts from its own file), the two renderer roots
+(the layer that runtime is built from), `packages/brain/src/store/worker-entry.ts`
+(the SQLite store's worker thread, spawned by its own test alone; its own edge
+because a worker starts from its own file), the two renderer roots
 `apps/desktop/src/renderer/index.tsx` and `apps/desktop/src/renderer/voice/index.tsx`
 (one browser `ManagedRuntime` each, so the panel and the voice window never
 share a registry), `apps/desktop/src/renderer/renderer-runtime.ts` (the module each root's

@@ -61,7 +61,7 @@ export const composeLive = (
 
     const service = yield* LiveSessionHolder.make({
       source: () => account.voiceCapabilities.liveSessions,
-      conversationEntries: () => brain.store.thread().entries(),
+      conversationEntries: () => brain.conversations.thread().entries(),
       roster: () => voiceRoster(observation.rosterForClients()),
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
       createId: kernel.createId,

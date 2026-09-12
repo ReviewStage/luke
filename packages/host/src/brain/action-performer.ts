@@ -68,12 +68,7 @@ export interface BrainActionPerformerDependencies {
   appGuide: () => AppGuideSnapshot;
   /** The notebook's entries as the validators read them: what the model may name by id. */
   rememberedFacts: () => readonly RememberedFact[];
-  /**
-   * The notebook's two writes, each carried whole by the store's worker,
-   * which serializes every mutation of the workspace and reconciles a hand
-   * edit before writing, so two conversations remembering at once cannot
-   * drop each other's entry.
-   */
+  /** The notebook's two writes; a host that keeps no notebook answers each with false. */
   notebook: BrainNotebookWriter;
   /** Carries an app action only a renderer can perform, and answers what became of it. */
   performAppAction: (action: BrainAppActionRequest["action"]) => Effect.Effect<WireRecord>;

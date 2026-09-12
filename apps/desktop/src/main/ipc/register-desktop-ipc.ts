@@ -44,10 +44,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // The Conversation Clear is the service's soft delete of the account's
     // main conversation, which is the thread every panel draws; a Clear the
     // service did not take leaves the thread standing and is reported to the
-    // panel as refused. Only once it landed is the local store's own thread —
-    // the voice window's relay and the local brain's context — deleted
-    // behind its recovery archive as before, so the two never disagree about
-    // whether anything was cleared.
+    // panel as refused. Only once it landed is the thread this process holds
+    // for the local brain — the voice window's relay and the brain's context
+    // — forgotten too, so the two never disagree about whether anything was
+    // cleared.
     clearConversation: () =>
       Effect.gen(function* () {
         const cleared = yield* operator.host.clearConversation();

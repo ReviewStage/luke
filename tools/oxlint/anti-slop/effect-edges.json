@@ -2,7 +2,6 @@
   "runtimeEdges": [
     "apps/desktop/src/main/main.ts",
     "apps/desktop/src/main/services/compose-desktop.ts",
-    "apps/desktop/src/main/store-worker.ts",
     "apps/desktop/src/renderer/index.tsx",
     "apps/desktop/src/renderer/introduction/introduction-takeover.tsx",
     "apps/desktop/src/renderer/renderer-runtime.ts",

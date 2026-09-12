@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 11 September 2026
+Last updated: 12 September 2026
 
 Luke is a macOS app that watches your coding agent sessions, with companion
 iOS and Apple Watch apps for the cloud sessions your account can see. This
@@ -41,10 +41,11 @@ memory on your Mac and stored nowhere else. Nothing
 else reads message history, file contents, or command output. It stays on
 your Mac unless a feature below sends it.
 
-**Your conversation with Luke.** Luke keeps the conversations you have with
-him — what you said, what he spoke or announced, the actions he took at your
-request, and the asks he is still working on — in a database on your
-Mac, so they are still there the next time you open him. The Conversation tab
+**Your conversation with Luke.** Luke's own judgment on this Mac holds the
+conversations you have with him — what you said, what he spoke or announced,
+the actions he took at your request, and the asks he is still working on — in
+memory alone, for as long as he is running: nothing of them is written to disk
+on your Mac, and quitting him lets them go. The Conversation tab
 draws a different record: the conversation Luke's own service keeps for your
 account, read by every Mac you sign in on, so two Macs on one account show
 the same thread. A signed-in Mac asks the service every few seconds what has
@@ -58,12 +59,8 @@ Pressing thumbs down also offers the feedback composer, prefilled with that
 message and your ask before it, and nothing of it leaves the Mac unless you
 press Send. What the service keeps of it is described under "Your account"
 below.
-Every entry on your Mac stays in its database until you clear the conversation or the
-housekeeping described below removes it. Beside the Conversation, Luke keeps a transcript
-of each conversation's turns in the same database: every input the model was
-shown and every point at which his working context was folded. The transcript
-is a record, not a limit: folding the context changes what the model sees
-next and erases nothing here. The 20 most recent Conversation lines, each cut to
+What his judgment on this Mac holds stays in memory until you clear the
+conversation or quit him. The 20 most recent lines it holds, each cut to
 400 characters, ride into a conversation as context, beside the working
 memory. The same 20 lines, in their roles, are also placed into each voice
 session when it opens, beside a summary of the coding agent sessions on your
@@ -96,9 +93,9 @@ each row bound to your account so it cannot be opened under another. Those
 rows are untouched by clearing the conversation and are removed when you
 delete your account.
 
-**Luke's working memory.** For each conversation Luke keeps a working memory
-of his own turns in the same database, in its own tables — main's, each
-private thread's, and each observed session's: the model's record
+**Luke's working memory.** For each conversation Luke's judgment on this Mac
+keeps a working memory of his own turns, in memory beside the conversation —
+main's, each private thread's, and each observed session's: the model's record
 of what he read, said, and did — the transcript excerpts described above, the
 position he last read each transcript to and the position he last wrote one
 down to, the inbox of excerpts written down and not yet read, a record of each ask you made and
@@ -113,13 +110,14 @@ the record itself, and an encrypted compaction item an earlier version of Luke
 stored is kept and replayed as it was but never asked for again. The whole
 record is one generation, and a generation does not reset on its own, on the
 terms OpenClaw's sessions keep: it stands, summaries included, until you clear
-the conversation, and an old one is loaded whole however long ago it began. A
+the conversation or quit Luke, and nothing of it is written to disk, so a
+launch begins with none. A
 generation holds at most 200 asks: the oldest finished
 asks go first once their endings are in the Conversation, and when nothing can go
 Luke declines a new ask rather than growing the record.
 
 **Work Luke delegates to himself.** A conversation of Luke's may hand a task to
-a child: another conversation of the same Luke, kept in the same database
+a child: another conversation of the same Luke, held in memory beside it
 under the same rules, that does the one task it was given and reports back.
 A child starts with an empty working memory unless the conversation that
 asked chose to fork its own into the child, in which case the child begins
@@ -129,11 +127,10 @@ runs the same tools as any conversation, under the same policy less the tools
 OpenClaw's design keeps from children, and its calls to OpenAI are the same
 calls described below. The record of each child — what it was asked, when it
 began and ended, and its final reply — and the record of that reply's
-delivery back to the conversation that asked are kept in the database beside
-everything else; a reply that could not be delivered is kept for seven days
-and then discarded. A child's conversation is archived an hour after it ends
-and lives under the same retention as every other conversation. Nothing a
-child does reaches you except through the conversation that asked for it.
+delivery back to the conversation that asked are held in memory beside
+everything else and go when you quit Luke. A child's conversation is archived
+an hour after it ends. Nothing a child does reaches you except through the
+conversation that asked for it.
 
 The Conversation tab's one control, **Clear**, asks Luke's service to clear
 your account's conversation: nothing is erased at once — the conversation is
@@ -141,36 +138,19 @@ marked deleted, a new empty one is opened in its place, every Mac on the
 account stops showing it on its next read, and the service removes the
 marked conversation thirty days later. A Clear the service did not take
 leaves the thread standing and says so. Once the service has taken it, the
-same press also removes the conversation's lines, transcript, and working
-memory from the database on your Mac, writing them first, in the same step,
-into a compressed recovery archive kept on your Mac under Luke's own data (a
-`.jsonl.deleted.<time>.zst` file, and until it is written to disk, a copy
-inside the database); a copy not yet written is written at the next launch.
-Nothing in the app reads an archive back yet; it stands on your Mac for you
-alone. Clearing never touches the separate things Luke remembers about you,
+same press also makes Luke's judgment on this Mac forget the conversation's
+lines and working memory it holds; nothing of them was on disk, so nothing is
+archived. Clearing never touches the separate things Luke remembers about you,
 described next, and never touches your agents' own files.
 
-Luke also tidies this storage on his own, on the terms OpenClaw's session
-store uses: a conversation untouched for 30 days, and a thread idle for 7, is
-archived in place and keeps everything, and nothing is removed outright. He
-keeps at most 5,000
-conversations on the active list, archiving the longest untouched first, and
-holds the database, its log, and the recovery archives together under 10 GiB
-on your Mac: past that he removes the oldest recovery archives and then
-permanently deletes conversations his own cap had archived, oldest first,
-never one you archived, pinned, or are talking in, and never the main
-conversation, until the total is back under 8 GiB, and tells you what
-protected data left it above. Recovery archives do not expire by age.
-
-The database lives under Luke's own application data, in a folder of its own
-per agent (`agents/main/agent.sqlite`, with recovery archives beside it under
-`archives/`), and it is written from one place: a worker thread of Luke's
-own, so nothing else on your Mac and no other part of Luke writes it. Earlier
-versions of Luke kept the conversation, the working memory, and the things he
-remembers about you in three files beside your settings. Those files are no
-longer read or written, so that conversation, that memory, and those
-remembered things start over; the files stay where they were until you remove
-them.
+Earlier versions of Luke kept the conversation, his working memory, the
+things he remembers about you, and a search index over his workspace files in
+a database under Luke's own application data, in a folder of its own per agent
+(`agents/main/agent.sqlite`, with recovery archives beside it under
+`archives/`), and versions before those kept them in three files beside your
+settings. This version reads and writes none of them, so that conversation,
+that memory, and those remembered things start over; the files stay where
+they are until you remove them.
 
 Luke's runtime runs inside the app, and can run on a server you connect to
 instead; either way it holds your settings and the encrypted credentials
@@ -188,48 +168,34 @@ on paper. The three things the app still does on this machine at the runtime's
 ask are opening an address you or Luke asked to open, carrying an action to the
 panel, and running the Calendar helper behind macOS's own consent dialog.
 
-**Things Luke remembers about you.** During a conversation you start, Luke may
-silently save a concise preference, personal fact, goal, or recurring constraint
-that looks useful later. He skips temporary details and uncertain guesses, never
-saves credentials, and saves sensitive facts only when you explicitly ask. Each
-one is a line of `USER.md` in his workspace on your Mac, under a "Remembered"
-heading, so the file you can read and edit is the record itself: at most 32 such
-lines stand, they do not expire, and a line you edit or add by hand is taken up
-the next time Luke reads the file. Beside the file, the same database keeps only
-bookkeeping about each line — an id Luke can name to correct or forget it, when
-it was written, and whether it came from you, from Luke, or from the list an
-earlier version kept in the database — and that list, if one was found, was
-moved into `USER.md` once under the same ids and is not written any more. The
-iOS app keeps no such memory and does not read the Mac's. When Luke runs a
-turn for you on our service, the facts he remembers in it are rows of their
-own in our database instead, their words sealed the same way as his workspace files
-there and bound to your account; a changed fact replaces the one it corrects,
-clearing the conversation does not touch them, and they are removed when you
-delete your account. You can ask Luke what
+**Things Luke remembers about you.** When Luke runs a turn for you on our
+service, he may silently save a concise preference, personal fact, goal, or
+recurring constraint that looks useful later. He skips temporary details and
+uncertain guesses, never saves credentials, and saves sensitive facts only when
+you explicitly ask. Each is a row of its own in our database, its words sealed
+the same way as his workspace files there and bound to your account; a changed
+fact replaces the one it corrects, clearing the conversation does not touch
+them, and they are removed when you delete your account. Luke's judgment on
+this Mac saves none: an earlier version kept them as lines of `USER.md` in his
+workspace under a "Remembered" heading, and that file is still read into his
+standing instructions as every workspace file is, but he keeps no list of
+facts from it and writes no new line to it, so asking that Luke to remember or
+forget something is declined rather than kept somewhere the next launch would
+not find. The iOS app keeps no such memory of its own. You can ask Luke what
 he remembers, correct something, or tell him to forget it. They travel with the
-rest of Luke's working memory when he thinks, so he can personalize replies:
-directly to OpenAI on your own key if you entered one, or through our own
-service on our key when you use Luke through your account, on the same terms as
-the rest of that call — one model call per request, and nothing of it stored or
-logged by our service. They are never sent to a coding-agent provider or a
-tracker, and they are never used to decide anything on your behalf.
+rest of Luke's working memory when he thinks on our service, so he can
+personalize replies, on the same terms as the rest of that call — one model
+call per request, and nothing of it stored or logged by our service beyond the
+rows themselves. They are never sent to a coding-agent provider or a tracker,
+and they are never used to decide anything on your behalf.
 
-**Luke's notebook index.** So that Luke can find what his workspace files say
-without reading them all into every call, the same database keeps a search
-index over them: `MEMORY.md`, `USER.md`, and the notes under `memory/`, cut
-into passages, each passage's text and a numeric embedding of it. The index is
-derived and disposable — it is rebuilt from the files whenever one changes, and
-holds nothing the files do not. The embeddings are made by OpenAI's embeddings
-model: on your own key if you entered one, or through our own service on our
-key when you use Luke through your account, where one request carries only the
-passages that changed and our service keeps and logs none of them. Without a
-key or an account the index still works by keywords alone, and Luke's answers
-say when a search ran that way. Luke's own conversations are never embedded or
-indexed: when he looks for something you said in an earlier conversation, he
-reads the lines the Conversation already keeps, only from main and the private threads
-you opened and never from the conversation he is answering in, a temporary
-thread, an observed coding session's conversation, or a child's. What such a
-look finds is context for that one reply and is written nowhere.
+**Luke's notebook index.** Luke keeps no search index over his workspace
+files any more. An earlier version kept one in the database above — `MEMORY.md`,
+`USER.md`, and the notes under `memory/`, cut into passages with a numeric
+embedding of each made by OpenAI's embeddings model — and nothing on your Mac
+makes an embedding now. A memory search Luke's judgment on this Mac is asked
+for answers that no index stands, rather than guessing. Luke's own
+conversations were never embedded or indexed.
 
 **How Luke keeps his notebook.** Two things write to Luke's workspace
 without your asking, each on your Mac and each bounded. Before a
@@ -246,11 +212,10 @@ changes only when you edit it or ask Luke to. An earlier version of Luke
 promoted lines into that file behind HTML markers, and wrote a `DREAMS.md`
 beside it. Both are left exactly where they are, for you to keep or delete:
 `MEMORY.md` is still read as your notebook, markers and all, and nothing
-reads `DREAMS.md` at all. Asking Luke to forget removes the notebook line
-you name, and the search index follows the file; a line he no longer holds
-under that name he says so about rather than claiming it erased. Forgetting does
-not delete the conversation itself; Delete conversation is still the separate,
-recoverable action above.
+reads `DREAMS.md` at all. Asking Luke to forget removes the remembered fact you name from our
+service; a fact he no longer holds under that name he says so about rather
+than claiming it erased. Forgetting does not delete the conversation itself;
+Clear is still the separate action above.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
@@ -516,7 +481,8 @@ Send.
   OpenAI stores the request and its reply under its own retention policy, and
   our service performs one model call per request and stores and logs none of
   the request, the reply, or the encrypted reasoning that travels in it; the
-  record the reply joins is kept only on your Mac, under the lifetime above.
+  record the reply joins is held only in memory on your Mac, under the
+  lifetime above.
   When Luke runs a turn for you on our service, the call to OpenAI is made
   from there, and the record it joins is the conversation our service keeps,
   described under "Your account" above.
@@ -534,12 +500,10 @@ Send.
   our service passes it upstream and keeps it no longer than the request.
   The same allowance meters a request to count
   a call's tokens or to fold Luke's working memory, and the folded memory
-  OpenAI answers with is kept only on your Mac. Luke's working memory is
-  stamped with the version of Luke that wrote it; a newer or older Luke that
-  cannot read that stamp leaves the memory untouched and declines to think
-  over it until you clear it, rather than rewriting or discarding it. On the Mac app, your conversation and Luke's durable memory are kept on your
-  Mac and sent with a call so the conversation carries across calls and across
-  launches; on iOS and Apple Watch, a call also carries the list of projects
+  OpenAI answers with is held only in memory on your Mac. On the Mac app, your
+  conversation and Luke's working memory are held in memory on your Mac and
+  sent with a call so the conversation carries across calls while he runs, and
+  no further; on iOS and Apple Watch, a call also carries the list of projects
   your synced keys can create a workspace in, while the conversation itself is
   held in memory until the app quits or you sign out, sent with a call so it
   carries across calls, and never stored on the phone or the watch. A
@@ -610,8 +574,9 @@ your network address, as it does for the app's recordings.
 ## Storage
 
 Your settings, local provider API keys, and calendar access stay on your
-Mac, and so do the conversation, working memory, workspace files, and
-remembered facts of a Luke whose judgment runs on your Mac.
+Mac, and so do the workspace files of a Luke whose judgment runs on your Mac;
+that Luke's conversation and working memory are held in memory while he runs
+and written nowhere.
 Your OpenAI key and calendar access are encrypted in the macOS Keychain. Your
 Conductor key, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
@@ -629,10 +594,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   our vault. Keys are also deleted when you delete your account.
 - Clear the Conversation tab to have the service mark your account's
   conversation deleted (removed thirty days later, and gone from every Mac on
-  the account at its next read) and to remove the stored conversation and
-  Luke's working memory of it on this Mac behind a recovery archive. Nothing
-  on your Mac discards them on a schedule: a conversation stands until you
-  clear it.
+  the account at its next read) and to have Luke's judgment on this Mac
+  forget the lines and working memory it holds for it. Nothing of them is on
+  disk to discard.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
   your edit, and clearing the Conversation tab does not touch them. Rows of
