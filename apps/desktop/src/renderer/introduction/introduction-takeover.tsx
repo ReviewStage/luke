@@ -103,6 +103,8 @@ export const INTRODUCTION_EVENT = {
   VOICE_FAILED: "voice-failed",
   /** Luke's output has gone quiet, by the ledger's settle and the track's level. */
   OUTPUT_QUIET: "output-quiet",
+  /** The greeting has run to its ceiling, quiet or not; the listening window's own bounds end it from here. */
+  GREETING_CEILING: "greeting-ceiling",
   /** The listening window ended: the developer said their piece or said nothing. */
   LISTEN_DONE: "listen-done",
   /** The landed panel has finished standing down to the capsule. */
@@ -149,6 +151,10 @@ const TRANSITIONS = {
   },
   [INTRODUCTION_BEAT.GREETING]: {
     [INTRODUCTION_EVENT.OUTPUT_QUIET]: INTRODUCTION_BEAT.LISTEN,
+    // The one exit that does not wait on the model: a greeting the developer
+    // answered and Luke answered back never goes quiet on its own, and a beat
+    // whose only way out is the model choosing to stop is no beat at all.
+    [INTRODUCTION_EVENT.GREETING_CEILING]: INTRODUCTION_BEAT.LISTEN,
   },
   [INTRODUCTION_BEAT.LISTEN]: {
     [INTRODUCTION_EVENT.LISTEN_DONE]: INTRODUCTION_BEAT.STAND_DOWN,
@@ -207,6 +213,12 @@ const DARK_HOLD_MS = 900;
 const WAKE_BELL_LEAD_MS = 600;
 /** How long a started session may stay silent before the greeting is given up on. */
 const GREETING_TIMEOUT_MS = 20_000;
+/**
+ * The greeting's ceiling however lively the exchange: two or three sentences
+ * take a fraction of this, so reaching it means the developer answered and
+ * the model answered back, and the listening window's own bounds take over.
+ */
+const GREETING_CEILING_MS = 45_000;
 /** Into the greeting, the staged "needs you" moment plays on one of the rows. */
 const TOUR_FLIP_DELAY_MS = 6_000;
 /** How long the listening window waits for a word back, restarted by any word either way. */
@@ -731,6 +743,12 @@ function IntroductionFlight({
             dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
           }
         }, GREETING_TIMEOUT_MS);
+        // A greeting heard to its ceiling was still heard: marking it given
+        // here is what keeps an answered greeting from replaying next launch.
+        const ceiling = setTimeout(() => {
+          if (lukeCaption(captionRowsRef.current) !== undefined) givenRef.current = true;
+          dispatch(INTRODUCTION_EVENT.GREETING_CEILING);
+        }, GREETING_CEILING_MS);
         const flip = setTimeout(() => {
           setRows((current) => {
             const middle = current[Math.floor((current.length - 1) / 2)];
@@ -741,6 +759,7 @@ function IntroductionFlight({
         }, TOUR_FLIP_DELAY_MS);
         return () => {
           clearTimeout(silence);
+          clearTimeout(ceiling);
           clearTimeout(flip);
           setTourFlipId(undefined);
         };

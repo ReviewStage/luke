@@ -80,6 +80,40 @@ test("a refused microphone glides to the ordinary launch, from the ask or the di
   ]);
 });
 
+test("the greeting has two exits, and neither the connect nor the listen takes the ceiling", () => {
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.GREETING, INTRODUCTION_EVENT.OUTPUT_QUIET),
+    INTRODUCTION_BEAT.LISTEN,
+  );
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.GREETING, INTRODUCTION_EVENT.GREETING_CEILING),
+    INTRODUCTION_BEAT.LISTEN,
+  );
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.CONNECT, INTRODUCTION_EVENT.GREETING_CEILING),
+    INTRODUCTION_BEAT.CONNECT,
+  );
+  assert.equal(
+    nextIntroductionBeat(INTRODUCTION_BEAT.LISTEN, INTRODUCTION_EVENT.GREETING_CEILING),
+    INTRODUCTION_BEAT.LISTEN,
+  );
+});
+
+test("every beat with a session standing leaves on some event other than the voice failing", () => {
+  // The trap this guards against: a beat whose only exit waits on the model.
+  for (const beat of [
+    INTRODUCTION_BEAT.CONNECT,
+    INTRODUCTION_BEAT.GREETING,
+    INTRODUCTION_BEAT.LISTEN,
+  ]) {
+    const exits = Object.values(INTRODUCTION_EVENT).filter(
+      (event) =>
+        event !== INTRODUCTION_EVENT.VOICE_FAILED && nextIntroductionBeat(beat, event) !== beat,
+    );
+    assert.ok(exits.length >= 1, beat);
+  }
+});
+
 test("an event a beat does not name leaves it standing", () => {
   assert.equal(
     nextIntroductionBeat(INTRODUCTION_BEAT.GREETING, INTRODUCTION_EVENT.LISTEN_DONE),
