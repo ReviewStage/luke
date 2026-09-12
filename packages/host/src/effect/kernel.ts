@@ -106,6 +106,7 @@ const kernelLayer = Layer.effect(
     const reporter = yield* Reporter;
     const service = yield* HostService;
     const override = yield* accountBaseUrlOverride;
+    const clock = yield* Effect.clock;
 
     return hostKernelOver({
       options,
@@ -115,9 +116,11 @@ const kernelLayer = Layer.effect(
         packaged: identity.packaged,
         override: Option.getOrUndefined(override),
       }),
-      // The clock seam stays the injected reading while the tests that drive a
-      // `FakeClock` do; P7-11 replaces it with Effect's own `Clock`.
-      now: options.now,
+      // Effect's own `Clock`: the real one at every edge, and a `TestClock`
+      // under `it.effect`, so a test drives `kernel.now()` the same way it
+      // drives every other Effect timer rather than through an injected
+      // closure of its own.
+      now: () => clock.unsafeCurrentTimeMillis(),
       createId: idSource.create,
       report: reporter.report,
       service: {

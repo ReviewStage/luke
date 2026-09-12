@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { describe, it } from "@effect/vitest";
-import { Config, Effect, Fiber, Option, TestClock } from "effect";
+import { Config, Duration, Effect, Fiber, Option, TestClock } from "effect";
 import {
   ACCOUNT_BASE_URL_VARIABLE,
   type HostSeams,
@@ -148,14 +148,25 @@ describe("the seam tags", () => {
     Effect.gen(function* () {
       const kernel = yield* Effect.provide(
         HostKernelTag,
-        hostKernelLayerFromSeams(seams({ stateRoot: "/state", now: () => 7 })),
+        hostKernelLayerFromSeams(seams({ stateRoot: "/state" })),
       );
 
       assert.equal(kernel.stateRoot, "/state");
-      assert.equal(kernel.now(), 7);
       assert.equal(kernel.createId(), "id");
       assert.equal(path.dirname(kernel.agentSkillsPath()), kernel.agentWorkspacePath());
     }),
+  );
+
+  it.effect(
+    "the kernel's clock is Effect's own, a `TestClock` under this test rather than the seam's own reading",
+    () =>
+      Effect.gen(function* () {
+        const kernel = yield* Effect.provide(HostKernelTag, hostKernelLayerFromSeams(seams()));
+
+        assert.equal(kernel.now(), 0);
+        yield* TestClock.adjust(Duration.millis(1_000));
+        assert.equal(kernel.now(), 1_000);
+      }),
   );
 });
 

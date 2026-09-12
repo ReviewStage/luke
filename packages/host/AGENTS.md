@@ -20,8 +20,12 @@ seams it reaches and cannot build without them. `hostSeamLayers` stands every
 tag up from the one `HostSeams` object the desktop builds today,
 `createHostKernel` is the adaptor beside it, and `hostLayerFromSeams` and
 `composeHost`'s `start()`/`stop()` face are the same shim one level up, each
-a named shim the migration's last host PR deletes; the clock seam stays the
-injected reading for as long as a test drives a `FakeClock`.
+a named shim the migration's last host PR deletes. The kernel's clock is not
+one of these seams: `kernel.now` reads Effect's own `Clock`, the real one at
+every edge and a `TestClock` under `@effect/vitest`'s `it.effect`, so
+`@sidecar/host/testing`'s `testKernelLayer` stands a fixture host up over
+whichever `Clock` the test itself is running on, with no clock of its own to
+keep in step.
 
 Every override that seam holds is a `Config` read of the variable's own name,
 and the settings store's are read together (`effect/settings-overrides.ts`):
@@ -253,7 +257,10 @@ lowest one that holds both.
 ## The test scaffolding is behind its own door
 
 `@sidecar/host/testing` holds the brain composition and the operator a
-window's ask crosses, so nothing that ships can reach them. The three
-fixtures every test in the repository shares — a temporary directory, a
-stated microtask drain, a clock the test drives — are in
-`@sidecar/runtime/testing`.
+window's ask crosses, and `testKernelLayer`, every seam
+`hostAssemblyLayer`/`hostStandingLayer` need over a fixture state root, so
+nothing that ships can reach them. Its clock is Effect's own — a `TestClock`
+under `it.effect`, driven with `TestClock.adjust` rather than a hand-advanced
+`FakeClock` — and the three fixtures every other test in the repository
+shares — a temporary directory, a stated microtask drain, a clock the test
+drives by hand — are in `@sidecar/runtime/testing`.
