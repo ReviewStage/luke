@@ -18,8 +18,8 @@ import {
   PROACTIVE_SPEECH_KIND,
   parseLiveServerEvent,
   type RosterSeedSession,
-  rosterSeedText,
-  rosterUpdateText,
+  rosterSeed,
+  rosterUpdate,
   SEED_ROLE,
   seedItemTokens,
   UTTERANCE_GAP_MS,
@@ -1334,7 +1334,7 @@ test("a created session opens knowing the desk: the roster leads the input as on
     f.seeds[0]?.map((item) => item.role),
     [SEED_ROLE.DEVELOPER, SEED_ROLE.USER, SEED_ROLE.ASSISTANT],
   );
-  assert.equal(f.seeds[0]?.[0]?.content[0]?.text, rosterSeedText(f.roster, f.clock.now));
+  assert.equal(f.seeds[0]?.[0]?.content[0]?.text, rosterSeed(f.roster, f.clock.now)?.text);
 });
 
 test("an empty desk puts no roster message into the input at all", async () => {
@@ -1359,7 +1359,7 @@ test("the roster message is counted against the input's own bounds, and the conv
   const seed = f.seeds[0];
   assert.ok(seed);
   assert.equal(seed[0]?.role, SEED_ROLE.DEVELOPER);
-  assert.equal(seed[0]?.content[0]?.text, rosterSeedText(f.roster, f.clock.now));
+  assert.equal(seed[0]?.content[0]?.text, rosterSeed(f.roster, f.clock.now)?.text);
   assert.ok(seed.length <= LIVE_INPUT_BOUNDS.MESSAGES);
   assert.ok(seedItemTokens(seed) <= LIVE_INPUT_BOUNDS.TOKENS);
 });
@@ -1428,7 +1428,7 @@ test("a desk that empties withdraws what the session was told rather than leavin
   assert.ok(only && "content" in only);
   assert.equal(
     only.content,
-    rosterUpdateText({ sessions: f.roster, at: f.clock.now }, [], f.clock.now),
+    rosterUpdate(rosterSeed(f.roster, f.clock.now)?.told, [], f.clock.now)?.text,
   );
 });
 
@@ -1455,6 +1455,36 @@ test("a refresh the session refused is not recorded as told, so the withdrawal i
   const second = sent[1];
   assert.ok(first && "content" in first && second && "content" in second);
   assert.equal(second.content, first.content);
+});
+
+test("a change that lands while a refresh is still in flight is decided against what the session will know by then", async () => {
+  const f = fixture();
+  f.roster.push(rosterSession("a"));
+  const sideband = await f.open();
+  sideband.acknowledgeThinkingAtOnce = false;
+  // The first refresh puts b on the desk and is left unacknowledged, so it is
+  // still in flight when the second takes b away again.
+  f.service.updateRoster([rosterSession("a"), rosterSession("b")]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
+  f.service.updateRoster([rosterSession("a")]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  sideband.acknowledge(0, 0, 0);
+  await drainMicrotasks();
+  const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+  assert.equal(sent.length, 2);
+  const withdrawal = sent[1];
+  assert.ok(withdrawal && "content" in withdrawal);
+  assert.equal(
+    withdrawal.content,
+    rosterUpdate(
+      rosterSeed([rosterSession("a"), rosterSession("b")], f.clock.now)?.told,
+      [rosterSession("a")],
+      f.clock.now,
+    )?.text,
+  );
 });
 
 test("a desk that moves while no session stands opens none and sends nothing", async () => {

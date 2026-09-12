@@ -134,6 +134,11 @@ function statusText(session: RosterSeedSession, now: number): string {
   }
 }
 
+/** The name a withdrawal says, kept beside the line a session was given so a departed row can still be named. */
+function withdrawalTitle(session: RosterSeedSession): string {
+  return observedValue(session.title, ROSTER_SEED_BOUNDS.TITLE_CHARS) ?? "an untitled agent";
+}
+
 function sessionLine(session: RosterSeedSession, now: number): string {
   const title = observedValue(session.title, ROSTER_SEED_BOUNDS.TITLE_CHARS) ?? "untitled";
   const provider = observedValue(session.provider.displayName, ROSTER_SEED_BOUNDS.TITLE_CHARS);
@@ -176,59 +181,97 @@ function ordered(sessions: readonly RosterSeedSession[]): readonly RosterSeedSes
 }
 
 /**
- * The lines a bound admits, in order, cut from the end rather than by cutting
+ * One line as a session was actually given it, with the title a withdrawal of
+ * it would name. The title is kept beside the line because a session that has
+ * left the roster is no longer there to be asked for one.
+ */
+interface ToldLine {
+  line: string;
+  title: string;
+}
+
+/**
+ * What one session knows of the desk: the line it was given for each row it
+ * was told about, held by that row's identity — the provider's own two parts
+ * nested, never a key composed from them.
+ *
+ * It is the lines delivered and not the roster intended, which is what makes
+ * the diff honest under everything that can go wrong between the two: a
+ * refresh the session refused, one the append bound had to cut short, and one
+ * still in flight when the next desk change arrives all leave the rows they
+ * never carried exactly as they were, so the next refresh says them again.
+ */
+export type RosterTold = ReadonlyMap<string, ReadonlyMap<string, ToldLine>>;
+
+/** A summary and what the session knows once it has taken it. */
+export interface RosterSummary {
+  text: string;
+  told: RosterTold;
+}
+
+/** A line about to travel, and the row it would change in what the session knows. */
+type SummaryRow =
+  | { line: string; session: RosterSeedSession }
+  | { line: string; departed: SessionIdentity };
+
+function toldOf(told: RosterTold, identity: SessionIdentity): ToldLine | undefined {
+  return told.get(identity.providerId)?.get(identity.providerSessionId);
+}
+
+function toldWith(told: RosterTold, rows: readonly SummaryRow[]): RosterTold {
+  const next = new Map([...told].map(([providerId, rows]) => [providerId, new Map(rows)]));
+  for (const row of rows) {
+    if ("departed" in row) {
+      next.get(row.departed.providerId)?.delete(row.departed.providerSessionId);
+      continue;
+    }
+    const { providerId, providerSessionId } = row.session.identity;
+    const byProvider = next.get(providerId) ?? new Map<string, ToldLine>();
+    next.set(providerId, byProvider);
+    byProvider.set(providerSessionId, { line: row.line, title: withdrawalTitle(row.session) });
+  }
+  return next;
+}
+
+/**
+ * The rows a bound admits, in order, cut from the end rather than by cutting
  * a line, so what travels is whole lines about the sessions that lead the
  * order. The count cap is the seed's alone — what a desk holds now — where an
  * update is bounded by what one append carries and by nothing else, since a
  * pass that moved twelve rows has twelve things to say.
  */
-function boundedLines(
-  lines: readonly string[],
+function boundedRows(
+  rows: readonly SummaryRow[],
   fixed: readonly string[],
   cap: number,
-): readonly string[] {
-  let kept = lines.slice(0, cap);
-  while (kept.length > 0 && estimatedTokens([...fixed, ...kept].join("\n")) > APPEND_TOKEN_BOUND) {
+): readonly SummaryRow[] {
+  let kept = rows.slice(0, cap);
+  while (
+    kept.length > 0 &&
+    estimatedTokens([...fixed, ...kept.map((row) => row.line)].join("\n")) > APPEND_TOKEN_BOUND
+  ) {
     kept = kept.slice(0, -1);
   }
   return kept;
 }
 
-function summaryText(
+function summary(
+  told: RosterTold,
   preface: string,
   closing: readonly string[],
-  lines: readonly string[],
+  rows: readonly SummaryRow[],
   cap: number,
-): string | undefined {
-  const kept = boundedLines(lines, [preface, ...closing], cap);
+): RosterSummary | undefined {
+  const kept = boundedRows(rows, [preface, ...closing], cap);
   if (kept.length === 0) return undefined;
-  return [preface, ...kept, ...closing].join("\n");
+  return {
+    text: [preface, ...kept.map((row) => row.line), ...closing].join("\n"),
+    told: toldWith(told, kept),
+  };
 }
 
-/**
- * Each session's rendered line, held by its identity's own two parts, so the
- * next roster is diffed against what the voice was actually told rather than
- * against the data behind it: a line that still reads the same is not news,
- * however the fields under it moved.
- */
-function lineByIdentity(
-  sessions: readonly RosterSeedSession[],
-  now: number,
-): ReadonlyMap<string, ReadonlyMap<string, string>> {
-  const index = new Map<string, Map<string, string>>();
-  for (const session of sessions) {
-    const byProvider = index.get(session.identity.providerId) ?? new Map<string, string>();
-    index.set(session.identity.providerId, byProvider);
-    byProvider.set(session.identity.providerSessionId, sessionLine(session, now));
-  }
-  return index;
-}
-
-function lineOf(
-  index: ReadonlyMap<string, ReadonlyMap<string, string>>,
-  identity: SessionIdentity,
-): string | undefined {
-  return index.get(identity.providerId)?.get(identity.providerSessionId);
+function summaryRows(sessions: readonly RosterSeedSession[], now: number): readonly SummaryRow[] {
+  return ordered(sessions).map((session) => ({ session, line: sessionLine(session, now) }));
 }
 
 /**
@@ -236,36 +279,22 @@ function lineOf(
  * a greeting told "no agents are running" would be told it again by the first
  * refresh, and an empty list teaches the model nothing it cannot ask for.
  */
-export function rosterSeedText(
+export function rosterSeed(
   sessions: readonly RosterSeedSession[],
   now: number,
-): string | undefined {
-  return summaryText(
+): RosterSummary | undefined {
+  return summary(
+    new Map(),
     ROSTER_SEED_PREFACE,
     [ROSTER_SEED_CLOSING],
-    ordered(sessions).map((session) => sessionLine(session, now)),
+    summaryRows(sessions, now),
     ROSTER_SEED_BOUNDS.SESSIONS,
   );
 }
 
 /** The one developer message the roster travels in, for a session's `input`. */
-export function rosterSeedItem(
-  sessions: readonly RosterSeedSession[],
-  now: number,
-): InitialItem | undefined {
-  const text = rosterSeedText(sessions, now);
-  return text === undefined ? undefined : developerSeedItem(text);
-}
-
-/**
- * A summary as one session was actually given it: the roster it named and the
- * instant it was rendered at. Both are needed to diff honestly — rendering
- * the old sessions at the new instant would compare a line against one that
- * was never sent, and a session grown an hour older would read as unchanged.
- */
-export interface RosterTold {
-  sessions: readonly RosterSeedSession[];
-  at: number;
+export function rosterSeedItem(summary: RosterSummary): InitialItem {
+  return developerSeedItem(summary.text);
 }
 
 /**
@@ -273,37 +302,44 @@ export interface RosterTold {
  * and then the ones whose line now reads differently from the one it was
  * given — an age that crossed a bucket edge included, since the voice would
  * otherwise keep calling a session fresh for as long as nothing else about it
- * moved. A roster whose every line still reads the same produces nothing, so
- * a pass that observed no change costs the conversation neither an append nor
- * the cached prefix behind it. A session that was never told a roster at all
- * is told the whole summary rather than a diff against nothing.
+ * moved. A roster every line of which still reads as it was given produces
+ * nothing, so a pass that observed no change costs the conversation neither
+ * an append nor the cached prefix behind it. A session that was never told a
+ * roster at all is told the whole summary rather than a diff against nothing.
  *
  * Departures lead, because the two failures are not equal: a line the voice
  * never hears leaves it merely uninformed, where a withdrawal it never hears
  * leaves it offering an agent that is not on the desk.
  */
-export function rosterUpdateText(
-  previous: RosterTold | undefined,
+export function rosterUpdate(
+  told: RosterTold | undefined,
   next: readonly RosterSeedSession[],
   now: number,
-): string | undefined {
-  if (previous === undefined) return rosterSeedText(next, now);
-  const before = lineByIdentity(previous.sessions, previous.at);
-  const after = lineByIdentity(next, now);
-  const gone = ordered(previous.sessions)
-    .filter((session) => lineOf(after, session.identity) === undefined)
-    .map(
-      (session) =>
-        `- ${observedValue(session.title, ROSTER_SEED_BOUNDS.TITLE_CHARS) ?? "an untitled agent"}: ${GONE_TEXT}.`,
-    );
-  const changed = ordered(next)
-    .map((session) => ({ session, line: sessionLine(session, now) }))
-    .filter(({ session, line }) => lineOf(before, session.identity) !== line)
-    .map(({ line }) => line);
-  return summaryText(
+): RosterSummary | undefined {
+  if (told === undefined) return rosterSeed(next, now);
+  const standing = new Map<string, ReadonlySet<string>>();
+  for (const session of next) {
+    const { providerId, providerSessionId } = session.identity;
+    standing.set(providerId, new Set([...(standing.get(providerId) ?? []), providerSessionId]));
+  }
+  const departed: SummaryRow[] = [];
+  for (const [providerId, rows] of told) {
+    for (const [providerSessionId, line] of rows) {
+      if (standing.get(providerId)?.has(providerSessionId) === true) continue;
+      departed.push({
+        departed: { providerId, providerSessionId },
+        line: `- ${line.title}: ${GONE_TEXT}.`,
+      });
+    }
+  }
+  const changed = summaryRows(next, now).filter(
+    (row) => "session" in row && toldOf(told, row.session.identity)?.line !== row.line,
+  );
+  return summary(
+    told,
     ROSTER_UPDATE_PREFACE,
     [],
-    [...gone, ...changed],
-    gone.length + changed.length,
+    [...departed, ...changed],
+    departed.length + changed.length,
   );
 }

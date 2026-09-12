@@ -22,10 +22,12 @@ import {
   PROACTIVE_SPEECH_KIND,
   type ProactiveSpeechKind,
   type RosterSeedSession,
+  type RosterSummary,
   type RosterTold,
   renderAskContext,
+  rosterSeed,
   rosterSeedItem,
-  rosterUpdateText,
+  rosterUpdate,
   seedItemTokens,
   speechAppends,
   TRANSCRIPT_SPEAKER,
@@ -214,7 +216,7 @@ interface StandingSession {
   readonly settleTimers: Map<TranscriptSpeaker, ScheduledTimer>;
   idleReported: boolean;
   idleTimer: ScheduledTimer | undefined;
-  /** The roster this session was told and the instant it was rendered at, so the next one is diffed against what it actually holds. */
+  /** The lines about the desk this session was actually given, so the next refresh says only what it does not already hold. */
   rosterTold: RosterTold | undefined;
   stopEvents: () => void;
   stopClose: () => void;
@@ -338,15 +340,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (this.#standing) await this.endSession();
     const source = this.#options.source();
     if (!source) return undefined;
-    const told: RosterTold = { sessions: this.#options.roster?.() ?? [], at: this.#options.now() };
+    const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#options.now());
     this.#dropPendingRoster();
-    const opened = await source.create({ sdpOffer, input: this.#seedInput(told) });
+    const opened = await source.create({ sdpOffer, input: this.#seedInput(seeded) });
     if (!opened) return undefined;
     this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
     const sideband = await this.#attach(opened);
     if (!sideband) return undefined;
     this.#standing = this.#stand(opened.sessionId, sideband);
-    this.#standing.rosterTold = told;
+    this.#standing.rosterTold = seeded?.told;
     this.#usageConfirmed = false;
     this.#options.onSessionCreated?.();
     this.#trace(LIVE_TRACE_DECISION.CREATED);
@@ -515,8 +517,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * without a round trip — so the conversation is built under what the roster
    * item leaves of the API's bounds.
    */
-  #seedInput(told: RosterTold): readonly InitialItem[] {
-    const item = rosterSeedItem(told.sessions, told.at);
+  #seedInput(seeded: RosterSummary | undefined): readonly InitialItem[] {
+    const item = seeded === undefined ? undefined : rosterSeedItem(seeded);
     const budget =
       item === undefined
         ? { messages: LIVE_INPUT_BOUNDS.MESSAGES, tokens: LIVE_INPUT_BOUNDS.TOKENS }
@@ -556,17 +558,19 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const session = this.#speakable();
     if (!session) return;
     this.#rosterPending = undefined;
-    const at = this.#options.now();
-    const text = rosterUpdateText(session.rosterTold, sessions, at);
-    if (text === undefined) return;
     session.channel.enqueue(async () => {
-      const taken = await session.channel.send(thinkingAppend(this.#input(null, text)), {
+      // Decided here rather than when the change settled: the channel runs one
+      // unit at a time, so any earlier refresh has landed and moved what the
+      // session knows before this one works out what is still news.
+      const update = rosterUpdate(session.rosterTold, sessions, this.#options.now());
+      if (update === undefined) return;
+      const taken = await session.channel.send(thinkingAppend(this.#input(null, update.text)), {
         countsForIdle: false,
       });
-      // What the session knows moves only once it has taken the append. A
-      // refresh the session refused was never heard, and recording it as told
-      // would withdraw a departed agent exactly once, into nothing.
-      if (taken) session.rosterTold = { sessions, at };
+      // What the session knows moves only once it has taken the append, and
+      // moves by the lines that actually travelled: a refusal, or a summary
+      // the append bound cut short, leaves the rest to be said again.
+      if (taken) session.rosterTold = update.told;
     });
   }
 

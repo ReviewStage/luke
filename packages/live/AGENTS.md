@@ -107,6 +107,16 @@ two. A refresh whose every line reads the same produces nothing, which is
 what keeps a conversation's cached prefix warm across a pass that observed
 no change.
 
+What a session knows is `RosterTold`: the lines it was actually given, held
+by identity, and never the roster it was meant to have. That is what makes
+the diff honest under everything that can go wrong between deciding a
+refresh and delivering it — a refusal, a summary the append bound cut short,
+a change arriving while the last one is still in flight — since each leaves
+the rows it never carried exactly as they stood, to be said again. A
+departure leads an update for the same reason: a line the voice never hears
+leaves it uninformed, where a withdrawal it never hears leaves it offering an
+agent that is not on the desk.
+
 `seed.ts` is the rest of what a session is told as it opens: the recent
 Conversation lines as `input` messages in their own roles (developer and
 user as `input_text`, assistant as `output_text`, no `system`), and nothing
