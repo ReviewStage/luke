@@ -1,4 +1,4 @@
-import { Effect, Fiber } from "effect";
+import { Cause, Effect, Either, Fiber } from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackConsent,
@@ -12,7 +12,6 @@ import {
   ACCOUNT_FAILURE_ACTION,
   type AccountClient,
   type AccountIdentity,
-  type AccountTokens,
   accessTokenNeedsRefresh,
   accountFailureAction,
   deleteHostedAccount,
@@ -52,9 +51,36 @@ function connectionSource(provider: AccountProvider): LoopbackConnectionSource |
 }
 
 interface AccountSessionStore {
-  readAccount(): Promise<StoredAccount | undefined>;
-  setAccount(account: StoredAccount): Promise<AccountSnapshot>;
-  clearAccount(): Promise<AccountSnapshot>;
+  readAccount(): Effect.Effect<StoredAccount | undefined>;
+  setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot>;
+  clearAccount(): Effect.Effect<AccountSnapshot>;
+}
+
+/**
+ * A rejected client call as the failure channel's own value. Everything that
+ * reads one below — the renewal decision, the deletion's retry, the sentence
+ * a row shows — reads an `Error`, so a rejection that carried something else
+ * is worded here rather than carried on as an unknown.
+ */
+function asError(cause: unknown): Error {
+  return cause instanceof Error ? cause : new Error(String(cause));
+}
+
+/**
+ * A step of the sign-out whose failure is written down and never held against
+ * the sign-out itself: an account that could not tell the service it was
+ * leaving still leaves this machine.
+ */
+function reportingFailure<A, E>(effect: Effect.Effect<A, E>, what: string): Effect.Effect<void> {
+  return Effect.catchAllCause(effect, (cause) =>
+    // An interruption is not a failure of the step and is never written down
+    // as one: it is the caller ending this fiber, and it stands.
+    Cause.isInterruptedOnly(cause)
+      ? Effect.interrupt
+      : Effect.sync(() => {
+          process.stderr.write(`${what}: ${asError(Cause.squash(cause)).message}\n`);
+        }),
+  ).pipe(Effect.asVoid);
 }
 
 export interface AccountSessionManagerOptions {
@@ -63,15 +89,15 @@ export interface AccountSessionManagerOptions {
   hostedServiceBaseUrl: string;
   requiresAccount: boolean;
   openExternal: (url: string) => Promise<void>;
-  startCapabilities: () => Promise<void>;
-  stopCapabilities: () => Promise<void>;
+  startCapabilities: Effect.Effect<void>;
+  stopCapabilities: Effect.Effect<void>;
   /**
    * The last thing the departing account is used for, before its credential
    * is cleared: what the account signed this installation up for on the
    * service (its device row) is told to let go while the token still stands
    * to say so. A failure here never holds up the sign-out.
    */
-  onSignOut?: (account: StoredAccount) => Promise<void>;
+  onSignOut?: (account: StoredAccount) => Effect.Effect<void, Error>;
   onChange: (account: AccountSnapshot) => void;
 }
 
@@ -101,82 +127,123 @@ export class AccountSessionManager {
     this.#cancelSignIn?.();
   }
 
-  async signOut(options: { revokeRemote?: boolean } = {}): Promise<AccountSnapshot> {
-    this.#generation += 1;
-    this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
-    this.#options.onChange(this.#account);
-    const stored = await this.#options.store.readAccount();
-    if (stored && this.#options.onSignOut) {
-      await this.#options.onSignOut(stored).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`Account sign-out release failed: ${message}\n`);
-      });
-    }
-    const clearing = this.#options.store.clearAccount();
-    await this.#options.stopCapabilities();
-    this.#account = await clearing;
-    this.#options.onChange(this.#account);
-    if (options.revokeRemote && stored?.refreshToken) {
-      await this.#options.client.revoke(stored.refreshToken).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`Account token revocation failed: ${message}\n`);
-      });
-    }
-    return this.#account;
+  signOut(options: { revokeRemote?: boolean } = {}): Effect.Effect<AccountSnapshot> {
+    return Effect.gen(this, function* () {
+      // Everything up to the cleared account is one uninterruptible step, as
+      // the promise it replaces was by construction: the departure is reported
+      // before the credential is cleared and the cadences are disarmed, so a
+      // fiber cut between them — a Gateway request whose connection closed, a
+      // quit — would leave a panel saying signed out over a credential still
+      // on disk and loops still running. The revocation after it is the
+      // remote's own business and may be cut like any other call.
+      const stored = yield* Effect.uninterruptible(this.#clearAccount());
+      if (options.revokeRemote && stored?.refreshToken) {
+        yield* reportingFailure(
+          Effect.tryPromise({
+            try: () => this.#options.client.revoke(stored.refreshToken),
+            catch: asError,
+          }),
+          "Account token revocation failed",
+        );
+      }
+      return this.#account;
+    });
   }
 
-  async deleteEverywhere(): Promise<AccountSnapshot> {
-    const stored = await this.#options.store.readAccount();
-    if (!stored) throw new Error("No stored account credential to delete with");
-    try {
-      await this.#deleteHosted(stored.accessToken);
-    } catch (error) {
-      if (!(error instanceof Error) || !accessTokenNeedsRefresh(error)) throw error;
+  /** The departure as this machine keeps it, answering the account that left. */
+  #clearAccount(): Effect.Effect<StoredAccount | undefined> {
+    return Effect.gen(this, function* () {
+      this.#generation += 1;
+      this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
+      this.#options.onChange(this.#account);
+      const stored = yield* this.#options.store.readAccount();
+      if (stored && this.#options.onSignOut) {
+        yield* reportingFailure(this.#options.onSignOut(stored), "Account sign-out release failed");
+      }
+      // The clearing and the capability stop run together rather than in a
+      // fixed order: what the sign-out guarantees is that both have settled
+      // before the account it reports is the cleared one.
+      const [cleared] = yield* Effect.all(
+        [this.#options.store.clearAccount(), this.#options.stopCapabilities],
+        { concurrency: 2 },
+      );
+      this.#account = cleared;
+      this.#options.onChange(this.#account);
+      return stored;
+    });
+  }
+
+  deleteEverywhere(): Effect.Effect<AccountSnapshot, Error> {
+    return Effect.gen(this, function* () {
+      const stored = yield* this.#options.store.readAccount();
+      if (!stored)
+        return yield* Effect.fail(new Error("No stored account credential to delete with"));
+      const deleted = yield* Effect.either(this.#deleteHosted(stored.accessToken));
+      if (Either.isLeft(deleted)) {
+        if (!accessTokenNeedsRefresh(deleted.left)) return yield* Effect.fail(deleted.left);
+        const generation = this.#generation;
+        const tokens = yield* Effect.tryPromise({
+          try: () => this.#options.client.refresh(stored.refreshToken),
+          catch: asError,
+        });
+        yield* this.#storeCurrent(generation, { ...stored, ...tokens });
+        yield* this.#deleteHosted(tokens.accessToken);
+      }
+      return yield* this.signOut();
+    });
+  }
+
+  refresh(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const stored = yield* this.#options.store.readAccount();
+      if (!stored || !this.#options.requiresAccount) return;
       const generation = this.#generation;
-      const tokens = await this.#options.client.refresh(stored.refreshToken);
-      await this.#storeCurrent(generation, { ...stored, ...tokens });
-      await this.#deleteHosted(tokens.accessToken);
-    }
-    return this.signOut();
-  }
-
-  async refresh(): Promise<void> {
-    const stored = await this.#options.store.readAccount();
-    if (!stored || !this.#options.requiresAccount) return;
-    const generation = this.#generation;
-    try {
-      const identity = await this.#options.client.userInfo(stored.accessToken, stored.provider);
-      if (!sameIdentity(stored, identity)) {
-        if (!(await this.#storeCurrent(generation, mergedIdentity(stored, identity)))) return;
+      const identity = yield* Effect.either(
+        Effect.tryPromise({
+          try: () => this.#options.client.userInfo(stored.accessToken, stored.provider),
+          catch: asError,
+        }),
+      );
+      if (Either.isRight(identity)) {
+        if (sameIdentity(stored, identity.right)) return;
+        if (!(yield* this.#storeCurrent(generation, mergedIdentity(stored, identity.right))))
+          return;
         this.#options.onChange(this.#account);
-      }
-      return;
-    } catch (error) {
-      if (!(error instanceof Error) || !accessTokenNeedsRefresh(error)) return;
-    }
-    let tokens: AccountTokens;
-    try {
-      tokens = await this.#options.client.refresh(stored.refreshToken);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        accountFailureAction(error) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
-        this.#isCurrent(generation)
-      ) {
-        await this.signOut();
-      }
-      return;
-    }
-    try {
-      if (!(await this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
-      const identity = await this.#options.client.userInfo(tokens.accessToken, stored.provider);
-      if (
-        !(await this.#storeCurrent(generation, mergedIdentity({ ...stored, ...tokens }, identity)))
-      ) {
         return;
       }
-      this.#options.onChange(this.#account);
-    } catch {}
+      if (!accessTokenNeedsRefresh(identity.left)) return;
+      const renewed = yield* Effect.either(
+        Effect.tryPromise({
+          try: () => this.#options.client.refresh(stored.refreshToken),
+          catch: asError,
+        }),
+      );
+      if (Either.isLeft(renewed)) {
+        if (
+          accountFailureAction(renewed.left) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
+          this.#isCurrent(generation)
+        ) {
+          yield* this.signOut();
+        }
+        return;
+      }
+      const tokens = renewed.right;
+      // The renewed tokens are already stored by the time the identity read
+      // below is made, so a read that fails leaves the account signed in on
+      // them rather than undoing the renewal.
+      yield* Effect.ignore(
+        Effect.gen(this, function* () {
+          if (!(yield* this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
+          const next = yield* Effect.tryPromise({
+            try: () => this.#options.client.userInfo(tokens.accessToken, stored.provider),
+            catch: asError,
+          });
+          const merged = mergedIdentity({ ...stored, ...tokens }, next);
+          if (!(yield* this.#storeCurrent(generation, merged))) return;
+          this.#options.onChange(this.#account);
+        }),
+      );
+    });
   }
 
   /**
@@ -225,7 +292,7 @@ export class AccountSessionManager {
         this.#options.onChange(this.#account);
         return this.#account;
       }
-      if (this.#isCurrent(generation)) yield* Effect.promise(() => this.signOut());
+      if (this.#isCurrent(generation)) yield* this.signOut();
       // A withdrawn sign-in — the developer's own press, or a later attempt
       // taking the generation out from under this one — is an ordinary end.
       // Anything else is a failure the panel has to be able to report.
@@ -266,56 +333,70 @@ export class AccountSessionManager {
    * that cannot be completed revokes what it was just issued rather than
    * leaving a live refresh token nobody holds.
    */
-  async #exchange(
+  #exchange(
     provider: AccountProvider,
     generation: number,
     input: LoopbackExchange,
-  ): Promise<LoopbackConsentOutcome<AccountSnapshot>> {
-    try {
-      return await withIssuedAccountTokens({
-        issue: () =>
+  ): Effect.Effect<LoopbackConsentOutcome<AccountSnapshot>> {
+    return withIssuedAccountTokens({
+      issue: Effect.tryPromise({
+        try: () =>
           this.#options.client.exchangeCode({
             code: input.code,
             codeVerifier: input.codeVerifier,
             redirectUri: input.redirectUri,
           }),
-        use: async (tokens) => {
-          const identity = await this.#options.client.userInfo(tokens.accessToken, provider);
-          if (!(await this.#storeCurrent(generation, { ...tokens, ...identity }))) {
-            throw new Error(LOOPBACK_CONSENT_CANCELLED);
+        catch: asError,
+      }),
+      use: (tokens) =>
+        Effect.gen(this, function* () {
+          const identity = yield* Effect.tryPromise({
+            try: () => this.#options.client.userInfo(tokens.accessToken, provider),
+            catch: asError,
+          });
+          if (!(yield* this.#storeCurrent(generation, { ...tokens, ...identity }))) {
+            return yield* Effect.fail(new Error(LOOPBACK_CONSENT_CANCELLED));
           }
-          await this.#options.startCapabilities();
-          if (!this.#isCurrent(generation)) throw new Error(LOOPBACK_CONSENT_CANCELLED);
+          yield* this.#options.startCapabilities;
+          if (!this.#isCurrent(generation)) {
+            return yield* Effect.fail(new Error(LOOPBACK_CONSENT_CANCELLED));
+          }
           return this.#account;
-        },
-        revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
-        onRevokeFailure: (error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
-        },
-      });
-    } catch (error) {
-      return { reason: error instanceof Error ? error.message : String(error) };
-    }
+        }),
+      revoke: (refreshToken) =>
+        Effect.tryPromise({
+          try: () => this.#options.client.revoke(refreshToken),
+          catch: asError,
+        }),
+      onRevokeFailure: (error) => {
+        process.stderr.write(`Rejected account token revocation failed: ${error.message}\n`);
+      },
+    }).pipe(Effect.catchAll((error) => Effect.succeed({ reason: error.message })));
   }
 
-  async #storeCurrent(generation: number, stored: StoredAccount): Promise<boolean> {
-    if (!this.#isCurrent(generation)) return false;
-    const next = await this.#options.store.setAccount(stored);
-    if (!this.#isCurrent(generation)) return false;
-    this.#account = next;
-    this.#options.onChange(this.#account);
-    return true;
+  #storeCurrent(generation: number, stored: StoredAccount): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      if (!this.#isCurrent(generation)) return false;
+      const next = yield* this.#options.store.setAccount(stored);
+      if (!this.#isCurrent(generation)) return false;
+      this.#account = next;
+      this.#options.onChange(this.#account);
+      return true;
+    });
   }
 
   #isCurrent(generation: number): boolean {
     return generation === this.#generation;
   }
 
-  #deleteHosted(accessToken: string): Promise<void> {
-    return deleteHostedAccount({
-      serviceBaseUrl: this.#options.hostedServiceBaseUrl,
-      accessToken,
+  #deleteHosted(accessToken: string): Effect.Effect<void, Error> {
+    return Effect.tryPromise({
+      try: () =>
+        deleteHostedAccount({
+          serviceBaseUrl: this.#options.hostedServiceBaseUrl,
+          accessToken,
+        }),
+      catch: asError,
     });
   }
 }

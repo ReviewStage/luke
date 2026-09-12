@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer, HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
-import { Effect, Exit, Fiber } from "effect";
-import { test } from "vitest";
+import { Deferred, Effect, Exit, Fiber, Option } from "effect";
 import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -19,8 +18,10 @@ function manager(options: {
   stored?: StoredAccount;
   revoke?: (token: string) => Promise<void>;
   exchangeCode?: () => Promise<{ accessToken: string; refreshToken: string }>;
-  onSignOut?: (account: StoredAccount) => Promise<void>;
+  onSignOut?: (account: StoredAccount) => Effect.Effect<void, Error>;
   client?: AccountClient;
+  /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
+  beforeClear?: Effect.Effect<void>;
 }) {
   let stored = options.stored;
   const changes: string[] = [];
@@ -42,75 +43,112 @@ function manager(options: {
   const instance = new AccountSessionManager({
     client: options.client ?? fixtureClient,
     store: {
-      readAccount: async () => stored,
-      setAccount: async (next) => {
-        stored = next;
-        return { status: ACCOUNT_STATUS.SIGNED_IN, ...next };
-      },
-      clearAccount: async () => {
-        stored = undefined;
-        return { status: ACCOUNT_STATUS.SIGNED_OUT };
-      },
+      readAccount: () => Effect.sync(() => stored),
+      setAccount: (next) =>
+        Effect.sync(() => {
+          stored = next;
+          return { status: ACCOUNT_STATUS.SIGNED_IN, ...next };
+        }),
+      clearAccount: () =>
+        Effect.gen(function* () {
+          if (options.beforeClear) yield* options.beforeClear;
+          stored = undefined;
+          return { status: ACCOUNT_STATUS.SIGNED_OUT };
+        }),
     },
     hostedServiceBaseUrl: "https://example.com",
     requiresAccount: true,
     openExternal: async () => undefined,
-    startCapabilities: async () => {
+    startCapabilities: Effect.sync(() => {
       events.push("start");
-    },
-    stopCapabilities: async () => {
+    }),
+    stopCapabilities: Effect.sync(() => {
       events.push("stop");
-    },
+    }),
     ...(options.onSignOut ? { onSignOut: options.onSignOut } : undefined),
     onChange: (account) => changes.push(account.status),
   });
   return { instance, changes, events, authorizations, stored: () => stored };
 }
 
-test("sign out closes capabilities, clears storage, broadcasts, then revokes", async () => {
-  const calls: string[] = [];
-  const subject = manager({
-    stored: STORED,
-    revoke: async () => {
-      calls.push("revoke");
-    },
-  });
-  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-  await subject.instance.signOut({ revokeRemote: true });
-  assert.deepEqual(subject.events, ["stop"]);
-  assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
-  assert.deepEqual(calls, ["revoke"]);
-  assert.equal(subject.stored(), undefined);
-});
+it.effect("sign out closes capabilities, clears storage, broadcasts, then revokes", () =>
+  Effect.gen(function* () {
+    const calls: string[] = [];
+    const subject = manager({
+      stored: STORED,
+      revoke: async () => {
+        calls.push("revoke");
+      },
+    });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+    yield* subject.instance.signOut({ revokeRemote: true });
+    assert.deepEqual(subject.events, ["stop"]);
+    assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
+    assert.deepEqual(calls, ["revoke"]);
+    assert.equal(subject.stored(), undefined);
+  }),
+);
 
-test("sign out releases the departing account while its token still stands, and a failed release never holds it up", async () => {
-  const order: string[] = [];
-  const subject = manager({
-    stored: STORED,
-    revoke: async () => {
-      order.push("revoke");
-    },
-    onSignOut: async (account) => {
-      order.push(
-        `release:${account.accessToken}:${subject.stored() === undefined ? "cleared" : "standing"}`,
-      );
-      throw new Error("service unreachable");
-    },
-  });
-  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-  await subject.instance.signOut({ revokeRemote: true });
-  assert.deepEqual(order, ["release:access:standing", "revoke"]);
-  assert.deepEqual(subject.events, ["stop"]);
-  assert.equal(subject.stored(), undefined);
-});
+it.effect(
+  "sign out releases the departing account while its token still stands, and a failed release never holds it up",
+  () =>
+    Effect.gen(function* () {
+      const order: string[] = [];
+      const subject = manager({
+        stored: STORED,
+        revoke: async () => {
+          order.push("revoke");
+        },
+        onSignOut: (account) =>
+          Effect.gen(function* () {
+            order.push(
+              `release:${account.accessToken}:${
+                subject.stored() === undefined ? "cleared" : "standing"
+              }`,
+            );
+            return yield* Effect.fail(new Error("service unreachable"));
+          }),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      yield* subject.instance.signOut({ revokeRemote: true });
+      assert.deepEqual(order, ["release:access:standing", "revoke"]);
+      assert.deepEqual(subject.events, ["stop"]);
+      assert.equal(subject.stored(), undefined);
+    }),
+);
 
-test("refresh keeps a valid stored account signed in without rewriting it", async () => {
-  const subject = manager({ stored: STORED });
-  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-  await subject.instance.refresh();
-  assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
-  assert.equal(subject.stored()?.accessToken, "access");
-});
+it.effect("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
+  Effect.gen(function* () {
+    const holding = yield* Deferred.make<void>();
+    const subject = manager({ stored: STORED, beforeClear: Deferred.await(holding) });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+
+    const signingOut = yield* Effect.fork(subject.instance.signOut());
+    yield* Effect.yieldNow();
+    yield* Effect.fork(Fiber.interrupt(signingOut));
+    // Enough turns for the interruption to have been delivered wherever the
+    // sign-out could take it. The departure is reported before the credential
+    // is cleared, so it must not be taken anywhere: the fiber is still
+    // running on the held clear.
+    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    assert.equal(Option.isNone(yield* Fiber.poll(signingOut)), true);
+
+    yield* Deferred.succeed(holding, undefined);
+    yield* Fiber.await(signingOut);
+    assert.equal(subject.stored(), undefined);
+    assert.deepEqual(subject.events, ["stop"]);
+  }),
+);
+
+it.effect("refresh keeps a valid stored account signed in without rewriting it", () =>
+  Effect.gen(function* () {
+    const subject = manager({ stored: STORED });
+    subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+    yield* subject.instance.refresh();
+    assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+    assert.equal(subject.stored()?.accessToken, "access");
+  }),
+);
 
 /**
  * The real `AccountClient` over the ambient `HttpClient`, so the renewal
@@ -134,40 +172,48 @@ function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>
   });
 }
 
-test("a renewal a network cannot carry keeps the stored account standing, never a sign-out", async () => {
-  const subject = manager({
-    stored: STORED,
-    client: refreshingClient(() => {
-      throw new TypeError("fetch failed");
+it.effect(
+  "a renewal a network cannot carry keeps the stored account standing, never a sign-out",
+  () =>
+    Effect.gen(function* () {
+      const subject = manager({
+        stored: STORED,
+        client: refreshingClient(() => {
+          throw new TypeError("fetch failed");
+        }),
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+
+      yield* subject.instance.refresh();
+
+      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
+      assert.deepEqual(subject.stored(), STORED);
     }),
-  });
-  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+);
 
-  await subject.instance.refresh();
-
-  assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_IN);
-  assert.deepEqual(subject.stored(), STORED);
-});
-
-test("a renewal the service refuses with invalid_grant is the one path that signs the account out", async () => {
-  const subject = manager({
-    stored: STORED,
-    client: refreshingClient(() =>
-      Promise.resolve(
-        jsonResponse(
-          { error: "invalid_grant", error_description: "Refresh token was revoked" },
-          400,
+it.effect(
+  "a renewal the service refuses with invalid_grant is the one path that signs the account out",
+  () =>
+    Effect.gen(function* () {
+      const subject = manager({
+        stored: STORED,
+        client: refreshingClient(() =>
+          Promise.resolve(
+            jsonResponse(
+              { error: "invalid_grant", error_description: "Refresh token was revoked" },
+              400,
+            ),
+          ),
         ),
-      ),
-    ),
-  });
-  subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
+      });
+      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
 
-  await subject.instance.refresh();
+      yield* subject.instance.refresh();
 
-  assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
-  assert.equal(subject.stored(), undefined);
-});
+      assert.equal(subject.instance.snapshot.status, ACCOUNT_STATUS.SIGNED_OUT);
+      assert.equal(subject.stored(), undefined);
+    }),
+);
 
 /** Waits for the consent trip to have composed its authorization page. */
 async function armed(authorizations: readonly unknown[]): Promise<void> {

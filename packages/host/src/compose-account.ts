@@ -24,7 +24,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { Config, Effect, Option, Runtime } from "effect";
+import { Config, Effect, Option } from "effect";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -96,10 +96,11 @@ export const composeAccount = (
     const environment = yield* Environment;
     const identity = yield* AppIdentity;
     const { runMode, report } = kernel;
-    // The runtime the host is being built on, so the three links the session
-    // manager awaits as promises are run as fibers of the host's own rather
-    // than of an ambient default one. It is the one run this composer makes,
-    // and it goes once `AccountSessionManager` answers effects itself.
+    // The runtime the host is being built on, threaded through
+    // `VoiceCapabilityAssembler` to every model adapter it builds, so the
+    // promise each of those still answers is run on the host's own runtime
+    // rather than on an ambient default one. This composer runs nothing on it
+    // itself.
     const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<AccountLinks>();
     const links = (): AccountLinks => {
@@ -118,13 +119,22 @@ export const composeAccount = (
 
     const session = new AccountSessionManager({
       client,
-      store: settings.store,
+      // The store answers promises still, so each of the session's three
+      // reads and writes of it is one lifted here rather than a run made
+      // there; the lateness of the links below is an `Effect.suspend` for the
+      // same reason, since a link read at construction would be read before
+      // `link()` has run.
+      store: {
+        readAccount: () => Effect.promise(() => settings.store.readAccount()),
+        setAccount: (stored) => Effect.promise(() => settings.store.setAccount(stored)),
+        clearAccount: () => Effect.promise(() => settings.store.clearAccount()),
+      },
       hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
       requiresAccount: runMode.requiresAccount,
       openExternal: (url) => kernel.openExternalThroughNode(url),
-      startCapabilities: () => Runtime.runPromise(runtime)(links().startCapabilities),
-      stopCapabilities: () => Runtime.runPromise(runtime)(links().stopCapabilities),
-      onSignOut: (stored) => Runtime.runPromise(runtime)(links().releaseDevice(stored)),
+      startCapabilities: Effect.suspend(() => links().startCapabilities),
+      stopCapabilities: Effect.suspend(() => links().stopCapabilities),
+      onSignOut: (stored) => links().releaseDevice(stored),
       onChange: (next) => {
         const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
         const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
@@ -282,7 +292,7 @@ export const composeAccount = (
           // authenticated with; queued behind the sign-out it would wait for the
           // next sign-in.
           yield* Effect.promise(() => settings.flushProductEvents());
-          const snapshot = yield* Effect.promise(() => session.signOut({ revokeRemote: true }));
+          const snapshot = yield* session.signOut({ revokeRemote: true });
           return { account: carried(snapshot) };
         }),
       [GATEWAY_METHOD.ACCOUNT_DELETE]: () =>
@@ -291,7 +301,7 @@ export const composeAccount = (
             account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
           });
           yield* Effect.promise(() => settings.flushProductEvents());
-          const snapshot = yield* Effect.promise(() => session.deleteEverywhere());
+          const snapshot = yield* Effect.orDie(session.deleteEverywhere());
           // Only a deletion that landed stands recording down for the run.
           sessionReplayEndedByDeletion = true;
           void emitSessionReplay();

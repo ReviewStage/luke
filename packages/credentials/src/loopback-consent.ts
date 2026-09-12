@@ -163,8 +163,8 @@ export interface LoopbackConsentOptions<Grant> {
   reasons: LoopbackConsentReasons;
   /** The consent page's URL, built from the state and the bound redirect. */
   authorizationUrl(input: LoopbackAuthorization): string;
-  /** Trades the code for a grant, or names why not. Never throws. */
-  exchange(input: LoopbackExchange): Promise<LoopbackConsentOutcome<Grant>>;
+  /** Trades the code for a grant, or names why not. Never fails. */
+  exchange(input: LoopbackExchange): Effect.Effect<LoopbackConsentOutcome<Grant>>;
   /**
    * Opens the consent page in the user's own browser. Injected so the caller
    * hands in the shell and tests hand in a recorder — this module never
@@ -330,9 +330,7 @@ export function loopbackConsent<Grant extends object>(
         const refused = parameter(parameters, "error");
         const code = parameter(parameters, "code");
         if (!refused && code) {
-          outcome = yield* Effect.promise(() =>
-            options.exchange({ code, redirectUri, codeVerifier }),
-          );
+          outcome = yield* options.exchange({ code, redirectUri, codeVerifier });
         }
         const granted = !("reason" in outcome);
         return card(
