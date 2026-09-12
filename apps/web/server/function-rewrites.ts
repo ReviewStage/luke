@@ -7,10 +7,15 @@ import { functionPublicPath, webFunctions } from "./function-layout.js";
 
 /**
  * The `/api/` entries of `vercel.json`'s `routes`, generated from the function
- * table so a client path lands on the function that groups its route. Vercel
- * checks the stubs into place before the build runs, and a route with no
- * rewrite would 404 on production while every check stayed green, so the
- * committed entries are checked against this generation like the stubs are.
+ * table so a client path lands on the function that groups its route. A route
+ * with no rewrite would 404 on production while every check stayed green, so
+ * the generation is committed and checked in two steps: the table itself,
+ * `server/api-rewrites.json`, must be what the routes generate, and the
+ * `/api/` entries of `vercel.json` must be the table, in its order. The table
+ * is its own file so the configuration can one day be assembled by a
+ * `vercel.ts` that imports it: Vercel bundles a config module's relative
+ * imports and evaluates it in plain Node, which can take a JSON table and
+ * cannot take this module's dependencies (LUKE-183).
  */
 export interface Rewrite {
   readonly src: string;
@@ -75,8 +80,22 @@ export function apiRewrites(definitions: readonly FunctionDefinition[]): readonl
 }
 
 export const VERCEL_CONFIG_FILE = "vercel.json";
+/** The committed generation of the `/api/` rewrites, which `vercel.json` is assembled from. */
+export const API_REWRITES_FILE = join("server", "api-rewrites.json");
 
 const RewriteSchema = Schema.Struct({ src: Schema.String, dest: Schema.String });
+
+const decodeApiRewrites = Schema.decodeUnknownSync(Schema.parseJson(Schema.Array(RewriteSchema)));
+
+/** The table as committed. */
+export async function readApiRewritesTable(web: string): Promise<readonly Rewrite[]> {
+  return decodeApiRewrites(await readFile(join(web, API_REWRITES_FILE), "utf8"));
+}
+
+/** The table's text, stable under regeneration. */
+export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
+  return `${JSON.stringify(rewrites, null, 2)}\n`;
+}
 
 /**
  * The whole of `vercel.json`, so a key this build does not know refuses the
@@ -100,18 +119,26 @@ async function readVercelConfig(web: string): Promise<VercelConfig> {
 
 const isApiRewrite = (rewrite: Rewrite) => rewrite.src.startsWith(API_ROUTE_PREFIX);
 
-/** Whether the committed `/api/` rewrites are the generated ones, in the generated order. */
+const sameRewrites = (a: readonly Rewrite[], b: readonly Rewrite[]) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Whether either committed half has drifted: the table from what the routes
+ * generate, or `vercel.json`'s `/api/` entries from the table. Both are read,
+ * so a table regenerated without the file assembled from it, or the reverse,
+ * is drift and not a pass.
+ */
 export async function rewritesDrifted(web: string): Promise<boolean> {
-  const config = await readVercelConfig(web);
-  const committed = config.routes.filter(isApiRewrite);
-  const expected = apiRewrites(await webFunctions(web));
-  return JSON.stringify(committed) !== JSON.stringify(expected);
+  const table = await readApiRewritesTable(web);
+  const generated = apiRewrites(await webFunctions(web));
+  const committed = (await readVercelConfig(web)).routes.filter(isApiRewrite);
+  return !sameRewrites(table, generated) || !sameRewrites(committed, table);
 }
 
-/** `vercel.json` with its `/api/` rewrites replaced by the generated ones, ahead of every other route. */
+/** `vercel.json` with its `/api/` rewrites replaced by the committed table, ahead of every other route. */
 export async function vercelConfigSource(web: string): Promise<string> {
   const config = await readVercelConfig(web);
   const others = config.routes.filter((rewrite) => !isApiRewrite(rewrite));
-  const routes = [...apiRewrites(await webFunctions(web)), ...others];
+  const routes = [...(await readApiRewritesTable(web)), ...others];
   return `${JSON.stringify({ ...config, routes }, null, 2)}\n`;
 }

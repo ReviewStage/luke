@@ -93,9 +93,14 @@ deploys are the ones the Build Output tree below emits, and a file under
 builders claiming one path. A function's public path is still
 `api/<function>.js` (`functionPublicPath` in `server/function-layout.ts`),
 because that is the `.func` name in the tree and the destination the `/api/`
-rewrites of `vercel.json` carry; `pnpm functions:rewrites` regenerates those
-rewrites after adding, moving, or removing a route, and
-`repository-checks.sh` refuses stale ones. `server/feedback.mjs` is the one
+rewrites of `vercel.json` carry. Those rewrites are generated into a committed
+table, `server/api-rewrites.json`, and `vercel.json` is assembled from the
+table: `pnpm functions:rewrites` regenerates both after adding, moving, or
+removing a route, and `repository-checks.sh` refuses drift on either half. The
+table is its own file so a `vercel.ts` can one day import it and `vercel.json`
+be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
+bundles only its relative imports, which takes a JSON table and not this
+generator's dependencies. `server/feedback.mjs` is the one
 hand-written function, emitted into the tree at `api/feedback.mjs` as it
 stands.
 
