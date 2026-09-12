@@ -80,9 +80,13 @@ failure; the treadmill is the one that can eat a night.
   the probe, the press, and reading production.
 - **The press is a watcher's, not a person's.** The merge queue checks review
   threads at enqueue and not at merge, and a verdict landing while queued is
-  the trap on record. The watcher presses when the ruleset's required contexts
-  pass, both Cursor bots pass, and no unresolved thread stands, and it
-  dequeues if a thread appears while queued.
+  the trap on record. The watcher is `scripts/queue-watch.sh`, tracked in the
+  repository and tested against a fake `gh`, never a copy in a sandbox: it
+  presses when the ruleset's required contexts pass, both Cursor bots pass,
+  and no unresolved thread stands, it dequeues if a thread appears while
+  queued, and it re-reads the pull request after the queue entry vanishes
+  before it calls the end a merge or an eviction, because GitHub drops the
+  entry before the pull request reads merged.
 
 ## The order
 
@@ -103,8 +107,9 @@ failure; the treadmill is the one that can eat a night.
 5. **Dean reads the two log facts and the eight probes** (below) and reports
    them as they are.
 6. **The worker presses within the minute** by starting the enqueue watcher
-   with its press gate on. Every other merge to `main` in the window fails
-   production, so the window is kept short and the PR merges first.
+   armed (`scripts/queue-watch.sh --press <number>`). Every other merge to
+   `main` in the window fails production, so the window is kept short and the
+   PR merges first.
 7. **The worker reads production to terminal state and probes it**, cache
    busted, with the same eight codes plus `/eve/v1/health`.
 
