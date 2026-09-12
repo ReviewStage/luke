@@ -10,6 +10,7 @@ import {
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { ACTION_TOOLS, type ActionToolContext, actionToolNamed } from "./action-tools.js";
 
@@ -76,7 +77,7 @@ test("execute admits over the roster admission reads for itself, then carries wh
   const tool = actionToolNamed("send_session_message");
   assert.ok(tool);
   const { ctx, carried, rosterReads } = context();
-  const output = await tool.execute(MESSAGE_INPUT, ctx);
+  const output = await Effect.runPromise(tool.execute(MESSAGE_INPUT, ctx));
   assert.equal(output.status, ACTION_OUTPUT_STATUS.ACCEPTED);
   assert.deepEqual(rosterReads, [1]);
   assert.deepEqual(carried, [
@@ -93,16 +94,15 @@ test("a call admission refuses carries nothing, and a standing already revoked r
   const tool = actionToolNamed("send_session_message");
   assert.ok(tool);
   const stranger = context();
-  const refused = await tool.execute(
-    { ...MESSAGE_INPUT, provider_session_id: "ghost" },
-    stranger.ctx,
+  const refused = await Effect.runPromise(
+    tool.execute({ ...MESSAGE_INPUT, provider_session_id: "ghost" }, stranger.ctx),
   );
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(stranger.carried, []);
   assert.deepEqual(stranger.rosterReads, [1]);
 
   const over = context(() => true);
-  const late = await tool.execute(MESSAGE_INPUT, over.ctx);
+  const late = await Effect.runPromise(tool.execute(MESSAGE_INPUT, over.ctx));
   assert.deepEqual(late, {
     status: ACTION_OUTPUT_STATUS.REFUSED,
     reason: ACTION_REFUSAL.TURN_OVER,
@@ -127,7 +127,7 @@ test("a standing revoked while admission read the roster refuses before the carr
       },
     },
   };
-  const late = await tool.execute(MESSAGE_INPUT, reading);
+  const late = await Effect.runPromise(tool.execute(MESSAGE_INPUT, reading));
   assert.deepEqual(late, {
     status: ACTION_OUTPUT_STATUS.REFUSED,
     reason: ACTION_REFUSAL.TURN_OVER,

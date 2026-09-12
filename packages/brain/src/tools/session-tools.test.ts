@@ -15,6 +15,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -123,10 +124,13 @@ function context(children: BrainChildAccess | undefined) {
     children,
     policy: { allowed: ["sessions_spawn"], denied: ["announce"] },
     fork: () => ({ items: [{ type: "message" }], estimatedTokens: 3 }),
-    journal: async (effect) => {
-      journaled += 1;
-      return effect();
-    },
+    journal: (effect) =>
+      Effect.flatMap(
+        Effect.sync(() => {
+          journaled += 1;
+        }),
+        () => effect,
+      ),
   };
   return { ctx, journaled: () => journaled };
 }
@@ -158,16 +162,18 @@ test("a spawn is bounded here, carries the turn's run, policy, and fork, runs th
   const { children, spawns } = delegation();
   const { ctx, journaled } = context(children);
   const spawn = toolNamed(BRAIN_TOOL.SESSIONS_SPAWN);
-  const receipt = await spawn.execute(
-    {
-      task: ` ${"t".repeat(maximumChildTaskLength + 10)} `,
-      label: " summary ",
-      context: CHILD_CONTEXT_MODE.FORK,
-      cleanup: CHILD_CLEANUP.DELETE,
-      run_timeout_seconds: 30,
-      expects_completion: false,
-    },
-    ctx,
+  const receipt = await Effect.runPromise(
+    spawn.execute(
+      {
+        task: ` ${"t".repeat(maximumChildTaskLength + 10)} `,
+        label: " summary ",
+        context: CHILD_CONTEXT_MODE.FORK,
+        cleanup: CHILD_CLEANUP.DELETE,
+        run_timeout_seconds: 30,
+        expects_completion: false,
+      },
+      ctx,
+    ),
   );
   assert.equal(journaled(), 1);
   assert.equal(receipt.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -186,15 +192,17 @@ test("a spawn is bounded here, carries the turn's run, policy, and fork, runs th
   assert.deepEqual(ask.policy, ctx.policy);
   assert.deepEqual(ask.fork(), ctx.fork());
   // Unreadable optional fields are left out rather than guessed at; an empty task never reaches the host.
-  await spawn.execute({ task: "look", context: "sideways", run_timeout_seconds: -1 }, ctx);
+  await Effect.runPromise(
+    spawn.execute({ task: "look", context: "sideways", run_timeout_seconds: -1 }, ctx),
+  );
   const second = spawns[1];
   assert.ok(second);
   assert.equal(second.context, undefined);
   assert.equal(second.timeoutMs, undefined);
-  const empty = await spawn.execute({ task: "  " }, ctx);
+  const empty = await Effect.runPromise(spawn.execute({ task: "  " }, ctx));
   assert.equal(empty.reason, REFUSAL_REASON.EMPTY_TASK);
   assert.equal(spawns.length, 2);
-  const refused = await spawn.execute({ task: "look", label: "refused" }, ctx);
+  const refused = await Effect.runPromise(spawn.execute({ task: "look", label: "refused" }, ctx));
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(journaled(), 3);
 });
@@ -203,7 +211,7 @@ test("subagents lists as a read and cancels through the journal; a child not thi
   const { children, cancelled } = delegation();
   const { ctx, journaled } = context(children);
   const subagents = toolNamed(BRAIN_TOOL.SUBAGENTS);
-  const listed = await subagents.execute({}, ctx);
+  const listed = await Effect.runPromise(subagents.execute({}, ctx));
   assert.equal(journaled(), 0);
   assert.deepEqual(listed, {
     status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -222,16 +230,20 @@ test("subagents lists as a read and cancels through the journal; a child not thi
       },
     ],
   });
-  const cancel = await subagents.execute({ action: "cancel", child_id: "child-1" }, ctx);
+  const cancel = await Effect.runPromise(
+    subagents.execute({ action: "cancel", child_id: "child-1" }, ctx),
+  );
   assert.deepEqual(cancel, { status: ACTION_RESULT_STATUS.ACCEPTED, cancelled: ["child-1"] });
   assert.equal(journaled(), 1);
-  const other = await subagents.execute({ action: "cancel", child_id: "someone-elses" }, ctx);
+  const other = await Effect.runPromise(
+    subagents.execute({ action: "cancel", child_id: "someone-elses" }, ctx),
+  );
   assert.equal(other.reason, REFUSAL_REASON.UNKNOWN_CHILD);
-  const unnamed = await subagents.execute({ action: "cancel" }, ctx);
+  const unnamed = await Effect.runPromise(subagents.execute({ action: "cancel" }, ctx));
   assert.equal(unnamed.reason, REFUSAL_REASON.NOT_OWN_CHILD);
   assert.deepEqual(cancelled, ["child-1"]);
 
-  const listing = await toolNamed(BRAIN_TOOL.SESSIONS_LIST).execute({}, ctx);
+  const listing = await Effect.runPromise(toolNamed(BRAIN_TOOL.SESSIONS_LIST).execute({}, ctx));
   assert.deepEqual(listing, {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     conversations: [
@@ -245,15 +257,21 @@ test("subagents lists as a read and cancels through the journal; a child not thi
     ],
   });
   const history = toolNamed(BRAIN_TOOL.SESSIONS_HISTORY);
-  assert.deepEqual(await history.execute({ child_id: "child-1", limit: 999 }, ctx), {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    lines: ["ask: hi", "reply: done"],
-  });
+  assert.deepEqual(
+    await Effect.runPromise(history.execute({ child_id: "child-1", limit: 999 }, ctx)),
+    {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      lines: ["ask: hi", "reply: done"],
+    },
+  );
   assert.equal(
-    (await history.execute({ child_id: "someone-elses" }, ctx)).reason,
+    (await Effect.runPromise(history.execute({ child_id: "someone-elses" }, ctx))).reason,
     REFUSAL_REASON.UNKNOWN_CHILD,
   );
-  assert.equal((await history.execute({}, ctx)).reason, REFUSAL_REASON.NOT_OWN_CHILD);
+  assert.equal(
+    (await Effect.runPromise(history.execute({}, ctx))).reason,
+    REFUSAL_REASON.NOT_OWN_CHILD,
+  );
   assert.ok(maximumSessionsConversationLines > 0);
 });
 
@@ -266,7 +284,7 @@ test("with no delegation wired every session tool refuses, and none reaches the 
     { child_id: "c" },
   ];
   for (const [index, tool] of SESSION_TOOLS.entries()) {
-    const refused = await tool.execute(inputs[index] ?? {}, ctx);
+    const refused = await Effect.runPromise(tool.execute(inputs[index] ?? {}, ctx));
     assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(refused.reason, REFUSAL_REASON.NO_CHILDREN);
   }

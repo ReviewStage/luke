@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { BRAIN_TOOL } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -24,10 +25,13 @@ function context(access: { workspace: BrainWorkspaceAccess | undefined }) {
     isRevoked: () => false,
     signal: new AbortController().signal,
     workspace,
-    journal: async (effect) => {
-      journaled += 1;
-      return effect();
-    },
+    journal: (effect) =>
+      Effect.flatMap(
+        Effect.sync(() => {
+          journaled += 1;
+        }),
+        () => effect,
+      ),
   };
   return { ctx, journaled: () => journaled };
 }
@@ -70,13 +74,15 @@ test("a write whose arguments are not the strings the tool takes is refused befo
     { name: "MEMORY.md", content: null },
   ];
   for (const input of malformed) {
-    const refused = await write.execute(input, ctx);
+    const refused: WireRecord = await Effect.runPromise(write.execute(input, ctx));
     assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(refused.reason, REFUSAL_REASON.MALFORMED_ARGUMENTS);
   }
   assert.equal(journaled(), 0);
   assert.deepEqual(written, []);
-  const landed = await write.execute({ name: "MEMORY.md", content: "# MEMORY.md\n" }, ctx);
+  const landed = await Effect.runPromise(
+    write.execute({ name: "MEMORY.md", content: "# MEMORY.md\n" }, ctx),
+  );
   assert.deepEqual(landed, {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     chars: "# MEMORY.md\n".length,
@@ -90,26 +96,28 @@ test("the reads answer the host's access directly and never through the journal,
   const read = workspaceToolNamed(BRAIN_TOOL.READ_WORKSPACE_FILE);
   const skill = workspaceToolNamed(BRAIN_TOOL.LOAD_SKILL);
   assert.ok(read && skill);
-  assert.deepEqual(await read.execute({ name: "USER.md" }, ctx), {
+  assert.deepEqual(await Effect.runPromise(read.execute({ name: "USER.md" }, ctx)), {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     content: "content of USER.md",
   });
-  assert.deepEqual(await skill.execute({ location: "skills/x/SKILL.md" }, ctx), {
+  assert.deepEqual(await Effect.runPromise(skill.execute({ location: "skills/x/SKILL.md" }, ctx)), {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     instructions: "do it",
     truncated: false,
   });
-  assert.equal((await read.execute({}, ctx)).reason, REFUSAL_REASON.MALFORMED_ARGUMENTS);
   assert.equal(
-    (await skill.execute({ location: 3 }, ctx)).reason,
+    (await Effect.runPromise(read.execute({}, ctx))).reason,
+    REFUSAL_REASON.MALFORMED_ARGUMENTS,
+  );
+  assert.equal(
+    (await Effect.runPromise(skill.execute({ location: 3 }, ctx))).reason,
     REFUSAL_REASON.MALFORMED_ARGUMENTS,
   );
   assert.equal(journaled(), 0);
   const without = context({ workspace: undefined });
   for (const tool of WORKSPACE_TOOLS) {
-    const refused = await tool.execute(
-      { name: "USER.md", content: "", location: "l" },
-      without.ctx,
+    const refused = await Effect.runPromise(
+      tool.execute({ name: "USER.md", content: "", location: "l" }, without.ctx),
     );
     assert.equal(refused.reason, REFUSAL_REASON.NO_WORKSPACE);
   }

@@ -615,9 +615,7 @@ class ScriptedRuntime implements AgentRuntimeEffect {
           isRevoked: () => request.signal.aborted,
         };
         contexts.push(context);
-        const result = yield* Effect.promise(
-          async () => await request.tools.execute(invocation, context),
-        );
+        const result = yield* request.tools.execute(invocation, context);
         yield* Effect.promise(
           async () =>
             await request.context.ingest({

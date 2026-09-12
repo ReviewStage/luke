@@ -553,12 +553,15 @@ export class ReadPrefetch implements TurnReadPrefetch {
       isRevoked: () => signal.aborted,
       signal,
       roster: { text: roster.text, identities: roster.identities },
-      readTranscript: (identity) => this.#options.readTranscript(identity, signal),
+      readTranscript: (identity) =>
+        Effect.promise(() => this.#options.readTranscript(identity, signal)),
     };
     if (read.kind === PREFETCH_READ_KIND.TRANSCRIPT) {
       const module = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
       if (!module) return Promise.resolve(rejection(REFUSAL_REASON.NOT_OFFERED));
-      return module.execute(args, standing);
+      // The module answers an effect; this slot's memo is a promise, so the
+      // read is carried onto the host's runtime through the brain's one door.
+      return this.#options.carry(module.execute(args, standing));
     }
     const memory = this.#options.memory;
     const tool = memory ? memoryToolNamed(memory.provider, read.kind) : undefined;

@@ -24,7 +24,7 @@ import {
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Effect, Either } from "effect";
 import { estimateTokens } from "./compaction.js";
 import { UNCONFIRMED_ACTION_RESULT, UNKNOWN_ACTION_RESULT } from "./journal.js";
 import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
@@ -161,52 +161,50 @@ export function createTurnToolExecutor(
    * mid-action is found as an action of unknown result and never replayed; a
    * checkpoint that will not land refuses the action instead, because an action
    * nobody could find afterwards is one the developer could not account
-   * for. An effect that throws after dispatch has answered nothing about
+   * for. An effect that dies after dispatch has answered nothing about
    * itself: the outcome is unknown, counted as such, and never a refusal.
    */
-  const performJournaled = async (
+  const performJournaled = (
     call: ToolInvocation,
     execution: BrainActionExecution,
-    effect: () => Promise<WireRecord>,
-  ): Promise<WireRecord> => {
-    const { run, generation } = context;
-    const outcomes = outcomesFor(call.name);
-    if (dependencies.runRevoked(run) || execution.isRevoked()) {
-      return outcomes.refuse(REFUSAL_REASON.RUN_REVOKED);
-    }
-    const recorded = generation.journal.get(run.runId, call.callId);
-    if (recorded) {
-      if (recorded.argumentsJson !== call.argumentsJson) {
-        return outcomes.refuse(REFUSAL_REASON.CALL_ID_REUSED);
+    effect: Effect.Effect<WireRecord>,
+  ): Effect.Effect<WireRecord> =>
+    Effect.gen(function* () {
+      const { run, generation } = context;
+      const outcomes = outcomesFor(call.name);
+      if (dependencies.runRevoked(run) || execution.isRevoked()) {
+        return outcomes.refuse(REFUSAL_REASON.RUN_REVOKED);
       }
-      return recorded.outputJson === undefined
-        ? outcomes.unknown(UNKNOWN_ACTION_RESULT.reason)
-        : parsedRecord(recorded.outputJson);
-    }
-    if (run.checkpointFailed) return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
-    generation.journal.start({
-      runId: run.runId,
-      callId: call.callId,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      startedAt: dependencies.now(),
+      const recorded = generation.journal.get(run.runId, call.callId);
+      if (recorded) {
+        if (recorded.argumentsJson !== call.argumentsJson) {
+          return outcomes.refuse(REFUSAL_REASON.CALL_ID_REUSED);
+        }
+        return recorded.outputJson === undefined
+          ? outcomes.unknown(UNKNOWN_ACTION_RESULT.reason)
+          : parsedRecord(recorded.outputJson);
+      }
+      if (run.checkpointFailed) return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
+      generation.journal.start({
+        runId: run.runId,
+        callId: call.callId,
+        name: call.name,
+        argumentsJson: call.argumentsJson,
+        startedAt: dependencies.now(),
+      });
+      if (!(yield* Effect.promise(() => dependencies.checkpoint(context)))) {
+        generation.journal.forget(run.runId, call.callId);
+        run.checkpointFailed = true;
+        return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
+      }
+      const output = yield* Effect.catchAllDefect(effect, () =>
+        Effect.succeed(outcomes.unknown(UNCONFIRMED_ACTION_RESULT.reason)),
+      );
+      if (output.status === ACTION_RESULT_STATUS.ACCEPTED) run.performedActions += 1;
+      if (output.status === UNKNOWN_ACTION_STATUS) run.unknownActions += 1;
+      generation.journal.settle(run.runId, call.callId, JSON.stringify(output), dependencies.now());
+      return output;
     });
-    if (!(await dependencies.checkpoint(context))) {
-      generation.journal.forget(run.runId, call.callId);
-      run.checkpointFailed = true;
-      return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
-    }
-    let output: WireRecord;
-    try {
-      output = await effect();
-    } catch {
-      output = outcomes.unknown(UNCONFIRMED_ACTION_RESULT.reason);
-    }
-    if (output.status === ACTION_RESULT_STATUS.ACCEPTED) run.performedActions += 1;
-    if (output.status === UNKNOWN_ACTION_STATUS) run.unknownActions += 1;
-    generation.journal.settle(run.runId, call.callId, JSON.stringify(output), dependencies.now());
-    return output;
-  };
 
   /**
    * A memory provider's tool: a write through the same journal an action runs
@@ -214,61 +212,67 @@ export function createTurnToolExecutor(
    * standing and the scope it was bound to, and bounds the call's arguments
    * itself; a conversation with no provider refuses the tools.
    */
-  const memoryTool = async (
+  const memoryTool = (
     call: ToolInvocation,
     input: WireRecord,
     execution: BrainActionExecution,
-  ): Promise<WireRecord> => {
-    const memory = dependencies.memory;
-    const tool = memory ? memoryToolNamed(memory.provider, call.name) : undefined;
-    if (!memory || !tool) return rejection(REFUSAL_REASON.NO_MEMORY);
-    const run = () => tool.execute(input, { ...execution, scope: memory.scope });
-    if (tool.effect === TOOL_EFFECT.WRITE) return performJournaled(call, execution, run);
-    if (execution.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    return run();
-  };
+  ): Effect.Effect<WireRecord> =>
+    Effect.suspend(() => {
+      const memory = dependencies.memory;
+      const tool = memory ? memoryToolNamed(memory.provider, call.name) : undefined;
+      if (!memory || !tool) return Effect.succeed(rejection(REFUSAL_REASON.NO_MEMORY));
+      const run = Effect.promise(() => tool.execute(input, { ...execution, scope: memory.scope }));
+      if (tool.effect === TOOL_EFFECT.WRITE) return performJournaled(call, execution, run);
+      if (execution.isRevoked()) return Effect.succeed(rejection(REFUSAL_REASON.RUN_REVOKED));
+      return run;
+    });
 
   /** One of the brain's own modules under the context its kind takes: the reads, the briefing, delegation. */
-  const brainTool = async (
+  const brainTool = (
     call: ToolInvocation,
     input: WireRecord,
     execution: BrainActionExecution,
-  ): Promise<WireRecord> => {
-    const read = readToolNamed(call.name);
-    if (read) {
-      const roster = dependencies.roster();
-      return read.execute(input, {
-        ...execution,
-        roster: { text: roster.text, identities: roster.identities },
-        readTranscript: (identity) => dependencies.readWhole(identity, context),
-      });
-    }
-    if (call.name === ANNOUNCE_TOOL.name) {
-      return ANNOUNCE_TOOL.execute(input, {
-        ...execution,
-        announce: (briefing) => turn.onBriefing({ briefing, decidedAt: dependencies.now() }),
-      });
-    }
-    const session = sessionToolNamed(call.name);
-    if (session) {
-      return session.execute(input, {
-        ...execution,
-        children: dependencies.children,
-        policy: {
-          allowed: policy.allowed.map((tool) => tool.schema.name),
-          denied: policy.denied.map((denial) => denial.tool),
-        },
-        fork: () => forkSnapshotOf(context.context),
-        journal: (effect) => performJournaled(call, execution, effect),
-      });
-    }
-    return rejection(REFUSAL_REASON.NOT_OFFERED);
-  };
+  ): Effect.Effect<WireRecord> =>
+    Effect.suspend(() => {
+      const read = readToolNamed(call.name);
+      if (read) {
+        const roster = dependencies.roster();
+        return read.execute(input, {
+          ...execution,
+          roster: { text: roster.text, identities: roster.identities },
+          readTranscript: (identity) =>
+            Effect.promise(() => dependencies.readWhole(identity, context)),
+        });
+      }
+      if (call.name === ANNOUNCE_TOOL.name) {
+        return ANNOUNCE_TOOL.execute(input, {
+          ...execution,
+          announce: (briefing) => turn.onBriefing({ briefing, decidedAt: dependencies.now() }),
+        });
+      }
+      const session = sessionToolNamed(call.name);
+      if (session) {
+        return session.execute(input, {
+          ...execution,
+          children: dependencies.children,
+          policy: {
+            allowed: policy.allowed.map((tool) => tool.schema.name),
+            denied: policy.denied.map((denial) => denial.tool),
+          },
+          fork: () => forkSnapshotOf(context.context),
+          journal: (effect) => performJournaled(call, execution, effect),
+        });
+      }
+      return Effect.succeed(rejection(REFUSAL_REASON.NOT_OFFERED));
+    });
 
-  return {
-    execute: async (call: ToolInvocation, runtimeContext: ToolExecutionContext) => {
+  const dispatch = (
+    call: ToolInvocation,
+    runtimeContext: ToolExecutionContext,
+  ): Effect.Effect<WireRecord> =>
+    Effect.suspend(() => {
       const refused = refusalForPolicy(policy, call.name);
-      if (refused) return answer(refused);
+      if (refused) return Effect.succeed(refused);
       const execution: BrainActionExecution = {
         ...turn.execution,
         isRevoked: () => turn.execution.isRevoked() || runtimeContext.isRevoked(),
@@ -276,15 +280,19 @@ export function createTurnToolExecutor(
       const tool = descriptors.get(call.name);
       if (tool?.execution === TOOL_EXECUTION.PERFORMER) {
         const actionTool = actionToolNamed(call.name);
-        if (!actionTool) return answer(refusedActionOutput(REFUSAL_REASON.NOT_OFFERED));
+        if (!actionTool) return Effect.succeed(refusedActionOutput(REFUSAL_REASON.NOT_OFFERED));
         // The module runs inside the journal: admission, then the carrier,
         // whose answer is validated before the journal keeps it. One this
         // build cannot read is answered unknown: the action was dispatched,
         // and what became of it is exactly what could not be read.
-        return answer(
-          await performJournaled(call, execution, async () => {
+        return performJournaled(
+          call,
+          execution,
+          Effect.suspend(() => {
             const input = toolArguments(call.argumentsJson);
-            if (input === undefined) return refusedActionOutput(ACTION_REFUSAL.UNREADABLE);
+            if (input === undefined) {
+              return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.UNREADABLE));
+            }
             return actionTool.execute(input, {
               ...execution,
               admission: dependencies.actions.admission(execution),
@@ -302,19 +310,19 @@ export function createTurnToolExecutor(
       const input = toolArguments(call.argumentsJson) ?? {};
       if (tool?.execution === TOOL_EXECUTION.WORKSPACE) {
         const workspaceTool = workspaceToolNamed(call.name);
-        if (!workspaceTool) return answer(rejection(REFUSAL_REASON.NOT_OFFERED));
-        return answer(
-          await workspaceTool.execute(input, {
-            ...execution,
-            workspace: dependencies.workspace,
-            journal: (effect) => performJournaled(call, execution, effect),
-          }),
-        );
+        if (!workspaceTool) return Effect.succeed(rejection(REFUSAL_REASON.NOT_OFFERED));
+        return workspaceTool.execute(input, {
+          ...execution,
+          workspace: dependencies.workspace,
+          journal: (effect) => performJournaled(call, execution, effect),
+        });
       }
-      if (tool?.execution === TOOL_EXECUTION.MEMORY) {
-        return answer(await memoryTool(call, input, execution));
-      }
-      return answer(await brainTool(call, input, execution));
-    },
+      if (tool?.execution === TOOL_EXECUTION.MEMORY) return memoryTool(call, input, execution);
+      return brainTool(call, input, execution);
+    });
+
+  return {
+    execute: (call: ToolInvocation, runtimeContext: ToolExecutionContext) =>
+      Effect.map(dispatch(call, runtimeContext), answer),
   };
 }

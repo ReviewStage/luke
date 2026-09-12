@@ -1,6 +1,6 @@
 import { ACTION_RESULT_STATUS, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL, maximumBriefingLength } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -58,10 +58,12 @@ export const ANNOUNCE_TOOL: AnnounceToolModule = {
     "when nothing is worth interrupting for. Never call it in a developer-ask turn: there your " +
     "final text is the reply.",
   inputSchema: ANNOUNCE_INPUT,
-  async execute(input: WireRecord, context: AnnounceToolContext): Promise<WireRecord> {
-    const briefing = text(input.briefing)?.slice(0, maximumBriefingLength);
-    if (!briefing) return rejection(REFUSAL_REASON.EMPTY_BRIEFING);
-    context.announce(briefing);
-    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  execute(input: WireRecord, context: AnnounceToolContext): Effect.Effect<WireRecord> {
+    return Effect.sync(() => {
+      const briefing = text(input.briefing)?.slice(0, maximumBriefingLength);
+      if (!briefing) return rejection(REFUSAL_REASON.EMPTY_BRIEFING);
+      context.announce(briefing);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    });
   },
 };

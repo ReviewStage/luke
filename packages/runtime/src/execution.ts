@@ -128,9 +128,15 @@ export interface ToolExecutionContext {
   isRevoked(): boolean;
 }
 
-/** Executes one admitted invocation; the host supplies it, and everything it may do is the host's rule. */
+/**
+ * Executes one admitted invocation; the host supplies it, and everything it
+ * may do is the host's rule. The call is an effect, so it runs on the fiber
+ * of the loop that dispatched it: the batch a runtime holds uninterruptible
+ * is what keeps a dispatched effect from being cut off from its result, and
+ * nothing crosses a promise between the two.
+ */
 export interface ToolExecutor {
-  execute(invocation: ToolInvocation, context: ToolExecutionContext): Promise<ToolResult>;
+  execute(invocation: ToolInvocation, context: ToolExecutionContext): Effect.Effect<ToolResult>;
 }
 
 export const REASONING_EFFORT = {

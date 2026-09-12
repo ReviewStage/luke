@@ -125,40 +125,41 @@ export function runMemoryHousekeeping(
     .map((tool) => tool.schema);
   let writes = 0;
   const tools: ToolExecutor = {
-    execute: async (call, context) => {
-      if (!HOUSEKEEPING_TOOLS.has(call.name)) return rejection(REFUSAL_REASON.NOT_OFFERED);
-      if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-      let args: WireRecord = {};
-      try {
-        args = wireRecord(JSON.parse(call.argumentsJson)) ?? {};
-      } catch {
-        args = {};
-      }
-      const name = isWireString(args.name) ? args.name : "";
-      if (call.name === BRAIN_TOOL.READ_WORKSPACE_FILE) {
-        const read = await options.workspace.read(name);
-        return read.ok
-          ? answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, content: read.content })
-          : rejection(read.reason);
-      }
-      if (!isDailyNotePathForDay(name, options.dateStamp)) {
-        return rejection(HOUSEKEEPING_REFUSAL.NOT_TODAYS_NOTE);
-      }
-      const content = isWireString(args.content) ? args.content : "";
-      const existing = await options.workspace.read(name);
-      if (!existing.ok && existing.reason !== WORKSPACE_FILE_REFUSAL.NOT_FOUND) {
-        return rejection(existing.reason);
-      }
-      const previous = existing.ok ? existing.content : "";
-      if (!isAppendOnlyRewrite(previous, content)) {
-        return rejection(HOUSEKEEPING_REFUSAL.NOT_APPEND_ONLY);
-      }
-      if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-      const written = await options.workspace.write(name, content);
-      if (!written.ok) return rejection(written.reason);
-      writes += 1;
-      return answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
-    },
+    execute: (call, context) =>
+      Effect.gen(function* () {
+        if (!HOUSEKEEPING_TOOLS.has(call.name)) return rejection(REFUSAL_REASON.NOT_OFFERED);
+        if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+        let args: WireRecord = {};
+        try {
+          args = wireRecord(JSON.parse(call.argumentsJson)) ?? {};
+        } catch {
+          args = {};
+        }
+        const name = isWireString(args.name) ? args.name : "";
+        if (call.name === BRAIN_TOOL.READ_WORKSPACE_FILE) {
+          const read = yield* Effect.promise(() => options.workspace.read(name));
+          return read.ok
+            ? answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, content: read.content })
+            : rejection(read.reason);
+        }
+        if (!isDailyNotePathForDay(name, options.dateStamp)) {
+          return rejection(HOUSEKEEPING_REFUSAL.NOT_TODAYS_NOTE);
+        }
+        const content = isWireString(args.content) ? args.content : "";
+        const existing = yield* Effect.promise(() => options.workspace.read(name));
+        if (!existing.ok && existing.reason !== WORKSPACE_FILE_REFUSAL.NOT_FOUND) {
+          return rejection(existing.reason);
+        }
+        const previous = existing.ok ? existing.content : "";
+        if (!isAppendOnlyRewrite(previous, content)) {
+          return rejection(HOUSEKEEPING_REFUSAL.NOT_APPEND_ONLY);
+        }
+        if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+        const written = yield* Effect.promise(() => options.workspace.write(name, content));
+        if (!written.ok) return rejection(written.reason);
+        writes += 1;
+        return answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
+      }),
   };
   return Effect.catchAllDefect(
     Effect.map(

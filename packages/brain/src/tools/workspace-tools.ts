@@ -6,7 +6,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -33,7 +33,7 @@ export interface WorkspaceToolContext extends ToolContext {
   /** The agent's own files, or nothing for an agent with no workspace, which refuses every call. */
   readonly workspace: BrainWorkspaceAccess | undefined;
   /** Records an effect before it runs and its result before the model reads it; the executor's journal. */
-  journal(effect: () => Promise<WireRecord>): Promise<WireRecord>;
+  journal(effect: Effect.Effect<WireRecord>): Effect.Effect<WireRecord>;
 }
 
 export type WorkspaceToolModule = ToolModule<WireRecord, WorkspaceToolContext>;
@@ -101,14 +101,18 @@ const READ_WORKSPACE_FILE: WorkspaceToolModule = {
     "MEMORY.md, BOOTSTRAP.md, or a dated note as memory/YYYY-MM-DD.md. Nothing " +
     "outside the workspace can be named.",
   inputSchema: READ_WORKSPACE_FILE_INPUT,
-  async execute(input: WireRecord, context: WorkspaceToolContext): Promise<WireRecord> {
-    if (!context.workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
-    if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    if (!isWireString(input.name)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
-    const read = await context.workspace.read(input.name);
-    return read.ok
-      ? { status: ACTION_RESULT_STATUS.ACCEPTED, content: read.content }
-      : rejection(read.reason);
+  execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+    return Effect.gen(function* () {
+      const workspace = context.workspace;
+      if (!workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
+      if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+      if (!isWireString(input.name)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
+      const name = input.name;
+      const read = yield* Effect.promise(() => workspace.read(name));
+      return read.ok
+        ? { status: ACTION_RESULT_STATUS.ACCEPTED, content: read.content }
+        : rejection(read.reason);
+    });
   },
 };
 
@@ -119,19 +123,24 @@ const WRITE_WORKSPACE_FILE: WorkspaceToolModule = {
     "MEMORY.md, USER.md, and dated notes current; read the file first so nothing is lost. " +
     "Content past the per-file bound is refused rather than cut.",
   inputSchema: WRITE_WORKSPACE_FILE_INPUT,
-  async execute(input: WireRecord, context: WorkspaceToolContext): Promise<WireRecord> {
-    const workspace = context.workspace;
-    if (!workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
-    if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    const { name, content } = input;
-    if (!isWireString(name) || !isWireString(content)) {
-      return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
-    }
-    return context.journal(async () => {
-      const written = await workspace.write(name, content);
-      return written.ok
-        ? { status: ACTION_RESULT_STATUS.ACCEPTED, chars: written.chars }
-        : rejection(written.reason);
+  execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+    return Effect.suspend(() => {
+      const workspace = context.workspace;
+      if (!workspace) return Effect.succeed(rejection(REFUSAL_REASON.NO_WORKSPACE));
+      if (context.isRevoked()) return Effect.succeed(rejection(REFUSAL_REASON.RUN_REVOKED));
+      const { name, content } = input;
+      if (!isWireString(name) || !isWireString(content)) {
+        return Effect.succeed(rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS));
+      }
+      return context.journal(
+        Effect.map(
+          Effect.promise(() => workspace.write(name, content)),
+          (written) =>
+            written.ok
+              ? { status: ACTION_RESULT_STATUS.ACCEPTED, chars: written.chars }
+              : rejection(written.reason),
+        ),
+      );
     });
   },
 };
@@ -142,18 +151,22 @@ const LOAD_SKILL: WorkspaceToolModule = {
     "Load one skill's full instructions by the location the available skills list gave. Only " +
     "a listed location answers.",
   inputSchema: LOAD_SKILL_INPUT,
-  async execute(input: WireRecord, context: WorkspaceToolContext): Promise<WireRecord> {
-    if (!context.workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
-    if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    if (!isWireString(input.location)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
-    const loaded = await context.workspace.loadSkill(input.location);
-    return loaded.ok
-      ? {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          instructions: loaded.instructions,
-          truncated: loaded.truncated,
-        }
-      : rejection(loaded.reason);
+  execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+    return Effect.gen(function* () {
+      const workspace = context.workspace;
+      if (!workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
+      if (context.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+      if (!isWireString(input.location)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
+      const location = input.location;
+      const loaded = yield* Effect.promise(() => workspace.loadSkill(location));
+      return loaded.ok
+        ? {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            instructions: loaded.instructions,
+            truncated: loaded.truncated,
+          }
+        : rejection(loaded.reason);
+    });
   },
 };
 

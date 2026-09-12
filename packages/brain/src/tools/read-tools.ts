@@ -2,7 +2,7 @@ import { maximumIdentifierLength } from "@sidecar/actions";
 import type { SessionIdentity } from "@sidecar/session";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { identityFromRecord, rejection, sameIdentity } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -21,7 +21,7 @@ export interface ReadToolContext extends ToolContext {
   /** The roster as the host renders it now, and the identities a named session is held to. */
   readonly roster: { readonly text: string; readonly identities: readonly SessionIdentity[] };
   /** Reads one observed session's whole tail through the host, bounded there; the identity is one the roster holds. */
-  readTranscript(identity: SessionIdentity): Promise<WireRecord>;
+  readTranscript(identity: SessionIdentity): Effect.Effect<WireRecord>;
 }
 
 export type ReadToolModule = ToolModule<WireRecord, ReadToolContext>;
@@ -70,8 +70,8 @@ const LIST_SESSIONS: ReadToolModule = {
     "identity, status, and capabilities. The standing context already carries it; call this " +
     "only when you need it fresher than the turn's opening.",
   inputSchema: LIST_SESSIONS_INPUT,
-  async execute(_input: WireRecord, context: ReadToolContext): Promise<WireRecord> {
-    return { roster: context.roster.text };
+  execute(_input: WireRecord, context: ReadToolContext): Effect.Effect<WireRecord> {
+    return Effect.sync(() => ({ roster: context.roster.text }));
   },
 };
 
@@ -84,13 +84,15 @@ const READ_TRANSCRIPT: ReadToolModule = {
     "session answers with the developer's messages and the agent's replies, never its tool " +
     "activity; any other cloud session returns a refusal.",
   inputSchema: READ_TRANSCRIPT_INPUT,
-  async execute(input: WireRecord, context: ReadToolContext): Promise<WireRecord> {
-    const named = identityFromRecord(input);
-    const observed =
-      named !== undefined &&
-      context.roster.identities.some((listed) => sameIdentity(listed, named));
-    if (!named || !observed) return rejection(REFUSAL_REASON.UNOBSERVED_SESSION);
-    return context.readTranscript(named);
+  execute(input: WireRecord, context: ReadToolContext): Effect.Effect<WireRecord> {
+    return Effect.suspend(() => {
+      const named = identityFromRecord(input);
+      const observed =
+        named !== undefined &&
+        context.roster.identities.some((listed) => sameIdentity(listed, named));
+      if (!named || !observed) return Effect.succeed(rejection(REFUSAL_REASON.UNOBSERVED_SESSION));
+      return context.readTranscript(named);
+    });
   },
 };
 

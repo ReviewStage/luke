@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
@@ -164,7 +165,7 @@ function call(
     hostedToolDeclarations(turn.trigger).some((declared) => declared.name === name),
     `${name} is offered`,
   );
-  return runHostedTool(name, input, context, seams, turn);
+  return Effect.runPromise(runHostedTool(name, input, context, seams, turn));
 }
 
 test("an ask is offered the catalog under the hosted policy, an observation the same set plus announce", () => {
@@ -249,12 +250,8 @@ test("announce answers accepted for words and refuses an empty briefing; it is o
   assert.equal(offered.status, ACTION_RESULT_STATUS.ACCEPTED);
   const empty = await call(seams, OBSERVATION, BRAIN_TOOL.ANNOUNCE, { briefing: "" });
   assert.equal(empty.status, ACTION_RESULT_STATUS.REJECTED);
-  const withheld = await runHostedTool(
-    BRAIN_TOOL.ANNOUNCE,
-    { briefing: "x" },
-    eveContext(),
-    seams,
-    ASK,
+  const withheld = await Effect.runPromise(
+    runHostedTool(BRAIN_TOOL.ANNOUNCE, { briefing: "x" }, eveContext(), seams, ASK),
   );
   assert.equal(withheld.status, ACTION_RESULT_STATUS.REJECTED);
 });

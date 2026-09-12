@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { ANNOUNCE_TOOL, type AnnounceToolContext } from "./announce-tool.js";
 import { BRAIN_TOOL, maximumBriefingLength } from "./names.js";
@@ -30,9 +31,13 @@ test("announce takes the briefing alone, hands it on bounded, and answers accept
   assert.deepEqual(node.required, ["briefing"]);
   assert.deepEqual(Object.keys(node.properties), ["briefing"]);
   const { ctx, announced } = context();
-  const answer = await ANNOUNCE_TOOL.execute({ briefing: "Checkout wants a decision." }, ctx);
+  const answer = await Effect.runPromise(
+    ANNOUNCE_TOOL.execute({ briefing: "Checkout wants a decision." }, ctx),
+  );
   assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED });
-  await ANNOUNCE_TOOL.execute({ briefing: "x".repeat(maximumBriefingLength + 40) }, ctx);
+  await Effect.runPromise(
+    ANNOUNCE_TOOL.execute({ briefing: "x".repeat(maximumBriefingLength + 40) }, ctx),
+  );
   assert.deepEqual(
     announced.map((briefing) => briefing.length),
     ["Checkout wants a decision.".length, maximumBriefingLength],
@@ -43,7 +48,7 @@ test("a briefing with no words is refused and nothing is handed on", async () =>
   const { ctx, announced } = context();
   const wordless: readonly WireRecord[] = [{}, { briefing: "   " }, { briefing: 4 }];
   for (const input of wordless) {
-    const refused = await ANNOUNCE_TOOL.execute(input, ctx);
+    const refused = await Effect.runPromise(ANNOUNCE_TOOL.execute(input, ctx));
     assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(refused.reason, REFUSAL_REASON.EMPTY_BRIEFING);
   }

@@ -468,7 +468,10 @@ function absorb(
   });
 }
 
-/** One call, handed to the executor; a tool that threw instead of answering is told as unknown rather than left dangling. */
+/**
+ * One call, handed to the executor on the loop's own fiber; a tool that died
+ * instead of answering is told as unknown rather than left dangling.
+ */
 function executeToolCall(
   call: ToolInvocation,
   tools: RuntimeRunRequestEffect["tools"],
@@ -477,14 +480,13 @@ function executeToolCall(
   revoked: () => boolean,
 ): Effect.Effect<ToolResult> {
   return Effect.gen(function* () {
-    const result = yield* Effect.merge(
-      Effect.tryPromise({
-        try: async () => await tools.execute(call, { runId, signal, isRevoked: revoked }),
-        catch: (): ToolResult => ({
+    const result = yield* Effect.catchAllDefect(
+      tools.execute(call, { runId, signal, isRevoked: revoked }),
+      (): Effect.Effect<ToolResult> =>
+        Effect.succeed({
           outputJson: JSON.stringify(TOOL_DID_NOT_ANSWER),
           status: TOOL_DID_NOT_ANSWER.status,
         }),
-      }),
     );
     const status = result.status ?? outputStatus(result.outputJson);
     return status !== undefined ? { outputJson: result.outputJson, status } : result;

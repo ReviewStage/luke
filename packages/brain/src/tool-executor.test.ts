@@ -25,7 +25,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema } from "effect";
 import { test } from "vitest";
 import { BrainJournal } from "./journal.js";
 import { fakeActionPerformer } from "./testing.js";
@@ -134,11 +134,13 @@ function executor(
     execute: async (invocation: ToolInvocation) =>
       parsed(
         (
-          await tools.execute(invocation, {
-            runId: run.runId,
-            signal: run.abort.signal,
-            isRevoked: () => false,
-          })
+          await Effect.runPromise(
+            tools.execute(invocation, {
+              runId: run.runId,
+              signal: run.abort.signal,
+              isRevoked: () => false,
+            }),
+          )
         ).outputJson,
       ),
   };

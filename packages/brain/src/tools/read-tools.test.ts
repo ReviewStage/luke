@@ -3,6 +3,7 @@ import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { BRAIN_TOOL } from "./names.js";
 import { READ_TOOLS, type ReadToolContext, readToolNamed } from "./read-tools.js";
@@ -21,10 +22,11 @@ function context() {
     isRevoked: () => false,
     signal: new AbortController().signal,
     roster: { text: "Currently observed sessions:\n- abc", identities: [ABC] },
-    readTranscript: async (identity) => {
-      reads.push(identity);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" };
-    },
+    readTranscript: (identity) =>
+      Effect.sync(() => {
+        reads.push(identity);
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" };
+      }),
   };
   return { ctx, reads };
 }
@@ -46,7 +48,7 @@ test("list_sessions answers the roster as the host renders it now, and reads not
   const { ctx, reads } = context();
   const tool = readToolNamed(BRAIN_TOOL.LIST_SESSIONS);
   assert.ok(tool);
-  assert.deepEqual(await tool.execute({}, ctx), { roster: ctx.roster.text });
+  assert.deepEqual(await Effect.runPromise(tool.execute({}, ctx)), { roster: ctx.roster.text });
   assert.deepEqual(reads, []);
 });
 
@@ -54,9 +56,8 @@ test("read_transcript reads only a session the roster holds, and refuses every o
   const { ctx, reads } = context();
   const tool = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
   assert.ok(tool);
-  const read = await tool.execute(
-    { provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId },
-    ctx,
+  const read = await Effect.runPromise(
+    tool.execute({ provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId }, ctx),
   );
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(reads, [ABC]);
@@ -67,7 +68,7 @@ test("read_transcript reads only a session the roster holds, and refuses every o
     { provider_id: 7, provider_session_id: "abc" },
   ];
   for (const input of refused) {
-    const answer = await tool.execute(input, ctx);
+    const answer: WireRecord = await Effect.runPromise(tool.execute(input, ctx));
     assert.equal(answer.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(answer.reason, REFUSAL_REASON.UNOBSERVED_SESSION);
   }

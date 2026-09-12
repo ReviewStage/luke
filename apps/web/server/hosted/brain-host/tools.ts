@@ -1,4 +1,5 @@
 import { emitJsonSchema } from "@sidecar/wire/effect";
+import { Effect } from "effect";
 import type { ToolContext as EveToolContext, ToolDefinition } from "eve/tools";
 import { NOTEBOOK_MEMORY_TOOL } from "../../../../../packages/memory/src/index.js";
 import {
@@ -125,7 +126,7 @@ function fieldsOf(input: UnparsedWireValue): WireRecord | undefined {
   return isRecord(input) ? input : undefined;
 }
 
-type ModuleRun = (fields: WireRecord, standing: ToolContext) => Promise<WireRecord>;
+type ModuleRun = (fields: WireRecord, standing: ToolContext) => Effect.Effect<WireRecord>;
 
 /**
  * One tool as eve is told of it: the module's own name, words, and wire
@@ -188,21 +189,25 @@ function runOf(
 ): ModuleRun {
   switch (named.kind) {
     case "action":
-      return async (fields, standing) =>
-        named.module.execute(fields, {
-          ...standing,
-          admission: await seams.carrier.admission(),
-          carry: (action) => seams.carrier.carry(action, fields, standing),
+      return (fields, standing) =>
+        Effect.gen(function* () {
+          const admission = yield* Effect.promise(() => seams.carrier.admission());
+          return yield* named.module.execute(fields, {
+            ...standing,
+            admission,
+            carry: (action) => seams.carrier.carry(action, fields, standing),
+          });
         });
     case "read":
-      return async (fields, standing) => {
-        const roster = brainRosterOf(await seams.roster(), seams.now());
-        return named.module.execute(fields, {
-          ...standing,
-          roster: { text: roster.text, identities: roster.identities },
-          readTranscript: (identity) => seams.transcripts.whole(identity),
+      return (fields, standing) =>
+        Effect.gen(function* () {
+          const roster = brainRosterOf(yield* Effect.promise(() => seams.roster()), seams.now());
+          return yield* named.module.execute(fields, {
+            ...standing,
+            roster: { text: roster.text, identities: roster.identities },
+            readTranscript: (identity) => Effect.promise(() => seams.transcripts.whole(identity)),
+          });
         });
-      };
     case "announce":
       // The words become the call's own part on the journal, and the relay
       // puts them on offer when it records the call as settled; the tool
@@ -210,11 +215,13 @@ function runOf(
       return (fields, standing) =>
         named.module.execute(fields, { ...standing, announce: () => undefined });
     case "workspace":
+      // Nothing here journals: the service's own record of the call is the
+      // turn record eve keeps, so the effect runs as the module handed it.
       return (fields, standing) =>
         named.module.execute(fields, {
           ...standing,
           workspace: seams.workspace,
-          journal: (effect) => effect(),
+          journal: (effect) => effect,
         });
   }
 }
@@ -226,19 +233,23 @@ function runOf(
  * refused here again, so the set the model was offered and the gate a call
  * meets are one resolution.
  */
-export async function runHostedTool(
+export function runHostedTool(
   name: string,
   input: UnparsedWireValue,
   context: EveToolContext,
   seams: HostedToolSeams,
   turn: HostedTurnStanding,
-): Promise<WireRecord> {
-  if (!hostedTurnPolicy(turn.trigger).allows(name)) return NO_SUCH_TOOL;
-  const named = moduleNamed(name);
-  if (!named) return NO_SUCH_TOOL;
-  const fields = fieldsOf(input);
-  if (fields === undefined) return UNREADABLE_CALL;
-  const standing = standingOf(context, seams, turn);
-  if (standing.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER);
-  return runOf(named, seams)(fields, standing);
+): Effect.Effect<WireRecord> {
+  return Effect.suspend(() => {
+    if (!hostedTurnPolicy(turn.trigger).allows(name)) return Effect.succeed(NO_SUCH_TOOL);
+    const named = moduleNamed(name);
+    if (!named) return Effect.succeed(NO_SUCH_TOOL);
+    const fields = fieldsOf(input);
+    if (fields === undefined) return Effect.succeed(UNREADABLE_CALL);
+    const standing = standingOf(context, seams, turn);
+    if (standing.isRevoked()) {
+      return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.TURN_OVER));
+    }
+    return runOf(named, seams)(fields, standing);
+  });
 }
