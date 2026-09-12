@@ -11,7 +11,7 @@ import {
   type SessionProviderPlugin,
   type WireRecord,
 } from "../../core.js";
-import type { FiberStoreRunner } from "../fiber-runner.js";
+import type { WebStoreRun } from "../../runtime.js";
 import { BRAIN_HOST } from "./bounds.js";
 import { type HostedRoster, observedSession } from "./roster.js";
 
@@ -27,8 +27,8 @@ import { type HostedRoster, observedSession } from "./roster.js";
  */
 
 export interface TranscriptReadSeams {
-  /** The promise face of the fiber the read runs on, which is what answers the cursor's own reads. */
-  readonly run: FiberStoreRunner;
+  /** The promise face of the connection the read runs on, which is what answers the cursor's own reads. */
+  readonly run: WebStoreRun;
   readonly userId: string;
   /** The roster as the snapshot holds it now, read again for every read. */
   readonly roster: () => Promise<HostedRoster>;

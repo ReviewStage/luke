@@ -1,4 +1,4 @@
-import type { SqlClient } from "@effect/sql";
+import { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult } from "effect";
 import {
@@ -23,7 +23,6 @@ import {
   WORKSPACE_FILE_REFUSAL,
   type WorkspaceFile,
 } from "../../core.js";
-import type { FiberStoreRunner } from "../fiber-runner.js";
 import type { HostedStore } from "../store/index.js";
 import { BRAIN_HOST } from "./bounds.js";
 
@@ -76,34 +75,38 @@ const NO_SKILLS = "not loaded: this agent lists no skills";
 
 /**
  * The workspace tools' reach: the rows, bounded like the files, with no
- * skills to load. `BrainWorkspaceAccess` answers effects the brain's own
- * fiber runs, but a row is read on the request's connection rather than on
- * that fiber, so the runner the tool call already runs on is handed in here
- * and each method is the effect of running its own read through it.
+ * skills to load. `BrainWorkspaceAccess` answers `Effect<A, never, never>`,
+ * but a row is read over `SqlClient`, so the request's own client is
+ * provided into each read here and `Effect.orDie` stands for the error the
+ * contract has nowhere to say — a row this service cannot read is not a
+ * refusal the model is offered a reason for.
  */
 export function hostedWorkspaceAccess(
-  run: FiberStoreRunner,
+  client: SqlClient.SqlClient,
   store: WorkspaceStore,
   userId: string,
   now: () => number,
 ): BrainWorkspaceAccess {
+  const run = <A>(
+    effect: Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>,
+  ): Effect.Effect<A> => Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, client));
   return {
     read: (name) =>
-      Effect.promise(async () => {
+      Effect.gen(function* () {
         const path = hostedWorkspacePath(name);
         if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
-        const row = await run(store.workspace.read(userId, path));
+        const row = yield* run(store.workspace.read(userId, path));
         if (!row) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND };
         return { ok: true, content: row.content.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) };
       }),
     write: (name, content) =>
-      Effect.promise(async () => {
+      Effect.gen(function* () {
         const path = hostedWorkspacePath(name);
         if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
         if (content.length > BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) {
           return { ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE };
         }
-        await run(store.workspace.write(userId, path, content, now()));
+        yield* run(store.workspace.write(userId, path, content, now()));
         return { ok: true, chars: content.length };
       }),
     loadSkill: () => Effect.succeed({ ok: false, reason: NO_SKILLS }),
