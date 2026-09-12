@@ -2,12 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { PRODUCT_EVENT } from "@sidecar/analytics";
-import {
-  INTRODUCTION_HANDOFF_READY_MS,
-  onboardingStateFile,
-  openSocketOverWs,
-  shouldRunIntroduction,
-} from "@sidecar/host";
+import { INTRODUCTION_HANDOFF_READY_MS, openSocketOverWs } from "@sidecar/host";
 import { hostedVoiceServiceOrigin } from "@sidecar/hosted";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
@@ -61,7 +56,7 @@ export interface WindowService extends DesktopService {
   readonly voiceWindow: VoiceWindow;
   readonly hotkeys: HotkeyRegistrar;
   readonly dock: DockPresence;
-  /** The takeover's own voice session, the one that stands with no account behind it. */
+  /** The takeover's own voice session, opened through the accountless endpoint for the signed-in developer. */
   readonly introductionSession: IntroductionSession;
   /** Hands a payload to every panel and the voice window, less the window given. */
   broadcast: <Payload>(channel: string, payload: Payload, except?: WebContents) => void;
@@ -94,6 +89,12 @@ export interface WindowService extends DesktopService {
   recycleVoiceWindow: () => void;
   /** A panel that finished painting, which is what the takeover's handoff waits for. */
   notePanelReady: (sender: WebContents) => void;
+  /**
+   * The host's word on whether the introduction is owed moved: the first
+   * sign-in this install observed put it up, so the takeover begins now, over
+   * the panel the sign-in landed on.
+   */
+  reconcileIntroduction: () => void;
   /**
    * The introduction's one ending, whichever way the takeover reported it.
    * `given` records the completion, so an introduction that was never given
@@ -175,9 +176,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function raiseVoiceWindow(): void {
     // Not while the introduction plays: its own call runs in the panel it
-    // took, so a second window standing by with no account behind it has
-    // nothing to hold and no credential it should be able to ask for. The
-    // ending raises it.
+    // took, and every voice of Luke's is held while the introduction is
+    // owed, so a second window standing by has nothing to hold. The ending
+    // raises it.
     if (introductionPlaying()) return;
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
   }
@@ -258,8 +259,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     }),
     recordProductEvent,
   });
-  const onboarding = onboardingStateFile(() => config.stateRoot, config.report);
-
   /**
    * Whether the takeover's window is waiting for the panel to be drawn under
    * it. The window keeps the display until then: the panel draws its capsule
@@ -278,20 +277,19 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   /**
    * The introduction's one ending, however the takeover reported it: the
-   * sign-off spoken to its end, or a takeover that cannot be given at all.
-   * The standing goes down first, so nothing granted against it — the keyless
-   * talk key, the accountless session, the takeover's own reports — outlives
-   * the ending; the window follows the panel that draws in its place.
+   * greeting spoken to its end, or a takeover that cannot be given at all.
+   * The standing goes down first, so nothing granted against it — the
+   * session, the takeover's own reports, the talk key's release — outlives
+   * the ending; the window follows the panel that draws in its place. The
+   * completion is the host's to write, since the host owns the onboarding
+   * record and the holds that stand while the introduction is owed.
    * Idempotent through that standing: a second ending finds nothing playing.
    */
   async function endIntroduction(given: boolean): Promise<void> {
     if (!introductionPlaying() || !launchStanding()) return;
     introductionSession.end();
     if (given) {
-      onboarding.update((current) => ({
-        ...current,
-        introductionCompletedAt: new Date().toISOString(),
-      }));
+      void operator.host.completeIntroduction();
       recordProductEvent(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
     }
     state.update({ introduction: { playing: false } });
@@ -305,9 +303,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const hotkeys = new HotkeyRegistrar({
     registersGlobalKeys: runMode.registersGlobalKeys,
-    // A voice stands only when the host says one does: the introduction's
-    // greeting is scripted and never unmutes, so it claims no key.
-    hasCredentials: () => operator.voiceAvailable(),
+    // A voice stands only when the host says one does, and not while the
+    // introduction plays: its greeting is scripted and never unmutes, and a
+    // press that opened the ordinary session would speak over it.
+    hasCredentials: () => operator.voiceAvailable() && !introductionPlaying(),
     host: {
       voiceHost: () => voiceWindow.current(),
       hotkeyChanged: (rank) => {
@@ -399,6 +398,38 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     "user-did-become-active": wake("user-did-become-active"),
   } as const;
 
+  /**
+   * Whether this launch gives the introduction now: the host says it is owed,
+   * the developer it is owed to is signed in, and nothing is playing yet. A
+   * launch that cannot reach its runtime knows nothing of the account and
+   * greets nobody.
+   */
+  function introductionDue(): boolean {
+    return (
+      runMode.requiresAccount &&
+      operator.signedIn() &&
+      operator.introductionOwed() &&
+      !introductionPlaying()
+    );
+  }
+
+  /**
+   * Begins the takeover over the primary panel. The standing is written
+   * first, so the panel's renderer reads it and draws the takeover rather than
+   * the panel and then the takeover; the talk key is released against it;
+   * and no panel anywhere is nothing to take the screen with, so the standing
+   * comes back down and the ordinary launch stands.
+   */
+  async function beginIntroduction(): Promise<void> {
+    state.update({ introduction: { playing: true } });
+    await hotkeys.reapply(HOTKEY_RANK.TALK);
+    if (!launchStanding()) return;
+    if (panels.enterTakeover() === undefined) {
+      state.update({ introduction: { playing: false } });
+      await hotkeys.reapply(HOTKEY_RANK.TALK);
+    }
+  }
+
   return {
     name: "windows",
     panels,
@@ -433,15 +464,15 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     endIntroduction,
     introductionPlaying,
+    reconcileIntroduction: () => {
+      if (!launchStanding() || !introductionDue()) return;
+      void beginIntroduction();
+    },
     start: async () => {
-      // The introduction plays only on a host actually reached: a launch that
-      // cannot reach its runtime knows nothing of the account and must not
-      // greet a signed-in developer as a stranger.
-      const giveIntroduction = shouldRunIntroduction({
-        requiresAccount: runMode.requiresAccount,
-        signedIn: operator.signedIn(),
-        completed: onboarding.read()?.introductionCompletedAt !== undefined,
-      });
+      // The introduction is given to a signed-in developer the host says it is
+      // owed to: at this launch when the record already says so, or the
+      // moment the first sign-in lands, through the reconcile above.
+      const giveIntroduction = introductionDue();
       await panels.refreshGeometry();
       // A Quit landing inside one of the launch's own waits is already tearing
       // this process down; nothing is opened or armed over it. This check sits
@@ -474,6 +505,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // reconciles again, to the one display it covers.
       if (giveIntroduction && panels.enterTakeover() === undefined) {
         state.update({ introduction: { playing: false } });
+        await hotkeys.reapply(HOTKEY_RANK.TALK);
+        if (!launchStanding()) return;
       }
       raiseVoiceWindow();
       configurePermissions();

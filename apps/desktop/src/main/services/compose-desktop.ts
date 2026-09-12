@@ -197,6 +197,7 @@ export function composeDesktop(
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
         recycleVoiceWindow: () => windows.recycleVoiceWindow(),
+        introductionOwedChanged: () => windows.reconcileIntroduction(),
       });
 
       // An action still waiting on a panel is refused before anything stops:

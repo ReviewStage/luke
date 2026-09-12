@@ -193,6 +193,7 @@ const BOOT: HostBootstrap = {
   workspaceProjects: [],
   calendars: [],
   calendarOnboardingOwed: false,
+  introductionOwed: false,
   sessionReplay: { permitted: true, accountId: "person" },
   voiceAvailable: true,
   agentTraceEnabled: true,

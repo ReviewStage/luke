@@ -308,6 +308,7 @@ export const hostAssemblyLayer: Layer.Layer<
             ),
             calendars: carried(account.capabilitiesActive() ? calendars.observedCalendars() : []),
             calendarOnboardingOwed: calendars.gateOwed(),
+            introductionOwed: calendars.introductionOwed(),
             sessionReplay: carried(replay),
             voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
             agentTraceEnabled: account.agentTrace !== undefined,

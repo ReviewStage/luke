@@ -26,6 +26,8 @@ interface OperatorClientLinks {
    * renderer holds was the old host's.
    */
   recycleVoiceWindow: () => void;
+  /** The host's word on whether the introduction is owed moved; the windows decide whether to begin it. */
+  introductionOwedChanged: () => void;
 }
 
 export interface OperatorClient extends DesktopService {
@@ -39,6 +41,8 @@ export interface OperatorClient extends DesktopService {
   ensureSettings: () => Promise<AppSettings | undefined>;
   signedIn: () => boolean;
   voiceAvailable: () => boolean;
+  /** Whether the host's onboarding record owes the spoken introduction, as last told. */
+  introductionOwed: () => boolean;
   /** One host bootstrap, adopted into the document every window is answered from. */
   readBootstrap: () => Promise<HostBootstrap | undefined>;
   /** Stops recording now, ahead of an action that ends the account it is filed under; the host's next replay event re-answers. */
@@ -80,6 +84,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
    * says goes into the document.
    */
   let voiceAvailable = false;
+  let introductionOwed = false;
   let attachments = 0;
   const unsubscribers: (() => void)[] = [];
 
@@ -96,6 +101,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
 
   function adoptBootstrap(boot: HostBootstrap): void {
     voiceAvailable = boot.voiceAvailable;
+    introductionOwed = boot.introductionOwed;
     state.update(bootstrapPatch(state.snapshot(), boot));
   }
 
@@ -110,6 +116,14 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     }),
     gateway.host.onAccountChanged((account) => {
       state.update({ account });
+      // The sign-in that owes the introduction lands as two events, the
+      // record's and the account's, in either order; whichever comes second
+      // is the one the windows can act on.
+      links().introductionOwedChanged();
+    }),
+    gateway.host.onIntroductionChanged((owed) => {
+      introductionOwed = owed;
+      links().introductionOwedChanged();
     }),
     gateway.host.onSessionsChanged((roster) => {
       state.update({
@@ -175,6 +189,7 @@ export function createOperatorClient(dependencies: OperatorClientDependencies): 
     },
     signedIn: () => state.snapshot().account.status === ACCOUNT_STATUS.SIGNED_IN,
     voiceAvailable: () => voiceAvailable,
+    introductionOwed: () => introductionOwed,
     readBootstrap: async () => {
       const boot = await gateway.host.bootstrap();
       if (boot) adoptBootstrap(boot);

@@ -108,12 +108,13 @@ export function greetingInstruction(): string {
   return [
     "Greet the developer now, in English, without waiting for them to speak. Open with exactly",
     "these words: \"Hi, I'm Luke. I've just moved in at the top of your screen, by the notch.\"",
-    "Then say that when one of their coding agents needs them, hits an error, or finishes, you",
-    "will say so. If a developer message above lists agents already running, mention one or two",
-    'by their titles as things you can already see. Close with exactly these words: "Sign in,',
-    "and I'll get you set up.\" Keep it to three or four short sentences in all, then stop. This",
-    "is a one-way greeting: the developer's microphone is off, so do not ask them anything, do",
-    "not wait for a reply, and say nothing further.",
+    "If a developer message above gives the developer's first name, say it after the Hi, as",
+    '"Hi <name>, I\'m Luke.", and nowhere else. Then say that when one of their coding agents',
+    "needs them, hits an error, or finishes, you will say so. If a developer message above lists",
+    "agents already running, mention one or two by their titles as things you can already see.",
+    'Close with exactly these words: "Let\'s get you set up." Keep it to three or four short',
+    "sentences in all, then stop. This is a one-way greeting: the developer's microphone is off,",
+    "so do not ask them anything, do not wait for a reply, and say nothing further.",
   ].join(" ");
 }
 

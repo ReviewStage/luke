@@ -10,6 +10,12 @@ export const ONBOARDING_STATE_FILE = "onboarding.json";
  * every field is written by the same launch and read by the same reconcile.
  */
 export interface OnboardingState {
+  /**
+   * When the install's first observed sign-in owed the spoken introduction.
+   * Recorded at that edge alone, so an install already signed in when this
+   * build arrived is never greeted as a stranger on an upgrade.
+   */
+  introductionRequiredAt?: string;
   /** When the spoken introduction finished, to the end. */
   introductionCompletedAt?: string;
   /** When the account's first sign-in landed, as this install observed it. */
@@ -40,6 +46,7 @@ export interface OnboardingState {
  * since it can only withhold a beat or a gate, never replay one already given.
  */
 function onboardingStateFrom(record: WireRecord): OnboardingState | undefined {
+  const introductionRequiredAt = text(record.introductionRequiredAt);
   const introductionCompletedAt = text(record.introductionCompletedAt);
   const arrivalSignedInAt = text(record.arrivalSignedInAt);
   const arrivalSpokenAt = text(record.arrivalSpokenAt);
@@ -48,6 +55,7 @@ function onboardingStateFrom(record: WireRecord): OnboardingState | undefined {
   const calendarOnboardingSettledAt = text(record.calendarOnboardingSettledAt);
   const calendarOnboardingSkippedAt = text(record.calendarOnboardingSkippedAt);
   const state: OnboardingState = {
+    ...(introductionRequiredAt !== undefined ? { introductionRequiredAt } : undefined),
     ...(introductionCompletedAt !== undefined ? { introductionCompletedAt } : undefined),
     ...(arrivalSignedInAt !== undefined ? { arrivalSignedInAt } : undefined),
     ...(arrivalSpokenAt !== undefined ? { arrivalSpokenAt } : undefined),

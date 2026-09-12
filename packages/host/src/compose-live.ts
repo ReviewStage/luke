@@ -213,6 +213,9 @@ export const composeLive = (
     async function requestOnboardingBeat(): Promise<void> {
       if (!runMode.requiresAccount || !account.signedIn()) return;
       if (!account.voiceCapabilities.liveSessions) return;
+      // The greeting comes first and speaks in its own session; the beats are
+      // asked for again by the completion that takes the introduction down.
+      if (calendars.introductionOwed()) return;
       if (await calendars.gateOfferable()) {
         service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
         return;

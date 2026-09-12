@@ -301,8 +301,9 @@ code you enter is not in it. While recording is on, Luke also reports what you
 clicked, including the text on it; the fixed list above does not cover those
 clicks.
 
-Recording starts when Luke opens, before you sign in, so it covers the spoken
-introduction on first launch and the signed-out panel. A recording that begins
+Recording starts when Luke opens, before you sign in, so it covers the
+signed-out panel, the sign-in, and the spoken introduction that follows your
+first sign-in. A recording that begins
 before you sign in is attached to your account if you sign in while it is
 running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
@@ -526,20 +527,22 @@ Send.
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no
   such switch and writes none.
-  The one voice session that happens before you sign in is the spoken
-  introduction on first launch of the Mac app. It is a scripted greeting,
+  The spoken introduction plays once, right after your first sign-in on the
+  Mac app; if you never sign in, it never plays. It is a scripted greeting,
   not a conversation. It asks for your microphone first, through macOS's own
-  dialog at your press, so the talk key can work once you sign in; the
-  greeting itself never listens, plays whether you allow the microphone or
-  not, and opens its one GPT Live session through our voice service without
-  an account with no microphone attached and never unmuted, so nothing you
-  say during it leaves your Mac. What travels is our own fixed greeting
-  instruction, and nothing about your coding agent sessions: the offer keeps
-  a seat for their titles (at most eight, each cut short) and the app sends
-  it empty, and the introduction draws no sessions on screen, real or
-  pretend. It plays once, can act on nothing, and our service keeps only a
-  hash of your network address for that day's rate limit, tied to nobody,
-  and none of the greeting.
+  dialog at your press, so the talk key can work afterwards; the greeting
+  itself never listens, plays whether you allow the microphone or not, and
+  opens its one GPT Live session through our voice service with no
+  microphone attached and never unmuted, so nothing you say during it leaves
+  your Mac. Luke greets you by name: the first word of the name on your
+  account is sent to our voice service, as data for the greeting alone, and
+  that is the one thing about you that travels with it. The session is
+  opened without your account token, and our service keeps only a hash of
+  your network address for that day's rate limit and none of the greeting.
+  Nothing about your coding agent sessions travels: the offer keeps a seat
+  for their titles (at most eight, each cut short) and the app sends it
+  empty, and the introduction draws no sessions on screen, real or pretend.
+  It can act on nothing.
 - Coding agent providers you connect (Conductor), using the key or
   account access you supply. The synced-key vault holds Conductor keys only.
   Luke reads your sessions, and sends something back

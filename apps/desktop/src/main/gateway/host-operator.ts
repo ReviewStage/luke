@@ -73,6 +73,8 @@ export interface HostBootstrap {
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
   calendarOnboardingOwed: boolean;
+  /** Whether the spoken introduction is owed to the signed-in developer, as the host's onboarding record has it. */
+  introductionOwed: boolean;
   sessionReplay: { permitted: boolean; accountId?: string };
   voiceAvailable: boolean;
   agentTraceEnabled: boolean;
@@ -165,9 +167,13 @@ export interface HostOperator {
     messageId: string,
     rating: MessageRating,
   ): Promise<ConversationRateMessageResult>;
-  onboardingState(): Promise<{ calendarOnboardingOwed: boolean } | undefined>;
+  onboardingState(): Promise<
+    { calendarOnboardingOwed: boolean; introductionOwed: boolean } | undefined
+  >;
   skipCalendarOnboarding(): Promise<void>;
   completeCalendarOnboarding(): Promise<void>;
+  /** The introduction given to its end: the host writes the completion, drops its hold, and asks for the beats that waited. */
+  completeIntroduction(): Promise<void>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onSessionsChanged(
@@ -182,6 +188,7 @@ export interface HostOperator {
   onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
   onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
+  onIntroductionChanged(listener: (owed: boolean) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
 }
@@ -441,12 +448,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onboardingState: async () => {
       const answer = record(await client.call(GATEWAY_METHOD.ONBOARDING_STATE));
       return answer
-        ? { calendarOnboardingOwed: answer.calendarOnboardingOwed === true }
+        ? {
+            calendarOnboardingOwed: answer.calendarOnboardingOwed === true,
+            introductionOwed: answer.introductionOwed === true,
+          }
         : undefined;
     },
     skipCalendarOnboarding: () => fire(client.call(GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR)),
     completeCalendarOnboarding: () =>
       fire(client.call(GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR)),
+    completeIntroduction: () => fire(client.call(GATEWAY_METHOD.ONBOARDING_COMPLETE_INTRODUCTION)),
     onSettingsChanged: (listener) =>
       on(
         GATEWAY_EVENT.SETTINGS_CHANGED,
@@ -511,6 +522,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onCalendarOnboardingChanged: (listener) =>
       on(
         GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED,
+        (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
+        listener,
+      ),
+    onIntroductionChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INTRODUCTION_CHANGED,
         (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
         listener,
       ),
