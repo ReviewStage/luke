@@ -1245,15 +1245,27 @@ Canonical commands:
   offer on so the briefing is spoken rather than held for a press, and the
   same session is the one the developer joins by holding it. There is no speak-only call and no second kind of
   session. What the
-  session is seeded with at creation is bounded, and it is one thing: Luke's
+  session is seeded with at creation is bounded, and it is two things: one
+  bounded summary of the roster as a developer message, and Luke's
   own Conversation record (the 20 most recent lines, in their roles, each cut
   to its length bound), held under the documented message and token bounds by
-  dropping the oldest lines first, and nothing addressed to the model beside
-  them. The voice knows no roster: what is on the desk is the brain's, which
-  holds it already, so "that one" and "the Nukualofa session" resolve in the
-  brain's own turn rather than in the voice, and a roster that moves while a
-  session stands reaches it not at all. The voice knows no guide, no
-  transcript, and no session
+  dropping the oldest lines first — the conversation gives way first, never
+  the summary — and nothing addressed to the model beside
+  them. The voice knows the roster as that bounded summary — at most ten
+  sessions, each as its title, its provider's name, its status, the tool a
+  session holding for the developer is holding, and how long since its
+  provider last wrote — and no transcript, error line, branch, repository,
+  model, address, or workspace id, so a question about which agents run,
+  wait, finished, or failed is answered from what the session already holds
+  rather than delegated, as the Live prompting guide asks. A roster that
+  moves while a session stands reaches it as one thinking append with no
+  delegation, debounced, carrying only the lines that changed and the ones
+  that have left; it opens no session, is never spoken, and does not move the
+  idle clock, so a desk that keeps changing cannot hold a quiet session open.
+  What may be acted on is still the brain's alone: the summary carries no
+  identity a line could name, so "that one" and "the Nukualofa session"
+  resolve in the brain's own turn rather than in the voice. The voice knows
+  no guide, no transcript, and no session
   address either; those reach only the brain. A developer's spoken words reach the
   brain as a delegation the host composes from both speakers' transcript
   since the previous one, submitted under the host's own submission id as a

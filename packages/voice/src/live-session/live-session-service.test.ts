@@ -10,17 +10,21 @@ import {
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
   LIVE_IDLE_WINDOW_MS,
+  LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   type LiveServerEvent,
   type LiveServerEventType,
   PROACTIVE_SPEECH_KIND,
   parseLiveServerEvent,
+  type RosterSeedSession,
+  rosterSeedText,
   SEED_ROLE,
+  seedItemTokens,
   UTTERANCE_GAP_MS,
   UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
@@ -234,6 +238,7 @@ interface Fixture {
   spoken: string[];
   service: LiveSessionService;
   entries: ConversationEntry[];
+  roster: RosterSeedSession[];
   quiet: boolean;
   sourceAvailable: boolean;
   open: () => Promise<FakeSideband>;
@@ -273,11 +278,13 @@ function fixture(): Fixture {
     },
   };
   const entries: ConversationEntry[] = [];
+  const roster: RosterSeedSession[] = [];
   const service = new LiveSessionService({
     source: () => (state.sourceAvailable ? source : undefined),
     brain,
     record,
     conversationEntries: () => entries,
+    roster: () => roster,
     quietNow: async () => state.quiet,
     releaseHeldBriefings: (held) => released.push([...held]),
     emit: (change) => changes.push(change),
@@ -303,6 +310,7 @@ function fixture(): Fixture {
     spoken,
     service,
     entries,
+    roster,
     get quiet() {
       return state.quiet;
     },
@@ -1298,4 +1306,106 @@ test("a steered ask whose sibling's record write fails is settled once every wri
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
   assert.equal(f.record.developer.length, 1);
+});
+
+const ROSTER_DEBOUNCE_MS = 2_000;
+
+function rosterSession(id: string, overrides: Partial<RosterSeedSession> = {}): RosterSeedSession {
+  return {
+    identity: { providerId: "conductor", providerSessionId: id },
+    title: `session ${id}`,
+    provider: { displayName: "Conductor" },
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt: 0,
+    ...overrides,
+  };
+}
+
+test("a created session opens knowing the desk: the roster leads the input as one developer message, ahead of the conversation", async () => {
+  const f = fixture();
+  f.roster.push(rosterSession("a"));
+  f.entries.push(
+    { kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" },
+    { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Nothing yet." },
+  );
+  await f.service.createSession("offer");
+  assert.deepEqual(
+    f.seeds[0]?.map((item) => item.role),
+    [SEED_ROLE.DEVELOPER, SEED_ROLE.USER, SEED_ROLE.ASSISTANT],
+  );
+  assert.equal(f.seeds[0]?.[0]?.content[0]?.text, rosterSeedText(f.roster, f.clock.now));
+});
+
+test("an empty desk puts no roster message into the input at all", async () => {
+  const f = fixture();
+  f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
+  await f.service.createSession("offer");
+  assert.deepEqual(
+    f.seeds[0]?.map((item) => item.role),
+    [SEED_ROLE.USER],
+  );
+});
+
+test("the roster message is counted against the input's own bounds, and the conversation is what fills what is left", async () => {
+  const f = fixture();
+  for (let index = 0; index < 10; index += 1) {
+    f.roster.push(rosterSession(`s${index}`, { title: "x".repeat(500) }));
+  }
+  for (let index = 0; index < 200; index += 1) {
+    f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "y".repeat(400) });
+  }
+  await f.service.createSession("offer");
+  const seed = f.seeds[0];
+  assert.ok(seed);
+  assert.equal(seed[0]?.role, SEED_ROLE.DEVELOPER);
+  assert.equal(seed[0]?.content[0]?.text, rosterSeedText(f.roster, f.clock.now));
+  assert.ok(seed.length <= LIVE_INPUT_BOUNDS.MESSAGES);
+  assert.ok(seedItemTokens(seed) <= LIVE_INPUT_BOUNDS.TOKENS);
+});
+
+test("a moved desk reaches the standing session as one thinking append with no delegation, once the change has settled", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.service.updateRoster([rosterSession("a")]);
+  f.service.updateRoster([rosterSession("a"), rosterSession("b")]);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+  assert.equal(sent.length, 1);
+  const only = sent[0];
+  assert.ok(only && "delegation_id" in only);
+  assert.equal(only.delegation_id, null);
+});
+
+test("a roster that comes back reading the same appends nothing", async () => {
+  const f = fixture();
+  f.roster.push(rosterSession("a"));
+  const sideband = await f.open();
+  f.service.updateRoster([rosterSession("a")]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+});
+
+test("a desk that moves while no session stands opens none and sends nothing", async () => {
+  const f = fixture();
+  f.service.updateRoster([rosterSession("a")]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  assert.deepEqual(f.creates, []);
+  assert.equal(f.service.sessionStands(), false);
+});
+
+test("a roster append does not keep a quiet session open: the idle clock reads the appends the session is worth staying open for", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.clock.now += LIVE_IDLE_WINDOW_MS;
+  f.service.updateRoster([rosterSession("a")]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
+  f.service.reportActivity(true);
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
 });

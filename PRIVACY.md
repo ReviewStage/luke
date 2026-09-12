@@ -455,8 +455,15 @@ Send.
   microphone hears streams to OpenAI, and the moment you let go the
   microphone is closed and nothing does; Luke can still speak into a session
   whose microphone is closed. There is no way to type to Luke; every ask is
-  spoken. Each voice session carries the recent Conversation lines and the
-  session summary described above as it opens, and every turn sends the
+  spoken. Each voice session carries the recent Conversation lines and a
+  bounded summary of your coding agents as it opens — at most ten of them,
+  each as its title, which provider it belongs to, whether it is working,
+  waiting on you, finished, or failed, the tool it is holding for your
+  permission, and roughly how long since its provider last wrote about it,
+  and nothing else about it: no branch, repository, error line, model,
+  address, or conversation. When that changes while the session is open, the
+  lines that changed are sent again, so what the voice knows of your desk
+  stays current without asking. Every turn sends the
   session fields listed above — on the Mac app, iOS, and Apple Watch alike,
   drawn from the
   same cloud observation your vault keys already

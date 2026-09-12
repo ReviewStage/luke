@@ -9,17 +9,23 @@ import {
   chunkForAppend,
   commentaryAppend,
   conversationSeedItems,
+  type InitialItem,
   instructionsAppend,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
   LIVE_IDLE_WINDOW_MS,
+  LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   type LiveDelegationId,
   type LiveServerEvent,
   type LiveSessionClosed,
   PROACTIVE_SPEECH_KIND,
   type ProactiveSpeechKind,
+  type RosterSeedSession,
   renderAskContext,
+  rosterSeedItem,
+  rosterUpdateText,
+  seedItemTokens,
   speechAppends,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
@@ -94,6 +100,13 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
 ]);
 const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
 
+/**
+ * How long a moving roster is let settle before the voice is told about it.
+ * An observation pass and the action that provoked it land within a second of
+ * each other, and the summary is worth one append rather than three.
+ */
+const ROSTER_REFRESH_DEBOUNCE_MS = 2_000;
+
 /** Said once, under the delegation, when the developer's ask could not be put on record: an ask off the record is answered nowhere. */
 export const ASK_UNRECORDED_NOTE =
   "I couldn't write that ask down, so I'm not going to answer it here.";
@@ -143,6 +156,12 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   record: LiveRecord;
   /** The retained conversation the next session is seeded from. */
   conversationEntries: () => readonly ConversationEntry[];
+  /**
+   * The desk as the voice may be told it, read when a session is seeded.
+   * Absent leaves every session seeded from the conversation alone, which is
+   * what a composition with no roster of its own wants.
+   */
+  roster?: () => readonly RosterSeedSession[];
   /** Whether a meeting or the developer's pause holds announcements now. */
   quietNow: () => Promise<boolean>;
   /** Hands held briefings back for re-decision once the quiet ends. */
@@ -194,6 +213,8 @@ interface StandingSession {
   readonly settleTimers: Map<TranscriptSpeaker, ScheduledTimer>;
   idleReported: boolean;
   idleTimer: ScheduledTimer | undefined;
+  /** The roster this session was last told, so the next one is diffed against what it actually knows. */
+  rosterTold: readonly RosterSeedSession[] | undefined;
   stopEvents: () => void;
   stopClose: () => void;
 }
@@ -275,6 +296,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** Exchanges whose reply outlived their session, or never had one, waiting for the next to open. */
   readonly #lateExchanges = new Set<Exchange>();
   readonly #stopRunEvents: () => void;
+  /** The latest roster seen, held until the debounce settles; one append answers however many changes arrived. */
+  #rosterPending: readonly RosterSeedSession[] | undefined;
+  #rosterTimer: ScheduledTimer | undefined;
 
   constructor(options: LiveSessionServiceOptions<Delivery>) {
     this.#options = options;
@@ -302,10 +326,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * Creates the one session for the peer's offer, seeded with the recent
-   * conversation and nothing else, and attaches the sideband before the answer
-   * is returned, so no transcript precedes attachment. A session already
-   * standing is closed gracefully first: there is one.
+   * Creates the one session for the peer's offer, seeded with the bounded
+   * roster summary and the recent conversation, and attaches the sideband
+   * before the answer is returned, so no transcript precedes attachment. A
+   * session already standing is closed gracefully first: there is one.
    */
   async createSession(
     sdpOffer: string,
@@ -313,13 +337,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (this.#standing) await this.endSession();
     const source = this.#options.source();
     if (!source) return undefined;
-    const input = conversationSeedItems(this.#options.conversationEntries());
-    const opened = await source.create({ sdpOffer, input });
+    const roster = this.#options.roster?.() ?? [];
+    const opened = await source.create({ sdpOffer, input: this.#seedInput(roster) });
     if (!opened) return undefined;
     this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
     const sideband = await this.#attach(opened);
     if (!sideband) return undefined;
     this.#standing = this.#stand(opened.sessionId, sideband);
+    this.#standing.rosterTold = roster;
     this.#usageConfirmed = false;
     this.#options.onSessionCreated?.();
     this.#trace(LIVE_TRACE_DECISION.CREATED);
@@ -466,7 +491,66 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   async stop(): Promise<void> {
     this.#stopRunEvents();
     this.#queue.clear();
+    if (this.#rosterTimer !== undefined) {
+      this.#options.cancel(this.#rosterTimer);
+      this.#rosterTimer = undefined;
+    }
+    this.#rosterPending = undefined;
     await this.endSession();
+  }
+
+  /**
+   * What a session opens knowing: the desk first, then the recent
+   * conversation. The roster item is never the one dropped — the guide's own
+   * reason for seeding at all is that the conversation can then answer
+   * without a round trip — so the conversation is built under what the roster
+   * item leaves of the API's bounds.
+   */
+  #seedInput(roster: readonly RosterSeedSession[]): readonly InitialItem[] {
+    const item = rosterSeedItem(roster, this.#options.now());
+    const budget =
+      item === undefined
+        ? { messages: LIVE_INPUT_BOUNDS.MESSAGES, tokens: LIVE_INPUT_BOUNDS.TOKENS }
+        : {
+            messages: LIVE_INPUT_BOUNDS.MESSAGES - 1,
+            tokens: LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens([item]),
+          };
+    const conversation = conversationSeedItems(this.#options.conversationEntries(), budget);
+    return item === undefined ? conversation : [item, ...conversation];
+  }
+
+  /**
+   * The desk has moved. What changed reaches the standing session as one
+   * thinking append with no delegation — the guide's own way to refresh a
+   * conversation's context without asking the model to say anything about it —
+   * so a later "is anything waiting on me?" is answered from the session
+   * rather than delegated. It is a note and not speech: it opens no session,
+   * waits for none, and does not move the idle clock, so a desk that keeps
+   * changing cannot hold a quiet session open.
+   */
+  updateRoster(sessions: readonly RosterSeedSession[]): void {
+    this.#rosterPending = sessions;
+    if (this.#rosterTimer !== undefined) this.#options.cancel(this.#rosterTimer);
+    this.#rosterTimer = this.#options.schedule(() => {
+      this.#rosterTimer = undefined;
+      this.#tellRoster();
+    }, ROSTER_REFRESH_DEBOUNCE_MS);
+  }
+
+  #tellRoster(): void {
+    const sessions = this.#rosterPending;
+    if (sessions === undefined) return;
+    this.#rosterPending = undefined;
+    const session = this.#speakable();
+    if (!session) return;
+    const text = rosterUpdateText(session.rosterTold, sessions, this.#options.now());
+    if (text === undefined) return;
+    session.rosterTold = sessions;
+    session.channel.enqueue(async () => {
+      await session.channel.send(thinkingAppend(this.#input(null, text)), {
+        countsForIdle: false,
+      });
+    });
   }
 
   /** The standing session, once started and not yet ended: the only one an append can reach. */
@@ -546,6 +630,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       settleTimers: new Map(),
       idleReported: false,
       idleTimer: undefined,
+      rosterTold: undefined,
       stopEvents: () => undefined,
       stopClose: () => undefined,
     };
@@ -951,15 +1036,16 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         if (last && request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
           this.#options.onBriefingAppend?.(request.delivery, input.eventId);
         }
-        const taken = await session.channel.send(
-          commentaryAppend(input),
-          last
-            ? () => {
-                this.#queue.spoken(request);
-                this.#options.onProactiveSpoken?.(request.kind);
+        const taken = await session.channel.send(commentaryAppend(input), {
+          ...(last
+            ? {
+                onSpoken: () => {
+                  this.#queue.spoken(request);
+                  this.#options.onProactiveSpoken?.(request.kind);
+                },
               }
-            : undefined,
-        );
+            : undefined),
+        });
         if (!taken && last) this.#queue.release(request);
       });
     });

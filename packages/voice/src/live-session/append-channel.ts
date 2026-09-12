@@ -34,6 +34,18 @@ interface PendingAck {
   onSpoken: (() => void) | undefined;
 }
 
+/**
+ * What a send may ask of the channel beside the append itself: the callback a
+ * commentary's speech settles, and whether the send is one the session should
+ * be kept alive for. Both default to what an ordinary reply wants.
+ */
+export interface SendOptions {
+  /** For a commentary append: called once its speech has settled. */
+  onSpoken?: () => void;
+  /** Whether this send moves the idle clock. A note about the desk does not. */
+  countsForIdle?: boolean;
+}
+
 export interface AppendChannelOptions {
   sideband: LiveSideband;
   now: () => number;
@@ -51,7 +63,11 @@ export class AppendChannel {
   readonly #spoken: AwaitingSpeech[] = [];
   #chain: Promise<void> = Promise.resolve();
   #closed = false;
-  /** When the host last appended anything, for the idle decision. */
+  /**
+   * When the host last appended anything the session is worth keeping open
+   * for. A send asked not to count for idle leaves it where it was, so a note
+   * the host writes about the desk cannot hold a quiet session open forever.
+   */
   lastSentAt: number | undefined;
 
   constructor(options: AppendChannelOptions) {
@@ -73,8 +89,9 @@ export class AppendChannel {
   }
 
   /** Sends one append and answers whether the session took it. */
-  async send(event: LiveAppendEvent, onSpoken?: () => void): Promise<boolean> {
+  async send(event: LiveAppendEvent, options: SendOptions = {}): Promise<boolean> {
     if (this.#closed) return false;
+    const { onSpoken, countsForIdle = true } = options;
     const speech =
       event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND
         ? () => {
@@ -89,7 +106,7 @@ export class AppendChannel {
       }, APPEND_ACK_TIMEOUT_MS);
       this.#pending.set(event.event_id, { resolve, timer, onSpoken: speech });
     });
-    this.lastSentAt = this.#options.now();
+    if (countsForIdle) this.lastSentAt = this.#options.now();
     this.#options.sideband.send(event);
     const acknowledgment = await acknowledged;
     this.#options.trace(

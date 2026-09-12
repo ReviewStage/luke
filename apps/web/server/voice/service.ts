@@ -24,6 +24,7 @@ import {
   greetingCue,
   greetingInstruction,
   instructionsAppend,
+  LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
   type LiveClientEvent,
@@ -111,6 +112,19 @@ export const INTRODUCTION_INPUT_BOUNDS = {
   CHARS: 1_024,
 } as const;
 
+/**
+ * What a signed-in desktop may put into its session's `input`: the API's own
+ * message bound, and a per-part bound wide enough for the roster summary a
+ * session opens with and the Conversation lines beside it, each of which the
+ * desktop composes under bounds of its own. It is admitted by shape rather
+ * than trusted by route: an account behind a request says who is asking, not
+ * how much of a prompt this service will pay OpenAI to read.
+ */
+export const SESSIONS_INPUT_BOUNDS = {
+  MESSAGES: LIVE_INPUT_BOUNDS.MESSAGES,
+  CHARS: 4_096,
+} as const;
+
 const BEARER_SCHEME = "Bearer ";
 
 export interface VoiceServiceOptions {
@@ -190,6 +204,15 @@ function introductionInputAdmitted(frame: SessionCreateFrame): boolean {
       (item) =>
         item.role === SEED_ROLE.DEVELOPER &&
         item.content.every((part) => part.text.length <= INTRODUCTION_INPUT_BOUNDS.CHARS),
+    )
+  );
+}
+
+function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
+  return (
+    frame.input.length <= SESSIONS_INPUT_BOUNDS.MESSAGES &&
+    frame.input.every((item) =>
+      item.content.every((part) => part.text.length <= SESSIONS_INPUT_BOUNDS.CHARS),
     )
   );
 }
@@ -515,6 +538,8 @@ export class VoiceService {
       if (!(await this.#accounts.spendIntroduction()).allowed) {
         return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
       }
+    } else if (!sessionsInputAdmitted(frame)) {
+      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
     }
     const account =
       admission.route === VOICE_ROUTE.SESSIONS ? await this.#admitAccount(admission) : undefined;

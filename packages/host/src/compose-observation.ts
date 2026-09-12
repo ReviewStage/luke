@@ -79,6 +79,13 @@ export interface ObservationComposer extends Composer {
   observedSessionCount: () => number;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
+  /**
+   * Told every time the drawn roster is broadcast, with the same sessions the
+   * broadcast carried. It is the one way a concern that draws nothing — the
+   * voice session, which is seeded with a summary of the desk — learns that
+   * the desk moved without polling for it.
+   */
+  onRosterChange: (listener: (sessions: readonly Session[]) => void) => void;
   rosterSettled: () => boolean;
   offeredWorkspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
@@ -143,6 +150,7 @@ export const composeObservation = (
     let heldWorkspaceProjects: readonly ObservedWorkspaceProject[] = [];
     let workspaceProjectsBroadcastGeneration = 0;
     let rosterBroadcast = false;
+    const rosterListeners: ((sessions: readonly Session[]) => void)[] = [];
     let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
 
     function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
@@ -350,10 +358,9 @@ export const composeObservation = (
 
     function broadcastSessions(sessions: readonly Session[]): void {
       rosterBroadcast = true;
-      kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, {
-        sessions: carried(relevantSessions(sessions)),
-        settled: true,
-      });
+      const drawn = relevantSessions(sessions);
+      kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(drawn), settled: true });
+      for (const listener of rosterListeners) listener(drawn);
     }
 
     function countObservedSessions(sessions: readonly Session[]): void {
@@ -484,6 +491,9 @@ export const composeObservation = (
       session: (identity) => sessionRegistry.get(identity),
       observedSessionCount: () => actableSessions().length,
       rosterForClients,
+      onRosterChange: (listener) => {
+        rosterListeners.push(listener);
+      },
       rosterSettled: () => !runMode.observesProviders || rosterBroadcast,
       offeredWorkspaceProjects,
       workspaceProjectOffered,
