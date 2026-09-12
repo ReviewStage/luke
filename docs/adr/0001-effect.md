@@ -380,6 +380,22 @@ and an arming after that close forks from a scope already closed, which
 interrupts what it forked at once. The pairs themselves stand while the gate
 that calls them is a promise.
 
+P7-13 finished the boundary those pairs sit behind: a `GatewayMethodTable`
+entry is an `Effect<WireValue | undefined, GatewayRefusal>` rather than a
+promise of an outcome record, so the server runs each handler as the
+request's own fiber and `gatewayMethodEffects`, the bridge that wrapped every
+promise handler in an `Effect.tryPromise` and mapped its outcome, is deleted
+rather than deprecated. `gatewayOk`/`gatewayError` go with it: a handler
+succeeds with the value the wire carries and fails with one of the refusal
+family `Schema.TaggedError` already declares, and `invalid(message)` is that
+failure for the one refusal every reader spells. A handler that throws rather
+than failing is still the request's own `internal` refusal, caught as a defect
+where the promise bridge caught a rejection, so the 87 envelope goldens hold
+byte for byte. What the composers still hold inside those effects are the
+promise faces below them, each already on the allowlist below; P7-13b takes
+each composer onto the Effect face its package already exports and deletes the
+rows that named this boundary as what they were waiting for.
+
 `shutdownGateway`, the promise door in `packages/gateway/src/shutdown.ts`, is
 gone: P7-10 composes the host's quit as an effect directly. The coordinator's
 fixed quit order — admissions closed, the cancellation and the settling raced
@@ -544,12 +560,13 @@ and hands both a `Runtime.Runtime<never>` — its own, obtained inside the
 reads exactly as `DeviceRegistration`'s does, so each runs its request effect
 there instead of on the ambient default runtime. Full deletion did not follow,
 because the premise this document stated for it was wrong on contact:
-`compose-calendars.ts`'s own `GatewayMethodTable` handlers stay promises
-regardless of how the composer itself is built — the Gateway is not
-Rpc-shaped until Phase 6's server work reaches this host — so a bridge from a
-promise-returning method to the reader's own request effect is still
-necessary, just onto a real runtime instead of a default one. Both go once
-the calendars composer's own methods answer effects rather than promises.
+`compose-calendars.ts`'s own `GatewayMethodTable` handlers stayed promises
+regardless of how the composer itself was built — the Gateway was not
+Rpc-shaped until Phase 6's server work reached this host — so a bridge from a
+promise-returning method to the reader's own request effect was still
+necessary, just onto a real runtime instead of a default one. Those methods
+answer effects since P7-13, and both doors go in P7-13b, which takes each
+handler onto the reader's own request effect.
 
 `LiveVoiceOrchestrator`'s `beginTalk`, `endTalk`, and `stopSpeaking` in
 `packages/voice/src/orchestrator/live-voice-orchestrator.ts` are on the
@@ -875,7 +892,7 @@ design decision stated as such:
 | `singleFlight`'s Promise-returning closure, over `singleFlightEffect` | P4-03 | the account's caller once `AccountSessionManager.refresh` answers an Effect |
 | `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | once `AccountSessionManager`'s sign-in is an effect |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
-| `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | once the calendars composer's methods answer effects |
+| `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | P7-13b — the calendars composer's methods answer effects since P7-13 |
 | `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P9-03 — its one caller is the renderer's `use-voice-session.ts`, never a `packages/host` composer |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P9-03, for the same reason |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |

@@ -1,10 +1,7 @@
-import type { MaybePromise } from "@sidecar/runtime/vocabulary";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import type { Effect } from "effect";
 import type {
   GatewayClientIdentity,
-  GatewayError,
-  GatewayErrorCode,
   GatewayMethod,
   GatewayRefusal,
   GatewayRequest,
@@ -17,19 +14,6 @@ import type { GatewayHostConnection } from "./transport.js";
  * shapes wherever the host composes one, and nothing here reaches
  * `@effect/rpc`, which stays behind the `./server` door that runs the table.
  */
-
-/** What one method answers: a result, or a typed error the envelope carries back. */
-export type GatewayMethodOutcome =
-  | { ok: true; result?: WireValue }
-  | { ok: false; error: GatewayError };
-
-export function gatewayOk(result?: WireValue): GatewayMethodOutcome {
-  return { ok: true, ...(result !== undefined ? { result } : undefined) };
-}
-
-export function gatewayError(code: GatewayErrorCode, message: string): GatewayMethodOutcome {
-  return { ok: false, error: { code, message } };
-}
 
 /**
  * What a request said beside its own id. The id is the transport's to echo
@@ -45,17 +29,14 @@ export interface GatewayMethodContext {
   connection?: GatewayHostConnection;
 }
 
+/**
+ * A method handler as the server runs it: an effect answering the wire value
+ * the method's result is, or nothing where the method answers no value, and
+ * failing with one of the protocol's own refusals.
+ */
 export type GatewayMethodHandler = (
-  params: WireRecord,
-  context: GatewayMethodContext,
-) => MaybePromise<GatewayMethodOutcome>;
-
-export type GatewayMethodTable = Partial<Record<GatewayMethod, GatewayMethodHandler>>;
-
-/** A method handler as the server runs it: an effect answering a wire value or nothing, failing with one of the refusal family. */
-export type GatewayMethodEffect = (
   params: WireRecord,
   context: GatewayMethodContext,
 ) => Effect.Effect<WireValue | undefined, GatewayRefusal>;
 
-export type GatewayMethodEffectTable = Partial<Record<GatewayMethod, GatewayMethodEffect>>;
+export type GatewayMethodTable = Partial<Record<GatewayMethod, GatewayMethodHandler>>;

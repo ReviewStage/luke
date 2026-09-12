@@ -4,6 +4,7 @@ import {
   CONVERSATION_RATE_STATUS,
   carried,
   GATEWAY_CLIENT_ROLE,
+  GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   GATEWAY_PROTOCOL_VERSION,
@@ -33,6 +34,7 @@ import {
   TURN_STATUS,
   type WireValue,
 } from "@sidecar/wire";
+import { Cause, Chunk, Effect, Exit } from "effect";
 import { test } from "vitest";
 import {
   type ConversationHeadsClient,
@@ -183,21 +185,22 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
 async function clear(composer: ReturnType<typeof composeConversation>) {
   const handler = composer.methods[GATEWAY_METHOD.CONVERSATION_CLEAR];
   assert.ok(handler);
-  const outcome = await handler(
-    {},
-    {
-      client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-      request: {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        method: GATEWAY_METHOD.CONVERSATION_CLEAR,
-        params: {},
-        idempotencyKey: "clear-1",
+  const result = await Effect.runPromise(
+    handler(
+      {},
+      {
+        client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+        request: {
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          method: GATEWAY_METHOD.CONVERSATION_CLEAR,
+          params: {},
+          idempotencyKey: "clear-1",
+        },
       },
-    },
+    ),
   );
-  assert.ok(outcome.ok);
-  assert.ok(isRecord(outcome.result));
-  return outcome.result.cleared;
+  assert.ok(isRecord(result));
+  return result.cleared;
 }
 
 test("without a device row a poll reads every resource, and tells every client once when the picture moved", async () => {
@@ -436,18 +439,20 @@ test("a reset drops everything held and tells every client the thread is gone", 
 async function rateOutcome(composer: ReturnType<typeof composeConversation>, params: WireValue) {
   const handler = composer.methods[GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE];
   assert.ok(handler);
-  return handler(
-    // SAFETY: the test hands the handler the params a client would; the handler's own schema is the boundary.
-    params as Parameters<typeof handler>[0],
-    {
-      client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-      request: {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        method: GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE,
-        params: {},
-        idempotencyKey: "rate-1",
+  return Effect.runPromiseExit(
+    handler(
+      // SAFETY: the test hands the handler the params a client would; the handler's own schema is the boundary.
+      params as Parameters<typeof handler>[0],
+      {
+        client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+        request: {
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          method: GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE,
+          params: {},
+          idempotencyKey: "rate-1",
+        },
       },
-    },
+    ),
   );
 }
 
@@ -456,8 +461,8 @@ async function rate(
   params: WireValue,
 ): Promise<WireValue | undefined> {
   const outcome = await rateOutcome(composer, params);
-  assert.ok(outcome.ok);
-  return outcome.result;
+  assert.ok(Exit.isSuccess(outcome));
+  return outcome.value;
 }
 
 test("the rating a read carries on a message reaches the picture", async () => {
@@ -554,6 +559,13 @@ test("a rating whose params are not one message and one verdict is refused as in
   const { composer, client } = harness({ deviceId: DEVICE });
   await composer.loop.refresh();
   const outcome = await rateOutcome(composer, { messageId: REPLY, rating: "sideways" });
-  assert.equal(outcome.ok, false);
+  assert.ok(Exit.isFailure(outcome));
+  assert.deepEqual(
+    Cause.failures(outcome.cause).pipe(
+      Chunk.map((refusal) => refusal.code),
+      Chunk.toReadonlyArray,
+    ),
+    [GATEWAY_ERROR.INVALID_PARAMS],
+  );
   assert.deepEqual(client.rated, []);
 });

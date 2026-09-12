@@ -3,8 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
-import { type GatewayMethodTable, gatewayError, gatewayOk } from "./methods.js";
+import type { GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -20,6 +21,10 @@ import {
   gatewayResponseToWire,
   isMutatingGatewayMethod,
   LIVE_TRANSPORT_STATE,
+  NodeUnavailableRefusal,
+  NotFoundRefusal,
+  RefusedRefusal,
+  UnknownCapabilityRefusal,
   voiceCreateLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
@@ -195,7 +200,7 @@ function requestFor(method: GatewayMethod): GatewayRequest {
 /** Every method answering its own name, so what the golden pins is the envelope rather than a host's result. */
 function answeringTable(): GatewayMethodTable {
   const table: GatewayMethodTable = {};
-  for (const method of METHODS) table[method] = () => gatewayOk({ answered: method });
+  for (const method of METHODS) table[method] = () => Effect.succeed({ answered: method });
   return table;
 }
 
@@ -231,13 +236,15 @@ test("every error code crosses as the recorded envelope", async () => {
   const host = await goldenHost({
     ...unanswered,
     [GATEWAY_METHOD.CONVERSATION_LINES]: () =>
-      gatewayError(GATEWAY_ERROR.NOT_FOUND, "no conversation stands under that key"),
+      Effect.fail(new NotFoundRefusal({ message: "no conversation stands under that key" })),
     [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
-      gatewayError(GATEWAY_ERROR.REFUSED, "that session advertises no message"),
+      Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
     [GATEWAY_METHOD.NODE_INVOKE]: () =>
-      gatewayError(GATEWAY_ERROR.NODE_UNAVAILABLE, "no connected node offers that capability"),
+      Effect.fail(
+        new NodeUnavailableRefusal({ message: "no connected node offers that capability" }),
+      ),
     [GATEWAY_METHOD.SESSION_OPEN]: () =>
-      gatewayError(GATEWAY_ERROR.UNKNOWN_CAPABILITY, "that capability is not registered"),
+      Effect.fail(new UnknownCapabilityRefusal({ message: "that capability is not registered" })),
     [GATEWAY_METHOD.RUN_SUBMIT]: () => {
       throw throwing;
     },
@@ -381,7 +388,7 @@ test("a reconnection inside the window replays, and one past it is handed a snap
 test("a named revision and an empty answer cross as the recorded envelopes", async () => {
   const host = await goldenHost({
     ...answeringTable(),
-    [GATEWAY_METHOD.GUIDE_REPORT]: () => gatewayOk(),
+    [GATEWAY_METHOD.GUIDE_REPORT]: () => Effect.succeed(undefined),
   });
   const transport = new TextLoopbackTransport(host, OPERATOR);
 

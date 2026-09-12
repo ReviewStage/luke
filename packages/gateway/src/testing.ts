@@ -1,7 +1,6 @@
 import type { WireValue } from "@sidecar/wire";
 import { Effect, Exit, Runtime, Scope } from "effect";
 import { unavailableInvocation } from "./invocations.js";
-import type { GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_ERROR,
   type GatewayClientIdentity,
@@ -27,14 +26,11 @@ import {
   type GatewayInProcessHost,
   type GatewayServerLayerOptions,
   gatewayInProcessHost,
-  gatewayMethodEffects,
 } from "./server.js";
 import { ServerBoundTransport } from "./transport.js";
 
 /** What a test composes an in-process host over: the server's own layer options, with the method table a host writes. */
-export interface GatewayTestHostOptions extends Omit<GatewayServerLayerOptions, "methods"> {
-  methods: GatewayMethodTable;
-}
+export type GatewayTestHostOptions = GatewayServerLayerOptions;
 
 /** An in-process host a test holds, and the close of the scope its layers were built in. */
 export interface GatewayTestHost extends GatewayInProcessHost {
@@ -63,11 +59,7 @@ export interface GatewayTestHost extends GatewayInProcessHost {
 export async function gatewayTestHost(options: GatewayTestHostOptions): Promise<GatewayTestHost> {
   const scope = Effect.runSync(Scope.make());
   const host = await Effect.runPromise(
-    Effect.provideService(
-      gatewayInProcessHost({ ...options, methods: gatewayMethodEffects(options.methods) }),
-      Scope.Scope,
-      scope,
-    ),
+    Effect.provideService(gatewayInProcessHost(options), Scope.Scope, scope),
   );
   return {
     ...host,

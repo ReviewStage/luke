@@ -12,7 +12,6 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  gatewayOk,
   invalid,
 } from "@sidecar/gateway";
 import { HostedVaultClient } from "@sidecar/hosted";
@@ -365,106 +364,126 @@ export const composeSettings = (): Effect.Effect<
     }
 
     const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.SETTINGS_SNAPSHOT]: async () =>
-        gatewayOk({ settings: carried(await store.snapshot()) }),
-      [GATEWAY_METHOD.SETTINGS_UPDATE]: async (params) => {
-        const field = params.field;
-        if (!isAppSettingField(field) || isKeyedAppSettingField(field)) {
-          return invalid("field must name a plain setting");
-        }
-        const parsed = APP_SETTING_SCHEMA[field].guard(params.value);
-        if (!parsed.valid) return invalid("value is not the shape that setting takes");
-        const result = await settingsWrite(
-          () => store.set(field, parsed.value),
-          async (saved) => {
-            if (saved.reason) return;
-            recordSettingUpdate(field, saved.settings);
-            await applyHostSettingSideEffect(field, saved.settings);
-          },
-          "Could not save that setting on this system.",
-          reporterOf(params),
-        );
-        if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
-        return gatewayOk(carried(result));
-      },
-      [GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY]: async (params) => {
-        const field = params.field;
-        if (!isKeyedAppSettingField(field)) return invalid("field must name a keyed setting");
-        const key = params.key;
-        if (!isSettingEntryKey(field, key)) return invalid("key is not one that setting takes");
-        // SAFETY: the guard is the parser; a wire value is one it reads.
-        const parsed = settingEntryGuard(field, key, params.value as UnparsedWireValue);
-        if (!parsed.valid) return invalid("value is not the shape that entry takes");
-        // SAFETY: settingEntryGuard validated workspace project defaults as a wire string.
-        const projectWire = parsed.value as UnparsedWireValue;
-        if (
-          field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
-          isWireString(projectWire) &&
-          !links.get().workspaceProjectOffered(key, projectWire)
-        ) {
-          return invalid("that project is not one a provider offers");
-        }
-        const result = await settingsWrite(
-          // SAFETY: settingEntryGuard validated the entry before it reaches the store.
-          () => store.setEntry(field, key, parsed.value as SettingEntryValue<typeof field>),
-          async (saved) => {
-            if (saved.reason) return;
-            recordSettingUpdate(field, saved.settings);
-            await applyHostSettingSideEffect(field, saved.settings);
-          },
-          "Could not save that setting on this system.",
-          reporterOf(params),
-        );
-        if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
-        return gatewayOk(carried(result));
-      },
-      [GATEWAY_METHOD.SETTINGS_RESET]: async (params) => {
-        const scope = params.scope;
-        if (!isSettingsResetScope(scope)) return invalid("scope is not one this build knows");
-        const result = await settingsWrite(
-          () => store.resetSettings(scope),
-          async (saved) => {
-            if (saved.reason) return;
-            recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
-            for (const field of APP_SETTING_FIELDS) {
-              const definition = APP_SETTING_SCHEMA[field];
-              if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
-              await applyHostSettingSideEffect(field, saved.settings);
-            }
-          },
-          "Could not reset those settings on this system.",
-          reporterOf(params),
-        );
-        if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
-        return gatewayOk(carried(result));
-      },
-      [GATEWAY_METHOD.CREDENTIAL_SET_API_KEY]: async (params) => {
-        const providerId = params.providerId;
-        if (!isCredentialProviderId(providerId))
-          return invalid("providerId is not one this build knows");
-        if (params.apiKey !== undefined && !isWireString(params.apiKey)) {
-          return invalid("apiKey must be a string");
-        }
-        const apiKey = params.apiKey;
-        const result = await settingsWrite(
-          () => store.setApiKey(providerId, apiKey),
-          async (saved) => {
-            if (saved.reason) return;
-            if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-              await links.get().applyVoiceCredential();
-              await emitSettings();
-            }
-            void vaultSync.keySaved(providerId, apiKey, saved.settings.stored.syncProviderKeys);
-            recordProductEvent(
-              apiKey?.trim() ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
-              { connection_id: providerId },
-            );
-          },
-          "Could not save that API key on this system.",
-          reporterOf(params),
-        );
-        return gatewayOk(carried(result));
-      },
+      [GATEWAY_METHOD.SETTINGS_SNAPSHOT]: () =>
+        Effect.map(
+          Effect.promise(() => store.snapshot()),
+          (snapshot) => ({ settings: carried(snapshot) }),
+        ),
+      [GATEWAY_METHOD.SETTINGS_UPDATE]: (params) =>
+        Effect.gen(function* () {
+          const field = params.field;
+          if (!isAppSettingField(field) || isKeyedAppSettingField(field)) {
+            return yield* invalid("field must name a plain setting");
+          }
+          const parsed = APP_SETTING_SCHEMA[field].guard(params.value);
+          if (!parsed.valid) return yield* invalid("value is not the shape that setting takes");
+          const result = yield* Effect.promise(() =>
+            settingsWrite(
+              () => store.set(field, parsed.value),
+              async (saved) => {
+                if (saved.reason) return;
+                recordSettingUpdate(field, saved.settings);
+                await applyHostSettingSideEffect(field, saved.settings);
+              },
+              "Could not save that setting on this system.",
+              reporterOf(params),
+            ),
+          );
+          if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
+          return carried(result);
+        }),
+      [GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY]: (params) =>
+        Effect.gen(function* () {
+          const field = params.field;
+          if (!isKeyedAppSettingField(field))
+            return yield* invalid("field must name a keyed setting");
+          const key = params.key;
+          if (!isSettingEntryKey(field, key))
+            return yield* invalid("key is not one that setting takes");
+          // SAFETY: the guard is the parser; a wire value is one it reads.
+          const parsed = settingEntryGuard(field, key, params.value as UnparsedWireValue);
+          if (!parsed.valid) return yield* invalid("value is not the shape that entry takes");
+          // SAFETY: settingEntryGuard validated workspace project defaults as a wire string.
+          const projectWire = parsed.value as UnparsedWireValue;
+          if (
+            field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
+            isWireString(projectWire) &&
+            !links.get().workspaceProjectOffered(key, projectWire)
+          ) {
+            return yield* invalid("that project is not one a provider offers");
+          }
+          const result = yield* Effect.promise(() =>
+            settingsWrite(
+              // SAFETY: settingEntryGuard validated the entry before it reaches the store.
+              () => store.setEntry(field, key, parsed.value as SettingEntryValue<typeof field>),
+              async (saved) => {
+                if (saved.reason) return;
+                recordSettingUpdate(field, saved.settings);
+                await applyHostSettingSideEffect(field, saved.settings);
+              },
+              "Could not save that setting on this system.",
+              reporterOf(params),
+            ),
+          );
+          if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
+          return carried(result);
+        }),
+      [GATEWAY_METHOD.SETTINGS_RESET]: (params) =>
+        Effect.gen(function* () {
+          const scope = params.scope;
+          if (!isSettingsResetScope(scope))
+            return yield* invalid("scope is not one this build knows");
+          const result = yield* Effect.promise(() =>
+            settingsWrite(
+              () => store.resetSettings(scope),
+              async (saved) => {
+                if (saved.reason) return;
+                recordProductEvent(PRODUCT_EVENT.SETTINGS_RESET, {});
+                for (const field of APP_SETTING_FIELDS) {
+                  const definition = APP_SETTING_SCHEMA[field];
+                  if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+                  await applyHostSettingSideEffect(field, saved.settings);
+                }
+              },
+              "Could not reset those settings on this system.",
+              reporterOf(params),
+            ),
+          );
+          if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
+          return carried(result);
+        }),
+      [GATEWAY_METHOD.CREDENTIAL_SET_API_KEY]: (params) =>
+        Effect.gen(function* () {
+          const providerId = params.providerId;
+          if (!isCredentialProviderId(providerId))
+            return yield* invalid("providerId is not one this build knows");
+          const apiKey = params.apiKey;
+          if (apiKey !== undefined && !isWireString(apiKey)) {
+            return yield* invalid("apiKey must be a string");
+          }
+          const result = yield* Effect.promise(() =>
+            settingsWrite(
+              () => store.setApiKey(providerId, apiKey),
+              async (saved) => {
+                if (saved.reason) return;
+                if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
+                  await links.get().applyVoiceCredential();
+                  await emitSettings();
+                }
+                void vaultSync.keySaved(providerId, apiKey, saved.settings.stored.syncProviderKeys);
+                recordProductEvent(
+                  apiKey?.trim()
+                    ? PRODUCT_EVENT.PROVIDER_CONNECT
+                    : PRODUCT_EVENT.PROVIDER_DISCONNECT,
+                  { connection_id: providerId },
+                );
+              },
+              "Could not save that API key on this system.",
+              reporterOf(params),
+            ),
+          );
+          return carried(result);
+        }),
       // A count the client's own surfaces made: read against the allowlist
       // again here, and queued only when it reads. Nothing observed can travel
       // in one, because the reader builds the event from the allowlist rather
@@ -477,7 +496,7 @@ export const composeSettings = (): Effect.Effect<
           event.name,
           event.properties as ProductEventPropertiesFor<typeof event.name>,
         );
-        return gatewayOk({});
+        return Effect.succeed({});
       },
     };
 

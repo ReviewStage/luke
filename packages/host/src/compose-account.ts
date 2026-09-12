@@ -16,7 +16,6 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  gatewayOk,
   invalid,
 } from "@sidecar/gateway";
 import {
@@ -233,45 +232,50 @@ export const composeAccount = (
     }
 
     const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => gatewayOk({ account: carried(account) }),
-      [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: async (params) => {
-        if (!isAccountProvider(params.provider))
-          return invalid("provider is not one this build knows");
-        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
-        });
-        const snapshot = await session.beginSignIn(params.provider);
-        return gatewayOk({ account: carried(snapshot) });
-      },
-      [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () => {
-        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
-        });
-        session.cancelSignIn();
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: async () => {
-        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
-        });
-        // The count of the action leaves before the action ends the account it is
-        // authenticated with; queued behind the sign-out it would wait for the
-        // next sign-in.
-        await settings.flushProductEvents();
-        const snapshot = await session.signOut({ revokeRemote: true });
-        return gatewayOk({ account: carried(snapshot) });
-      },
-      [GATEWAY_METHOD.ACCOUNT_DELETE]: async () => {
-        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-          account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
-        });
-        await settings.flushProductEvents();
-        const snapshot = await session.deleteEverywhere();
-        // Only a deletion that landed stands recording down for the run.
-        sessionReplayEndedByDeletion = true;
-        void emitSessionReplay();
-        return gatewayOk({ account: carried(snapshot) });
-      },
+      [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => Effect.succeed({ account: carried(account) }),
+      [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>
+        Effect.gen(function* () {
+          const provider = params.provider;
+          if (!isAccountProvider(provider))
+            return yield* invalid("provider is not one this build knows");
+          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+            account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
+          });
+          const snapshot = yield* Effect.promise(() => session.beginSignIn(provider));
+          return { account: carried(snapshot) };
+        }),
+      [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () =>
+        Effect.sync(() => {
+          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+            account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
+          });
+          session.cancelSignIn();
+          return {};
+        }),
+      [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: () =>
+        Effect.gen(function* () {
+          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+            account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
+          });
+          // The count of the action leaves before the action ends the account it is
+          // authenticated with; queued behind the sign-out it would wait for the
+          // next sign-in.
+          yield* Effect.promise(() => settings.flushProductEvents());
+          const snapshot = yield* Effect.promise(() => session.signOut({ revokeRemote: true }));
+          return { account: carried(snapshot) };
+        }),
+      [GATEWAY_METHOD.ACCOUNT_DELETE]: () =>
+        Effect.gen(function* () {
+          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+            account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
+          });
+          yield* Effect.promise(() => settings.flushProductEvents());
+          const snapshot = yield* Effect.promise(() => session.deleteEverywhere());
+          // Only a deletion that landed stands recording down for the run.
+          sessionReplayEndedByDeletion = true;
+          void emitSessionReplay();
+          return { account: carried(snapshot) };
+        }),
     };
 
     return {

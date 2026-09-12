@@ -6,20 +6,21 @@ import { it } from "@effect/vitest";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { WebSocket } from "ws";
-import { type GatewayMethodTable, gatewayError, gatewayOk } from "./methods.js";
+import type { GatewayMethodTable } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
-  GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
   GATEWAY_PROTOCOL_VERSION,
   NODE_CAPABILITY_STATUS,
+  NotFoundRefusal,
   nodeInvocationAnswerToWire,
   nodeInvocationFromWire,
+  RefusedRefusal,
 } from "./protocol.js";
-import { GatewayEventLog, gatewayMethodEffects } from "./server.js";
+import { GatewayEventLog } from "./server.js";
 import {
   bearerAuthentication,
   GATEWAY_FRAME,
@@ -87,12 +88,13 @@ function hostWithNodes() {
   let invocations = 0;
   let events = 0;
   const methods: GatewayMethodTable = {
-    [GATEWAY_METHOD.RUN_LIST]: () => gatewayOk({ runs: [] }),
-    [GATEWAY_METHOD.MEMORY_STATUS]: () => gatewayError(GATEWAY_ERROR.NOT_FOUND, "nothing stands"),
+    [GATEWAY_METHOD.RUN_LIST]: () => Effect.succeed({ runs: [] }),
+    [GATEWAY_METHOD.MEMORY_STATUS]: () =>
+      Effect.fail(new NotFoundRefusal({ message: "nothing stands" })),
     [GATEWAY_METHOD.NODE_REGISTER]: (params, context) => {
       const connection = context.connection;
       if (!connection || !isWireString(params.nodeId)) {
-        return gatewayError(GATEWAY_ERROR.REFUSED, "no connection");
+        return Effect.fail(new RefusedRefusal({ message: "no connection" }));
       }
       const nodeId = params.nodeId;
       nodes.registerRemote({
@@ -106,11 +108,11 @@ function hostWithNodes() {
             params: invoked,
           }),
       });
-      return gatewayOk({ nodeId });
+      return Effect.succeed({ nodeId });
     },
   };
   const layer = layerGatewaySocket({
-    methods: gatewayMethodEffects(methods),
+    methods: methods,
     configurationRevision: () => FIXTURE_CONFIGURATION_REVISION,
     sessionRevision: () => undefined,
     snapshot: () => ({ kind: "snapshot", rows: [] }),

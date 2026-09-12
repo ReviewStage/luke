@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Context, Effect, ExecutionStrategy, Exit, Layer, Scope } from "effect";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
-import { type GatewayMethodTable, gatewayError, gatewayOk } from "./methods.js";
+import type { GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -14,8 +14,9 @@ import {
   GATEWAY_PROTOCOL_VERSION,
   type GatewayClientIdentity,
   type GatewayEvent,
+  RefusedRefusal,
 } from "./protocol.js";
-import { GatewayEventLog, gatewayMethodEffects } from "./server.js";
+import { GatewayEventLog } from "./server.js";
 import {
   bearerAuthentication,
   connectWebSocketGateway,
@@ -57,24 +58,24 @@ const hosted = (
     let ids = 0;
     const methods: GatewayMethodTable = {
       [GATEWAY_METHOD.RUN_LIST]: (_params, context) =>
-        gatewayOk({ runs: [], client: context.client.clientId }),
+        Effect.succeed({ runs: [], client: context.client.clientId }),
       [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
         effects.push(String(params.question));
-        return gatewayOk({ runId: `run-${effects.length}` });
+        return Effect.succeed({ runId: `run-${effects.length}` });
       },
       [GATEWAY_METHOD.SHUTDOWN]: () => {
         state.shutdowns += 1;
-        return gatewayOk({ accepted: true });
+        return Effect.succeed({ accepted: true });
       },
-      [GATEWAY_METHOD.MEMORY_STATUS]: () => gatewayError(GATEWAY_ERROR.REFUSED, "no"),
+      [GATEWAY_METHOD.MEMORY_STATUS]: () => Effect.fail(new RefusedRefusal({ message: "no" })),
       // A read that never answers, so a socket can die with a request still out.
-      [GATEWAY_METHOD.RUN_WAIT]: () => new Promise(() => undefined),
+      [GATEWAY_METHOD.RUN_WAIT]: () => Effect.never,
     };
     const scope = yield* Scope.fork(yield* Effect.scope, ExecutionStrategy.sequential);
     const context = yield* Scope.extend(
       Layer.build(
         layerGatewaySocket({
-          methods: gatewayMethodEffects(methods),
+          methods: methods,
           configurationRevision: () => 1,
           sessionRevision: () => "gen-1",
           snapshot: () => ({ runs: [] }),

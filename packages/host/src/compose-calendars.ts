@@ -16,7 +16,6 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  gatewayOk,
   invalid,
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
@@ -405,188 +404,216 @@ export const composeCalendars = (
     }
 
     const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE]: async (params) => {
-        const result = await settings.settingsWrite(
-          async () => {
-            const outcome = await Runtime.runPromise(runtime)(
-              Effect.scoped(googleCalendarConsent.signInEffect()),
-            );
-            if ("reason" in outcome) return settings.refusedSettings(outcome.reason);
-            let primaryId: string | undefined;
-            try {
-              const calendars = await googleCalendar.listCalendars(outcome.accessToken);
-              primaryId = (calendars.find((candidate) => candidate.primary) ?? calendars[0])?.id;
-            } catch {
-              primaryId = undefined;
-            }
-            if (!primaryId) {
-              return settings.refusedSettings(
-                "Google did not answer with the account's calendars.",
-              );
-            }
-            return settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [primaryId]);
-          },
-          (saved) => {
-            if (saved.reason) return;
-            void loop.refresh();
-            settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
-              calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
-            });
-          },
-          "Could not connect Google Calendar on this system.",
-          reporterOf(params),
-        );
-        return gatewayOk(carried(result));
-      },
-      [GATEWAY_METHOD.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () => {
-        googleCalendarConsent.cancel();
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: () => {
-        googleCalendarConsent.reopen();
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT]: async (params) => {
-        if (!isWireString(params.accountId)) return invalid("accountId must be a string");
+      [GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE]: (params) =>
+        Effect.map(
+          Effect.promise(() =>
+            settings.settingsWrite(
+              async () => {
+                const outcome = await Runtime.runPromise(runtime)(
+                  Effect.scoped(googleCalendarConsent.signInEffect()),
+                );
+                if ("reason" in outcome) return settings.refusedSettings(outcome.reason);
+                let primaryId: string | undefined;
+                try {
+                  const calendars = await googleCalendar.listCalendars(outcome.accessToken);
+                  primaryId = (calendars.find((candidate) => candidate.primary) ?? calendars[0])
+                    ?.id;
+                } catch {
+                  primaryId = undefined;
+                }
+                if (!primaryId) {
+                  return settings.refusedSettings(
+                    "Google did not answer with the account's calendars.",
+                  );
+                }
+                return settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [
+                  primaryId,
+                ]);
+              },
+              (saved) => {
+                if (saved.reason) return;
+                void loop.refresh();
+                settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
+                  calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
+                });
+              },
+              "Could not connect Google Calendar on this system.",
+              reporterOf(params),
+            ),
+          ),
+          (result) => carried(result),
+        ),
+      [GATEWAY_METHOD.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () =>
+        Effect.sync(() => {
+          googleCalendarConsent.cancel();
+          return {};
+        }),
+      [GATEWAY_METHOD.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: () =>
+        Effect.sync(() => {
+          googleCalendarConsent.reopen();
+          return {};
+        }),
+      [GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT]: (params) => {
         const accountId = params.accountId;
-        const result = await settings.settingsWrite(
-          () => settingsStore.removeCalendarAccount(accountId),
-          (saved) => {
-            if (saved.reason) return;
-            void loop.refresh();
-            settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
-              calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
-            });
-          },
-          "Could not disconnect that account on this system.",
-          reporterOf(params),
+        if (!isWireString(accountId)) return invalid("accountId must be a string");
+        return Effect.map(
+          Effect.promise(() =>
+            settings.settingsWrite(
+              () => settingsStore.removeCalendarAccount(accountId),
+              (saved) => {
+                if (saved.reason) return;
+                void loop.refresh();
+                settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
+                  calendar_source: PRODUCT_CALENDAR_SOURCE.GOOGLE,
+                });
+              },
+              "Could not disconnect that account on this system.",
+              reporterOf(params),
+            ),
+          ),
+          (result) => carried(result),
         );
-        return gatewayOk(carried(result));
       },
-      [GATEWAY_METHOD.CALENDAR_CONNECT_APPLE]: async (params) => {
-        const generation = ++appleConnectGeneration;
-        let stored = false;
-        const result = await settings.settingsWrite(
-          async () => {
-            // The system's own consent is the whole connect flow, raised by the
-            // helper on the desktop at this press and nowhere else.
-            const outcome = await appleCalendar.obtainAccess({
-              openSystemSettings: () =>
-                void kernel
-                  .openExternalThroughNode(CALENDAR_PRIVACY_PANE_URL)
-                  .catch(kernel.reportOpenFailure),
-              superseded: () => appleConnectGeneration !== generation,
-            });
-            if (appleConnectGeneration !== generation) {
-              return {
-                status: ACTION_RESULT_STATUS.ACCEPTED,
-                settings: await settingsStore.snapshot(),
-              };
-            }
-            if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL) {
-              return settings.refusedSettings(
-                outcome.failure ?? APPLE_CALENDAR_ACCESS_REFUSAL[outcome.access],
-              );
-            }
-            const seed = outcome.defaultCalendarId ?? outcome.calendars[0]?.id;
-            stored = true;
-            return settingsStore.connectAppleCalendar(seed ? [seed] : []);
-          },
-          (saved) => {
-            if (saved.reason) return;
-            void loop.refresh();
-            if (stored) {
-              settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
-                calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
-              });
-            }
-          },
-          "Could not connect Apple Calendar on this system.",
-          reporterOf(params),
-        );
-        return gatewayOk(carried(result));
-      },
-      [GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE]: async (params) => {
-        const result = await settings.settingsWrite(
-          () => settingsStore.disconnectAppleCalendar(),
-          (saved) => {
-            if (saved.reason) return;
-            void loop.refresh();
-            settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
-              calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
-            });
-          },
-          "Could not disconnect Apple Calendar on this system.",
-          reporterOf(params),
-        );
-        return gatewayOk(carried(result));
-      },
-      [GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS]: async () => {
-        try {
-          return gatewayOk({ access: await appleCalendar.status() });
-        } catch {
-          return gatewayOk({ access: APPLE_CALENDAR_ACCESS.NOT_DETERMINED });
-        }
-      },
-      [GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT]: () => {
-        appleConnectGeneration += 1;
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.CALENDAR_REFRESH]: async () => {
-        await loop.refresh();
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.CALENDAR_SET_SELECTED]: async (params) => {
-        if (!isWireString(params.accountId) || !isWireString(params.calendarId)) {
-          return invalid("accountId and calendarId must be strings");
-        }
-        if (!isWireBoolean(params.selected)) return invalid("selected must be a boolean");
-        const { accountId, calendarId, selected } = params;
-        if (
-          selected &&
-          !observedCalendars
-            .find((held) => held.accountId === accountId)
-            ?.calendars.some((candidate) => candidate.id === calendarId)
-        ) {
-          return gatewayOk(
-            carried(
-              await settings.refusedSettings(
-                "That calendar is not one the account's latest list offered.",
+      [GATEWAY_METHOD.CALENDAR_CONNECT_APPLE]: (params) =>
+        Effect.suspend(() => {
+          const generation = ++appleConnectGeneration;
+          let stored = false;
+          return Effect.map(
+            Effect.promise(() =>
+              settings.settingsWrite(
+                async () => {
+                  // The system's own consent is the whole connect flow, raised by the
+                  // helper on the desktop at this press and nowhere else.
+                  const outcome = await appleCalendar.obtainAccess({
+                    openSystemSettings: () =>
+                      void kernel
+                        .openExternalThroughNode(CALENDAR_PRIVACY_PANE_URL)
+                        .catch(kernel.reportOpenFailure),
+                    superseded: () => appleConnectGeneration !== generation,
+                  });
+                  if (appleConnectGeneration !== generation) {
+                    return {
+                      status: ACTION_RESULT_STATUS.ACCEPTED,
+                      settings: await settingsStore.snapshot(),
+                    };
+                  }
+                  if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL) {
+                    return settings.refusedSettings(
+                      outcome.failure ?? APPLE_CALENDAR_ACCESS_REFUSAL[outcome.access],
+                    );
+                  }
+                  const seed = outcome.defaultCalendarId ?? outcome.calendars[0]?.id;
+                  stored = true;
+                  return settingsStore.connectAppleCalendar(seed ? [seed] : []);
+                },
+                (saved) => {
+                  if (saved.reason) return;
+                  void loop.refresh();
+                  if (stored) {
+                    settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {
+                      calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
+                    });
+                  }
+                },
+                "Could not connect Apple Calendar on this system.",
+                reporterOf(params),
               ),
             ),
+            (result) => carried(result),
           );
-        }
-        const result = await settings.settingsWrite(
-          () => settingsStore.setCalendarSelected(accountId, calendarId, selected),
-          (saved) => {
-            if (saved.reason) return;
-            void loop.refresh();
-            settings.recordProductEvent(PRODUCT_EVENT.SETTING_UPDATE, {
-              setting_id: APP_SETTING_ID.CALENDAR_SELECTED,
-              setting_value: selected ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
-            });
+        }),
+      [GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE]: (params) =>
+        Effect.map(
+          Effect.promise(() =>
+            settings.settingsWrite(
+              () => settingsStore.disconnectAppleCalendar(),
+              (saved) => {
+                if (saved.reason) return;
+                void loop.refresh();
+                settings.recordProductEvent(PRODUCT_EVENT.CALENDAR_DISCONNECT, {
+                  calendar_source: PRODUCT_CALENDAR_SOURCE.APPLE,
+                });
+              },
+              "Could not disconnect Apple Calendar on this system.",
+              reporterOf(params),
+            ),
+          ),
+          (result) => carried(result),
+        ),
+      [GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS]: () =>
+        Effect.match(
+          Effect.tryPromise(() => appleCalendar.status()),
+          {
+            onFailure: () => ({ access: APPLE_CALENDAR_ACCESS.NOT_DETERMINED }),
+            onSuccess: (access) => ({ access }),
           },
-          "Could not save that calendar choice on this system.",
-          reporterOf(params),
-        );
-        return gatewayOk(carried(result));
-      },
+        ),
+      [GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT]: () =>
+        Effect.sync(() => {
+          appleConnectGeneration += 1;
+          return {};
+        }),
+      [GATEWAY_METHOD.CALENDAR_REFRESH]: () =>
+        Effect.as(
+          Effect.promise(() => loop.refresh()),
+          {},
+        ),
+      [GATEWAY_METHOD.CALENDAR_SET_SELECTED]: (params) =>
+        Effect.gen(function* () {
+          const { accountId, calendarId, selected } = params;
+          if (!isWireString(accountId) || !isWireString(calendarId)) {
+            return yield* invalid("accountId and calendarId must be strings");
+          }
+          if (!isWireBoolean(selected)) return yield* invalid("selected must be a boolean");
+          if (
+            selected &&
+            !observedCalendars
+              .find((held) => held.accountId === accountId)
+              ?.calendars.some((candidate) => candidate.id === calendarId)
+          ) {
+            return carried(
+              yield* Effect.promise(() =>
+                settings.refusedSettings(
+                  "That calendar is not one the account's latest list offered.",
+                ),
+              ),
+            );
+          }
+          const result = yield* Effect.promise(() =>
+            settings.settingsWrite(
+              () => settingsStore.setCalendarSelected(accountId, calendarId, selected),
+              (saved) => {
+                if (saved.reason) return;
+                void loop.refresh();
+                settings.recordProductEvent(PRODUCT_EVENT.SETTING_UPDATE, {
+                  setting_id: APP_SETTING_ID.CALENDAR_SELECTED,
+                  setting_value: selected ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF,
+                });
+              },
+              "Could not save that calendar choice on this system.",
+              reporterOf(params),
+            ),
+          );
+          return carried(result);
+        }),
       [GATEWAY_METHOD.ONBOARDING_STATE]: () =>
-        gatewayOk({ calendarOnboardingOwed: calendarOnboardingGateOwed() }),
-      [GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR]: () => {
-        if (calendarOnboardingOwed(onboardingState)) {
-          writeOnboardingState({ calendarOnboardingSkippedAt: new Date(now()).toISOString() });
-          links().requestOnboardingBeat();
-        }
-        return gatewayOk({});
-      },
-      [GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR]: () => {
-        if (calendarOnboardingOwed(onboardingState)) {
-          writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
-          links().requestOnboardingBeat();
-        }
-        return gatewayOk({});
-      },
+        Effect.sync(() => ({ calendarOnboardingOwed: calendarOnboardingGateOwed() })),
+      [GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR]: () =>
+        Effect.sync(() => {
+          if (calendarOnboardingOwed(onboardingState)) {
+            writeOnboardingState({ calendarOnboardingSkippedAt: new Date(now()).toISOString() });
+            links().requestOnboardingBeat();
+          }
+          return {};
+        }),
+      [GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR]: () =>
+        Effect.sync(() => {
+          if (calendarOnboardingOwed(onboardingState)) {
+            writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
+            links().requestOnboardingBeat();
+          }
+          return {};
+        }),
     };
 
     return {

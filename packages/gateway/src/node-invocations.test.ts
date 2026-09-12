@@ -6,11 +6,10 @@ import { test } from "vitest";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
 import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
-import { type GatewayMethodTable, gatewayError, gatewayOk } from "./methods.js";
+import type { GatewayMethodTable } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
-  GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
@@ -20,8 +19,8 @@ import {
   type NodeInvocation,
   nodeInvocationAnswerToWire,
   nodeInvocationFromWire,
+  RefusedRefusal,
 } from "./protocol.js";
-import { gatewayMethodEffects } from "./server.js";
 import { type GatewayTestHost, gatewayTestHost, TextLoopbackTransport } from "./testing.js";
 import { InProcessTransport } from "./transport.js";
 import {
@@ -54,7 +53,7 @@ function nodeMethods() {
     [GATEWAY_METHOD.NODE_REGISTER]: (params, context) => {
       const connection = context.connection;
       if (!connection || !isWireString(params.nodeId)) {
-        return gatewayError(GATEWAY_ERROR.REFUSED, "no connection");
+        return Effect.fail(new RefusedRefusal({ message: "no connection" }));
       }
       const nodeId = params.nodeId;
       owners.set(nodeId, connection.connectionId);
@@ -74,7 +73,7 @@ function nodeMethods() {
       connection.onClosed(() => {
         if (owners.get(nodeId) === connection.connectionId) nodes.setConnected(nodeId, false);
       });
-      return gatewayOk({ nodeId });
+      return Effect.succeed({ nodeId });
     },
   };
   return { methods, nodes, nextId: () => `event-${++ids}` };
@@ -103,7 +102,7 @@ const socketHost = (): Effect.Effect<
     const { methods, nodes, nextId } = nodeMethods();
     const context = yield* Layer.build(
       layerGatewaySocket({
-        methods: gatewayMethodEffects(methods),
+        methods: methods,
         configurationRevision: () => 1,
         sessionRevision: () => undefined,
         snapshot: () => ({}),
