@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import * as SqlClient from "@effect/sql/SqlClient";
+import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
-import { afterAll, test } from "vitest";
+import { afterAll } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { ASK_REFUSAL, acceptAsk, askStanding, stopAsk } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
@@ -25,7 +26,6 @@ import { storeWriter } from "../server/hosted/store";
 import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks, promisedWriter } from "./support/promised-store";
 
 /**
  * The ask record over the real migrations, and the two compositions that
@@ -39,9 +39,28 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
-const asks = promisedAsks(database.run);
 /** The record itself, for the seams that take the effect rather than the promise. */
 const askEffects = askRecord();
+const asks = {
+  record: (write: Parameters<typeof askEffects.record>[0]) =>
+    database.run(askEffects.record(write)),
+  named: (userId: string, id: string) => database.run(askEffects.named(userId, id)),
+  latestSession: (userId: string, conversationId: string) =>
+    database.run(askEffects.latestSession(userId, conversationId)),
+  dispatchOnce: (
+    target: Parameters<typeof askEffects.dispatchOnce>[0],
+    id: string,
+    dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
+  ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
+  cancelRequested: (id: string, at: Date) => database.run(askEffects.cancelRequested(id, at)),
+  bindDeliveries: (
+    target: Parameters<typeof askEffects.bindDeliveries>[0],
+    deliveryIds: Parameters<typeof askEffects.bindDeliveries>[1],
+    turnId: string,
+  ) => database.run(askEffects.bindDeliveries(target, deliveryIds, turnId)),
+  stoppedOn: (target: Parameters<typeof askEffects.stoppedOn>[0], turnId: string) =>
+    database.run(askEffects.stoppedOn(target, turnId)),
+};
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
@@ -93,108 +112,130 @@ function write(userId: string, conversationId: string, clientId = randomUUID()) 
   };
 }
 
-test("an ask is recorded once per conversation and client id, by the index: two arrivals at once leave one row and both read it, and the same client id in another conversation is another ask", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const clientId = randomUUID();
-  const [first, second] = await Promise.all([
-    asks.record(write(userId, conversationId, clientId)),
-    asks.record(write(userId, conversationId, clientId)),
-  ]);
-  assert.deepEqual(first, second);
-  assert.equal(first.clientId, clientId);
-  assert.equal(first.createdAt.getTime(), NOW);
-  assert.equal(first.sessionId, undefined);
-  const neighbour = await database.createUser();
-  const elsewhere = await asks.record(write(neighbour, await conversation(neighbour), clientId));
-  assert.notEqual(elsewhere.id, first.id);
-});
-
-test("a read is the account's own: an ask is named for its account and for nobody else, and the latest session is the newest by eve's sortable ids whichever ask holds it", async () => {
-  const owner = await database.createUser();
-  const other = await database.createUser();
-  const conversationId = await conversation(owner);
-  const earlier = await asks.record(write(owner, conversationId));
-  const later = await asks.record({
-    ...write(owner, conversationId),
-    createdAt: new Date(NOW + 1),
-  });
-  assert.deepEqual(await asks.named(owner, earlier.id), earlier);
-  assert.equal(await asks.named(other, earlier.id), undefined);
-  assert.equal(await asks.latestSession(owner, conversationId), undefined);
-
-  await asks.dispatchOnce({ userId: owner, conversationId }, earlier.id, async () => ({
-    sessionId: "wrun_02_newer",
-  }));
-  await asks.dispatchOnce({ userId: owner, conversationId }, later.id, async () => ({
-    sessionId: "wrun_01_older",
-    deliveryId: "delivery-2",
-  }));
-  assert.equal(await asks.latestSession(owner, conversationId), "wrun_02_newer");
-  assert.equal(await asks.latestSession(other, conversationId), undefined);
-});
-
-test("a second dispatch on an ask already handed to eve runs nothing and changes nothing; the first Stop stands", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const ask = await asks.record(write(userId, conversationId));
-  const turnId = randomUUID();
-  await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => ({
-    sessionId: "wrun_1",
-    turnId,
-  }));
-  let ran = 0;
-  const after = dispatchedRow(
-    await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
-      ran += 1;
-      return { sessionId: "wrun_2", deliveryId: "delivery-1" };
+it.effect(
+  "an ask is recorded once per conversation and client id, by the index: two arrivals at once leave one row and both read it, and the same client id in another conversation is another ask",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const clientId = randomUUID();
+      const [first, second] = await Promise.all([
+        asks.record(write(userId, conversationId, clientId)),
+        asks.record(write(userId, conversationId, clientId)),
+      ]);
+      assert.deepEqual(first, second);
+      assert.equal(first.clientId, clientId);
+      assert.equal(first.createdAt.getTime(), NOW);
+      assert.equal(first.sessionId, undefined);
+      const neighbour = await database.createUser();
+      const elsewhere = await asks.record(
+        write(neighbour, await conversation(neighbour), clientId),
+      );
+      assert.notEqual(elsewhere.id, first.id);
     }),
-  );
-  assert.equal(ran, 0);
-  assert.equal(after.sessionId, "wrun_1");
-  assert.equal(after.turnId, turnId);
-  assert.equal(after.deliveryId, undefined);
-  const undispatched = await asks.record(write(userId, conversationId));
-  assert.equal(
-    dispatchedRow(
-      await asks.dispatchOnce({ userId, conversationId }, undispatched.id, async () => undefined),
-    ).sessionId,
-    undefined,
-  );
+);
 
-  await asks.cancelRequested(ask.id, new Date(NOW + 5));
-  await asks.cancelRequested(ask.id, new Date(NOW + 9));
-  assert.equal((await asks.named(userId, ask.id))?.cancelRequestedAt?.getTime(), NOW + 5);
-});
+it.effect(
+  "a read is the account's own: an ask is named for its account and for nobody else, and the latest session is the newest by eve's sortable ids whichever ask holds it",
+  () =>
+    Effect.promise(async () => {
+      const owner = await database.createUser();
+      const other = await database.createUser();
+      const conversationId = await conversation(owner);
+      const earlier = await asks.record(write(owner, conversationId));
+      const later = await asks.record({
+        ...write(owner, conversationId),
+        createdAt: new Date(NOW + 1),
+      });
+      assert.deepEqual(await asks.named(owner, earlier.id), earlier);
+      assert.equal(await asks.named(other, earlier.id), undefined);
+      assert.equal(await asks.latestSession(owner, conversationId), undefined);
 
-test("binding a turn's deliveries names the turn on each delivered ask not yet bound, answers those asks, and binds nothing when the start is emitted again", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const target = { userId, conversationId };
-  const waiting = await asks.record(write(userId, conversationId));
-  const alsoWaiting = await asks.record(write(userId, conversationId));
-  const unrelated = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(target, waiting.id, async () => ({
-    sessionId: "wrun_1",
-    deliveryId: "delivery-a",
-  }));
-  await asks.dispatchOnce(target, alsoWaiting.id, async () => ({
-    sessionId: "wrun_1",
-    deliveryId: "delivery-b",
-  }));
-  await asks.dispatchOnce(target, unrelated.id, async () => ({
-    sessionId: "wrun_1",
-    deliveryId: "delivery-c",
-  }));
-  const turnId = randomUUID();
+      await asks.dispatchOnce({ userId: owner, conversationId }, earlier.id, async () => ({
+        sessionId: "wrun_02_newer",
+      }));
+      await asks.dispatchOnce({ userId: owner, conversationId }, later.id, async () => ({
+        sessionId: "wrun_01_older",
+        deliveryId: "delivery-2",
+      }));
+      assert.equal(await asks.latestSession(owner, conversationId), "wrun_02_newer");
+      assert.equal(await asks.latestSession(other, conversationId), undefined);
+    }),
+);
 
-  const bound = await asks.bindDeliveries(target, ["delivery-a", "delivery-b"], turnId);
-  assert.deepEqual(bound.map((ask) => ask.id).sort(), [waiting.id, alsoWaiting.id].sort());
-  assert.ok(bound.every((ask) => ask.turnId === turnId));
-  assert.equal((await asks.named(userId, unrelated.id))?.turnId, undefined);
-  assert.deepEqual(await asks.bindDeliveries(target, ["delivery-a", "delivery-b"], turnId), []);
-  assert.deepEqual(await asks.bindDeliveries(target, [], turnId), []);
-});
+it.effect(
+  "a second dispatch on an ask already handed to eve runs nothing and changes nothing; the first Stop stands",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const ask = await asks.record(write(userId, conversationId));
+      const turnId = randomUUID();
+      await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => ({
+        sessionId: "wrun_1",
+        turnId,
+      }));
+      let ran = 0;
+      const after = dispatchedRow(
+        await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
+          ran += 1;
+          return { sessionId: "wrun_2", deliveryId: "delivery-1" };
+        }),
+      );
+      assert.equal(ran, 0);
+      assert.equal(after.sessionId, "wrun_1");
+      assert.equal(after.turnId, turnId);
+      assert.equal(after.deliveryId, undefined);
+      const undispatched = await asks.record(write(userId, conversationId));
+      assert.equal(
+        dispatchedRow(
+          await asks.dispatchOnce(
+            { userId, conversationId },
+            undispatched.id,
+            async () => undefined,
+          ),
+        ).sessionId,
+        undefined,
+      );
+
+      await asks.cancelRequested(ask.id, new Date(NOW + 5));
+      await asks.cancelRequested(ask.id, new Date(NOW + 9));
+      assert.equal((await asks.named(userId, ask.id))?.cancelRequestedAt?.getTime(), NOW + 5);
+    }),
+);
+
+it.effect(
+  "binding a turn's deliveries names the turn on each delivered ask not yet bound, answers those asks, and binds nothing when the start is emitted again",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const target = { userId, conversationId };
+      const waiting = await asks.record(write(userId, conversationId));
+      const alsoWaiting = await asks.record(write(userId, conversationId));
+      const unrelated = await asks.record(write(userId, conversationId));
+      await asks.dispatchOnce(target, waiting.id, async () => ({
+        sessionId: "wrun_1",
+        deliveryId: "delivery-a",
+      }));
+      await asks.dispatchOnce(target, alsoWaiting.id, async () => ({
+        sessionId: "wrun_1",
+        deliveryId: "delivery-b",
+      }));
+      await asks.dispatchOnce(target, unrelated.id, async () => ({
+        sessionId: "wrun_1",
+        deliveryId: "delivery-c",
+      }));
+      const turnId = randomUUID();
+
+      const bound = await asks.bindDeliveries(target, ["delivery-a", "delivery-b"], turnId);
+      assert.deepEqual(bound.map((ask) => ask.id).sort(), [waiting.id, alsoWaiting.id].sort());
+      assert.ok(bound.every((ask) => ask.turnId === turnId));
+      assert.equal((await asks.named(userId, unrelated.id))?.turnId, undefined);
+      assert.deepEqual(await asks.bindDeliveries(target, ["delivery-a", "delivery-b"], turnId), []);
+      assert.deepEqual(await asks.bindDeliveries(target, [], turnId), []);
+    }),
+);
 
 /** The row a dispatch answered; a refusal fails the test naming it. */
 function dispatchedRow(answer: AskRow | typeof ASK_DISPATCH_REFUSAL.NO_CONVERSATION): AskRow {
@@ -228,429 +269,477 @@ function eveAccepting(
   return eve;
 }
 
-test("two retries of one client id in flight together dispatch once: the second finds the session the first wrote under the row's lock, and both answer the same record", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const eve = eveAccepting(`wrun_${randomUUID()}`);
-  const seams = { asks: askEffects, eve, now: () => NOW };
-  const input = {
-    userId,
-    conversationId,
-    clientId: randomUUID(),
-    question: "what changed?",
-    origin: ASK_ORIGIN.TYPED,
-  };
-  const [first, second] = await Promise.all([
-    database.run(acceptAsk(seams, input)),
-    database.run(acceptAsk(seams, input)),
-  ]);
-  assert.deepEqual(first, second);
-  assert.ok(first.ok);
-  assert.equal(eve.opens, 1);
-  assert.deepEqual(eve.deliveries, []);
-});
-
-test("a Stop stamped on a waiting ask is carried the moment eve's start names its turn, once, scoped to that turn; a start that binds no stamped ask carries nothing", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const target = { userId, conversationId };
-  const sessionId = `wrun_${randomUUID()}`;
-  const stamped = await asks.record(write(userId, conversationId));
-  const quiet = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(target, stamped.id, async () => ({
-    sessionId,
-    deliveryId: "delivery-s",
-  }));
-  await asks.dispatchOnce(target, quiet.id, async () => ({ sessionId, deliveryId: "delivery-q" }));
-  await asks.cancelRequested(stamped.id, new Date(NOW));
-
-  const stops: (readonly [string, string, string, string])[] = [];
-  let throwOnce = false;
-  const writer = await database.run(
-    storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-  );
-  const relay = new StreamRelay({
-    writer,
-    asks: askEffects,
-    stopTurn: (stopped, session, eveTurnId, turnId) =>
-      Effect.sync(() => {
-        if (throwOnce) {
-          throwOnce = false;
-          throw new Error("eve unreachable");
-        }
-        stops.push([stopped.conversationId, session, eveTurnId, turnId]);
-      }),
-    offer: () => Effect.succeed(true),
-    now: () => NOW,
-    report: () => undefined,
-  });
-  const standing: RelayStanding = {
-    sessionId,
-    target,
-    turn: BRAIN_HOST_TURN.TYPED,
-    state: memoryRelayState(),
-  };
-  const start = (turn: string, deliveries: readonly string[]): MessageStreamEvent => {
-    const started = stampedEveEvent(
-      { type: "turn.started", data: { turnId: turn, sequence: 1 } },
-      NOW,
-    );
-    return { ...started, meta: { ...started.meta, deliveryIds: [...deliveries] } };
-  };
-
-  await database.run(relay.handle(start("turn_1", ["delivery-q"]), standing));
-  assert.deepEqual(stops, []);
-  await database.run(relay.handle(start("turn_2", ["delivery-s"]), standing));
-  assert.deepEqual(stops, [[conversationId, sessionId, "turn_2", hostTurnId(sessionId, "turn_2")]]);
-  await database.run(relay.handle(start("turn_2", ["delivery-s"]), standing));
-  assert.equal(stops.length, 1);
-
-  // A stop that throws leaves the start unrecorded, so the start eve emits again carries it.
-  const failing = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(target, failing.id, async () => ({
-    sessionId,
-    deliveryId: "delivery-f",
-  }));
-  await asks.cancelRequested(failing.id, new Date(NOW));
-  throwOnce = true;
-  await assert.rejects(database.run(relay.handle(start("turn_3", ["delivery-f"]), standing)));
-  assert.equal(stops.length, 1);
-  await database.run(relay.handle(start("turn_3", ["delivery-f"]), standing));
-  assert.deepEqual(stops[1], [
-    conversationId,
-    sessionId,
-    "turn_3",
-    hostTurnId(sessionId, "turn_3"),
-  ]);
-
-  // The ask that opened the session was bound to the first turn at its dispatch, with no delivery
-  // for a start to name; its Stop is carried by the start that names that turn all the same.
-  const opener = await asks.record(write(userId, conversationId));
-  const openingTurn = hostTurnId(sessionId, "turn_0");
-  await asks.dispatchOnce(target, opener.id, async () => ({ sessionId, turnId: openingTurn }));
-  await asks.cancelRequested(opener.id, new Date(NOW));
-  await database.run(relay.handle(start("turn_0", []), standing));
-  assert.deepEqual(stops[2], [conversationId, sessionId, "turn_0", openingTurn]);
-  assert.equal(stops.length, 3);
-  assert.deepEqual(
-    (await asks.stoppedOn(target, openingTurn)).map((row) => row.id),
-    [opener.id],
-  );
-});
-
-test("the stamp and the start's binding converge in either order: bound-then-stamped, the Stop cancels the turn itself; stamped-then-bound, the start carries it; each order stops the turn once", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const target = { userId, conversationId };
-  const sessionId = `wrun_${randomUUID()}`;
-  await setConversationRuntimeSessionId(conversationId, sessionId);
-  const writer = await database.run(
-    storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-  );
-  const writes = promisedWriter(database.run, writer);
-  const turnId = hostTurnId(sessionId, "turn_9");
-  const waiting = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(target, waiting.id, async () => ({
-    sessionId,
-    deliveryId: "delivery-w",
-  }));
-  const cancels: (readonly [string, string | undefined])[] = [];
-  const eve = {
-    ...eveAccepting(sessionId),
-    async cancel(session: string, eveTurnId?: string) {
-      cancels.push([session, eveTurnId]);
-      return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
-    },
-  };
-  // The start lands between the Stop's read and its stamp: the turn row is written and the ask
-  // bound before the stamp, so the start read no stamp and carried nothing.
-  const bindingBeforeStamp = {
-    ...askEffects,
-    cancelRequested: (id: string, at: Date) =>
-      Effect.promise(async () => {
-        assert.equal(
-          (
-            await writes.enqueueTurn(target, {
-              turnId,
-              eveTurnId: "turn_9",
-              origin: TURN_ORIGIN.TYPED,
-            })
-          ).ok,
-          true,
-        );
-        await asks.bindDeliveries(target, ["delivery-w"], turnId);
-        await asks.cancelRequested(id, at);
-      }),
-  };
-  const outcome = await database.run(
-    stopAsk(
-      {
-        store: database.store,
-        asks: bindingBeforeStamp,
-        writer,
-        eve,
-        now: () => NOW,
-      },
-      userId,
-      waiting.id,
-    ),
-  );
-  assert.equal(outcome.ok, true);
-  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-  const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
-  assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
-
-  // The other order in the same run: the Stop stamps first and finds nothing bound, so it cancels
-  // nothing itself; the start that binds the ask afterwards reads the stamp and carries it.
-  const later = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(target, later.id, async () => ({ sessionId, deliveryId: "delivery-l" }));
-  const stampedFirst = await database.run(
-    stopAsk(
-      { store: database.store, asks: askEffects, writer, eve, now: () => NOW },
-      userId,
-      later.id,
-    ),
-  );
-  assert.equal(stampedFirst.ok, true);
-  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-  const stops: (readonly [string, string, string, string])[] = [];
-  const relay = new StreamRelay({
-    writer,
-    asks: askEffects,
-    stopTurn: (stopped, session, eveTurnId, stoppedTurn) =>
-      Effect.sync(() => {
-        stops.push([stopped.conversationId, session, eveTurnId, stoppedTurn]);
-      }),
-    offer: () => Effect.succeed(true),
-    now: () => NOW,
-    report: () => undefined,
-  });
-  const started = stampedEveEvent(
-    { type: "turn.started", data: { turnId: "turn_10", sequence: 1 } },
-    NOW,
-  );
-  await database.run(
-    relay.handle(
-      { ...started, meta: { ...started.meta, deliveryIds: ["delivery-l"] } },
-      { sessionId, target, turn: BRAIN_HOST_TURN.TYPED, state: memoryRelayState() },
-    ),
-  );
-  assert.deepEqual(stops, [
-    [conversationId, sessionId, "turn_10", hostTurnId(sessionId, "turn_10")],
-  ]);
-  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-
-  // Both landed before both later reads: the start's honour stamped the turn, so the Stop's re-read
-  // finds the stamp standing and answers it without a cancel of its own, which unscoped could reach
-  // the turn queued next.
-  const honoured = await asks.record(write(userId, conversationId));
-  await asks.dispatchOnce(target, honoured.id, async () => ({
-    sessionId,
-    deliveryId: "delivery-h",
-  }));
-  const honouredTurn = hostTurnId(sessionId, "turn_11");
-  const honouredBeforeStamp = {
-    ...askEffects,
-    cancelRequested: (askId: string, at: Date) =>
-      Effect.promise(async () => {
-        assert.equal(
-          (
-            await writes.enqueueTurn(target, {
-              turnId: honouredTurn,
-              eveTurnId: "turn_11",
-              origin: TURN_ORIGIN.TYPED,
-            })
-          ).ok,
-          true,
-        );
-        await asks.bindDeliveries(target, ["delivery-h"], honouredTurn);
-        await writes.requestTurnCancel(target, { turnId: honouredTurn, at: new Date(NOW - 5) });
-        await asks.cancelRequested(askId, at);
-      }),
-  };
-  const afterHonour = await database.run(
-    stopAsk(
-      {
-        store: database.store,
-        asks: honouredBeforeStamp,
-        writer,
-        eve,
-        now: () => NOW,
-      },
-      userId,
-      honoured.id,
-    ),
-  );
-  assert.deepEqual(afterHonour.ok && afterHonour.answer.cancelRequestedAt, NOW - 5);
-  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-
-  // A second Stop on a running turn already stamped is a repeat: eve is not asked again.
-  const again = await database.run(
-    stopAsk(
-      { store: database.store, asks: askEffects, writer, eve, now: () => NOW + 1 },
-      userId,
-      waiting.id,
-    ),
-  );
-  assert.deepEqual(again.ok && again.answer.cancelRequestedAt, NOW);
-  assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-});
-
-test("over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const sessionId = `wrun_${randomUUID()}`;
-  await setConversationRuntimeSessionId(conversationId, sessionId);
-  const eve = eveAccepting(sessionId);
-  const seams = { asks: askEffects, eve, now: () => NOW };
-  const reads = { store: database.store, asks: askEffects };
-  const clientId = randomUUID();
-  const accepted = await database.run(
-    acceptAsk(seams, {
-      userId,
-      conversationId,
-      clientId,
-      question: "what changed?",
-      origin: ASK_ORIGIN.TYPED,
-    }),
-  );
-  assert.ok(accepted.ok);
-  assert.deepEqual(eve.deliveries, ["delivery-1"]);
-  const queued = await database.run(askStanding(reads, userId, accepted.answer.id));
-  assert.equal(queued?.answer.status, TURN_STATUS.QUEUED);
-  assert.equal(queued?.answer.turnId, undefined);
-
-  const writer = await database.run(
-    storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-  );
-  const relay = new StreamRelay({
-    writer,
-    asks: askEffects,
-    stopTurn: () => Effect.void,
-    offer: () => Effect.succeed(true),
-    now: () => NOW,
-    report: () => undefined,
-  });
-  const standing: RelayStanding = {
-    sessionId,
-    target: { userId, conversationId },
-    turn: BRAIN_HOST_TURN.TYPED,
-    state: memoryRelayState(),
-  };
-  const started = stampedEveEvent(
-    { type: "turn.started", data: { turnId: "turn_3", sequence: 3 } },
-    NOW,
-  );
-  const withDeliveries: MessageStreamEvent = {
-    ...started,
-    meta: { ...started.meta, deliveryIds: ["delivery-1"] },
-  };
-  await database.run(relay.handle(withDeliveries, standing));
-  await database.run(relay.handle(withDeliveries, standing));
-
-  const turnId = hostTurnId(sessionId, "turn_3");
-  const running = await database.run(askStanding(reads, userId, accepted.answer.id));
-  assert.equal(running?.answer.turnId, turnId);
-  assert.equal(running?.answer.status, TURN_STATUS.RUNNING);
-  assert.deepEqual(await database.run(askStanding(reads, userId, turnId)), {
-    ...running,
-    answer: { ...running?.answer, id: turnId },
-    ask: undefined,
-  });
-
-  const again = await database.run(
-    acceptAsk(seams, {
-      userId,
-      conversationId,
-      clientId,
-      question: "what changed?",
-      origin: ASK_ORIGIN.TYPED,
-    }),
-  );
-  assert.deepEqual(again, accepted);
-  assert.deepEqual(eve.deliveries, ["delivery-1"]);
-  assert.deepEqual(
-    await database.run(
-      acceptAsk(seams, {
-        userId: await database.createUser(),
+it.effect(
+  "two retries of one client id in flight together dispatch once: the second finds the session the first wrote under the row's lock, and both answer the same record",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const eve = eveAccepting(`wrun_${randomUUID()}`);
+      const seams = { asks: askEffects, eve, now: () => NOW };
+      const input = {
+        userId,
         conversationId,
         clientId: randomUUID(),
         question: "what changed?",
         origin: ASK_ORIGIN.TYPED,
-      }),
-    ),
-    { ok: false, refusal: ASK_REFUSAL.NOT_FOUND },
-  );
-});
+      };
+      const [first, second] = await Promise.all([
+        database.run(acceptAsk(seams, input)),
+        database.run(acceptAsk(seams, input)),
+      ]);
+      assert.deepEqual(first, second);
+      assert.ok(first.ok);
+      assert.equal(eve.opens, 1);
+      assert.deepEqual(eve.deliveries, []);
+    }),
+);
 
-test("two first asks of different client ids on a conversation with no session open one session between them: the second waits on the conversation's lock, reads the session the first opened, and sends into it", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const eve = eveAccepting(`wrun_${randomUUID()}`);
-  const seams = { asks: askEffects, eve, now: () => NOW };
-  const ask = (clientId: string) =>
-    database.run(
-      acceptAsk(seams, {
-        userId,
+it.effect(
+  "a Stop stamped on a waiting ask is carried the moment eve's start names its turn, once, scoped to that turn; a start that binds no stamped ask carries nothing",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const target = { userId, conversationId };
+      const sessionId = `wrun_${randomUUID()}`;
+      const stamped = await asks.record(write(userId, conversationId));
+      const quiet = await asks.record(write(userId, conversationId));
+      await asks.dispatchOnce(target, stamped.id, async () => ({
+        sessionId,
+        deliveryId: "delivery-s",
+      }));
+      await asks.dispatchOnce(target, quiet.id, async () => ({
+        sessionId,
+        deliveryId: "delivery-q",
+      }));
+      await asks.cancelRequested(stamped.id, new Date(NOW));
+
+      const stops: (readonly [string, string, string, string])[] = [];
+      let throwOnce = false;
+      const writer = await database.run(
+        storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
+      );
+      const relay = new StreamRelay({
+        writer,
+        asks: askEffects,
+        stopTurn: (stopped, session, eveTurnId, turnId) =>
+          Effect.sync(() => {
+            if (throwOnce) {
+              throwOnce = false;
+              throw new Error("eve unreachable");
+            }
+            stops.push([stopped.conversationId, session, eveTurnId, turnId]);
+          }),
+        offer: () => Effect.succeed(true),
+        now: () => NOW,
+        report: () => undefined,
+      });
+      const standing: RelayStanding = {
+        sessionId,
+        target,
+        turn: BRAIN_HOST_TURN.TYPED,
+        state: memoryRelayState(),
+      };
+      const start = (turn: string, deliveries: readonly string[]): MessageStreamEvent => {
+        const started = stampedEveEvent(
+          { type: "turn.started", data: { turnId: turn, sequence: 1 } },
+          NOW,
+        );
+        return { ...started, meta: { ...started.meta, deliveryIds: [...deliveries] } };
+      };
+
+      await database.run(relay.handle(start("turn_1", ["delivery-q"]), standing));
+      assert.deepEqual(stops, []);
+      await database.run(relay.handle(start("turn_2", ["delivery-s"]), standing));
+      assert.deepEqual(stops, [
+        [conversationId, sessionId, "turn_2", hostTurnId(sessionId, "turn_2")],
+      ]);
+      await database.run(relay.handle(start("turn_2", ["delivery-s"]), standing));
+      assert.equal(stops.length, 1);
+
+      // A stop that throws leaves the start unrecorded, so the start eve emits again carries it.
+      const failing = await asks.record(write(userId, conversationId));
+      await asks.dispatchOnce(target, failing.id, async () => ({
+        sessionId,
+        deliveryId: "delivery-f",
+      }));
+      await asks.cancelRequested(failing.id, new Date(NOW));
+      throwOnce = true;
+      await assert.rejects(database.run(relay.handle(start("turn_3", ["delivery-f"]), standing)));
+      assert.equal(stops.length, 1);
+      await database.run(relay.handle(start("turn_3", ["delivery-f"]), standing));
+      assert.deepEqual(stops[1], [
         conversationId,
-        clientId,
-        question: "what changed?",
-        origin: ASK_ORIGIN.TYPED,
-      }),
-    );
-  const [first, second] = await Promise.all([ask(randomUUID()), ask(randomUUID())]);
-  assert.ok(first.ok && second.ok);
-  assert.notEqual(first.answer.id, second.answer.id);
-  assert.equal(eve.opens, 1);
-  assert.deepEqual(eve.deliveries, ["delivery-1"]);
-  const rows = await Promise.all([
-    asks.named(userId, first.answer.id),
-    asks.named(userId, second.answer.id),
-  ]);
-  assert.equal(rows[0]?.sessionId, rows[1]?.sessionId);
-  assert.equal([rows[0]?.deliveryId, rows[1]?.deliveryId].filter((d) => d !== undefined).length, 1);
-});
+        sessionId,
+        "turn_3",
+        hostTurnId(sessionId, "turn_3"),
+      ]);
 
-test("a dispatch on a conversation cleared since the ask was admitted runs nothing and answers no row, so the Clear is the caller's refusal and not a failure", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const ask = await asks.record(write(userId, conversationId));
-  await stampConversationDeletedAt(conversationId, new Date(NOW));
-  let dispatched = 0;
-  const outcome = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
-    dispatched += 1;
-    return { sessionId: "wrun_never" };
-  });
-  assert.equal(outcome, ASK_DISPATCH_REFUSAL.NO_CONVERSATION);
-  assert.equal(dispatched, 0);
-  assert.equal((await asks.named(userId, ask.id))?.sessionId, undefined);
-});
+      // The ask that opened the session was bound to the first turn at its dispatch, with no delivery
+      // for a start to name; its Stop is carried by the start that names that turn all the same.
+      const opener = await asks.record(write(userId, conversationId));
+      const openingTurn = hostTurnId(sessionId, "turn_0");
+      await asks.dispatchOnce(target, opener.id, async () => ({ sessionId, turnId: openingTurn }));
+      await asks.cancelRequested(opener.id, new Date(NOW));
+      await database.run(relay.handle(start("turn_0", []), standing));
+      assert.deepEqual(stops[2], [conversationId, sessionId, "turn_0", openingTurn]);
+      assert.equal(stops.length, 3);
+      assert.deepEqual(
+        (await asks.stoppedOn(target, openingTurn)).map((row) => row.id),
+        [opener.id],
+      );
+    }),
+);
 
-test("an ask whose conversation is cleared between its admission and its dispatch is refused as not found, and eve is not reached", async () => {
-  const userId = await database.createUser();
-  const conversationId = await conversation(userId);
-  const eve = eveAccepting(`wrun_${randomUUID()}`);
-  const clearingBeforeDispatch = {
-    ...askEffects,
-    dispatchOnce: (...args: Parameters<typeof askEffects.dispatchOnce>) =>
-      Effect.flatMap(
-        Effect.promise(() => stampConversationDeletedAt(conversationId, new Date(NOW))),
-        () => askEffects.dispatchOnce(...args),
-      ),
-  };
-  const outcome = await database.run(
-    acceptAsk(
-      { asks: clearingBeforeDispatch, eve, now: () => NOW },
-      {
-        userId,
-        conversationId,
-        clientId: randomUUID(),
-        question: "still there?",
-        origin: ASK_ORIGIN.TYPED,
-      },
-    ),
-  );
-  assert.deepEqual(outcome, { ok: false, refusal: ASK_REFUSAL.NOT_FOUND });
-  assert.equal(eve.opens, 0);
-  assert.deepEqual(eve.deliveries, []);
-});
+it.effect(
+  "the stamp and the start's binding converge in either order: bound-then-stamped, the Stop cancels the turn itself; stamped-then-bound, the start carries it; each order stops the turn once",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const target = { userId, conversationId };
+      const sessionId = `wrun_${randomUUID()}`;
+      await setConversationRuntimeSessionId(conversationId, sessionId);
+      const writer = await database.run(
+        storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
+      );
+      const writes = {
+        enqueueTurn: (
+          target: Parameters<typeof writer.enqueueTurn>[0],
+          enqueue: Parameters<typeof writer.enqueueTurn>[1],
+        ) => database.run(writer.enqueueTurn(target, enqueue)),
+        requestTurnCancel: (
+          target: Parameters<typeof writer.requestTurnCancel>[0],
+          cancel: Parameters<typeof writer.requestTurnCancel>[1],
+        ) => database.run(writer.requestTurnCancel(target, cancel)),
+      };
+      const turnId = hostTurnId(sessionId, "turn_9");
+      const waiting = await asks.record(write(userId, conversationId));
+      await asks.dispatchOnce(target, waiting.id, async () => ({
+        sessionId,
+        deliveryId: "delivery-w",
+      }));
+      const cancels: (readonly [string, string | undefined])[] = [];
+      const eve = {
+        ...eveAccepting(sessionId),
+        async cancel(session: string, eveTurnId?: string) {
+          cancels.push([session, eveTurnId]);
+          return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+        },
+      };
+      // The start lands between the Stop's read and its stamp: the turn row is written and the ask
+      // bound before the stamp, so the start read no stamp and carried nothing.
+      const bindingBeforeStamp = {
+        ...askEffects,
+        cancelRequested: (id: string, at: Date) =>
+          Effect.promise(async () => {
+            assert.equal(
+              (
+                await writes.enqueueTurn(target, {
+                  turnId,
+                  eveTurnId: "turn_9",
+                  origin: TURN_ORIGIN.TYPED,
+                })
+              ).ok,
+              true,
+            );
+            await asks.bindDeliveries(target, ["delivery-w"], turnId);
+            await asks.cancelRequested(id, at);
+          }),
+      };
+      const outcome = await database.run(
+        stopAsk(
+          {
+            store: database.store,
+            asks: bindingBeforeStamp,
+            writer,
+            eve,
+            now: () => NOW,
+          },
+          userId,
+          waiting.id,
+        ),
+      );
+      assert.equal(outcome.ok, true);
+      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
+      const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
+      assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
+
+      // The other order in the same run: the Stop stamps first and finds nothing bound, so it cancels
+      // nothing itself; the start that binds the ask afterwards reads the stamp and carries it.
+      const later = await asks.record(write(userId, conversationId));
+      await asks.dispatchOnce(target, later.id, async () => ({
+        sessionId,
+        deliveryId: "delivery-l",
+      }));
+      const stampedFirst = await database.run(
+        stopAsk(
+          { store: database.store, asks: askEffects, writer, eve, now: () => NOW },
+          userId,
+          later.id,
+        ),
+      );
+      assert.equal(stampedFirst.ok, true);
+      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
+      const stops: (readonly [string, string, string, string])[] = [];
+      const relay = new StreamRelay({
+        writer,
+        asks: askEffects,
+        stopTurn: (stopped, session, eveTurnId, stoppedTurn) =>
+          Effect.sync(() => {
+            stops.push([stopped.conversationId, session, eveTurnId, stoppedTurn]);
+          }),
+        offer: () => Effect.succeed(true),
+        now: () => NOW,
+        report: () => undefined,
+      });
+      const started = stampedEveEvent(
+        { type: "turn.started", data: { turnId: "turn_10", sequence: 1 } },
+        NOW,
+      );
+      await database.run(
+        relay.handle(
+          { ...started, meta: { ...started.meta, deliveryIds: ["delivery-l"] } },
+          { sessionId, target, turn: BRAIN_HOST_TURN.TYPED, state: memoryRelayState() },
+        ),
+      );
+      assert.deepEqual(stops, [
+        [conversationId, sessionId, "turn_10", hostTurnId(sessionId, "turn_10")],
+      ]);
+      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
+
+      // Both landed before both later reads: the start's honour stamped the turn, so the Stop's re-read
+      // finds the stamp standing and answers it without a cancel of its own, which unscoped could reach
+      // the turn queued next.
+      const honoured = await asks.record(write(userId, conversationId));
+      await asks.dispatchOnce(target, honoured.id, async () => ({
+        sessionId,
+        deliveryId: "delivery-h",
+      }));
+      const honouredTurn = hostTurnId(sessionId, "turn_11");
+      const honouredBeforeStamp = {
+        ...askEffects,
+        cancelRequested: (askId: string, at: Date) =>
+          Effect.promise(async () => {
+            assert.equal(
+              (
+                await writes.enqueueTurn(target, {
+                  turnId: honouredTurn,
+                  eveTurnId: "turn_11",
+                  origin: TURN_ORIGIN.TYPED,
+                })
+              ).ok,
+              true,
+            );
+            await asks.bindDeliveries(target, ["delivery-h"], honouredTurn);
+            await writes.requestTurnCancel(target, { turnId: honouredTurn, at: new Date(NOW - 5) });
+            await asks.cancelRequested(askId, at);
+          }),
+      };
+      const afterHonour = await database.run(
+        stopAsk(
+          {
+            store: database.store,
+            asks: honouredBeforeStamp,
+            writer,
+            eve,
+            now: () => NOW,
+          },
+          userId,
+          honoured.id,
+        ),
+      );
+      assert.deepEqual(afterHonour.ok && afterHonour.answer.cancelRequestedAt, NOW - 5);
+      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
+
+      // A second Stop on a running turn already stamped is a repeat: eve is not asked again.
+      const again = await database.run(
+        stopAsk(
+          { store: database.store, asks: askEffects, writer, eve, now: () => NOW + 1 },
+          userId,
+          waiting.id,
+        ),
+      );
+      assert.deepEqual(again.ok && again.answer.cancelRequestedAt, NOW);
+      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
+    }),
+);
+
+it.effect(
+  "over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const sessionId = `wrun_${randomUUID()}`;
+      await setConversationRuntimeSessionId(conversationId, sessionId);
+      const eve = eveAccepting(sessionId);
+      const seams = { asks: askEffects, eve, now: () => NOW };
+      const reads = { store: database.store, asks: askEffects };
+      const clientId = randomUUID();
+      const accepted = await database.run(
+        acceptAsk(seams, {
+          userId,
+          conversationId,
+          clientId,
+          question: "what changed?",
+          origin: ASK_ORIGIN.TYPED,
+        }),
+      );
+      assert.ok(accepted.ok);
+      assert.deepEqual(eve.deliveries, ["delivery-1"]);
+      const queued = await database.run(askStanding(reads, userId, accepted.answer.id));
+      assert.equal(queued?.answer.status, TURN_STATUS.QUEUED);
+      assert.equal(queued?.answer.turnId, undefined);
+
+      const writer = await database.run(
+        storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
+      );
+      const relay = new StreamRelay({
+        writer,
+        asks: askEffects,
+        stopTurn: () => Effect.void,
+        offer: () => Effect.succeed(true),
+        now: () => NOW,
+        report: () => undefined,
+      });
+      const standing: RelayStanding = {
+        sessionId,
+        target: { userId, conversationId },
+        turn: BRAIN_HOST_TURN.TYPED,
+        state: memoryRelayState(),
+      };
+      const started = stampedEveEvent(
+        { type: "turn.started", data: { turnId: "turn_3", sequence: 3 } },
+        NOW,
+      );
+      const withDeliveries: MessageStreamEvent = {
+        ...started,
+        meta: { ...started.meta, deliveryIds: ["delivery-1"] },
+      };
+      await database.run(relay.handle(withDeliveries, standing));
+      await database.run(relay.handle(withDeliveries, standing));
+
+      const turnId = hostTurnId(sessionId, "turn_3");
+      const running = await database.run(askStanding(reads, userId, accepted.answer.id));
+      assert.equal(running?.answer.turnId, turnId);
+      assert.equal(running?.answer.status, TURN_STATUS.RUNNING);
+      assert.deepEqual(await database.run(askStanding(reads, userId, turnId)), {
+        ...running,
+        answer: { ...running?.answer, id: turnId },
+        ask: undefined,
+      });
+
+      const again = await database.run(
+        acceptAsk(seams, {
+          userId,
+          conversationId,
+          clientId,
+          question: "what changed?",
+          origin: ASK_ORIGIN.TYPED,
+        }),
+      );
+      assert.deepEqual(again, accepted);
+      assert.deepEqual(eve.deliveries, ["delivery-1"]);
+      assert.deepEqual(
+        await database.run(
+          acceptAsk(seams, {
+            userId: await database.createUser(),
+            conversationId,
+            clientId: randomUUID(),
+            question: "what changed?",
+            origin: ASK_ORIGIN.TYPED,
+          }),
+        ),
+        { ok: false, refusal: ASK_REFUSAL.NOT_FOUND },
+      );
+    }),
+);
+
+it.effect(
+  "two first asks of different client ids on a conversation with no session open one session between them: the second waits on the conversation's lock, reads the session the first opened, and sends into it",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const eve = eveAccepting(`wrun_${randomUUID()}`);
+      const seams = { asks: askEffects, eve, now: () => NOW };
+      const ask = (clientId: string) =>
+        database.run(
+          acceptAsk(seams, {
+            userId,
+            conversationId,
+            clientId,
+            question: "what changed?",
+            origin: ASK_ORIGIN.TYPED,
+          }),
+        );
+      const [first, second] = await Promise.all([ask(randomUUID()), ask(randomUUID())]);
+      assert.ok(first.ok && second.ok);
+      assert.notEqual(first.answer.id, second.answer.id);
+      assert.equal(eve.opens, 1);
+      assert.deepEqual(eve.deliveries, ["delivery-1"]);
+      const rows = await Promise.all([
+        asks.named(userId, first.answer.id),
+        asks.named(userId, second.answer.id),
+      ]);
+      assert.equal(rows[0]?.sessionId, rows[1]?.sessionId);
+      assert.equal(
+        [rows[0]?.deliveryId, rows[1]?.deliveryId].filter((d) => d !== undefined).length,
+        1,
+      );
+    }),
+);
+
+it.effect(
+  "a dispatch on a conversation cleared since the ask was admitted runs nothing and answers no row, so the Clear is the caller's refusal and not a failure",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const ask = await asks.record(write(userId, conversationId));
+      await stampConversationDeletedAt(conversationId, new Date(NOW));
+      let dispatched = 0;
+      const outcome = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
+        dispatched += 1;
+        return { sessionId: "wrun_never" };
+      });
+      assert.equal(outcome, ASK_DISPATCH_REFUSAL.NO_CONVERSATION);
+      assert.equal(dispatched, 0);
+      assert.equal((await asks.named(userId, ask.id))?.sessionId, undefined);
+    }),
+);
+
+it.effect(
+  "an ask whose conversation is cleared between its admission and its dispatch is refused as not found, and eve is not reached",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const eve = eveAccepting(`wrun_${randomUUID()}`);
+      const clearingBeforeDispatch = {
+        ...askEffects,
+        dispatchOnce: (...args: Parameters<typeof askEffects.dispatchOnce>) =>
+          Effect.flatMap(
+            Effect.promise(() => stampConversationDeletedAt(conversationId, new Date(NOW))),
+            () => askEffects.dispatchOnce(...args),
+          ),
+      };
+      const outcome = await database.run(
+        acceptAsk(
+          { asks: clearingBeforeDispatch, eve, now: () => NOW },
+          {
+            userId,
+            conversationId,
+            clientId: randomUUID(),
+            question: "still there?",
+            origin: ASK_ORIGIN.TYPED,
+          },
+        ),
+      );
+      assert.deepEqual(outcome, { ok: false, refusal: ASK_REFUSAL.NOT_FOUND });
+      assert.equal(eve.opens, 0);
+      assert.deepEqual(eve.deliveries, []);
+    }),
+);

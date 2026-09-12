@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { it } from "@effect/vitest";
 import {
   LIVE_BRAIN_SUBMISSION,
   type LiveSessionSource,
@@ -9,7 +10,7 @@ import {
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { Effect, Exit, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
-import { afterAll, test } from "vitest";
+import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
@@ -41,7 +42,6 @@ import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, sessionStarted } from "./support/live-events";
-import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation,
   insertDevice,
@@ -85,10 +85,30 @@ const writer = await database.run(
     now: () => new Date(NOW),
   }),
 );
-const asks = promisedAsks(database.run);
+const askEffects = askRecord();
+const asks = {
+  record: (write: Parameters<typeof askEffects.record>[0]) =>
+    database.run(askEffects.record(write)),
+  named: (userId: string, id: string) => database.run(askEffects.named(userId, id)),
+  latestSession: (userId: string, conversationId: string) =>
+    database.run(askEffects.latestSession(userId, conversationId)),
+  dispatchOnce: (
+    target: Parameters<typeof askEffects.dispatchOnce>[0],
+    id: string,
+    dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
+  ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
+  cancelRequested: (id: string, at: Date) => database.run(askEffects.cancelRequested(id, at)),
+  bindDeliveries: (
+    target: Parameters<typeof askEffects.bindDeliveries>[0],
+    deliveryIds: Parameters<typeof askEffects.bindDeliveries>[1],
+    turnId: string,
+  ) => database.run(askEffects.bindDeliveries(target, deliveryIds, turnId)),
+  stoppedOn: (target: Parameters<typeof askEffects.stoppedOn>[0], turnId: string) =>
+    database.run(askEffects.stoppedOn(target, turnId)),
+};
 const relay = new StreamRelay({
   writer,
-  asks: askRecord(),
+  asks: askEffects,
   stopTurn: () => Effect.void,
   offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
   now: () => NOW,
@@ -252,152 +272,172 @@ async function speechEventsOf(messageId: string) {
   return rows.map((row) => row.kind);
 }
 
-test("a spoken ask runs a turn through the ask door and is spoken from the service's own appends, its words one user message and both speakers' words segments", async () => {
-  const target = await account();
-  const f = await stand(target, undefined);
-  f.socket.receive(heard("What needs me?", 1000, 2400));
-  f.socket.receive(delegated("dl_1", 2500));
-  await until(
-    () => f.eve.opened.length === 1,
-    () => `the ask to reach eve; reports ${JSON.stringify(f.reports)}`,
-  );
-  assert.deepEqual(
-    f.eve.opened.map((message) => [message.conversationId, message.turn]),
-    [[target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
-  );
-  const recorded = await asks.latestSession(target.userId, target.conversationId);
-  assert.ok(recorded);
-  await play(spokenTurn(FIRST_EVE_TURN, NOW), {
-    sessionId: recorded,
-    target,
-    turn: BRAIN_HOST_TURN.SPOKEN,
-    model: "scripted-model",
-    state: memoryRelayState(),
-  });
-  const diagnosis = async () => {
-    const ask = (await asks.latestSession(target.userId, target.conversationId)) ?? "none";
-    const turn = await database.run(
-      database.store.turns.named(target.userId, [hostTurnId(recorded, FIRST_EVE_TURN)]),
-    );
-    const rows = (await readMessagesByConversationTyped(database.run, target.conversationId)).map(
-      (row) => ({ clientId: row.clientId, role: row.role }),
-    );
-    return `ask session ${ask}; turn rows ${turn.length} (${turn[0]?.status}); messages ${JSON.stringify(rows)}; commentary ${JSON.stringify(f.commentary().map((e) => e.content))}; reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`;
-  };
-  for (let attempt = 0; attempt < 400 && f.commentary().length < 2; attempt += 1) await sleep(5);
-  if (f.commentary().length !== 2) assert.fail(`the reply was not spoken: ${await diagnosis()}`);
-  assert.deepEqual(
-    f.commentary().map((event) => [event.delegation_id, event.content]),
-    [
-      ["dl_1", "One agent finished."],
-      ["dl_1", "Another is waiting on you."],
-    ],
-  );
-  const rows = await readMessagesByConversationTyped(database.run, target.conversationId);
-  // One user row stands for one spoken ask: the developer's words as the session transcribed
-  // them, under the delegation's id, which is the ask's id too, and tied to the turn the ask
-  // ran. The question as eve received it is on the ask's record, never a second line.
-  const userRows = rows
-    .filter((row) => row.role === MESSAGE_ROLE.USER)
-    .map((row) => [row.clientId, row.turnId]);
-  assert.deepEqual(userRows, [["dl_1", hostTurnId(recorded, FIRST_EVE_TURN)]]);
-  const [session] = await readVoiceSessionByLiveSessionId(database.run, f.liveSessionId);
-  assert.ok(session);
-  const segments = await readVoiceTranscriptSegmentsBySession(
-    database.run,
-    Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(session).id,
-  );
-  assert.deepEqual(
-    segments.map((segment) => segment.text),
-    ["What needs me?"],
-  );
-  await f.exchange.stop();
-});
+it.effect(
+  "a spoken ask runs a turn through the ask door and is spoken from the service's own appends, its words one user message and both speakers' words segments",
+  () =>
+    Effect.promise(async () => {
+      const target = await account();
+      const f = await stand(target, undefined);
+      f.socket.receive(heard("What needs me?", 1000, 2400));
+      f.socket.receive(delegated("dl_1", 2500));
+      await until(
+        () => f.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(f.reports)}`,
+      );
+      assert.deepEqual(
+        f.eve.opened.map((message) => [message.conversationId, message.turn]),
+        [[target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+      );
+      const recorded = await asks.latestSession(target.userId, target.conversationId);
+      assert.ok(recorded);
+      await play(spokenTurn(FIRST_EVE_TURN, NOW), {
+        sessionId: recorded,
+        target,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      });
+      const diagnosis = async () => {
+        const ask = (await asks.latestSession(target.userId, target.conversationId)) ?? "none";
+        const turn = await database.run(
+          database.store.turns.named(target.userId, [hostTurnId(recorded, FIRST_EVE_TURN)]),
+        );
+        const rows = (
+          await readMessagesByConversationTyped(database.run, target.conversationId)
+        ).map((row) => ({ clientId: row.clientId, role: row.role }));
+        return `ask session ${ask}; turn rows ${turn.length} (${turn[0]?.status}); messages ${JSON.stringify(rows)}; commentary ${JSON.stringify(f.commentary().map((e) => e.content))}; reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`;
+      };
+      for (let attempt = 0; attempt < 400 && f.commentary().length < 2; attempt += 1)
+        await sleep(5);
+      if (f.commentary().length !== 2)
+        assert.fail(`the reply was not spoken: ${await diagnosis()}`);
+      assert.deepEqual(
+        f.commentary().map((event) => [event.delegation_id, event.content]),
+        [
+          ["dl_1", "One agent finished."],
+          ["dl_1", "Another is waiting on you."],
+        ],
+      );
+      const rows = await readMessagesByConversationTyped(database.run, target.conversationId);
+      // One user row stands for one spoken ask: the developer's words as the session transcribed
+      // them, under the delegation's id, which is the ask's id too, and tied to the turn the ask
+      // ran. The question as eve received it is on the ask's record, never a second line.
+      const userRows = rows
+        .filter((row) => row.role === MESSAGE_ROLE.USER)
+        .map((row) => [row.clientId, row.turnId]);
+      assert.deepEqual(userRows, [["dl_1", hostTurnId(recorded, FIRST_EVE_TURN)]]);
+      const [session] = await readVoiceSessionByLiveSessionId(database.run, f.liveSessionId);
+      assert.ok(session);
+      const segments = await readVoiceTranscriptSegmentsBySession(
+        database.run,
+        Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))(session).id,
+      );
+      assert.deepEqual(
+        segments.map((segment) => segment.text),
+        ["What needs me?"],
+      );
+      await f.exchange.stop();
+    }),
+);
 
-test("a briefing on offer is claimed as the session's device before it is appended, and the session's own voice past the append marks it spoken", async () => {
-  const target = await account();
-  const deviceId = await device(target.userId);
-  const f = await stand(target, deviceId);
-  const standing: RelayStanding = {
-    sessionId: mintEveSession(),
-    target,
-    turn: BRAIN_HOST_TURN.OBSERVATION,
-    model: "scripted-model",
-    state: memoryRelayState(),
-  };
-  await play(announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW), standing);
-  const [offer] = await database.run(database.store.speech.open(target.userId));
-  assert.ok(offer);
+it.effect(
+  "a briefing on offer is claimed as the session's device before it is appended, and the session's own voice past the append marks it spoken",
+  () =>
+    Effect.promise(async () => {
+      const target = await account();
+      const deviceId = await device(target.userId);
+      const f = await stand(target, deviceId);
+      const standing: RelayStanding = {
+        sessionId: mintEveSession(),
+        target,
+        turn: BRAIN_HOST_TURN.OBSERVATION,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      await play(announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW), standing);
+      const [offer] = await database.run(database.store.speech.open(target.userId));
+      assert.ok(offer);
 
-  await f.exchange.briefings.look();
-  await until(
-    () => f.commentary().length === 1,
-    () => `the briefing to be appended; reports ${JSON.stringify(f.reports)}`,
-  );
-  assert.deepEqual(
-    f.commentary().map((event) => [event.delegation_id, event.content]),
-    [[null, "One agent finished."]],
-  );
-  assert.deepEqual(await speechEventsOf(offer.messageId), [
-    CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-    CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-  ]);
+      await f.exchange.briefings.look();
+      await until(
+        () => f.commentary().length === 1,
+        () => `the briefing to be appended; reports ${JSON.stringify(f.reports)}`,
+      );
+      assert.deepEqual(
+        f.commentary().map((event) => [event.delegation_id, event.content]),
+        [[null, "One agent finished."]],
+      );
+      assert.deepEqual(await speechEventsOf(offer.messageId), [
+        CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+        CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+      ]);
 
-  f.socket.receive({
-    type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
-    event_id: "out-1",
-    delta: "One agent finished.",
-    start_ms: 4000,
-    end_ms: 5200,
-  });
-  await until(
-    () => f.reports.length === 0 && true,
-    () => "nothing refused",
-  );
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if ((await speechEventsOf(offer.messageId)).length === 3) break;
-    await sleep(5);
-  }
-  assert.deepEqual(await speechEventsOf(offer.messageId), [
-    CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-    CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-    CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
-  ]);
-  assert.deepEqual(f.reports, []);
-  await f.exchange.stop();
-});
+      f.socket.receive({
+        type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+        event_id: "out-1",
+        delta: "One agent finished.",
+        start_ms: 4000,
+        end_ms: 5200,
+      });
+      await until(
+        () => f.reports.length === 0 && true,
+        () => "nothing refused",
+      );
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        if ((await speechEventsOf(offer.messageId)).length === 3) break;
+        await sleep(5);
+      }
+      assert.deepEqual(await speechEventsOf(offer.messageId), [
+        CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+        CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+        CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+      ]);
+      assert.deepEqual(f.reports, []);
+      await f.exchange.stop();
+    }),
+);
 
-test("a session whose row names no device appends no briefing: the offer stands unclaimed for the push or the sweep", async () => {
-  const target = await account();
-  const f = await stand(target, undefined);
-  await play(announceTurn(FIRST_EVE_TURN, "Not for this session.", NOW), {
-    sessionId: mintEveSession(),
-    target,
-    turn: BRAIN_HOST_TURN.OBSERVATION,
-    model: "scripted-model",
-    state: memoryRelayState(),
-  });
-  const [offer] = await database.run(database.store.speech.open(target.userId));
-  assert.ok(offer);
-  await f.exchange.briefings.look();
-  await sleep(30);
-  assert.deepEqual(f.commentary(), []);
-  assert.deepEqual(await speechEventsOf(offer.messageId), [CONVERSATION_EVENT_KIND.SPEECH_OFFERED]);
-  assert.equal(f.reports.length, 1);
-  await f.exchange.stop();
-});
+it.effect(
+  "a session whose row names no device appends no briefing: the offer stands unclaimed for the push or the sweep",
+  () =>
+    Effect.promise(async () => {
+      const target = await account();
+      const f = await stand(target, undefined);
+      await play(announceTurn(FIRST_EVE_TURN, "Not for this session.", NOW), {
+        sessionId: mintEveSession(),
+        target,
+        turn: BRAIN_HOST_TURN.OBSERVATION,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      });
+      const [offer] = await database.run(database.store.speech.open(target.userId));
+      assert.ok(offer);
+      await f.exchange.briefings.look();
+      await sleep(30);
+      assert.deepEqual(f.commentary(), []);
+      assert.deepEqual(await speechEventsOf(offer.messageId), [
+        CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      ]);
+      assert.equal(f.reports.length, 1);
+      await f.exchange.stop();
+    }),
+);
 
-test("after a Clear, a spoken ask is refused at the door and eve is not reached: the record and the ask name one conversation, never the record's old main and eve's new one", async () => {
-  const target = await account();
-  const f = await stand(target, await device(target.userId));
-  const cleared = await database.run(database.store.main.clear(target.userId, new Date(NOW)));
-  assert.deepEqual(cleared.cleared, [target.conversationId]);
+it.effect(
+  "after a Clear, a spoken ask is refused at the door and eve is not reached: the record and the ask name one conversation, never the record's old main and eve's new one",
+  () =>
+    Effect.promise(async () => {
+      const target = await account();
+      const f = await stand(target, await device(target.userId));
+      const cleared = await database.run(database.store.main.clear(target.userId, new Date(NOW)));
+      assert.deepEqual(cleared.cleared, [target.conversationId]);
 
-  const refused = await f.exchange.brain.submitAsk({
-    submissionId: randomUUID(),
-    question: "Developer: still there?",
-  });
-  assert.equal(refused.outcome, LIVE_BRAIN_SUBMISSION.REFUSED);
-  assert.deepEqual(f.eve.opened, []);
-  await f.exchange.stop();
-});
+      const refused = await f.exchange.brain.submitAsk({
+        submissionId: randomUUID(),
+        question: "Developer: still there?",
+      });
+      assert.equal(refused.outcome, LIVE_BRAIN_SUBMISSION.REFUSED);
+      assert.deepEqual(f.eve.opened, []);
+      await f.exchange.stop();
+    }),
+);

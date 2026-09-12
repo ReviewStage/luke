@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as SqlClient from "@effect/sql/SqlClient";
+import { it } from "@effect/vitest";
 import {
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
@@ -37,7 +38,7 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Schema as EffectSchema, Either } from "effect";
-import { afterAll, test } from "vitest";
+import { afterAll } from "vitest";
 import { ASK_ORIGIN, type StoredUIMessage } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -49,8 +50,8 @@ import {
   type ResourceReadOptions,
 } from "../server/hosted/resource-reads";
 import { storeWriter } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { promisedAsks } from "./support/promised-store";
 import {
   insertConversation as insertConversationRow,
   insertEvent as insertEventRow,
@@ -463,242 +464,276 @@ const REPLAY_SLOT = {
   openai: { itemId: "rs_fixture_0f3a1c22", reasoningEncryptedContent: "Zml4dHVyZS1vcGFxdWU=" },
 };
 
-test("a spoken ask's transcript row tied to its turn is answered inside the turn's group beside the reply, not as a group of its own; a row no turn owns still stands alone under its message id", async () => {
-  const userId = await database.createUser();
-  const main = await insertConversation(userId);
-  const spoken = await insertTurn(userId, main, { origin: TURN_ORIGIN.SPOKEN });
-  // The writer places the developer's line ahead of the turn's work; the view keeps the store's sequence.
-  const transcript = await insertMessage(userId, main, 1, {
-    clientId: "dl_1",
-    turnId: spoken,
-    metadata: {
-      author: MESSAGE_AUTHOR.DEVELOPER,
-      channel: MESSAGE_CHANNEL.VOICE,
-      voice_session_id: "vs_1",
-      delegation_id: "dl_1",
-      from_ms: 0,
-      to_ms: 2500,
-    },
-    parts: [{ type: "text", text: "What needs me?" }],
-  });
-  const reply = await insertMessage(userId, main, 2, {
-    turnId: spoken,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
-  });
-  const unowned = await insertMessage(userId, main, 3, {
-    clientId: "dl_2",
-    metadata: {
-      author: MESSAGE_AUTHOR.DEVELOPER,
-      channel: MESSAGE_CHANNEL.VOICE,
-      voice_session_id: "vs_1",
-      delegation_id: "dl_2",
-      from_ms: 3000,
-      to_ms: 4000,
-    },
-    parts: [{ type: "text", text: "And now?" }],
-  });
+it.effect(
+  "a spoken ask's transcript row tied to its turn is answered inside the turn's group beside the reply, not as a group of its own; a row no turn owns still stands alone under its message id",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const main = await insertConversation(userId);
+      const spoken = await insertTurn(userId, main, { origin: TURN_ORIGIN.SPOKEN });
+      // The writer places the developer's line ahead of the turn's work; the view keeps the store's sequence.
+      const transcript = await insertMessage(userId, main, 1, {
+        clientId: "dl_1",
+        turnId: spoken,
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_1",
+          delegation_id: "dl_1",
+          from_ms: 0,
+          to_ms: 2500,
+        },
+        parts: [{ type: "text", text: "What needs me?" }],
+      });
+      const reply = await insertMessage(userId, main, 2, {
+        turnId: spoken,
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        parts: [{ type: "text", text: "One agent finished.", state: "done" }],
+      });
+      const unowned = await insertMessage(userId, main, 3, {
+        clientId: "dl_2",
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_1",
+          delegation_id: "dl_2",
+          from_ms: 3000,
+          to_ms: 4000,
+        },
+        parts: [{ type: "text", text: "And now?" }],
+      });
 
-  const answer = await answered(
-    await database.run(handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)))),
-    conversationMessagesAnswerSchema,
-  );
-  assert.deepEqual(
-    answer.groups.map((group) => [
-      group.turnId,
-      group.turn?.id,
-      group.messages.map((row) => String(row.message.id)),
-    ]),
-    [
-      [spoken, spoken, [transcript, reply]],
-      [unowned, undefined, [unowned]],
-    ],
-  );
-});
-
-test("a device that read a spoken line before its turn took it reads the line again, in the turn's group ahead of the reply, and lets the standalone group go", async () => {
-  const userId = await database.createUser();
-  const main = await insertConversation(userId);
-  const target = { userId, conversationId: main };
-  const delegationId = "dl_early";
-  const asks = promisedAsks(database.run);
-  const ask = await asks.record({
-    userId,
-    conversationId: main,
-    clientId: delegationId,
-    origin: ASK_ORIGIN.SPOKEN,
-    question: "what needs me?",
-    createdAt: new Date(NOW),
-  });
-  // The voice writer's cut of the transcript lands while the ask still waits for its turn.
-  const line = await database.run(
-    writer.recordUserMessage(target, {
-      clientId: delegationId,
-      turnOfAsk: true,
-      text: "What needs me?",
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+      const answer = await answered(
+        await database.run(
+          handleConversationMessages(options(userId, request(READ_PATH.MESSAGES))),
+        ),
+        conversationMessagesAnswerSchema,
+      );
+      assert.deepEqual(
+        answer.groups.map((group) => [
+          group.turnId,
+          group.turn?.id,
+          group.messages.map((row) => String(row.message.id)),
+        ]),
+        [
+          [spoken, spoken, [transcript, reply]],
+          [unowned, undefined, [unowned]],
+        ],
+      );
     }),
-  );
-  assert.ok(line.ok);
-  const early = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
-  await early.catchUp();
-  assert.deepEqual(early.ordered(), [[line.id, line.id]]);
-  const passed = parse(sequenceReadCursorSchema, early.cursor ?? "");
-  assert.deepEqual(passed, { positions: [{ conversationId: main, seq: 1 }] });
+);
 
-  // The turn starts and takes the ask's line, then writes its reply.
-  const turn = await insertTurn(userId, main, {
-    origin: TURN_ORIGIN.SPOKEN,
-    status: TURN_STATUS.RUNNING,
-    queuedAt: new Date(NOW + 1000),
-  });
-  await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
-  const attached = await database.run(writer.attachAskLines(target, turn));
-  assert.deepEqual(attached, { ok: true, attached: [line.id] });
-  const reply = await insertMessage(userId, main, 3, {
-    clientId: turn,
-    turnId: turn,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [{ type: "text", text: "One agent finished.", state: "done" }],
-  });
+it.effect(
+  "a device that read a spoken line before its turn took it reads the line again, in the turn's group ahead of the reply, and lets the standalone group go",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const main = await insertConversation(userId);
+      const target = { userId, conversationId: main };
+      const delegationId = "dl_early";
+      const askEffects = askRecord();
+      const asks = {
+        record: (write: Parameters<typeof askEffects.record>[0]) =>
+          database.run(askEffects.record(write)),
+        dispatchOnce: (
+          target: Parameters<typeof askEffects.dispatchOnce>[0],
+          id: string,
+          dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
+        ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
+      };
+      const ask = await asks.record({
+        userId,
+        conversationId: main,
+        clientId: delegationId,
+        origin: ASK_ORIGIN.SPOKEN,
+        question: "what needs me?",
+        createdAt: new Date(NOW),
+      });
+      // The voice writer's cut of the transcript lands while the ask still waits for its turn.
+      const line = await database.run(
+        writer.recordUserMessage(target, {
+          clientId: delegationId,
+          turnOfAsk: true,
+          text: "What needs me?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        }),
+      );
+      assert.ok(line.ok);
+      const early = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+      await early.catchUp();
+      assert.deepEqual(early.ordered(), [[line.id, line.id]]);
+      const passed = parse(sequenceReadCursorSchema, early.cursor ?? "");
+      assert.deepEqual(passed, { positions: [{ conversationId: main, seq: 1 }] });
 
-  const expected: readonly [string, string][] = [
-    [turn, line.id],
-    [turn, reply],
-  ];
-  await early.catchUp();
-  assert.deepEqual(early.ordered(), expected);
-  assert.equal(early.groups.has(line.id), false);
-  const late = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
-  await late.catchUp();
-  assert.deepEqual(late.ordered(), expected);
-  assert.equal(late.cursor, early.cursor);
-});
+      // The turn starts and takes the ask's line, then writes its reply.
+      const turn = await insertTurn(userId, main, {
+        origin: TURN_ORIGIN.SPOKEN,
+        status: TURN_STATUS.RUNNING,
+        queuedAt: new Date(NOW + 1000),
+      });
+      await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
+      const attached = await database.run(writer.attachAskLines(target, turn));
+      assert.deepEqual(attached, { ok: true, attached: [line.id] });
+      const reply = await insertMessage(userId, main, 3, {
+        clientId: turn,
+        turnId: turn,
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        parts: [{ type: "text", text: "One agent finished.", state: "done" }],
+      });
 
-test("a line the turn takes with its journal already open still precedes the reply: the journal moves behind it, and a device that previewed the journal reads both again in the store's order", async () => {
-  const userId = await database.createUser();
-  const main = await insertConversation(userId);
-  const target = { userId, conversationId: main };
-  const delegationId = "dl_late_attach";
-  const asks = promisedAsks(database.run);
-  const ask = await asks.record({
-    userId,
-    conversationId: main,
-    clientId: delegationId,
-    origin: ASK_ORIGIN.SPOKEN,
-    question: "what needs me?",
-    createdAt: new Date(NOW),
-  });
-  // The voice writer's cut lands before the ask learned its turn, so it stands unattached.
-  const line = await database.run(
-    writer.recordUserMessage(target, {
-      clientId: delegationId,
-      turnOfAsk: true,
-      text: "What needs me?",
-      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+      const expected: readonly [string, string][] = [
+        [turn, line.id],
+        [turn, reply],
+      ];
+      await early.catchUp();
+      assert.deepEqual(early.ordered(), expected);
+      assert.equal(early.groups.has(line.id), false);
+      const late = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+      await late.catchUp();
+      assert.deepEqual(late.ordered(), expected);
+      assert.equal(late.cursor, early.cursor);
     }),
-  );
-  assert.ok(line.ok);
-  // The turn's first step opens the journal before the received message that takes the line in.
-  const turn = await insertTurn(userId, main, {
-    origin: TURN_ORIGIN.SPOKEN,
-    status: TURN_STATUS.RUNNING,
-    queuedAt: new Date(NOW + 1000),
-  });
-  const journal = await insertMessage(userId, main, 2, {
-    clientId: turn,
-    turnId: turn,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [{ type: "text", text: "One", state: "streaming" }],
-    finishedAt: null,
-  });
-  const device = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
-  await device.catchUp();
-  assert.deepEqual(device.ordered(), [
-    [line.id, line.id],
-    [turn, journal],
-  ]);
+);
 
-  await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
-  const attached = await database.run(writer.attachAskLines(target, turn));
-  assert.deepEqual(attached, { ok: true, attached: [line.id] });
+it.effect(
+  "a line the turn takes with its journal already open still precedes the reply: the journal moves behind it, and a device that previewed the journal reads both again in the store's order",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const main = await insertConversation(userId);
+      const target = { userId, conversationId: main };
+      const delegationId = "dl_late_attach";
+      const askEffects = askRecord();
+      const asks = {
+        record: (write: Parameters<typeof askEffects.record>[0]) =>
+          database.run(askEffects.record(write)),
+        dispatchOnce: (
+          target: Parameters<typeof askEffects.dispatchOnce>[0],
+          id: string,
+          dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
+        ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
+      };
+      const ask = await asks.record({
+        userId,
+        conversationId: main,
+        clientId: delegationId,
+        origin: ASK_ORIGIN.SPOKEN,
+        question: "what needs me?",
+        createdAt: new Date(NOW),
+      });
+      // The voice writer's cut lands before the ask learned its turn, so it stands unattached.
+      const line = await database.run(
+        writer.recordUserMessage(target, {
+          clientId: delegationId,
+          turnOfAsk: true,
+          text: "What needs me?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        }),
+      );
+      assert.ok(line.ok);
+      // The turn's first step opens the journal before the received message that takes the line in.
+      const turn = await insertTurn(userId, main, {
+        origin: TURN_ORIGIN.SPOKEN,
+        status: TURN_STATUS.RUNNING,
+        queuedAt: new Date(NOW + 1000),
+      });
+      const journal = await insertMessage(userId, main, 2, {
+        clientId: turn,
+        turnId: turn,
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        parts: [{ type: "text", text: "One", state: "streaming" }],
+        finishedAt: null,
+      });
+      const device = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+      await device.catchUp();
+      assert.deepEqual(device.ordered(), [
+        [line.id, line.id],
+        [turn, journal],
+      ]);
 
-  // Read in sequence: both moved past the sequences they stood at, the line ahead of the journal.
-  const bySeq = await readMessagesByConversationTyped(database.run, main);
-  assert.deepEqual(
-    bySeq.map((row) => [row.id, row.turnId]),
-    [
-      [line.id, turn],
-      [journal, turn],
-    ],
-  );
-  assert.ok((bySeq[0]?.seq ?? 0) > 2);
-  assert.ok((bySeq[1]?.seq ?? 0) > (bySeq[0]?.seq ?? 0));
+      await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
+      const attached = await database.run(writer.attachAskLines(target, turn));
+      assert.deepEqual(attached, { ok: true, attached: [line.id] });
 
-  await device.catchUp();
-  assert.deepEqual(device.ordered(), [
-    [turn, line.id],
-    [turn, journal],
-  ]);
-  assert.equal(device.groups.has(line.id), false);
-  const late = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
-  await late.catchUp();
-  assert.deepEqual(late.ordered(), device.ordered());
-});
+      // Read in sequence: both moved past the sequences they stood at, the line ahead of the journal.
+      const bySeq = await readMessagesByConversationTyped(database.run, main);
+      assert.deepEqual(
+        bySeq.map((row) => [row.id, row.turnId]),
+        [
+          [line.id, turn],
+          [journal, turn],
+        ],
+      );
+      assert.ok((bySeq[0]?.seq ?? 0) > 2);
+      assert.ok((bySeq[1]?.seq ?? 0) > (bySeq[0]?.seq ?? 0));
 
-test("a message's replay slot never leaves the service, and the stored row keeps it", async () => {
-  const userId = await database.createUser();
-  const main = await insertConversation(userId);
-  const typed = await insertTurn(userId, main);
-  await insertMessage(userId, main, 1, { turnId: typed });
-  const reply = await insertMessage(userId, main, 2, {
-    turnId: typed,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [
-      { type: "step-start" },
-      {
-        type: "reasoning",
-        text: "Read the tail first.",
-        state: "done",
-        providerMetadata: REPLAY_SLOT,
-      },
-      {
-        type: "text",
-        text: "It is waiting.",
-        state: "done",
-        providerMetadata: { openai: { itemId: "msg_1" } },
-      },
-    ],
-  });
+      await device.catchUp();
+      assert.deepEqual(device.ordered(), [
+        [turn, line.id],
+        [turn, journal],
+      ]);
+      assert.equal(device.groups.has(line.id), false);
+      const late = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+      await late.catchUp();
+      assert.deepEqual(late.ordered(), device.ordered());
+    }),
+);
 
-  const answer = await answered(
-    await database.run(handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)))),
-    conversationMessagesAnswerSchema,
-  );
-  const parts = answer.groups.flatMap((group) =>
-    group.messages.flatMap((row) => wireParts(row.message.parts)),
-  );
-  assert.equal(parts.length, 4);
-  assert.deepEqual(
-    parts.map((part) => "providerMetadata" in part),
-    [false, false, false, false],
-  );
-  assert.deepEqual(
-    parts.filter((part) => part.type === "reasoning"),
-    [{ type: "reasoning", text: "Read the tail first.", state: "done" }],
-  );
+it.effect("a message's replay slot never leaves the service, and the stored row keeps it", () =>
+  Effect.promise(async () => {
+    const userId = await database.createUser();
+    const main = await insertConversation(userId);
+    const typed = await insertTurn(userId, main);
+    await insertMessage(userId, main, 1, { turnId: typed });
+    const reply = await insertMessage(userId, main, 2, {
+      turnId: typed,
+      role: MESSAGE_ROLE.ASSISTANT,
+      metadata: BRAIN_REPLY,
+      parts: [
+        { type: "step-start" },
+        {
+          type: "reasoning",
+          text: "Read the tail first.",
+          state: "done",
+          providerMetadata: REPLAY_SLOT,
+        },
+        {
+          type: "text",
+          text: "It is waiting.",
+          state: "done",
+          providerMetadata: { openai: { itemId: "msg_1" } },
+        },
+      ],
+    });
 
-  const stored = await readMessageById(database.run, reply);
-  assert.ok(stored);
-  // SAFETY: the parts column is jsonb, read back as the JSON the test wrote.
-  const storedParts = wireParts(unparsedWire(stored.parts as WireBoundaryInput));
-  assert.deepEqual(storedParts[1]?.providerMetadata, REPLAY_SLOT);
-  assert.deepEqual(storedParts[2]?.providerMetadata, { openai: { itemId: "msg_1" } });
-});
+    const answer = await answered(
+      await database.run(handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)))),
+      conversationMessagesAnswerSchema,
+    );
+    const parts = answer.groups.flatMap((group) =>
+      group.messages.flatMap((row) => wireParts(row.message.parts)),
+    );
+    assert.equal(parts.length, 4);
+    assert.deepEqual(
+      parts.map((part) => "providerMetadata" in part),
+      [false, false, false, false],
+    );
+    assert.deepEqual(
+      parts.filter((part) => part.type === "reasoning"),
+      [{ type: "reasoning", text: "Read the tail first.", state: "done" }],
+    );
+
+    const stored = await readMessageById(database.run, reply);
+    assert.ok(stored);
+    // SAFETY: the parts column is jsonb, read back as the JSON the test wrote.
+    const storedParts = wireParts(unparsedWire(stored.parts as WireBoundaryInput));
+    assert.deepEqual(storedParts[1]?.providerMetadata, REPLAY_SLOT);
+    assert.deepEqual(storedParts[2]?.providerMetadata, { openai: { itemId: "msg_1" } });
+  }),
+);
 
 /** A message's parts as JSON records, the way a device parses them; anything else fails the test. */
 function wireParts(parts: UnparsedWireValue): WireRecord[] {
@@ -709,708 +744,773 @@ function wireParts(parts: UnparsedWireValue): WireRecord[] {
   });
 }
 
-test("the gate order is method, bearer, and query, and every refusal is one shape", async () => {
-  const userId = await database.createUser();
-  for (const [path, handle] of [
-    [READ_PATH.MESSAGES, handleConversationMessages],
-    [READ_PATH.EVENTS, handleConversationEvents],
-    [READ_PATH.TURNS, handleBrainTurns],
-  ] as const) {
-    const wrongMethod = await database.run(handle(options(userId, request(path, {}, "POST"))));
-    assert.equal(wrongMethod.status, 405);
-    assert.equal((await wrongMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
+it.effect("the gate order is method, bearer, and query, and every refusal is one shape", () =>
+  Effect.promise(async () => {
+    const userId = await database.createUser();
+    for (const [path, handle] of [
+      [READ_PATH.MESSAGES, handleConversationMessages],
+      [READ_PATH.EVENTS, handleConversationEvents],
+      [READ_PATH.TURNS, handleBrainTurns],
+    ] as const) {
+      const wrongMethod = await database.run(handle(options(userId, request(path, {}, "POST"))));
+      assert.equal(wrongMethod.status, 405);
+      assert.equal((await wrongMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
 
-    const anonymous = await database.run(
-      handle({
-        ...options(userId, request(path, {}, "GET", false)),
-        resolveUserId: async () => undefined,
-      }),
-    );
-    assert.equal(anonymous.status, 401);
-    assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
+      const anonymous = await database.run(
+        handle({
+          ...options(userId, request(path, {}, "GET", false)),
+          resolveUserId: async () => undefined,
+        }),
+      );
+      assert.equal(anonymous.status, 401);
+      assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 
-    const refusals: ReadQuery[] = [
-      { after: "%%%" },
-      { limit: 0 },
-      { limit: 201 },
-      { limit: "two" },
-    ];
-    for (const query of refusals) {
-      const refused = await database.run(handle(options(userId, request(path, query))));
-      assert.equal(refused.status, 400, JSON.stringify(query));
-      assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
+      const refusals: ReadQuery[] = [
+        { after: "%%%" },
+        { limit: 0 },
+        { limit: 201 },
+        { limit: "two" },
+      ];
+      for (const query of refusals) {
+        const refused = await database.run(handle(options(userId, request(path, query))));
+        assert.equal(refused.status, 400, JSON.stringify(query));
+        assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
+      }
     }
-  }
-});
+  }),
+);
 
-test("two devices paging at different bounds converge on the same messages in the same order under the same cursor", async () => {
-  const userId = await database.createUser();
-  const { main, observed, turns: ids, expected } = await populate(userId);
+it.effect(
+  "two devices paging at different bounds converge on the same messages in the same order under the same cursor",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main, observed, turns: ids, expected } = await populate(userId);
 
-  const narrow = new Device(userId, 2);
-  const wide = new Device(userId, 200);
-  await narrow.catchUp();
-  await wide.catchUp();
+      const narrow = new Device(userId, 2);
+      const wide = new Device(userId, 200);
+      await narrow.catchUp();
+      await wide.catchUp();
 
-  assert.deepEqual(narrow.ordered(), expected);
-  assert.deepEqual(wide.ordered(), expected);
-  assert.equal(narrow.cursor, wide.cursor);
-  assert.deepEqual(parse(sequenceReadCursorSchema, wide.cursor ?? ""), {
-    positions: [
-      { conversationId: main, seq: 4 },
-      { conversationId: observed, seq: 3 },
-    ].sort((a, b) => (a.conversationId < b.conversationId ? -1 : 1)),
-  });
+      assert.deepEqual(narrow.ordered(), expected);
+      assert.deepEqual(wide.ordered(), expected);
+      assert.equal(narrow.cursor, wide.cursor);
+      assert.deepEqual(parse(sequenceReadCursorSchema, wide.cursor ?? ""), {
+        positions: [
+          { conversationId: main, seq: 4 },
+          { conversationId: observed, seq: 3 },
+        ].sort((a, b) => (a.conversationId < b.conversationId ? -1 : 1)),
+      });
 
-  const announced = wide.groups.get(ids.roster);
-  assert.ok(announced);
-  assert.equal(announced.source.kind, CONVERSATION_VIEW_SOURCE.OBSERVED);
-  assert.deepEqual(
-    announced.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED && announced.source.session,
-    SESSION,
-  );
-  assert.equal(announced.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
-  const crossing = announced.messages.get(2);
-  assert.ok(crossing);
-  const parts = crossing.message.parts;
-  assert.ok(Array.isArray(parts));
-  assert.equal(parts.length, 1);
-  assert.deepEqual(
-    crossing.tools.map((tool) => [tool.kind, tool.toolName]),
-    [[CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE, "announce"]],
-  );
-  const announce = crossing.tools[0];
-  assert.equal(announce?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && announce.unspoken, true);
-  assert.equal(wide.groups.has(ids.idle), false);
+      const announced = wide.groups.get(ids.roster);
+      assert.ok(announced);
+      assert.equal(announced.source.kind, CONVERSATION_VIEW_SOURCE.OBSERVED);
+      assert.deepEqual(
+        announced.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED && announced.source.session,
+        SESSION,
+      );
+      assert.equal(announced.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
+      const crossing = announced.messages.get(2);
+      assert.ok(crossing);
+      const parts = crossing.message.parts;
+      assert.ok(Array.isArray(parts));
+      assert.equal(parts.length, 1);
+      assert.deepEqual(
+        crossing.tools.map((tool) => [tool.kind, tool.toolName]),
+        [[CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE, "announce"]],
+      );
+      const announce = crossing.tools[0];
+      assert.equal(
+        announce?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && announce.unspoken,
+        true,
+      );
+      assert.equal(wide.groups.has(ids.idle), false);
 
-  const sent = wide.groups.get(ids.typed)?.messages.get(2);
-  assert.deepEqual(
-    sent?.tools.map((tool) => tool.kind),
-    [CONVERSATION_VIEW_TOOL_KIND.ACTION],
-  );
-  const read = wide.groups.get(ids.later)?.messages.get(4);
-  assert.deepEqual(
-    read?.tools.map((tool) => tool.kind),
-    [CONVERSATION_VIEW_TOOL_KIND.DETAIL],
-  );
+      const sent = wide.groups.get(ids.typed)?.messages.get(2);
+      assert.deepEqual(
+        sent?.tools.map((tool) => tool.kind),
+        [CONVERSATION_VIEW_TOOL_KIND.ACTION],
+      );
+      const read = wide.groups.get(ids.later)?.messages.get(4);
+      assert.deepEqual(
+        read?.tools.map((tool) => tool.kind),
+        [CONVERSATION_VIEW_TOOL_KIND.DETAIL],
+      );
 
-  const quiet = await wide.poll();
-  assert.deepEqual(quiet.groups, []);
-  assert.equal(quiet.hasMore, false);
-  assert.equal(quiet.next, narrow.cursor);
-});
-
-test("a message still in flight is answered on every read and passed only once it finishes", async () => {
-  const userId = await database.createUser();
-  const { main, expected } = await populate(userId);
-  const running = await insertTurn(userId, main, {
-    status: TURN_STATUS.RUNNING,
-    queuedAt: new Date(NOW + 40_000),
-  });
-  const ask = await insertMessage(userId, main, 5, {
-    turnId: running,
-    createdAt: new Date(NOW + 41_000),
-  });
-  const journal = await insertMessage(userId, main, 6, {
-    turnId: running,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    createdAt: new Date(NOW + 42_000),
-    finishedAt: null,
-    parts: [
-      toolPart(
-        "send_session_message",
-        "call_7a0000000000000001",
-        { ...SESSION_FIELDS, text: "Run the tests." },
-        "input-available",
-      ),
-    ],
-  });
-  const mainPosition = (cursor: string | undefined) =>
-    parse(sequenceReadCursorSchema, cursor ?? "")?.positions.find((p) => p.conversationId === main)
-      ?.seq;
-
-  const device = new Device(userId, 200);
-  await device.catchUp();
-  assert.deepEqual(device.ordered(), [...expected, [running, ask], [running, journal]]);
-  assert.equal(mainPosition(device.cursor), 5);
-  const inFlight = device.groups.get(running)?.messages.get(6);
-  assert.deepEqual(
-    inFlight?.tools.map((tool) => tool.state),
-    ["input-available"],
-  );
-
-  const again = await device.poll();
-  assert.deepEqual(
-    again.groups.flatMap((group) => group.messages.map((message) => message.seq)),
-    [6],
-  );
-  assert.equal(again.hasMore, false);
-  assert.equal(mainPosition(again.next), 5);
-
-  const finishedParts = JSON.stringify([
-    toolPart("send_session_message", "call_7a0000000000000001", {
-      ...SESSION_FIELDS,
-      text: "Run the tests.",
+      const quiet = await wide.poll();
+      assert.deepEqual(quiet.groups, []);
+      assert.equal(quiet.hasMore, false);
+      assert.equal(quiet.next, narrow.cursor);
     }),
-    { type: "text", text: "Sent." },
-  ]);
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
+);
+
+it.effect(
+  "a message still in flight is answered on every read and passed only once it finishes",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main, expected } = await populate(userId);
+      const running = await insertTurn(userId, main, {
+        status: TURN_STATUS.RUNNING,
+        queuedAt: new Date(NOW + 40_000),
+      });
+      const ask = await insertMessage(userId, main, 5, {
+        turnId: running,
+        createdAt: new Date(NOW + 41_000),
+      });
+      const journal = await insertMessage(userId, main, 6, {
+        turnId: running,
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        createdAt: new Date(NOW + 42_000),
+        finishedAt: null,
+        parts: [
+          toolPart(
+            "send_session_message",
+            "call_7a0000000000000001",
+            { ...SESSION_FIELDS, text: "Run the tests." },
+            "input-available",
+          ),
+        ],
+      });
+      const mainPosition = (cursor: string | undefined) =>
+        parse(sequenceReadCursorSchema, cursor ?? "")?.positions.find(
+          (p) => p.conversationId === main,
+        )?.seq;
+
+      const device = new Device(userId, 200);
+      await device.catchUp();
+      assert.deepEqual(device.ordered(), [...expected, [running, ask], [running, journal]]);
+      assert.equal(mainPosition(device.cursor), 5);
+      const inFlight = device.groups.get(running)?.messages.get(6);
+      assert.deepEqual(
+        inFlight?.tools.map((tool) => tool.state),
+        ["input-available"],
+      );
+
+      const again = await device.poll();
+      assert.deepEqual(
+        again.groups.flatMap((group) => group.messages.map((message) => message.seq)),
+        [6],
+      );
+      assert.equal(again.hasMore, false);
+      assert.equal(mainPosition(again.next), 5);
+
+      const finishedParts = JSON.stringify([
+        toolPart("send_session_message", "call_7a0000000000000001", {
+          ...SESSION_FIELDS,
+          text: "Run the tests.",
+        }),
+        { type: "text", text: "Sent." },
+      ]);
+      await database.run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`
         update messages set parts = ${finishedParts}::jsonb, finished_at = ${new Date(NOW + 45_000)}
         where id = ${journal}
       `;
+        }),
+      );
+      const finished = await device.poll();
+      assert.deepEqual(
+        finished.groups.flatMap((group) => group.messages.map((message) => message.seq)),
+        [6],
+      );
+      assert.equal(mainPosition(finished.next), 6);
+      assert.deepEqual(
+        device.groups
+          .get(running)
+          ?.messages.get(6)
+          ?.tools.map((tool) => tool.state),
+        ["output-available"],
+      );
+      const quiet = await device.poll();
+      assert.deepEqual(quiet.groups, []);
+      assert.equal(quiet.hasMore, false);
     }),
-  );
-  const finished = await device.poll();
-  assert.deepEqual(
-    finished.groups.flatMap((group) => group.messages.map((message) => message.seq)),
-    [6],
-  );
-  assert.equal(mainPosition(finished.next), 6);
-  assert.deepEqual(
-    device.groups
-      .get(running)
-      ?.messages.get(6)
-      ?.tools.map((tool) => tool.state),
-    ["output-available"],
-  );
-  const quiet = await device.poll();
-  assert.deepEqual(quiet.groups, []);
-  assert.equal(quiet.hasMore, false);
-});
+);
 
-test("a conversation longer than one page is read to its end on the default bound", async () => {
-  const userId = await database.createUser();
-  const main = await insertConversation(userId);
-  const turn = await insertTurn(userId, main);
-  const count = READ_PAGE_BOUNDS.MAX_LIMIT + 1;
-  for (let seq = 1; seq <= count; seq += 1)
-    await insertMessage(userId, main, seq, { turnId: turn });
+it.effect("a conversation longer than one page is read to its end on the default bound", () =>
+  Effect.promise(async () => {
+    const userId = await database.createUser();
+    const main = await insertConversation(userId);
+    const turn = await insertTurn(userId, main);
+    const count = READ_PAGE_BOUNDS.MAX_LIMIT + 1;
+    for (let seq = 1; seq <= count; seq += 1)
+      await insertMessage(userId, main, seq, { turnId: turn });
 
-  const device = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
-  const first = await device.poll();
-  assert.equal(first.hasMore, true);
-  assert.equal(first.groups[0]?.messages.length, READ_PAGE_BOUNDS.MAX_LIMIT);
-  const second = await device.poll();
-  assert.equal(second.hasMore, false);
-  assert.equal(second.groups[0]?.messages.length, 1);
-  assert.equal(device.groups.get(turn)?.messages.size, count);
-});
+    const device = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
+    const first = await device.poll();
+    assert.equal(first.hasMore, true);
+    assert.equal(first.groups[0]?.messages.length, READ_PAGE_BOUNDS.MAX_LIMIT);
+    const second = await device.poll();
+    assert.equal(second.hasMore, false);
+    assert.equal(second.groups[0]?.messages.length, 1);
+    assert.equal(device.groups.get(turn)?.messages.size, count);
+  }),
+);
 
-test("an open journal at the front of the page does not hold the other conversations' rows behind it", async () => {
-  const userId = await database.createUser();
-  const { main, observed, expected } = await populate(userId);
-  const running = await insertTurn(userId, main, {
-    status: TURN_STATUS.RUNNING,
-    queuedAt: new Date(NOW + 40_000),
-  });
-  const journal = await insertMessage(userId, main, 5, {
-    turnId: running,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    createdAt: new Date(NOW + 41_000),
-    finishedAt: null,
-    parts: [
-      toolPart("read_transcript", "call_8a0000000000000001", SESSION_FIELDS, "input-available"),
-    ],
-  });
+it.effect(
+  "an open journal at the front of the page does not hold the other conversations' rows behind it",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main, observed, expected } = await populate(userId);
+      const running = await insertTurn(userId, main, {
+        status: TURN_STATUS.RUNNING,
+        queuedAt: new Date(NOW + 40_000),
+      });
+      const journal = await insertMessage(userId, main, 5, {
+        turnId: running,
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        createdAt: new Date(NOW + 41_000),
+        finishedAt: null,
+        parts: [
+          toolPart("read_transcript", "call_8a0000000000000001", SESSION_FIELDS, "input-available"),
+        ],
+      });
 
-  const narrowest = new Device(userId, 1);
-  const firstPage = await narrowest.poll();
-  assert.ok(
-    firstPage.groups.flatMap((group) => group.messages).length <=
-      1 + READ_PAGE_BOUNDS.PREVIEW_ROWS * firstPage.conversations.length,
-  );
-  await narrowest.catchUp();
-  assert.deepEqual(narrowest.ordered(), [...expected, [running, journal]]);
-  const positions = parse(sequenceReadCursorSchema, narrowest.cursor ?? "")?.positions ?? [];
-  assert.deepEqual(
-    new Map(positions.map((position) => [position.conversationId, position.seq])),
-    new Map([
-      [main, 4],
-      [observed, 3],
-    ]),
-  );
-});
-
-test("a cleared main is absent from the next read: its groups leave the device, its position leaves the cursor, and the new main takes its place", async () => {
-  const userId = await database.createUser();
-  const { main, observed, turns: ids } = await populate(userId);
-  const device = new Device(userId, 200);
-  await device.catchUp();
-  assert.equal(device.groups.has(ids.typed), true);
-
-  const { opened } = await database.run(database.store.main.clear(userId, new Date(NOW + 60_000)));
-  const answer = await device.poll();
-  assert.deepEqual(
-    answer.conversations.map((conversation) => conversation.id).sort(),
-    [opened, observed].sort(),
-  );
-  const mainEntry = answer.conversations.find((conversation) => conversation.id === opened);
-  assert.equal(
-    mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt,
-    NOW + 60_000,
-  );
-  // The device still holds the observed group it read before the Clear; the client's own rule drops rows older than the new main.
-  assert.deepEqual([...device.groups.keys()], [ids.roster]);
-  assert.deepEqual(
-    parse(sequenceReadCursorSchema, answer.next)
-      ?.positions.map((position) => [position.conversationId, position.seq])
-      .sort(),
-    [
-      [opened, 0],
-      [observed, 3],
-    ].sort(),
-  );
-  assert.equal(
-    parse(sequenceReadCursorSchema, answer.next)?.positions.some((p) => p.conversationId === main),
-    false,
-  );
-
-  const fresh = new Device(userId, 200);
-  await fresh.catchUp();
-  assert.deepEqual(fresh.ordered(), []);
-  assert.deepEqual(
-    parse(sequenceReadCursorSchema, fresh.cursor ?? "")
-      ?.positions.map((position) => [position.conversationId, position.seq])
-      .sort(),
-    [
-      [opened, 0],
-      [observed, 3],
-    ].sort(),
-  );
-});
-
-test("a Clear empties the thread of observed rows from before the new main and keeps the ones after it, and the observed conversation itself stands untouched", async () => {
-  const userId = await database.createUser();
-  const { observed, turns: ids } = await populate(userId);
-  await insertProviderCursor(database.run, {
-    userId,
-    providerId: SESSION.providerId,
-    providerSessionId: SESSION.providerSessionId,
-    cursor: "msg_0000000000000042",
-  });
-  const before = {
-    conversation: await readConversationById(database.run, observed),
-    messages: await readMessagesByConversation(database.run, observed),
-    cursors: await readProviderCursorRows(userId),
-  };
-  assert.equal(before.messages.length, 3);
-
-  const clearedAt = NOW + 60_000;
-  const { opened } = await database.run(database.store.main.clear(userId, new Date(clearedAt)));
-  const laterTurn = await insertTurn(userId, observed, {
-    origin: TURN_ORIGIN.ROSTER_DIFF,
-    queuedAt: new Date(clearedAt + 10_000),
-  });
-  const laterAnnounce = await insertMessage(userId, observed, 4, {
-    turnId: laterTurn,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    createdAt: new Date(clearedAt + 12_000),
-    parts: [toolPart("announce", "call_9a0000000000000001", { briefing: "The session finished." })],
-  });
-
-  const fresh = new Device(userId, 200);
-  await fresh.catchUp();
-  assert.deepEqual(fresh.ordered(), [[laterTurn, laterAnnounce]]);
-  assert.equal(fresh.groups.has(ids.roster), false);
-  const mainEntry = (await fresh.poll()).conversations.find((c) => c.id === opened);
-  assert.equal(mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt, clearedAt);
-
-  const heads = await database.run(
-    handleChanges({
-      request: new Request("https://luke.test/api/changes", {
-        method: "POST",
-        headers: { authorization: "Bearer token-1", "content-type": "application/json" },
-        body: JSON.stringify({ deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7" }),
-      }),
-      resolveUserId: async () => userId,
-      store: database.store,
-      touchDevice: () => Effect.succeed(false),
-      now: () => NOW,
+      const narrowest = new Device(userId, 1);
+      const firstPage = await narrowest.poll();
+      assert.ok(
+        firstPage.groups.flatMap((group) => group.messages).length <=
+          1 + READ_PAGE_BOUNDS.PREVIEW_ROWS * firstPage.conversations.length,
+      );
+      await narrowest.catchUp();
+      assert.deepEqual(narrowest.ordered(), [...expected, [running, journal]]);
+      const positions = parse(sequenceReadCursorSchema, narrowest.cursor ?? "")?.positions ?? [];
+      assert.deepEqual(
+        new Map(positions.map((position) => [position.conversationId, position.seq])),
+        new Map([
+          [main, 4],
+          [observed, 3],
+        ]),
+      );
     }),
-  );
-  const head = parse(
-    changesAnswerSchema,
-    // SAFETY: the response body is the route's own JSON; the schema read is the validation.
-    (await heads.json()) as UnparsedWireValue,
-  );
-  assert.equal(head?.messages, fresh.cursor);
+);
 
-  const after = {
-    conversation: await readConversationById(database.run, observed),
-    messages: await readMessagesByConversation(database.run, observed),
-    cursors: await readProviderCursorRows(userId),
-  };
-  assert.equal(after.conversation[0]?.deleted_at, null);
-  assert.deepEqual(after.cursors, before.cursors);
-  assert.deepEqual(
-    after.messages.filter((row) => Number(row.seq) <= 3),
-    before.messages,
-  );
-  assert.equal(after.messages.length, 4);
-  assert.equal(
-    EffectSchema.decodeUnknownSync(
-      EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
-    )(after.conversation[0]?.next_message_seq),
-    5,
-  );
-  const whole = await database.run(
-    database.store.messages.list(userId, observed, CATALOG_TOOL_SET),
-  );
-  assert.equal(whole.ok, true);
-  assert.deepEqual(whole.ok ? whole.value.map((record) => record.seq) : [], [1, 2, 3, 4]);
-});
+it.effect(
+  "a cleared main is absent from the next read: its groups leave the device, its position leaves the cursor, and the new main takes its place",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main, observed, turns: ids } = await populate(userId);
+      const device = new Device(userId, 200);
+      await device.catchUp();
+      assert.equal(device.groups.has(ids.typed), true);
 
-test("a message carries its latest rating on a device's first page, a re-rating changes the next page, and the events record keeps every rating as its own row", async () => {
-  const userId = await database.createUser();
-  const { main, turns: ids } = await populate(userId);
-  const MessageIdRowSchema = EffectSchema.Struct({
-    id: EffectSchema.String,
-    seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
-  });
-  const sent = (await readMessagesByConversation(database.run, main))
-    .map((row) => EffectSchema.decodeUnknownSync(MessageIdRowSchema)(row))
-    .find((row) => row.seq === 2);
-  assert.ok(sent);
-  const first = await insertEvent(userId, main, sent.id, 1, {
-    kind: CONVERSATION_EVENT_KIND.RATING,
-    deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-    payload: { rating: MESSAGE_RATING.UP },
-  });
+      const { opened } = await database.run(
+        database.store.main.clear(userId, new Date(NOW + 60_000)),
+      );
+      const answer = await device.poll();
+      assert.deepEqual(
+        answer.conversations.map((conversation) => conversation.id).sort(),
+        [opened, observed].sort(),
+      );
+      const mainEntry = answer.conversations.find((conversation) => conversation.id === opened);
+      assert.equal(
+        mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt,
+        NOW + 60_000,
+      );
+      // The device still holds the observed group it read before the Clear; the client's own rule drops rows older than the new main.
+      assert.deepEqual([...device.groups.keys()], [ids.roster]);
+      assert.deepEqual(
+        parse(sequenceReadCursorSchema, answer.next)
+          ?.positions.map((position) => [position.conversationId, position.seq])
+          .sort(),
+        [
+          [opened, 0],
+          [observed, 3],
+        ].sort(),
+      );
+      assert.equal(
+        parse(sequenceReadCursorSchema, answer.next)?.positions.some(
+          (p) => p.conversationId === main,
+        ),
+        false,
+      );
 
-  const fresh = new Device(userId, 200);
-  await fresh.catchUp();
-  const before = fresh.groups.get(ids.typed)?.messages.get(2);
-  assert.deepEqual(before?.rating, { rating: MESSAGE_RATING.UP });
-  assert.equal(fresh.groups.get(ids.typed)?.messages.get(1)?.rating, undefined);
-  assert.equal(fresh.groups.get(ids.roster)?.messages.get(2)?.rating, undefined);
-
-  const second = await insertEvent(userId, main, sent.id, 2, {
-    kind: CONVERSATION_EVENT_KIND.RATING,
-    deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-    payload: { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." },
-  });
-  const rerated = new Device(userId, 200);
-  await rerated.catchUp();
-  assert.deepEqual(rerated.groups.get(ids.typed)?.messages.get(2)?.rating, {
-    rating: MESSAGE_RATING.DOWN,
-    note: "Sent the wrong session.",
-  });
-
-  const EventRowSchema = EffectSchema.Struct({
-    id: EffectSchema.String,
-    seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
-    kind: EffectSchema.String,
-    payload: EffectSchema.Unknown,
-  });
-  const record = (await readEventsByMessage(database.run, sent.id))
-    .map((row) => EffectSchema.decodeUnknownSync(EventRowSchema)(row))
-    .filter((row) => row.kind === CONVERSATION_EVENT_KIND.RATING);
-  assert.deepEqual(
-    record.map((row) => [row.id, row.seq, row.payload]),
-    [
-      [first, 1, { rating: MESSAGE_RATING.UP }],
-      [second, 2, { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." }],
-    ],
-  );
-  const listed = await database.run(database.store.events.list(userId, main));
-  assert.deepEqual(
-    listed.map((event) => [event.id, event.kind]),
-    [
-      [first, CONVERSATION_EVENT_KIND.RATING],
-      [second, CONVERSATION_EVENT_KIND.RATING],
-    ],
-  );
-});
-
-test("a row the catalog cannot read refuses the page whole, naming the row, whether the tool is unregistered or its input refused", async () => {
-  const userId = await database.createUser();
-  const { main } = await populate(userId);
-  const device = new Device(userId, 200);
-  await device.catchUp();
-
-  await insertMessage(userId, main, 5, {
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [toolPart("nobody_registered", "call_6a0000000000000001", {})],
-  });
-  const unregistered = await database.run(
-    handleConversationMessages(
-      options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
-    ),
-  );
-  assert.equal(unregistered.status, 500);
-  assert.deepEqual(await unregistered.json(), {
-    error: HOSTED_API_ERROR.UNREADABLE_ROW,
-    unreadableRow: { conversationId: main, seq: 5 },
-  });
-
-  // Scoped to this test's conversation: on CI every store suite shares one database, and an unscoped delete of seq 5 took a neighbour's row twice today.
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from messages where conversation_id = ${main} and seq = 5`;
+      const fresh = new Device(userId, 200);
+      await fresh.catchUp();
+      assert.deepEqual(fresh.ordered(), []);
+      assert.deepEqual(
+        parse(sequenceReadCursorSchema, fresh.cursor ?? "")
+          ?.positions.map((position) => [position.conversationId, position.seq])
+          .sort(),
+        [
+          [opened, 0],
+          [observed, 3],
+        ].sort(),
+      );
     }),
-  );
-  await insertMessage(userId, main, 5, {
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata: BRAIN_REPLY,
-    parts: [toolPart("announce", "call_6a0000000000000002", { briefing: 42 })],
-  });
-  const refusedInput = await database.run(
-    handleConversationMessages(
-      options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
-    ),
-  );
-  assert.equal(refusedInput.status, 500);
-  assert.equal((await refusedInput.json()).unreadableRow.seq, 5);
-});
+);
 
-test("events page behind a cursor of their own and two devices converge on them", async () => {
-  const userId = await database.createUser();
-  const { main, observed, messages: ids } = await populate(userId);
-  await insertEvent(userId, observed, ids.look, 3, {
-    kind: CONVERSATION_EVENT_KIND.RATING,
-    deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-    payload: { rating: "down" },
-  });
+it.effect(
+  "a Clear empties the thread of observed rows from before the new main and keeps the ones after it, and the observed conversation itself stands untouched",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { observed, turns: ids } = await populate(userId);
+      await insertProviderCursor(database.run, {
+        userId,
+        providerId: SESSION.providerId,
+        providerSessionId: SESSION.providerSessionId,
+        cursor: "msg_0000000000000042",
+      });
+      const before = {
+        conversation: await readConversationById(database.run, observed),
+        messages: await readMessagesByConversation(database.run, observed),
+        cursors: await readProviderCursorRows(userId),
+      };
+      assert.equal(before.messages.length, 3);
 
-  const wide = await answered(
-    await database.run(handleConversationEvents(options(userId, request(READ_PATH.EVENTS)))),
-    conversationEventsAnswerSchema,
-  );
-  assert.deepEqual(
-    wide.events.map((event) => [event.conversationId, event.seq, event.kind]),
-    [
-      [observed, 1, CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
-      [observed, 2, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
-      [observed, 3, CONVERSATION_EVENT_KIND.RATING],
-    ],
-  );
-  assert.deepEqual(wide.events[2]?.payload, { rating: "down" });
-  assert.equal(wide.hasMore, false);
+      const clearedAt = NOW + 60_000;
+      const { opened } = await database.run(database.store.main.clear(userId, new Date(clearedAt)));
+      const laterTurn = await insertTurn(userId, observed, {
+        origin: TURN_ORIGIN.ROSTER_DIFF,
+        queuedAt: new Date(clearedAt + 10_000),
+      });
+      const laterAnnounce = await insertMessage(userId, observed, 4, {
+        turnId: laterTurn,
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        createdAt: new Date(clearedAt + 12_000),
+        parts: [
+          toolPart("announce", "call_9a0000000000000001", { briefing: "The session finished." }),
+        ],
+      });
 
-  const narrow: ConversationEventsAnswer["events"][number][] = [];
-  let cursor: string | undefined;
-  for (let polls = 0; polls < 10; polls += 1) {
-    const query: ReadQuery = { limit: 1 };
-    if (cursor !== undefined) query.after = cursor;
-    const page = await answered(
+      const fresh = new Device(userId, 200);
+      await fresh.catchUp();
+      assert.deepEqual(fresh.ordered(), [[laterTurn, laterAnnounce]]);
+      assert.equal(fresh.groups.has(ids.roster), false);
+      const mainEntry = (await fresh.poll()).conversations.find((c) => c.id === opened);
+      assert.equal(
+        mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt,
+        clearedAt,
+      );
+
+      const heads = await database.run(
+        handleChanges({
+          request: new Request("https://luke.test/api/changes", {
+            method: "POST",
+            headers: { authorization: "Bearer token-1", "content-type": "application/json" },
+            body: JSON.stringify({ deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7" }),
+          }),
+          resolveUserId: async () => userId,
+          store: database.store,
+          touchDevice: () => Effect.succeed(false),
+          now: () => NOW,
+        }),
+      );
+      const head = parse(
+        changesAnswerSchema,
+        // SAFETY: the response body is the route's own JSON; the schema read is the validation.
+        (await heads.json()) as UnparsedWireValue,
+      );
+      assert.equal(head?.messages, fresh.cursor);
+
+      const after = {
+        conversation: await readConversationById(database.run, observed),
+        messages: await readMessagesByConversation(database.run, observed),
+        cursors: await readProviderCursorRows(userId),
+      };
+      assert.equal(after.conversation[0]?.deleted_at, null);
+      assert.deepEqual(after.cursors, before.cursors);
+      assert.deepEqual(
+        after.messages.filter((row) => Number(row.seq) <= 3),
+        before.messages,
+      );
+      assert.equal(after.messages.length, 4);
+      assert.equal(
+        EffectSchema.decodeUnknownSync(
+          EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+        )(after.conversation[0]?.next_message_seq),
+        5,
+      );
+      const whole = await database.run(
+        database.store.messages.list(userId, observed, CATALOG_TOOL_SET),
+      );
+      assert.equal(whole.ok, true);
+      assert.deepEqual(whole.ok ? whole.value.map((record) => record.seq) : [], [1, 2, 3, 4]);
+    }),
+);
+
+it.effect(
+  "a message carries its latest rating on a device's first page, a re-rating changes the next page, and the events record keeps every rating as its own row",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main, turns: ids } = await populate(userId);
+      const MessageIdRowSchema = EffectSchema.Struct({
+        id: EffectSchema.String,
+        seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+      });
+      const sent = (await readMessagesByConversation(database.run, main))
+        .map((row) => EffectSchema.decodeUnknownSync(MessageIdRowSchema)(row))
+        .find((row) => row.seq === 2);
+      assert.ok(sent);
+      const first = await insertEvent(userId, main, sent.id, 1, {
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        payload: { rating: MESSAGE_RATING.UP },
+      });
+
+      const fresh = new Device(userId, 200);
+      await fresh.catchUp();
+      const before = fresh.groups.get(ids.typed)?.messages.get(2);
+      assert.deepEqual(before?.rating, { rating: MESSAGE_RATING.UP });
+      assert.equal(fresh.groups.get(ids.typed)?.messages.get(1)?.rating, undefined);
+      assert.equal(fresh.groups.get(ids.roster)?.messages.get(2)?.rating, undefined);
+
+      const second = await insertEvent(userId, main, sent.id, 2, {
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        payload: { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." },
+      });
+      const rerated = new Device(userId, 200);
+      await rerated.catchUp();
+      assert.deepEqual(rerated.groups.get(ids.typed)?.messages.get(2)?.rating, {
+        rating: MESSAGE_RATING.DOWN,
+        note: "Sent the wrong session.",
+      });
+
+      const EventRowSchema = EffectSchema.Struct({
+        id: EffectSchema.String,
+        seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+        kind: EffectSchema.String,
+        payload: EffectSchema.Unknown,
+      });
+      const record = (await readEventsByMessage(database.run, sent.id))
+        .map((row) => EffectSchema.decodeUnknownSync(EventRowSchema)(row))
+        .filter((row) => row.kind === CONVERSATION_EVENT_KIND.RATING);
+      assert.deepEqual(
+        record.map((row) => [row.id, row.seq, row.payload]),
+        [
+          [first, 1, { rating: MESSAGE_RATING.UP }],
+          [second, 2, { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." }],
+        ],
+      );
+      const listed = await database.run(database.store.events.list(userId, main));
+      assert.deepEqual(
+        listed.map((event) => [event.id, event.kind]),
+        [
+          [first, CONVERSATION_EVENT_KIND.RATING],
+          [second, CONVERSATION_EVENT_KIND.RATING],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "a row the catalog cannot read refuses the page whole, naming the row, whether the tool is unregistered or its input refused",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main } = await populate(userId);
+      const device = new Device(userId, 200);
+      await device.catchUp();
+
+      await insertMessage(userId, main, 5, {
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        parts: [toolPart("nobody_registered", "call_6a0000000000000001", {})],
+      });
+      const unregistered = await database.run(
+        handleConversationMessages(
+          options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
+        ),
+      );
+      assert.equal(unregistered.status, 500);
+      assert.deepEqual(await unregistered.json(), {
+        error: HOSTED_API_ERROR.UNREADABLE_ROW,
+        unreadableRow: { conversationId: main, seq: 5 },
+      });
+
+      // Scoped to this test's conversation: on CI every store suite shares one database, and an unscoped delete of seq 5 took a neighbour's row twice today.
       await database.run(
-        handleConversationEvents(options(userId, request(READ_PATH.EVENTS, query))),
-      ),
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`delete from messages where conversation_id = ${main} and seq = 5`;
+        }),
+      );
+      await insertMessage(userId, main, 5, {
+        role: MESSAGE_ROLE.ASSISTANT,
+        metadata: BRAIN_REPLY,
+        parts: [toolPart("announce", "call_6a0000000000000002", { briefing: 42 })],
+      });
+      const refusedInput = await database.run(
+        handleConversationMessages(
+          options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
+        ),
+      );
+      assert.equal(refusedInput.status, 500);
+      assert.equal((await refusedInput.json()).unreadableRow.seq, 5);
+    }),
+);
+
+it.effect("events page behind a cursor of their own and two devices converge on them", () =>
+  Effect.promise(async () => {
+    const userId = await database.createUser();
+    const { main, observed, messages: ids } = await populate(userId);
+    await insertEvent(userId, observed, ids.look, 3, {
+      kind: CONVERSATION_EVENT_KIND.RATING,
+      deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      payload: { rating: "down" },
+    });
+
+    const wide = await answered(
+      await database.run(handleConversationEvents(options(userId, request(READ_PATH.EVENTS)))),
       conversationEventsAnswerSchema,
     );
-    narrow.push(...page.events);
-    cursor = page.next;
-    if (!page.hasMore) break;
-  }
-  assert.deepEqual(
-    narrow.map((event) => event.id),
-    wide.events.map((event) => event.id),
-  );
-  assert.equal(cursor, wide.next);
-  assert.deepEqual(
-    parse(sequenceReadCursorSchema, wide.next)
-      ?.positions.map((position) => [position.conversationId, position.seq])
-      .sort(),
-    [
-      [main, 0],
-      [observed, 3],
-    ].sort(),
-  );
-});
+    assert.deepEqual(
+      wide.events.map((event) => [event.conversationId, event.seq, event.kind]),
+      [
+        [observed, 1, CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
+        [observed, 2, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
+        [observed, 3, CONVERSATION_EVENT_KIND.RATING],
+      ],
+    );
+    assert.deepEqual(wide.events[2]?.payload, { rating: "down" });
+    assert.equal(wide.hasMore, false);
 
-test("turns are answered in the order they last changed, again when a stamp moves, behind the cursor the store minted", async () => {
-  const userId = await database.createUser();
-  const { turns: ids, main } = await populate(userId);
+    const narrow: ConversationEventsAnswer["events"][number][] = [];
+    let cursor: string | undefined;
+    for (let polls = 0; polls < 10; polls += 1) {
+      const query: ReadQuery = { limit: 1 };
+      if (cursor !== undefined) query.after = cursor;
+      const page = await answered(
+        await database.run(
+          handleConversationEvents(options(userId, request(READ_PATH.EVENTS, query))),
+        ),
+        conversationEventsAnswerSchema,
+      );
+      narrow.push(...page.events);
+      cursor = page.next;
+      if (!page.hasMore) break;
+    }
+    assert.deepEqual(
+      narrow.map((event) => event.id),
+      wide.events.map((event) => event.id),
+    );
+    assert.equal(cursor, wide.next);
+    assert.deepEqual(
+      parse(sequenceReadCursorSchema, wide.next)
+        ?.positions.map((position) => [position.conversationId, position.seq])
+        .sort(),
+      [
+        [main, 0],
+        [observed, 3],
+      ].sort(),
+    );
+  }),
+);
 
-  const all = await answered(
-    await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS)))),
-    brainTurnsAnswerSchema,
-  );
-  assert.deepEqual(
-    all.turns.map((turn) => turn.id),
-    [ids.typed, ids.roster, ids.later, ids.idle],
-  );
-  assert.equal(all.turns[0]?.conversationId, main);
-  assert.equal(all.hasMore, false);
-  assert.equal(all.next, all.turns[3]?.cursor);
+it.effect(
+  "turns are answered in the order they last changed, again when a stamp moves, behind the cursor the store minted",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { turns: ids, main } = await populate(userId);
 
-  const settledAt = new Date(NOW + 90_000);
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
+      const all = await answered(
+        await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS)))),
+        brainTurnsAnswerSchema,
+      );
+      assert.deepEqual(
+        all.turns.map((turn) => turn.id),
+        [ids.typed, ids.roster, ids.later, ids.idle],
+      );
+      assert.equal(all.turns[0]?.conversationId, main);
+      assert.equal(all.hasMore, false);
+      assert.equal(all.next, all.turns[3]?.cursor);
+
+      const settledAt = new Date(NOW + 90_000);
+      await database.run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`
         update turns set status = ${TURN_STATUS.SETTLED}, settled_at = ${settledAt}, model = ${"gpt-5"}
         where id = ${ids.typed}
       `;
+        }),
+      );
+      const changed = await answered(
+        await database.run(
+          handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: all.next ?? "" }))),
+        ),
+        brainTurnsAnswerSchema,
+      );
+      assert.deepEqual(
+        changed.turns.map((turn) => [turn.id, turn.status, turn.model, turn.settledAt]),
+        [[ids.typed, TURN_STATUS.SETTLED, "gpt-5", settledAt.getTime()]],
+      );
+      assert.equal(changed.hasMore, false);
+      assert.equal(parse(turnReadCursorSchema, changed.next ?? "")?.id, ids.typed);
+
+      const paged: BrainTurnsAnswer = await answered(
+        await database.run(
+          handleBrainTurns(options(userId, request(READ_PATH.TURNS, { limit: 2 }))),
+        ),
+        brainTurnsAnswerSchema,
+      );
+      assert.equal(paged.turns.length, 2);
+      assert.equal(paged.hasMore, true);
+      const rest = await answered(
+        await database.run(
+          handleBrainTurns(
+            options(userId, request(READ_PATH.TURNS, { after: paged.next ?? "", limit: 2 })),
+          ),
+        ),
+        brainTurnsAnswerSchema,
+      );
+      assert.deepEqual(
+        [...paged.turns, ...rest.turns].map((turn) => turn.id),
+        [ids.roster, ids.later, ids.idle, ids.typed],
+      );
+      assert.equal(rest.hasMore, true);
+
+      const quiet = await answered(
+        await database.run(
+          handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: rest.next ?? "" }))),
+        ),
+        brainTurnsAnswerSchema,
+      );
+      assert.deepEqual(quiet.turns, []);
+      assert.equal(quiet.next, rest.next);
+      assert.equal(quiet.hasMore, false);
     }),
-  );
-  const changed = await answered(
-    await database.run(
-      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: all.next ?? "" }))),
-    ),
-    brainTurnsAnswerSchema,
-  );
-  assert.deepEqual(
-    changed.turns.map((turn) => [turn.id, turn.status, turn.model, turn.settledAt]),
-    [[ids.typed, TURN_STATUS.SETTLED, "gpt-5", settledAt.getTime()]],
-  );
-  assert.equal(changed.hasMore, false);
-  assert.equal(parse(turnReadCursorSchema, changed.next ?? "")?.id, ids.typed);
+);
 
-  const paged: BrainTurnsAnswer = await answered(
-    await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS, { limit: 2 })))),
-    brainTurnsAnswerSchema,
-  );
-  assert.equal(paged.turns.length, 2);
-  assert.equal(paged.hasMore, true);
-  const rest = await answered(
-    await database.run(
-      handleBrainTurns(
-        options(userId, request(READ_PATH.TURNS, { after: paged.next ?? "", limit: 2 })),
-      ),
-    ),
-    brainTurnsAnswerSchema,
-  );
-  assert.deepEqual(
-    [...paged.turns, ...rest.turns].map((turn) => turn.id),
-    [ids.roster, ids.later, ids.idle, ids.typed],
-  );
-  assert.equal(rest.hasMore, true);
-
-  const quiet = await answered(
-    await database.run(
-      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: rest.next ?? "" }))),
-    ),
-    brainTurnsAnswerSchema,
-  );
-  assert.deepEqual(quiet.turns, []);
-  assert.equal(quiet.next, rest.next);
-  assert.equal(quiet.hasMore, false);
-});
-
-test("the latest turn position stops at a given cursor, so an empty page never moves past a turn unread", async () => {
-  const userId = await database.createUser();
-  const { main, turns: ids } = await populate(userId);
-  const extra = await insertTurn(userId, main, { queuedAt: new Date(NOW + 15_000) });
-  const all = await database.run(database.store.turns.list(userId));
-  assert.deepEqual(
-    all.map((turn) => turn.id),
-    [ids.typed, ids.roster, extra, ids.later, ids.idle],
-  );
-  const [, roster, gone, later, idle] = all;
-  assert.ok(roster && gone && later && idle);
-  assert.deepEqual(await database.run(database.store.turns.latest(userId)), idle.cursor);
-  assert.deepEqual(
-    await database.run(database.store.turns.latest(userId, gone.cursor)),
-    gone.cursor,
-  );
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from turns where id = ${extra}`;
+it.effect(
+  "the latest turn position stops at a given cursor, so an empty page never moves past a turn unread",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main, turns: ids } = await populate(userId);
+      const extra = await insertTurn(userId, main, { queuedAt: new Date(NOW + 15_000) });
+      const all = await database.run(database.store.turns.list(userId));
+      assert.deepEqual(
+        all.map((turn) => turn.id),
+        [ids.typed, ids.roster, extra, ids.later, ids.idle],
+      );
+      const [, roster, gone, later, idle] = all;
+      assert.ok(roster && gone && later && idle);
+      assert.deepEqual(await database.run(database.store.turns.latest(userId)), idle.cursor);
+      assert.deepEqual(
+        await database.run(database.store.turns.latest(userId, gone.cursor)),
+        gone.cursor,
+      );
+      await database.run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`delete from turns where id = ${extra}`;
+        }),
+      );
+      assert.deepEqual(
+        await database.run(database.store.turns.latest(userId, gone.cursor)),
+        roster.cursor,
+      );
+      assert.deepEqual(
+        await database.run(database.store.turns.latest(userId, later.cursor)),
+        later.cursor,
+      );
     }),
-  );
-  assert.deepEqual(
-    await database.run(database.store.turns.latest(userId, gone.cursor)),
-    roster.cursor,
-  );
-  assert.deepEqual(
-    await database.run(database.store.turns.latest(userId, later.cursor)),
-    later.cursor,
-  );
-});
+);
 
-test("a queued turn is the opener's inbox and not the record: the turns read and its head skip it until the relay moves it to running", async () => {
-  const userId = await database.createUser();
-  const { main, turns: ids } = await populate(userId);
-  const queued = await insertTurn(userId, main, {
-    status: TURN_STATUS.QUEUED,
-    queuedAt: new Date(NOW + 60_000),
-  });
-  const listed = await database.run(database.store.turns.list(userId));
-  assert.deepEqual(
-    listed.map((turn) => turn.id),
-    [ids.typed, ids.roster, ids.later, ids.idle],
-  );
-  const head = listed.at(-1);
-  assert.ok(head);
-  assert.deepEqual(await database.run(database.store.turns.latest(userId)), head.cursor);
+it.effect(
+  "a queued turn is the opener's inbox and not the record: the turns read and its head skip it until the relay moves it to running",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { main, turns: ids } = await populate(userId);
+      const queued = await insertTurn(userId, main, {
+        status: TURN_STATUS.QUEUED,
+        queuedAt: new Date(NOW + 60_000),
+      });
+      const listed = await database.run(database.store.turns.list(userId));
+      assert.deepEqual(
+        listed.map((turn) => turn.id),
+        [ids.typed, ids.roster, ids.later, ids.idle],
+      );
+      const head = listed.at(-1);
+      assert.ok(head);
+      assert.deepEqual(await database.run(database.store.turns.latest(userId)), head.cursor);
 
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
+      await database.run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`
         update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${new Date(NOW + 61_000)}
         where id = ${queued}
       `;
+        }),
+      );
+      const started = await database.run(database.store.turns.list(userId, { after: head.cursor }));
+      assert.deepEqual(
+        started.map((turn) => [turn.id, turn.status]),
+        [[queued, TURN_STATUS.RUNNING]],
+      );
+      assert.deepEqual(await database.run(database.store.turns.latest(userId)), started[0]?.cursor);
     }),
-  );
-  const started = await database.run(database.store.turns.list(userId, { after: head.cursor }));
-  assert.deepEqual(
-    started.map((turn) => [turn.id, turn.status]),
-    [[queued, TURN_STATUS.RUNNING]],
-  );
-  assert.deepEqual(await database.run(database.store.turns.latest(userId)), started[0]?.cursor);
-});
+);
 
-test("a turns cursor naming a turn a Clear took moves back to the last turn at or before it, and to nothing when no turn stands", async () => {
-  const userId = await database.createUser();
-  const { turns: ids, observed } = await populate(userId);
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`update turns set settled_at = ${new Date(NOW + 90_000)} where id = ${ids.typed}`;
+it.effect(
+  "a turns cursor naming a turn a Clear took moves back to the last turn at or before it, and to nothing when no turn stands",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const { turns: ids, observed } = await populate(userId);
+      await database.run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`update turns set settled_at = ${new Date(NOW + 90_000)} where id = ${ids.typed}`;
+        }),
+      );
+      const all = await answered(
+        await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS)))),
+        brainTurnsAnswerSchema,
+      );
+      assert.equal(all.turns.at(-1)?.id, ids.typed);
+      const stale = all.next ?? "";
+
+      await database.run(database.store.main.clear(userId, new Date(NOW + 100_000)));
+      const moved = await answered(
+        await database.run(
+          handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: stale }))),
+        ),
+        brainTurnsAnswerSchema,
+      );
+      assert.deepEqual(moved.turns, []);
+      assert.equal(moved.hasMore, false);
+      assert.equal(parse(turnReadCursorSchema, moved.next ?? "")?.id, ids.idle);
+      const head = await database.run(database.store.turns.latest(userId));
+      assert.deepEqual(parse(turnReadCursorSchema, moved.next ?? ""), head);
+      const settled = await answered(
+        await database.run(
+          handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
+        ),
+        brainTurnsAnswerSchema,
+      );
+      assert.deepEqual(settled.turns, []);
+      assert.equal(settled.next, moved.next);
+
+      await database.run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`delete from conversations where id = ${observed}`;
+        }),
+      );
+      const none = await answered(
+        await database.run(
+          handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
+        ),
+        brainTurnsAnswerSchema,
+      );
+      assert.deepEqual(none.turns, []);
+      assert.equal(none.next, undefined);
+      assert.equal(none.hasMore, false);
     }),
-  );
-  const all = await answered(
-    await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS)))),
-    brainTurnsAnswerSchema,
-  );
-  assert.equal(all.turns.at(-1)?.id, ids.typed);
-  const stale = all.next ?? "";
-
-  await database.run(database.store.main.clear(userId, new Date(NOW + 100_000)));
-  const moved = await answered(
-    await database.run(
-      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: stale }))),
-    ),
-    brainTurnsAnswerSchema,
-  );
-  assert.deepEqual(moved.turns, []);
-  assert.equal(moved.hasMore, false);
-  assert.equal(parse(turnReadCursorSchema, moved.next ?? "")?.id, ids.idle);
-  const head = await database.run(database.store.turns.latest(userId));
-  assert.deepEqual(parse(turnReadCursorSchema, moved.next ?? ""), head);
-  const settled = await answered(
-    await database.run(
-      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
-    ),
-    brainTurnsAnswerSchema,
-  );
-  assert.deepEqual(settled.turns, []);
-  assert.equal(settled.next, moved.next);
-
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from conversations where id = ${observed}`;
-    }),
-  );
-  const none = await answered(
-    await database.run(
-      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
-    ),
-    brainTurnsAnswerSchema,
-  );
-  assert.deepEqual(none.turns, []);
-  assert.equal(none.next, undefined);
-  assert.equal(none.hasMore, false);
-});
+);
