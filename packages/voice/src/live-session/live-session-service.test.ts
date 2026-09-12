@@ -704,6 +704,54 @@ test("a beat is spoken at most once to the end per run, and dropping briefings l
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
 });
 
+test("the launch greeting is an instructions append acknowledged before the one commentary cue, settled spoken by output past the cue", async () => {
+  const f = fixture();
+  f.service.speakBeat({
+    kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+    firstName: "Ada",
+    decidedAt: f.clock.now,
+  });
+  assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+  const sideband = await f.open();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  const instruction = sideband.sent[0];
+  assert.equal(instruction && "delegation_id" in instruction && instruction.delegation_id, null);
+  sideband.acknowledge(0, 100, 200);
+  await drainMicrotasks();
+  const cues = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(cues.length, 1);
+  assert.equal(cues[0] && "delegation_id" in cues[0] && cues[0].delegation_id, null);
+  sideband.acknowledge(1, 300, 400);
+  sideband.output("Hey Ada", 350, 380);
+  assert.deepEqual(f.spoken, []);
+  sideband.output(", I'm here.", 380, 900);
+  assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
+  f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
+});
+
+test("a launch greeting whose instruction is refused sends no cue and stands released for another ask", async () => {
+  const f = fixture();
+  const sideband = await f.open();
+  f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+  await drainMicrotasks();
+  const instruction = sideband.sent[0];
+  assert.ok(instruction);
+  sideband.receive({
+    type: LIVE_SERVER_EVENT.ERROR,
+    event_id: "err",
+    error: { code: null, client_event_id: instruction.event_id },
+  });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  assert.deepEqual(f.spoken, []);
+  f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+  await drainMicrotasks();
+  assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 2);
+});
+
 test("idle reported by the peer closes the session only once the host too has appended nothing in the window, and records the usage", async () => {
   const f = fixture();
   const sideband = await f.open();

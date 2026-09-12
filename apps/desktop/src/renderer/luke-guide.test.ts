@@ -91,6 +91,7 @@ const GUIDE_FACT_LABELS: readonly string[] = [
   "Stopping a reply",
   "Announcements",
   "The arrival beat",
+  "Launch greeting",
   "Calendar onboarding",
   "How long a conversation lasts",
   "Voice",

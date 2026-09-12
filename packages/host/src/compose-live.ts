@@ -1,5 +1,6 @@
 import { PRODUCT_EVENT, productSignInAge } from "@sidecar/analytics";
 import type { BrainDelivery } from "@sidecar/brain";
+import { ACCOUNT_STATUS } from "@sidecar/credentials";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   carried,
@@ -28,7 +29,12 @@ import { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
 import { LiveSessionService } from "@sidecar/voice/live-session";
 import { lateRef } from "@sidecar/wire";
 import { Effect } from "effect";
-import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
+import {
+  arrivalBeatOwed,
+  countsFirstAnnouncement,
+  firstNameOf,
+  launchGreetingOwed,
+} from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
@@ -44,7 +50,7 @@ interface LiveLinks {
 
 export interface LiveComposer extends Composer {
   readonly service: LiveSessionService<BrainDelivery>;
-  /** The two onboarding beats, asked for when their deterministic reason stands. */
+  /** The onboarding beats and the launch greeting, asked for when their deterministic reason stands. */
   requestOnboardingBeat: () => Promise<void>;
   /** The arrival beat's own moment, recorded at the first sign-in ever observed. */
   seedArrivalOnFirstSignIn: () => void;
@@ -163,10 +169,33 @@ export const composeLive = (
         service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
         return;
       }
-      if (!arrivalBeatOwed(calendars.onboarding())) return;
-      await observation.loop.refresh().catch(() => undefined);
-      if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
-      service.speakBeat(await arrivalBeat());
+      if (arrivalBeatOwed(calendars.onboarding())) {
+        await observation.loop.refresh().catch(() => undefined);
+        if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
+        service.speakBeat(await arrivalBeat());
+        return;
+      }
+      if (!launchGreetingOwed(calendars.onboarding(), launchGreetingRequested)) return;
+      launchGreetingRequested = true;
+      service.speakBeat(launchGreeting());
+    }
+
+    /**
+     * The launch greeting's one observed value is the signed-in account's
+     * first name, read from the snapshot the host already holds and never
+     * from a session; the flag keeps it to one ask per run whatever later
+     * re-asks the beats.
+     */
+    let launchGreetingRequested = false;
+    function launchGreeting() {
+      const snapshot = account.snapshot();
+      const name = snapshot.status === ACCOUNT_STATUS.SIGNED_IN ? snapshot.name : undefined;
+      const firstName = firstNameOf(name);
+      return {
+        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+        decidedAt: now(),
+        ...(firstName === undefined ? undefined : { firstName }),
+      } as const;
     }
 
     const methods: GatewayMethodTable = {
