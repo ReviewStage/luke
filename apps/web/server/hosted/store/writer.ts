@@ -58,9 +58,13 @@ import { EpochMillisColumnSchema, nullable } from "./database.js";
  * from queued through running to its end, one assistant message per turn
  * that is the turn's journal while it runs — each tool call written in
  * `input-available` before it executes and moved to `output-available` or
- * `output-error` as its result lands, `finished_at` set once and the row
- * immutable after — the user messages the turn opened with, and a compaction
- * message where the compaction's owner hands one over. Every write is
+ * `output-error` as its result lands, `finished_at` set once and the row's
+ * words immutable after — the user messages the turn opened with, and a
+ * compaction message where the compaction's owner hands one over. A row's
+ * place in the sequence is the one thing a finished row may still lose: the
+ * sequence is what a device pages by, so a row moved into a turn, or a
+ * turn's work moved behind the ask it answers, takes a fresh position and is
+ * read again there rather than left where a device already passed it. Every write is
  * idempotent: a message by its `(conversation_id, client_id)`, a turn by its
  * id, a tool part by its call id, so an event delivered twice writes one row
  * and a stream replayed from its start changes nothing.
@@ -234,15 +238,16 @@ interface UserMessageWrite {
    * The row's turn is the ask's that shares its client id, read under the same
    * lock the row is written under: a spoken ask's transcript row and the ask
    * the service submitted for it carry one id, the delegation's, so the row
-   * lands attached to the turn the ask already learned, and a turn the ask
-   * learns later is attached by the relay at the turn's received message.
+   * lands attached to the turn the ask already learned, placed ahead of the
+   * turn's own rows, and a turn the ask learns later takes the row at its
+   * received message.
    */
   readonly turnOfAsk?: true;
   readonly text: string;
   readonly metadata: UserMessageMetadata;
 }
 
-/** What the relay's attach did for one turn: the user rows it tied to the turn, by id; or the conversation no longer stands. */
+/** What the relay's attach did for one turn: the user rows it took into the turn, by id; or the conversation no longer stands. */
 type AskLinesAttached =
   | { readonly ok: true; readonly attached: readonly string[] }
   | typeof NO_CONVERSATION;
@@ -325,10 +330,13 @@ export interface StoreWriter {
     message: UserMessageWrite,
   ): Write<UserMessageWriteResult>;
   /**
-   * Ties to the turn every user row whose client id is an ask's the turn ran,
-   * where the row stands with no turn yet: the other half of `turnOfAsk`, for
-   * a row written before the ask learned its turn. Under the conversation's
-   * lock, so a row being written meanwhile is seen once it lands, never missed.
+   * Takes into the turn every user row whose client id is an ask's the turn
+   * ran, where the row stands with no turn yet: the other half of
+   * `turnOfAsk`, for a row written before the ask learned its turn. A row
+   * taken moves to a fresh place in the conversation's sequence, ahead of
+   * everything the turn will write, so a device that already passed its old
+   * place reads it again where it now stands. Under the conversation's lock,
+   * so a row being written meanwhile is seen once it lands, never missed.
    */
   attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
   /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
@@ -923,6 +931,12 @@ function messageByClientId(
   });
 }
 
+/** Where a row landed: its id, and the position it took. */
+interface InsertedMessage {
+  readonly id: string;
+  readonly seq: number;
+}
+
 function insertMessage(
   context: WriterContext,
   row: {
@@ -931,7 +945,7 @@ function insertMessage(
     message: StoredUIMessage;
     finishedAt: Date | undefined;
   },
-): Write<string> {
+): Write<InsertedMessage> {
   return Effect.gen(function* () {
     const seq = yield* allocateMessageSeq(context);
     const metadata: StoredMessageMetadata | undefined =
@@ -949,7 +963,7 @@ function insertMessage(
       finishedAt: nullable(row.finishedAt),
     });
     const written = yield* required(inserted, "the message insert answered no row");
-    return written.id;
+    return { id: written.id, seq };
   });
 }
 
@@ -985,7 +999,7 @@ function journal(context: WriterContext, turnId: string): Write<Journal> {
     if (Option.isSome(standing)) return { ok: true, row: standing.value };
     const closed = yield* openTurn(context, turnId);
     if (closed !== undefined) return closed;
-    const id = yield* insertMessage(context, {
+    const { id } = yield* insertMessage(context, {
       clientId: turnId,
       turnId,
       message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: BRAIN_AUTHORED, parts: [] },
@@ -1449,12 +1463,13 @@ function recordUserMessage(
             clientId: write.clientId,
           })
         : undefined);
-    const id = yield* insertMessage(context, {
+    const { id, seq } = yield* insertMessage(context, {
       clientId: write.clientId,
       turnId,
       message: read.message,
       finishedAt: context.now(),
     });
+    if (write.turnOfAsk && turnId !== undefined) yield* moveTurnWorkAfter(context, turnId, seq);
     return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
   });
 }
@@ -1463,7 +1478,7 @@ function recordUserMessage(
  * The turn an ask of the conversation has learned, by the ask's client id,
  * where the turn's row stands: a first ask learns its turn's id at dispatch,
  * before eve's start writes the row, and a message names only a turn on
- * record, so until then the row lands unattached and the relay ties it at
+ * record, so until then the row lands unattached and the relay takes it at
  * the turn's received message, under this same lock.
  */
 function askTurnOf(key: {
@@ -1491,30 +1506,111 @@ const findAskTurn = SqlSchema.findOne({
     ),
 });
 
-const attachTurnAskLines = SqlSchema.findAll({
+/** The user rows of the turn's asks still standing outside it, in the order they were written. */
+const findUnattachedAskLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
   Result: RowIdSchema,
   execute: (key) =>
     statement(
       (sql) => sql`
-        update messages
-        set turn_id = ${key.turnId}::uuid
-        from asks
+        select messages.id
+        from messages
+        join asks
+          on asks.conversation_id = messages.conversation_id
+         and asks.client_id = messages.client_id
         where asks.conversation_id = ${key.conversationId}
           and asks.turn_id = ${key.turnId}::uuid
-          and messages.conversation_id = asks.conversation_id
-          and messages.client_id = asks.client_id
           and messages.turn_id is null
-        returning messages.id
+        order by messages.seq asc
       `,
     ),
 });
 
+const placeMessageInTurn = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String, turnId: Schema.String, seq: Schema.Int }),
+  execute: (row) =>
+    statement(
+      (sql) => sql`
+        update messages set turn_id = ${row.turnId}::uuid, seq = ${row.seq} where id = ${row.id}
+      `,
+    ),
+});
+
+/** The turn's own rows — its journal, its answer, a compaction — standing ahead of a place, in sequence. */
+const findTurnWorkBefore = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String, seq: Schema.Int }),
+  Result: RowIdSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select id
+        from messages
+        where conversation_id = ${key.conversationId}
+          and turn_id = ${key.turnId}::uuid
+          and role <> ${MESSAGE_ROLE.USER}
+          and seq < ${key.seq}
+        order by seq asc
+      `,
+    ),
+});
+
+const moveMessage = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String, seq: Schema.Int }),
+  execute: (row) =>
+    statement((sql) => sql`update messages set seq = ${row.seq} where id = ${row.id}`),
+});
+
+/**
+ * The sequence is the order and the delivery both: a device reads past the
+ * last position it took, so a row is in the group a device draws it in
+ * only if it stood there when the device passed it. A row that changes
+ * turn therefore changes place too — a fresh position, past every cursor,
+ * where every device reads it again and lets go of the copy it held.
+ */
+function takeLineIntoTurn(context: WriterContext, turnId: string, id: string): Write<number> {
+  return Effect.gen(function* () {
+    const seq = yield* allocateMessageSeq(context);
+    yield* placeMessageInTurn({ id, turnId, seq });
+    return seq;
+  });
+}
+
+/**
+ * A turn's work follows the ask it answers. The developer's line normally
+ * lands before the turn's first step writes the journal; where it lands
+ * after — the voice writer's cut of the transcript racing eve's first step —
+ * the rows the turn wrote ahead of it move behind it, each to a fresh
+ * position, so the order the sequence states is the order that happened,
+ * and a device that previewed the journal reads it again where it now
+ * stands. Every row here is the turn's own, so a second ask's line the same
+ * turn folded in keeps its place ahead.
+ */
+function moveTurnWorkAfter(context: WriterContext, turnId: string, seq: number): Write<void> {
+  return Effect.gen(function* () {
+    const ahead = yield* findTurnWorkBefore({
+      conversationId: context.target.conversationId,
+      turnId,
+      seq,
+    });
+    for (const row of ahead) {
+      yield* moveMessage({ id: row.id, seq: yield* allocateMessageSeq(context) });
+    }
+  });
+}
+
 function attachAskLines(context: WriterContext, turnId: string): Write<AskLinesAttached> {
-  return Effect.map(
-    attachTurnAskLines({ conversationId: context.target.conversationId, turnId }),
-    (rows) => ({ ok: true, attached: rows.map((row) => row.id) }),
-  );
+  return Effect.gen(function* () {
+    const standing = yield* findUnattachedAskLines({
+      conversationId: context.target.conversationId,
+      turnId,
+    });
+    const attached: string[] = [];
+    for (const row of standing) {
+      yield* takeLineIntoTurn(context, turnId, row.id);
+      attached.push(row.id);
+    }
+    return { ok: true, attached };
+  });
 }
 
 /**

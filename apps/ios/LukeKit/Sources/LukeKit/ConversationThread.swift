@@ -2,9 +2,13 @@ import Foundation
 
 /// The Conversation as one device holds it: what the per-resource reads have
 /// answered so far, merged under the contract `reads-wire.ts` states. Groups
-/// merge by turn id and messages by sequence, so a row still being written —
+/// merge by turn id, and a message is held once, by its id, at the sequence
+/// and in the group its latest delivery gave it: a row still being written —
 /// answered on every read until it is finished — replaces the copy held
-/// rather than standing beside it; the rows of a conversation an answer no
+/// rather than standing beside it, and a row the store moved — a spoken line
+/// taken into its turn, a turn's work placed behind the line it answers —
+/// arrives again at a fresh sequence and leaves the place it held, a group
+/// emptied that way going with it; the rows of a conversation an answer no
 /// longer lists are dropped, which is how a Clear reaches a screen that drew
 /// them; a turn is replaced by id as its stamps move; and the marks the
 /// service folded onto each message — an announcement's unspoken mark, the
@@ -21,6 +25,8 @@ public struct ConversationThread: Equatable, Sendable {
     public private(set) var turnsCursor: String?
 
     private var groups: [String: Group] = [:]
+    /// Where each message held stands, by its id: the one place a message has in this thread.
+    private var places: [String: Place] = [:]
     private var latestSpeech: [String: SpeechMark] = [:]
     private var latestRating: [String: RatingMark] = [:]
     /// Whether the events read stands at or past the fold. The messages
@@ -38,6 +44,12 @@ public struct ConversationThread: Equatable, Sendable {
         var source: ConversationViewSource
         var turn: ConversationViewTurn?
         var messages: [Int: ConversationReadMessage]
+    }
+
+    /// The group holding a message and the sequence it is held at.
+    private struct Place: Equatable, Sendable {
+        let turnId: String
+        let seq: Int
     }
 
     /// The latest speech event a message has, by its conversation's own event sequence.
@@ -81,13 +93,33 @@ public struct ConversationThread: Equatable, Sendable {
             merged.conversationId = group.conversationId
             merged.source = group.source
             if let turn = group.turn { merged.turn = turn }
-            for message in group.messages { merged.messages[message.seq] = message }
+            for message in group.messages {
+                leavePlace(of: message.message.id, arrivingIn: group.turnId, at: message.seq, into: &merged)
+                merged.messages[message.seq] = message
+                places[message.message.id] = Place(turnId: group.turnId, seq: message.seq)
+            }
             groups[group.turnId] = merged
         }
         let held = Set(groups.values.flatMap { $0.messages.values.map(\.message.id) })
+        places = places.filter { held.contains($0.key) }
         latestSpeech = latestSpeech.filter { held.contains($0.key) }
         latestRating = latestRating.filter { held.contains($0.key) }
         messagesCursor = answer.next
+    }
+
+    /// A message arriving somewhere other than where it is held leaves the
+    /// old place first, so it stands once: the store moved it, by taking a
+    /// spoken line into its turn or by placing a turn's work behind the line
+    /// it answers, and answered it again at a fresh sequence. A group left
+    /// with nothing goes; the group being merged into is amended in place.
+    private mutating func leavePlace(of messageId: String, arrivingIn turnId: String, at seq: Int, into merged: inout Group) {
+        guard let held = places[messageId], held.turnId != turnId || held.seq != seq else { return }
+        if held.turnId == turnId {
+            merged.messages.removeValue(forKey: held.seq)
+            return
+        }
+        groups[held.turnId]?.messages.removeValue(forKey: held.seq)
+        if groups[held.turnId]?.messages.isEmpty == true { groups.removeValue(forKey: held.turnId) }
     }
 
     public mutating func apply(_ answer: BrainTurnsAnswer) {

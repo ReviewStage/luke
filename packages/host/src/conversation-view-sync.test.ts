@@ -703,3 +703,77 @@ test("the marks about a message the window or the group bound let go of go with 
   sync.applyMessages(page([mainGroup(turnId(1), [reply(2, 1, NOW + 6)])], "c2", [MAIN], NOW + 5));
   assert.equal(ratingOf(sync, 2), undefined);
 });
+
+test("a message answered again at a fresh sequence stands once, where its latest delivery placed it: a spoken line taken into its turn leaves its standalone group, and a journal moved behind the line draws after it", () => {
+  const sync = new ConversationViewSync();
+  // Read early: the developer's line stands as a group of its own under its message id, and the
+  // turn's journal, still being written, was previewed in the turn's group.
+  sync.applyMessages(page([mainGroup(messageId(1), [ask(1, 1, "what needs me?", NOW)])], "c1"));
+  sync.applyMessages(
+    page(
+      [mainGroup(turnId(1), [reply(2, 2, NOW + 500)], turn(turnId(1), TURN_STATUS.RUNNING, NOW))],
+      "c2",
+    ),
+  );
+  assert.deepEqual(
+    sync
+      .snapshot()
+      .groups.map((group) => [
+        group.turnId,
+        group.messages.map((message) => [message.message.id, message.seq]),
+      ]),
+    [
+      [messageId(1), [[messageId(1), 1]]],
+      [turnId(1), [[messageId(2), 2]]],
+    ],
+  );
+  const before = sync.revision;
+  // The store placed the line into the turn at a fresh sequence and moved the journal behind it.
+  sync.applyMessages(
+    page(
+      [
+        mainGroup(
+          turnId(1),
+          [ask(1, 3, "what needs me?", NOW), reply(2, 4, NOW + 500)],
+          turn(turnId(1), TURN_STATUS.SETTLED, NOW),
+        ),
+      ],
+      "c3",
+    ),
+  );
+  assert.ok(sync.revision > before);
+  assert.deepEqual(
+    sync
+      .snapshot()
+      .groups.map((group) => [
+        group.turnId,
+        group.messages.map((message) => [message.message.id, message.seq]),
+      ]),
+    [
+      [
+        turnId(1),
+        [
+          [messageId(1), 3],
+          [messageId(2), 4],
+        ],
+      ],
+    ],
+  );
+  // The moved message is still the one a rating finds, at its new place.
+  assert.deepEqual(sync.rateable(messageId(2)), { announcement: false });
+  // The same page again moves nothing.
+  const settled = sync.revision;
+  sync.applyMessages(
+    page(
+      [
+        mainGroup(
+          turnId(1),
+          [ask(1, 3, "what needs me?", NOW), reply(2, 4, NOW + 500)],
+          turn(turnId(1), TURN_STATUS.SETTLED, NOW),
+        ),
+      ],
+      "c4",
+    ),
+  );
+  assert.equal(sync.revision, settled);
+});
