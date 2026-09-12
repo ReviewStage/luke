@@ -57,6 +57,21 @@ can open the window, which is why the sitting is scheduled rather than
 attempted: quiet the queue first, then rebase once, then flip. The rebase is
 the last thing done before the flip, not the first.
 
+Not every merge is a treadmill turn, and the two hazards in this file are
+different sizes. The treadmill hazard is narrow: a merge dirties the PR only
+if it touches one of three paths, `apps/web/vercel.json`, the route table
+`apps/web/server/api-rewrites.json` (or anything under `apps/web/server/routes/`
+that regenerates it), or `packages/AGENTS.md`. On 2026-09-12 a merge from
+another lane (#1242) landed at 05:41Z, inside the window between the rebase and
+the press, touched none of the three, and cost nothing: the PR stayed
+mergeable and the queue's merge commit absorbed it. So a lane freeze protects
+those three paths and need not stop work that cannot reach them. The
+production hazard is the wide one and is bounded in time instead: between the
+preset flip and the PR's merge, every merge to `main` fails its production
+build whatever it touches, because the preset is Services and `main` has no
+`services` key yet. Keep that window to minutes and it is a recoverable
+failure; the treadmill is the one that can eat a night.
+
 ## Who does what
 
 - **The flip is Dean's.** The Framework Preset is a dashboard setting nobody
@@ -125,8 +140,11 @@ one of:
 - Any line setting `EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY`: a build command from
   before the flat layout, relocating output by hand through eve's internals.
 - `The api/ directory will not be built because services are configured`: this
-  warning is **expected** and harmless, because nothing is committed under
-  `api/` any more. It is listed so a reader does not take it for a failure.
+  warning may or may not appear, and either way it is not a failure. Nothing is
+  committed under `api/` any more, so there is nothing for it to protect; the
+  redeploy that passed the sitting on 2026-09-12 did not print it at all, and
+  the only warnings in that log were pnpm's "Ignored build scripts". It is
+  listed so a reader neither aborts on seeing it nor distrusts a log without it.
 
 ## The eight probes
 
