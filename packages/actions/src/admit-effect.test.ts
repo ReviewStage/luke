@@ -164,21 +164,6 @@ describe("admitEffect", () => {
     }),
   );
 
-  it.effect("fails with the tracker's refusal when no tracker is connected", () =>
-    Effect.gen(function* () {
-      const refusal = yield* Effect.flip(
-        admitEffect(
-          {
-            kind: ACTION_KIND.ISSUE_STATE,
-            fields: { tracker_id: "linear", issue_id: "LUKE-1", state: "Done" },
-          },
-          context(),
-        ),
-      );
-      assert.equal(refusal.reason, ACTION_REFUSAL.NO_TRACKER);
-    }),
-  );
-
   it.effect("carries a roster read's own failure as a defect, never as a refusal", () =>
     Effect.gen(function* () {
       const failure = new Error("roster offline");

@@ -89,7 +89,6 @@ describe("the standing host", () => {
       HOST_CONCERN.BRAIN,
       HOST_CONCERN.CALENDARS,
       HOST_CONCERN.OBSERVATION,
-      HOST_CONCERN.ISSUES,
       HOST_CONCERN.LIVE,
     ]);
     assert.deepEqual([...HOST_START_ORDER].sort(), Object.values(HOST_CONCERN).sort());

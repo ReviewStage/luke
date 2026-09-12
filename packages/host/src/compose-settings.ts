@@ -6,11 +6,7 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { ProductEventSender } from "@sidecar/analytics/sender";
-import {
-  CREDENTIAL_PROVIDER_ID,
-  isCredentialProviderId,
-  VOICE_CREDENTIAL_PROVIDER_ID,
-} from "@sidecar/credentials";
+import { isCredentialProviderId, VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
   carried,
   GATEWAY_EVENT,
@@ -62,7 +58,6 @@ interface SettingsLinks {
   setVoice: (voice: StoredSettings["voice"]) => void;
   reconcileSpeech: () => void;
   broadcastWorkspaceProjects: () => Promise<void>;
-  refreshIssues: () => void;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
 }
 
@@ -455,7 +450,6 @@ export const composeSettings = (): Effect.Effect<
           () => store.setApiKey(providerId, apiKey),
           async (saved) => {
             if (saved.reason) return;
-            if (providerId === CREDENTIAL_PROVIDER_ID.LINEAR) links.get().refreshIssues();
             if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
               await links.get().applyVoiceCredential();
               await emitSettings();

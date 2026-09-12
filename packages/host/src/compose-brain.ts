@@ -44,7 +44,6 @@ import {
 import { Effect } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
-import type { IssuesComposer } from "./compose-issues.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { Composer } from "./composer.js";
 import { conversationOperations, startConversationMaintenance } from "./conversation-operations.js";
@@ -74,7 +73,6 @@ export interface BrainComposer extends Composer {
 
 export interface BrainDependencies {
   account: AccountComposer;
-  issues: IssuesComposer;
   observation: ObservationComposer;
   /** Where a briefing goes, and where a generation's end drops the ones not yet said; the merge routes both to the live session. */
   announcements: {
@@ -87,7 +85,7 @@ export const composeBrain = (
   dependencies: BrainDependencies,
 ): Effect.Effect<BrainComposer, never, HostKernelTag> =>
   Effect.gen(function* () {
-    const { account, issues, observation, announcements } = dependencies;
+    const { account, observation, announcements } = dependencies;
     const kernel = yield* HostKernelTag;
     // The runtime the store's asks and every run of the tool loop are fibers
     // of: the host's own, so a turn and the host that cancels it stand on one
@@ -246,7 +244,6 @@ export const composeBrain = (
         refreshSessions: () => observation.loop.refresh(),
         workspaceProjects: observation.workspaceProjects,
         workspaceDefaults: observation.workspaceDefaults,
-        trackedIssues: () => issues.issues(),
         appGuide: () => appGuide,
         rememberedFacts: store.rememberedFacts,
         notebook: {

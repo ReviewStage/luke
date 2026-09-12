@@ -52,11 +52,7 @@ type SettingsActKind =
   | typeof ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT
   | typeof ACT_KIND.CALENDAR_OPEN_SETTINGS
   | typeof ACT_KIND.CALENDAR_REFRESH
-  | typeof ACT_KIND.CALENDAR_SET_SELECTED
-  | typeof ACT_KIND.TRACKER_CONNECT
-  | typeof ACT_KIND.TRACKER_CANCEL_SIGN_IN
-  | typeof ACT_KIND.TRACKER_REOPEN_SIGN_IN
-  | typeof ACT_KIND.TRACKER_DISCONNECT;
+  | typeof ACT_KIND.CALENDAR_SET_SELECTED;
 
 /** How every settings row below answers: a write carried, or a refusal the row can draw. */
 interface SettingsWriter {
@@ -211,7 +207,7 @@ type ConnectionActKind = Exclude<
 >;
 
 /**
- * The Linear and calendar rows, proxied to the host that owns each grant: the
+ * The calendar rows, proxied to the host that owns each grant: the
  * consent flows, the loopback redirects, the exchanges, the stored accounts
  * and selections, the renewals and the revocations all run there, and the
  * renderer's reply is the settings snapshot alone. The EventKit helper itself
@@ -229,12 +225,6 @@ function connectionActRows(
   const { host, reporterOf, openExternal } = dependencies;
   const { write } = settingsWriter(dependencies);
   return {
-    [ACT_KIND.TRACKER_CONNECT]: (_payload, { sender }) =>
-      write(ACT_KIND.TRACKER_CONNECT, () => host.connectLinear(reporterOf(sender))),
-    [ACT_KIND.TRACKER_DISCONNECT]: (_payload, { sender }) =>
-      write(ACT_KIND.TRACKER_DISCONNECT, () => host.disconnectLinear(reporterOf(sender))),
-    [ACT_KIND.TRACKER_CANCEL_SIGN_IN]: () => host.cancelLinearSignIn(),
-    [ACT_KIND.TRACKER_REOPEN_SIGN_IN]: () => host.reopenLinearSignIn(),
     [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: (_payload, { sender }) =>
       write(ACT_KIND.CALENDAR_CONNECT_GOOGLE, () => host.connectGoogleCalendar(reporterOf(sender))),
     [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () => host.cancelGoogleCalendarSignIn(),

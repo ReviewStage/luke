@@ -55,9 +55,6 @@ const ACTION_NARRATION = {
     `renamed the workspace of ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
   [ACTION_KIND.RENAME_SESSION]: (action, sessions) =>
     `renamed ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
-  [ACTION_KIND.ISSUE_STATE]: (action) =>
-    `moved issue ${action.identity.identifier} to "${action.transition.name}"`,
-  [ACTION_KIND.ISSUE_COMMENT]: (action) => `commented on issue ${action.identity.identifier}`,
   [ACTION_KIND.SETTING]: (action) => `changed ${action.setting.label} to ${action.value}`,
   [ACTION_KIND.PANEL]: (action) => `showed the ${action.tab} panel`,
   [ACTION_KIND.FEEDBACK]: (action) => `opened the ${action.composer} composer`,

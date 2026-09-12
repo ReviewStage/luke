@@ -3,10 +3,8 @@ import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { ObservedWorkspaceProject as ListedProject, Session } from "@sidecar/session";
 import {
   ACTION_KIND,
-  ISSUE_TRACKER_ID,
   maximumWorkspaceNameLength,
   normalizeSession,
-  normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
@@ -14,7 +12,6 @@ import {
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
-  type TrackedIssue,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
 } from "@sidecar/session";
@@ -57,16 +54,6 @@ async function sessionToolAction(
         defaults: async () => ({ defaultProviderId, defaultProjectIds }),
         agentModels,
       },
-    }),
-  );
-}
-
-async function issueToolAction(call: ActionFunctionCall, issues: readonly TrackedIssue[]) {
-  return withoutAdmission(
-    await admitToolCall(call, {
-      origin: RUN_ORIGIN.USER,
-      roster: { read: async () => [] },
-      issues,
     }),
   );
 }
@@ -757,116 +744,11 @@ test("an opening task is held to the project's own word for it", async () => {
   for (const refusal of refusals) assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
 });
 
-function actionableIssue() {
-  const issue = normalizeTrackedIssue(
-    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
-    {
-      trackerIssueId: "issue-uuid-1",
-      identifier: "LUKE-123",
-      title: "Add Codex support",
-      stateName: "In Progress",
-      observedAt: DECIDED_AT,
-      transitions: [
-        { id: "state-done", name: "Done" },
-        { id: "state-review", name: "In Review" },
-      ],
-      canComment: true,
-    },
-  );
-  assert.ok(issue);
-  return issue;
-}
-
-function issueCall(argumentsJson: string, name: string = ACTION_TOOL.UPDATE_ISSUE_STATE) {
-  return { name, argumentsJson };
-}
-
-test("an issue tool call can act only on an issue Luke was shown, going where its tracker allows", async () => {
-  const roster = [actionableIssue()];
-  const identity = '"tracker_id":"linear","issue_id":"LUKE-123"';
-
-  assert.deepEqual(await issueToolAction(issueCall(`{${identity},"state":"Done"}`), roster), {
-    kind: "issue-state",
-    identity: { trackerId: "linear", identifier: "LUKE-123" },
-    transition: { id: "state-done", name: "Done" },
-  });
-  // A spoken state arrives with its case retold rather than copied.
-  assert.deepEqual(await issueToolAction(issueCall(`{${identity},"state":"done"}`), roster), {
-    kind: "issue-state",
-    identity: { trackerId: "linear", identifier: "LUKE-123" },
-    transition: { id: "state-done", name: "Done" },
-  });
-  assert.deepEqual(
-    await issueToolAction(
-      issueCall(`{${identity},"body":"deferred to next release"}`, ACTION_TOOL.COMMENT_ON_ISSUE),
-      roster,
-    ),
-    {
-      kind: "issue-comment",
-      identity: { trackerId: "linear", identifier: "LUKE-123" },
-      body: "deferred to next release",
-    },
-  );
-
-  // Every way a call can point somewhere Luke was not shown is a refusal with
-  // a reason he can say aloud, never a request that reaches a bridge.
-  const refusals = [
-    await issueToolAction(issueCall("not json"), roster),
-    await issueToolAction(
-      issueCall('{"tracker_id":"linear","issue_id":"LUKE-999","state":"Done"}'),
-      roster,
-    ),
-    // The issue's own state is not a transition its tracker advertised.
-    await issueToolAction(issueCall(`{${identity},"state":"In Progress"}`), roster),
-    await issueToolAction(issueCall(`{${identity},"state":""}`), roster),
-    await issueToolAction(
-      issueCall(`{${identity},"body":""}`, ACTION_TOOL.COMMENT_ON_ISSUE),
-      roster,
-    ),
-    await issueToolAction(
-      issueCall(`{${identity},"body":"${"a".repeat(4_100)}"}`, ACTION_TOOL.COMMENT_ON_ISSUE),
-      roster,
-    ),
-    await issueToolAction(issueCall(`{${identity},"state":"Done"}`, "delete_everything"), roster),
-  ];
-  for (const refusal of refusals) assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
-
-  // An issue that advertised nothing is offered nothing, out loud too.
-  const still = normalizeTrackedIssue(
-    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
-    {
-      trackerIssueId: "issue-uuid-2",
-      identifier: "LUKE-124",
-      title: "Read-only issue",
-      stateName: "Todo",
-      observedAt: DECIDED_AT,
-    },
-  );
-  assert.ok(still);
-  const quietIdentity = '"tracker_id":"linear","issue_id":"LUKE-124"';
-  assert.equal(
-    (await issueToolAction(issueCall(`{${quietIdentity},"state":"Done"}`), [still])).status,
-    ACTION_RESULT_STATUS.REJECTED,
-  );
-  assert.equal(
-    (
-      await issueToolAction(
-        issueCall(`{${quietIdentity},"body":"hi"}`, ACTION_TOOL.COMMENT_ON_ISSUE),
-        [still],
-      )
-    ).status,
-    ACTION_RESULT_STATUS.REJECTED,
-  );
-});
-
 test("each action belongs to one family", async () => {
   assert.equal(actionToolFamily(ACTION_TOOL.SEND_SESSION_MESSAGE), ACTION_FAMILY.SESSION);
-  assert.equal(actionToolFamily(ACTION_TOOL.UPDATE_ISSUE_STATE), ACTION_FAMILY.ISSUE);
-  assert.equal(actionToolFamily(ACTION_TOOL.COMMENT_ON_ISSUE), ACTION_FAMILY.ISSUE);
   assert.equal(actionToolFamily("delete_everything"), undefined);
   assert.equal(ACTIONS.CHANGE_APP_SETTING.family, ACTION_FAMILY.APP);
   assert.equal(ACTIONS.SEND_SESSION_MESSAGE.family, ACTION_FAMILY.SESSION);
-  assert.equal(ACTIONS.UPDATE_ISSUE_STATE.family, ACTION_FAMILY.ISSUE);
 });
 
 test("show_panel's filter enum carries the whole vocabulary its validator accepts", async () => {

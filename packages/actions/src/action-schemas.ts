@@ -19,7 +19,6 @@ import {
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
 import {
-  maximumIssueCommentLength,
   maximumSessionMessageLength,
   maximumWorkspaceNameLength,
   PROVIDER_ID_LIST,
@@ -119,13 +118,7 @@ export const SESSION_IDENTITY_FIELDS = {
   provider_session_id: identifier("The session ID."),
 } as const;
 
-/** The identity fields every issue action names its target by. */
-export const ISSUE_IDENTITY_FIELDS = {
-  tracker_id: identifier("The tracker ID."),
-  issue_id: identifier("The issue ID."),
-} as const;
-
-/** The message, task, and comment bounds: refused rather than cut, one declaration each. */
+/** The message and task bounds: refused rather than cut, one declaration each. */
 export const MESSAGE_TEXT = boundedText({
   max: maximumSessionMessageLength,
   description: "The message to send.",
@@ -133,10 +126,6 @@ export const MESSAGE_TEXT = boundedText({
 export const OPENING_TASK = boundedText({
   max: maximumSessionMessageLength,
   description: "An optional opening task.",
-});
-export const COMMENT_BODY = boundedText({
-  max: maximumIssueCommentLength,
-  description: "The comment to add.",
 });
 export const WORKSPACE_NAME = boundedText({ max: maximumWorkspaceNameLength });
 
@@ -286,13 +275,6 @@ export const RENAME_SESSION_REQUEST = record({
   ...SESSION_IDENTITY_FIELDS,
   name: describeWire(WORKSPACE_NAME, "The chat's new name, exactly as the developer chose it."),
 });
-
-export const ISSUE_STATE_REQUEST = record({
-  ...ISSUE_IDENTITY_FIELDS,
-  state: boundedText({ description: "The target state." }),
-});
-
-export const ISSUE_COMMENT_REQUEST = record({ ...ISSUE_IDENTITY_FIELDS, body: COMMENT_BODY });
 
 export const SETTING_REQUEST = record({
   setting_id: boundedText({ description: "The setting ID." }),

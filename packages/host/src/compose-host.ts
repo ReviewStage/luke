@@ -38,7 +38,6 @@ import { type BrainComposer, composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
 import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
-import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
 import { composeObservation } from "./compose-observation.js";
 import { composeSettings } from "./compose-settings.js";
@@ -90,7 +89,7 @@ export interface Host {
   stop: (options?: GatewayShutdownOptions) => Promise<void>;
 }
 
-/** The nine concerns, by the name each is built under. */
+/** The eight concerns, by the name each is built under. */
 export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
@@ -99,7 +98,6 @@ export const HOST_CONCERN = {
   BRAIN: "brain",
   CALENDARS: "calendars",
   OBSERVATION: "observation",
-  ISSUES: "issues",
   LIVE: "live",
 } as const;
 
@@ -119,7 +117,6 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.BRAIN,
   HOST_CONCERN.CALENDARS,
   HOST_CONCERN.OBSERVATION,
-  HOST_CONCERN.ISSUES,
   HOST_CONCERN.LIVE,
 ];
 
@@ -155,8 +152,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings });
     const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
-    const issues = yield* composeIssues({ settings, observationGate });
-    const observation = yield* composeObservation({ settings, account, issues, observationGate });
+    const observation = yield* composeObservation({ settings, account, observationGate });
     const calendars = yield* composeCalendars({ settings, observationGate });
     const devices = yield* composeDevices({ account, calendars });
     const conversation = composeConversation({
@@ -181,7 +177,6 @@ export const hostAssemblyLayer: Layer.Layer<
     // would be reading itself through the other.
     const brain: BrainComposer = yield* composeBrain({
       account,
-      issues,
       observation,
       announcements: {
         deliverBriefing: (delivery) => live.service.deliverBriefing(delivery),
@@ -215,7 +210,6 @@ export const hostAssemblyLayer: Layer.Layer<
         void live.service.reconcile();
       },
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
-      refreshIssues: issues.refresh,
       workspaceProjectOffered: observation.workspaceProjectOffered,
     });
     account.link({
@@ -248,12 +242,10 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.BRAIN]: brain,
       [HOST_CONCERN.CALENDARS]: calendars,
       [HOST_CONCERN.OBSERVATION]: observation,
-      [HOST_CONCERN.ISSUES]: issues,
       [HOST_CONCERN.LIVE]: live,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     const supervisor = new ObservationSupervisor([
       observation.loop,
-      issues.loop,
       calendars.loop,
       conversation.loop,
     ]);
@@ -277,7 +269,6 @@ export const hostAssemblyLayer: Layer.Layer<
       conversation.reset();
       await devices.release(undefined);
       observation.stopObservation();
-      issues.stopObservation();
       calendars.stopObservation();
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
       live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);

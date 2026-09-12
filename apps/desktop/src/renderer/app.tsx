@@ -1043,7 +1043,6 @@ export function App(): React.JSX.Element {
               workspaceProviders: sessions.workspaceProviders,
               calendar: connections.calendar,
               appleCalendar: connections.appleCalendar,
-              linear: connections.linear,
               onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
               shortcuts,
               searchOpen: settingsSearchOpen,

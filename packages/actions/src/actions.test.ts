@@ -163,12 +163,10 @@ test("the phone is handed the actions it carries, in the shape its own surface g
       ACTION_TOOL.SHOW_PANEL,
     ],
   );
-  // No tracker, setting, composer, Updates row, or memory stands on the phone.
+  // No setting, composer, Updates row, or memory stands on the phone.
   for (const absent of [
     ACTION_TOOL.REMEMBER_FACT,
     ACTION_TOOL.FORGET_FACT,
-    ACTION_TOOL.UPDATE_ISSUE_STATE,
-    ACTION_TOOL.COMMENT_ON_ISSUE,
     ACTION_TOOL.CHANGE_APP_SETTING,
     ACTION_TOOL.OPEN_FEEDBACK_COMPOSER,
     ACTION_TOOL.RUN_UPDATE_ACTION,

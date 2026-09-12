@@ -45,7 +45,6 @@ function everythingDrawn(): SettingsSearchInput {
       // The key half live is what draws the OpenAI row on the front page.
       voiceSource: VOICE_SOURCE.KEY,
       calendarSignInAvailable: true,
-      linearSignInAvailable: true,
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
     }),
     workspaceProviders: [
@@ -93,7 +92,6 @@ test("a row a page is not drawing is not offered", () => {
     "the announce switch rides the voice controls",
   );
   assert.ok(!bare.includes("Quiet during meetings"), "no quiet row without a calendar account");
-  assert.ok(!bare.includes("Linear"), "no Linear row without its OAuth client");
   assert.ok(!bare.includes("New Conductor agents run"), "no agent row while disconnected");
   assert.ok(
     !bare.includes("Conductor default project"),
@@ -104,7 +102,6 @@ test("a row a page is not drawing is not offered", () => {
   for (const label of [
     "Captions",
     "Quiet during meetings",
-    "Linear",
     "New Conductor agents run",
     "Conductor default project",
   ]) {

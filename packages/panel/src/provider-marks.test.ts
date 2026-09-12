@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import {
-  HOSTED_AGENT_ID,
-  ISSUE_TRACKER_ID,
-  PROVIDER_ID,
-  SESSION_APPLICATION_ID,
-} from "@sidecar/session";
+import { HOSTED_AGENT_ID, PROVIDER_ID, SESSION_APPLICATION_ID } from "@sidecar/session";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -25,7 +20,6 @@ const MARK_IDS: readonly MarkId[] = [
   ...Object.values(PROVIDER_ID),
   ...Object.values(HOSTED_AGENT_ID),
   ...Object.values(SESSION_APPLICATION_ID),
-  ...Object.values(ISSUE_TRACKER_ID),
 ];
 
 function mark(providerId: string, className?: string): string {

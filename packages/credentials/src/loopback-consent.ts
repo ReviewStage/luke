@@ -20,7 +20,7 @@ import { codeChallenge, createCodeVerifier } from "./pkce.js";
  * the user's own browser, a code handed back on a loopback redirect that never
  * leaves this machine, and a PKCE-verified exchange with whoever issued the
  * page. Every provider Luke asks consent of runs this same trip — the Luke
- * account, Google Calendar, Linear — and differs only in the four things the
+ * account and Google Calendar — and differs only in the four things the
  * options below name: which ports the redirect may land on, what the
  * authorization page's URL is, what the exchange does with the code, and how
  * the landing card is worded.

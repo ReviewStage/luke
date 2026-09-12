@@ -539,10 +539,10 @@ Send.
   so you can answer it. It plays once, can act on nothing, and our service
   keeps only a hash of your network address for that day's rate limit, tied
   to nobody, and none of the conversation.
-- Coding agent providers you connect (Conductor) and Linear, using the key or
+- Coding agent providers you connect (Conductor), using the key or
   account access you supply. The synced-key vault holds Conductor keys only.
-  Luke reads your sessions or issues, and sends something back
-  only when you ask it to, such as a message you wrote or an issue you moved.
+  Luke reads your sessions, and sends something back
+  only when you ask it to, such as a message you wrote.
   With a synced Conductor key, our service also reads your Conductor sessions
   about once a minute on the schedule described above, under that key.
   If you open a Conductor session's screen in the iOS app, our service also
@@ -601,7 +601,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
 
-- Disconnect any provider, issue tracker, or calendar to stop it being read.
+- Disconnect any provider or calendar to stop it being read.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.

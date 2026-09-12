@@ -127,10 +127,6 @@ export interface HostOperator {
     selected: boolean,
     reporter: string,
   ): Promise<SettingsUpdateResult>;
-  connectLinear(reporter: string): Promise<SettingsUpdateResult>;
-  cancelLinearSignIn(): Promise<void>;
-  reopenLinearSignIn(): Promise<void>;
-  disconnectLinear(reporter: string): Promise<SettingsUpdateResult>;
   sessionRoster(): Promise<{ sessions: readonly Session[]; settled: boolean }>;
   openSession(identity: SessionIdentity): Promise<ActionResult>;
   openSessionApplication(
@@ -339,12 +335,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...wireReporter(reporter),
         }),
       ),
-    connectLinear: (reporter) =>
-      settingsResult(client.call(GATEWAY_METHOD.TRACKER_CONNECT, wireReporter(reporter))),
-    cancelLinearSignIn: () => fire(client.call(GATEWAY_METHOD.TRACKER_CANCEL_SIGN_IN)),
-    reopenLinearSignIn: () => fire(client.call(GATEWAY_METHOD.TRACKER_REOPEN_SIGN_IN)),
-    disconnectLinear: (reporter) =>
-      settingsResult(client.call(GATEWAY_METHOD.TRACKER_DISCONNECT, wireReporter(reporter))),
     sessionRoster: async () => {
       const answer = record(await client.call(GATEWAY_METHOD.SESSION_ROSTER));
       return {

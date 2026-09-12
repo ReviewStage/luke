@@ -38,7 +38,6 @@ describe("the settings store's environment overrides", () => {
       "LUKE_LIVE_VOICE",
       "GOOGLE_CALENDAR_OAUTH_CLIENT_ID",
       "GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET",
-      "LINEAR_OAUTH_CLIENT_ID",
       "CONDUCTOR_API_KEY",
       "CONDUCTOR_API_TOKEN",
     ]);
@@ -54,7 +53,6 @@ describe("the settings store's environment overrides", () => {
         [SETTINGS_OVERRIDE_VARIABLE.LIVE_VOICE]: LIVE_VOICE.SAGE,
         [SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_ID]: "client-id",
         [SETTINGS_OVERRIDE_VARIABLE.GOOGLE_CALENDAR_CLIENT_SECRET]: "client-secret",
-        [SETTINGS_OVERRIDE_VARIABLE.LINEAR_CLIENT_ID]: "linear-client-id",
         CONDUCTOR_API_KEY: CONDUCTOR_KEY,
       });
 
@@ -63,7 +61,6 @@ describe("the settings store's environment overrides", () => {
         clientId: "client-id",
         clientSecret: "client-secret",
       });
-      assert.deepEqual(overrides.linearSignIn, { clientId: "linear-client-id" });
       assert.equal(keyOf(overrides.apiKeys, CONDUCTOR), CONDUCTOR_KEY);
     }),
   );
@@ -76,9 +73,7 @@ describe("the settings store's environment overrides", () => {
       );
 
       assert.equal(overrides.voice, undefined);
-      // No override names a registration, so the sign-in this build offers is
-      // whatever stands in source: Linear's client id, and no Google secret.
-      assert.deepEqual(overrides.linearSignIn?.clientId.length !== 0, true);
+      // No override names a registration, so no Google Calendar sign-in stands.
       assert.equal(overrides.googleCalendarSignIn, undefined);
       assert.equal(overrides.apiKeys.size, 0);
     }),

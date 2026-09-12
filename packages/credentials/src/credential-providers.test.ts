@@ -6,7 +6,6 @@ import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
-  INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
   providerRunsSessionsInCloud,
   VOICE_CREDENTIAL_PROVIDER,
@@ -15,7 +14,6 @@ import {
 
 test("accepts only a provider the build ships", () => {
   assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.CONDUCTOR), true);
-  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.LINEAR), true);
   assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.OPENAI), true);
   assert.equal(isCredentialProviderId("unknown-cloud"), false);
   // An inherited property name is not a provider, and neither is a value that
@@ -43,18 +41,10 @@ test("describes every provider it lists", () => {
     }
     // The environment fallback is `<PROVIDER>_API_KEY` — except OpenAI, which
     // deliberately offers none (a key that costs money and moves the review
-    // path is connected by hand or not at all), and except a provider
-    // connected by consent, where there is no key for an environment to hold.
-    if (
-      provider.id === CREDENTIAL_PROVIDER_ID.OPENAI ||
-      provider.connection === CREDENTIAL_CONNECTION.CONSENT
-    ) {
+    // path is connected by hand or not at all).
+    if (provider.id === CREDENTIAL_PROVIDER_ID.OPENAI) {
       assert.deepEqual(provider.environmentVariables, [], provider.id);
     } else {
-    }
-    // A consent grant is never typed, so no format could refuse one.
-    if (provider.connection === CREDENTIAL_CONNECTION.CONSENT) {
-      assert.equal(provider.keyFormat, undefined, provider.id);
     }
     // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     // A declared format has to say what it wants as well as refuse, because
@@ -71,25 +61,18 @@ test("splits the settings sections without losing a provider", () => {
   // asked for the same key twice. The voice key stands apart because its row
   // is drawn on the Voice page rather than under Connections.
   assert.deepEqual(
-    [...CLOUD_AGENT_PROVIDER_LIST, ...INTEGRATION_PROVIDER_LIST, VOICE_CREDENTIAL_PROVIDER]
-      .map((provider) => provider.id)
-      .sort(),
+    [...CLOUD_AGENT_PROVIDER_LIST, VOICE_CREDENTIAL_PROVIDER].map((provider) => provider.id).sort(),
     CREDENTIAL_PROVIDER_LIST.map((provider) => provider.id).sort(),
-  );
-  assert.deepEqual(
-    INTEGRATION_PROVIDER_LIST.map((provider) => provider.id),
-    [CREDENTIAL_PROVIDER_ID.LINEAR],
   );
 });
 
 test("the cloud badge belongs to the agents alone", () => {
-  // The badge says a provider's sessions run in a cloud service. Linear's
-  // issues and OpenAI's voice are services Luke uses rather than sessions he
-  // watches, so a badge on their marks would claim sessions neither has.
+  // The badge says a provider's sessions run in a cloud service. OpenAI's
+  // voice is a service Luke uses rather than sessions he watches, so a badge
+  // on its mark would claim sessions it has none of.
   for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
     assert.equal(providerRunsSessionsInCloud(provider.id), true, provider.id);
   }
-  assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.LINEAR), false);
   assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.OPENAI), false);
 });
 
@@ -97,21 +80,6 @@ test("holds no key format for a provider that publishes one kind of key", () => 
   // Conductor publishes one kind of key, so it has no format worth holding a
   // credential to.
   assert.equal(CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR].keyFormat, undefined);
-});
-
-test("connects Linear by consent rather than by a key", () => {
-  const linear = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
-
-  assert.equal(linear.displayName, "Linear");
-  assert.equal(linear.connection, CREDENTIAL_CONNECTION.CONSENT);
-  // Nothing is pasted for Linear, so there is nothing for a launch
-  // environment to supply, no page to send anyone to, and no shape to refuse:
-  // what authorizes a read is granted on Linear's own consent page and
-  // withdrawn there or from the row.
-  assert.deepEqual(linear.environmentVariables, []);
-  assert.equal(linear.hint, undefined);
-  assert.equal(linear.apiKeysUrl, undefined);
-  assert.equal(linear.keyFormat, undefined);
 });
 
 test("holds the key Luke speaks through, apart from the agents he observes", () => {
@@ -138,6 +106,5 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   // for a row to belong to, and no adapter for a saved key to refresh. Its
   // row stands after Permissions on the Voice page, beside the feature it turns on.
   assert.equal(VOICE_CREDENTIAL_PROVIDER, openai);
-  assert.equal(INTEGRATION_PROVIDER_LIST.includes(openai), false);
   assert.equal(CLOUD_AGENT_PROVIDER_LIST.includes(openai), false);
 });

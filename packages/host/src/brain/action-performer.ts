@@ -22,7 +22,6 @@ import type {
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import type { TrackedIssue } from "@sidecar/session";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -63,7 +62,6 @@ export interface BrainActionPerformerDependencies {
   refreshSessions: () => Promise<void>;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceDefaults: () => Promise<WorkspaceCreationDefaults>;
-  trackedIssues: () => readonly TrackedIssue[] | undefined;
   /** The guide as the renderer last reported it; empty before it has. */
   appGuide: () => AppGuideSnapshot;
   /** The notebook's entries as the validators read them: what the model may name by id. */
@@ -151,11 +149,10 @@ export function createBrainActionPerformer(
   dependencies: BrainActionPerformerDependencies,
 ): BrainActionPerformer {
   const admission = (): ActionAdmissionReads => {
-    const issues = dependencies.trackedIssues();
     // The roster and the projects an action is admitted against are two readings
     // of one observation pass, so the pass runs once per action however many of
-    // them admission asks for. An action that asks for neither — an issue action, a
-    // setting — observes nothing at all.
+    // them admission asks for. An action that asks for neither — a setting —
+    // observes nothing at all.
     let pass: Promise<void> | undefined;
     const observed = () => (pass ??= dependencies.refreshSessions());
     return {
@@ -177,7 +174,6 @@ export function createBrainActionPerformer(
         agentModels: workspaceAgentModels,
       },
       guide: dependencies.appGuide(),
-      ...(issues ? { issues } : undefined),
       rememberedFacts: dependencies.rememberedFacts(),
     };
   };
@@ -228,9 +224,9 @@ export function createBrainActionPerformer(
     if (!isExecution(execution)) return refusedActionOutput(REFUSAL.NO_EXECUTION);
     if (execution.isRevoked()) return refusedActionOutput(REFUSAL.TURN_OVER);
     // Where each admitted action goes, named kind by kind: the two notebook
-    // writes are carried here, an app action is the renderer's to perform, an
-    // issue action reaches its tracker without a Conversation line, and a session
-    // action is recorded as it is carried. Every answer is the one envelope.
+    // writes are carried here, an app action is the renderer's to perform, and
+    // a session action is recorded as it is carried. Every answer is the one
+    // envelope.
     return dispatchByKind(action, {
       [ACTION_KIND.REMEMBER]: async (action) =>
         (await dependencies.notebook.remember({
@@ -248,10 +244,6 @@ export function createBrainActionPerformer(
       [ACTION_KIND.PANEL]: carryAppAction,
       [ACTION_KIND.FEEDBACK]: carryAppAction,
       [ACTION_KIND.UPDATE]: carryAppAction,
-      [ACTION_KIND.ISSUE_STATE]: async (action) =>
-        actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
-      [ACTION_KIND.ISSUE_COMMENT]: async (action) =>
-        actionOutputFromResult(await dependencies.sessionActions.perform(action, execution)),
       [ACTION_KIND.MESSAGE]: (action) => carrySessionAction(action, execution),
       [ACTION_KIND.CONTROL]: (action) => carrySessionAction(action, execution),
       [ACTION_KIND.OPEN]: (action) => carrySessionAction(action, execution),

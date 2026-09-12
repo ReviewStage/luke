@@ -70,7 +70,6 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
     secretStorage: settings.secretStorage,
     voiceAvailable: settings.voiceAvailable,
     calendarSignInAvailable: settings.calendarSignInAvailable,
-    linearSignInAvailable: settings.linearSignInAvailable,
     calendarAccounts: settings.calendarAccounts,
     appleCalendarAvailable: settings.appleCalendarAvailable,
     ...(settings.appleCalendar ? { appleCalendar: settings.appleCalendar } : undefined),

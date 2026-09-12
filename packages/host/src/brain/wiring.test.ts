@@ -46,7 +46,6 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
       refreshSessions: async () => undefined,
       workspaceProjects: () => [],
       workspaceDefaults: async () => ({}),
-      trackedIssues: () => undefined,
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },

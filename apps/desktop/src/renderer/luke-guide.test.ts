@@ -30,7 +30,6 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
   return settingsView({
     credentialSources: {
       [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
       [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     voiceAvailable: true,
@@ -96,7 +95,6 @@ const GUIDE_FACT_LABELS: readonly string[] = [
   "Voice",
   "Cloud providers",
   "OpenAI",
-  "Linear",
   "Apple Calendar",
   "Google Calendar",
   "Conductor",
@@ -118,7 +116,6 @@ function everyGuideState(): LukeGuideInput[] {
         provider: ACCOUNT_PROVIDER.GOOGLE,
       },
       settings: settings({
-        linearSignInAvailable: true,
         appleCalendarAvailable: true,
         calendarSignInAvailable: true,
         secretStorage: SECRET_STORAGE.UNAVAILABLE,

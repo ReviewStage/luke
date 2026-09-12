@@ -163,9 +163,6 @@ function fixture(options: FixtureOptions = {}) {
     openCreatedWorkspaces: () => {
       recorded.createdOpens += 1;
     },
-    trackedIssues: () => undefined,
-    issueTrackers: [],
-    refreshIssues: () => {},
     recordProductEvent: (name) => {
       recorded.events.push(name);
     },

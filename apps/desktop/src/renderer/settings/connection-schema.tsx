@@ -8,8 +8,6 @@ import type { CredentialProvider, CredentialSource } from "@sidecar/credentials/
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_CONNECTION,
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_PROVIDERS,
   CREDENTIAL_SOURCE,
   providerRunsSessionsInCloud,
   SECRET_STORAGE,
@@ -25,12 +23,7 @@ import type { CredentialEntryControl } from "../credential-entry";
 import { entryForProvider } from "../credential-entry";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { CalendarChoices } from "./calendar-choices";
-import type {
-  AppleCalendarControl,
-  CalendarControl,
-  LinearControl,
-  WorkspaceProviderOption,
-} from "./controls";
+import type { AppleCalendarControl, CalendarControl, WorkspaceProviderOption } from "./controls";
 import { CredentialField } from "./credential-field";
 import { HELD_TITLE } from "./notes";
 import { WorkspaceAgentRow, WorkspaceProjectRow } from "./workspace-rows";
@@ -103,7 +96,7 @@ export type ConnectionAction = {
   control: ConnectionControl;
   /** The word a `WORD` control wears. */
   word?: string;
-  /** Its own name for a hand and a reader alike: "Connect Linear". */
+  /** Its own name for a hand and a reader alike: "Connect Google Calendar". */
   label: string;
   /** The hover, absent where the label is the whole message. */
   title?: string;
@@ -147,7 +140,6 @@ export interface ConnectionInput {
   credentials: CredentialEntryControl;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
-  linear: LinearControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
   writes: SettingsWrites;
   /** True while the surface these rows are drawn on is the shape on screen. */
@@ -274,9 +266,9 @@ function credentialConnection(
     name: () => provider.displayName,
     /* An agent provider's mark carries the same cloud badge its session rows
        do — the key buys the observation of cloud sessions, and the same mark
-       cannot differ between the row and the sessions it stands for. Linear and
-       OpenAI are services Luke uses rather than sessions he watches, so their
-       marks stand alone. */
+       cannot differ between the row and the sessions it stands for. OpenAI is a
+       service Luke uses rather than sessions he watches, so its mark stands
+       alone. */
     mark: (
       <>
         <ProviderMark providerId={provider.id} />
@@ -483,59 +475,6 @@ export const CONNECTION_SCHEMA: readonly ConnectionSpec[] = [
       order: 110 + index * 10,
     }),
   ),
-  // The issue tracker: connected by signing in with Linear, never by a pasted
-  // credential, and drawn at all only in a build that carries the OAuth client
-  // the sign-in runs on — a row whose one action cannot run is not a row.
-  {
-    id: CREDENTIAL_PROVIDER_ID.LINEAR,
-    layout: CONNECTION_LAYOUT.BLOCK,
-    page: SETTINGS_VIEW.CONNECTIONS,
-    section: CONNECTION_SECTION.INTEGRATIONS,
-    order: 1000,
-    offered: (visibility) => visibility.settings.linearSignInAvailable,
-    name: () => CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR].displayName,
-    mark: <ProviderMark providerId={CREDENTIAL_PROVIDER_ID.LINEAR} />,
-    status: (input) => ({
-      connected:
-        input.settings.credentialSources[CREDENTIAL_PROVIDER_ID.LINEAR] !== CREDENTIAL_SOURCE.NONE,
-    }),
-    actions: (input) => {
-      const provider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
-      const connected = input.settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE;
-      if (!connected) {
-        return [
-          {
-            /* The consent page does the connecting: the same word every other
-               integration's row uses. */
-            control: CONNECTION_CONTROL.WORD,
-            word: input.linear.connecting ? "Waiting for Linear…" : "Connect",
-            label: `Connect ${provider.displayName} by signing in`,
-            ...(input.linear.held ? { title: HELD_TITLE } : undefined),
-            disabled: input.linear.held || input.linear.connecting,
-            run: input.linear.onSignIn,
-          },
-        ];
-      }
-      return [
-        {
-          control: CONNECTION_CONTROL.TRASH,
-          label: `Disconnect ${provider.displayName}`,
-          /* The ellipsis is the promise that it asks first. */
-          title: "Disconnect…",
-          confirm: {
-            // Nothing here can hand the grant back, so a disconnect taken on
-            // the first press would cost a trip through Linear's consent to
-            // undo.
-            question: `Disconnect ${provider.displayName}?`,
-            verb: "Disconnect",
-            running: "Disconnecting…",
-            act: input.linear.onDisconnect,
-          },
-        },
-      ];
-    },
-    haystack: ["issues issue tracker sign in connect integration"],
-  },
   // This Mac's own Calendar: the line carries the connection's whole surface —
   // Connect while there is no usable grant, else the refresh and the trash —
   // and the calendar checkboxes sit directly beneath, because one connection

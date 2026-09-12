@@ -12,7 +12,6 @@
 import path from "node:path";
 import type { PlatformError } from "@effect/platform/Error";
 import * as FileSystem from "@effect/platform/FileSystem";
-import type { CredentialProvider } from "@sidecar/credentials";
 import { Data, Effect, Either } from "effect";
 import { type PersistedSettings, parsePersistedSettingsThrowing } from "../settings-store.js";
 
@@ -38,10 +37,9 @@ export class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal
  */
 export function parsePersistedSettingsEither(
   source: string,
-  providers: readonly CredentialProvider[],
 ): Either.Either<PersistedSettings, SettingsParseRefusal> {
   return Either.try({
-    try: () => parsePersistedSettingsThrowing(source, providers),
+    try: () => parsePersistedSettingsThrowing(source),
     catch: (error) =>
       new SettingsParseRefusal({
         reason: error instanceof Error ? error.message : "Settings file is not an object",

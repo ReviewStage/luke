@@ -1,12 +1,10 @@
 import type * as FileSystem from "@effect/platform/FileSystem";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
-  CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_LIST,
   type CredentialFormat,
   type CredentialProvider,
   type CredentialProviderId,
-  type LinearGrant,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import {
@@ -79,7 +77,6 @@ const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
   APPLE_CALENDAR: "appleCalendar",
   CALENDAR_ACCOUNTS: "calendarAccounts",
-  GRANTS: "grants",
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   VAULT_SYNC_ACCOUNT: "vaultSyncAccount",
   VERSION: "version",
@@ -140,13 +137,6 @@ export interface PersistedSettings extends StoredAppSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
-  /**
-   * The consent grants, by provider id, kept apart from the pasted keys
-   * because what is inside is not a credential the user could type back in:
-   * two tokens and the moment the shorter-lived one lapses. Carried through
-   * untouched for a provider this build does not know, exactly as a key is.
-   */
-  grants?: Readonly<Record<string, PersistedGrant>>;
   /** Account tokens encrypted together; only display identity stays plaintext. */
   account?: {
     tokenCipher: string;
@@ -297,18 +287,6 @@ function storedAppleCalendar(record: WireRecord): PersistedSettings["appleCalend
 }
 
 /**
- * One provider's consent grant at rest. The tokens travel together under one
- * ciphertext, the way the account's do — they are useless apart, and a single
- * decryption is a single trip to the Keychain. The expiry stays in plaintext
- * beside it: when a token lapses is not a secret, and knowing it without
- * decrypting is what lets a pass skip the refresh it does not need.
- */
-interface PersistedGrant {
-  tokenCipher: string;
-  expiresAt: number;
-}
-
-/**
  * The settings with this account list, kept the way an emptied map is kept: an
  * empty list is a deleted field, so a disconnection reads as no calendars
  * rather than as a connection with none.
@@ -334,27 +312,6 @@ function withAppleCalendar(
   return next;
 }
 
-/** Reads the stored grants, keeping only well-formed entries. */
-function storedGrants(record: WireRecord) {
-  const grants: Record<string, PersistedGrant> = {};
-  const persisted = record[SETTINGS_FIELD.GRANTS];
-  if (!isRecord(persisted)) {
-    return grants;
-  }
-  for (const [providerId, entry] of Object.entries(persisted)) {
-    if (!isRecord(entry)) continue;
-    const { tokenCipher, expiresAt } = entry;
-    if (!isWireString(tokenCipher) || !tokenCipher) continue;
-    // A grant whose expiry did not survive the file is treated as lapsed
-    // rather than as eternal, so the next pass refreshes it before riding it.
-    grants[providerId] = {
-      tokenCipher,
-      expiresAt: isWireNumber(expiresAt) ? expiresAt : 0,
-    };
-  }
-  return grants;
-}
-
 /**
  * A rejected key never reaches disk, and the reason never echoes the submitted
  * value. Most of what this rules out is a value that cannot be sent as an HTTP
@@ -371,20 +328,12 @@ export function apiKeyRejection(apiKey: string, format?: CredentialFormat): stri
   return undefined;
 }
 
-function storedApiKeys(record: WireRecord, providers: readonly CredentialProvider[]) {
+function storedApiKeys(record: WireRecord) {
   const apiKeys: Record<string, string> = {};
   const persisted = record[SETTINGS_FIELD.API_KEYS];
   if (isRecord(persisted)) {
     for (const [providerId, ciphertext] of Object.entries(persisted)) {
       if (!isWireString(ciphertext) || !ciphertext) continue;
-      // A provider this build connects by consent takes no key, so a key left
-      // by a build that asked for one is dropped rather than carried: it can
-      // never authorize anything again, and a credential Luke will not use is
-      // not a credential Luke should keep. A provider this build does not
-      // know is still carried through untouched — that is an older build
-      // meeting a newer one's key, which is the opposite case.
-      const provider = providers.find((candidate) => candidate.id === providerId);
-      if (provider?.connection === CREDENTIAL_CONNECTION.CONSENT) continue;
       apiKeys[providerId] = ciphertext;
     }
   }
@@ -503,10 +452,7 @@ function defaultPersistedSettings(): PersistedSettings {
  * what a caller reads today, and this stays private to that Either's own
  * `Either.try` rather than a second parse a caller could reach directly.
  */
-export function parsePersistedSettingsThrowing(
-  source: string,
-  providers: readonly CredentialProvider[],
-): PersistedSettings {
+export function parsePersistedSettingsThrowing(source: string): PersistedSettings {
   const parsed = JSON.parse(source);
   if (!isRecord(parsed)) {
     throw new Error("Settings file is not an object");
@@ -515,7 +461,6 @@ export function parsePersistedSettingsThrowing(
   const version = record[SETTINGS_FIELD.VERSION];
   const calendarAccounts = storedCalendarAccounts(record);
   const appleCalendar = storedAppleCalendar(record);
-  const grants = storedGrants(record);
   const settings = readStoredSettings(record);
   const vaultSyncAccount = record[SETTINGS_FIELD.VAULT_SYNC_ACCOUNT];
   const account = storedAccount(record);
@@ -523,8 +468,7 @@ export function parsePersistedSettingsThrowing(
   const persisted = {
     ...settings,
     version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,
-    apiKeys: storedApiKeys(record, providers),
-    ...(Object.keys(grants).length > 0 ? { grants } : undefined),
+    apiKeys: storedApiKeys(record),
     ...(account ? { account } : undefined),
     ...(account && accountPreferencesSync?.accountEmail === account.email
       ? { accountPreferencesSync }
@@ -564,8 +508,6 @@ export class SettingsStore {
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
   #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
-  /** Decrypted grants, cached for the same reason and cleared by the same writes. */
-  #resolvedGrants = new Map<CredentialProviderId, LinearGrant | undefined>();
   #mutations: Promise<void> = Promise.resolve();
 
   async get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>> {
@@ -751,11 +693,6 @@ export class SettingsStore {
         // grants. Without one the integration is not drawn at all.
         calendarSignInAvailable:
           this.#credentialsUsable && this.#overrides.googleCalendarSignIn !== undefined,
-        // The same question for Linear, answered the same way: without a
-        // registered OAuth client there is no consent page to open, so the row
-        // is not drawn rather than drawn refusing.
-        linearSignInAvailable:
-          this.#credentialsUsable && this.#overrides.linearSignIn !== undefined,
         // Whether this build can offer the Apple Calendar connection: a Mac to
         // read, and a run that would use what macOS grants. No client gates it
         // the way the sign-ins are gated — the grant lives with the system.
@@ -977,102 +914,6 @@ export class SettingsStore {
       () => this.#resolved.delete(providerId),
     );
     return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
-  }
-
-  /**
-   * Main-process only, like the resolved keys: one provider's grant with its
-   * tokens decrypted, for the reader that mints requests from it. A grant
-   * that no longer decrypts — another OS account, a rotated Keychain — reads
-   * as absent, and the row it draws says to connect again.
-   */
-  async readGrant(providerId: CredentialProviderId): Promise<LinearGrant | undefined> {
-    if (this.#resolvedGrants.has(providerId)) return this.#resolvedGrants.get(providerId);
-    const held = (await this.#load()).grants?.[providerId];
-    const grant = held ? this.#decryptGrant(held) : undefined;
-    this.#resolvedGrants.set(providerId, grant);
-    return grant;
-  }
-
-  /**
-   * Stores one provider's grant encrypted at rest. Every refresh comes back
-   * through here as well as every connection, because Linear consumes the
-   * refresh token it is given: a grant refreshed and not written is a grant
-   * the user has to make again.
-   */
-  async setGrant(
-    providerId: CredentialProviderId,
-    grant: LinearGrant,
-  ): Promise<SettingsUpdateResult> {
-    const accessToken = grant.accessToken.trim();
-    const rejection = !this.#secretStorageUsable()
-      ? "Encrypted credential storage is unavailable on this system."
-      : // The shape rules a pasted key answers to. What is inside is the
-        // provider's to shape, so only sendability is checked.
-        apiKeyRejection(accessToken);
-    if (rejection)
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        settings: await this.snapshot(),
-        reason: rejection,
-      };
-
-    await this.#mutate(
-      (persisted) => {
-        const tokenCipher = this.#cipher
-          .encrypt(
-            JSON.stringify({
-              accessToken,
-              ...(grant.refreshToken ? { refreshToken: grant.refreshToken } : undefined),
-            }),
-          )
-          .toString("base64");
-        // Every other provider's grant is carried over, so connecting one never
-        // disturbs another.
-        const grants = { ...persisted.grants };
-        grants[providerId] = { tokenCipher, expiresAt: grant.expiresAt };
-        return { ...persisted, grants };
-      },
-      () => this.#forgetGrant(providerId),
-    );
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
-  }
-
-  /** Disconnects one provider, deleting its stored grant with it. */
-  async clearGrant(providerId: CredentialProviderId): Promise<SettingsUpdateResult> {
-    await this.#mutate(
-      (persisted) => {
-        if (!persisted.grants?.[providerId]) return undefined;
-        const grants = { ...persisted.grants };
-        delete grants[providerId];
-        const next: PersistedSettings = { ...persisted };
-        if (Object.keys(grants).length > 0) next.grants = grants;
-        else delete next.grants;
-        return next;
-      },
-      () => this.#forgetGrant(providerId),
-    );
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
-  }
-
-  /** Both caches a written grant makes stale: the grant itself and the row's source. */
-  #forgetGrant(providerId: CredentialProviderId): void {
-    this.#resolvedGrants.delete(providerId);
-    // The row's own source is resolved from the same file, so it is stale now
-    // for exactly the same reason.
-    this.#resolved.delete(providerId);
-  }
-
-  /** Recovers one stored grant's tokens, or nothing if they cannot be read. */
-  #decryptGrant(held: PersistedGrant): LinearGrant | undefined {
-    return this.#decryptRecord(held.tokenCipher, (tokens) => {
-      const { accessToken, refreshToken } = tokens;
-      if (!isWireString(accessToken) || !accessToken) return undefined;
-      return {
-        accessToken,
-        ...(isWireString(refreshToken) && refreshToken ? { refreshToken } : undefined),
-        expiresAt: held.expiresAt,
-      };
-    });
   }
 
   /**
@@ -1374,19 +1215,6 @@ export class SettingsStore {
   async #resolveApiKey(provider: CredentialProvider): Promise<ResolvedApiKey> {
     const cached = this.#resolved.get(provider.id);
     if (cached) return cached;
-    // A consent grant is not a key and is never handed out as one: what
-    // authorizes a request is minted from it, by the reader that holds it.
-    // Only whether one is stored belongs here, because that is what the
-    // provider's row draws — and a grant can only ever have come from this
-    // file, never from a launch environment.
-    if (provider.connection === CREDENTIAL_CONNECTION.CONSENT) {
-      const held = (await this.#load()).grants?.[provider.id];
-      const resolved: ResolvedApiKey = {
-        source: held ? CREDENTIAL_SOURCE.ENCRYPTED_FILE : CREDENTIAL_SOURCE.NONE,
-      };
-      this.#resolved.set(provider.id, resolved);
-      return resolved;
-    }
     const stored = await this.#storedApiKey(provider);
     const fromEnvironment = stored ? undefined : this.#overrides.apiKeys.get(provider.id);
     const resolved: ResolvedApiKey = stored
@@ -1458,10 +1286,7 @@ export class SettingsStore {
     // A corrupt settings file is replaced by the next write rather than
     // failing app start, so a refusal here falls back to defaults exactly as
     // an absent file does.
-    return Either.getOrElse(
-      parsePersistedSettingsEither(source, CREDENTIAL_PROVIDER_LIST),
-      defaultPersistedSettings,
-    );
+    return Either.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings);
   }
 
   /** Only ever called from inside `#serialize`, so writes cannot interleave. */
