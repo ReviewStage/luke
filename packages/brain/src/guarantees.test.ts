@@ -552,7 +552,7 @@ test("a brain call is addressed to the developer's own key or to Luke's own serv
   });
   const service = hostedBrainTransport({
     baseUrl: "https://luke.test",
-    readAccessToken: () => Promise.resolve("account-secret"),
+    readAccessToken: () => Effect.succeed("account-secret"),
     refreshAccount: () => Effect.void,
     fetch,
     now: () => NOW,

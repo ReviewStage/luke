@@ -9,7 +9,7 @@ import type { Effect } from "effect";
  */
 export interface AccountToken {
   /** The signed-in account's current access token, read fresh for every attempt. */
-  readAccessToken: () => Promise<string | undefined>;
+  readAccessToken: () => Effect.Effect<string | undefined>;
   /**
    * Asks the account lifecycle to refresh its tokens. Access tokens outlive a
    * call by an hour at most while the app runs for days, so a 401 is routine:
@@ -25,5 +25,5 @@ export interface AccountToken {
    * with no identity to name omits it, and then the comparison does not
    * exist.
    */
-  readAccountKey?: (() => Promise<string | undefined>) | undefined;
+  readAccountKey?: (() => Effect.Effect<string | undefined>) | undefined;
 }

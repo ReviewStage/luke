@@ -40,14 +40,14 @@ function account(tokens: (string | undefined)[], holders?: (string | undefined)[
   return {
     renewals,
     credential: accountBearer({
-      readAccessToken: () => Promise.resolve(token),
+      readAccessToken: () => Effect.succeed(token),
       refreshAccount: () =>
         Effect.sync(() => {
           renewals.push("renewed");
           token = tokens.shift() ?? token;
           holder = holders === undefined ? holder : (holders.shift() ?? holder);
         }),
-      ...(holders ? { readAccountKey: () => Promise.resolve(holder) } : undefined),
+      ...(holders ? { readAccountKey: () => Effect.succeed(holder) } : undefined),
     }),
   };
 }
@@ -169,7 +169,7 @@ it.effect(
 
       const failing = callOn(
         {
-          authorization: () => Promise.resolve("Bearer held"),
+          authorization: () => Effect.succeed("Bearer held"),
           renew: () => Effect.fail(new Error("the network is down")),
         },
         () => refusal(),
@@ -196,28 +196,6 @@ it.effect("a credential that reads nothing asks the service nothing at all", () 
     assert.ok(!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL);
     assert.deepEqual(requests, []);
   }),
-);
-
-it.effect(
-  "a credential the store could not read is a call that was never made, not a failure",
-  () =>
-    Effect.gen(function* () {
-      const { call, requests, client } = callOn(
-        {
-          authorization: () => Promise.reject(new Error("the settings file could not be read")),
-          renew: () => Effect.void,
-        },
-        () => jsonResponse({}),
-      );
-
-      const answer = yield* Effect.provide(
-        call.send({ method: HTTP_METHOD.POST, path: PATH, body: "{}" }),
-        client,
-      );
-
-      assert.ok(!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL);
-      assert.deepEqual(requests, []);
-    }),
 );
 
 it.effect(

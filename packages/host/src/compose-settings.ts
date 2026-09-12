@@ -41,7 +41,7 @@ import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
-import { SettingsStore } from "./settings-store.js";
+import { SettingsStore, type StoredAccount } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
@@ -122,27 +122,43 @@ export const composeSettings = (): Effect.Effect<
       runtime,
     });
 
+    /**
+     * One account read, lifted from the store's own Promise into a
+     * never-failing Effect: a store that could not be read is an account
+     * this attempt cannot name, exactly as a rejected promise already read
+     * here before `accountBearer` gained an Effect of its own.
+     */
+    const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
+      Effect.tryPromise(() => store.readAccount()).pipe(Effect.orElseSucceed(() => undefined));
+
     const productEvents = new ProductEventSender({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
       sends: runMode.sendsNetwork,
-      readAccessToken: async () => (await store.readAccount())?.accessToken,
+      readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
       refreshAccount: () => links().refreshAccount(),
-      readAccountKey: async () => (await store.readAccount())?.email,
+      readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
     });
     const hostedVault = new HostedVaultClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      readAccessToken: async () =>
-        runMode.sendsNetwork ? (await store.readAccount())?.accessToken : undefined,
+      readAccessToken: () =>
+        runMode.sendsNetwork
+          ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
+          : Effect.succeed(undefined),
       refreshAccount: () => links().refreshAccount(),
-      readAccountKey: async () => (await store.readAccount())?.email,
+      readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
     });
     const accountPreferencesClient = new AccountPreferencesClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      readAccessToken: async () =>
-        runMode.sendsNetwork ? (await store.readAccount())?.accessToken : undefined,
+      readAccessToken: () =>
+        runMode.sendsNetwork
+          ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
+          : Effect.succeed(undefined),
       refreshAccount: () => links().refreshAccount(),
-      readAccountKey: readAccountPreferenceAccountKey,
+      readAccountKey: () =>
+        Effect.tryPromise(() => readAccountPreferenceAccountKey()).pipe(
+          Effect.orElseSucceed(() => undefined),
+        ),
     });
     const vaultSync = new ProviderKeyVaultSync({
       vault: hostedVault,

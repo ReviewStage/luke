@@ -18,7 +18,7 @@ function client(
 ) {
   return new HostedActionClient({
     serviceBaseUrl: "https://tryluke.dev/",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     httpClient: layerFromCloudFetch(fetch),
     ...options,
@@ -82,7 +82,7 @@ it.effect("each way a call ends short of an answer says whether the action may h
     });
     assert.deepEqual(
       yield* Effect.promise(() =>
-        client(unsent.fetch, { readAccessToken: async () => undefined }).sendMessage(
+        client(unsent.fetch, { readAccessToken: () => Effect.succeed(undefined) }).sendMessage(
           TARGET,
           "hello",
         ),

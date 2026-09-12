@@ -15,7 +15,7 @@ function client(
 ) {
   return new HostedVaultClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     httpClient,
     ...options,

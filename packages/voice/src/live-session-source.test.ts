@@ -267,9 +267,9 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
   return new HostedLiveSessionSource({
     serviceOrigin: SERVICE_ORIGIN,
     openSocket: script.openSocket,
-    readAccessToken: async () => "token-1",
+    readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
-    readAccountKey: async () => "dev@example.test",
+    readAccountKey: () => Effect.succeed("dev@example.test"),
     now: () => NOW,
     requestTimeoutMs: 50,
     ...options,
@@ -343,7 +343,7 @@ test("the hosted source's attach is the socket that answered, and the answer fra
 
 test("the hosted source refuses to open without an access token and opens no socket", async () => {
   const script = scriptedOpenSocket([answering(createdFrame())]);
-  const source = hosted(script, { readAccessToken: async () => undefined });
+  const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
 
   assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
   assert.equal(script.opens.length, 0);
@@ -378,7 +378,7 @@ test("the hosted source renews a refused bearer once and retries with the renewe
     answering(createdFrame()),
   ]);
   const source = hosted(script, {
-    readAccessToken: async () => token,
+    readAccessToken: () => Effect.succeed(token),
     refreshAccount: () =>
       Effect.sync(() => {
         token = "token-new";
@@ -402,8 +402,8 @@ test("the hosted source does not carry a renewed bearer for another account", as
     answering(createdFrame()),
   ]);
   const source = hosted(script, {
-    readAccessToken: async () => token,
-    readAccountKey: async () => holder,
+    readAccessToken: () => Effect.succeed(token),
+    readAccountKey: () => Effect.succeed(holder),
     refreshAccount: () =>
       Effect.sync(() => {
         token = "token-new";
@@ -500,7 +500,7 @@ function reattaching(script: ScriptedSocketSeam, options: Partial<HostedLiveSess
 
 test("a hosted connection lost mid-session re-attaches with session.attach and the pipe resumes", async () => {
   const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
-  const source = reattaching(script, { readAccessToken: async () => "token-2" });
+  const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
   const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
   assert.ok(opened);
   const sideband = await opened.attach();
@@ -812,7 +812,7 @@ test("a frame the service sends right behind session.attached, before the recove
       { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "ev_2", client_event_id: "c_2" },
     ]),
   ]);
-  const source = reattaching(script, { readAccessToken: async () => "token-2" });
+  const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
   const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
   assert.ok(opened);
   const sideband = await opened.attach();

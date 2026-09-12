@@ -53,7 +53,7 @@ export interface CallCredential {
    * is its own answer; a credential that has one and reads nothing is a call
    * that cannot be made.
    */
-  authorization?: () => Promise<string | undefined>;
+  authorization?: () => Effect.Effect<string | undefined>;
   /** Asks whoever owns the credential to renew it; one with nothing to renew omits this. */
   renew?: () => Effect.Effect<void, unknown>;
   /**
@@ -63,7 +63,7 @@ export interface CallCredential {
    * caller's account gone, never as a fresh bearer to carry the old account's
    * payload under.
    */
-  holder?: (() => Promise<string | undefined>) | undefined;
+  holder?: (() => Effect.Effect<string | undefined>) | undefined;
 }
 
 /** The ends a call reaches before any status is read. */
@@ -251,9 +251,9 @@ function transportFailure(error: CallTransportError): CallFailure {
 }
 
 function readCredential(
-  read: (() => Promise<string | undefined>) | undefined,
-): Effect.Effect<string | undefined, Cause.UnknownException> {
-  return read === undefined ? Effect.succeed(undefined) : Effect.tryPromise(() => read());
+  read: (() => Effect.Effect<string | undefined>) | undefined,
+): Effect.Effect<string | undefined> {
+  return read === undefined ? Effect.succeed(undefined) : read();
 }
 
 /** The call as effects over the ambient `HttpClient`. */
@@ -356,7 +356,7 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     const authorization = yield* readCredential(credential.authorization);
     if (credential.authorization && authorization === undefined) return undefined;
     return { holder, authorization };
-  }).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+  });
 
   const renew: Effect.Effect<void> = Effect.ignore(
     Effect.suspend(() => credential.renew?.() ?? Effect.void),
@@ -480,10 +480,10 @@ export function createAccountCall(options: AccountFetchCallOptions): AccountCall
 /** The signed-in account's bearer, read fresh for every attempt and renewed by the account lifecycle. */
 export function accountBearer(token: AccountToken): CallCredential {
   return {
-    authorization: async () => {
-      const accessToken = await token.readAccessToken();
-      return accessToken ? bearer(accessToken) : undefined;
-    },
+    authorization: () =>
+      Effect.map(token.readAccessToken(), (accessToken) =>
+        accessToken ? bearer(accessToken) : undefined,
+      ),
     renew: token.refreshAccount,
     holder: token.readAccountKey,
   };
@@ -492,7 +492,7 @@ export function accountBearer(token: AccountToken): CallCredential {
 /** A credential the build or the developer fixed: one header, one attempt, nothing to renew. */
 export function fixedBearer(credential: string): CallCredential {
   const authorization = bearer(credential);
-  return { authorization: () => Promise.resolve(authorization) };
+  return { authorization: () => Effect.succeed(authorization) };
 }
 
 /** An endpoint that takes no identity: nothing to send, nothing to renew, nobody to answer for. */

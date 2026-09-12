@@ -166,15 +166,28 @@ export const composeAccount = (
       return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
     }
 
+    /**
+     * One account read, lifted from the store's own Promise into a
+     * never-failing Effect: a store that could not be read is an account
+     * this attempt cannot name, exactly as a rejected promise already read
+     * here before `accountBearer` gained an Effect of its own.
+     */
+    const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
+      Effect.tryPromise(() => settings.store.readAccount()).pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
+
     // The holder is the account's own address, so a call's one retry after a
     // 401 can tell a renewed token from a different person's: a sign-out and
     // sign-in between the attempt and its retry reads as the caller's account
     // gone, never as a fresh bearer to carry the old account's payload under.
     const token: AccountToken = {
-      readAccessToken: async () =>
-        runMode.sendsNetwork ? (await settings.store.readAccount())?.accessToken : undefined,
+      readAccessToken: () =>
+        runMode.sendsNetwork
+          ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
+          : Effect.succeed(undefined),
       refreshAccount: session.refreshOnce,
-      readAccountKey: async () => (await settings.store.readAccount())?.email,
+      readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
     };
 
     const voiceCapabilities = new VoiceCapabilityAssembler({

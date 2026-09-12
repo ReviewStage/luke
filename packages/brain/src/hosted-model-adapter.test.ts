@@ -80,7 +80,7 @@ function adapter(
   let current = queue.shift();
   return new HostedModelAdapter({
     serviceBaseUrl: BASE,
-    readAccessToken: async () => current,
+    readAccessToken: () => Effect.succeed(current),
     refreshAccount: () =>
       Effect.sync(() => {
         current = queue.shift() ?? current;
