@@ -14,6 +14,7 @@ import { estimatedTokens } from "./tokens.js";
 
 const NOW = 1_800_000_000_000;
 const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
 
 function session(overrides: Partial<RosterSeedSession> & { id: string }): RosterSeedSession {
   const { id, ...rest } = overrides;
@@ -146,41 +147,73 @@ test("the held tool rides only on a wait the provider reported as holding for th
   assert.equal(lineOf(session({ ...working, activity: "bash" })), lineOf(session({ ...working })));
 });
 
-test("the age reads in coarse buckets, so a line moves only at an edge a session crossed", () => {
+test("the age reads in coarse buckets, so a line holds still across a clock tick and moves at an edge", () => {
   const one = session({ id: "age" });
-  assert.equal(lineOf(one, one.lastActivityAt + 1), lineOf(one, one.lastActivityAt + 59_000));
-  assert.notEqual(
-    lineOf(one, one.lastActivityAt + 1),
-    lineOf(one, one.lastActivityAt + 5 * MINUTE),
-  );
-  assert.equal(
-    lineOf(one, one.lastActivityAt + 2 * 60 * MINUTE),
-    lineOf(one, one.lastActivityAt + 9 * 60 * MINUTE),
+  const at = (elapsed: number) => lineOf(one, one.lastActivityAt + elapsed);
+  assert.equal(at(1), at(59_000));
+  assert.equal(at(6 * MINUTE), at(40 * MINUTE));
+  assert.equal(at(3 * HOUR), at(20 * HOUR));
+  assert.deepEqual(
+    new Set([at(1), at(2 * MINUTE), at(30 * MINUTE), at(90 * MINUTE), at(5 * HOUR), at(30 * HOUR)])
+      .size,
+    6,
   );
 });
 
 test("an unchanged roster is no update at all", () => {
   const roster = [session({ id: "a" }), session({ id: "b", status: SESSION_STATUS.COMPLETE })];
-  assert.equal(rosterUpdateText(roster, [...roster], NOW), undefined);
+  assert.equal(rosterUpdateText({ sessions: roster, at: NOW }, [...roster], NOW), undefined);
 });
 
 test("an update carries the lines that changed and nothing else", () => {
   const still = session({ id: "still" });
   const moved = session({ id: "moved" });
   const after = { ...moved, status: SESSION_STATUS.COMPLETE };
-  const text = rosterUpdateText([still, moved], [still, after], NOW);
+  const text = rosterUpdateText({ sessions: [still, moved], at: NOW }, [still, after], NOW);
   assert.deepEqual(lines(text).slice(1), [lineOf(after)]);
 });
 
-test("a session that has left the desk is withdrawn by name, and an added one arrives as its own line", () => {
+test("a session that has left the desk is withdrawn by name, ahead of the lines that merely changed", () => {
   const stays = session({ id: "stays" });
   const leaves = session({ id: "leaves", title: "gone agent" });
   const arrives = session({ id: "arrives" });
-  const text = rosterUpdateText([stays, leaves], [stays, arrives], NOW);
+  const text = rosterUpdateText({ sessions: [stays, leaves], at: NOW }, [stays, arrives], NOW);
   const body = lines(text).slice(1);
   assert.equal(body.length, 2);
-  assert.deepEqual(body[0], lineOf(arrives));
-  assert.notEqual(body[1], lineOf(leaves));
+  assert.notEqual(body[0], lineOf(leaves));
+  assert.deepEqual(body[1], lineOf(arrives));
+});
+
+test("a withdrawal is never what the append bound cuts, however many rows moved beside it", () => {
+  const leaves = session({ id: "leaves", title: "gone agent" });
+  const many = Array.from({ length: 40 }, (_, index) =>
+    session({ id: `s${index}`, title: "x".repeat(200) }),
+  );
+  const before = many.map((one) => ({ ...one, status: SESSION_STATUS.COMPLETE }));
+  const text = rosterUpdateText({ sessions: [...before, leaves], at: NOW }, many, NOW);
+  const body = lines(text).slice(1);
+  assert.ok(text);
+  assert.ok(estimatedTokens(text) <= APPEND_TOKEN_BOUND);
+  assert.ok(body.length < many.length);
+  assert.equal(body[0], `- gone agent: no longer on the desk.`);
+});
+
+test("an age that crossed a bucket edge is news, and one that did not is not", () => {
+  const one = session({ id: "age", lastActivityAt: NOW });
+  const told = { sessions: [one], at: NOW };
+  assert.equal(rosterUpdateText(told, [one], NOW + 30_000), undefined);
+  const drifted = rosterUpdateText(told, [one], NOW + 3 * HOUR);
+  assert.deepEqual(lines(drifted).slice(1), [lineOf(one, NOW + 3 * HOUR)]);
+});
+
+test("an update carries more lines than the seed's own count cap when that many rows moved", () => {
+  const many = Array.from({ length: ROSTER_SEED_BOUNDS.SESSIONS + 4 }, (_, index) =>
+    session({ id: `s${index}` }),
+  );
+  const before = many.map((one) => ({ ...one, status: SESSION_STATUS.COMPLETE }));
+  const body = lines(rosterUpdateText({ sessions: before, at: NOW }, many, NOW)).slice(1);
+  assert.equal(body.length, many.length);
+  assert.equal(lines(rosterSeedText(many, NOW)).length - 2, ROSTER_SEED_BOUNDS.SESSIONS);
 });
 
 test("a session never told a roster is told the whole summary rather than a diff against nothing", () => {
@@ -192,7 +225,7 @@ test("an update stays inside one append's bound too", () => {
   const many = Array.from({ length: ROSTER_SEED_BOUNDS.SESSIONS + 4 }, (_, index) =>
     session({ id: `s${index}`, title: "x".repeat(500) }),
   );
-  const text = rosterUpdateText([], many, NOW);
+  const text = rosterUpdateText({ sessions: [], at: NOW }, many, NOW);
   assert.ok(text);
   assert.ok(estimatedTokens(text) <= APPEND_TOKEN_BOUND);
 });

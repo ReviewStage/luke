@@ -67,24 +67,39 @@ const GONE_TEXT = "no longer on the desk";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
 
 /**
- * How long since the provider last wrote about the session, in coarse
- * buckets. `lastActivityAt` is the only timestamp a provider reports — none
- * of them records when a status was entered — so a bucket says how long since
- * the session was last written about and never how long it has been working
- * or waiting. Coarse on purpose: a bucket that moved is a change the voice is
- * told about, and an exact age would reword the whole summary every minute a
- * quiet desk merely sat there.
+ * How long since the provider last wrote about the session. `lastActivityAt`
+ * is the only timestamp a provider reports — none of them records when a
+ * status was entered — so a bucket says how long since the session was last
+ * written about and never how long it has been working or waiting.
+ *
+ * Coarse deliberately, on the same reasoning the brain's own roster follows:
+ * a bucket that moved is a change the voice is told about, so an exact age
+ * would reword the whole summary every minute a quiet desk merely sat there
+ * and cost the conversation its cached prefix each time. These edges are wide
+ * enough that an ordinary conversation crosses few.
  */
-function ageText(lastActivityAt: number, now: number): string {
+const AGE_TEXT = {
+  UNDER_A_MINUTE: "under a minute",
+  A_FEW_MINUTES: "a few minutes",
+  UNDER_AN_HOUR: "under an hour",
+  ABOUT_AN_HOUR: "about an hour",
+  A_FEW_HOURS: "a few hours",
+  A_DAY_OR_MORE: "a day or more",
+} as const;
+
+type AgeText = (typeof AGE_TEXT)[keyof typeof AGE_TEXT];
+
+function ageText(lastActivityAt: number, now: number): AgeText {
   const elapsed = Math.max(0, now - lastActivityAt);
-  if (elapsed < MINUTE_MS) return "under a minute";
-  if (elapsed < HOUR_MS) {
-    const minutes = Math.floor(elapsed / MINUTE_MS);
-    return `about ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
-  }
-  return "over an hour";
+  if (elapsed < MINUTE_MS) return AGE_TEXT.UNDER_A_MINUTE;
+  if (elapsed < 5 * MINUTE_MS) return AGE_TEXT.A_FEW_MINUTES;
+  if (elapsed < HOUR_MS) return AGE_TEXT.UNDER_AN_HOUR;
+  if (elapsed < 2 * HOUR_MS) return AGE_TEXT.ABOUT_AN_HOUR;
+  if (elapsed < DAY_MS) return AGE_TEXT.A_FEW_HOURS;
+  return AGE_TEXT.A_DAY_OR_MORE;
 }
 
 function observedValue(value: string | undefined, chars: number): string | undefined {
@@ -161,12 +176,18 @@ function ordered(sessions: readonly RosterSeedSession[]): readonly RosterSeedSes
 }
 
 /**
- * The lines the cap and the append bound both admit, in order. The bound is
- * held by dropping from the end rather than by cutting a line, so what
- * travels is whole lines about the sessions that lead the order.
+ * The lines a bound admits, in order, cut from the end rather than by cutting
+ * a line, so what travels is whole lines about the sessions that lead the
+ * order. The count cap is the seed's alone — what a desk holds now — where an
+ * update is bounded by what one append carries and by nothing else, since a
+ * pass that moved twelve rows has twelve things to say.
  */
-function boundedLines(lines: readonly string[], fixed: readonly string[]): readonly string[] {
-  let kept = lines.slice(0, ROSTER_SEED_BOUNDS.SESSIONS);
+function boundedLines(
+  lines: readonly string[],
+  fixed: readonly string[],
+  cap: number,
+): readonly string[] {
+  let kept = lines.slice(0, cap);
   while (kept.length > 0 && estimatedTokens([...fixed, ...kept].join("\n")) > APPEND_TOKEN_BOUND) {
     kept = kept.slice(0, -1);
   }
@@ -177,8 +198,9 @@ function summaryText(
   preface: string,
   closing: readonly string[],
   lines: readonly string[],
+  cap: number,
 ): string | undefined {
-  const kept = boundedLines(lines, [preface, ...closing]);
+  const kept = boundedLines(lines, [preface, ...closing], cap);
   if (kept.length === 0) return undefined;
   return [preface, ...kept, ...closing].join("\n");
 }
@@ -222,6 +244,7 @@ export function rosterSeedText(
     ROSTER_SEED_PREFACE,
     [ROSTER_SEED_CLOSING],
     ordered(sessions).map((session) => sessionLine(session, now)),
+    ROSTER_SEED_BOUNDS.SESSIONS,
   );
 }
 
@@ -235,30 +258,52 @@ export function rosterSeedItem(
 }
 
 /**
- * What the voice is told when the desk moves: the sessions whose line reads
- * differently than the one it was given, and the ones that have left. A
- * roster whose every line still reads the same produces nothing, so a pass
- * that observed no change costs the conversation neither an append nor the
- * cached prefix behind it. A session that was never told a roster at all is
- * told the whole summary rather than a diff against nothing.
+ * A summary as one session was actually given it: the roster it named and the
+ * instant it was rendered at. Both are needed to diff honestly — rendering
+ * the old sessions at the new instant would compare a line against one that
+ * was never sent, and a session grown an hour older would read as unchanged.
+ */
+export interface RosterTold {
+  sessions: readonly RosterSeedSession[];
+  at: number;
+}
+
+/**
+ * What the voice is told when the desk moves: the sessions that have left,
+ * and then the ones whose line now reads differently from the one it was
+ * given — an age that crossed a bucket edge included, since the voice would
+ * otherwise keep calling a session fresh for as long as nothing else about it
+ * moved. A roster whose every line still reads the same produces nothing, so
+ * a pass that observed no change costs the conversation neither an append nor
+ * the cached prefix behind it. A session that was never told a roster at all
+ * is told the whole summary rather than a diff against nothing.
+ *
+ * Departures lead, because the two failures are not equal: a line the voice
+ * never hears leaves it merely uninformed, where a withdrawal it never hears
+ * leaves it offering an agent that is not on the desk.
  */
 export function rosterUpdateText(
-  previous: readonly RosterSeedSession[] | undefined,
+  previous: RosterTold | undefined,
   next: readonly RosterSeedSession[],
   now: number,
 ): string | undefined {
   if (previous === undefined) return rosterSeedText(next, now);
-  const before = lineByIdentity(previous, now);
+  const before = lineByIdentity(previous.sessions, previous.at);
   const after = lineByIdentity(next, now);
-  const changed = ordered(next)
-    .map((session) => ({ session, line: sessionLine(session, now) }))
-    .filter(({ session, line }) => lineOf(before, session.identity) !== line)
-    .map(({ line }) => line);
-  const gone = ordered(previous)
+  const gone = ordered(previous.sessions)
     .filter((session) => lineOf(after, session.identity) === undefined)
     .map(
       (session) =>
         `- ${observedValue(session.title, ROSTER_SEED_BOUNDS.TITLE_CHARS) ?? "an untitled agent"}: ${GONE_TEXT}.`,
     );
-  return summaryText(ROSTER_UPDATE_PREFACE, [], [...changed, ...gone]);
+  const changed = ordered(next)
+    .map((session) => ({ session, line: sessionLine(session, now) }))
+    .filter(({ session, line }) => lineOf(before, session.identity) !== line)
+    .map(({ line }) => line);
+  return summaryText(
+    ROSTER_UPDATE_PREFACE,
+    [],
+    [...gone, ...changed],
+    gone.length + changed.length,
+  );
 }

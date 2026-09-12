@@ -22,6 +22,7 @@ import {
   PROACTIVE_SPEECH_KIND,
   type ProactiveSpeechKind,
   type RosterSeedSession,
+  type RosterTold,
   renderAskContext,
   rosterSeedItem,
   rosterUpdateText,
@@ -213,8 +214,8 @@ interface StandingSession {
   readonly settleTimers: Map<TranscriptSpeaker, ScheduledTimer>;
   idleReported: boolean;
   idleTimer: ScheduledTimer | undefined;
-  /** The roster this session was last told, so the next one is diffed against what it actually knows. */
-  rosterTold: readonly RosterSeedSession[] | undefined;
+  /** The roster this session was told and the instant it was rendered at, so the next one is diffed against what it actually holds. */
+  rosterTold: RosterTold | undefined;
   stopEvents: () => void;
   stopClose: () => void;
 }
@@ -337,15 +338,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (this.#standing) await this.endSession();
     const source = this.#options.source();
     if (!source) return undefined;
-    const roster = this.#options.roster?.() ?? [];
+    const told: RosterTold = { sessions: this.#options.roster?.() ?? [], at: this.#options.now() };
     this.#dropPendingRoster();
-    const opened = await source.create({ sdpOffer, input: this.#seedInput(roster) });
+    const opened = await source.create({ sdpOffer, input: this.#seedInput(told) });
     if (!opened) return undefined;
     this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
     const sideband = await this.#attach(opened);
     if (!sideband) return undefined;
     this.#standing = this.#stand(opened.sessionId, sideband);
-    this.#standing.rosterTold = roster;
+    this.#standing.rosterTold = told;
     this.#usageConfirmed = false;
     this.#options.onSessionCreated?.();
     this.#trace(LIVE_TRACE_DECISION.CREATED);
@@ -514,8 +515,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * without a round trip — so the conversation is built under what the roster
    * item leaves of the API's bounds.
    */
-  #seedInput(roster: readonly RosterSeedSession[]): readonly InitialItem[] {
-    const item = rosterSeedItem(roster, this.#options.now());
+  #seedInput(told: RosterTold): readonly InitialItem[] {
+    const item = rosterSeedItem(told.sessions, told.at);
     const budget =
       item === undefined
         ? { messages: LIVE_INPUT_BOUNDS.MESSAGES, tokens: LIVE_INPUT_BOUNDS.TOKENS }
@@ -555,9 +556,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const session = this.#speakable();
     if (!session) return;
     this.#rosterPending = undefined;
-    const text = rosterUpdateText(session.rosterTold, sessions, this.#options.now());
+    const at = this.#options.now();
+    const text = rosterUpdateText(session.rosterTold, sessions, at);
     if (text === undefined) return;
-    session.rosterTold = sessions;
+    session.rosterTold = { sessions, at };
     session.channel.enqueue(async () => {
       await session.channel.send(thinkingAppend(this.#input(null, text)), {
         countsForIdle: false,

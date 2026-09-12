@@ -19,6 +19,7 @@ import {
   parseLiveServerEvent,
   type RosterSeedSession,
   rosterSeedText,
+  rosterUpdateText,
   SEED_ROLE,
   seedItemTokens,
   UTTERANCE_GAP_MS,
@@ -1412,6 +1413,23 @@ test("a change the seed's own read has already superseded is discarded, never to
   await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
   await drainMicrotasks();
   assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+});
+
+test("a desk that empties withdraws what the session was told rather than leaving it standing", async () => {
+  const f = fixture();
+  f.roster.push(rosterSession("a"));
+  const sideband = await f.open();
+  f.service.updateRoster([]);
+  await f.clock.advance(f.clock.now + ROSTER_DEBOUNCE_MS);
+  await drainMicrotasks();
+  const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+  assert.equal(sent.length, 1);
+  const only = sent[0];
+  assert.ok(only && "content" in only);
+  assert.equal(
+    only.content,
+    rosterUpdateText({ sessions: f.roster, at: f.clock.now }, [], f.clock.now),
+  );
 });
 
 test("a desk that moves while no session stands opens none and sends nothing", async () => {

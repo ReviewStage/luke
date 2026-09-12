@@ -358,7 +358,18 @@ export const composeObservation = (
 
     function broadcastSessions(sessions: readonly Session[]): void {
       rosterBroadcast = true;
-      const drawn = relevantSessions(sessions);
+      emitSessions(relevantSessions(sessions));
+    }
+
+    /**
+     * The one place the drawn roster leaves this composer, so every reader of
+     * it sees the same desk: the panel over the event, and the concerns that
+     * draw nothing over the listeners. The stop's empty roster travels here
+     * too — a voice session outlives the account gate closing, and one left
+     * holding the last desk it was told would keep offering agents that are
+     * no longer observed.
+     */
+    function emitSessions(drawn: readonly Session[]): void {
       kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(drawn), settled: true });
       for (const listener of rosterListeners) listener(drawn);
     }
@@ -397,7 +408,7 @@ export const composeObservation = (
       for (const id of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
         sessionRegistry.replaceProvider(PROVIDER_IDENTITY_BY_ID[id], []);
       }
-      kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [], settled: true });
+      emitSessions([]);
       kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: [] });
       lastWorkspaceProjects = undefined;
       heldWorkspaceProjects = [];
