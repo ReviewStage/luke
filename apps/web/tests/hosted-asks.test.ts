@@ -6,7 +6,7 @@ import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { ASK_REFUSAL, acceptAsk, askStanding, stopAsk } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {

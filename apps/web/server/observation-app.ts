@@ -4,7 +4,6 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Redacted, Schema } from "effect";
 import { auth } from "./auth.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "./core.js";
-import { getDatabase } from "./db/index.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
@@ -239,13 +238,12 @@ async function eventsHandler(request: Request): Promise<Response> {
  * only ever one this tick enumerated.
  */
 async function observationTickHandler(request: Request): Promise<Response> {
-  const database = getDatabase();
   const environment = await runWeb(HostedEnvironment);
   const encryptionSecret = environment.providerKeyEncryptionSecret
     ? Redacted.value(environment.providerKeyEncryptionSecret)
     : undefined;
   const store = encryptionSecret
-    ? hostedStore({ db: database, keys: payloadKeyRing(encryptionSecret), run: runWeb })
+    ? hostedStore({ keys: payloadKeyRing(encryptionSecret), run: runWeb })
     : undefined;
   const sender = environment.apnsCredentials
     ? new ApnsSender({ credentials: environment.apnsCredentials })

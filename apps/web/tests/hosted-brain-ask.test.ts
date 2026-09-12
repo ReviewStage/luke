@@ -17,7 +17,7 @@ import {
 } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   ASK_REFUSAL,
   type AskRecord,

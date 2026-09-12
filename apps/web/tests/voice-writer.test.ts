@@ -10,7 +10,7 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import { VOICE_SEGMENT_ROLE } from "../server/db/voice-schema";
+import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import {
   type CommentaryAppend,
   type ConversationTarget,

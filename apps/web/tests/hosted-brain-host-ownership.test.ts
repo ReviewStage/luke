@@ -95,7 +95,6 @@ interface TestHost {
 function hostOverTestDatabase(): TestHost {
   let storeReads = 0;
   const seams: BrainHostSeams = {
-    db: () => database.db,
     run: database.run,
     store: () => {
       storeReads += 1;

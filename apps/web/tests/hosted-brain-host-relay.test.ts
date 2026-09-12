@@ -18,7 +18,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";

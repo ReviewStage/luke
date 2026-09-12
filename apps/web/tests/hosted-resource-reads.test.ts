@@ -39,7 +39,7 @@ import {
 import { Effect, Schema as EffectSchema } from "effect";
 import { afterAll, test } from "vitest";
 import type { StoredUIMessage } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { handleChanges } from "../server/hosted/change-signal";
 import {

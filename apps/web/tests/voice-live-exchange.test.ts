@@ -199,7 +199,7 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
     userId: target.userId,
     liveSessionId,
     conversationId: target.conversationId,
-    context: { db: database.db, run: database.run, keys: KEYS },
+    context: { run: database.run, keys: KEYS },
     writer,
     eve,
     source: () => source,

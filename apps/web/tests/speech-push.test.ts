@@ -17,7 +17,7 @@ import {
   TURN_STATUS,
   type WireRecord,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   APNS_DELIVERY,
   APNS_INTERRUPTION_LEVEL,

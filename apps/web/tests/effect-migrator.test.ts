@@ -12,22 +12,11 @@ import {
   webMigrationJournal,
   webMigrations,
 } from "../server/db/effect-migrator.js";
-import {
-  drizzleMigratedPgliteSqlClient,
-  testSqlClient,
-  unmigratedPgliteSqlClient,
-} from "./support/sql-client.js";
+import { testSqlClient, unmigratedPgliteSqlClient } from "./support/sql-client.js";
 
 interface RecordedMigration {
   readonly id: number;
   readonly name: string;
-}
-
-interface Column {
-  readonly table: string;
-  readonly column: string;
-  readonly type: string;
-  readonly nullable: string;
 }
 
 function withPlatform<A, E>(layer: Layer.Layer<A, E>): Layer.Layer<A | NodeContext.NodeContext, E> {
@@ -51,34 +40,6 @@ const named = (
 const resolved = Effect.map(webMigrations(), (migrations) =>
   named(migrations.map(([id, name]) => [id, name])),
 );
-
-/**
- * Every column of every table the migrations left behind, bookkeeping aside:
- * the runner's own table is what this migration introduces, so it is the one
- * difference expected between the two runners' schemas.
- */
-const publicColumns = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  const rows = yield* sql<{
-    readonly table_name: string;
-    readonly column_name: string;
-    readonly data_type: string;
-    readonly is_nullable: string;
-  }>`
-    select table_name, column_name, data_type, is_nullable
-    from information_schema.columns
-    where table_schema = 'public' and table_name <> ${MIGRATIONS_TABLE}
-    order by table_name, column_name
-  `.withoutTransform;
-  return rows.map(
-    (row): Column => ({
-      table: row.table_name,
-      column: row.column_name,
-      type: row.data_type,
-      nullable: row.is_nullable,
-    }),
-  );
-});
 
 function seedDrizzleHistory(createdAt: number) {
   return Effect.gen(function* () {
@@ -157,15 +118,4 @@ it.effect("the bootstrap records nothing when there is no Drizzle history to rea
       assert.deepEqual(yield* recorded, []);
     }),
   ),
-);
-
-it.effect("the two runners leave a fresh database with the same schema", () =>
-  Effect.gen(function* () {
-    const drizzled = yield* Effect.provide(
-      publicColumns,
-      withPlatform(drizzleMigratedPgliteSqlClient),
-    );
-    const migrated = yield* onFreshDatabase(Effect.zipRight(runWebMigrations(), publicColumns));
-    assert.deepEqual(migrated, drizzled);
-  }),
 );

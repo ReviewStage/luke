@@ -5,7 +5,7 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { BRAIN_TURN_TRIGGER, WORKSPACE_FILE } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_TURN,
@@ -58,7 +58,6 @@ function unreached(name: string): () => never {
 }
 
 const seams: BrainHostSeams = {
-  db: () => database.db,
   eveOrigin: () => undefined,
   run: database.run,
   store: () => database.store,

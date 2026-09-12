@@ -15,7 +15,7 @@ import {
   sessionKey,
   type WireRecord,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import {
   type HostedActionCarrier,

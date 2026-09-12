@@ -1,7 +1,6 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import { Effect, Schema } from "effect";
 import { type CloudAgentProviderId, unparsedWire, type WireBoundaryInput } from "../../core.js";
-import { getDatabase } from "../../db/index.js";
 import { runWeb } from "../../runtime.js";
 import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
@@ -10,7 +9,7 @@ import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../encryption.js";
 import { OBSERVATION_ENVIRONMENT } from "../observation-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../openai.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
-import type { HostedStoreDatabase, HostedStoreRun } from "../store/database.js";
+import type { HostedStoreRun } from "../store/database.js";
 import { type HostedStore, hostedStore, storeWriter } from "../store/index.js";
 import { readApiKeyFor } from "../vault-keys.js";
 import type { VaultKeyRow } from "../vault-route.js";
@@ -39,7 +38,6 @@ interface OpenAiAccess {
 }
 
 export interface BrainHostSeams {
-  readonly db: () => HostedStoreDatabase;
   /** The runner the store's own effects are answered through, this deployment's edge. */
   readonly run: HostedStoreRun;
   readonly store: () => HostedStore;
@@ -112,15 +110,11 @@ function vaultSecret(): string {
 }
 
 export function productionBrainHostSeams(): BrainHostSeams {
-  const db = once(() => getDatabase());
-  const store = once(() =>
-    hostedStore({ db: db(), keys: payloadKeyRing(vaultSecret()), run: runWeb }),
-  );
+  const store = once(() => hostedStore({ keys: payloadKeyRing(vaultSecret()), run: runWeb }));
   const writer = once(() => storeWriter({ run: runWeb, tools: CATALOG_TOOL_SET }));
   const vaultRows = (userId: string): Promise<readonly VaultKeyRow[]> =>
     runWeb(findVaultRows(userId));
   return {
-    db,
     run: runWeb,
     store,
     writer,

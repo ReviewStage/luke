@@ -8,13 +8,10 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
-import { getTableName, is } from "drizzle-orm";
-import { PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
-import * as schema from "../server/db/schema";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,
@@ -51,10 +48,41 @@ import {
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-/** Every table `server/db/schema.ts` declares, by its Postgres name. */
-const DECLARED_TABLES = Object.values(schema)
-  .flatMap((value) => (is(value, PgTable) ? [getTableName(value)] : []))
-  .sort();
+/** Every table the migrations declare, by its Postgres name, better-auth's own alongside Luke's. */
+const DECLARED_TABLES = [
+  "account",
+  "account_preference",
+  "account_workspace_preference",
+  "admin_favorite",
+  "asks",
+  "conversations",
+  "devices",
+  "events",
+  "hosted_usage",
+  "introduction_usage",
+  "jwks",
+  "messages",
+  "oauth_access_token",
+  "oauth_client",
+  "oauth_consent",
+  "oauth_refresh_token",
+  "observation_pass",
+  "personal_fact",
+  "provider_cursors",
+  "provider_key",
+  "roster_consumed",
+  "roster_diff",
+  "roster_snapshot",
+  "session",
+  "tool_sets",
+  "turns",
+  "user",
+  "verification",
+  "voice_session_usage",
+  "voice_sessions",
+  "voice_transcript_segments",
+  "workspace_file",
+].sort();
 
 async function publicTableNames(): Promise<readonly string[]> {
   const rows = await database.run(

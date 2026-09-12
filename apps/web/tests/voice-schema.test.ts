@@ -5,7 +5,7 @@ import {
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceSessionUsage,
-} from "../server/db/voice-schema";
+} from "../server/db/voice-vocabulary";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,

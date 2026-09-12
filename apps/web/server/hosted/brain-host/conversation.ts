@@ -2,7 +2,7 @@ import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import { CONVERSATION_KIND } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";

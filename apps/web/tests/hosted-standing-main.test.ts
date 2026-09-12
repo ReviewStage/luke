@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { standingMain } from "../server/hosted/brain-host/main";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { readStandingConversations, setConversationDeletedAt } from "./support/store-rows";

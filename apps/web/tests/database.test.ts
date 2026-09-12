@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { createDatabase, createPool, getDatabase, POOL_LIMITS } from "../server/db/index";
+import { createPool, getPool, POOL_LIMITS } from "../server/db/index";
 
 const TEST_CONNECTION_STRING = "postgresql://user:secret@localhost:5432/luke";
 
-test("database construction is offline and the pool is bounded", () => {
-  const database = createDatabase(TEST_CONNECTION_STRING);
-  const pool = database.$client;
+test("a pool is bounded and lazy: nothing connects at construction", () => {
+  const pool = createPool(TEST_CONNECTION_STRING);
 
   assert.equal(pool.totalCount, 0);
   assert.equal(pool.idleCount, 0);
@@ -20,20 +19,13 @@ test("database construction is offline and the pool is bounded", () => {
   assert.ok(Number.isFinite(pool.options.connectionTimeoutMillis));
 });
 
-test("a pool is also lazy when constructed directly", () => {
-  const pool = createPool(TEST_CONNECTION_STRING);
-
-  assert.equal(pool.totalCount, 0);
-  assert.equal(pool.options.connectionString, TEST_CONNECTION_STRING);
-});
-
 test("DATABASE_URL is read lazily and a missing value is not cached", () => {
   const previousConnectionString = process.env.DATABASE_URL;
   delete process.env.DATABASE_URL;
 
   try {
     assert.throws(
-      () => getDatabase(),
+      () => getPool(),
       (error) => {
         assert.ok(error instanceof Error);
         return true;
@@ -41,7 +33,7 @@ test("DATABASE_URL is read lazily and a missing value is not cached", () => {
     );
 
     process.env.DATABASE_URL = TEST_CONNECTION_STRING;
-    assert.equal(getDatabase().$client.options.connectionString, TEST_CONNECTION_STRING);
+    assert.equal(getPool().options.connectionString, TEST_CONNECTION_STRING);
   } finally {
     if (previousConnectionString === undefined) {
       delete process.env.DATABASE_URL;

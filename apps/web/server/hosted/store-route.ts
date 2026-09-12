@@ -1,4 +1,3 @@
-import { getDatabase } from "../db/index.js";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
 import { payloadKeyRing } from "./encryption.js";
@@ -26,7 +25,7 @@ async function deploymentStore(): Promise<HostedStore | undefined> {
   if (composed) return composed;
   const secret = await hostedEncryptionSecret();
   if (!secret) return undefined;
-  composed = hostedStore({ db: getDatabase(), keys: payloadKeyRing(secret), run: runWeb });
+  composed = hostedStore({ keys: payloadKeyRing(secret), run: runWeb });
   return composed;
 }
 

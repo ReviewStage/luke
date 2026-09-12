@@ -44,7 +44,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,

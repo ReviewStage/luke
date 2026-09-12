@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
+import * as SqlClient from "@effect/sql/SqlClient";
 import { isTextUIPart, isToolUIPart } from "ai";
-import { and, asc, eq, isNull } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { ManagedRuntime } from "effect";
+import { Effect, ManagedRuntime, Schema } from "effect";
 import { defineEval } from "eve/evals";
 import { Pool } from "pg";
 import {
@@ -18,20 +17,18 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../../server/core";
-import * as schema from "../../server/db/schema";
 import { sqlClientOverPool } from "../../server/db/sql-client";
-import {
-  CONVERSATION_KIND,
-  conversations,
-  messages,
-  toolSets,
-  turns,
-} from "../../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../../server/hosted/brain-host/ids";
 import { hostedToolDeclarations } from "../../server/hosted/brain-host/tools";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption";
 import { hostedStore, toolSetHashOf } from "../../server/hosted/store";
+import {
+  readMessagesByConversationTyped,
+  readToolSetsByHash,
+  readTurnById,
+} from "../../tests/support/store-rows";
 import { SCRIPTED_FACT } from "../scripted-model";
 
 /**
@@ -55,27 +52,68 @@ const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
 const ACCEPTED_SESSION = s.record({ sessionId: s.text() }, { extraKeys: RECORD_EXTRA_KEYS.IGNORE });
 
-type FixtureDatabase = ReturnType<typeof drizzle<typeof schema>>;
+type Run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
+
+async function ensureLocalDevUser(run: Run): Promise<void> {
+  await run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        insert into "user" (id, name, email)
+        values (${LOCAL_DEV_PRINCIPAL}, ${"Local developer"}, ${"local-dev@luke.test"})
+        on conflict (id) do nothing
+      `;
+    }),
+  );
+}
 
 /** The account's one standing main conversation, opened on the first run and reused on every later one. */
-async function standingMainConversation(db: FixtureDatabase): Promise<{ id: string }> {
-  const [standing] = await db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.userId, LOCAL_DEV_PRINCIPAL),
-        eq(conversations.kind, CONVERSATION_KIND.MAIN),
-        isNull(conversations.deletedAt),
-      ),
-    );
-  if (standing) return standing;
-  const [opened] = await db
-    .insert(conversations)
-    .values({ userId: LOCAL_DEV_PRINCIPAL, kind: CONVERSATION_KIND.MAIN })
-    .returning({ id: conversations.id });
-  assert.ok(opened);
-  return opened;
+async function standingMainConversation(run: Run): Promise<{ id: string }> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const IdRowSchema = Schema.Struct({ id: Schema.String });
+      const standing = yield* sql`
+        select id from conversations
+        where user_id = ${LOCAL_DEV_PRINCIPAL} and kind = ${CONVERSATION_KIND.MAIN}
+          and deleted_at is null
+      `;
+      if (standing[0]) return Schema.decodeUnknownSync(IdRowSchema)(standing[0]);
+      const opened = yield* sql`
+        insert into conversations (user_id, kind)
+        values (${LOCAL_DEV_PRINCIPAL}, ${CONVERSATION_KIND.MAIN})
+        returning id
+      `;
+      const [row] = opened;
+      assert.ok(row);
+      return Schema.decodeUnknownSync(IdRowSchema)(row);
+    }),
+  );
+}
+
+function readConversationRuntimeSessionId(
+  run: Run,
+  conversationId: string,
+): Promise<string | null> {
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        select runtime_session_id from conversations where id = ${conversationId}
+      `;
+      const RowSchema = Schema.Struct({
+        runtime_session_id: Schema.NullOr(Schema.String),
+      });
+      const [row] = rows;
+      return row === undefined ? null : Schema.decodeUnknownSync(RowSchema)(row).runtime_session_id;
+    }),
+  );
+}
+
+function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
+  return readMessagesByConversationTyped(run, conversationId).then((rows) =>
+    rows.filter((row) => row.turnId === turnId),
+  );
 }
 
 /** The database and vault secret the fixture runs against, or nothing where the environment names neither. */
@@ -94,14 +132,11 @@ export default defineEval({
     }
     const { connectionString, secret } = named;
     const pool = new Pool({ connectionString, max: 1 });
-    const db = drizzle(pool, { schema });
     const runtime = ManagedRuntime.make(sqlClientOverPool(pool));
+    const run: Run = (effect) => runtime.runPromise(effect);
     try {
-      await db
-        .insert(schema.user)
-        .values({ id: LOCAL_DEV_PRINCIPAL, name: "Local developer", email: "local-dev@luke.test" })
-        .onConflictDoNothing();
-      const conversation = await standingMainConversation(db);
+      await ensureLocalDevUser(run);
+      const conversation = await standingMainConversation(run);
 
       const opened = await t.target.fetch("/eve/v1/session", {
         method: "POST",
@@ -117,11 +152,8 @@ export default defineEval({
       assert.ok(accepted);
       // The door admits a session once its first event has recorded it on the conversation row.
       for (let waited = 0; waited < 40; waited += 1) {
-        const [recorded] = await db
-          .select({ runtimeSessionId: conversations.runtimeSessionId })
-          .from(conversations)
-          .where(eq(conversations.id, conversation.id));
-        if (recorded?.runtimeSessionId === accepted.sessionId) break;
+        const runtimeSessionId = await readConversationRuntimeSessionId(run, conversation.id);
+        if (runtimeSessionId === accepted.sessionId) break;
         await t.sleep(250);
       }
       const session = await t.target.attachSession(accepted.sessionId);
@@ -129,13 +161,9 @@ export default defineEval({
       session.calledTool(ACTION_TOOL.REMEMBER_FACT);
 
       const turnId = hostTurnId(accepted.sessionId, "turn_0");
-      const turnRows = await db
-        .select()
-        .from(turns)
-        .where(and(eq(turns.conversationId, conversation.id), eq(turns.id, turnId)));
-      assert.equal(turnRows.length, 1);
-      const [turn] = turnRows;
+      const turn = await readTurnById(run, turnId);
       assert.ok(turn);
+      assert.equal(turn.conversationId, conversation.id);
       assert.equal(turn.origin, TURN_ORIGIN.TYPED);
       assert.equal(turn.status, TURN_STATUS.SETTLED);
       // What the turn ran under, carried from the session's start through eve's
@@ -145,14 +173,10 @@ export default defineEval({
       assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
       assert.ok(turn.toolSetHash);
       assert.equal(turn.toolSetHash, toolSetHashOf(hostedToolDeclarations(BRAIN_TURN_TRIGGER.ASK)));
-      const [toolSet] = await db.select().from(toolSets).where(eq(toolSets.hash, turn.toolSetHash));
-      assert.ok(toolSet);
+      const toolSetRows = await readToolSetsByHash(run, turn.toolSetHash);
+      assert.equal(toolSetRows.length, 1);
 
-      const messageRows = await db
-        .select()
-        .from(messages)
-        .where(and(eq(messages.conversationId, conversation.id), eq(messages.turnId, turnId)))
-        .orderBy(asc(messages.seq));
+      const messageRows = await readMessagesByTurn(run, conversation.id, turnId);
       assert.deepEqual(
         messageRows.map((row) => row.role),
         [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
@@ -168,18 +192,11 @@ export default defineEval({
       assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.equal(answer.parts.filter((part) => isTextUIPart(part)).length, 1);
 
-      const store = hostedStore({
-        db,
-        keys: payloadKeyRing(secret),
-        run: (effect) => runtime.runPromise(effect),
-      });
+      const store = hostedStore({ keys: payloadKeyRing(secret), run });
       const facts = await store.facts.list(LOCAL_DEV_PRINCIPAL);
       assert.equal(facts.filter((fact) => fact.words === SCRIPTED_FACT).length, 1);
-      const [row] = await db
-        .select({ runtimeSessionId: conversations.runtimeSessionId })
-        .from(conversations)
-        .where(eq(conversations.id, conversation.id));
-      assert.equal(row?.runtimeSessionId, accepted.sessionId);
+      const runtimeSessionId = await readConversationRuntimeSessionId(run, conversation.id);
+      assert.equal(runtimeSessionId, accepted.sessionId);
     } finally {
       await runtime.dispose();
       await pool.end();

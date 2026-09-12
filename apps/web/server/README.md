@@ -4,40 +4,40 @@
 
 Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
-migrations; the connection strings live nowhere in this repository.
-`server/db/schema.ts` is the aggregate source of truth for database structure
-owned by Luke. Better Auth generates its portion into `server/db/auth-schema.ts`;
-do not hand-edit that generated module.
+migrations; the connection strings live nowhere in this repository. There is
+no ORM and no generated schema module: every query is a statement the
+`@effect/sql` `SqlClient` runs, and a table's shape lives in its migration
+alone. Better Auth reaches the same tables through its own Kysely adapter
+(`server/auth.ts`), a `Kysely` instance built over the same `pg.Pool` with
+`CamelCasePlugin`, which is what maps the camelCase fields Better Auth reads
+and writes onto the migrations' snake_case columns; there is no generated
+auth schema module to hand-edit and nothing to regenerate after changing
+Better Auth or one of its plugins.
 
-After changing Better Auth or one of its plugins, run `pnpm auth:generate`, then
-run `pnpm db:generate`, review the generated migration, and commit both outputs.
-Schema generation uses a local placeholder connection string when `DATABASE_URL`
-is absent; `pg.Pool` is lazy, so the command never connects to that placeholder.
-For a Luke-owned table, add its own schema module and export it from
-`server/db/schema.ts` before running `pnpm db:generate`. Name every schema module
-`*-schema.ts` so Drizzle Kit includes it.
+For a new table or a changed one, write the migration by hand under
+`drizzle/` (a plain SQL file plus its `meta/_journal.json` entry, the shape
+`drizzle-kit` used to generate before this migration off it; the directory
+name is what stands from that era and is not itself a dependency on the
+package) and add whatever query modules under `server/` need it.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
 connection Neon supplies for that deployment. The runner holds a PostgreSQL
 advisory lock for the migration session, so overlapping builds targeting one
 branch cannot apply the same migration concurrently.
 
-What applies them is `@effect/sql`'s own migrator, over the same generated
-folder Drizzle Kit writes: `server/db/effect-migrator.ts` reads
-`drizzle/meta/_journal.json` and the `.sql` file each entry names, so the
-statements and their order stay Drizzle's and nothing here rewrites a
-migration. Drizzle Kit still generates them — `pnpm db:generate` is unchanged
-— and what moved is only the bookkeeping: `effect_sql_migrations` in `public`
-rather than `drizzle.__drizzle_migrations`. A database Drizzle's runner had
-already migrated is bootstrapped once rather than migrated again: Drizzle
-stamped every row it wrote with the journal instant of the migration it had
-just applied and refused anything at or below the greatest instant it found,
-so that greatest instant is read, every journal entry at or below it is
-recorded as applied, and the copy runs only into an empty table, which is what
-makes a second deploy a no-op. The Neon integration creates
-a database branch for each Preview deployment, so its committed schema changes
-are applied to the matching branch before Vite builds the application. No package
-lifecycle hook runs migrations.
+What applies them is `@effect/sql`'s own migrator: `server/db/effect-migrator.ts`
+reads `drizzle/meta/_journal.json` and the `.sql` file each entry names, in
+order, and records what it applied in its own `effect_sql_migrations` table
+rather than `drizzle.__drizzle_migrations`, which a database an older
+Drizzle-based runner had already migrated is bootstrapped from once rather
+than migrated again: that runner stamped every row it wrote with the journal
+instant of the migration it had just applied and refused anything at or below
+the greatest instant it found, so that greatest instant is read, every journal
+entry at or below it is recorded as applied, and the copy runs only into an
+empty table, which is what makes a second deploy a no-op. The Neon integration
+creates a database branch for each Preview deployment, so its committed schema
+changes are applied to the matching branch before Vite builds the application.
+No package lifecycle hook runs migrations.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
@@ -864,8 +864,9 @@ and any Preview that needs a working vault) alongside `DATABASE_URL`.
 
 ## Hosted conversation store
 
-The tables under `server/db/storage-schema.ts`, `workspace-schema.ts`, and
-`roster-schema.ts` hold the hosted brain's conversation per account: the
+The `conversations`/`messages`/`turns`/`events`/`tool_sets`/`provider_cursors`,
+`workspace_file`, and `roster_snapshot` tables hold the hosted brain's
+conversation per account: the
 conversation rows the storage rework settled on, the identity workspace and
 daily notes, the remembered facts, and the latest roster snapshot with its
 diffs and pass record. Every row is keyed by `user_id` and cascades with the
@@ -886,9 +887,8 @@ every key an envelope on record may still name, and the vault's own key format
 is left exactly as it was. Ids, keys, sequences, instants, states, and fixed
 vocabulary words stand clear so they can be indexed.
 
-The conversation tables under `server/db/storage-schema.ts` are
-`conversations`, `messages`, `turns`, `events`, `tool_sets`, and
-`provider_cursors`, the shape `plan/storage-plan.md` on the
+The conversation tables — `conversations`, `messages`, `turns`, `events`,
+`tool_sets`, and `provider_cursors` — are the shape `plan/storage-plan.md` on the
 `orchestration/storage-plan` branch settles on, less the `prompts` table it
 drew: a turn keeps the composed prompt's hash and nothing else of it, because
 the prompt embeds the developer's notebook and nothing replays it, while a
@@ -1058,8 +1058,8 @@ snapshot's instant, and the same call is the device's heartbeat: its row
 takes the last-seen instant and the `activeUntil` and `quietUntil` it
 reported. The service records those two and decides nothing from them here.
 
-Voice is stored beside them the way a call platform stores a call, under
-`server/db/voice-schema.ts`: `voice_sessions` and `voice_transcript_segments`.
+Voice is stored beside them the way a call platform stores a call, in
+`voice_sessions` and `voice_transcript_segments`.
 A session row is one live session — the Live API's own session id, unique so
 a re-attach on a fresh function instance finds the row it had rather than
 forking it, and indexed with the user so an ownership check is one lookup —
