@@ -361,7 +361,9 @@ export const composeObservation = (
             // The roster's own subscriber only broadcasts sessions; the
             // projects broadcast the same pass earns is yielded here, on the
             // pass's own fiber, rather than forked from that plain callback.
-            yield* broadcastWorkspaceProjects;
+            // Gated the same way `drawSnapshotRoster` gates its own write, so
+            // a pass a newer one superseded broadcasts nothing stale.
+            if (isCurrent()) yield* broadcastWorkspaceProjects;
           }),
           FetchHttpClient.layer,
         ),
