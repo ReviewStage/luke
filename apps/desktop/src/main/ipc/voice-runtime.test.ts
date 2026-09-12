@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Runtime } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { channels } from "#shared/bridge";
@@ -62,7 +62,7 @@ function fixture(clearConversation: () => Promise<boolean>) {
   const dependencies = {
     panels,
     voiceWindow,
-    state: new AppStateStore(initialAppState(RUN, false)),
+    state: new AppStateStore(initialAppState(RUN, false), Runtime.defaultRuntime),
     openExternal: async () => undefined,
     liveSession: {
       createLiveSession: async (sdp: string) => {

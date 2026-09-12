@@ -151,7 +151,7 @@ export function composeDesktop(
         config.packaged && config.runMode.sendsNetwork && config.platform === "darwin"
           ? createElectronUpdaterEngine()
           : undefined;
-      const state = new AppStateStore(initialAppState(config, updateEngine !== undefined));
+      const state = new AppStateStore(initialAppState(config, updateEngine !== undefined), runtime);
       const native = createNativeNode({ config, state });
       const operator = createOperatorClient({
         config,
