@@ -63,7 +63,7 @@ export interface BrainActionPerformerDependencies {
    */
   refreshSessions: () => Effect.Effect<void>;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
-  workspaceDefaults: () => Promise<WorkspaceCreationDefaults>;
+  workspaceDefaults: Effect.Effect<WorkspaceCreationDefaults>;
   /** The guide as the renderer last reported it; empty before it has. */
   appGuide: () => AppGuideSnapshot;
   /** The notebook's entries as the validators read them: what the model may name by id. */
@@ -189,7 +189,7 @@ export function createBrainActionPerformer(
         },
         projects: {
           read: () => Effect.map(observed, () => dependencies.workspaceProjects()),
-          defaults: () => Effect.promise(() => dependencies.workspaceDefaults()),
+          defaults: () => dependencies.workspaceDefaults,
           agentModels: workspaceAgentModels,
         },
         guide: dependencies.appGuide(),

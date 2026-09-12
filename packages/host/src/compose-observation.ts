@@ -34,7 +34,7 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Either, Option, Runtime, type Scope } from "effect";
+import { Effect, Either, Option, type Scope } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -89,13 +89,17 @@ export interface ObservationComposer extends Composer {
   rosterSettled: () => boolean;
   offeredWorkspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
-  /** Told the roster or the settings moved; the settings link runs it on the runtime it captured. */
+  /**
+   * Told the roster or the settings moved; yielded on whichever fiber asked,
+   * the loop's own pass after it draws the roster or the settings write that
+   * changed a default.
+   */
   broadcastWorkspaceProjects: Effect.Effect<void>;
   /** The sessions an action may name: the drawn roster less the voice's own. */
   actableSessions: () => readonly Session[];
   roster: () => BrainRoster;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
-  workspaceDefaults: () => Promise<WorkspaceCreationDefaults>;
+  workspaceDefaults: Effect.Effect<WorkspaceCreationDefaults>;
   heldWorkspaceDefaults: () => WorkspaceCreationDefaults;
   startObservation: () => void;
   stopObservation: () => void;
@@ -120,10 +124,6 @@ export const composeObservation = (
     const { settings, account, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
     const { runMode, report, now } = kernel;
-    // The runtime this composition is built on: what the brain's own
-    // workspace-defaults read is run to a promise on while that collaborator
-    // is promise-shaped, and what a roster listener forks its broadcast onto.
-    const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<ObservationLinks>();
     const links = (): ObservationLinks => {
       const standing = late.unsafePeek();
@@ -193,10 +193,6 @@ export const composeObservation = (
         return defaults;
       },
     );
-
-    function readWorkspaceDefaults(): Promise<WorkspaceCreationDefaults> {
-      return Runtime.runPromise(runtime)(readWorkspaceDefaultsEffect);
-    }
 
     function brainWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
       return normalizeObservedWorkspaceProjects(
@@ -362,6 +358,12 @@ export const composeObservation = (
               isCurrent,
               report,
             });
+            // The roster's own subscriber only broadcasts sessions; the
+            // projects broadcast the same pass earns is yielded here, on the
+            // pass's own fiber, rather than forked from that plain callback.
+            // Gated the same way `drawSnapshotRoster` gates its own write, so
+            // a pass a newer one superseded broadcasts nothing stale.
+            if (isCurrent()) yield* broadcastWorkspaceProjects;
           }),
           FetchHttpClient.layer,
         ),
@@ -421,7 +423,6 @@ export const composeObservation = (
       unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
         broadcastSessions(sessions);
         openCreatedWorkspaces(sessions);
-        Runtime.runFork(runtime)(broadcastWorkspaceProjects);
         countObservedSessions(sessions);
       });
     }
@@ -540,7 +541,7 @@ export const composeObservation = (
         };
       },
       workspaceProjects: brainWorkspaceProjects,
-      workspaceDefaults: readWorkspaceDefaults,
+      workspaceDefaults: readWorkspaceDefaultsEffect,
       heldWorkspaceDefaults: () => brainWorkspaceDefaults,
       startObservation,
       stopObservation,
