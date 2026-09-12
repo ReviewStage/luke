@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import type { Duplex } from "node:stream";
+import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { SOCKET_OPEN_FAULT, socketOpened } from "@sidecar/voice";
 import { test } from "vitest";
 import { WebSocketServer } from "ws";
@@ -84,4 +87,77 @@ test("a refused upgrade answers its status, and nothing listening answers a netw
   assert.equal(socketOpened(unreachable), false);
   if (socketOpened(unreachable)) return;
   assert.equal(unreachable.fault, SOCKET_OPEN_FAULT.NETWORK);
+});
+
+/** One unmasked server-to-client text frame, as the wire carries it (FIN set, opcode text, one-byte length). */
+function textFrame(text: string): Buffer {
+  const payload = Buffer.from(text, "utf8");
+  assert.ok(payload.length < 126);
+  return Buffer.concat([Buffer.from([0x81, payload.length]), payload]);
+}
+
+/**
+ * An upgrade endpoint that answers the handshake and the session's first
+ * frames in ONE write, so the frames sit in the same chunk as the response:
+ * the production timing a promise continuation is one tick too late for.
+ */
+async function serverSpeakingWithTheHandshake(frames: readonly string[]) {
+  const httpServer = http.createServer((_request, response) => {
+    response.statusCode = 404;
+    response.end();
+  });
+  const upgraded = new Set<Duplex>();
+  httpServer.on("upgrade", (request, socket) => {
+    upgraded.add(socket);
+    const key = request.headers["sec-websocket-key"] ?? "";
+    const accept = createHash("sha1")
+      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest("base64");
+    const response = [
+      "HTTP/1.1 101 Switching Protocols",
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      `Sec-WebSocket-Accept: ${accept}`,
+      "",
+      "",
+    ].join("\r\n");
+    socket.write(Buffer.concat([Buffer.from(response, "latin1"), ...frames.map(textFrame)]));
+  });
+  httpServer.listen(0, "127.0.0.1");
+  await once(httpServer, "listening");
+  // SAFETY: a listening TCP server answers its bound address as AddressInfo, never a pipe path.
+  const { port } = httpServer.address() as AddressInfo;
+  return {
+    url: `ws://127.0.0.1:${port}/v1/live/sessions/sess_1/attach`,
+    close: async () => {
+      // An upgraded socket is no longer the HTTP server's to close, and this server answers no
+      // close handshake, so the connections are dropped outright.
+      for (const socket of upgraded) socket.destroy();
+      httpServer.close();
+      await once(httpServer, "close");
+    },
+  };
+}
+
+test("frames in the same chunk as the handshake response reach a consumer that subscribes after the open settles, in order", async () => {
+  const spoken = [
+    JSON.stringify({ type: "session.started" }),
+    JSON.stringify({ type: "session.input_audio.muted" }),
+  ];
+  const endpoint = await serverSpeakingWithTheHandshake(spoken);
+  try {
+    const opening = await openSocketOverWs(endpoint.url, {});
+    assert.ok(socketOpened(opening));
+    // One more turn than the continuation already cost: the frames must still be waiting.
+    await drainMicrotasks(1);
+    const types: string[] = [];
+    opening.socket.onMessage((data) => {
+      // SAFETY: the test wrote these frames as JSON objects with a string type.
+      types.push((JSON.parse(data) as { type: string }).type);
+    });
+    assert.deepEqual(types, ["session.started", "session.input_audio.muted"]);
+    opening.socket.close();
+  } finally {
+    await endpoint.close();
+  }
 });

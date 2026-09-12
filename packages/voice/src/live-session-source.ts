@@ -47,6 +47,7 @@ import {
   withoutTrailingSlash,
 } from "@sidecar/wire";
 import { Data, Duration, Effect, Fiber, Runtime, Schedule } from "effect";
+import { type HeldSocket, holdSocket } from "./held-socket.js";
 import {
   type LiveSideband,
   type LiveSocket,
@@ -478,7 +479,7 @@ class ServiceLiveSessionSource {
       this.#refuse(outcome, detail);
       return undefined;
     }
-    const { socket } = opening;
+    const socket = holdSocket(opening.socket);
     const frame: SessionCreateFrame = {
       type: VOICE_SERVICE_FRAME.SESSION_CREATE,
       sdp: input.sdpOffer,
@@ -537,7 +538,7 @@ class ServiceLiveSessionSource {
             : REATTACH_ATTEMPT.FAILED,
       };
     }
-    const { socket } = opening;
+    const socket = holdSocket(opening.socket);
     const frame: SessionAttachFrame = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId };
     const answer = await this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
     if (answer === undefined) {
@@ -569,30 +570,46 @@ class ServiceLiveSessionSource {
   }
 
   /**
-   * Waits for the service's one answer. A frame is decoded but not judged
+   * Waits for the service's one answer, taken from the held socket without
+   * releasing its hold, so a frame the service sends right behind the answer
+   * waits for the consumer that subscribes in the continuation rather than
+   * being emitted to nobody in between. A frame is decoded but not judged
    * here; a socket closed before it answered, or one silent past the request
    * deadline, is recorded as the service unavailable.
    */
-  #firstFrame(socket: LiveSocket, send: () => void): Promise<WireRecord | undefined> {
+  #firstFrame(socket: HeldSocket, send: () => void): Promise<WireRecord | undefined> {
     return new Promise((resolve) => {
       let settled = false;
       const settle = (value: WireRecord | undefined) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        stopMessages();
-        stopClose();
         resolve(value);
       };
       const timer = setTimeout(() => {
+        // The wait is withdrawn before the outcome is written, so the close the caller answers a
+        // deadline with, or a frame arriving late, is held for the consumer and records nothing
+        // over the deadline's own outcome.
+        socket.cancelFirst();
         this.#outcome.record(
           LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
           "no answer before the deadline",
         );
         settle(undefined);
       }, this.#requestTimeoutMs);
-      const stopMessages = socket.onMessage((data) => {
-        const payload = decodeLivePayload(data);
+      void socket.takeFirst().then((arrival) => {
+        if (settled) return;
+        if ("close" in arrival) {
+          this.#outcome.record(
+            LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
+            arrival.close.code === undefined
+              ? "closed before answering"
+              : `closed with code ${arrival.close.code}`,
+          );
+          settle(undefined);
+          return;
+        }
+        const payload = decodeLivePayload(arrival.frame);
         if (payload === undefined) {
           this.#outcome.record(
             LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
@@ -600,13 +617,6 @@ class ServiceLiveSessionSource {
           );
         }
         settle(payload);
-      });
-      const stopClose = socket.onClose((close) => {
-        this.#outcome.record(
-          LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
-          close.code === undefined ? "closed before answering" : `closed with code ${close.code}`,
-        );
-        settle(undefined);
       });
       send();
     });
@@ -706,6 +716,8 @@ class ReattachingSocket implements LiveSocket {
   readonly #runtime: Runtime.Runtime<never>;
   readonly #messageListeners = new Set<(data: string) => void>();
   readonly #closeListeners = new Set<(close: SocketClose) => void>();
+  /** Frames heard before the first listener stands, replayed to it in order; the sideband over this socket subscribes only after construction. */
+  #heldForListener: string[] | undefined = [];
   #held: string[] | undefined;
   #closedByClient = false;
   #ended = false;
@@ -743,6 +755,11 @@ class ReattachingSocket implements LiveSocket {
 
   onMessage(listener: (data: string) => void): () => void {
     this.#messageListeners.add(listener);
+    if (this.#heldForListener !== undefined) {
+      const replay = this.#heldForListener;
+      this.#heldForListener = undefined;
+      for (const data of replay) listener(data);
+    }
     return () => {
       this.#messageListeners.delete(listener);
     };
@@ -758,6 +775,10 @@ class ReattachingSocket implements LiveSocket {
   #adopt(socket: LiveSocket): void {
     socket.onMessage((data) => {
       if (socket !== this.#inner || this.#ended) return;
+      if (this.#heldForListener !== undefined) {
+        this.#heldForListener.push(data);
+        return;
+      }
       for (const listener of [...this.#messageListeners]) listener(data);
     });
     socket.onClose((close) => {
@@ -914,6 +935,9 @@ export class IntroductionLiveSessionSource
   async create(input: LiveSessionCreateInput): Promise<IntroductionLiveSessionOpened | undefined> {
     const opened = await this.createSession(input);
     if (!opened) return undefined;
+    // Kept open and never read: the frames the service might send are heard and dropped, so the
+    // hold on this socket releases at once rather than filling toward its bound.
+    opened.socket.onMessage(() => undefined);
     return { ...opened.created, close: () => opened.socket.close() };
   }
 }
