@@ -1,0 +1,50 @@
+name: Preview probe
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  deployments: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The one check that sees what Vercel built. Every other job here reads the
+# tree; this one waits for the PR's own preview through the GitHub deployment
+# record and sends it the requests the clients make (`apps/web/server/preview-probe.ts`
+# says which and why), so a preset and a `vercel.json` that disagree fail the
+# PR that would deploy them rather than the five merges after it.
+jobs:
+  probe:
+    name: Preview shape
+    # The preview is behind Deployment Protection, and the way through it is a
+    # project setting Dean opens: the Protection Bypass secret, or the OPTIONS
+    # Allowlist. The repository variable PREVIEW_PROBE_DOOR names which one
+    # stands (`bypass-secret` or `options-allowlist`); until it is set there
+    # is no way to see the deployed shape and the job says so by not running,
+    # rather than by a red check on every PR or a green one that saw nothing.
+    # A merge group has no preview, and a fork's PR has no preview and no
+    # secrets, so neither is probed.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && vars.PREVIEW_PROBE_DOOR != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # The head commit, not the merge commit: Vercel builds the branch, and
+      # the caller list the probe derives has to be the one that preview built.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./.github/actions/setup
+      - run: pnpm --dir apps/web exec tsx scripts/preview-probe.ts
+        env:
+          PREVIEW_PROBE_DOOR: ${{ vars.PREVIEW_PROBE_DOOR }}
+          PREVIEW_PROBE_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
