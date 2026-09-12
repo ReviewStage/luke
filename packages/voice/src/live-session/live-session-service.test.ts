@@ -365,6 +365,7 @@ test("an adopted session is stood without asking the source and without a seed: 
   const adopted = await f.service.adoptSession({
     sessionId: "sess-adopted",
     attach: async () => sideband,
+    started: false,
   });
   assert.equal(adopted, true);
   assert.deepEqual(f.creates, []);
@@ -380,6 +381,46 @@ test("an adopted session is stood without asking the source and without a seed: 
   assert.equal(f.brain.asks.length, 1);
 });
 
+test("a session adopted as already started is speakable at once: it hears no session.started again, so a briefing delivered to it is appended without waiting, where one adopted as not yet started waits for the start", async () => {
+  const running = fixture();
+  const runningSideband = new FakeSideband();
+  assert.equal(
+    await running.service.adoptSession({
+      sessionId: "sess-running",
+      attach: async () => runningSideband,
+      started: true,
+    }),
+    true,
+  );
+  assert.deepEqual(phases(running.changes), [
+    LIVE_SESSION_PHASE.CREATED,
+    LIVE_SESSION_PHASE.STARTED,
+  ]);
+  running.service.deliverBriefing({
+    briefing: "Nukualofa finished.",
+    decidedAt: running.clock.now,
+  });
+  await drainMicrotasks();
+  assert.equal(appends(runningSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+
+  const fresh = fixture();
+  const freshSideband = new FakeSideband();
+  assert.equal(
+    await fresh.service.adoptSession({
+      sessionId: "sess-fresh",
+      attach: async () => freshSideband,
+      started: false,
+    }),
+    true,
+  );
+  fresh.service.deliverBriefing({ briefing: "Nukualofa finished.", decidedAt: fresh.clock.now });
+  await drainMicrotasks();
+  assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+  freshSideband.started("sess-fresh");
+  await drainMicrotasks();
+  assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+});
+
 test("an adopted session whose sideband cannot attach is not stood: the adopt answers false and the session is announced closed as sideband-failed", async () => {
   const f = fixture();
   const adopted = await f.service.adoptSession({
@@ -387,6 +428,7 @@ test("an adopted session whose sideband cannot attach is not stood: the adopt an
     attach: async () => {
       throw new Error("the sideband never opened");
     },
+    started: false,
   });
   assert.equal(adopted, false);
   assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.CLOSED]);

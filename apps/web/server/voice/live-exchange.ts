@@ -82,6 +82,8 @@ export interface AttachedSession {
   readonly deviceId: string | undefined;
   /** The socket the route attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
+  /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
+  readonly started: boolean;
 }
 
 /**
@@ -228,6 +230,7 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
       service.adoptSession({
         sessionId: opened.sessionId,
         attach: observing(() => opened.attach()),
+        started: opened.started,
       }),
     async stop() {
       brain.stop();

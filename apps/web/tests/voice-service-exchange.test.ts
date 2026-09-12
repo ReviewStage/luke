@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { afterAll, test } from "vitest";
-import { MESSAGE_ROLE } from "../server/core";
+import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -27,11 +27,12 @@ import {
   SEED_ROLE,
 } from "../server/live";
 import { exchangeAttachment } from "../server/voice/exchange-attachment";
+import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { SOCKET_CLOSE_CODE } from "../server/voice/relay";
 import { VoiceService, type VoiceServiceOptions } from "../server/voice/service";
 import { voiceSessionRecord } from "../server/voice/session-record";
-import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
+import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import {
   appended,
@@ -40,7 +41,12 @@ import {
   sessionStarted,
   thinkingAppended,
 } from "./support/live-events";
-import { insertConversation, readMessagesByConversationTyped } from "./support/store-rows";
+import {
+  insertConversation,
+  insertDevice,
+  readEventsByMessage,
+  readMessagesByConversationTyped,
+} from "./support/store-rows";
 import {
   connect,
   fakeAccounts,
@@ -174,6 +180,8 @@ interface Stand {
   readonly log: LogEntry[];
   readonly reports: string[];
   readonly openAi: Awaited<ReturnType<typeof startFakeOpenAi>>;
+  /** Every session the attachment was offered, in order, as the route described it. */
+  readonly offered: AttachedSession[];
   /** Lets a gated attachment proceed; a no-op for every other offer. */
   release(): void;
   url(path: string): string;
@@ -223,13 +231,15 @@ async function stand(offer: Offer): Promise<Stand> {
             createId: () => randomUUID(),
             report: (message) => reports.push(message),
           });
+  const offered: AttachedSession[] = [];
   const exchange: VoiceServiceOptions["exchange"] =
-    offer === OFFER.GATED && attachment !== undefined
-      ? async (session) => {
-          await gate;
+    attachment === undefined
+      ? undefined
+      : async (session) => {
+          offered.push(session);
+          if (offer === OFFER.GATED) await gate;
           return attachment(session);
-        }
-      : attachment;
+        };
   const service = new VoiceService({
     apiKey: API_KEY,
     accounts,
@@ -250,6 +260,7 @@ async function stand(offer: Offer): Promise<Stand> {
     log,
     reports,
     openAi,
+    offered,
     release: () => release(),
     url: (path) => `ws://127.0.0.1:${port}${path}`,
     stop: async () => {
@@ -534,5 +545,107 @@ test("what the session speaks while the exchange is standing is read once both c
     afterAsk.map((frame) => ("delegation_id" in frame ? frame.delegation_id : undefined)),
     afterAsk.map(() => "dl_1"),
   );
+  await context.stop();
+});
+
+test("a fresh connection re-attached to a running session offers the exchange the session as started, where the creation offered it as not yet started, since the running session speaks its start to no later listener", async () => {
+  const context = await stand(OFFER.EXCHANGE);
+  const first = await openSession(context);
+  assert.equal(first.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+  const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+  const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in again);
+  await send(again.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
+  const reattach = await context.openAi.nextAttach();
+  const reattached = record(await again.reader.next());
+  assert.equal(reattached.type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
+  assert.deepEqual(
+    context.offered.map((session) => [session.sessionId, session.started]),
+    [
+      [sessionId, false],
+      [sessionId, true],
+    ],
+  );
+  // Both connections hang up; each relay's close is answered so each exchange's stop settles.
+  for (const [desktop, attach, upstream] of [
+    [again.reader, reattach, readSocket(reattach.socket)] as const,
+    [first.desktop, first.attach, first.upstream] as const,
+  ]) {
+    desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+    const closing = clientEvent(await upstream.next(5_000));
+    assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+    await sendText(
+      attach.socket,
+      JSON.stringify({
+        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+        event_id: `closed-${desktop.socket.url}`,
+        reason: "close_requested",
+        usage: { seconds: 1 },
+      }),
+    );
+  }
+  await until(
+    () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+    () =>
+      `both sessions to be reported ended; log ${JSON.stringify(context.log.map((entry) => entry.event))}`,
+  );
+  await context.stop();
+});
+
+test("the briefing look runs for as long as the session stands: a briefing on offer is claimed as the session's device and appended into the session with no delegation, without anyone asking for a look", async () => {
+  const context = await stand(OFFER.EXCHANGE);
+  const deviceId = randomUUID();
+  await insertDevice(database.run, {
+    id: deviceId,
+    userId: context.target.userId,
+    installationId: `install-${deviceId}`,
+    platform: DEVICE_PLATFORM.IOS,
+    lastSeenAt: new Date(NOW),
+  });
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+    [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
+  });
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+    sdp: SDP_OFFER,
+    voice: LIVE_VOICE.MARIN,
+    input: SEED,
+  });
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  const created = record(await desktop.next());
+  assert.equal(created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+  await sendText(
+    attach.socket,
+    JSON.stringify(sessionStarted(context.openAi.attaches[0]?.sessionId ?? "")),
+  );
+  // The brain announces, as an observation turn through the relay: one briefing on offer for the account.
+  const standing = {
+    sessionId: `wrun_${randomUUID()}`,
+    target: context.target,
+    turn: BRAIN_HOST_TURN.OBSERVATION,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  };
+  for (const event of announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW)) {
+    await relay.handle(event, standing);
+  }
+  const [offer] = await database.store.speech.open(context.target.userId);
+  assert.ok(offer);
+  // The look polls on its own cadence; nothing here asks it to look.
+  const spoken = clientEvent(await upstream.next(10_000));
+  assert.equal(spoken.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  if (spoken.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND) {
+    assert.equal(spoken.delegation_id, null);
+    assert.equal(spoken.content, "One agent finished.");
+  }
+  assert.deepEqual(
+    (await readEventsByMessage(database.run, offer.messageId)).map((row) => row.kind),
+    [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED],
+  );
+  await hangUp(context, { desktop, upstream, attach, created });
   await context.stop();
 });

@@ -165,6 +165,8 @@ type Opened =
       accountId: string | undefined;
       /** The device the handshake named and the account was shown to hold; none for the introduction, for a desktop that sent none, and on a re-attach, which checks the session's owner and not a device. */
       deviceId: string | undefined;
+      /** Whether the session is already running: false for one just created, whose peer has yet to connect; true for one re-attached, which spoke its start to an earlier connection. */
+      started: boolean;
       sideband: WebSocket;
       answer: SessionCreatedFrame | SessionAttachedFrame;
       logEvent: typeof LOG_EVENT.SESSION_CREATED | typeof LOG_EVENT.SESSION_ATTACHED;
@@ -352,6 +354,7 @@ export class VoiceService {
             accountId,
             sessionId,
             deviceId: opened.deviceId,
+            started: opened.started,
             sideband,
           });
     if ("refused" in standing) {
@@ -556,6 +559,7 @@ export class VoiceService {
       sessionId: answer.sessionId,
       accountId: account?.accountId,
       deviceId: account?.deviceId,
+      started: false,
       sideband,
       answer,
       logEvent: LOG_EVENT.SESSION_CREATED,
@@ -617,6 +621,7 @@ export class VoiceService {
       sessionId: frame.sessionId,
       accountId,
       deviceId: undefined,
+      started: true,
       sideband,
       answer,
       logEvent: LOG_EVENT.SESSION_ATTACHED,

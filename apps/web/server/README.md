@@ -726,7 +726,11 @@ went meanwhile is answered nothing, its exchange stopped and its sideband
 released rather than left standing for the invocation. The exchange adopts rather than
 creates (`LiveSessionService.adoptSession`): the desktop's create frame
 seeded the session, and a second seed would put the recent lines into the
-conversation twice. An exchange offered that cannot stand refuses the session
+conversation twice. A fresh connection re-attached to a running session
+adopts it as started, since the session spoke its start to an earlier
+connection and speaks it to no later one; the attachment also starts the
+briefing look, which runs for as long as the session stands and ends with the
+exchange's stop. An exchange offered that cannot stand refuses the session
 as unavailable rather than running it with no one to answer its asks. When
 the relay settles, the exchange ends its follows and its look, closes the
 session it holds (already gone, which its sideband reports as the close it

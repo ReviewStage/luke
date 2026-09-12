@@ -62,11 +62,14 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     const adopted = await exchange.adopt({
       sessionId: session.sessionId,
       attach: async () => upstreamSideband(session.sideband),
+      started: session.started,
     });
     if (!adopted) {
       await exchange.stop();
       throw new Error("the exchange could not stand on the session's sideband");
     }
+    // The look at the account's open offers runs for as long as the session stands; the exchange's stop ends it.
+    exchange.briefings.start();
     return exchange;
   };
 }
