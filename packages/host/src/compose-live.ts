@@ -34,6 +34,7 @@ import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { timerSeamFromRuntime } from "./effect/timer-seam.js";
+import { voiceRoster } from "./voice-roster.js";
 
 /** What the live session reaches in the brain that re-decides a held briefing. */
 interface LiveLinks {
@@ -113,6 +114,7 @@ export const composeLive = (
       brain: liveBrain,
       record: liveRecord,
       conversationEntries: () => brain.store.thread().entries(),
+      roster: () => voiceRoster(observation.rosterForClients()),
       quietNow: () => calendars.announcementsQuietNow(now()),
       releaseHeldBriefings: (held) => links().releaseHeld(held),
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
@@ -138,6 +140,14 @@ export const composeLive = (
           calendars.writeOnboarding({ arrivalSpokenAt: new Date(now()).toISOString() });
         }
       },
+    });
+
+    // The desk moving is the one thing that refreshes what the voice knows of
+    // it. The service holds the append until the change settles and sends
+    // nothing while no session stands, so a roster that moves all day on a
+    // quiet Mac costs nothing.
+    observation.onRosterChange((sessions) => {
+      service.updateRoster(voiceRoster(sessions));
     });
 
     /**

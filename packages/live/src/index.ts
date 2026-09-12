@@ -3,6 +3,7 @@ export * from "./events.js";
 export * from "./instructions.js";
 export * from "./introduction.js";
 export * from "./proactive.js";
+export * from "./roster-seed.js";
 export * from "./seed.js";
 export * from "./session.js";
 export * from "./tokens.js";

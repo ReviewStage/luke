@@ -78,6 +78,13 @@ export interface ObservationComposer extends Composer {
   observedSessionCount: () => number;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
+  /**
+   * Told every time the drawn roster is broadcast, with the same sessions the
+   * broadcast carried. It is the one way a concern that draws nothing — the
+   * voice session, which is seeded with a summary of the desk — learns that
+   * the desk moved without polling for it.
+   */
+  onRosterChange: (listener: (sessions: readonly Session[]) => void) => void;
   rosterSettled: () => boolean;
   offeredWorkspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
@@ -141,6 +148,7 @@ export const composeObservation = (
     let heldWorkspaceProjects: readonly ObservedWorkspaceProject[] = [];
     let workspaceProjectsBroadcastGeneration = 0;
     let rosterBroadcast = false;
+    const rosterListeners: ((sessions: readonly Session[]) => void)[] = [];
     let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
 
     function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
@@ -347,10 +355,20 @@ export const composeObservation = (
 
     function broadcastSessions(sessions: readonly Session[]): void {
       rosterBroadcast = true;
-      kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, {
-        sessions: carried(relevantSessions(sessions)),
-        settled: true,
-      });
+      emitSessions(relevantSessions(sessions));
+    }
+
+    /**
+     * The one place the drawn roster leaves this composer, so every reader of
+     * it sees the same desk: the panel over the event, and the concerns that
+     * draw nothing over the listeners. The stop's empty roster travels here
+     * too — a voice session outlives the account gate closing, and one left
+     * holding the last desk it was told would keep offering agents that are
+     * no longer observed.
+     */
+    function emitSessions(drawn: readonly Session[]): void {
+      kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(drawn), settled: true });
+      for (const listener of rosterListeners) listener(drawn);
     }
 
     function countObservedSessions(sessions: readonly Session[]): void {
@@ -387,7 +405,7 @@ export const composeObservation = (
       for (const id of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
         sessionRegistry.replaceProvider(PROVIDER_IDENTITY_BY_ID[id], []);
       }
-      kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [], settled: true });
+      emitSessions([]);
       kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: [] });
       lastWorkspaceProjects = undefined;
       heldWorkspaceProjects = [];
@@ -481,6 +499,9 @@ export const composeObservation = (
       session: (identity) => sessionRegistry.get(identity),
       observedSessionCount: () => actableSessions().length,
       rosterForClients,
+      onRosterChange: (listener) => {
+        rosterListeners.push(listener);
+      },
       rosterSettled: () => !runMode.observesProviders || rosterBroadcast,
       offeredWorkspaceProjects,
       workspaceProjectOffered,

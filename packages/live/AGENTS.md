@@ -78,16 +78,52 @@ sentence the service sends as one commentary append once that append is
 acknowledged; `introductionSeedItems` is the one developer message the
 introduction's `input` may carry, the detected titles under
 `INTRODUCTION_SEED_BOUNDS`, composed by the takeover and admitted by the
-service against the same bound. The docs' backend preamble is not here: it is a prompt section
-of `@sidecar/brain`, and the roster is not here or anywhere the voice can
-read it, because what is on the desk is the brain's; neither package depends
-on this one and this one depends on neither.
+service against the same bound. The desktop policy's line about answering
+from a still-current result is the template's own, and it stands on
+`roster-seed.ts` below: a session that holds a summary of the desk can answer
+which agents run, wait, finished, or failed without a delegation. The docs'
+backend preamble is not here: it is a prompt section
+of `@sidecar/brain`, and the brain's own roster — its identities, transcript
+reads, and everything an action names — is not here and never reaches the
+voice; neither package depends on this one and this one depends on neither.
 
-`seed.ts` is what a session is told as it opens: the recent Conversation
-lines as `input` messages in their own roles (developer and user as
-`input_text`, assistant as `output_text`, no `system`), and nothing else —
-no note addressed to the model, no roster — held under the API's 128
-messages and 8,192 estimated tokens by dropping the oldest lines first. No
+`roster-seed.ts` is the one thing of the desk the voice does know, and it is
+a summary rather than a roster: `rosterSeedText` and `rosterSeedItem` build
+the single developer message a session's `input` opens with, and
+`rosterUpdateText` the diff a refresh carries. A session line is a bounded
+title, the provider's display name, the status worded per status, the held
+tool of a wait its provider reported as holding for the developer, and a
+coarse age bucket off `lastActivityAt` — the only timestamp any provider
+reports, so a bucket says how long since the session was written about and
+never how long it has been working. `RosterSeedSession` is a narrow input
+the host maps its own `Session` to, so this package reaches no registry and
+the fields a line may not carry — the error, branch, repository, model,
+address, workspace — are absent from the type rather than dropped in the
+rendering; the identity it does carry is the diff's and never enters a line.
+The list is ordered so a session holding for the developer leads, capped at
+`ROSTER_SEED_BOUNDS.SESSIONS`, and cut from the end until the whole text is
+inside one append's bound, so a desk of fifty reads the size of a desk of
+two. A refresh whose every line reads the same produces nothing, which is
+what keeps a conversation's cached prefix warm across a pass that observed
+no change.
+
+What a session knows is `RosterTold`: the lines it was actually given, held
+by identity, and never the roster it was meant to have. That is what makes
+the diff honest under everything that can go wrong between deciding a
+refresh and delivering it — a refusal, a summary the append bound cut short,
+a change arriving while the last one is still in flight — since each leaves
+the rows it never carried exactly as they stood, to be said again. A
+departure leads an update for the same reason: a line the voice never hears
+leaves it uninformed, where a withdrawal it never hears leaves it offering an
+agent that is not on the desk.
+
+`seed.ts` is the rest of what a session is told as it opens: the recent
+Conversation lines as `input` messages in their own roles (developer and
+user as `input_text`, assistant as `output_text`, no `system`), and nothing
+addressed to the model beside them, held under the API's 128
+messages and 8,192 estimated tokens by dropping the oldest lines first; the
+roster message above rides ahead of them under the same bounds, and the
+conversation is what gives way when both will not fit. No
 instruction about that history stands in `instructions.ts` either: telling the
 model to read it as memory rather than as a fresh ask is exactly the kind of
 rule the guide says to add only once listening shows it is needed.

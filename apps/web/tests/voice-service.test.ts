@@ -35,6 +35,7 @@ import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { SOCKET_CLOSE_CODE, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
 import {
   INTRODUCTION_INPUT_BOUNDS,
+  SESSIONS_INPUT_BOUNDS,
   UPGRADE_STATUS,
   VoiceService,
   type VoiceServiceOptions,
@@ -750,6 +751,35 @@ test("an introduction seed beyond one bounded developer message is refused befor
     hostedError(record(await wrongRole.reader.next())),
     HOSTED_API_ERROR.INVALID_REQUEST,
   );
+
+  assert.equal(context.openAi.creates.length, 0);
+});
+
+test("a signed-in seed past the input bounds is refused by shape, before any session is created", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+
+  const tooLong = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+  });
+  assert.ok("reader" in tooLong);
+  await send(
+    tooLong.reader.socket,
+    createFrame([developerMessage("x".repeat(SESSIONS_INPUT_BOUNDS.CHARS + 1))]),
+  );
+  assert.equal(hostedError(record(await tooLong.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
+
+  const tooMany = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+  });
+  assert.ok("reader" in tooMany);
+  await send(
+    tooMany.reader.socket,
+    createFrame(
+      Array.from({ length: SESSIONS_INPUT_BOUNDS.MESSAGES + 1 }, () => developerMessage("a")),
+    ),
+  );
+  assert.equal(hostedError(record(await tooMany.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
 
   assert.equal(context.openAi.creates.length, 0);
 });

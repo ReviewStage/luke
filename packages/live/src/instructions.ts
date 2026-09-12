@@ -36,7 +36,10 @@ ${delegationPolicy}`;
  * The guide's Delegation section asks for concrete conditions — "the user asks
  * to change a booking" rather than "delegate when needed" — and fills its own
  * example the same way, so the capabilities and both lists name what Luke's
- * backend actually does. The closing two lines are the template's own.
+ * backend actually does. The closing two lines are the template's own, as is
+ * the line about answering from a still-current result: the session is seeded
+ * with the desk and told again when it moves, so which agents run, wait,
+ * finished, or failed is a question it already holds the answer to.
  */
 const DESKTOP_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -52,6 +55,8 @@ Delegate to the backend when:
 
 Do not delegate to the backend when:
 - The developer greets you, makes small talk, or asks you to repeat a result already given.
+- You can answer from the conversation or a still-current result, such as which agents are
+  running, waiting on the developer, finished, or failed.
 - You cannot tell what they are asking for without a brief clarification.
 
 Delegate before giving an answer that depends on backend work.
