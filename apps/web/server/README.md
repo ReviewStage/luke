@@ -117,7 +117,16 @@ scripts' — and the exports of `@sidecar/hosted`'s paths module, evaluated, mus
 resolve to a rewrite of the table or to an extensionless alias the Build Output
 emits, and a builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
-nothing until production answers 404 (LUKE-186). The
+nothing until production answers 404 (LUKE-186). The same derived list is
+what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
+deployment: every caller path, the cron's, the page, and eve's health, failing
+on any answer that is Vercel's own rather than a handler's — the
+`x-vercel-error` header the platform puts on its `NOT_FOUND`, which a
+function's own 404 never carries — with the runbook's eight requests held to
+their exact codes besides, because on 2026-09-11 five production deploys
+failed in a row while nothing in CI could see the deployed shape (LUKE-164).
+Behind Deployment Protection it needs one of two doors, the bypass secret
+sent as a header or the OPTIONS allowlist, and names which it relies on. The
 table is its own file so a `vercel.ts` can one day import it and `vercel.json`
 be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
 bundles only its relative imports, which takes a JSON table and not this
