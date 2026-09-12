@@ -1,5 +1,7 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Effect, Either, type ParseResult } from "effect";
 import {
   type ChangesAnswer,
   type ChangesRequest,
@@ -15,8 +17,7 @@ import {
   jsonResponse,
   readJsonBody,
 } from "./http.js";
-import { createRateBrake } from "./rate-brake.js";
-import type { HostedStoreRun } from "./store/database.js";
+import { makeRateBrake } from "./rate-brake.js";
 import type { HostedStore } from "./store/index.js";
 
 /**
@@ -40,7 +41,7 @@ const CHANGES_RATE_LIMIT = {
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const changesRateLimited = createRateBrake({
+const changesBrake = makeRateBrake({
   windowMs: CHANGES_RATE_LIMIT.WINDOW_MS,
   maxRequestsPerWindow: CHANGES_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
   maxTrackedUsers: CHANGES_RATE_LIMIT.MAX_TRACKED_USERS,
@@ -54,8 +55,6 @@ const MAXIMUM_CHANGES_BODY_BYTES = 4_096;
 export interface ChangeSignalOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The runner the poll's three store reads are answered through. */
-  run: HostedStoreRun;
   store: Pick<HostedStore, "directory" | "turns" | "roster">;
   touchDevice: DeviceSeams["touchDevice"];
   now?: () => number;
@@ -67,68 +66,70 @@ function reportedInstant(value: number | null | undefined): Date | null | undefi
   return new Date(value);
 }
 
-export async function handleChanges(options: ChangeSignalOptions): Promise<Response> {
-  const { request, resolveUserId, run, store } = options;
-  const now = options.now ?? Date.now;
+export function handleChanges(
+  options: ChangeSignalOptions,
+): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const { request, resolveUserId, store } = options;
+    const now = options.now ?? Date.now;
 
-  if (request.method !== CHANGES_METHOD) {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+    if (request.method !== CHANGES_METHOD) {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
+    }
+    const userId = yield* Effect.promise(() => resolveUserId(request));
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+    if (!(yield* changesBrake.check(userId))) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    }
+    const parsed = yield* Effect.promise(() => readJsonBody(request, MAXIMUM_CHANGES_BODY_BYTES));
+    if (parsed instanceof Response) return parsed;
+    const body: ChangesRequest | undefined = Either.getOrUndefined(
+      readEither(changesRequestSchema)(parsed),
     );
-  }
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-  if (await changesRateLimited(userId)) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  }
-  const parsed = await readJsonBody(request, MAXIMUM_CHANGES_BODY_BYTES);
-  if (parsed instanceof Response) return parsed;
-  const body: ChangesRequest | undefined = Either.getOrUndefined(
-    readEither(changesRequestSchema)(parsed),
-  );
-  if (!body) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
+    if (!body) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    }
 
-  const seen = await options.touchDevice(
-    userId,
-    {
-      deviceId: body.deviceId,
-      activeUntil: reportedInstant(body.activeUntil),
-      ...(body.quietUntil !== undefined
-        ? { quietUntil: reportedInstant(body.quietUntil) }
-        : undefined),
-      push: undefined,
-    },
-    new Date(now()),
-  );
+    const seen = yield* options.touchDevice(
+      userId,
+      {
+        deviceId: body.deviceId,
+        activeUntil: reportedInstant(body.activeUntil),
+        ...(body.quietUntil !== undefined
+          ? { quietUntil: reportedInstant(body.quietUntil) }
+          : undefined),
+        push: undefined,
+      },
+      new Date(now()),
+    );
 
-  const [standing, latestTurn, rosterObservedAt] = await run(
-    Effect.all([
+    const [standing, latestTurn, rosterObservedAt] = yield* Effect.all([
       store.directory.standing(userId),
       store.turns.latest(userId),
       store.roster.observedAt(userId),
-    ]),
-  );
-  const answer: ChangesAnswer = {
-    seen,
-    messages: encodeSequenceReadCursor(
-      standing.map((conversation) => ({
-        conversationId: conversation.id,
-        seq: conversation.nextMessageSeq - 1,
-      })),
-    ),
-    events: encodeSequenceReadCursor(
-      standing.map((conversation) => ({
-        conversationId: conversation.id,
-        seq: conversation.nextEventSeq - 1,
-      })),
-    ),
-    ...(latestTurn !== undefined ? { turns: encodeTurnReadCursor(latestTurn) } : undefined),
-    ...(rosterObservedAt !== undefined ? { rosterObservedAt } : undefined),
-  };
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+    ]);
+    const answer: ChangesAnswer = {
+      seen,
+      messages: encodeSequenceReadCursor(
+        standing.map((conversation) => ({
+          conversationId: conversation.id,
+          seq: conversation.nextMessageSeq - 1,
+        })),
+      ),
+      events: encodeSequenceReadCursor(
+        standing.map((conversation) => ({
+          conversationId: conversation.id,
+          seq: conversation.nextEventSeq - 1,
+        })),
+      ),
+      ...(latestTurn !== undefined ? { turns: encodeTurnReadCursor(latestTurn) } : undefined),
+      ...(rosterObservedAt !== undefined ? { rosterObservedAt } : undefined),
+    };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  });
 }

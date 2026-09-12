@@ -21,12 +21,12 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import { claimSpeech, offerSpeech, SPEECH_OFFER } from "../server/hosted/store/speech";
 import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/live-briefings";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { promisedAsks, promisedWriter } from "./support/promised-store";
 import {
   insertConversation,
   insertDevice,
@@ -49,22 +49,23 @@ afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
 
-const writer = await storeWriter({
-  run: database.run,
-  tools: CATALOG_TOOL_SET,
-  now: () => new Date(NOW),
-});
+const writer = await database.run(
+  storeWriter({
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  }),
+);
 const relay = new StreamRelay({
-  writer,
-  asks: askRecord(database.run),
+  writer: promisedWriter(database.run, writer),
+  asks: promisedAsks(database.run),
   stopTurn: async () => undefined,
   offer: (target, turnId) =>
-    offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
+    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
   now: () => NOW,
   report: () => undefined,
 });
 const sessionRecord = voiceSessionRecord(database.run, () => NOW);
-const speech = { run: database.run, writer };
+const speech = { writer };
 
 async function account(): Promise<ConversationTarget> {
   const userId = await database.createUser();
@@ -158,6 +159,7 @@ function stand(
   const reports: string[] = [];
   const briefings = hostedBriefings({
     userId: target.userId,
+    run: database.run,
     speech,
     offers: database.store.speech,
     tools: CATALOG_TOOL_SET,
@@ -227,7 +229,10 @@ test("an offer another device claimed first is not delivered here", async () => 
   const other = await device(target.userId);
   const f = stand(target, await voiceSession(target.userId, mine));
   const messageId = await offered(target, "Claimed elsewhere.");
-  assert.equal((await claimSpeech(speech, target.userId, messageId, other, NOW)).ok, true);
+  assert.equal(
+    (await database.run(claimSpeech(speech, target.userId, messageId, other, NOW))).ok,
+    true,
+  );
 
   await f.briefings.look();
   assert.deepEqual(f.deliveries, []);
@@ -259,13 +264,15 @@ test("an offer whose announcement has no words this build can read is left stand
   const target = await account();
   const deviceId = await device(target.userId);
   const f = stand(target, await voiceSession(target.userId, deviceId));
-  const written = await writer.recordUserMessage(target, {
-    clientId: randomUUID(),
-    text: "not an announcement",
-    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-  });
+  const written = await database.run(
+    writer.recordUserMessage(target, {
+      clientId: randomUUID(),
+      text: "not an announcement",
+      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+    }),
+  );
   assert.ok(written.ok);
-  assert.equal((await offerSpeech(speech, target.userId, written.id, NOW)).ok, true);
+  assert.equal((await database.run(offerSpeech(speech, target.userId, written.id, NOW))).ok, true);
 
   await f.briefings.look();
   assert.deepEqual(f.deliveries, []);
@@ -296,8 +303,14 @@ test("offers other devices hold claims on do not take the look's page from a new
   const f = stand(target, await voiceSession(target.userId, mine), 5, () => NOW, 2);
   const first = await offered(target, "Claimed elsewhere, one.");
   const second = await offered(target, "Claimed elsewhere, two.");
-  assert.equal((await claimSpeech(speech, target.userId, first, other, NOW)).ok, true);
-  assert.equal((await claimSpeech(speech, target.userId, second, other, NOW)).ok, true);
+  assert.equal(
+    (await database.run(claimSpeech(speech, target.userId, first, other, NOW))).ok,
+    true,
+  );
+  assert.equal(
+    (await database.run(claimSpeech(speech, target.userId, second, other, NOW))).ok,
+    true,
+  );
   const third = await offered(target, "Still offered.");
 
   await f.briefings.look();

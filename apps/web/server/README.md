@@ -951,11 +951,12 @@ diffs and pass record. Every row is keyed by `user_id` and cascades with the
 user row, so `server/routes/account/delete.ts` erases them with the account.
 The roster tables are read and written by the scheduled observation below and
 the routes that serve it. `server/hosted/store/` is the store the brain host
-composes against; its modules are being moved onto `@effect/sql`, and one there
-is an `Effect<A, SqlError | ParseError, SqlClient>` whose rows a `Schema`
-decodes and whose path rule is that schema too, which `HostedStore` answers
-as it came and a promise-holding route runs through the `HostedStoreRun` its
-own edge handed it.
+composes against; every module there is an
+`Effect<A, SqlError | ParseError, SqlClient>` whose rows a `Schema` decodes
+and whose path rule is that schema too, which `HostedStore`, the store
+writer, the voice writer, the speech module, and the ask record all answer as
+it came, and which a route handler composes into the one effect `runWeb`
+answers for the request.
 
 The notebook, the facts, and the roster keep their `sealed_*` columns: the
 payload envelope in `server/hosted/encryption.ts`, AES-256-GCM under the

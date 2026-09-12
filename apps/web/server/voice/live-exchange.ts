@@ -11,8 +11,9 @@ import { Effect, Option, Schema } from "effect";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
+import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import { askRecord } from "../hosted/store/asks.js";
-import type { HostedStoreContext, HostedStoreRun } from "../hosted/store/database.js";
+import type { HostedStoreContext } from "../hosted/store/database.js";
 import {
   type HostedStore,
   hostedStore,
@@ -53,8 +54,8 @@ export interface HostedLiveExchangeOptions {
   /** The account's standing main, which the spoken asks and the record land in. */
   readonly conversationId: string;
   readonly context: HostedStoreContext;
-  /** The runner this composition's own effects — the store's reads, the ask record, the voice writer — are answered through. */
-  readonly run: HostedStoreRun;
+  /** The promise face this composition's own effects — the store's reads, the ask record, the voice writer — are run to, since the voice service drives them from socket callbacks. */
+  readonly run: FiberStoreRunner;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
   /**
@@ -143,14 +144,14 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
     liveSessionId,
     conversation: { userId, conversationId },
   };
-  const voice = voiceWriter({ run, store: writer });
-  const record = hostedLiveRecord({ writer: voice, target });
+  const voice = voiceWriter({ store: writer });
+  const record = hostedLiveRecord({ run, writer: voice, target });
   const brain = hostedLiveBrain({
     userId,
     conversationId,
+    run,
     asks: {
-      run,
-      asks: askRecord(run),
+      asks: askRecord(),
       eve: options.eve,
       now: options.now,
     },
@@ -169,7 +170,8 @@ export function hostedLiveExchange(options: HostedLiveExchangeOptions): HostedLi
 
   const briefings = hostedBriefings({
     userId,
-    speech: { run, writer },
+    run,
+    speech: { writer },
     offers: store.speech,
     tools: CATALOG_TOOL_SET,
     deviceId,

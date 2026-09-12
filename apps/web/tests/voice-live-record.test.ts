@@ -80,9 +80,9 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const store = await storeWriter({ run: database.run, tools: TOOLS, now: () => new Date(NOW) });
+const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
 const sessionRecord = voiceSessionRecord(database.run, () => NOW);
-const writer = voiceWriter({ run: database.run, store });
+const writer = voiceWriter({ store });
 
 /**
  * A user with a main conversation, and the live session's row unless the test
@@ -170,7 +170,7 @@ class FakeBrain implements LiveBrain {
 function stand(live: VoiceTarget) {
   const clock = new ManualClock();
   const brain = new FakeBrain();
-  const record = hostedLiveRecord({ writer, target: live });
+  const record = hostedLiveRecord({ run: database.run, writer, target: live });
   const socket = new FakeLiveSocket();
   // The session acknowledges every thinking append at once, as the real one
   // does for an append that speaks nothing; the acknowledgment is a server
@@ -416,7 +416,7 @@ test("an ask the record refuses is answered with the unrecorded note alone, and 
 
 test("the record door answers from the stream: a delegation is held until its ask is written, a repeated write is the same message, an unseen delegation is refused, and neither an undelegated utterance nor Luke's words reach a row", async () => {
   const live = await target();
-  const record = hostedLiveRecord({ writer, target: live });
+  const record = hostedLiveRecord({ run: database.run, writer, target: live });
   const utterance = {
     rowId: 1,
     voiceSessionId: live.liveSessionId,

@@ -1,6 +1,8 @@
 import { setTimeout as sleepFor } from "node:timers/promises";
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Effect, Either, type ParseResult } from "effect";
 import {
   BRAIN_TURN_TRIGGER,
   type BrainTurnTrigger,
@@ -29,9 +31,9 @@ import {
 } from "../core.js";
 import { hostedTurnPolicy } from "./brain-host/tools.js";
 import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
+import { type FiberStoreRunner, fiberStoreRunner } from "./fiber-runner.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
-import { createRateBrake } from "./rate-brake.js";
-import type { HostedStoreRun } from "./store/database.js";
+import { makeRateBrake } from "./rate-brake.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**
@@ -93,7 +95,7 @@ const STREAM_RATE_LIMIT = {
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const streamRateLimited = createRateBrake({
+const streamBrake = makeRateBrake({
   windowMs: STREAM_RATE_LIMIT.WINDOW_MS,
   maxRequestsPerWindow: STREAM_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
   maxTrackedUsers: STREAM_RATE_LIMIT.MAX_TRACKED_USERS,
@@ -173,8 +175,6 @@ export function projectTurnEvents(
 export interface TurnEventStreamOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The runner the stream's turn and journal reads are answered through. */
-  run: HostedStoreRun;
   store: Pick<HostedStore, "turns" | "messages">;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -192,7 +192,7 @@ function notFound(): Response {
 
 /** The turn's record and its journal as they stand now, or nothing where the turn is gone or its journal cannot be read. */
 async function lookAtTurn(
-  run: HostedStoreRun,
+  run: FiberStoreRunner,
   store: TurnEventStreamOptions["store"],
   userId: string,
   turnId: string,
@@ -214,79 +214,86 @@ function cursorOf(query: URLSearchParams): number | undefined {
   return Either.getOrUndefined(readEither(turnEventCursorSchema)(unparsedWire(Number(text))));
 }
 
-export async function handleTurnEventStream(options: TurnEventStreamOptions): Promise<Response> {
-  const { request, resolveUserId, run, store } = options;
-  if (request.method !== "GET") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-  const query = new URL(request.url).searchParams;
-  const ids = query.getAll(TURN_ID_QUERY);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1) return invalidRequest();
-  const after = cursorOf(query);
-  if (after === undefined) return invalidRequest();
+export function handleTurnEventStream(
+  options: TurnEventStreamOptions,
+): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const { request, resolveUserId, store } = options;
+    if (request.method !== "GET") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
+    }
+    const query = new URL(request.url).searchParams;
+    const ids = query.getAll(TURN_ID_QUERY);
+    const [id] = ids;
+    if (id === undefined || ids.length !== 1) return invalidRequest();
+    const after = cursorOf(query);
+    if (after === undefined) return invalidRequest();
 
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-  const now = options.now ?? Date.now;
-  if (await streamRateLimited(userId)) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  }
-  // An id that is not a uuid names no row and answers as none, the same as another account's.
-  const turnId = Either.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
-  if (turnId === undefined) return notFound();
-  const [turn] = await run(store.turns.named(userId, [turnId]));
-  if (turn === undefined) return notFound();
+    const userId = yield* Effect.promise(() => resolveUserId(request));
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+    const now = options.now ?? Date.now;
+    if (!(yield* streamBrake.check(userId))) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    }
+    // An id that is not a uuid names no row and answers as none, the same as another account's.
+    const turnId = Either.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
+    if (turnId === undefined) return notFound();
+    const [turn] = yield* store.turns.named(userId, [turnId]);
+    if (turn === undefined) return notFound();
+    // The polling body runs inside the stream this handler answers with, so it
+    // outlives the handler's own fiber and holds the runtime rather than it.
+    const run = yield* fiberStoreRunner;
 
-  const bounds = { ...TURN_EVENT_STREAM_BOUNDS, ...options.bounds };
-  const sleep = options.sleep ?? sleepFor;
-  const encoder = new TextEncoder();
-  const attachedAt = now();
-  // The client's side of the connection can end two ways: the stream's own cancel, after which
-  // the controller takes nothing more, and the request's abort, after which the stream is closed.
-  let cancelled = false;
-  const gone = () => cancelled || request.signal.aborted;
+    const bounds = { ...TURN_EVENT_STREAM_BOUNDS, ...options.bounds };
+    const sleep = options.sleep ?? sleepFor;
+    const encoder = new TextEncoder();
+    const attachedAt = now();
+    // The client's side of the connection can end two ways: the stream's own cancel, after which
+    // the controller takes nothing more, and the request's abort, after which the stream is closed.
+    let cancelled = false;
+    const gone = () => cancelled || request.signal.aborted;
 
-  const body = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let told = after;
-      let quietSince = attachedAt;
-      const write = (frame: string) => {
-        controller.enqueue(encoder.encode(frame));
-        quietSince = now();
-      };
-      try {
-        for (;;) {
-          const events = await lookAtTurn(run, store, userId, turn.id);
-          if (events === undefined || gone()) break;
-          for (const event of events.slice(told)) {
-            write(encodeTurnEventFrame(event));
-            told = event.seq;
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let told = after;
+        let quietSince = attachedAt;
+        const write = (frame: string) => {
+          controller.enqueue(encoder.encode(frame));
+          quietSince = now();
+        };
+        try {
+          for (;;) {
+            const events = await lookAtTurn(run, store, userId, turn.id);
+            if (events === undefined || gone()) break;
+            for (const event of events.slice(told)) {
+              write(encodeTurnEventFrame(event));
+              told = event.seq;
+            }
+            if (events.at(-1)?.kind === TURN_EVENT_KIND.ENDED) break;
+            if (now() - attachedAt >= bounds.ATTACHMENT_MS) break;
+            if (now() - quietSince >= bounds.HEARTBEAT_MS) write(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
+            await sleep(bounds.POLL_MS);
+            if (gone()) break;
           }
-          if (events.at(-1)?.kind === TURN_EVENT_KIND.ENDED) break;
-          if (now() - attachedAt >= bounds.ATTACHMENT_MS) break;
-          if (now() - quietSince >= bounds.HEARTBEAT_MS) write(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
-          await sleep(bounds.POLL_MS);
-          if (gone()) break;
+        } finally {
+          if (!cancelled) controller.close();
         }
-      } finally {
-        if (!cancelled) controller.close();
-      }
-    },
-    cancel() {
-      cancelled = true;
-    },
-  });
-  return new Response(body, {
-    status: HOSTED_HTTP_STATUS.OK,
-    headers: {
-      "content-type": `${TURN_EVENT_STREAM.MEDIA_TYPE}; charset=utf-8`,
-      "cache-control": "no-cache, no-transform",
-    },
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    return new Response(body, {
+      status: HOSTED_HTTP_STATUS.OK,
+      headers: {
+        "content-type": `${TURN_EVENT_STREAM.MEDIA_TYPE}; charset=utf-8`,
+        "cache-control": "no-cache, no-transform",
+      },
+    });
   });
 }

@@ -35,10 +35,10 @@ import {
   STORE_WRITE_REFUSAL,
   storeWriter,
 } from "../server/hosted/store";
-import { askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { promisedAsks, promisedWriter } from "./support/promised-store";
 import {
   insertConversation,
   readEventsByConversation,
@@ -60,18 +60,19 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await storeWriter({
-  run: database.run,
-  tools: CATALOG_TOOL_SET,
-  now: () => new Date(NOW),
-});
+const writer = await database.run(
+  storeWriter({
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  }),
+);
 const refusals: string[] = [];
 const relay = new StreamRelay({
-  writer,
-  asks: askRecord(database.run),
+  writer: promisedWriter(database.run, writer),
+  asks: promisedAsks(database.run),
   stopTurn: async () => undefined,
   offer: (target, turnId) =>
-    offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
+    database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
   now: () => NOW,
   report: (message) => refusals.push(message),
 });
@@ -240,7 +241,7 @@ test("a spoken turn's received message writes no user row: the developer's line 
   // The service's ask under the delegation's id, dispatched into this eve session, and the
   // transcript row the voice writer cut for it, written before eve's turn started.
   const delegationId = `dl_${randomUUID()}`;
-  const record = askRecord(database.run);
+  const record = promisedAsks(database.run);
   const ask = await record.record({
     userId: spoken.userId,
     conversationId: spoken.conversationId,
@@ -253,12 +254,14 @@ test("a spoken turn's received message writes no user row: the developer's line 
     sessionId: spokenStanding.sessionId,
     deliveryId: "delivery-1",
   }));
-  const transcript = await writer.recordUserMessage(spoken, {
-    clientId: delegationId,
-    turnOfAsk: true,
-    text: "What changed?",
-    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-  });
+  const transcript = await database.run(
+    writer.recordUserMessage(spoken, {
+      clientId: delegationId,
+      turnOfAsk: true,
+      text: "What changed?",
+      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+    }),
+  );
   assert.ok(transcript.ok);
   await play(spokenTurn("turn_0", NOW, ["delivery-1"]), spokenStanding);
   await play(typedTurn("turn_0", 0), standingFor(typed, BRAIN_HOST_TURN.TYPED));
@@ -304,12 +307,14 @@ test("a spoken turn's received message writes no user row: the developer's line 
     deliveryId: "delivery-2",
     turnId: spokenTurnId,
   }));
-  const laterRow = await writer.recordUserMessage(spoken, {
-    clientId: laterDelegation,
-    turnOfAsk: true,
-    text: "And now?",
-    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-  });
+  const laterRow = await database.run(
+    writer.recordUserMessage(spoken, {
+      clientId: laterDelegation,
+      turnOfAsk: true,
+      text: "And now?",
+      metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+    }),
+  );
   assert.ok(laterRow.ok);
   const written = (await readMessagesByConversationTyped(database.run, spoken.conversationId)).find(
     (row) => row.id === laterRow.id,
@@ -669,19 +674,19 @@ test("the recent exchange reads back the newest finished messages, oldest first,
   const requested = events.findIndex((event) => event.type === "actions.requested");
   await play(events.slice(0, requested + 1), standing);
 
-  const recent = await readRecentMessages(database.run, target, tools, 10);
+  const recent = await database.run(readRecentMessages(target, tools, 10));
   assert.deepEqual(
     recent.map((message) => message.role),
     [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT, MESSAGE_ROLE.USER],
   );
-  const newest = await readRecentMessages(database.run, target, tools, 1);
+  const newest = await database.run(readRecentMessages(target, tools, 1));
   assert.deepEqual(
     newest.map((message) => message.role),
     [MESSAGE_ROLE.USER],
   );
 
   await play(events.slice(requested + 1), standing);
-  const settled = await readRecentMessages(database.run, target, tools, 10);
+  const settled = await database.run(readRecentMessages(target, tools, 10));
   assert.equal(settled.length, 4);
   assert.equal(settled.at(-1)?.role, MESSAGE_ROLE.ASSISTANT);
 });
@@ -690,16 +695,16 @@ test("a turn whose answer the store refuses ends failed for persistence rather t
   const target = await conversation();
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
-    asks: askRecord(database.run),
+    asks: promisedAsks(database.run),
     stopTurn: async () => undefined,
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
         event.message.role === MESSAGE_ROLE.ASSISTANT
           ? Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
-          : writer.consume(to, event),
-      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+          : database.run(writer.consume(to, event)),
+      enqueueTurn: (to, enqueue) => database.run(writer.enqueueTurn(to, enqueue)),
+      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,
@@ -717,18 +722,18 @@ test("a turn start whose write throws keeps nothing in relay state, so the start
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   let failures = 1;
   const failing = new StreamRelay({
-    asks: askRecord(database.run),
+    asks: promisedAsks(database.run),
     stopTurn: async () => undefined,
     writer: {
-      consume: (to, event) => writer.consume(to, event),
+      consume: (to, event) => database.run(writer.consume(to, event)),
       enqueueTurn: (to, enqueue) => {
         if (failures > 0) {
           failures -= 1;
           return Promise.reject(new Error("the database went away"));
         }
-        return writer.enqueueTurn(to, enqueue);
+        return database.run(writer.enqueueTurn(to, enqueue));
       },
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,
@@ -750,15 +755,15 @@ test("a turn whose ask the store refuses writes no answer and ends failed for pe
   const target = await conversation();
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   const refusing = new StreamRelay({
-    asks: askRecord(database.run),
+    asks: promisedAsks(database.run),
     stopTurn: async () => undefined,
     writer: {
       consume: (to, event) =>
         event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED && event.message.role === MESSAGE_ROLE.USER
           ? Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
-          : writer.consume(to, event),
-      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+          : database.run(writer.consume(to, event)),
+      enqueueTurn: (to, enqueue) => database.run(writer.enqueueTurn(to, enqueue)),
+      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,
@@ -787,7 +792,7 @@ test("a turn end the store refuses keeps the turn in relay state, so the boundar
   const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
   let refuseEnds = 1;
   const refusing = new StreamRelay({
-    asks: askRecord(database.run),
+    asks: promisedAsks(database.run),
     stopTurn: async () => undefined,
     writer: {
       consume: (to, event) => {
@@ -795,10 +800,10 @@ test("a turn end the store refuses keeps the turn in relay state, so the boundar
           refuseEnds -= 1;
           return Promise.resolve({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
         }
-        return writer.consume(to, event);
+        return database.run(writer.consume(to, event));
       },
-      enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
-      attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
+      enqueueTurn: (to, enqueue) => database.run(writer.enqueueTurn(to, enqueue)),
+      attachAskLines: (to, turnId) => database.run(writer.attachAskLines(to, turnId)),
     },
     offer: () => Promise.resolve(true),
     now: () => NOW,

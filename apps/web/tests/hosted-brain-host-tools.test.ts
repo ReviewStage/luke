@@ -279,39 +279,41 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
     kind: CONVERSATION_KIND.OBSERVED,
   });
   const target: ConversationTarget = { userId, conversationId };
-  const writer = await storeWriter({
-    run: database.run,
-    tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
-  });
+  const writer = await database.run(
+    storeWriter({
+      tools: CATALOG_TOOL_SET,
+      now: () => new Date(NOW),
+    }),
+  );
   const turnId = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
 
   assert.equal(
-    await offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
+    await database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
     false,
   );
 
   const stamp = { conversationId: sessionKey(conversationId), turnId };
-  await writer.consume(target, {
-    ...stamp,
-    sequence: 1,
-    kind: BRAIN_RUN_EVENT.TURN_STARTED,
-    origin: BRAIN_TURN_ORIGIN.OBSERVATION,
-    trigger: BRAIN_TURN_TRIGGER.ROSTER,
-    at: NOW,
-  });
-  await writer.consume(target, {
-    ...stamp,
-    sequence: 2,
-    kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
-    callId: "call-a",
-    name: BRAIN_TOOL.ANNOUNCE,
-    input: { briefing: "One agent finished." },
-  });
-  assert.equal(
-    await offerBriefing({ run: database.run, writer, now: () => NOW }, target, turnId),
-    true,
+  await database.run(
+    writer.consume(target, {
+      ...stamp,
+      sequence: 1,
+      kind: BRAIN_RUN_EVENT.TURN_STARTED,
+      origin: BRAIN_TURN_ORIGIN.OBSERVATION,
+      trigger: BRAIN_TURN_TRIGGER.ROSTER,
+      at: NOW,
+    }),
   );
+  await database.run(
+    writer.consume(target, {
+      ...stamp,
+      sequence: 2,
+      kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+      callId: "call-a",
+      name: BRAIN_TOOL.ANNOUNCE,
+      input: { briefing: "One agent finished." },
+    }),
+  );
+  assert.equal(await database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)), true);
   const recorded = await readEventsByConversation(database.run, conversationId);
   assert.deepEqual(
     recorded.map((event) => event.kind),

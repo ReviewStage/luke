@@ -1,4 +1,5 @@
 import type { LiveRecord } from "@sidecar/voice/live-session";
+import type { FiberStoreRunner } from "../hosted/fiber-runner.js";
 import {
   STORE_WRITE_EFFECT,
   type VoiceTarget,
@@ -37,6 +38,8 @@ type DelegationCreated = Extract<
 >;
 
 export interface HostedLiveRecordOptions {
+  /** The promise face the writer's effects are run to, since the record is driven from the session's own socket callbacks. */
+  readonly run: FiberStoreRunner;
   readonly writer: VoiceWriter;
   readonly target: VoiceTarget;
 }
@@ -51,13 +54,17 @@ export interface HostedLiveRecord extends LiveRecord {
 /** A delegation is held for the ask that names it, and the stream itself writes nothing for it yet. */
 const HELD: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
 
-export function hostedLiveRecord({ writer, target }: HostedLiveRecordOptions): HostedLiveRecord {
+export function hostedLiveRecord({
+  run,
+  writer,
+  target,
+}: HostedLiveRecordOptions): HostedLiveRecord {
   const held = new Map<string, DelegationCreated>();
   let chain: Promise<unknown> = Promise.resolve();
 
   /** Every write of one session takes its turn, so a segment's place in the sequence is its arrival. */
   function consume(event: LiveServerEvent): Promise<VoiceWriteResult> {
-    const next = chain.then(() => writer.consume(target, event));
+    const next = chain.then(() => run(writer.consume(target, event)));
     chain = next.catch(() => undefined);
     return next;
   }

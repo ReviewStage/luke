@@ -4,8 +4,8 @@ import { MessageRoleSchema } from "@sidecar/wire";
 import { Cause, Effect, Option, Runtime, Schema } from "effect";
 import type { StoredUIMessage } from "../../server/core";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
-import type { HostedStoreRun } from "../../server/hosted/store";
 import { EpochMillisColumnSchema } from "../../server/hosted/store/database";
+import type { HostedStoreTestRun } from "./hosted-store-database";
 
 /**
  * Raw rows over the ambient `SqlClient`, for the setup and assertions a test
@@ -33,7 +33,7 @@ export interface ConversationRow {
   readonly nextEventSeq?: number;
 }
 
-export function insertConversation(run: HostedStoreRun, row: ConversationRow): Promise<string> {
+export function insertConversation(run: HostedStoreTestRun, row: ConversationRow): Promise<string> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -58,7 +58,7 @@ export function insertConversation(run: HostedStoreRun, row: ConversationRow): P
 }
 
 export function setConversationDeletedAt(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   conversationId: string,
   deletedAt: Date | null,
 ): Promise<void> {
@@ -70,7 +70,7 @@ export function setConversationDeletedAt(
   );
 }
 
-export function readConversationById(run: HostedStoreRun, id: string) {
+export function readConversationById(run: HostedStoreTestRun, id: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -79,7 +79,7 @@ export function readConversationById(run: HostedStoreRun, id: string) {
   );
 }
 
-export function readStandingConversations(run: HostedStoreRun, userId: string, kind: string) {
+export function readStandingConversations(run: HostedStoreTestRun, userId: string, kind: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -91,7 +91,7 @@ export function readStandingConversations(run: HostedStoreRun, userId: string, k
   );
 }
 
-export function deleteConversation(run: HostedStoreRun, id: string): Promise<void> {
+export function deleteConversation(run: HostedStoreTestRun, id: string): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -113,7 +113,7 @@ export interface MessageRow {
   readonly finishedAt?: Date | null;
 }
 
-export function insertMessage(run: HostedStoreRun, row: MessageRow): Promise<string> {
+export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise<string> {
   const parts = JSON.stringify(row.parts);
   const metadata = row.metadata === undefined ? null : JSON.stringify(row.metadata);
   return run(
@@ -134,7 +134,7 @@ export function insertMessage(run: HostedStoreRun, row: MessageRow): Promise<str
   );
 }
 
-export function readMessagesByConversation(run: HostedStoreRun, conversationId: string) {
+export function readMessagesByConversation(run: HostedStoreTestRun, conversationId: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -155,7 +155,7 @@ export interface TurnInsertRow {
   readonly usage?: unknown;
 }
 
-export function insertTurn(run: HostedStoreRun, row: TurnInsertRow): Promise<string> {
+export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise<string> {
   const responseIds = row.responseIds ?? null;
   const usage = row.usage === undefined ? null : JSON.stringify(row.usage);
   return run(
@@ -215,7 +215,7 @@ export type TurnRow = Schema.Schema.Type<typeof TurnRowSchema>;
 const decodeTurnRow = Schema.decodeUnknownSync(TurnRowSchema);
 
 export function readTurnsByConversation(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   conversationId: string,
 ): Promise<readonly TurnRow[]> {
   return run(
@@ -227,7 +227,7 @@ export function readTurnsByConversation(
   );
 }
 
-export function readTurnById(run: HostedStoreRun, id: string): Promise<TurnRow | undefined> {
+export function readTurnById(run: HostedStoreTestRun, id: string): Promise<TurnRow | undefined> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -263,7 +263,7 @@ export type MessageRowFull = Schema.Schema.Type<typeof MessageRowFullSchema>;
 const decodeMessageRow = Schema.decodeUnknownSync(MessageRowFullSchema);
 
 export function readMessagesByConversationTyped(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   conversationId: string,
 ): Promise<readonly MessageRowFull[]> {
   return run(
@@ -278,7 +278,7 @@ export function readMessagesByConversationTyped(
 }
 
 export function readMessageById(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   id: string,
 ): Promise<MessageRowFull | undefined> {
   return run(
@@ -301,7 +301,7 @@ export interface EventInsertRow {
   readonly createdAt?: Date;
 }
 
-export function insertEvent(run: HostedStoreRun, row: EventInsertRow): Promise<string> {
+export function insertEvent(run: HostedStoreTestRun, row: EventInsertRow): Promise<string> {
   const payload = row.payload === undefined ? null : JSON.stringify(row.payload);
   return run(
     Effect.gen(function* () {
@@ -319,7 +319,7 @@ export function insertEvent(run: HostedStoreRun, row: EventInsertRow): Promise<s
   );
 }
 
-export function readEventsByConversation(run: HostedStoreRun, conversationId: string) {
+export function readEventsByConversation(run: HostedStoreTestRun, conversationId: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -340,7 +340,7 @@ export interface DeviceInsertRow {
   readonly pushEnvironment?: string | null;
 }
 
-export function insertDevice(run: HostedStoreRun, row: DeviceInsertRow): Promise<void> {
+export function insertDevice(run: HostedStoreTestRun, row: DeviceInsertRow): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -358,7 +358,7 @@ export function insertDevice(run: HostedStoreRun, row: DeviceInsertRow): Promise
   );
 }
 
-export function readDevicesByUser(run: HostedStoreRun, userId: string) {
+export function readDevicesByUser(run: HostedStoreTestRun, userId: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -390,7 +390,10 @@ export const DeviceRowSchema = Schema.Struct({
 export type DeviceRow = Schema.Schema.Type<typeof DeviceRowSchema>;
 const decodeDeviceRow = Schema.decodeUnknownSync(DeviceRowSchema);
 
-export function readDeviceById(run: HostedStoreRun, id: string): Promise<DeviceRow | undefined> {
+export function readDeviceById(
+  run: HostedStoreTestRun,
+  id: string,
+): Promise<DeviceRow | undefined> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -401,7 +404,7 @@ export function readDeviceById(run: HostedStoreRun, id: string): Promise<DeviceR
 }
 
 export function setVoiceSessionDeviceId(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   liveSessionId: string,
   deviceId: string | null,
 ): Promise<void> {
@@ -416,7 +419,7 @@ export function setVoiceSessionDeviceId(
 }
 
 export function setDeviceQuietUntil(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   id: string,
   quietUntil: Date | null,
 ): Promise<void> {
@@ -429,7 +432,7 @@ export function setDeviceQuietUntil(
 }
 
 export function setDeviceActiveUntil(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   id: string,
   activeUntil: Date | null,
 ): Promise<void> {
@@ -441,7 +444,7 @@ export function setDeviceActiveUntil(
   );
 }
 
-export function readEventsByMessage(run: HostedStoreRun, messageId: string) {
+export function readEventsByMessage(run: HostedStoreTestRun, messageId: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -461,7 +464,7 @@ export interface VoiceSessionInsertRow {
 }
 
 export function insertVoiceSession(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   row: VoiceSessionInsertRow,
 ): Promise<string> {
   const usage = row.usage === undefined ? null : JSON.stringify(row.usage);
@@ -504,7 +507,7 @@ export type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
 const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
 
 export function readVoiceSessionByIdTyped(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   id: string,
 ): Promise<VoiceSessionRow | undefined> {
   return run(
@@ -517,7 +520,7 @@ export function readVoiceSessionByIdTyped(
 }
 
 export function readVoiceSessionsByUserTyped(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   userId: string,
 ): Promise<readonly VoiceSessionRow[]> {
   return run(
@@ -539,7 +542,7 @@ export interface VoiceSegmentInsertRow {
 }
 
 export function insertVoiceTranscriptSegment(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   row: VoiceSegmentInsertRow,
 ): Promise<void> {
   return run(
@@ -553,7 +556,7 @@ export function insertVoiceTranscriptSegment(
   );
 }
 
-export function deleteVoiceSession(run: HostedStoreRun, id: string): Promise<void> {
+export function deleteVoiceSession(run: HostedStoreTestRun, id: string): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -562,7 +565,7 @@ export function deleteVoiceSession(run: HostedStoreRun, id: string): Promise<voi
   );
 }
 
-export function deleteDevice(run: HostedStoreRun, id: string): Promise<void> {
+export function deleteDevice(run: HostedStoreTestRun, id: string): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -571,7 +574,7 @@ export function deleteDevice(run: HostedStoreRun, id: string): Promise<void> {
   );
 }
 
-export function readVoiceSessionByLiveSessionId(run: HostedStoreRun, liveSessionId: string) {
+export function readVoiceSessionByLiveSessionId(run: HostedStoreTestRun, liveSessionId: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -580,7 +583,10 @@ export function readVoiceSessionByLiveSessionId(run: HostedStoreRun, liveSession
   );
 }
 
-export function readVoiceTranscriptSegmentsBySession(run: HostedStoreRun, voiceSessionId: string) {
+export function readVoiceTranscriptSegmentsBySession(
+  run: HostedStoreTestRun,
+  voiceSessionId: string,
+) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -591,7 +597,7 @@ export function readVoiceTranscriptSegmentsBySession(run: HostedStoreRun, voiceS
   );
 }
 
-export function deleteUser(run: HostedStoreRun, id: string): Promise<void> {
+export function deleteUser(run: HostedStoreTestRun, id: string): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -602,7 +608,7 @@ export function deleteUser(run: HostedStoreRun, id: string): Promise<void> {
 
 /** A count of a table's rows for one user, by the table's own name; every table this reaches keys its rows by `user_id`. */
 export function countRowsForUser(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   table: string,
   userId: string,
 ): Promise<number> {
@@ -619,7 +625,7 @@ export function countRowsForUser(
 
 /** A count of a table's rows matching one column's equality, by the table and column's own names. */
 export function countRowsWhere(
-  run: HostedStoreRun,
+  run: HostedStoreTestRun,
   table: string,
   column: string,
   value: string,
@@ -640,7 +646,7 @@ export interface ToolSetRow {
   readonly schemas: unknown;
 }
 
-export function insertToolSet(run: HostedStoreRun, row: ToolSetRow): Promise<void> {
+export function insertToolSet(run: HostedStoreTestRun, row: ToolSetRow): Promise<void> {
   const schemas = JSON.stringify(row.schemas);
   return run(
     Effect.gen(function* () {
@@ -650,7 +656,10 @@ export function insertToolSet(run: HostedStoreRun, row: ToolSetRow): Promise<voi
   );
 }
 
-export function insertToolSetIgnoringConflict(run: HostedStoreRun, row: ToolSetRow): Promise<void> {
+export function insertToolSetIgnoringConflict(
+  run: HostedStoreTestRun,
+  row: ToolSetRow,
+): Promise<void> {
   const schemas = JSON.stringify(row.schemas);
   return run(
     Effect.gen(function* () {
@@ -663,7 +672,7 @@ export function insertToolSetIgnoringConflict(run: HostedStoreRun, row: ToolSetR
   );
 }
 
-export function readToolSetsByHash(run: HostedStoreRun, hash: string) {
+export function readToolSetsByHash(run: HostedStoreTestRun, hash: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -679,7 +688,10 @@ export interface ProviderCursorRow {
   readonly cursor: string;
 }
 
-export function insertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow): Promise<void> {
+export function insertProviderCursor(
+  run: HostedStoreTestRun,
+  row: ProviderCursorRow,
+): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -691,7 +703,10 @@ export function insertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow
   );
 }
 
-export function upsertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow): Promise<void> {
+export function upsertProviderCursor(
+  run: HostedStoreTestRun,
+  row: ProviderCursorRow,
+): Promise<void> {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -704,7 +719,7 @@ export function upsertProviderCursor(run: HostedStoreRun, row: ProviderCursorRow
   );
 }
 
-export function readProviderCursorsByUser(run: HostedStoreRun, userId: string) {
+export function readProviderCursorsByUser(run: HostedStoreTestRun, userId: string) {
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

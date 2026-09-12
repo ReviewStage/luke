@@ -246,7 +246,6 @@ function options(userId: string, req: Request): ResourceReadOptions {
   return {
     request: req,
     resolveUserId: async () => userId,
-    run: database.run,
     store: database.store,
   };
 }
@@ -296,7 +295,9 @@ class Device {
     const query: ReadQuery = { limit: this.limit };
     if (this.cursor !== undefined) query.after = this.cursor;
     const answer = await answered(
-      await handleConversationMessages(options(this.userId, request(READ_PATH.MESSAGES, query))),
+      await database.run(
+        handleConversationMessages(options(this.userId, request(READ_PATH.MESSAGES, query))),
+      ),
       conversationMessagesAnswerSchema,
     );
     const standing = new Set(answer.conversations.map((conversation) => conversation.id));
@@ -478,7 +479,7 @@ test("a spoken ask's transcript row tied to its turn is answered inside the turn
   });
 
   const answer = await answered(
-    await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES))),
+    await database.run(handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)))),
     conversationMessagesAnswerSchema,
   );
   // Membership, never order: the row's place inside its group follows the store's sequence today.
@@ -522,7 +523,7 @@ test("a message's replay slot never leaves the service, and the stored row keeps
   });
 
   const answer = await answered(
-    await handleConversationMessages(options(userId, request(READ_PATH.MESSAGES))),
+    await database.run(handleConversationMessages(options(userId, request(READ_PATH.MESSAGES)))),
     conversationMessagesAnswerSchema,
   );
   const parts = answer.groups.flatMap((group) =>
@@ -562,14 +563,16 @@ test("the gate order is method, bearer, and query, and every refusal is one shap
     [READ_PATH.EVENTS, handleConversationEvents],
     [READ_PATH.TURNS, handleBrainTurns],
   ] as const) {
-    const wrongMethod = await handle(options(userId, request(path, {}, "POST")));
+    const wrongMethod = await database.run(handle(options(userId, request(path, {}, "POST"))));
     assert.equal(wrongMethod.status, 405);
     assert.equal((await wrongMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
 
-    const anonymous = await handle({
-      ...options(userId, request(path, {}, "GET", false)),
-      resolveUserId: async () => undefined,
-    });
+    const anonymous = await database.run(
+      handle({
+        ...options(userId, request(path, {}, "GET", false)),
+        resolveUserId: async () => undefined,
+      }),
+    );
     assert.equal(anonymous.status, 401);
     assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 
@@ -580,7 +583,7 @@ test("the gate order is method, bearer, and query, and every refusal is one shap
       { limit: "two" },
     ];
     for (const query of refusals) {
-      const refused = await handle(options(userId, request(path, query)));
+      const refused = await database.run(handle(options(userId, request(path, query))));
       assert.equal(refused.status, 400, JSON.stringify(query));
       assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
     }
@@ -865,18 +868,19 @@ test("a Clear empties the thread of observed rows from before the new main and k
   const mainEntry = (await fresh.poll()).conversations.find((c) => c.id === opened);
   assert.equal(mainEntry?.kind === CONVERSATION_VIEW_SOURCE.MAIN && mainEntry.openedAt, clearedAt);
 
-  const heads = await handleChanges({
-    run: database.run,
-    request: new Request("https://luke.test/api/changes", {
-      method: "POST",
-      headers: { authorization: "Bearer token-1", "content-type": "application/json" },
-      body: JSON.stringify({ deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7" }),
+  const heads = await database.run(
+    handleChanges({
+      request: new Request("https://luke.test/api/changes", {
+        method: "POST",
+        headers: { authorization: "Bearer token-1", "content-type": "application/json" },
+        body: JSON.stringify({ deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7" }),
+      }),
+      resolveUserId: async () => userId,
+      store: database.store,
+      touchDevice: () => Effect.succeed(false),
+      now: () => NOW,
     }),
-    resolveUserId: async () => userId,
-    store: database.store,
-    touchDevice: async () => false,
-    now: () => NOW,
-  });
+  );
   const head = parse(
     changesAnswerSchema,
     // SAFETY: the response body is the route's own JSON; the schema read is the validation.
@@ -982,8 +986,10 @@ test("a row the catalog cannot read refuses the page whole, naming the row, whet
     metadata: BRAIN_REPLY,
     parts: [toolPart("nobody_registered", "call_6a0000000000000001", {})],
   });
-  const unregistered = await handleConversationMessages(
-    options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
+  const unregistered = await database.run(
+    handleConversationMessages(
+      options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
+    ),
   );
   assert.equal(unregistered.status, 500);
   assert.deepEqual(await unregistered.json(), {
@@ -1003,8 +1009,10 @@ test("a row the catalog cannot read refuses the page whole, naming the row, whet
     metadata: BRAIN_REPLY,
     parts: [toolPart("announce", "call_6a0000000000000002", { briefing: 42 })],
   });
-  const refusedInput = await handleConversationMessages(
-    options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
+  const refusedInput = await database.run(
+    handleConversationMessages(
+      options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
+    ),
   );
   assert.equal(refusedInput.status, 500);
   assert.equal((await refusedInput.json()).unreadableRow.seq, 5);
@@ -1020,7 +1028,7 @@ test("events page behind a cursor of their own and two devices converge on them"
   });
 
   const wide = await answered(
-    await handleConversationEvents(options(userId, request(READ_PATH.EVENTS))),
+    await database.run(handleConversationEvents(options(userId, request(READ_PATH.EVENTS)))),
     conversationEventsAnswerSchema,
   );
   assert.deepEqual(
@@ -1040,7 +1048,9 @@ test("events page behind a cursor of their own and two devices converge on them"
     const query: ReadQuery = { limit: 1 };
     if (cursor !== undefined) query.after = cursor;
     const page = await answered(
-      await handleConversationEvents(options(userId, request(READ_PATH.EVENTS, query))),
+      await database.run(
+        handleConversationEvents(options(userId, request(READ_PATH.EVENTS, query))),
+      ),
       conversationEventsAnswerSchema,
     );
     narrow.push(...page.events);
@@ -1068,7 +1078,7 @@ test("turns are answered in the order they last changed, again when a stamp move
   const { turns: ids, main } = await populate(userId);
 
   const all = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS))),
+    await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS)))),
     brainTurnsAnswerSchema,
   );
   assert.deepEqual(
@@ -1090,7 +1100,9 @@ test("turns are answered in the order they last changed, again when a stamp move
     }),
   );
   const changed = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: all.next ?? "" }))),
+    await database.run(
+      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: all.next ?? "" }))),
+    ),
     brainTurnsAnswerSchema,
   );
   assert.deepEqual(
@@ -1101,14 +1113,16 @@ test("turns are answered in the order they last changed, again when a stamp move
   assert.equal(parse(turnReadCursorSchema, changed.next ?? "")?.id, ids.typed);
 
   const paged: BrainTurnsAnswer = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { limit: 2 }))),
+    await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS, { limit: 2 })))),
     brainTurnsAnswerSchema,
   );
   assert.equal(paged.turns.length, 2);
   assert.equal(paged.hasMore, true);
   const rest = await answered(
-    await handleBrainTurns(
-      options(userId, request(READ_PATH.TURNS, { after: paged.next ?? "", limit: 2 })),
+    await database.run(
+      handleBrainTurns(
+        options(userId, request(READ_PATH.TURNS, { after: paged.next ?? "", limit: 2 })),
+      ),
     ),
     brainTurnsAnswerSchema,
   );
@@ -1119,7 +1133,9 @@ test("turns are answered in the order they last changed, again when a stamp move
   assert.equal(rest.hasMore, true);
 
   const quiet = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: rest.next ?? "" }))),
+    await database.run(
+      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: rest.next ?? "" }))),
+    ),
     brainTurnsAnswerSchema,
   );
   assert.deepEqual(quiet.turns, []);
@@ -1202,7 +1218,7 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
     }),
   );
   const all = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS))),
+    await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS)))),
     brainTurnsAnswerSchema,
   );
   assert.equal(all.turns.at(-1)?.id, ids.typed);
@@ -1210,7 +1226,9 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
 
   await database.run(database.store.main.clear(userId, new Date(NOW + 100_000)));
   const moved = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: stale }))),
+    await database.run(
+      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: stale }))),
+    ),
     brainTurnsAnswerSchema,
   );
   assert.deepEqual(moved.turns, []);
@@ -1219,7 +1237,9 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
   const head = await database.run(database.store.turns.latest(userId));
   assert.deepEqual(parse(turnReadCursorSchema, moved.next ?? ""), head);
   const settled = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
+    await database.run(
+      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
+    ),
     brainTurnsAnswerSchema,
   );
   assert.deepEqual(settled.turns, []);
@@ -1232,7 +1252,9 @@ test("a turns cursor naming a turn a Clear took moves back to the last turn at o
     }),
   );
   const none = await answered(
-    await handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
+    await database.run(
+      handleBrainTurns(options(userId, request(READ_PATH.TURNS, { after: moved.next ?? "" }))),
+    ),
     brainTurnsAnswerSchema,
   );
   assert.deepEqual(none.turns, []);

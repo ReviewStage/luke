@@ -36,6 +36,7 @@ import {
 } from "../server/voice/live-brain";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { promisedAsks, promisedWriter } from "./support/promised-store";
 import { deleteConversation, insertConversation } from "./support/store-rows";
 
 /**
@@ -62,14 +63,16 @@ const QUICK = { POLL_MS: 5, FOLLOW_MS: 60_000 };
 /** The same cadence with the bound close enough to reach inside a test. */
 const BOUNDED = { POLL_MS: 5, FOLLOW_MS: 150 };
 
-const writer = await storeWriter({
-  run: database.run,
-  tools: CATALOG_TOOL_SET,
-  now: () => new Date(NOW),
-});
-const asks = askRecord(database.run);
+const writer = await database.run(
+  storeWriter({
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  }),
+);
+const asks = promisedAsks(database.run);
+const askEffects = askRecord();
 const relay = new StreamRelay({
-  writer,
+  writer: promisedWriter(database.run, writer),
   asks,
   stopTurn: async () => undefined,
   offer: async () => false,
@@ -134,7 +137,8 @@ function stand(
   const reports: string[] = [];
   const brain = hostedLiveBrain({
     userId: target.userId,
-    asks: { run: database.run, asks, eve, now: () => NOW },
+    run: database.run,
+    asks: { asks: askEffects, eve, now: () => NOW },
     store,
     report: (message) => reports.push(message),
     bounds,

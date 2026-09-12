@@ -2,6 +2,7 @@ import { HttpApp } from "@effect/platform";
 import { Effect, Redacted } from "effect";
 import { type DevicesVaultSeams, devicesVaultApp } from "../../server/devices-vault-app.js";
 import { HostedEnvironment } from "../../server/hosted/environment.js";
+import { noDatabase } from "./no-database.js";
 
 /**
  * The devices-and-vault group answered the way a function answers it, with
@@ -22,8 +23,11 @@ function present(value: string | undefined): string | undefined {
 
 export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
   const secret = present(call.encryptionSecret);
+  // The seams a test hands in reach no connection, so the group runs over the
+  // refusing client rather than one this suite would have to open.
   const handler = HttpApp.toWebHandler(
     devicesVaultApp(call).pipe(
+      Effect.provide(noDatabase),
       Effect.provideService(HostedEnvironment, {
         openAiKey: undefined,
         brainModel: undefined,

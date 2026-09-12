@@ -1,9 +1,11 @@
-import type { HostedStoreRun } from "../store/database.js";
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import {
+  type StoreWriter as ComposedStoreWriter,
   type ConversationTarget,
   findMessageByClientId,
   offerSpeech,
-  type storeWriter,
 } from "../store/index.js";
 
 /**
@@ -18,30 +20,28 @@ import {
  * a row for it.
  */
 
-export type StoreWriter = Awaited<ReturnType<typeof storeWriter>>;
+export type StoreWriter = ComposedStoreWriter;
 
 export interface BriefingOfferSeams {
-  /** The runner the speech module's own reads are answered through. */
-  readonly run: HostedStoreRun;
   readonly writer: Pick<StoreWriter, "recordEvent">;
   readonly now: () => number;
 }
 
 /** Offers the turn's briefing on its journal row; answers whether the offer landed or already stood. */
-export async function offerBriefing(
+export function offerBriefing(
   seams: BriefingOfferSeams,
   target: ConversationTarget,
   turnId: string,
-): Promise<boolean> {
-  const journal = await seams.run(
-    findMessageByClientId(target.userId, target.conversationId, turnId),
-  );
-  if (!journal) return false;
-  const offered = await offerSpeech(
-    { run: seams.run, writer: seams.writer },
-    target.userId,
-    journal.id,
-    seams.now(),
-  );
-  return offered.ok;
+): Effect.Effect<boolean, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const journal = yield* findMessageByClientId(target.userId, target.conversationId, turnId);
+    if (!journal) return false;
+    const offered = yield* offerSpeech(
+      { writer: seams.writer },
+      target.userId,
+      journal.id,
+      seams.now(),
+    );
+    return offered.ok;
+  });
 }

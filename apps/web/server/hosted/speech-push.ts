@@ -17,6 +17,7 @@ import {
   type ApnsNotification,
 } from "./apns.js";
 import { briefingWordsOf } from "./briefing-words.js";
+import type { DeviceSeams } from "./devices.js";
 import {
   markSpeechPushed,
   openSpeechOffers,
@@ -189,7 +190,7 @@ export interface SpeechPushSeams {
   /** One notification to Apple, answered as the sender classifies the reply. */
   readonly send: (notification: ApnsNotification) => Promise<ApnsDelivery>;
   /** Removes the device row Apple said will never take another notification, scoped to its account. */
-  readonly forgetDevice: (userId: string, deviceId: string) => Promise<boolean>;
+  readonly forgetDevice: DeviceSeams["forgetDevice"];
 }
 
 export interface SpeechPushOptions {
@@ -281,59 +282,61 @@ function devicesByAccount(
  * Apple says its token is gone. Nothing here decides whether a briefing is
  * worth saying, rewords it, or reads anything of it but the words.
  */
-export async function pushSpeech(
+export function pushSpeech(
   seams: SpeechPushSeams,
   options: SpeechPushOptions,
-): Promise<SpeechPushOutcome> {
-  const { now, limit, userIds, clock = Date.now } = options;
-  const until = clock() + SPEECH_PUSH.BUDGET_MS;
-  const outcome = { pushed: 0, undelivered: 0, unaddressed: 0, unreadable: 0, waiting: 0 };
-  const quiet = await seams.store.run(quietUntilByAccount(now, userIds));
-  const offers = await seams.store.run(
-    openSpeechOffers({
+): Effect.Effect<SpeechPushOutcome, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const { now, limit, userIds, clock = Date.now } = options;
+    const until = clock() + SPEECH_PUSH.BUDGET_MS;
+    const outcome = { pushed: 0, undelivered: 0, unaddressed: 0, unreadable: 0, waiting: 0 };
+    const quiet = yield* quietUntilByAccount(now, userIds);
+    const offers = yield* openSpeechOffers({
       userIds,
       notUserIds: [...quiet.keys()],
       limit,
-    }),
-  );
-  const reported = await seams.store.run(
-    devicesByAccount([...new Set(offers.map((offer) => offer.userId))], now),
-  );
-  for (const offer of offers) {
-    const account = reported.get(offer.userId) ?? { active: false, target: undefined };
-    const decision = speechPushDecision(offer, account.active, now);
-    if (decision === SPEECH_PUSH_DECISION.WAIT) outcome.waiting += 1;
-    if (decision !== SPEECH_PUSH_DECISION.PUSH) continue;
-    if (account.target === undefined) {
-      outcome.unaddressed += 1;
-      continue;
-    }
-    const briefing = await briefingWordsOf(seams.store.run, seams.tools, offer);
-    if (briefing === undefined) {
-      outcome.unreadable += 1;
-      continue;
-    }
-    // Checked before the mark, so an offer the budget leaves for the next tick is never settled unsent.
-    if (clock() >= until) break;
-    const marked = await markSpeechPushed(
-      seams.store,
-      offer.userId,
-      offer.messageId,
+    });
+    const reported = yield* devicesByAccount(
+      [...new Set(offers.map((offer) => offer.userId))],
       now,
-      account.target.deviceId,
     );
-    if (!marked.ok) continue;
-    const delivery = await seams.send(
-      briefingNotification(briefing, offer.messageId, account.target),
-    );
-    if (delivery === APNS_DELIVERY.DELIVERED) {
-      outcome.pushed += 1;
-      continue;
+    for (const offer of offers) {
+      const account = reported.get(offer.userId) ?? { active: false, target: undefined };
+      const decision = speechPushDecision(offer, account.active, now);
+      if (decision === SPEECH_PUSH_DECISION.WAIT) outcome.waiting += 1;
+      if (decision !== SPEECH_PUSH_DECISION.PUSH) continue;
+      const target = account.target;
+      if (target === undefined) {
+        outcome.unaddressed += 1;
+        continue;
+      }
+      const briefing = yield* briefingWordsOf(seams.tools, offer);
+      if (briefing === undefined) {
+        outcome.unreadable += 1;
+        continue;
+      }
+      // Checked before the mark, so an offer the budget leaves for the next tick is never settled unsent.
+      if (clock() >= until) break;
+      const marked = yield* markSpeechPushed(
+        seams.store,
+        offer.userId,
+        offer.messageId,
+        now,
+        target.deviceId,
+      );
+      if (!marked.ok) continue;
+      const delivery = yield* Effect.promise(() =>
+        seams.send(briefingNotification(briefing, offer.messageId, target)),
+      );
+      if (delivery === APNS_DELIVERY.DELIVERED) {
+        outcome.pushed += 1;
+        continue;
+      }
+      outcome.undelivered += 1;
+      if (delivery !== APNS_DELIVERY.TOKEN_GONE) break;
+      yield* seams.forgetDevice(offer.userId, target.deviceId);
+      reported.set(offer.userId, { active: account.active, target: undefined });
     }
-    outcome.undelivered += 1;
-    if (delivery !== APNS_DELIVERY.TOKEN_GONE) break;
-    await seams.forgetDevice(offer.userId, account.target.deviceId);
-    reported.set(offer.userId, { active: account.active, target: undefined });
-  }
-  return outcome;
+    return outcome;
+  });
 }

@@ -1,4 +1,7 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
+import { Effect, type ParseResult } from "effect";
 import {
   BRAIN_TOOL,
   isRecord,
@@ -11,7 +14,6 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../core.js";
-import type { HostedStoreRun } from "./store/database.js";
 import { readMessageById, type SpeechOffer } from "./store/index.js";
 
 /**
@@ -22,25 +24,26 @@ import { readMessageById, type SpeechOffer } from "./store/index.js";
  * them leaves the offer standing rather than claiming words it cannot say.
  * The push pass and the live session service read the same words this way.
  */
-export async function briefingWordsOf(
-  run: HostedStoreRun,
+export function briefingWordsOf(
   tools: ToolSet,
   offer: SpeechOffer,
-): Promise<string | undefined> {
-  const read = await run(
+): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+  return Effect.map(
     readMessageById(offer.userId, offer.conversationId, tools, offer.messageId),
+    (read) => {
+      if (!read.ok) return undefined;
+      const message = read.value[0]?.message;
+      if (message === undefined || message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+      for (const part of message.parts) {
+        if (!isStoredToolPart(part)) continue;
+        if (storedToolName(part) !== BRAIN_TOOL.ANNOUNCE) continue;
+        if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) continue;
+        // SAFETY: the part was read back from the row's jsonb column through the vocabulary; its input is the JSON that column held.
+        const input = unparsedWire(part.input as WireBoundaryInput);
+        const briefing = isRecord(input) ? text(input.briefing) : undefined;
+        if (briefing) return briefing.slice(0, maximumBriefingLength);
+      }
+      return undefined;
+    },
   );
-  if (!read.ok) return undefined;
-  const message = read.value[0]?.message;
-  if (message === undefined || message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
-  for (const part of message.parts) {
-    if (!isStoredToolPart(part)) continue;
-    if (storedToolName(part) !== BRAIN_TOOL.ANNOUNCE) continue;
-    if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) continue;
-    // SAFETY: the part was read back from the row's jsonb column through the vocabulary; its input is the JSON that column held.
-    const input = unparsedWire(part.input as WireBoundaryInput);
-    const briefing = isRecord(input) ? text(input.briefing) : undefined;
-    if (briefing) return briefing.slice(0, maximumBriefingLength);
-  }
-  return undefined;
 }

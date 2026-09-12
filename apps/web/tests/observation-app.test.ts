@@ -62,11 +62,14 @@ const EXCHANGES: readonly Exchange[] = [
     handle: async () => {
       const { handleProjects } = await import("../server/hosted/projects.js");
       const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      return handleProjects({
-        ...hostedVaultSeams,
-        encryptionSecret: undefined,
-        request: new Request(`${ORIGIN}/api/projects`),
-      });
+      const { runWeb } = await import("../server/runtime.js");
+      return runWeb(
+        handleProjects({
+          ...hostedVaultSeams,
+          encryptionSecret: undefined,
+          request: new Request(`${ORIGIN}/api/projects`),
+        }),
+      );
     },
   },
   {
@@ -75,11 +78,14 @@ const EXCHANGES: readonly Exchange[] = [
     handle: async () => {
       const { handleObserve } = await import("../server/hosted/observe.js");
       const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      return handleObserve({
-        ...hostedVaultSeams,
-        encryptionSecret: undefined,
-        request: new Request(`${ORIGIN}/api/observe`),
-      });
+      const { runWeb } = await import("../server/runtime.js");
+      return runWeb(
+        handleObserve({
+          ...hostedVaultSeams,
+          encryptionSecret: undefined,
+          request: new Request(`${ORIGIN}/api/observe`),
+        }),
+      );
     },
   },
   {

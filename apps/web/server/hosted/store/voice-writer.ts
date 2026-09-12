@@ -4,7 +4,6 @@ import { Effect, Option, type ParseResult, Schema } from "effect";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, type SpokenAskMetadata } from "../../core.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-vocabulary.js";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../../live.js";
-import type { HostedStoreRun } from "./database.js";
 import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";
 import {
   type ConversationTarget,
@@ -43,10 +42,9 @@ import {
  * deltas do, and no audio is ever stored.
  *
  * Every statement here is an `Effect` over the ambient `SqlClient`, decoded
- * by a `Schema` rather than trusted, and run through the runner the edge that
- * composed the writer handed it; the position a segment takes is allocated
- * inside the session row's own lock, which is the transaction the client
- * opens.
+ * by a `Schema` rather than trusted, and answered as an effect to whoever
+ * composed the writer; the position a segment takes is allocated inside the
+ * session row's own lock, which is the transaction the client opens.
  */
 
 /** The live session a stream belongs to, and the conversation its asks and briefings belong to. */
@@ -88,14 +86,15 @@ const NO_SESSION: VoiceWriteResult = { ok: false, refusal: VOICE_WRITE_REFUSAL.N
 
 export interface VoiceWriter {
   /** Consumes one server event of the live session's stream. */
-  consume(target: VoiceTarget, event: LiveServerEvent): Promise<VoiceWriteResult>;
+  consume(
+    target: VoiceTarget,
+    event: LiveServerEvent,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
   /** Tells the writer which message a commentary append carries, before the stream acknowledges it. */
   noteAppend(target: VoiceTarget, append: CommentaryAppend): void;
 }
 
 interface VoiceWriterOptions {
-  /** The runner of the edge that composed the writer, which is what answers every statement below. */
-  readonly run: HostedStoreRun;
   /** The messages and events writer, which the spoken ask and the speech event go through. */
   readonly store: StoreWriter;
 }
@@ -242,7 +241,7 @@ const findSpokenSegments = SqlSchema.findAll({
     ),
 });
 
-export function voiceWriter({ run, store }: VoiceWriterOptions): VoiceWriter {
+export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   /** Appends by live session and client event id: the one thing kept in memory, and only until the speech lands. */
   const pending = new Map<string, Map<string, PendingAppend>>();
 
@@ -293,41 +292,43 @@ export function voiceWriter({ run, store }: VoiceWriterOptions): VoiceWriter {
    * appended back to back may both be answered by one delta and a second
    * would otherwise wait for speech that never comes.
    */
-  async function markSpoken(
+  function markSpoken(
     target: VoiceTarget,
     delta: SegmentDelta,
     voiceSession: VoiceSessionRow,
-  ): Promise<VoiceWriteResult | undefined> {
-    const appends = appendsOf(target.liveSessionId);
-    let outcome: VoiceWriteResult | undefined;
-    for (const [clientEventId, append] of appends) {
-      if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
-      appends.delete(clientEventId);
-      if (voiceSession.deviceId === null) {
-        outcome = { ok: false, refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT };
-        continue;
+  ): Effect.Effect<VoiceWriteResult | undefined, VoiceWriteFailure, SqlClient.SqlClient> {
+    return Effect.gen(function* () {
+      const appends = appendsOf(target.liveSessionId);
+      let outcome: VoiceWriteResult | undefined;
+      for (const [clientEventId, append] of appends) {
+        if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
+        appends.delete(clientEventId);
+        if (voiceSession.deviceId === null) {
+          outcome = { ok: false, refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT };
+          continue;
+        }
+        const marked = yield* markSpeechSpoken(
+          { writer: store },
+          target.userId,
+          append.messageId,
+          voiceSession.deviceId,
+          // Which session said it, and when on that session's clock.
+          { voiceSessionId: voiceSession.id, atMs: delta.start_ms },
+        );
+        if (marked.ok) {
+          outcome ??= WRITTEN;
+        } else {
+          outcome = {
+            ok: false,
+            refusal:
+              marked.refusal === SPEECH_REFUSAL.NOT_FOUND
+                ? VOICE_WRITE_REFUSAL.NO_MESSAGE
+                : VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
+          };
+        }
       }
-      const marked = await markSpeechSpoken(
-        { run, writer: store },
-        target.userId,
-        append.messageId,
-        voiceSession.deviceId,
-        // Which session said it, and when on that session's clock.
-        { voiceSessionId: voiceSession.id, atMs: delta.start_ms },
-      );
-      if (marked.ok) {
-        outcome ??= WRITTEN;
-      } else {
-        outcome = {
-          ok: false,
-          refusal:
-            marked.refusal === SPEECH_REFUSAL.NOT_FOUND
-              ? VOICE_WRITE_REFUSAL.NO_MESSAGE
-              : VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
-        };
-      }
-    }
-    return outcome;
+      return outcome;
+    });
   }
 
   function placeAppend(target: VoiceTarget, appended: CommentaryAppended): VoiceWriteResult {
@@ -347,45 +348,46 @@ export function voiceWriter({ run, store }: VoiceWriterOptions): VoiceWriter {
    * the session, the delegation, and the span. A delegation with no words
    * before it writes nothing.
    */
-  async function recordSpokenAsk(
+  function recordSpokenAsk(
     target: VoiceTarget,
     created: DelegationCreated,
-  ): Promise<VoiceWriteResult> {
-    const voiceSession = await run(
-      findVoiceSession({ userId: target.userId, liveSessionId: target.liveSessionId }),
-    );
-    if (Option.isNone(voiceSession)) return NO_SESSION;
-    const voiceSessionId = voiceSession.value.id;
-    const previous = await store.spokenAskEnd(target.conversation, {
-      voiceSessionId,
-      delegationId: created.delegation.id,
-    });
-    if (!previous.ok) return { ok: false, refusal: previous.refusal };
-    const spoken = await run(
-      findSpokenSegments({
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
+    return Effect.gen(function* () {
+      const voiceSession = yield* findVoiceSession({
+        userId: target.userId,
+        liveSessionId: target.liveSessionId,
+      });
+      if (Option.isNone(voiceSession)) return NO_SESSION;
+      const voiceSessionId = voiceSession.value.id;
+      const previous = yield* store.spokenAskEnd(target.conversation, {
+        voiceSessionId,
+        delegationId: created.delegation.id,
+      });
+      if (!previous.ok) return { ok: false, refusal: previous.refusal };
+      const spoken = yield* findSpokenSegments({
         voiceSessionId,
         fromMs: previous.toMs,
         toMs: created.offset_ms,
-      }),
-    );
-    const text = spoken.map((segment) => segment.text).join("");
-    if (text.length === 0) return IGNORED;
-    const metadata: SpokenAskMetadata = {
-      author: MESSAGE_AUTHOR.DEVELOPER,
-      channel: MESSAGE_CHANNEL.VOICE,
-      voice_session_id: voiceSessionId,
-      delegation_id: created.delegation.id,
-      from_ms: Math.min(...spoken.map((segment) => segment.startMs)),
-      to_ms: created.offset_ms,
-    };
-    const written = await store.recordUserMessage(target.conversation, {
-      clientId: created.delegation.id,
-      turnOfAsk: true,
-      text,
-      metadata,
+      });
+      const text = spoken.map((segment) => segment.text).join("");
+      if (text.length === 0) return IGNORED;
+      const metadata: SpokenAskMetadata = {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: voiceSessionId,
+        delegation_id: created.delegation.id,
+        from_ms: Math.min(...spoken.map((segment) => segment.startMs)),
+        to_ms: created.offset_ms,
+      };
+      const written = yield* store.recordUserMessage(target.conversation, {
+        clientId: created.delegation.id,
+        turnOfAsk: true,
+        text,
+        metadata,
+      });
+      if (written.ok) return written.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
+      return { ok: false, refusal: written.refusal };
     });
-    if (written.ok) return written.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
-    return { ok: false, refusal: written.refusal };
   }
 
   return {
@@ -395,22 +397,23 @@ export function voiceWriter({ run, store }: VoiceWriterOptions): VoiceWriter {
         conversation: target.conversation,
       });
     },
-    async consume(target, event) {
-      switch (event.type) {
-        case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
-          return Option.isNone(await run(appendSegment(target, event))) ? NO_SESSION : WRITTEN;
-        case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA: {
-          const voiceSession = await run(appendSegment(target, event));
-          if (Option.isNone(voiceSession)) return NO_SESSION;
-          return (await markSpoken(target, event, voiceSession.value)) ?? WRITTEN;
+    consume: (target, event) =>
+      Effect.gen(function* () {
+        switch (event.type) {
+          case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
+            return Option.isNone(yield* appendSegment(target, event)) ? NO_SESSION : WRITTEN;
+          case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA: {
+            const voiceSession = yield* appendSegment(target, event);
+            if (Option.isNone(voiceSession)) return NO_SESSION;
+            return (yield* markSpoken(target, event, voiceSession.value)) ?? WRITTEN;
+          }
+          case LIVE_SERVER_EVENT.COMMENTARY_APPENDED:
+            return placeAppend(target, event);
+          case LIVE_SERVER_EVENT.DELEGATION_CREATED:
+            return yield* recordSpokenAsk(target, event);
+          default:
+            return IGNORED;
         }
-        case LIVE_SERVER_EVENT.COMMENTARY_APPENDED:
-          return placeAppend(target, event);
-        case LIVE_SERVER_EVENT.DELEGATION_CREATED:
-          return recordSpokenAsk(target, event);
-        default:
-          return IGNORED;
-      }
-    },
+      }),
   };
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -66,11 +66,12 @@ function sessions() {
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await storeWriter({
-  run: database.run,
-  tools: CATALOG_TOOL_SET,
-  now: () => new Date(NOW),
-});
+const writer = await database.run(
+  storeWriter({
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  }),
+);
 
 /** The door's reads exactly as `productionBrainHostSeams` composes them, over the test database instead of the deployment's. */
 const ownership: SessionOwnership = {
@@ -95,12 +96,11 @@ interface TestHost {
 function hostOverTestDatabase(): TestHost {
   let storeReads = 0;
   const seams: BrainHostSeams = {
-    run: database.run,
     store: () => {
       storeReads += 1;
       return database.store;
     },
-    writer: async () => writer,
+    writer: () => Effect.succeed(writer),
     userInfo: async () => undefined,
     ownership,
     eveOrigin: () => undefined,
@@ -150,10 +150,10 @@ async function recordedSession(conversationId: string): Promise<string | null> {
 
 /** A session's start as the store hook runs it: admitted while claiming, then the claim; answers whether the record is now this session's. */
 async function start(host: BrainHost, auth: SessionAuth, sessionId: string): Promise<boolean> {
-  const starting = await host.admitStarting(auth, sessionId);
+  const starting = await database.run(host.admitStarting(auth, sessionId));
   assert.equal(starting.ok, true);
   if (!starting.ok) return false;
-  return host.sessionStarted(starting, sessionId);
+  return database.run(host.sessionStarted(starting, sessionId));
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
@@ -190,14 +190,16 @@ async function hookedEvent(
   event: MessageStreamEvent,
   state = memoryRelayState(),
 ): Promise<boolean> {
-  const admitted = await host.admit(auth, sessionId);
+  const admitted = await database.run(host.admit(auth, sessionId));
   if (!admitted.ok) return false;
-  await host.relay(
-    event,
-    admitted,
-    { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
-    state,
-    {},
+  await database.run(
+    host.relay(
+      event,
+      admitted,
+      { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
+      state,
+      {},
+    ),
   );
   return true;
 }
@@ -242,8 +244,8 @@ test("two concurrent starts on one conversation leave exactly one recorded sessi
 
     assert.equal(claims[order.indexOf(SESSION.NEWER)], true);
     assert.equal(await recordedSession(target.conversationId), SESSION.NEWER);
-    assert.equal((await host.admit(seat, SESSION.NEWER)).ok, true);
-    assert.deepEqual(await host.admit(seat, SESSION.OLDER), {
+    assert.equal((await database.run(host.admit(seat, SESSION.NEWER))).ok, true);
+    assert.deepEqual(await database.run(host.admit(seat, SESSION.OLDER)), {
       ok: false,
       refusal: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
     });
@@ -425,11 +427,11 @@ test("a conversation cleared while its session runs admits nobody at the door an
     ),
     forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER),
   );
-  assert.deepEqual(await host.admit(seat, SESSION.OLDER), {
+  assert.deepEqual(await database.run(host.admit(seat, SESSION.OLDER)), {
     ok: false,
     refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
   });
-  assert.deepEqual(await host.admitStarting(seat, SESSION.NEWER), {
+  assert.deepEqual(await database.run(host.admitStarting(seat, SESSION.NEWER)), {
     ok: false,
     refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
   });
@@ -444,11 +446,13 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const seat = ownSeat(userA, target.conversationId);
   const { host, storeReads } = hostOverTestDatabase();
   const call = (sessionId: string, auth: SessionAuth) =>
-    host.runTool(
-      ACTION_TOOL.REMEMBER_FACT,
-      binding(target, sessionId),
-      { words: "prefers short replies" },
-      toolContext(sessionId, auth),
+    database.run(
+      host.runTool(
+        ACTION_TOOL.REMEMBER_FACT,
+        binding(target, sessionId),
+        { words: "prefers short replies" },
+        toolContext(sessionId, auth),
+      ),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);

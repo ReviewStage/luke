@@ -28,8 +28,8 @@ import {
   actionRosterFor,
   type HostedSessionActionKind,
 } from "../action-execute.js";
+import type { FiberStoreRunner } from "../fiber-runner.js";
 import type { ObservedRoster } from "../observed-roster.js";
-import type { HostedStoreRun } from "../store/database.js";
 import type { HostedStore } from "../store/index.js";
 import type { HostedWorkspaceDefaults } from "./defaults.js";
 import type { HostedRoster } from "./roster.js";
@@ -218,7 +218,7 @@ function serially<Value>(userId: string, write: () => Promise<Value>): Promise<V
 
 /** The facts table as the carrier writes it: the same bounds the desktop's notebook keeps, one account's rows. */
 export function hostedFactsWriter(
-  run: HostedStoreRun,
+  run: FiberStoreRunner,
   store: Pick<HostedStore, "facts">,
   userId: string,
   now: () => number,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type { DevicesVaultSeams } from "../server/devices-vault-app.js";
 import type { DeviceHeartbeat, DeviceRegistration } from "../server/hosted/devices.js";
@@ -78,18 +79,21 @@ function seamsFor(overrides: Partial<DevicesVaultSeams> = {}) {
     resolveUserId: async (authorization) => authorization?.replace("Bearer ", "") || undefined,
     now: () => NOON,
     mintId: () => DEVICE_ID,
-    registerDevice: async (userId, registration, mintId, now) => {
-      recorded.registrations.push({ userId, registration, now });
-      return { deviceId: mintId() };
-    },
-    touchDevice: async (userId, heartbeat, now) => {
-      recorded.heartbeats.push({ userId, heartbeat, now });
-      return true;
-    },
-    forgetDevice: async (userId, deviceId) => {
-      recorded.forgets.push({ userId, deviceId });
-      return true;
-    },
+    registerDevice: (userId, registration, mintId, now) =>
+      Effect.sync(() => {
+        recorded.registrations.push({ userId, registration, now });
+        return { deviceId: mintId() };
+      }),
+    touchDevice: (userId, heartbeat, now) =>
+      Effect.sync(() => {
+        recorded.heartbeats.push({ userId, heartbeat, now });
+        return true;
+      }),
+    forgetDevice: (userId, deviceId) =>
+      Effect.sync(() => {
+        recorded.forgets.push({ userId, deviceId });
+        return true;
+      }),
     storeKey: async (userId, providerId, ciphertext) => {
       recorded.stores.push({ userId, providerId, ciphertext });
     },
@@ -259,7 +263,7 @@ test("a heartbeat moves last seen and carries only the changes it named", async 
 });
 
 test("a heartbeat for a row the account does not hold answers unseen", async () => {
-  const { seams } = seamsFor({ touchDevice: async () => false });
+  const { seams } = seamsFor({ touchDevice: () => Effect.succeed(false) });
   const response = await answer(seams, devicesRequest("PUT", { deviceId: DEVICE_ID }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { seen: false });
@@ -292,7 +296,7 @@ test("a forget is scoped to the bearer's account and answers whether a row went"
   assert.deepEqual(recorded.forgets, [{ userId: "user-1", deviceId: DEVICE_ID }]);
 
   const absent = await answer(
-    seamsFor({ forgetDevice: async () => false }).seams,
+    seamsFor({ forgetDevice: () => Effect.succeed(false) }).seams,
     devicesRequest("DELETE", { deviceId: DEVICE_ID }),
   );
   assert.deepEqual(await absent.json(), { deleted: false });

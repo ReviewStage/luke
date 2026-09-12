@@ -44,7 +44,6 @@ function options(userId: string | undefined, req: Request) {
   return {
     request: req,
     resolveUserId: async () => userId,
-    run: database.run,
     store: database.store,
     now: () => NOW,
   };
@@ -84,7 +83,11 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
 
   const before = parse(
     conversationMessagesAnswerSchema,
-    await body(await handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET")))),
+    await body(
+      await database.run(
+        handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET"))),
+      ),
+    ),
   );
   assert.ok(before);
   assert.deepEqual(
@@ -93,7 +96,9 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   );
   assert.equal(before.groups.length, 1);
 
-  const response = await handleConversationClear(options(userId, request(CLEAR_PATH, "POST")));
+  const response = await database.run(
+    handleConversationClear(options(userId, request(CLEAR_PATH, "POST"))),
+  );
   assert.equal(response.status, 200);
   const answer = parse(conversationClearAnswerSchema, await body(response));
   assert.ok(answer);
@@ -106,7 +111,11 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
 
   const after = parse(
     conversationMessagesAnswerSchema,
-    await body(await handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET")))),
+    await body(
+      await database.run(
+        handleConversationMessages(options(userId, request(MESSAGES_PATH, "GET"))),
+      ),
+    ),
   );
   assert.ok(after);
   // The main the Clear opened is the view's window from the Clear's own instant.
@@ -121,11 +130,15 @@ test("a second Clear stamps the main the first one opened", async () => {
   await populate(userId);
   const first = parse(
     conversationClearAnswerSchema,
-    await body(await handleConversationClear(options(userId, request(CLEAR_PATH, "POST")))),
+    await body(
+      await database.run(handleConversationClear(options(userId, request(CLEAR_PATH, "POST")))),
+    ),
   );
   const second = parse(
     conversationClearAnswerSchema,
-    await body(await handleConversationClear(options(userId, request(CLEAR_PATH, "POST")))),
+    await body(
+      await database.run(handleConversationClear(options(userId, request(CLEAR_PATH, "POST")))),
+    ),
   );
   assert.ok(first && second);
   assert.equal(second.cleared, 1);
@@ -134,11 +147,13 @@ test("a second Clear stamps the main the first one opened", async () => {
 
 test("the shared refusals stand in front of Clear: the method, then the bearer", async () => {
   const userId = await database.createUser();
-  const method = await handleConversationClear(options(userId, request(CLEAR_PATH, "GET")));
+  const method = await database.run(
+    handleConversationClear(options(userId, request(CLEAR_PATH, "GET"))),
+  );
   assert.equal(method.status, 405);
   assert.deepEqual(await body(method), { error: HOSTED_API_ERROR.METHOD_NOT_ALLOWED });
-  const bearer = await handleConversationClear(
-    options(undefined, request(CLEAR_PATH, "POST", false)),
+  const bearer = await database.run(
+    handleConversationClear(options(undefined, request(CLEAR_PATH, "POST", false))),
   );
   assert.equal(bearer.status, 401);
   assert.deepEqual(await body(bearer), { error: HOSTED_API_ERROR.INVALID_TOKEN });

@@ -45,11 +45,12 @@ const TEST_VAULT_SECRET = "v".repeat(64);
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await storeWriter({
-  run: database.run,
-  tools: CATALOG_TOOL_SET,
-  now: () => new Date(NOW),
-});
+const writer = await database.run(
+  storeWriter({
+    tools: CATALOG_TOOL_SET,
+    now: () => new Date(NOW),
+  }),
+);
 
 function unreached(name: string): () => never {
   return () => {
@@ -59,9 +60,8 @@ function unreached(name: string): () => never {
 
 const seams: BrainHostSeams = {
   eveOrigin: () => undefined,
-  run: database.run,
   store: () => database.store,
-  writer: async () => writer,
+  writer: () => Effect.succeed(writer),
   userInfo: async () => undefined,
   ownership: {
     sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
@@ -122,21 +122,21 @@ async function startSession(
 ): Promise<Session> {
   const id = sessionId();
   const auth = seat(target, turn);
-  const starting = await host.admitStarting(auth, id);
+  const starting = await database.run(host.admitStarting(auth, id));
   assert.equal(starting.ok, true);
   if (!starting.ok) throw new Error("not admitted");
-  assert.equal(await host.sessionStarted(starting, id), true);
+  assert.equal(await database.run(host.sessionStarted(starting, id)), true);
   return { id, auth, state: memoryRelayState() };
 }
 
 /** The prompt the instructions resolver composes at the session's start, as the host answers it. */
 async function composePrompt(host: BrainHost, session: Session) {
-  const admitted = await host.admit(session.auth, session.id);
+  const admitted = await database.run(host.admit(session.auth, session.id));
   assert.equal(admitted.ok, true);
   if (!admitted.ok) throw new Error("not admitted");
   const kind = host.turnKindOf(session.auth);
   assert.ok(kind);
-  return host.prompt(admitted, kind.trigger);
+  return database.run(host.prompt(admitted, kind.trigger));
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
@@ -169,15 +169,17 @@ async function relayTurn(
   prompt: { readonly hash?: string },
 ): Promise<string> {
   for (const event of shortTurn(eveTurnId, sequence)) {
-    const admitted = await host.admit(session.auth, session.id);
+    const admitted = await database.run(host.admit(session.auth, session.id));
     assert.equal(admitted.ok, true);
     if (!admitted.ok) throw new Error("not admitted");
-    await host.relay(
-      event,
-      admitted,
-      { id: session.id, auth: session.auth, turn: { id: eveTurnId, sequence } },
-      session.state,
-      prompt,
+    await database.run(
+      host.relay(
+        event,
+        admitted,
+        { id: session.id, auth: session.auth, turn: { id: eveTurnId, sequence } },
+        session.state,
+        prompt,
+      ),
     );
   }
   return hostTurnId(session.id, eveTurnId);

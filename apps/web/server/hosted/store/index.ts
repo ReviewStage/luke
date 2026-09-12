@@ -283,7 +283,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
 }
 
 export { promptHashOf, toolSetHashOf } from "./content-addressed.js";
-export type { HostedStoreContext, HostedStoreRun } from "./database.js";
+export type { HostedStoreContext } from "./database.js";
 export {
   findMessageByClientId,
   listRecentMessages,

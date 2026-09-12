@@ -4,7 +4,7 @@ import type * as SqlConnection from "@effect/sql/SqlConnection";
 import { SqlError } from "@effect/sql/SqlError";
 import { PgClient } from "@effect/sql-pg";
 import { Effect, Layer, Stream } from "effect";
-import type { HostedStoreRun } from "../../server/hosted/store/database";
+import type { HostedStoreTestRun } from "./hosted-store-database";
 
 const refused = () =>
   Effect.fail(
@@ -22,7 +22,7 @@ const refusingConnection: SqlConnection.Connection = {
   executeStream: () => Stream.fromEffect(refused()),
 };
 
-const noDatabase = Layer.scoped(
+export const noDatabase = Layer.scoped(
   SqlClient.SqlClient,
   SqlClient.make({
     acquirer: Effect.succeed(refusingConnection),
@@ -41,5 +41,5 @@ const noDatabase = Layer.scoped(
  * The store's own tests run against PGlite or Postgres through
  * `hosted-store-database.ts` instead.
  */
-export const runWithoutDatabase: HostedStoreRun = (effect) =>
+export const runWithoutDatabase: HostedStoreTestRun = (effect) =>
   Effect.runPromise(Effect.provide(effect, noDatabase));

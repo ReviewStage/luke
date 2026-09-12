@@ -1,4 +1,7 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import { isTextUIPart, isToolUIPart, type ToolSet } from "ai";
+import { Effect, type ParseResult } from "effect";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
@@ -8,7 +11,6 @@ import {
   standingContextText,
   workspaceProjectContextText,
 } from "../../core.js";
-import type { HostedStoreRun } from "../store/database.js";
 import { type ConversationTarget, listRecentMessages } from "../store/index.js";
 import { BRAIN_HOST } from "./bounds.js";
 import type { HostedWorkspaceDefaults } from "./defaults.js";
@@ -97,12 +99,17 @@ export function hostedStandingContext(input: StandingContextInput): string {
  * page whole rather than being rendered. The limit is on rows, not words:
  * each line is bounded again when rendered.
  */
-export async function readRecentMessages(
-  run: HostedStoreRun,
+export function readRecentMessages(
   target: ConversationTarget,
   tools: ToolSet,
   limit: number,
-): Promise<readonly StoredUIMessage[]> {
-  const read = await run(listRecentMessages(target.userId, target.conversationId, tools, limit));
-  return read.ok ? read.value.map((record) => record.message) : [];
+): Effect.Effect<
+  readonly StoredUIMessage[],
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient
+> {
+  return Effect.map(
+    listRecentMessages(target.userId, target.conversationId, tools, limit),
+    (read) => (read.ok ? read.value.map((record) => record.message) : []),
+  );
 }

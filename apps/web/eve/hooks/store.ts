@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
 import {
@@ -5,6 +6,7 @@ import {
   type RelayState,
   type RelayStateStore,
 } from "../../server/hosted/brain-host/relay.js";
+import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
 import { sessionPrompt } from "../session-prompt.js";
 
@@ -28,14 +30,19 @@ const state: RelayStateStore = {
 
 export default defineHook({
   events: {
-    async "*"(event, ctx) {
-      if (event.type === "session.started") {
-        const starting = await host.admitStarting(ctx.session.auth, ctx.session.id);
-        if (!starting.ok || !(await host.sessionStarted(starting, ctx.session.id))) return;
-      }
-      const admitted = await host.admit(ctx.session.auth, ctx.session.id);
-      if (!admitted.ok) return;
-      await host.relay(event, admitted, ctx.session, state, sessionPrompt.get());
+    "*"(event, ctx) {
+      return runWeb(
+        Effect.gen(function* () {
+          if (event.type === "session.started") {
+            const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
+            if (!starting.ok) return;
+            if (!(yield* host.sessionStarted(starting, ctx.session.id))) return;
+          }
+          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+          if (!admitted.ok) return;
+          yield* host.relay(event, admitted, ctx.session, state, sessionPrompt.get());
+        }),
+      );
     },
   },
 });

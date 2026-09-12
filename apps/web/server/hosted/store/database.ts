@@ -1,21 +1,5 @@
-import type { SqlClient } from "@effect/sql";
-import { type Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { openPayload, type PayloadKeyRing, sealPayload } from "../encryption.js";
-
-/**
- * The runner of whichever edge composed a hosted-store caller that still
- * answers a promise — `runWeb` in a web function, the test harness's runtime
- * over the same connection — handed to that caller so it builds no runtime of
- * its own. The store itself answers effects now; what still takes this are
- * the store writer, the voice writer, the speech module, the ask record, the
- * device seams, and the brain host's own seams, each of which a route
- * composes apart from the store and each of which still hands a promise up.
- *
- * @deprecated A strangler shim. P10-16 deletes it, with `BrainHostSeams.run`
- * beside it, once the web's route handlers and the modules they call hold
- * effects end to end and nothing above these callers awaits one here.
- */
-export type HostedStoreRun = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
 
 export interface HostedStoreContext {
   readonly keys: PayloadKeyRing;
