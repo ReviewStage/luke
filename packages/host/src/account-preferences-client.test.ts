@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { AccountPreferences } from "@sidecar/settings";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 
@@ -30,7 +31,7 @@ function client(options: Partial<ConstructorParameters<typeof AccountPreferences
   return new AccountPreferencesClient({
     serviceBaseUrl: "https://tryluke.dev",
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     ...options,
   });
 }

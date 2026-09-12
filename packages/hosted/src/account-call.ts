@@ -47,7 +47,7 @@ export interface CallCredential {
    */
   authorization?: () => Promise<string | undefined>;
   /** Asks whoever owns the credential to renew it; one with nothing to renew omits this. */
-  renew?: () => Promise<void>;
+  renew?: () => Effect.Effect<void, unknown>;
   /**
    * Who the credential answers for, as an opaque identity. Read before an
    * attempt and again before its one retry, because the retry re-reads the
@@ -348,7 +348,7 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
   }).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
 
   const renew: Effect.Effect<void> = Effect.ignore(
-    Effect.tryPromise(() => credential.renew?.() ?? Promise.resolve()),
+    Effect.suspend(() => credential.renew?.() ?? Effect.void),
   );
 
   /**

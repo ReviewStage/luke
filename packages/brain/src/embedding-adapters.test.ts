@@ -5,6 +5,7 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime/vocabulary";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   BRAIN_EMBEDDING_MODEL,
@@ -133,7 +134,7 @@ test("the hosted adapter reads the capabilities once and embeds through the cont
   const adapter = new HostedEmbeddingAdapter({
     serviceBaseUrl: "https://luke.test/",
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch,
   });
   const batch = await adapter.embed(["a"]);
@@ -163,7 +164,7 @@ test("a hosted service without the embed operation is a compatibility failure, n
   const adapter = new HostedEmbeddingAdapter({
     serviceBaseUrl: "https://luke.test",
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch,
   });
   const batch = await adapter.embed(["a"]);
@@ -175,7 +176,7 @@ test("a hosted service without the embed operation is a compatibility failure, n
   const noToken = new HostedEmbeddingAdapter({
     serviceBaseUrl: "https://luke.test",
     readAccessToken: async () => undefined,
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch,
   });
   const unsigned = await noToken.embed(["a"]);

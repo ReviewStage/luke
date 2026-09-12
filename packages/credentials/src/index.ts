@@ -39,4 +39,4 @@ export {
   type LoopbackConnectionSource,
 } from "./loopback-page.js";
 export { codeChallenge, createCodeVerifier } from "./pkce.js";
-export { singleFlight } from "./single-flight.js";
+export { singleFlightEffect } from "./single-flight.js";

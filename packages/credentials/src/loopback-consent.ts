@@ -182,7 +182,6 @@ export interface LoopbackConsentOptions<Grant> {
 export function unofferedConsent<Grant>(): LoopbackConsent<Grant> {
   const unconfigured = { reason: SHARED_REASON.UNCONFIGURED };
   return {
-    signIn: async () => unconfigured,
     signInEffect: () => Effect.succeed(unconfigured),
     cancel: () => undefined,
     reopen: () => undefined,
@@ -191,19 +190,9 @@ export function unofferedConsent<Grant>(): LoopbackConsent<Grant> {
 
 export interface LoopbackConsent<Grant> {
   /**
-   * One trip, press to grant. A second call while one waits answers with why.
-   *
-   * @deprecated The Promise door over {@link LoopbackConsent.signInEffect},
-   * on the `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: the
-   * settings rows that press this still hold a Promise, so the trip's scope
-   * is opened and closed here rather than by a caller's own fiber. Deleted in
-   * P7-06, once the composers that own these flows are Layers.
-   */
-  signIn(): Promise<LoopbackConsentOutcome<Grant>>;
-  /**
-   * The same one trip as an Effect, whose `Scope` is the listener's: closing
-   * it stops the loopback, whether the trip settled, timed out, or was
-   * interrupted.
+   * One trip, press to grant, whose `Scope` is the listener's: closing it
+   * stops the loopback, whether the trip settled, timed out, or was
+   * interrupted. A second call while one waits answers with why.
    */
   signInEffect(): Effect.Effect<LoopbackConsentOutcome<Grant>, never, Scope.Scope>;
   /**
@@ -438,9 +427,6 @@ export function loopbackConsent<Grant extends object>(
   }
 
   return {
-    signIn(): Promise<LoopbackConsentOutcome<Grant>> {
-      return Effect.runPromise(Effect.scoped(signInEffect()));
-    },
     signInEffect,
     cancel(): void {
       abandon?.();

@@ -54,7 +54,7 @@ function client(
   return new HostedRosterClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch,
     ...options,
   });

@@ -17,6 +17,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
+import type { Effect } from "effect";
 import {
   HostedLiveSessionSource,
   keyedLiveSessions,
@@ -90,7 +91,7 @@ export interface VoiceCapabilityAssemblerOptions {
    * would have nowhere to speak from.
    */
   openSocket?: OpenSocket;
-  refreshAccount: () => Promise<void>;
+  refreshAccount: () => Effect.Effect<void, unknown>;
   /** This installation's device row id, for the hosted session's handshake; absent or answering nothing, the handshake names no device. */
   deviceId?: () => string | undefined;
   fetch?: typeof fetch;

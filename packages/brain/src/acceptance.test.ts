@@ -60,6 +60,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
@@ -261,7 +262,7 @@ const HOSTED: Transport = {
     new HostedModelAdapter({
       serviceBaseUrl: "https://luke.test",
       readAccessToken: async () => "account-token",
-      refreshAccount: async () => undefined,
+      refreshAccount: () => Effect.void,
       fetch: fakeService(upstream, allowance).fetch,
       now: () => NOW,
       report: () => undefined,
@@ -493,7 +494,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
   const model = new HostedModelAdapter({
     serviceBaseUrl: "https://luke.test",
     readAccessToken: async () => "account-token",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch: fakeService(upstream, exhausted).fetch,
     now: () => NOW,
     report: () => undefined,

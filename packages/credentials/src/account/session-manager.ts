@@ -1,3 +1,4 @@
+import { Effect, Fiber } from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackConsent,
@@ -6,7 +7,7 @@ import {
   loopbackConsent,
 } from "../loopback-consent.js";
 import { LOOPBACK_CONNECTION_SOURCE, type LoopbackConnectionSource } from "../loopback-page.js";
-import { singleFlight } from "../single-flight.js";
+import { singleFlightEffect } from "../single-flight.js";
 import {
   ACCOUNT_FAILURE_ACTION,
   type AccountClient,
@@ -76,15 +77,16 @@ export interface AccountSessionManagerOptions {
 
 export class AccountSessionManager {
   readonly #options: AccountSessionManagerOptions;
-  readonly refreshOnce: () => Promise<void>;
+  /** One refresh however many callers ask for it at once; every ask joins the flight already under way. */
+  readonly refreshOnce: () => Effect.Effect<void, unknown>;
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
-  #signInRunning: Promise<AccountSnapshot> | undefined;
+  #signInRunning: Fiber.RuntimeFiber<AccountSnapshot, Error> | undefined;
   #cancelSignIn: (() => void) | undefined;
 
   constructor(options: AccountSessionManagerOptions) {
     this.#options = options;
-    this.refreshOnce = singleFlight(() => this.refresh());
+    this.refreshOnce = singleFlightEffect(() => this.refresh());
   }
 
   get snapshot(): AccountSnapshot {
@@ -177,33 +179,66 @@ export class AccountSessionManager {
     } catch {}
   }
 
-  beginSignIn(provider: AccountProvider): Promise<AccountSnapshot> {
-    if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return Promise.resolve(this.#account);
-    if (this.#signInRunning) return this.#signInRunning;
-    this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };
-    const generation = ++this.#generation;
-    this.#options.onChange(this.#account);
-    const consent = this.#consent(provider, generation);
-    this.#cancelSignIn = () => consent.cancel();
-    this.#signInRunning = (async () => {
-      try {
-        const outcome = await consent.signIn();
-        if (!("reason" in outcome)) {
-          this.#options.onChange(this.#account);
-          return this.#account;
-        }
-        if (this.#isCurrent(generation)) await this.signOut();
-        // A withdrawn sign-in — the developer's own press, or a later attempt
-        // taking the generation out from under this one — is an ordinary end.
-        // Anything else is a failure the panel has to be able to report.
-        if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return this.#account;
-        throw new Error(outcome.reason);
-      } finally {
-        this.#cancelSignIn = undefined;
-        this.#signInRunning = undefined;
+  /**
+   * The one trip, as the fiber every concurrent ask joins. The trip is forked
+   * rather than run in the asking fiber, so an ask that is itself interrupted
+   * — a Gateway request whose connection closed — leaves the consent standing
+   * for the developer's own press rather than ending it, exactly as the held
+   * promise it replaces did.
+   */
+  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, Error> {
+    // The decision, the fork, and the store of the fiber are one
+    // uninterruptible step, the same guarantee `singleFlightEffect`'s own
+    // semaphore states: a second ask landing between them would start a second
+    // trip, and an interruption between them would leave the account signing
+    // in with no fiber behind it and a cancel that does nothing. Only the join
+    // is interruptible, and an ask interrupted there leaves the consent
+    // standing for the developer's own press, exactly as the held promise did.
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.gen(this, function* () {
+        if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return this.#account;
+        if (this.#signInRunning) return yield* restore(Fiber.join(this.#signInRunning));
+        this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };
+        const generation = ++this.#generation;
+        this.#options.onChange(this.#account);
+        const consent = this.#consent(provider, generation);
+        this.#cancelSignIn = () => consent.cancel();
+        // `Effect.interruptible` because a fork inherits the mask above, and
+        // the trip's own scope has to be able to close on the deadline and on
+        // a withdrawal rather than run to its end whatever happens.
+        const fiber = yield* Effect.forkDaemon(
+          Effect.interruptible(this.#trip(consent, generation)),
+        );
+        this.#signInRunning = fiber;
+        return yield* restore(Fiber.join(fiber));
+      }),
+    );
+  }
+
+  #trip(
+    consent: LoopbackConsent<AccountSnapshot>,
+    generation: number,
+  ): Effect.Effect<AccountSnapshot, Error> {
+    return Effect.gen(this, function* () {
+      const outcome = yield* Effect.scoped(consent.signInEffect());
+      if (!("reason" in outcome)) {
+        this.#options.onChange(this.#account);
+        return this.#account;
       }
-    })();
-    return this.#signInRunning;
+      if (this.#isCurrent(generation)) yield* Effect.promise(() => this.signOut());
+      // A withdrawn sign-in — the developer's own press, or a later attempt
+      // taking the generation out from under this one — is an ordinary end.
+      // Anything else is a failure the panel has to be able to report.
+      if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return this.#account;
+      return yield* Effect.fail(new Error(outcome.reason));
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#cancelSignIn = undefined;
+          this.#signInRunning = undefined;
+        }),
+      ),
+    );
   }
 
   #consent(provider: AccountProvider, generation: number): LoopbackConsent<AccountSnapshot> {

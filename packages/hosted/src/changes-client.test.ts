@@ -15,7 +15,7 @@ function client(
   return new HostedChangesClient({
     serviceBaseUrl: "https://tryluke.dev/",
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     fetch,
     ...options,
   });

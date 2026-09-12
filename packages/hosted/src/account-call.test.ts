@@ -41,12 +41,12 @@ function account(tokens: (string | undefined)[], holders?: (string | undefined)[
     renewals,
     credential: accountBearer({
       readAccessToken: () => Promise.resolve(token),
-      refreshAccount: () => {
-        renewals.push("renewed");
-        token = tokens.shift() ?? token;
-        holder = holders === undefined ? holder : (holders.shift() ?? holder);
-        return Promise.resolve();
-      },
+      refreshAccount: () =>
+        Effect.sync(() => {
+          renewals.push("renewed");
+          token = tokens.shift() ?? token;
+          holder = holders === undefined ? holder : (holders.shift() ?? holder);
+        }),
       ...(holders ? { readAccountKey: () => Promise.resolve(holder) } : undefined),
     }),
   };
@@ -170,7 +170,7 @@ it.effect(
       const failing = callOn(
         {
           authorization: () => Promise.resolve("Bearer held"),
-          renew: () => Promise.reject(new Error("the network is down")),
+          renew: () => Effect.fail(new Error("the network is down")),
         },
         () => refusal(),
       );
@@ -205,7 +205,7 @@ it.effect(
       const { call, requests, client } = callOn(
         {
           authorization: () => Promise.reject(new Error("the settings file could not be read")),
-          renew: () => Promise.resolve(),
+          renew: () => Effect.void,
         },
         () => jsonResponse({}),
       );

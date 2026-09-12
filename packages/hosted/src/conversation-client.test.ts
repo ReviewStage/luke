@@ -26,7 +26,7 @@ function client(
     serviceBaseUrl: "https://luke.test",
     fetch,
     readAccessToken: async () => "token-1",
-    refreshAccount: async () => undefined,
+    refreshAccount: () => Effect.void,
     readAccountKey: async () => "person",
     ...options,
   });

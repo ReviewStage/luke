@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, FiberId } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 
 /**
  * Collapses concurrent asks for a refresh into one in-flight run, and every
@@ -9,36 +9,15 @@ import { Cause, Deferred, Effect, Exit, FiberId } from "effect";
  * right after a successful refresh. A run that ends, ends the flight; the next
  * ask starts a fresh one holding the newly rotated token.
  *
- * The run itself starts synchronously, exactly as a caller starting a request
- * on the spot expects: the semaphore only guards the check-and-create of the
- * one {@link Deferred} every concurrent caller then joins, so the decision and
- * the run's start are one uninterruptible step and never wait on the Effect
- * runtime's own scheduling.
- *
- * @deprecated The returned closure's `Effect.runPromiseExit` is on the
- * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: this function's
- * one remaining caller, `AccountSessionManager.refresh`, still holds a
- * Promise rather than a fiber, and holds `refreshOnce` behind an
- * `AccountToken` a hosted client is handed, so it runs the join as an Effect
- * only once `AccountSessionManager.refresh` is one itself.
+ * The run itself starts synchronously the instant the returned closure is
+ * called, before the Effect it hands back is ever run: the semaphore guards a
+ * body that cannot suspend, so the check-and-create of the one {@link Deferred}
+ * every concurrent caller then joins is one uninterruptible step regardless of
+ * when — or whether — a caller runs the await that follows. That is the whole
+ * of what `Effect.runSync` is for here, and it is why this file is on the
+ * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`.
  */
-export function singleFlight(run: () => Promise<void>): () => Promise<void> {
-  const join = singleFlightEffect(run);
-  return () =>
-    Effect.runPromiseExit(join()).then((exit) => {
-      if (Exit.isSuccess(exit)) return;
-      throw Cause.squash(exit.cause);
-    });
-}
-
-/**
- * The join `singleFlight` wraps to a promise, answered as an Effect instead:
- * every concurrent ask awaits the one flight already under way, or starts it.
- * The run itself still starts synchronously, exactly as a caller starting a
- * request on the spot expects: the semaphore only guards the check-and-create
- * of the one {@link Deferred} every concurrent caller then joins.
- */
-function singleFlightEffect(run: () => Promise<void>): () => Effect.Effect<void, unknown> {
+export function singleFlightEffect(run: () => Promise<void>): () => Effect.Effect<void, unknown> {
   const gate = Effect.unsafeMakeSemaphore(1);
   let flight: Deferred.Deferred<void, unknown> | undefined;
 
@@ -65,9 +44,5 @@ function singleFlightEffect(run: () => Promise<void>): () => Effect.Effect<void,
     );
   }
 
-  // `join()` runs synchronously the instant the returned closure is called,
-  // before the Effect it hands back is ever run: the decision and the run's
-  // start stay one uninterruptible step regardless of when — or whether — a
-  // caller runs the await that follows.
   return () => Deferred.await(join());
 }
