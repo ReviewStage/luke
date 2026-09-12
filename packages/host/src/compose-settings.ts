@@ -54,6 +54,7 @@ import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { apiKeyRejection, SettingsStore, type StoredAccount } from "./settings-store.js";
 import { type AwaitedSettingsStore, awaitedSettingsStore } from "./settings-store-awaited.js";
 import { vaultStepBearer } from "./vault-step-bearer.js";
+import { type VaultStepEra, vaultStepEraStands } from "./vault-step-era.js";
 import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
@@ -268,13 +269,16 @@ export const composeSettings = (): Effect.Effect<
     /**
      * Every touch of the vault's key list rides one queue, drained by a fiber
      * of this composer's lifetime scope, in the order the hands and the
-     * account's edges took them and one at a time; and every step that
-     * awaited the service checks two things before it writes: that no
-     * sign-out has moved the generation since it began, and that the account
-     * it began under is the one signed in. A list that returns after a
-     * sign-out, or a store that finishes after the account changed, installs
-     * nothing; and the bearer every call on the queue carries is the step's
-     * own account's, so a call that outlived it travels under nobody's.
+     * account's edges took them and one at a time. A step is offered with
+     * the era its hand pressed in — the generation standing and the account
+     * signed in at the press — and begins only if that era still stands when
+     * the queue reaches it, so a Save that waited behind a reconcile's round
+     * trips cannot run under whoever signed in meanwhile; and every step that
+     * awaited the service checks the same two things before it writes, so a
+     * list that returns after a sign-out, or a store that finishes after the
+     * account changed, installs nothing. The bearer every call on the queue
+     * carries is the era's own account's, so a call that outlived it travels
+     * under nobody's.
      */
     const vaultActions = yield* Queue.unbounded<Effect.Effect<void>>();
     let vaultGeneration = 0;
@@ -331,19 +335,27 @@ export const composeSettings = (): Effect.Effect<
     const signedInAccountKey = (): Effect.Effect<string | undefined> =>
       Effect.map(readStoredAccount(), (account) => account?.email);
 
-    /** The account a step begins under, and the one its calls may travel as. */
-    const beginVaultStep = (): Effect.Effect<StoredAccount | undefined> =>
-      Effect.map(readStoredAccount(), (account) => {
-        vaultStepAccount = account?.email;
-        return account;
-      });
-
-    /** Whether a step begun under this generation and account may still write. */
+    /** Whether the era a step was pressed in still stands, so it may begin or still write. */
     const vaultStillCurrent = (generation: number, accountKey: string): Effect.Effect<boolean> =>
-      Effect.map(
-        signedInAccountKey(),
-        (signedIn) => vaultGeneration === generation && signedIn === accountKey,
+      Effect.map(signedInAccountKey(), (signedIn) =>
+        vaultStepEraStands({ generation, accountKey }, vaultGeneration, signedIn),
       );
+
+    /** The era of a press: the generation standing and the account signed in, or nothing signed out. */
+    const vaultEraNow = (): Effect.Effect<VaultStepEra | undefined> =>
+      Effect.map(signedInAccountKey(), (accountKey) =>
+        accountKey === undefined ? undefined : { generation: vaultGeneration, accountKey },
+      );
+
+    /**
+     * A step begins only if the era of its press still stands; then its calls
+     * travel as that account. Answers whether it began.
+     */
+    const beginVaultStep = (era: VaultStepEra): Effect.Effect<boolean> =>
+      Effect.map(vaultStillCurrent(era.generation, era.accountKey), (stands) => {
+        if (stands) vaultStepAccount = era.accountKey;
+        return stands;
+      });
 
     /**
      * The row says what the vault last listed, so until the first list of a
@@ -413,20 +425,23 @@ export const composeSettings = (): Effect.Effect<
       });
 
     const reconcileVaultKeys = (): Effect.Effect<void> =>
-      offerVault(
-        Effect.gen(function* () {
-          const generation = vaultGeneration;
-          const account = yield* beginVaultStep();
-          if (!account) return;
-          const held = yield* refreshVaultKeys(generation, account.email);
-          if (held === undefined) return;
-          if (yield* migrateLocalCloudKeys(generation, account, held)) {
-            yield* refreshVaultKeys(generation, account.email);
-          }
-          if (!(yield* vaultStillCurrent(generation, account.email))) return;
-          yield* emitSettings();
-        }),
-      );
+      Effect.gen(function* () {
+        const account = yield* readStoredAccount();
+        if (!account) return;
+        const era: VaultStepEra = { generation: vaultGeneration, accountKey: account.email };
+        yield* offerVault(
+          Effect.gen(function* () {
+            if (!(yield* beginVaultStep(era))) return;
+            const held = yield* refreshVaultKeys(era.generation, era.accountKey);
+            if (held === undefined) return;
+            if (yield* migrateLocalCloudKeys(era.generation, account, held)) {
+              yield* refreshVaultKeys(era.generation, era.accountKey);
+            }
+            if (!(yield* vaultStillCurrent(era.generation, era.accountKey))) return;
+            yield* emitSettings();
+          }),
+        );
+      });
 
     /**
      * The account is gone: the set empties now and the generation moves, so
@@ -452,60 +467,70 @@ export const composeSettings = (): Effect.Effect<
       apiKey: string | undefined,
       reporter: string | undefined,
     ): Effect.Effect<SettingsUpdateResult> =>
-      enqueueVault(
-        Effect.gen(function* () {
-          const generation = vaultGeneration;
-          const accountKey = (yield* beginVaultStep())?.email;
-          if (accountKey === undefined) {
-            return yield* refusedSettings(
-              "Sign in first: this key is held by Luke's service, not on this Mac.",
-            );
-          }
-          const normalized = apiKey?.trim();
-          if (normalized) {
-            // The same door the local path holds, and it already holds the
-            // vault's own shape rule: the length it caps at is the vault's, and
-            // printable ASCII admits no whitespace, so a key that passes here is
-            // one the vault stores, and each refusal names its own reason.
-            const rejection = apiKeyRejection(
-              normalized,
-              CREDENTIAL_PROVIDERS[providerId].keyFormat,
-            );
-            if (rejection) return yield* refusedSettings(rejection);
-            const stored = yield* Effect.promise(() =>
-              hostedVault.storeKey(providerId, normalized),
-            );
-            if (!stored?.stored) {
-              return yield* refusedSettings("Could not store that key with Luke's service.");
-            }
-            if (!(yield* vaultStillCurrent(generation, accountKey))) {
-              return yield* refusedSettings(
-                "The account signed out while the key was being stored.",
-              );
-            }
-            vaultKeys.add(providerId);
-            yield* Effect.orDie(store.setApiKey(providerId, undefined));
-          } else {
-            const deleted = yield* Effect.promise(() => hostedVault.deleteKey(providerId));
-            if (deleted === undefined) {
-              return yield* refusedSettings("Could not remove that key from Luke's service.");
-            }
-            if (!(yield* vaultStillCurrent(generation, accountKey))) {
-              return yield* refusedSettings(
-                "The account signed out while the key was being removed.",
-              );
-            }
-            vaultKeys.delete(providerId);
-          }
-          recordProductEvent(
-            normalized ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
-            { connection_id: providerId },
+      Effect.gen(function* () {
+        // The era is the press's, read before the step is offered: a Save
+        // that waits behind the steps ahead of it belongs to the account that
+        // pressed, and begins under no other.
+        const era = yield* vaultEraNow();
+        if (era === undefined) {
+          return yield* refusedSettings(
+            "Sign in first: this key is held by Luke's service, not on this Mac.",
           );
-          const settings = yield* Effect.orDie(store.snapshot());
-          emitSettingsSnapshot(settings, reporter);
-          return { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
-        }),
-      );
+        }
+        return yield* enqueueVault(storeCloudKeyStep(era, providerId, apiKey, reporter));
+      });
+
+    /** The Save's own step, once the queue reaches it. */
+    const storeCloudKeyStep = (
+      era: VaultStepEra,
+      providerId: CloudAgentProviderId,
+      apiKey: string | undefined,
+      reporter: string | undefined,
+    ): Effect.Effect<SettingsUpdateResult> =>
+      Effect.gen(function* () {
+        const { generation, accountKey } = era;
+        if (!(yield* beginVaultStep(era))) {
+          return yield* refusedSettings(
+            "The account changed before the key was stored; sign in and enter it again.",
+          );
+        }
+        const normalized = apiKey?.trim();
+        if (normalized) {
+          // The same door the local path holds, and it already holds the
+          // vault's own shape rule: the length it caps at is the vault's, and
+          // printable ASCII admits no whitespace, so a key that passes here is
+          // one the vault stores, and each refusal names its own reason.
+          const rejection = apiKeyRejection(normalized, CREDENTIAL_PROVIDERS[providerId].keyFormat);
+          if (rejection) return yield* refusedSettings(rejection);
+          const stored = yield* Effect.promise(() => hostedVault.storeKey(providerId, normalized));
+          if (!stored?.stored) {
+            return yield* refusedSettings("Could not store that key with Luke's service.");
+          }
+          if (!(yield* vaultStillCurrent(generation, accountKey))) {
+            return yield* refusedSettings("The account signed out while the key was being stored.");
+          }
+          vaultKeys.add(providerId);
+          yield* Effect.orDie(store.setApiKey(providerId, undefined));
+        } else {
+          const deleted = yield* Effect.promise(() => hostedVault.deleteKey(providerId));
+          if (deleted === undefined) {
+            return yield* refusedSettings("Could not remove that key from Luke's service.");
+          }
+          if (!(yield* vaultStillCurrent(generation, accountKey))) {
+            return yield* refusedSettings(
+              "The account signed out while the key was being removed.",
+            );
+          }
+          vaultKeys.delete(providerId);
+        }
+        recordProductEvent(
+          normalized ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
+          { connection_id: providerId },
+        );
+        const settings = yield* Effect.orDie(store.snapshot());
+        emitSettingsSnapshot(settings, reporter);
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
+      });
 
     const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
       Effect.map(store.readAccount(), (account) => account?.email);
