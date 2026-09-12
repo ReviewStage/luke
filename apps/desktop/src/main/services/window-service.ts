@@ -399,16 +399,25 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   } as const;
 
   /**
+   * Whether this run has begun the introduction. One run gives it at most
+   * once: a greeting cut short writes no completion and stays owed, and the
+   * record says it replays at the next signed-in launch, not the moment the
+   * account's next event lands in this one.
+   */
+  let introductionAttempted = false;
+
+  /**
    * Whether this launch gives the introduction now: the host says it is owed,
-   * the developer it is owed to is signed in, and nothing is playing yet. A
-   * launch that cannot reach its runtime knows nothing of the account and
-   * greets nobody.
+   * the developer it is owed to is signed in, this run has not begun it, and
+   * nothing is playing. A launch that cannot reach its runtime knows nothing
+   * of the account and greets nobody.
    */
   function introductionDue(): boolean {
     return (
       runMode.requiresAccount &&
       operator.signedIn() &&
       operator.introductionOwed() &&
+      !introductionAttempted &&
       !introductionPlaying()
     );
   }
@@ -421,6 +430,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
    * comes back down and the ordinary launch stands.
    */
   async function beginIntroduction(): Promise<void> {
+    introductionAttempted = true;
     state.update({ introduction: { playing: true } });
     await hotkeys.reapply(HOTKEY_RANK.TALK);
     if (!launchStanding()) return;
@@ -473,6 +483,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // owed to: at this launch when the record already says so, or the
       // moment the first sign-in lands, through the reconcile above.
       const giveIntroduction = introductionDue();
+      if (giveIntroduction) introductionAttempted = true;
       await panels.refreshGeometry();
       // A Quit landing inside one of the launch's own waits is already tearing
       // this process down; nothing is opened or armed over it. This check sits
