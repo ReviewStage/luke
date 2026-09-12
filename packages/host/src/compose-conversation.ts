@@ -21,7 +21,6 @@ import {
   type HostedConversationClient,
 } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
-import type { CadenceHome } from "@sidecar/runtime/effect";
 import type {
   ConversationViewMessage,
   ConversationViewSnapshot,
@@ -84,8 +83,6 @@ export interface ConversationDependencies {
   devices: Pick<DevicesComposer, "deviceId">;
   heads: ConversationHeadsClient;
   client: ConversationReadsClient;
-  /** Where the poll's fibers live, so the host's own scope closing ends them. */
-  home?: CadenceHome;
 }
 
 /** How the service's refusal of a rating reaches the control, one answer per refusal so none is read as another. */
@@ -301,7 +298,6 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       inFlight = poll(generation);
       return inFlight;
     },
-    ...(dependencies.home !== undefined ? { home: dependencies.home } : undefined),
   });
 
   /**
@@ -373,8 +369,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     snapshot,
     reset,
     start: async () => undefined,
-    stop: async () => {
-      loop.stop();
-    },
+    // The supervisor the account gate arms owns this loop's cadence, and its
+    // disarm runs before any composer stops.
+    stop: async () => undefined,
   };
 }

@@ -7,12 +7,12 @@
  * outlives the close, and an arming after it forks from a scope already
  * closed, which interrupts what it forked at once.
  *
- * The three calls below run an effect outside an edge, exactly as the armings
- * they were factored out of already did; each of those owners is on the ADR's
- * allowlist for as long as its arming is a synchronous call rather than an
- * effect.
+ * `cadenceGate` below is that shape said as two effects, for an owner whose
+ * arming is one; the three calls beside it run an effect outside an edge,
+ * exactly as the armings they were factored out of already did, and stand for
+ * as long as an arming is still made from inside a promise.
  */
-import { Effect, ExecutionStrategy, Exit, Runtime, Scope } from "effect";
+import { Effect, ExecutionStrategy, Exit, Option, Runtime, Scope, SynchronizedRef } from "effect";
 
 export interface CadenceHome {
   /** The runtime the cadence's fibers are forked on. */
@@ -47,7 +47,7 @@ export const openCadenceScope = (home: CadenceHome | undefined): Scope.Closeable
  */
 export const forkIntoCadence = <A>(
   home: CadenceHome | undefined,
-  scope: Scope.CloseableScope,
+  scope: Scope.Scope,
   work: Effect.Effect<A, never, Scope.Scope>,
 ): A => Runtime.runSync(runtimeOf(home))(Effect.provideService(work, Scope.Scope, scope));
 
@@ -61,3 +61,45 @@ export const closeCadenceScope = (
 ): void => {
   Runtime.runFork(runtimeOf(home))(Scope.close(scope, Exit.void));
 };
+
+/**
+ * A cadence the owner arms and disarms by hand, as a pair of effects rather
+ * than a pair of synchronous calls: the arm forks a child of the home's scope
+ * and runs the arming in it, the disarm closes that child, and the home's own
+ * close disarms whatever is still standing. The pair is serialized, so a
+ * disarm that arrives while an arm is still out waits for it and then undoes
+ * it, which is the race an arm-and-check pair used to answer by re-reading
+ * its gate.
+ */
+export interface CadenceGate {
+  /** Arms the cadence, or, where it already stands, does nothing. */
+  readonly arm: Effect.Effect<void>;
+  /** Disarms it, waiting for the finalizers of what it armed. */
+  readonly disarm: Effect.Effect<void>;
+}
+
+export const cadenceGate = (
+  armed: Effect.Effect<void, never, Scope.Scope>,
+): Effect.Effect<CadenceGate, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const home = yield* Effect.scope;
+    const standing = yield* SynchronizedRef.make(Option.none<Scope.CloseableScope>());
+    const disarm = SynchronizedRef.updateEffect(standing, (current) =>
+      Option.match(current, {
+        onNone: () => Effect.succeed(current),
+        onSome: (scope) =>
+          Effect.as(Scope.close(scope, Exit.void), Option.none<Scope.CloseableScope>()),
+      }),
+    );
+    const arm = SynchronizedRef.updateEffect(standing, (current) =>
+      Option.isSome(current)
+        ? Effect.succeed(current)
+        : Effect.gen(function* () {
+            const scope = yield* Scope.fork(home, ExecutionStrategy.sequential);
+            yield* Scope.extend(armed, scope);
+            return Option.some(scope);
+          }),
+    );
+    yield* Effect.addFinalizer(() => disarm);
+    return { arm, disarm };
+  });

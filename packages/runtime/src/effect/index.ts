@@ -74,7 +74,9 @@ export {
   writeWorkspaceFileEffect,
 } from "../workspace.effect.js";
 export {
+  type CadenceGate,
   type CadenceHome,
+  cadenceGate,
   cadenceHome,
   closeCadenceScope,
   forkIntoCadence,

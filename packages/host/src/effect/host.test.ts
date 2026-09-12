@@ -56,12 +56,16 @@ const recordingComposer = (
 const recordingAssembly = (log: Recorded[], startOrder: readonly Composer[]): HostAssembly => ({
   gateway: stubGateway(),
   startOrder,
-  arm: async () => {
-    log.push({ step: STEP.ARM });
-  },
-  disarm: () => {
-    log.push({ step: STEP.DISARM });
-  },
+  armed: Effect.zipRight(
+    Effect.sync(() => {
+      log.push({ step: STEP.ARM });
+    }),
+    Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        log.push({ step: STEP.DISARM });
+      }),
+    ),
+  ),
   drain: () =>
     Effect.sync(() => {
       log.push({ step: STEP.DRAIN });

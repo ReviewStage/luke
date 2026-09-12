@@ -14,7 +14,6 @@ import {
   HostedSessionMessagesClient,
 } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
-import { cadenceHome } from "@sidecar/runtime/effect";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
@@ -111,7 +110,6 @@ export const composeObservation = (
   Effect.gen(function* () {
     const { settings, account, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
-    const home = yield* cadenceHome;
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
     const late = yield* lateService<ObservationLinks>();
@@ -315,7 +313,6 @@ export const composeObservation = (
 
     const loop = new ObservationLoop({
       gate: observationGate,
-      home,
       intervalMs: SESSION_REFRESH_INTERVAL_MS,
       // The projects are drawn before the roster, so the broadcast the roster's
       // commit fires already reads the list the same pass listed.

@@ -17,7 +17,6 @@ import {
   isAppGuideSnapshot,
 } from "@sidecar/guide";
 import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
-import { cadenceHome } from "@sidecar/runtime/effect";
 import {
   CONVERSATION_KIND,
   conversationKindOf,
@@ -46,7 +45,7 @@ import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { Composer } from "./composer.js";
-import { conversationOperations, startConversationMaintenance } from "./conversation-operations.js";
+import { conversationMaintenance, conversationOperations } from "./conversation-operations.js";
 import { HostKernelTag } from "./effect/kernel.js";
 import { StoreWorker } from "./effect/seams.js";
 import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
@@ -89,7 +88,6 @@ export const composeBrain = (
     const { account, observation, announcements } = dependencies;
     const kernel = yield* HostKernelTag;
     const storeWorker = yield* StoreWorker;
-    const home = yield* cadenceHome;
     // The runtime the store's asks and every run of the tool loop are fibers
     // of: the host's own, so a turn and the host that cancels it stand on one
     // runtime rather than on a second one built where the work lives.
@@ -118,7 +116,6 @@ export const composeBrain = (
       report,
     });
     let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
-    let stopConversationMaintenance: (() => void) | undefined;
 
     const memory: MemoryWiring = runMode.observesProviders
       ? composeNotebookMemory({
@@ -336,11 +333,13 @@ export const composeBrain = (
         });
         await wiring.store().load();
         await store.restore();
-        stopConversationMaintenance = startConversationMaintenance({ store, brain: wiring, home });
       },
+      // The hourly pass is armed after the start that opened the store and
+      // ends with the scope this composer's lifetime is, before its stop.
+      armed: Effect.suspend(() =>
+        runMode.observesProviders ? conversationMaintenance({ store, brain: wiring }) : Effect.void,
+      ),
       stop: async () => {
-        stopConversationMaintenance?.();
-        stopConversationMaintenance = undefined;
         wiring.retire();
         memory.stop();
         await store.close();

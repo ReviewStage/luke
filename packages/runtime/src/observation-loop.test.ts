@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
 import { Effect, Exit, Scope, TestClock } from "effect";
 import { test } from "vitest";
-import { cadenceHome } from "./effect/cadence.js";
-import { ObservationLoop, ObservationSupervisor } from "./observation-loop.js";
+import { cadenceGate } from "./effect/cadence.js";
+import { ObservationLoop, observationSupervisor } from "./observation-loop.js";
 
 function deferred() {
   let resolve: () => void = () => undefined;
@@ -35,103 +35,108 @@ test("coalesces overlapping refreshes into one immediate follow-up", async () =>
   assert.deepEqual(generations, [0, 0]);
 });
 
-test("stop invalidates work already in flight and prevents gated work", async () => {
-  let enabled = true;
-  const pending = deferred();
-  const loop = new ObservationLoop({
-    gate: () => enabled,
-    intervalMs: 60_000,
-    run: () => pending.promise,
-  });
+it.scoped("a disarm invalidates work already in flight and prevents gated work", () =>
+  Effect.gen(function* () {
+    let enabled = true;
+    const pending = deferred();
+    const loop = new ObservationLoop({
+      gate: () => enabled,
+      intervalMs: 60_000,
+      run: () => pending.promise,
+    });
+    const gate = yield* cadenceGate(loop.cadence);
+    yield* gate.arm;
 
-  const generation = loop.generation;
-  const running = loop.refresh();
-  loop.stop();
-  enabled = false;
-  assert.equal(loop.isCurrent(generation), false);
-  pending.resolve();
-  await running;
-  await loop.refresh();
-  assert.equal(loop.generation, generation + 1);
-});
+    const generation = loop.generation;
+    const running = loop.refresh();
+    yield* gate.disarm;
+    enabled = false;
+    assert.equal(loop.isCurrent(generation), false);
+    pending.resolve();
+    yield* Effect.promise(() => running);
+    yield* Effect.promise(() => loop.refresh());
+    assert.equal(loop.generation, generation + 1);
+  }),
+);
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("supervisor starts and stops every loop as one lifecycle", () => {
-  let enabled = true;
-  const events: string[] = [];
-  const loops = ["sessions", "issues"].map(
-    (name) =>
-      new ObservationLoop({
-        gate: () => enabled,
-        intervalMs: 60_000,
-        run: async () => {
-          events.push(name);
-        },
-      }),
-  );
-  const supervisor = new ObservationSupervisor(loops);
+it.scoped("the supervisor arms and disarms every loop as one lifecycle", () =>
+  Effect.gen(function* () {
+    const events: string[] = [];
+    const loops = ["sessions", "calendars"].map(
+      (name) =>
+        new ObservationLoop({
+          gate: () => true,
+          intervalMs: 60_000,
+          run: async () => {
+            events.push(name);
+          },
+        }),
+    );
+    const supervisor = yield* observationSupervisor(loops);
 
-  supervisor.setEnabled(true);
-  supervisor.setEnabled(true);
-  enabled = false;
-  supervisor.setEnabled(false);
-  assert.deepEqual(events, ["sessions", "issues"]);
-  assert.deepEqual(
-    loops.map((loop) => loop.generation),
-    [1, 1],
-  );
-});
+    yield* supervisor.arm;
+    yield* supervisor.arm;
+    // The cadences are fibers the arming forked, so their first pass is the
+    // scheduler's next turn rather than the arming's own.
+    yield* Effect.yieldNow();
+    yield* supervisor.disarm;
+    assert.deepEqual(events, ["sessions", "calendars"]);
+    assert.deepEqual(
+      loops.map((loop) => loop.generation),
+      [1, 1],
+    );
+  }),
+);
 
-test("supervisor arms the loops when the gate opens after the first enable", () => {
-  let enabled = false;
-  const events: string[] = [];
-  const loops = ["sessions", "issues"].map(
-    (name) =>
-      new ObservationLoop({
-        gate: () => enabled,
-        intervalMs: 60_000,
-        run: async () => {
-          events.push(name);
-        },
-      }),
-  );
-  const supervisor = new ObservationSupervisor(loops);
+it.scoped("a loop behind a closed gate arms nothing and is disarmed all the same", () =>
+  Effect.gen(function* () {
+    const events: string[] = [];
+    const loop = new ObservationLoop({
+      gate: () => false,
+      intervalMs: 60_000,
+      run: async () => {
+        events.push("pass");
+      },
+    });
+    const supervisor = yield* observationSupervisor([loop]);
 
-  supervisor.setEnabled(true);
-  assert.deepEqual(events, []);
-  enabled = true;
-  supervisor.setEnabled(true);
-  assert.deepEqual(events, ["sessions", "issues"]);
-  supervisor.setEnabled(false);
-});
+    yield* supervisor.arm;
+    assert.deepEqual(events, []);
+    yield* supervisor.disarm;
+    assert.equal(loop.generation, 0);
+  }),
+);
 
-test("a pass that outlives its stop does not run the after-run hook", async () => {
-  let enabled = true;
-  const pending = deferred();
-  const hooks: number[] = [];
-  const loop = new ObservationLoop({
-    gate: () => enabled,
-    intervalMs: 60_000,
-    run: () => pending.promise,
-    afterRun: () => hooks.push(1),
-  });
+it.scoped("a pass that outlives its disarm does not run the after-run hook", () =>
+  Effect.gen(function* () {
+    let enabled = true;
+    const pending = deferred();
+    const hooks: number[] = [];
+    const loop = new ObservationLoop({
+      gate: () => enabled,
+      intervalMs: 60_000,
+      run: () => pending.promise,
+      afterRun: () => hooks.push(1),
+    });
+    const gate = yield* cadenceGate(loop.cadence);
+    yield* gate.arm;
 
-  const running = loop.refresh();
-  loop.stop();
-  enabled = false;
-  pending.resolve();
-  await running;
-  assert.deepEqual(hooks, []);
+    const running = loop.refresh();
+    yield* gate.disarm;
+    enabled = false;
+    pending.resolve();
+    yield* Effect.promise(() => running);
+    assert.deepEqual(hooks, []);
 
-  enabled = true;
-  await loop.refresh();
-  assert.deepEqual(hooks, [1]);
-});
+    enabled = true;
+    yield* Effect.promise(() => loop.refresh());
+    assert.deepEqual(hooks, [1]);
+  }),
+);
 
 describe("the cadence", () => {
-  it.scoped("runs a pass at every spaced instant until the loop stops", () =>
+  it.scoped("runs a pass at every spaced instant until the loop is disarmed", () =>
     Effect.gen(function* () {
-      const home = yield* cadenceHome;
       const clock = yield* Effect.clock;
       const passes: number[] = [];
       const loop = new ObservationLoop({
@@ -140,17 +145,18 @@ describe("the cadence", () => {
         run: async () => {
           passes.push(clock.unsafeCurrentTimeMillis());
         },
-        home,
       });
+      const gate = yield* cadenceGate(loop.cadence);
 
-      loop.start();
+      yield* gate.arm;
+      yield* Effect.yieldNow();
       assert.equal(passes.length, 1);
 
       yield* TestClock.adjust("30 seconds");
       yield* TestClock.adjust("30 seconds");
       assert.deepEqual(passes, [0, 30_000, 60_000]);
 
-      loop.stop();
+      yield* gate.disarm;
       yield* TestClock.adjust("5 minutes");
       assert.deepEqual(passes, [0, 30_000, 60_000]);
     }),
@@ -158,7 +164,6 @@ describe("the cadence", () => {
 
   it.scoped("keeps its cadence over a pass that failed and reports it", () =>
     Effect.gen(function* () {
-      const home = yield* cadenceHome;
       const reports: string[] = [];
       const passes: number[] = [];
       const loop = new ObservationLoop({
@@ -169,23 +174,22 @@ describe("the cadence", () => {
           if (passes.length === 2) throw new Error("provider unreachable");
         },
         report: (message) => reports.push(message),
-        home,
       });
+      const gate = yield* cadenceGate(loop.cadence);
 
-      loop.start();
+      yield* gate.arm;
       yield* TestClock.adjust("30 seconds");
       yield* TestClock.adjust("30 seconds");
 
       assert.equal(reports.length, 1);
       assert.deepEqual(passes, [0, 1, 2]);
-      loop.stop();
+      yield* gate.disarm;
     }),
   );
 
-  it.effect("ends when the home's scope closes, whatever became of the stop that should have", () =>
+  it.effect("ends when the gate's own scope closes, whatever became of the disarm", () =>
     Effect.gen(function* () {
       const scope = yield* Scope.make();
-      const home = yield* Effect.provideService(cadenceHome, Scope.Scope, scope);
       const passes: number[] = [];
       const loop = new ObservationLoop({
         gate: () => true,
@@ -193,10 +197,10 @@ describe("the cadence", () => {
         run: async () => {
           passes.push(passes.length);
         },
-        home,
       });
+      const gate = yield* Effect.provideService(cadenceGate(loop.cadence), Scope.Scope, scope);
 
-      loop.start();
+      yield* gate.arm;
       yield* TestClock.adjust("30 seconds");
       assert.deepEqual(passes, [0, 1]);
 

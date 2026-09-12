@@ -32,7 +32,7 @@ export {
 export {
   ObservationLoop,
   type ObservationLoopOptions,
-  ObservationSupervisor,
+  observationSupervisor,
 } from "./observation-loop.js";
 export {
   type BuiltPrompt,

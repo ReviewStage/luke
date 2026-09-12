@@ -80,7 +80,9 @@ state, its own timers, and the Gateway methods of its domain, and answers
 `start()` and `stop()` for exactly what it began; `composerLayer` is that
 composer as a scoped layer whose build runs `start` and whose scope closing
 runs `stop`, so the scope a composer was built in is its lifetime and nothing
-else stops it. The stop is registered before the start runs rather than as
+else stops it; what a composer answers as `armed` is run after that start and
+in the same scope, so a cadence whose stop is a scope closing needs no handle
+handed back at all. The stop is registered before the start runs rather than as
 the release of a successful acquire, because a composer's `stop` is written
 to give back what a partial or failed `start` allocated. The layers
 are built one after another in one sequential scope (`layersInOrder`), never
@@ -108,9 +110,9 @@ being built on: the store's asks and every run of a conversation's tool loop
 are fibers of that one runtime, never of a default one built where the work
 lives. The calendars composer holds three
 observation-driven timers of its own — the held-notice release, the Apple
-access poll, and the meeting-boundary wake — each forked into one `Scope`
-`startObservation` forks from the composer's own and `stopObservation` closes,
-so a sign-out's stop ends all three at once; the first two are fixed `Schedule`s on
+access poll, and the meeting-boundary wake — each forked into the one `Scope`
+`armObservation` opens and `disarmObservation` closes, over a gate of its own,
+so a sign-out's disarm ends all three at once; the first two are fixed `Schedule`s on
 that scope, exactly as the devices composer's poll is, and the third is a
 one-shot fiber the composer re-arms itself, because its delay is recomputed
 from the meetings every observation pass just read rather than held fixed.
@@ -166,16 +168,18 @@ stop in the reverse of its start, and only then the store closed. A step that
 threw is the drain's own named refusal rather than a defect the close carries.
 A stop
 that fails strands none of its siblings and surfaces in the close's own
-`Cause`. What a stop misses the close still ends: every cadence a composer
-arms at the account gate's own edges — the observation loops, the device
-poll, the calendars' three timers, the hourly conversation maintenance —
-forks its scope from the one that composer was built in
-(`@sidecar/runtime/effect`'s `cadenceHome`), so those fibers run on the host's
-own runtime rather than an ambient default one and are interrupted by the same
-close, and one armed after it forks from a scope already closed, which
-interrupts what it forked at once. Their `start` and `stop` stay, because what
-arms them is the gate opening and closing rather than the composer's own
-lifetime: a sign-out disarms them while the host still stands. The drain runs once whichever door asks for it — `Host.stop()` under
+`Cause`. What a disarm misses the close still ends: every cadence the account gate
+arms — the observation loops, the device poll, the calendars' three timers —
+lives in a scope `@sidecar/runtime/effect`'s `cadenceGate` forks from the one
+its owner was built in, so those fibers run on the host's own runtime rather
+than an ambient default one and are interrupted by the same close. The gate is
+two effects rather than a pair of synchronous calls, because what arms these is
+the account gate opening and closing rather than a composer's own lifetime: a
+sign-out disarms them while the host still stands, and the gate is serialized,
+so a sign-out arriving while a sign-in's arming is still out waits for it and
+then undoes it. The hourly conversation maintenance is not the gate's: it is
+the brain composer's own `armed`, run by `composerLayer` in the scope that
+composer's lifetime is, and released before its stop. The drain runs once whichever door asks for it — `Host.stop()` under
 the caller's own deadline, or the scope closing with the defaults — and every
 later ask is answered with that outcome, so the admissions close and the runs
 are cancelled once however many times the quit arrives. `Host.stop()` is
