@@ -267,10 +267,7 @@ repeated work into a `Scope`, which is what cancels it, `cadenceHome` with
 cadence armed at an edge outside any effect — an account gate opening, a
 supervisor enabling a loop — takes its scope and its runtime from, so its
 fibers are a child of the scope its owner was built in rather than an orphan
-on the ambient default runtime, `timersFromRuntime`
-answers the old `now`/`schedule`/`cancel` seam from a runtime's own `Clock` so
-a caller still injected with those closures reads the clock the rest of the
-process reads, `makePendingInputQueue` with `admitInput` and
+on the ambient default runtime, `makePendingInputQueue` with `admitInput` and
 `queueDebounceSchedule` are the reply queue's Effect surface, `withLane` and
 `acquireLane` are the execution lanes' — a lane's slot as a scoped,
 `Semaphore`-shaped resource admitted in the port's own arrival order —
@@ -356,16 +353,16 @@ AI SDK's `validateUIMessages` at run time, where the vocabulary itself — the
 message metadata schemas in `@sidecar/wire` and the tool-part states on the
 session barrel — reaches the SDK for its types alone, so a renderer that only
 names a state pulls none of it. `@sidecar/runtime/testing` is the scaffolding
-every test in this repository shares — a self-cleaning temporary directory, a
-stated microtask drain, and a clock the test drives — behind its own door
-because it reaches `node:fs` and `node:os`, and in this package because the
-clock stands in for the runtime's own `ScheduledTimer`. Both of those are
-deprecated in place, since a `TestClock` advanced by hand is the same thing
-said in the library every other seam is moving to, and P12-03 deletes them
-with the bridge that answers the seam from a runtime. A test written on
-`it.effect` reaches for `TestClock` directly rather than a wrapper of its own —
-`../effect/timers.test.ts` is the pattern — and for `temporaryDirectoryScoped`,
-an `Effect` over `@effect/platform`'s `FileSystem` that is this same
+every test in this repository shares — a self-cleaning temporary directory —
+behind its own door because it reaches `node:fs` and `node:os`. A test
+written on `it.effect` reaches for `TestClock` directly for its clock rather
+than a fake clock of its own — `../effect/timers.test.ts` is the pattern —
+and settles a wait through the predicate it is actually waiting on rather
+than a fixed microtask drain; P12-03 deleted the `ScheduledTimer` seam, the
+`FakeClock`, and `drainMicrotasks` that used to stand here, and a plain
+vitest test that still needs either keeps a package-owned copy beside the
+suite it serves rather than a shared runtime export. `temporaryDirectoryScoped`
+is an `Effect` over `@effect/platform`'s `FileSystem` that is this same
 guarantee stated as an `acquireRelease` rather than a `TestContext` callback.
 `@sidecar/analytics/sender` is the same door the other way around: the
 package's barrel is vocabulary only, read by the renderer for the event names

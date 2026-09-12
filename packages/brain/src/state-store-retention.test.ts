@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { FakeClock } from "@sidecar/runtime/testing";
+import { setImmediate as immediate } from "node:timers/promises";
 import { test } from "vitest";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -7,8 +7,44 @@ import {
   freshBrainState,
 } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
+import type { ScheduledTimer } from "./seam.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
+
+/** A clock this test drives by hand: nothing is due until it advances or fires. */
+class FakeClock {
+  now: number;
+  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
+
+  constructor(now: number) {
+    this.now = now;
+  }
+
+  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
+    const handle: ScheduledTimer = {};
+    this.timers.set(handle, { callback, at: this.now + delayMs });
+    return handle;
+  };
+
+  cancel = (timer: ScheduledTimer): void => {
+    this.timers.delete(timer);
+  };
+
+  /** Runs every timer due at or before `untilMs`, in due order, draining between each. */
+  async advance(untilMs: number): Promise<void> {
+    for (;;) {
+      const due = [...this.timers.entries()]
+        .filter(([, timer]) => timer.at <= untilMs)
+        .sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) break;
+      this.timers.delete(due[0]);
+      this.now = Math.max(this.now, due[1].at);
+      due[1].callback();
+      for (let turn = 0; turn < 20; turn += 1) await immediate();
+    }
+    this.now = Math.max(this.now, untilMs);
+  }
+}
 
 /**
  * Retention as the shipped policy has it: the store and its clock stand from

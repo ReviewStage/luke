@@ -4,9 +4,8 @@ import {
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
 } from "@sidecar/brain";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { test } from "vitest";
-import { answerOf, brainHarness, heldModel } from "../testing/index.js";
+import { answerOf, brainHarness, drainMicrotasks, heldModel } from "../testing/index.js";
 
 test("removing the capability under five outstanding runs leaves every run interrupted and marked, with no line written", async () => {
   const c = await brainHarness();

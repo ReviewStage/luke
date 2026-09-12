@@ -170,12 +170,24 @@ answers, so the bridge is where the effect is run until every one of them takes
 a client instead. It is the migration's own scaffolding rather than a second
 runtime for the product to live on, and it goes in P12-04 with the seam.
 
-`timersFromRuntime` in `packages/runtime/src/effect/timers.ts` is on the
-allowlist for the same reason and on the same terms: the `now`, `schedule`, and
-`cancel` closures its callers hold answer a number and a handle rather than an
-Effect, so the reading of now is run there and the delay is forked on the
-runtime the bridge was handed, never on one it built. It goes in P12-03 with
-the seam, the `FakeClock`, and `drainMicrotasks`.
+`timerSeamFromRuntime` answers the `now`/`schedule`/`cancel` seam a caller
+still injected with those closures reads from an Effect runtime's own
+`Clock`, exactly as the deleted `timersFromRuntime` did, but as a
+package-local function rather than a shared runtime export, since P12-03
+found no caller left that could take a shared one instead of a seam of its
+own: `packages/runtime/src/effect/timer-seam.ts` answers `children.effect.ts`'s
+and `queue.effect.ts`'s own delegation and reply-queue services, over the
+runtime their `Effect.acquireRelease` was handed, never one either builds;
+`packages/host/src/effect/timer-seam.ts` answers `compose-live.ts`'s idle,
+settle, and finalize timers the same way, over the runtime the live
+composition runs on; and `packages/brain/src/effect/harness.ts`'s own copy
+answers the brain's test harness alone, so its `BrainAgent` reads the ambient
+`TestClock` an `it.effect` test already stands on rather than a `FakeClock` of
+its own. Each is `runOnHandedRuntime` on the same terms the others there are:
+it starts the work on the runtime it was handed rather than building a
+second one, so this is that runtime's own edge for as long as the seam it
+answers still takes closures instead of an effect. They go once every caller
+each answers reads and schedules against `Clock` and `Scope` directly instead.
 
 `ObservationLoop`'s `start` and `stop` in
 `packages/runtime/src/observation-loop.ts` are the third: the loop's cadence is
@@ -903,6 +915,9 @@ design decision stated as such:
 | `LoopbackConsent`'s `signIn` Promise door over `signInEffect` | P4-04 | once `AccountSessionManager`'s sign-in is an effect |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | P12-04 |
 | `GoogleCalendarReader#run` / `exchangeGoogleCode`'s internal run, now over a handed-in `Runtime` | P4-05 | P7-13b — the calendars composer's methods answer effects since P7-13 |
+| `timerSeamFromRuntime` (`packages/runtime/src/effect/timer-seam.ts`) | P12-03 | once `children.effect.ts`/`queue.effect.ts` answer `Clock`/`Scope` directly |
+| `timerSeamFromRuntime` (`packages/host/src/effect/timer-seam.ts`) | P12-03 | once `compose-live.ts` answers `Clock`/`Scope` directly |
+| `timerSeamFromRuntime` (`packages/brain/src/effect/harness.ts`) | P12-03 | once `BrainAgent` answers `Clock`/`Scope` directly |
 | `LiveVoiceOrchestrator`'s `beginTalk`/`endTalk`/`stopSpeaking` over its own runtime | P6-07 | P9-03 — its one caller is the renderer's `use-voice-session.ts`, never a `packages/host` composer |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | P9-03, for the same reason |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |

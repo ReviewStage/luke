@@ -5,7 +5,6 @@ import type {
   ChildRunRecord,
   MemoryDefinition,
   ReasoningEffort,
-  ScheduledTimer,
   SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type {
@@ -45,7 +44,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import type { BrainRunEvent } from "./run-events.js";
-import type { AgentSeam } from "./seam.js";
+import type { AgentSeam, ScheduledTimer } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 import type { BrainChildAccess, BrainWorkspaceAccess } from "./tool-executor.js";

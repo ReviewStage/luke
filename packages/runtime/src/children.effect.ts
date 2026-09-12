@@ -19,7 +19,7 @@ import {
   type ChildSpawnRefusal,
   type ChildSpawnRequest,
 } from "./children.js";
-import { timersFromRuntime } from "./effect/timers.js";
+import { timerSeamFromRuntime } from "./effect/timer-seam.js";
 import type { SessionKey } from "./identifiers.js";
 
 export class ChildSpawnRefused extends Data.TaggedError("ChildSpawnRefused")<{
@@ -80,7 +80,7 @@ export const makeChildRunService = (
 ): Effect.Effect<ChildRunService, never, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.flatMap(Effect.runtime<never>(), (runtime) => {
-      const timers = timersFromRuntime(runtime);
+      const timers = timerSeamFromRuntime(runtime);
       const service = new ChildRunService({
         ...options,
         now: timers.now,

@@ -1,5 +1,5 @@
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import { type BrainPersistedState, brainGenerationExpired } from "./envelope.js";
+import type { ScheduledTimer } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 
 export interface BrainGenerationClockOptions {

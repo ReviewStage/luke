@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
+import { setImmediate as immediate } from "node:timers/promises";
 import { describe, it } from "vitest";
 import { claimedUnlessAborted, settledUnlessAborted } from "./settled.js";
 
@@ -11,7 +11,8 @@ const whileWatchingRejections = async (body: () => Promise<void>): Promise<reado
   process.on("unhandledRejection", record);
   try {
     await body();
-    await drainMicrotasks();
+    // Lets the rejection watcher's own listener run before it is torn down.
+    for (let turn = 0; turn < 30; turn += 1) await immediate();
   } finally {
     process.off("unhandledRejection", record);
   }

@@ -14,7 +14,6 @@ import {
   type HostedAgentAddition,
   type HostedWorkspaceCreation,
 } from "@sidecar/hosted";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_ID,
@@ -31,6 +30,7 @@ import { test } from "vitest";
 import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import { createSessionActionPerformer } from "./session-action-performer.js";
 import type { SettingsStore } from "./settings-store.js";
+import { drainMicrotasks } from "./testing/index.js";
 
 /*
  * Every write the brain asks for is carried to the service, which admits it

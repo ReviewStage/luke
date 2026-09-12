@@ -17,7 +17,6 @@ import {
 } from "@sidecar/brain/testing";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
   conversationKindOf,
@@ -38,6 +37,7 @@ import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Runtime } from "effect";
 import { type TestContext, test } from "vitest";
+import { drainMicrotasks } from "../testing/index.js";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**

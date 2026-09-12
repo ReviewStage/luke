@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { maximumAskLength } from "@sidecar/session";
 import { test } from "vitest";
-import { operatorOverBrain } from "../testing/index.js";
+import { drainMicrotasks, operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
 
 const NOW = 1_800_000_000_000;

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
 import { Effect } from "effect";
 import { test } from "vitest";
+import { drainMicrotasks } from "../testing.js";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,

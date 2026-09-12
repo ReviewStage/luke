@@ -6,12 +6,11 @@ import {
   refusedActionOutput,
 } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
-import { timersFromRuntime } from "@sidecar/runtime/effect";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
-import { advanceHarness, effectHarness } from "./effect/harness.js";
+import { advanceHarness, effectHarness, timerSeamFromRuntime } from "./effect/harness.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
   ABC,
@@ -305,7 +304,7 @@ it.effect(
       // — here, a mark — lands nowhere, while the successor's own writes do.
       const successorModel = adapterOf(new FakeClient());
       const successorRuntime = yield* Effect.runtime<never>();
-      const successorTimers = timersFromRuntime(successorRuntime);
+      const successorTimers = timerSeamFromRuntime(successorRuntime);
       const successor = new BrainAgent({
         conversationId: MAIN_SESSION_KEY,
         runtime: runtimeOver(successorModel),

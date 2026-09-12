@@ -1,7 +1,9 @@
 import { LIVE_CLIENT_EVENT, type LiveAppendEvent } from "@sidecar/live";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import type { LiveSideband } from "../live-socket.js";
+import type { ScheduledTimer } from "../scheduled-timer.js";
 import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
+
+export type { ScheduledTimer } from "../scheduled-timer.js";
 
 /**
  * The host's sends on one session, in order, each awaiting the acknowledgment

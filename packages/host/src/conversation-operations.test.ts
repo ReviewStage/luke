@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { cadenceHome } from "@sidecar/runtime/effect";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import {
   CONVERSATION_KIND,
   type ConversationRecord,
@@ -19,6 +18,7 @@ import {
   conversationOperations,
   startConversationMaintenance,
 } from "./conversation-operations.js";
+import { drainMicrotasks } from "./testing/index.js";
 
 const NOW = 1_800_000_000_000;
 const THREAD = threadSessionKey("t-1");

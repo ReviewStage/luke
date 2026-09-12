@@ -4,8 +4,8 @@ import {
   type LiveServerEvent,
   type LiveSessionClosed,
 } from "@sidecar/live";
-import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
+import type { ScheduledTimer } from "./append-channel.js";
 
 /**
  * The graceful close the conversations guide prescribes, over the sideband

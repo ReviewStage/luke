@@ -4,7 +4,6 @@ import path from "node:path";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
 import { type CadenceHome, cadenceHome } from "@sidecar/runtime/effect";
-import { drainMicrotasks } from "@sidecar/runtime/testing";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Duration, Effect, TestClock } from "effect";
@@ -18,6 +17,7 @@ import {
   deviceStateFrom,
 } from "./compose-devices.js";
 import { DEVICE_POLL_INTERVAL_MS, type DevicePresenceReport } from "./device-presence.js";
+import { drainMicrotasks } from "./testing/index.js";
 
 const INSTALLATION_ID = "0F8FAD5B-D9CB-469F-A165-70867728950E";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
