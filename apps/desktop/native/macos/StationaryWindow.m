@@ -58,9 +58,11 @@ static napi_value MakeStationary(napi_env env, napi_callback_info info) {
   }
   // Managed, transient, and stationary are a mutually exclusive group — AppKit
   // honors at most one, and the window arrives here carrying managed (from its
-  // creation) and transient (from being hidden in Mission Control). Stationary
-  // only takes effect once it is the group's sole member; the panel is an
-  // NSPanel, which Mission Control never tiles, so transient is not missed.
+  // creation, and again after every change of its level) and transient (from
+  // being hidden in Mission Control). Stationary only takes effect once it is
+  // the group's sole member, so both are cleared here and the caller runs this
+  // after each level change; a window left with managed beside stationary is
+  // tiled by Mission Control like an ordinary app window.
   window.collectionBehavior =
       (window.collectionBehavior &
        ~(NSWindowCollectionBehaviorManaged | NSWindowCollectionBehaviorTransient)) |
