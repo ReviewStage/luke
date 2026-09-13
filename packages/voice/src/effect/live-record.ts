@@ -14,10 +14,9 @@
 import { Context, Layer } from "effect";
 import type { LiveRecord } from "../live-session/live-record.js";
 
-export class LiveRecordTag extends Context.Tag("@sidecar/voice/LiveRecord")<
-  LiveRecordTag,
-  LiveRecord
->() {}
+export class LiveRecordTag extends Context.Service<LiveRecordTag, LiveRecord>()(
+  "@sidecar/voice/LiveRecord",
+) {}
 
 /** Hands a record built imperatively to the session that reads `LiveRecordTag`. */
 export const liveRecordLayer = (record: LiveRecord): Layer.Layer<LiveRecordTag> =>

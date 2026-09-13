@@ -227,7 +227,7 @@ module scope, and `runWeb(effect)` is the only place `apps/web` runs an effect.
 Vercel keeps a warm instance's module registry between invocations, so the
 first invocation of a cold start builds the layer and every later one on that
 instance reuses the services it built; a runtime built where the work lives
-would be a second copy of every service a `Context.Tag` was supposed to
+would be a second copy of every service a `Context.Service` was supposed to
 identify. Root AGENTS.md's "Effect idioms" section names this edge with the
 process's others.
 

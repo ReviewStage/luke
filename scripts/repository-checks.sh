@@ -530,7 +530,7 @@ if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$SIDECAR_REPO_ROOT/CHANGELOG
     exit 1
 fi
 
-# Effect's Context.Tag identity is per module instance: two resolved copies of
+# Effect's Context.Service identity is per module instance: two resolved copies of
 # "effect" in the dependency tree mint two tags that fail their own equality
 # check. The catalog is what pins every package to the one resolved version, so
 # a literal version here is the one thing that can quietly reintroduce a second

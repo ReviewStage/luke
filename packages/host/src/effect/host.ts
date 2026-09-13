@@ -95,10 +95,9 @@ export interface HostAssembly {
   readonly drain: HostDrain;
 }
 
-export class HostAssemblyTag extends Context.Tag("@sidecar/host/HostAssembly")<
-  HostAssemblyTag,
-  HostAssembly
->() {}
+export class HostAssemblyTag extends Context.Service<HostAssemblyTag, HostAssembly>()(
+  "@sidecar/host/HostAssembly",
+) {}
 
 /** The host with every composer started: what a client operates and what the quit drains. */
 export interface StandingHost {
@@ -106,7 +105,7 @@ export interface StandingHost {
   readonly drain: HostDrain;
 }
 
-export class HostTag extends Context.Tag("@sidecar/host/Host")<HostTag, StandingHost>() {}
+export class HostTag extends Context.Service<HostTag, StandingHost>()("@sidecar/host/Host") {}
 
 /**
  * The composers started in the assembly's order, the loops armed after the

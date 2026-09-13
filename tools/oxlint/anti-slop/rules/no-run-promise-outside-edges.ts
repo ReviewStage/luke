@@ -8,7 +8,7 @@ import { isAllowedFile, RUN_ALLOWLIST } from "../shared/effect-edges.ts";
  * builds the thing that runs one, and `NodeRuntime.runMain` runs one as a
  * whole process. All of them belong at an edge, because a runtime built where
  * the work lives is a second runtime, and two runtimes are two copies of every
- * service a `Context.Tag` was supposed to identify.
+ * service a `Context.Service` was supposed to identify.
  */
 const RUNNING_MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [

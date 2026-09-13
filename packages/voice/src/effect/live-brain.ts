@@ -14,10 +14,9 @@
 import { Context, Layer } from "effect";
 import type { LiveBrain } from "../live-session/live-brain.js";
 
-export class LiveBrainTag extends Context.Tag("@sidecar/voice/LiveBrain")<
-  LiveBrainTag,
-  LiveBrain
->() {}
+export class LiveBrainTag extends Context.Service<LiveBrainTag, LiveBrain>()(
+  "@sidecar/voice/LiveBrain",
+) {}
 
 /** Hands a brain built imperatively to the session that reads `LiveBrainTag`. */
 export const liveBrainLayer = (brain: LiveBrain): Layer.Layer<LiveBrainTag> =>

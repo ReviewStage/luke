@@ -1,5 +1,5 @@
 /**
- * The seams the host is handed, each as a `Context.Tag`. Everything of the
+ * The seams the host is handed, each as a `Context.Service`. Everything of the
  * machine still arrives rather than being read here: what changes is that a
  * seam is asked for by name out of the context the composition was built with,
  * so a composer states the seams it reaches in its own requirements instead of
@@ -12,10 +12,10 @@ import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
 /** Luke's own application-state root, given explicitly. */
-export class StateRoot extends Context.Tag("@sidecar/host/StateRoot")<StateRoot, string>() {}
+export class StateRoot extends Context.Service<StateRoot, string>()("@sidecar/host/StateRoot") {}
 
 /** What this launch is allowed to do. */
-export class RunMode extends Context.Tag("@sidecar/host/RunMode")<RunMode, RunModeFacts>() {}
+export class RunMode extends Context.Service<RunMode, RunModeFacts>()("@sidecar/host/RunMode") {}
 
 /** What this build is, and whose machine it runs on. */
 export interface AppIdentityFacts {
@@ -23,10 +23,9 @@ export interface AppIdentityFacts {
   readonly packaged: boolean;
 }
 
-export class AppIdentity extends Context.Tag("@sidecar/host/AppIdentity")<
-  AppIdentity,
-  AppIdentityFacts
->() {}
+export class AppIdentity extends Context.Service<AppIdentity, AppIdentityFacts>()(
+  "@sidecar/host/AppIdentity",
+) {}
 
 /**
  * The environment the host reads its development overrides from, as a
@@ -34,33 +33,30 @@ export class AppIdentity extends Context.Tag("@sidecar/host/AppIdentity")<
  * with the variable's own name and a packaged build can be handed a provider
  * that holds none.
  */
-export class Environment extends Context.Tag("@sidecar/host/Environment")<
-  Environment,
-  ConfigProvider.ConfigProvider
->() {}
+export class Environment extends Context.Service<Environment, ConfigProvider.ConfigProvider>()(
+  "@sidecar/host/Environment",
+) {}
 
 /** The Keychain-backed cipher the settings store encrypts its secrets with. */
-export class SecretCipher extends Context.Tag("@sidecar/host/SecretCipher")<
-  SecretCipher,
-  SecretCipherSeam
->() {}
+export class SecretCipher extends Context.Service<SecretCipher, SecretCipherSeam>()(
+  "@sidecar/host/SecretCipher",
+) {}
 
 /** Spawns the brain store's worker thread; the host's store wiring connects its client to it. */
 export interface StoreWorkerSource {
   readonly create: () => Worker;
 }
 
-export class StoreWorker extends Context.Tag("@sidecar/host/StoreWorker")<
-  StoreWorker,
-  StoreWorkerSource
->() {}
+export class StoreWorker extends Context.Service<StoreWorker, StoreWorkerSource>()(
+  "@sidecar/host/StoreWorker",
+) {}
 
 /** The ids the host mints for its own records. */
 export interface IdSourceSeam {
   readonly create: () => string;
 }
 
-export class IdSource extends Context.Tag("@sidecar/host/IdSource")<IdSource, IdSourceSeam>() {}
+export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@sidecar/host/IdSource") {}
 
 /**
  * Where a line about the host's own running goes. The service answers the
@@ -72,7 +68,7 @@ export interface HostReporter {
   readonly report: (message: string) => void;
 }
 
-export class Reporter extends Context.Tag("@sidecar/host/Reporter")<Reporter, HostReporter>() {}
+export class Reporter extends Context.Service<Reporter, HostReporter>()("@sidecar/host/Reporter") {}
 
 export const reporterLayer = (report: (message: string) => void): Layer.Layer<Reporter> =>
   Layer.merge(
@@ -97,10 +93,10 @@ export interface MachinePresenceSeam {
   readonly read: (() => MachinePresence) | undefined;
 }
 
-export class MachinePresenceReader extends Context.Tag("@sidecar/host/MachinePresenceReader")<
+export class MachinePresenceReader extends Context.Service<
   MachinePresenceReader,
   MachinePresenceSeam
->() {}
+>()("@sidecar/host/MachinePresenceReader") {}
 
 /**
  * Hears the protocol's shutdown method: the client's explicit Quit, or a
@@ -112,10 +108,9 @@ export interface ShutdownSignalSeam {
   readonly notify: (() => void) | undefined;
 }
 
-export class ShutdownSignal extends Context.Tag("@sidecar/host/ShutdownSignal")<
-  ShutdownSignal,
-  ShutdownSignalSeam
->() {}
+export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSignalSeam>()(
+  "@sidecar/host/ShutdownSignal",
+) {}
 
 /** Every seam tag a host composition stands on. */
 export type HostSeamTags =
