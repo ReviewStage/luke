@@ -1,10 +1,9 @@
 import { scheduleOnce } from "@sidecar/runtime/effect";
 import {
+  type Context,
   Duration,
   Effect,
   type Fiber,
-  FiberId,
-  Runtime,
   Schedule,
   ScheduleDecision,
   Scope,
@@ -192,19 +191,20 @@ export interface UpdateServiceOptions {
  */
 export class UpdateService {
   /**
-   * The service as the effect that builds it, since nothing here may run on
-   * a runtime of its own: the launch's own scope is what the timed check,
-   * the first check, and a publishing retry fork into, and the launch's own
-   * runtime is what a synchronous caller's `start`/`check`/`install`
-   * steps or forks its effects on, captured once here rather than defaulted,
-   * so a bridge that ran on the ambient default runtime can never stand in
-   * for the one runtime the launch actually disposes.
+   * The service as the effect that builds it, since nothing here may run
+   * under services of its own: the launch's own scope is what the timed
+   * check, the first check, and a publishing retry fork into, and the
+   * launch's own services are what a synchronous caller's
+   * `start`/`check`/`install` steps or forks its effects under, read once out
+   * of the fiber building this rather than defaulted, so a bridge can never
+   * run under the empty context plain `Effect.runSync` stands for in place of
+   * the one the launch actually holds.
    */
   static make(options: UpdateServiceOptions): Effect.Effect<UpdateService, never, Scope.Scope> {
     return Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const runtime = yield* Effect.runtime<never>();
-      return new UpdateService(options, scope, runtime);
+      const services = yield* Effect.context<never>();
+      return new UpdateService(options, scope, services);
     });
   }
 
@@ -216,7 +216,7 @@ export class UpdateService {
   readonly #justUpdatedFirstCheckDelayMs: number;
   readonly #publishingRetrySchedule: Schedule.Schedule<Duration.Duration>;
   readonly #report: (line: string) => void;
-  readonly #runtime: Runtime.Runtime<never>;
+  readonly #services: Context.Context<never>;
   /** Every fiber the service forks — the timed check, the first check, and a publishing retry — lands here. */
   readonly #scope: Scope.Scope;
   #snapshot: UpdateSnapshot;
@@ -224,14 +224,14 @@ export class UpdateService {
   #installing = false;
   #started = false;
   #stopped = false;
-  #publishingRetry: Fiber.RuntimeFiber<void> | undefined;
+  #publishingRetry: Fiber.Fiber<void> | undefined;
   /**
    * The timed check and the first check `start()` forks, tracked so `stop()`
    * can interrupt them directly when the scope they forked into is not this
    * class's own to close.
    */
-  #repeatingCheck: Fiber.RuntimeFiber<unknown> | undefined;
-  #firstCheck: Fiber.RuntimeFiber<unknown> | undefined;
+  #repeatingCheck: Fiber.Fiber<unknown> | undefined;
+  #firstCheck: Fiber.Fiber<unknown> | undefined;
   #publishingVersion: string | undefined;
   /** `#publishingRetrySchedule`'s own state, carried step to step for `#publishingVersion`. */
   #publishingScheduleState: unknown;
@@ -246,13 +246,13 @@ export class UpdateService {
   private constructor(
     options: UpdateServiceOptions,
     scope: Scope.Scope,
-    runtime: Runtime.Runtime<never>,
+    services: Context.Context<never>,
   ) {
     this.#currentVersion = options.currentVersion;
     this.#onChange = options.onChange;
     this.#engine = options.engine;
     this.#lastRunVersion = options.lastRunVersion;
-    this.#runtime = runtime;
+    this.#services = services;
     this.#scope = scope;
     this.#intervalMs = options.intervalMs ?? UPDATE_CHECK_DEFAULTS.INTERVAL_MS;
     this.#justUpdatedFirstCheckDelayMs =
@@ -329,7 +329,7 @@ export class UpdateService {
     // press or timed tick mid-wait collapses the pending timer rather than
     // stacking a second check behind it.
     if (this.#publishingRetry) {
-      this.#publishingRetry.unsafeInterruptAsFork(FiberId.none);
+      this.#publishingRetry.interruptUnsafe();
       this.#publishingRetry = undefined;
     }
     this.#move({ ...this.#base(UPDATE_STATUS.CHECKING) });
@@ -380,7 +380,7 @@ export class UpdateService {
       this.#report(`Updated: ${previous} -> ${this.#currentVersion}`);
       this.#move({ ...this.#base(UPDATE_STATUS.UPDATED), previousVersion: previous });
     }
-    const runSync = Runtime.runSync(this.#runtime);
+    const runSync = Effect.runSyncWith(this.#services);
     const work = Effect.sync(() => void this.check());
     // The interval never fires at the fork itself: the whole repeat is
     // pushed back by one interval, so the cadence lands at `intervalMs`,
@@ -418,9 +418,9 @@ export class UpdateService {
     this.#stopped = true;
     const publishingRetry = this.#publishingRetry;
     this.#publishingRetry = undefined;
-    publishingRetry?.unsafeInterruptAsFork(FiberId.none);
-    this.#repeatingCheck?.unsafeInterruptAsFork(FiberId.none);
-    this.#firstCheck?.unsafeInterruptAsFork(FiberId.none);
+    publishingRetry?.interruptUnsafe();
+    this.#repeatingCheck?.interruptUnsafe();
+    this.#firstCheck?.interruptUnsafe();
   }
 
   /**
@@ -435,13 +435,13 @@ export class UpdateService {
       this.#publishingVersion = version;
       this.#publishingScheduleState = this.#publishingRetrySchedule.initial;
     }
-    const runSync = Runtime.runSync(this.#runtime);
+    const runSync = Effect.runSyncWith(this.#services);
     const [state, delay, decision] = runSync(
       this.#publishingRetrySchedule.step(Date.now(), undefined, this.#publishingScheduleState),
     );
     if (ScheduleDecision.isDone(decision)) return false;
     this.#publishingScheduleState = state;
-    if (this.#publishingRetry) this.#publishingRetry.unsafeInterruptAsFork(FiberId.none);
+    if (this.#publishingRetry) this.#publishingRetry.interruptUnsafe();
     const work = Effect.sync(() => void this.check());
     this.#publishingRetry = runSync(
       Effect.provideService(scheduleOnce(Duration.toMillis(delay), work), Scope.Scope, this.#scope),

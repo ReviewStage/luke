@@ -26,7 +26,7 @@ import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Fiber, Queue, Result, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, Fiber, Queue, Result, Schedule, Scope } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
@@ -119,13 +119,13 @@ export interface CalendarsDependencies {
 }
 
 /**
- * The calendars concern, over the kernel it takes as a tag and the runtime
- * the layer it is built under is running on: the announcement hold its
- * observation finalizer owes is forked onto that runtime rather than the
- * ambient default one, and the three observation-driven timers fork their
- * fibers into the `Scope` the account gate's own arming runs in, exactly as
- * the device registration does one level down. The onboarding record is read
- * and written through `FileSystem`, which this composition provides.
+ * The calendars concern, over the kernel it takes as a tag: the announcement
+ * hold its observation finalizer owes is detached from the fiber the
+ * finalizer runs on and begun on that same stack, so the disarm never waits
+ * on it, and the three observation-driven timers fork their fibers into the
+ * `Scope` the account gate's own arming runs in, exactly as the device
+ * registration does one level down. The onboarding record is read and
+ * written through `FileSystem`, which this composition provides.
  */
 export const composeCalendars = (
   dependencies: CalendarsDependencies,
@@ -133,7 +133,6 @@ export const composeCalendars = (
   Effect.gen(function* () {
     const { settings, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
-    const runtime = yield* Effect.runtime<never>();
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
     const late = yield* lateService<CalendarsLinks>();
@@ -189,7 +188,7 @@ export const composeCalendars = (
      */
     let observationScope: Scope.Scope | undefined;
     /** The one pending meeting-boundary wake, interrupted and replaced on every re-arm. */
-    let boundaryFiber: Fiber.RuntimeFiber<void, never> | undefined;
+    let boundaryFiber: Fiber.Fiber<void, never> | undefined;
 
     const onboarding = onboardingStateRecord(kernel.stateRoot, report, fileSystemContext);
     /**
@@ -382,7 +381,7 @@ export const composeCalendars = (
         // Dropped rather than waited for, the way cancelling a timer never
         // waited: what an interruption has to guarantee is that the wake does
         // not fire, never that its fiber has already ended.
-        yield* Effect.forkDaemon(Fiber.interrupt(fiber));
+        yield* Effect.forkDetach(Fiber.interrupt(fiber));
       }
       if (!calendarMeetings || observationScope === undefined) return;
       const at = now();
@@ -392,7 +391,7 @@ export const composeCalendars = (
         Effect.forkScoped(
           Effect.interruptible(
             Effect.sleep(Duration.millis(boundary - at + 1)).pipe(
-              Effect.zipRight(
+              Effect.andThen(
                 Effect.gen(function* () {
                   boundaryFiber = undefined;
                   const links = yield* late.value;
@@ -448,7 +447,7 @@ export const composeCalendars = (
      * because the fiber outlives the request that asked for it, exactly as
      * the detached promise it replaces did.
      */
-    const pokeRefresh = Effect.asVoid(Effect.forkDaemon(loop.refresh));
+    const pokeRefresh = Effect.asVoid(Effect.forkDetach(loop.refresh));
 
     const pollAppleCalendarAccess = (): Effect.Effect<void> =>
       Effect.gen(function* () {
@@ -503,7 +502,7 @@ export const composeCalendars = (
           appleCalendar.forget();
           (yield* late.value).dropBriefings();
           kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: [] });
-          Runtime.runFork(runtime)(refreshAnnouncementHold());
+          yield* Effect.forkDetach(refreshAnnouncementHold(), { startImmediately: true });
         }),
       );
       yield* Effect.forkScoped(

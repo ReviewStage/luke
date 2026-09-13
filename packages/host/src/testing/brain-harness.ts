@@ -18,7 +18,7 @@ import {
 } from "@sidecar/brain/testing";
 import { MAIN_SESSION_KEY, type ModelResponse } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Effect, Runtime, type Scope } from "effect";
+import { Context, Effect, type Scope } from "effect";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";
 import type { GatewayOperator } from "../operator.js";
@@ -70,9 +70,10 @@ export function brainHarness(): Effect.Effect<BrainHarness, never, Scope.Scope> 
     });
     const broadcasts: (readonly BrainRequestSnapshot[])[] = [];
     // The agents this harness builds take no execution of their own, so the
-    // detach here is over the same default runtime they run their turns on.
+    // detach here carries the same empty set of services they run their turns
+    // under.
     const host = new BrainHost({
-      detach: detachOn(Runtime.defaultRuntime),
+      detach: detachOn(Context.empty()),
       follow: (agent) =>
         followBrainRequests(agent, {
           broadcastRequests: (snapshots) => {

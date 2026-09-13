@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { MessageRoleSchema } from "@sidecar/wire";
-import { Cause, Effect, Option, Runtime, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { StoredUIMessage } from "../../server/core";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
@@ -774,26 +774,24 @@ export function readProviderCursorsByUser(run: HostedStoreTestRun, userId: strin
 
 /**
  * The driver's own refusal code (Postgres's `SQLSTATE`, e.g. `23505` for a
- * unique violation) off a rejected `database.run(...)` promise: the runtime
- * rejects with a `FiberFailure` wrapping the `SqlError`'s `Cause`, and the
- * `SqlError` itself carries the driver's error as its own `cause`, the way
- * Drizzle's wrapped error once did.
+ * unique violation) off a rejected `database.run(...)` promise: a promise door
+ * rejects with the squashed `Cause`, which is the `SqlError` itself, nothing
+ * wrapping it, and that error carries the driver's error as its own `cause`,
+ * the way Drizzle's wrapped error once did.
  */
 const DriverErrorSchema = Schema.Struct({
   cause: Schema.Struct({ code: Schema.String }),
 });
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary: the value node:assert's own `rejects` caught, parsed immediately below by Runtime.isFiberFailure and then Schema.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary: the value node:assert's own `rejects` caught, parsed immediately below by Schema.
 function sqlErrorCode(error: unknown): string | undefined {
-  if (!Runtime.isFiberFailure(error)) return undefined;
-  const failure = Cause.squash(error[Runtime.FiberFailureCauseId]);
   return Option.map(
-    Schema.decodeUnknownOption(DriverErrorSchema)(failure),
+    Schema.decodeUnknownOption(DriverErrorSchema)(error),
     (decoded) => decoded.cause.code,
   ).pipe(Option.getOrUndefined);
 }
 
-/** A statement's promise is refused for exactly the Postgres code named, whatever wraps it now. */
+/** A statement's promise is refused for exactly the Postgres code named. */
 export async function assertRefusedWithCode(
   promise: Promise<unknown>,
   code: string,

@@ -47,7 +47,7 @@ const recordingComposer = (
     Effect.sync(() => {
       log.push({ step: STEP.START, concern });
     }),
-    Effect.zipRight(
+    Effect.andThen(
       Effect.sync(() => {
         log.push({ step: STEP.STOP, concern });
       }),
@@ -59,7 +59,7 @@ const recordingComposer = (
 const recordingAssembly = (log: Recorded[], startOrder: readonly Composer[]): HostAssembly => ({
   gateway: stubGateway(),
   startOrder,
-  armed: Effect.zipRight(
+  armed: Effect.andThen(
     Effect.sync(() => {
       log.push({ step: STEP.ARM });
     }),
@@ -76,7 +76,7 @@ const recordingAssembly = (log: Recorded[], startOrder: readonly Composer[]): Ho
     }),
 });
 
-const buildStanding = (assembly: HostAssembly, scope: Scope.CloseableScope) =>
+const buildStanding = (assembly: HostAssembly, scope: Scope.Closeable) =>
   Layer.buildWithScope(hostStandingLayer, scope).pipe(
     Effect.provide(Layer.succeed(HostAssemblyTag, assembly)),
   );
@@ -213,8 +213,8 @@ describe("a standup interrupted", () => {
           {
             methods: {},
             lifetime: startedAndStopped(
-              Effect.zipRight(
-                Effect.zipRight(Deferred.succeed(began, undefined), Deferred.await(gate)),
+              Effect.andThen(
+                Effect.andThen(Deferred.succeed(began, undefined), Deferred.await(gate)),
                 Effect.sync(() => {
                   log.push({ step: STEP.START, concern: "second" });
                 }),
@@ -228,11 +228,11 @@ describe("a standup interrupted", () => {
         ]);
         const scope = yield* Scope.make();
 
-        const standup = yield* Effect.fork(buildStanding(assembly, scope));
+        const standup = yield* Effect.forkChild(buildStanding(assembly, scope));
         yield* Deferred.await(began);
         assert.deepEqual(log, [{ step: STEP.START, concern: "first" }]);
 
-        const interrupting = yield* Effect.fork(Fiber.interrupt(standup));
+        const interrupting = yield* Effect.forkChild(Fiber.interrupt(standup));
         yield* Effect.yieldNow();
         assert.equal(log.length, 1);
         yield* Deferred.succeed(gate, undefined);

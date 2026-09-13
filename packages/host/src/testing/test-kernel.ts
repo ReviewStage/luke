@@ -59,16 +59,7 @@ const testSeamLayers = (seams: HostSeams) =>
     Layer.succeed(StateRoot, seams.stateRoot),
     Layer.succeed(RunMode, seams.runMode),
     Layer.succeed(AppIdentity, { appVersion: seams.appVersion, packaged: seams.packaged }),
-    Layer.succeed(
-      Environment,
-      ConfigProvider.fromMap(
-        new Map(
-          Object.entries(seams.environment).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
-        ),
-      ),
-    ),
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord(seams.environment)),
     Layer.succeed(SecretCipher, seams.cipher),
     Layer.succeed(StoreWorker, { create: seams.createWorker }),
     Layer.succeed(IdSource, { create: seams.createId }),

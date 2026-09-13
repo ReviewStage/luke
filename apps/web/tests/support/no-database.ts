@@ -22,7 +22,7 @@ const refusingConnection: SqlConnection.Connection = {
   executeStream: () => Stream.fromEffect(refused()),
 };
 
-export const noDatabase = Layer.scoped(
+export const noDatabase = Layer.effect(
   SqlClient.SqlClient,
   SqlClient.make({
     acquirer: Effect.succeed(refusingConnection),

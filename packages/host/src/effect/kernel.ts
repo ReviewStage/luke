@@ -48,7 +48,7 @@ export const lateService = <A>(): Effect.Effect<LateService<A>> =>
         Effect.sync(() => {
           if (Option.isSome(held)) return false;
           held = Option.some(value);
-          Deferred.unsafeDone(deferred, Effect.succeed(value));
+          Deferred.doneUnsafe(deferred, Effect.succeed(value));
           return true;
         }),
       peek: Effect.sync(() => held),
@@ -85,7 +85,7 @@ const kernelEmit = (service: LateService<GatewayService>): Effect.Effect<HostKer
     let standing: GatewayService | undefined;
     const pending: Array<{ readonly kind: GatewayEventKind; readonly payload: WireValue }> = [];
 
-    yield* Effect.forkDaemon(
+    yield* Effect.forkDetach(
       Effect.interruptible(
         Effect.map(service.value, (resolved) => {
           standing = resolved;
@@ -125,7 +125,7 @@ const accountBaseUrlOverride: Effect.Effect<
   never,
   Environment
 > = Effect.flatMap(Environment, (environment) =>
-  Effect.orDie(environment.load(Config.option(Config.string(ACCOUNT_BASE_URL_VARIABLE)))),
+  Effect.orDie(Config.option(Config.String(ACCOUNT_BASE_URL_VARIABLE)).parse(environment)),
 );
 
 const hostServiceLayer = Layer.effect(HostService, lateService<GatewayService>());

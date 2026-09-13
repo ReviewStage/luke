@@ -563,7 +563,7 @@ function readLastSequence(params: WireRecord): Effect.Effect<number, InvalidPara
 function layerGatewayMethods(
   options: GatewayServerLayerOptions,
 ): Layer.Layer<Rpc.ToHandler<GatewayServerRpc>, never, GatewayEventLog | GatewayClients> {
-  return Layer.unwrapEffect(
+  return Layer.unwrap(
     Effect.gen(function* () {
       const log = yield* GatewayEventLog;
       const clients = yield* GatewayClients;
@@ -784,7 +784,7 @@ const makeGatewayInProcessProtocol: Effect.Effect<
                 { discard: true },
               )
             : Effect.void;
-          return Effect.zipRight(abandoned, clients.disconnect(clientId));
+          return Effect.andThen(abandoned, clients.disconnect(clientId));
         }),
       clientIds: Effect.sync(() => new Set(held.keys())),
       initialMessage: Effect.succeedNone,

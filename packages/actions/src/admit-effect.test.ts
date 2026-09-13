@@ -256,7 +256,7 @@ describe("admitEffect", () => {
       const controller = new AbortController();
       const started = yield* Deferred.make<void>();
       let interrupted = false;
-      const held: Effect.Effect<readonly Session[]> = Effect.zipRight(
+      const held: Effect.Effect<readonly Session[]> = Effect.andThen(
         Deferred.succeed(started, undefined),
         Effect.never,
       ).pipe(
@@ -266,7 +266,7 @@ describe("admitEffect", () => {
           }),
         ),
       );
-      const admitting = yield* Effect.fork(
+      const admitting = yield* Effect.forkChild(
         Effect.flip(
           admitEffect(MESSAGE, {
             origin: RUN_ORIGIN.USER,

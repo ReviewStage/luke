@@ -56,7 +56,7 @@ it.effect(
           return 1;
         }),
       };
-      const fiber = yield* Effect.fork(shutdownGatewayEffect(steps, { deadlineMs: 1_000 }));
+      const fiber = yield* Effect.forkChild(shutdownGatewayEffect(steps, { deadlineMs: 1_000 }));
       yield* TestClock.adjust(1_000);
       const outcome = yield* Fiber.join(fiber);
       assert.equal(outcome.settled, false);
@@ -84,7 +84,7 @@ it.effect(
           return 2;
         }),
       };
-      const fiber = yield* Effect.fork(shutdownGatewayEffect(steps, { deadlineMs: 1_000 }));
+      const fiber = yield* Effect.forkChild(shutdownGatewayEffect(steps, { deadlineMs: 1_000 }));
       yield* TestClock.adjust(1_000);
       const outcome = yield* Fiber.join(fiber);
       assert.equal(outcome.settled, false);

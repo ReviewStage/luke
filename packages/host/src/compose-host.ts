@@ -105,7 +105,7 @@ export const hostAssemblyLayer: Layer.Layer<
   | StoreWorker
   | ShutdownSignal
   | FileSystem.FileSystem
-> = Layer.scoped(
+> = Layer.effect(
   HostAssemblyTag,
   Effect.gen(function* () {
     const kernel = yield* HostKernelTag;
@@ -438,7 +438,7 @@ export const hostAssemblyLayer: Layer.Layer<
       // The loops are disarmed before the admissions close, so no observation
       // pass begins behind a quit; the gate's own scope is what the standing
       // scope closes after.
-      drain: (shutdown) => Effect.zipRight(supervisor.disarm, drain(shutdown)),
+      drain: (shutdown) => Effect.andThen(supervisor.disarm, drain(shutdown)),
     };
     return assembly;
   }),

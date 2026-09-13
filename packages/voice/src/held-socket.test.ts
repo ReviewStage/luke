@@ -30,7 +30,7 @@ function settle() {
 function reading(socket: LiveSocket) {
   return Effect.gen(function* () {
     const arrivals: SocketArrival[] = [];
-    yield* Effect.fork(
+    yield* Effect.forkChild(
       Stream.runForEach(socket.arrivals, (arrival) =>
         Effect.sync(() => {
           arrivals.push(arrival);
@@ -89,7 +89,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const hold = holdSocket(new FakeTransport());
-      const waiting = yield* Effect.fork(hold.socket.takeFirst);
+      const waiting = yield* Effect.forkChild(hold.socket.takeFirst);
       yield* Effect.yieldNow();
       hold.hear({ frame: "answer" });
       hold.hear({ frame: "spoken-right-behind" });
@@ -147,7 +147,7 @@ it.effect(
     Effect.gen(function* () {
       const hold = holdSocket(new FakeTransport());
       const taken: SocketArrival[] = [];
-      const waiting = yield* Effect.fork(
+      const waiting = yield* Effect.forkChild(
         Effect.tap(hold.socket.takeFirst, (arrival) =>
           Effect.sync(() => {
             taken.push(arrival);

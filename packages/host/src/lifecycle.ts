@@ -26,7 +26,7 @@ export interface StartupStoreOptions {
 export function seedWorkspaceThenStartMemory(
   options: StartupStoreOptions,
 ): Effect.Effect<void, never, Scope.Scope> {
-  return Effect.zipRight(
+  return Effect.andThen(
     Effect.catchAllCause(options.seedWorkspace, (cause) => {
       const failure = Cause.squash(cause);
       return Effect.sync(() => {
@@ -57,7 +57,7 @@ function begunOnce(work: Effect.Effect<void>): Effect.Effect<BegunOnce> {
   return Effect.map(Ref.make<Fiber.Fiber<void> | undefined>(undefined), (held) => ({
     begin: Effect.flatMap(Ref.get(held), (running) =>
       running === undefined
-        ? Effect.flatMap(Effect.forkDaemon(Effect.asVoid(Effect.exit(work))), (forked) =>
+        ? Effect.flatMap(Effect.forkDetach(Effect.asVoid(Effect.exit(work))), (forked) =>
             // A daemon rather than a child, because the step that begins the
             // work and the step that waits on it are not the same fiber: the
             // cancellations run inside the coordinator's deadline, and a
@@ -65,7 +65,7 @@ function begunOnce(work: Effect.Effect<void>): Effect.Effect<BegunOnce> {
             // than merely stopped being waited on. It is given its first turn
             // before the quit moves on, so the work is under way from the
             // step that began it.
-            Effect.zipRight(Ref.set(held, forked), Effect.yieldNow()),
+            Effect.andThen(Ref.set(held, forked), Effect.yieldNow()),
           )
         : Effect.void,
     ),
@@ -91,7 +91,7 @@ export function shutdownStepsFlushingEvents(
   flushEvents: Effect.Effect<void>,
 ): Effect.Effect<GatewayShutdownSteps> {
   return Effect.map(begunOnce(flushEvents), (flush) => ({
-    closeAdmissions: Effect.zipRight(steps.closeAdmissions, flush.begin),
+    closeAdmissions: Effect.andThen(steps.closeAdmissions, flush.begin),
     cancelActive: steps.cancelActive,
     awaitSettled: Effect.all([steps.awaitSettled, flush.settled], {
       concurrency: "unbounded",
@@ -116,7 +116,7 @@ export function shutdownStepsClosingLiveSession(
 ): Effect.Effect<GatewayShutdownSteps> {
   return Effect.map(begunOnce(closeSession), (close) => ({
     closeAdmissions: steps.closeAdmissions,
-    cancelActive: Effect.zipRight(close.begin, steps.cancelActive),
+    cancelActive: Effect.andThen(close.begin, steps.cancelActive),
     awaitSettled: Effect.all([steps.awaitSettled, close.settled], {
       concurrency: "unbounded",
       discard: true,

@@ -4,7 +4,7 @@ import {
   type ChildRunRecord,
   CONTEXT_INPUT_KIND,
 } from "@sidecar/runtime/vocabulary";
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect } from "effect";
 import { childRunEnd, RUN_FORGOTTEN } from "./child-records.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { CONTEXT_OPENING } from "./generation.js";
@@ -75,7 +75,7 @@ export class ChildRuns {
     task: string,
     childRunId: string,
   ): Effect.Effect<{ readonly runId: string; readonly done: Effect.Effect<ChildEnd> } | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const submitted = yield* this.#options.submit({
         submissionId: childRunId,
         question: task,
@@ -101,7 +101,7 @@ export class ChildRuns {
    * again on the strength of its requester's receipt.
    */
   adopt(childRunId: string): Effect.Effect<ChildEnd | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#seam.ready();
       const record = this.#options
         .records()
@@ -120,7 +120,7 @@ export class ChildRuns {
    * strength of having asked, so a reset that waits on it waits on the truth.
    */
   cancelRun(childRunId: string): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#seam.ready();
       const record = this.#options.records().find((held) => held.submissionId === childRunId);
       if (!record) return true;
@@ -133,7 +133,7 @@ export class ChildRuns {
   }
 
   #awaitTerminal(runId: string): Effect.Effect<BrainRequestRecord | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       for (;;) {
         const record = yield* this.#options.wait(runId, BRAIN_DEFAULTS.ASK_WAIT_MS);
         if (!record || isTerminalBrainRequestStatus(record.status)) return record;
@@ -166,13 +166,13 @@ export class ChildRuns {
     return Effect.suspend(() => {
       const pending = this.#pending.get(completion.completionId);
       if (pending) return pending;
-      const settled = Deferred.unsafeMake<BrainCompletionDelivery>(FiberId.none);
+      const settled = Deferred.makeUnsafe<BrainCompletionDelivery>();
       const waiting = Deferred.await(settled);
       this.#pending.set(completion.completionId, waiting);
-      return Effect.zipRight(
-        Effect.forkDaemon(
+      return Effect.andThen(
+        Effect.forkDetach(
           Effect.onExit(this.#deliverCompletion(completion, record), (exit) =>
-            Effect.zipRight(
+            Effect.andThen(
               Effect.sync(() => {
                 this.#pending.delete(completion.completionId);
               }),
@@ -189,7 +189,7 @@ export class ChildRuns {
     completion: ChildCompletionRecord,
     record: ChildRunRecord,
   ): Effect.Effect<BrainCompletionDelivery> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#seam.ready();
       this.#seam.expireIfDue();
       const generation = this.#seam.generation();

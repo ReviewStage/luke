@@ -328,7 +328,7 @@ const makeGatewaySocket = (
             }
           }),
         end: (clientId) =>
-          Effect.zipRight(
+          Effect.andThen(
             Effect.sync(() => {
               held.delete(clientId);
             }),
@@ -643,7 +643,7 @@ const makeGatewaySocket = (
       binding: GatewaySocketBinding.of({
         port,
         connections: Effect.sync(() => held.size),
-        closeAdmissions: Effect.zipRight(
+        closeAdmissions: Effect.andThen(
           Effect.sync(() => MutableRef.set(admitting, false)),
           admissions.close,
         ),
@@ -659,7 +659,7 @@ function layerGatewaySocketProtocol(
   SocketServer.SocketServerError,
   RpcSerialization.RpcSerialization | GatewayClients | GatewayEventLog | GatewayAdmissions
 > {
-  return Layer.scopedContext(
+  return Layer.effectContext(
     Effect.map(makeGatewaySocket(options), ({ protocol, binding }) =>
       Context.make(RpcServer.Protocol, protocol).pipe(Context.add(GatewaySocketBinding, binding)),
     ),
@@ -864,7 +864,7 @@ class WebSocketGatewayConnection implements GatewayTransport {
    * there.
    */
   serveInvocations(handler: NodeInvocationHandler): Effect.Effect<void, never, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const memory = yield* invocationMemory({ handler });
       yield* Effect.acquireRelease(
         Effect.sync(() => {
@@ -947,7 +947,7 @@ class WebSocketGatewayConnection implements GatewayTransport {
   }
 
   #answer(invocation: NodeInvocation): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const memory = this.#memory;
       const answer = memory
         ? yield* memory.take(invocation)

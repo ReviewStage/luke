@@ -836,7 +836,7 @@ function forkAndSettle(
   plugin: StubCloudPlugin,
 ): Effect.Effect<readonly ProviderSessionObservation[]> {
   return Effect.gen(function* () {
-    const fiber = yield* Effect.fork(plugin.pass.run());
+    const fiber = yield* Effect.forkChild(plugin.pass.run());
     yield* TestClock.adjust(Duration.millis(RATE_LIMIT_BACKOFF.PASS_CEILING_MS));
     return yield* Fiber.join(fiber);
   });
@@ -980,7 +980,7 @@ describe("the 429 cadence", () => {
   ): Effect.Effect<{ readonly attempts: number; readonly spentMs: number }> =>
     Effect.gen(function* () {
       let attempts = 0;
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         Effect.retry(
           Effect.suspend(() => {
             attempts += 1;

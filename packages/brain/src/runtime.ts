@@ -257,14 +257,14 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
     const settled = Effect.suspend(() => (end.told ? Effect.succeed(end.told) : cancelled));
     const loop = this.#loop(request, signal, end, steered, emit, finish);
     return Effect.gen(function* () {
-      const running = yield* Effect.fork(loop);
-      yield* Effect.fork(Effect.zipRight(whenAborted(signal), Fiber.interrupt(running)));
+      const running = yield* Effect.forkChild(loop);
+      yield* Effect.forkChild(Effect.andThen(whenAborted(signal), Fiber.interrupt(running)));
       // A host that interrupts the fiber it runs this on — the turn ending
       // around the run — is the same end as its own cancel, so the loop is
       // stopped and the end still told before this fiber dies, rather than
       // lost to the interruption that took the wait.
       const exit = yield* Effect.onInterrupt(Fiber.await(running), () =>
-        Effect.asVoid(Effect.zipRight(Fiber.interrupt(running), settled)),
+        Effect.asVoid(Effect.andThen(Fiber.interrupt(running), settled)),
       );
       if (Exit.isSuccess(exit)) return exit.value;
       if (!Cause.isInterruptedOnly(exit.cause)) return yield* Effect.failCause(exit.cause);

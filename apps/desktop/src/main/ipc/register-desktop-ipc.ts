@@ -52,7 +52,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       Effect.gen(function* () {
         const cleared = yield* operator.host.clearConversation();
         if (!cleared) return false;
-        yield* Effect.forkDaemon(operator.operator.deleteConversation(MAIN_SESSION_KEY));
+        yield* Effect.forkDetach(operator.operator.deleteConversation(MAIN_SESSION_KEY));
         return true;
       }),
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),

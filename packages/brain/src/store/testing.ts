@@ -65,7 +65,7 @@ export function overStore<A, E>(
       (opened) => Effect.sync(() => opened.close()),
     );
     return yield* Effect.provide(
-      Effect.zipRight(
+      Effect.andThen(
         createConversationEffect({
           agentId: DEFAULT_AGENT_ID,
           sessionKey: MAIN_SESSION_KEY,

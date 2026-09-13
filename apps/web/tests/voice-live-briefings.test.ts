@@ -163,7 +163,7 @@ async function stand(
   const reports: string[] = [];
   const scope = await database.run(Scope.make());
   const briefings = await database.run(
-    Scope.extend(
+    Scope.provide(
       hostedBriefings({
         userId: target.userId,
         speech,

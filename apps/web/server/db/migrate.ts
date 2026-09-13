@@ -62,7 +62,7 @@ export function withMigrationLock<A, E, R>(
  * The unpooled URL, because the migration holds one session's advisory lock and
  * a pooler is free to answer two statements on two sessions.
  */
-const migrationConnectionString = Config.redacted("DATABASE_URL_UNPOOLED");
+const migrationConnectionString = Config.Redacted("DATABASE_URL_UNPOOLED");
 
 const migrateConfiguredDatabase = Effect.gen(function* () {
   const url = Redacted.value(yield* migrationConnectionString);

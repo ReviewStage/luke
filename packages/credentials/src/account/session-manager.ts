@@ -127,7 +127,7 @@ export class AccountSessionManager {
   readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>;
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
-  #signInRunning: Fiber.RuntimeFiber<AccountSnapshot, Error> | undefined;
+  #signInRunning: Fiber.Fiber<AccountSnapshot, Error> | undefined;
   #cancelSignIn: (() => void) | undefined;
 
   private constructor(
@@ -157,7 +157,7 @@ export class AccountSessionManager {
   }
 
   signOut(options: { revokeRemote?: boolean } = {}): Effect.Effect<AccountSnapshot> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       // Everything up to the cleared account is one uninterruptible step, as
       // the promise it replaces was by construction: the departure is reported
       // before the credential is cleared and the cadences are disarmed, so a
@@ -178,7 +178,7 @@ export class AccountSessionManager {
 
   /** The departure as this machine keeps it, answering the account that left. */
   #clearAccount(): Effect.Effect<StoredAccount | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#generation += 1;
       this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
       yield* this.#publishChange();
@@ -200,7 +200,7 @@ export class AccountSessionManager {
   }
 
   deleteEverywhere(): Effect.Effect<AccountSnapshot, Error> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const stored = yield* this.#options.store.readAccount();
       if (!stored)
         return yield* Effect.fail(new Error("No stored account credential to delete with"));
@@ -217,7 +217,7 @@ export class AccountSessionManager {
   }
 
   refresh(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const stored = yield* this.#options.store.readAccount();
       if (!stored || !this.#options.requiresAccount) return;
       const generation = this.#generation;
@@ -247,7 +247,7 @@ export class AccountSessionManager {
       // below is made, so a read that fails leaves the account signed in on
       // them rather than undoing the renewal.
       yield* Effect.ignore(
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           if (!(yield* this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
           const next = yield* this.#options.client.userInfo(tokens.accessToken, stored.provider);
           const merged = mergedIdentity({ ...stored, ...tokens }, next);
@@ -274,7 +274,7 @@ export class AccountSessionManager {
     // is interruptible, and an ask interrupted there leaves the consent
     // standing for the developer's own press, exactly as the held promise did.
     return Effect.uninterruptibleMask((restore) =>
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return this.#account;
         if (this.#signInRunning) return yield* restore(Fiber.join(this.#signInRunning));
         this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };
@@ -285,7 +285,7 @@ export class AccountSessionManager {
         // `Effect.interruptible` because a fork inherits the mask above, and
         // the trip's own scope has to be able to close on the deadline and on
         // a withdrawal rather than run to its end whatever happens.
-        const fiber = yield* Effect.forkDaemon(
+        const fiber = yield* Effect.forkDetach(
           Effect.interruptible(this.#trip(consent, generation)),
         );
         this.#signInRunning = fiber;
@@ -298,7 +298,7 @@ export class AccountSessionManager {
     consent: LoopbackConsent<AccountSnapshot>,
     generation: number,
   ): Effect.Effect<AccountSnapshot, Error> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.scoped(consent.signInEffect());
       if (!("reason" in outcome)) {
         yield* this.#publishChange();
@@ -357,7 +357,7 @@ export class AccountSessionManager {
         redirectUri: input.redirectUri,
       }),
       use: (tokens) =>
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
           if (!(yield* this.#storeCurrent(generation, { ...tokens, ...identity }))) {
             return yield* Effect.fail(new Error(LOOPBACK_CONSENT_CANCELLED));
@@ -376,7 +376,7 @@ export class AccountSessionManager {
   }
 
   #storeCurrent(generation: number, stored: StoredAccount): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (!this.#isCurrent(generation)) return false;
       const next = yield* this.#options.store.setAccount(stored);
       if (!this.#isCurrent(generation)) return false;

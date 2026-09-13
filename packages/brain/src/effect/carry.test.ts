@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Effect, Exit, Fiber, Layer, ManagedRuntime, Runtime } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
 import { detachOn } from "./carry.js";
 
 /**
@@ -13,14 +13,14 @@ import { detachOn } from "./carry.js";
 describe("the detach door", () => {
   it("begins the effect on the calling stack", () => {
     const steps: string[] = [];
-    detachOn(Runtime.defaultRuntime)(Effect.sync(() => steps.push("detached")));
+    detachOn(Context.empty())(Effect.sync(() => steps.push("detached")));
     assert.deepEqual(steps, ["detached"]);
   });
 
-  it.effect("is what `Effect.forkDaemon` is not: a fork only schedules the fiber", () =>
+  it.effect("is what `Effect.forkDetach` is not: a fork only schedules the fiber", () =>
     Effect.gen(function* () {
       const steps: string[] = [];
-      yield* Effect.forkDaemon(Effect.sync(() => steps.push("forked")));
+      yield* Effect.forkDetach(Effect.sync(() => steps.push("forked")));
       assert.deepEqual(steps, []);
       yield* Effect.yieldNow();
       assert.deepEqual(steps, ["forked"]);
@@ -30,11 +30,10 @@ describe("the detach door", () => {
   it("runs the first step even when the effect suspends right behind it", async () => {
     // The miniature of `BrainAgent#enqueue`: a turn is counted queued by the
     // acquisition, and only then asks for the conversation's one permit.
-    const runPromise = Runtime.runPromise(Runtime.defaultRuntime);
     const permit = Effect.unsafeMakeSemaphore(1);
     let queued = 0;
-    await runPromise(permit.take(1));
-    const detached = detachOn(Runtime.defaultRuntime)(
+    await Effect.runPromise(permit.take(1));
+    const detached = detachOn(Context.empty())(
       Effect.acquireUseRelease(
         Effect.sync(() => {
           queued += 1;
@@ -49,20 +48,20 @@ describe("the detach door", () => {
     // Counted queued before the call returned, though the work behind the
     // acquisition has not begun: the one permit is still held elsewhere.
     assert.equal(queued, 1);
-    await runPromise(permit.release(1));
-    await runPromise(Fiber.join(detached));
+    await Effect.runPromise(permit.release(1));
+    await Effect.runPromise(Fiber.join(detached));
     assert.equal(queued, 0);
   });
 
   it("answers the fiber, so a caller that must know how the work ended awaits it", async () => {
-    const fiber = detachOn(Runtime.defaultRuntime)(Effect.succeed("ended"));
-    const exit = await Runtime.runPromise(Runtime.defaultRuntime)(Fiber.await(fiber));
+    const fiber = detachOn(Context.empty())(Effect.succeed("ended"));
+    const exit = await Effect.runPromise(Fiber.await(fiber));
     assert.deepEqual(exit, Exit.succeed("ended"));
   });
 
   it("dispatches a built `ManagedRuntime` onto the same synchronous start", async () => {
     const managed = ManagedRuntime.make(Layer.empty);
-    await managed.runtime();
+    await managed.context();
     const steps: string[] = [];
     detachOn(managed)(Effect.sync(() => steps.push("detached")));
     assert.deepEqual(steps, ["detached"]);

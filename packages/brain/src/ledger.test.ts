@@ -191,10 +191,10 @@ it.effect(
       const releaseWrite = h.repository.hold();
       h.client.answers.push(answered([message("once")]));
 
-      const first = yield* Effect.fork(submit(h, "send", "sub-1"));
+      const first = yield* Effect.forkChild(submit(h, "send", "sub-1"));
       yield* Effect.promise(() => settle());
-      const retry = yield* Effect.fork(submit(h, "send", "sub-1"));
-      const other = yield* Effect.fork(
+      const retry = yield* Effect.forkChild(submit(h, "send", "sub-1"));
+      const other = yield* Effect.forkChild(
         Effect.map(submit(h, "send", "sub-1"), () => h.agent.requests().length),
       );
       yield* Effect.promise(() => settle());
@@ -248,12 +248,12 @@ it.effect(
       const releaseWrite = h.repository.hold();
       h.client.answers.push(answered([message("once")]));
 
-      const abandoned = yield* Effect.fork(submit(h, "send", "sub-1"));
+      const abandoned = yield* Effect.forkChild(submit(h, "send", "sub-1"));
       yield* Effect.promise(() => settle());
       // The caller is gone, the write is still out: the acceptance it started
       // is the one a retry of that id must be given, never a second run.
       yield* Fiber.interrupt(abandoned);
-      const retry = yield* Effect.fork(submit(h, "send", "sub-1"));
+      const retry = yield* Effect.forkChild(submit(h, "send", "sub-1"));
       yield* Effect.promise(() => settle());
       releaseWrite?.(true);
       assert.equal((yield* Fiber.join(retry)).outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
@@ -268,9 +268,9 @@ it.effect("a stop while an acceptance is being written interrupts the run it acc
     const h = yield* effectHarness();
     yield* h.agent.ready();
     const releaseWrite = h.repository.hold();
-    const pending = yield* Effect.fork(submit(h, "send", "sub-1"));
+    const pending = yield* Effect.forkChild(submit(h, "send", "sub-1"));
     yield* Effect.promise(() => settle());
-    const stopping = yield* Effect.fork(h.agent.stop());
+    const stopping = yield* Effect.forkChild(h.agent.stop());
     releaseWrite?.(true);
     const accepted = yield* Fiber.join(pending);
     yield* Fiber.join(stopping);
@@ -305,10 +305,10 @@ it.effect(
       const h = yield* effectHarness();
       yield* h.agent.ready();
       const releaseWrite = h.repository.hold();
-      const pending = yield* Effect.fork(submit(h, "send", "sub-1"));
+      const pending = yield* Effect.forkChild(submit(h, "send", "sub-1"));
       yield* Effect.promise(() => settle());
       let stopped = false;
-      const stopping = yield* Effect.fork(
+      const stopping = yield* Effect.forkChild(
         Effect.flatMap(h.agent.stop(), () =>
           Effect.sync(() => {
             stopped = true;
@@ -326,7 +326,7 @@ it.effect(
       // The successor takes the store's lease: the old agent's late checkpoint
       // — here, a mark — lands nowhere, while the successor's own writes do.
       const successorModel = adapterOf(new FakeClient());
-      const successorRuntime = yield* Effect.runtime<never>();
+      const successorContext = yield* Effect.context<never>();
       const successor = yield* BrainAgent.make({
         conversationId: MAIN_SESSION_KEY,
         runtime: toolLoopRuntimeOver(successorModel),
@@ -343,7 +343,7 @@ it.effect(
         store: h.store,
         createRunId: () => `successor-${nextRunId()}`,
         report: () => {},
-        execution: successorRuntime,
+        execution: successorContext,
       });
       yield* successor.ready();
       const runId = h.agent.requests()[0]?.runId ?? "";
@@ -461,13 +461,15 @@ it.effect(
       const record = yield* ask(h, "hello");
       assert.ok(record);
       const releaseWrite = h.repository.hold();
-      const first = yield* Effect.fork(h.agent.markConversationRecorded(record.runId, NOW + 5));
+      const first = yield* Effect.forkChild(
+        h.agent.markConversationRecorded(record.runId, NOW + 5),
+      );
       yield* Effect.promise(() => settle());
       // Nothing reads the mark while the write is out, and a second caller waits
       // on the same write rather than being told yes.
       assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
       let secondAnswered = false;
-      const second = yield* Effect.fork(
+      const second = yield* Effect.forkChild(
         Effect.map(h.agent.markConversationRecorded(record.runId, NOW + 7), (written) => {
           secondAnswered = true;
           return written;
@@ -475,7 +477,7 @@ it.effect(
       );
       // The ask marker is another field: it stages its own write and touches
       // nothing of the history marker's.
-      const other = yield* Effect.fork(h.agent.markAskRecorded(record.runId, NOW));
+      const other = yield* Effect.forkChild(h.agent.markAskRecorded(record.runId, NOW));
       yield* Effect.promise(() => settle());
       assert.equal(secondAnswered, false);
       releaseWrite(false);
@@ -529,7 +531,7 @@ it.effect("a run's success is seen by no reader before the write that keeps it h
     // Every public reader still sees the run under way.
     assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
     assert.equal(h.agent.requests()[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
-    const waited = yield* Effect.fork(h.agent.waitAsk(runId, 1_000));
+    const waited = yield* Effect.forkChild(h.agent.waitAsk(runId, 1_000));
     yield* Effect.promise(() => settle());
     yield* advanceHarness(NOW + 1_000);
     assert.equal((yield* Fiber.join(waited))?.status, BRAIN_REQUEST_STATUS.RUNNING);
@@ -645,14 +647,14 @@ it.effect("an ordinary observation checkpoint composed behind a held mark keeps 
     });
     const runId = yield* completedRun(h);
     const releaseWrite = h.repository.hold();
-    const marking = yield* Effect.fork(h.agent.markConversationRecorded(runId, NOW + 1));
+    const marking = yield* Effect.forkChild(h.agent.markConversationRecorded(runId, NOW + 1));
     yield* Effect.promise(() => settle());
     // Periodic observation races the publication: its inference and checkpoint
     // queue behind the held mark write.
     h.client.answers.push(answered([message("noted")]));
     // Forked: the look's own capture queues behind the held write too, so a
     // test that waits for it before releasing the write waits forever.
-    const looking = yield* Effect.fork(h.agent.rosterLook());
+    const looking = yield* Effect.forkChild(h.agent.rosterLook());
     yield* Effect.promise(() => settle());
     releaseWrite(true);
     yield* Fiber.join(looking);
@@ -750,11 +752,11 @@ it.effect(
       const h = yield* effectHarness();
       const a = yield* completedRun(h, "s");
       const held = holdNextWrite(h.repository);
-      const firstMark = yield* Effect.fork(h.agent.markConversationRecorded(a, NOW + 1));
+      const firstMark = yield* Effect.forkChild(h.agent.markConversationRecorded(a, NOW + 1));
       yield* Effect.promise(() => settle());
-      const secondMark = yield* Effect.fork(h.agent.markAskRecorded(a, NOW));
+      const secondMark = yield* Effect.forkChild(h.agent.markAskRecorded(a, NOW));
       // B is provisional while its own acceptance write waits behind the marks.
-      const rejectedB = yield* Effect.fork(submit(h, "ASK_THAT_WAS_REJECTED", "rejected-b"));
+      const rejectedB = yield* Effect.forkChild(submit(h, "ASK_THAT_WAS_REJECTED", "rejected-b"));
       yield* Effect.promise(() => settle());
       // Behind the held write: A's second mark lands, B's own write is refused.
       const landed = h.repository.save;
@@ -948,7 +950,7 @@ it.effect(
       const runId = acceptedRunId(yield* submit(cancelling, "send"));
       yield* Effect.promise(() => settle());
       assert.equal(heldStart.held(), true);
-      const cancelled = yield* Effect.fork(cancelling.agent.cancelAsk(runId));
+      const cancelled = yield* Effect.forkChild(cancelling.agent.cancelAsk(runId));
       yield* Effect.promise(() => settle());
       heldStart.release(true);
       yield* Fiber.join(cancelled);
@@ -966,7 +968,7 @@ it.effect(
       const stopRun = acceptedRunId(yield* submit(stopping, "send"));
       yield* Effect.promise(() => settle());
       assert.equal(refusedStart.held(), true);
-      const stopped = yield* Effect.fork(stopping.agent.stop());
+      const stopped = yield* Effect.forkChild(stopping.agent.stop());
       refusedStart.release(false);
       yield* Fiber.join(stopped);
       assert.equal(stopping.agent.request(stopRun)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);

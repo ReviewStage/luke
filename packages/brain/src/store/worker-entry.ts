@@ -10,6 +10,4 @@ import { storeWorkerLayer } from "./worker-host.js";
  * `storeWorkerLayer`; this file is not reached from there and carries no
  * production export.
  */
-NodeRuntime.runMain(
-  NodeWorkerRunner.launch(storeWorkerLayer.pipe(Layer.provide(NodeWorkerRunner.layer))),
-);
+NodeRuntime.runMain(Layer.launch(storeWorkerLayer.pipe(Layer.provide(NodeWorkerRunner.layer))));

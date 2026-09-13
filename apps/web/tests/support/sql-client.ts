@@ -71,7 +71,7 @@ function pgliteConnection(client: PGlite): SqlConnection.Connection {
  * would land inside whichever transaction was open.
  */
 export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlClient> =>
-  Layer.scoped(
+  Layer.effect(
     SqlClient.SqlClient,
     Effect.flatMap(Effect.makeSemaphore(1), (connections) => {
       const exclusive = Effect.acquireRelease(
@@ -102,7 +102,7 @@ export async function openMigratedPglite(): Promise<PGlite> {
 }
 
 function pgliteSqlClientOver(open: () => Promise<PGlite>) {
-  return Layer.unwrapScoped(
+  return Layer.unwrap(
     Effect.map(
       Effect.acquireRelease(Effect.promise(open), (client) => Effect.promise(() => client.close())),
       sqlClientOverPglite,
@@ -125,7 +125,7 @@ export const unmigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlErro
  * after the clone's in the same scope, and finalizers run in reverse.
  */
 function postgresSqlClient(connectionString: string) {
-  return Layer.unwrapScoped(
+  return Layer.unwrap(
     Effect.map(
       Effect.acquireRelease(
         Effect.promise(() => cloneStoreTestPostgres(connectionString)),

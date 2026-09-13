@@ -185,7 +185,7 @@ export class HostedActionClient {
     answerSchema: EffectSchema.Schema<Answer, Encoded>,
   ): Effect.Effect<{ answer: Answer } | { failure: HostedActionFailure }> {
     return Effect.provide(
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         const sent = yield* this.#call.send({
           method: HTTP_METHOD.POST,
           path,

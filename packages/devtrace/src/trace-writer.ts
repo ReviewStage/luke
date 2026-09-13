@@ -144,7 +144,7 @@ export class AgentTraceWriter {
    */
   readonly settled: Effect.Effect<void> = Effect.suspend(() =>
     Effect.flatMap(Deferred.make<void>(), (done) =>
-      Effect.zipRight(
+      Effect.andThen(
         Queue.offer(this.#work, { kind: TRACE_WORK.SETTLED, done }),
         Deferred.await(done),
       ),

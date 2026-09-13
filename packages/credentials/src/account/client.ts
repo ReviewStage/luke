@@ -215,7 +215,7 @@ export class AccountClient {
 
   /** Revokes the long-lived credential; local sign-out never depends on this succeeding. */
   revoke(refreshToken: string): Effect.Effect<void, Error> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const response = yield* timedRequest(
         this.#client,
         HttpClientRequest.post(`${this.#baseUrl}/oauth2/revoke`, {
@@ -235,7 +235,7 @@ export class AccountClient {
   }
 
   userInfo(accessToken: string, provider: AccountProvider): Effect.Effect<AccountIdentity, Error> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const response = yield* timedRequest(
         this.#client,
         HttpClientRequest.get(`${this.#baseUrl}/oauth2/userinfo`, {
@@ -365,7 +365,7 @@ export function deleteHostedAccount(options: AccountDeletionOptions): Effect.Eff
  * waits for what it asked for.
  */
 function onOwnFiber<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> {
-  return Effect.flatMap(Effect.forkDaemon(Effect.interruptible(effect)), Fiber.join);
+  return Effect.flatMap(Effect.forkDetach(Effect.interruptible(effect)), Fiber.join);
 }
 
 /**

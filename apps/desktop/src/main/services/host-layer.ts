@@ -37,16 +37,7 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(StateRoot, config.stateRoot),
     Layer.succeed(RunMode, runMode),
     Layer.succeed(AppIdentity, { appVersion: config.appVersion, packaged: config.packaged }),
-    Layer.succeed(
-      Environment,
-      ConfigProvider.fromMap(
-        new Map(
-          Object.entries(config.environment).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
-        ),
-      ),
-    ),
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord(config.environment)),
     Layer.succeed(SecretCipher, cipher),
     Layer.succeed(StoreWorker, {
       create: () => {

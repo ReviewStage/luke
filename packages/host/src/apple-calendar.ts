@@ -206,7 +206,7 @@ export class AppleCalendarReader {
   }
 
   observe(): Effect.Effect<AppleCalendarObservation | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const connection = yield* this.#readConnection();
       // Not connected, no read: the calendar is not connected, which is a
       // different answer from a connected calendar with no meetings.
@@ -289,7 +289,7 @@ export class AppleCalendarReader {
     openSystemSettings: () => void;
     superseded: () => boolean;
   }): Effect.Effect<AppleCalendarAccessOutcome, unknown> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       let outcome = yield* this.requestAccess();
       // A cancel that landed while the dialog stood ends the flow here: the
       // grant, if given, stays macOS's own, but nobody is taken to System
@@ -331,7 +331,7 @@ export class AppleCalendarReader {
   #observeConnection(
     connection: AppleCalendarConnection,
   ): Effect.Effect<AppleCalendarObservation, unknown> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const now = this.#now();
       // The same window the Google free/busy read keeps to, so the two
       // sources hold and release announcements on identical terms.

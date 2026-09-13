@@ -64,10 +64,7 @@ const kernelLayerOver = (input: TestSeams) =>
       Layer.succeed(StateRoot, input.stateRoot),
       Layer.succeed(RunMode, input.runMode),
       Layer.succeed(AppIdentity, { appVersion: input.appVersion, packaged: input.packaged }),
-      Layer.succeed(
-        Environment,
-        ConfigProvider.fromMap(new Map(Object.entries(input.environment))),
-      ),
+      Layer.succeed(Environment, ConfigProvider.fromEnvRecord(input.environment)),
       Layer.succeed(SecretCipherTag, input.cipher),
       Layer.succeed(StoreWorker, { create: input.createWorker }),
       Layer.succeed(IdSource, { create: input.createId }),
@@ -132,9 +129,9 @@ describe("the seam tags", () => {
         kernelLayerOver(seams({ environment: { LUKE_TRACE_DIR: "/traces" } })),
       );
 
-      assert.equal(yield* environment.load(Config.string("LUKE_TRACE_DIR")), "/traces");
+      assert.equal(yield* Config.String("LUKE_TRACE_DIR").parse(environment), "/traces");
       assert.deepEqual(
-        yield* environment.load(Config.option(Config.string(ACCOUNT_BASE_URL_VARIABLE))),
+        yield* Config.option(Config.String(ACCOUNT_BASE_URL_VARIABLE)).parse(environment),
         Option.none(),
       );
     }),
@@ -207,7 +204,7 @@ describe("the late service", () => {
       const late = yield* lateService<number>();
 
       assert.deepEqual(yield* late.peek, Option.none());
-      const waiting = yield* Effect.fork(late.value);
+      const waiting = yield* Effect.forkChild(late.value);
       yield* TestClock.adjust("1 minute");
       assert.deepEqual(yield* Fiber.poll(waiting), Option.none());
 

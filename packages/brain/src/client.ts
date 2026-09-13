@@ -27,7 +27,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Cause, Effect, Exit, type Layer, Result, Runtime } from "effect";
+import { Cause, Context, Effect, Exit, type Layer, Result } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { runtimeExit } from "./effect/carry.js";
@@ -49,7 +49,7 @@ export interface BrainTransportOptions {
   baseUrl: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  /** The services a request effect is run on; an empty `Context` for a caller that gave none. */
   execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;
@@ -123,7 +123,7 @@ export class BrainTransport {
       requestTimeoutMs: options.requestTimeoutMs ?? BRAIN_REQUEST_TIMEOUT_MS,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
-    this.#execution = options.execution ?? Runtime.defaultRuntime;
+    this.#execution = options.execution ?? Context.empty();
     this.#label = options.label;
     this.#now = options.now ?? Date.now;
   }

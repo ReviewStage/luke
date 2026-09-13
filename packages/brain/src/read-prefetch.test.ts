@@ -313,7 +313,9 @@ it.effect(
       const r = yield* rig();
       yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
-      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
+      const taking = yield* Effect.forkChild(
+        r.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS - 1);
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
@@ -331,7 +333,9 @@ it.effect(
       const r = yield* rig();
       yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
-      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
+      const taking = yield* Effect.forkChild(
+        r.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS);
       const taken = yield* Fiber.join(taking);
       yield* drained;
@@ -382,7 +386,9 @@ it.effect(
       const r = yield* rig();
       yield* r.prefetch.anticipate(anticipation("what is"));
       yield* drained;
-      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
+      const taking = yield* Effect.forkChild(
+        r.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
       yield* drained;
       yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
@@ -434,7 +440,7 @@ it.effect("a take under a signal already fired, or fired while it waits, is a re
     const atOnce = yield* r.prefetch.take(ASK_POLICY, fired.signal);
     assert.equal(atOnce.take, BRAIN_PREFETCH_TAKE.MISS_REVOKED);
     const later = new AbortController();
-    const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, later.signal));
+    const taking = yield* Effect.forkChild(r.prefetch.take(ASK_POLICY, later.signal));
     yield* drained;
     later.abort();
     const revoked = yield* Fiber.join(taking);

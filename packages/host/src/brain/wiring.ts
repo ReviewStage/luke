@@ -832,7 +832,7 @@ function buildBrainWiring(
         bySession.set(key, held);
       }
       for (const { identity, events: own } of bySession.values()) {
-        yield* Effect.forkDaemon(
+        yield* Effect.forkDetach(
           Effect.flatMap(openObserved(identity), (agent) =>
             agent ? agent.wake(own) : Effect.void,
           ),
@@ -871,7 +871,7 @@ function buildBrainWiring(
           session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
         const open = conversations.has(sessionKey);
         if (!(live || open)) continue;
-        yield* Effect.forkDaemon(
+        yield* Effect.forkDetach(
           Effect.flatMap(openObserved(identity), (agent) =>
             agent ? agent.rosterLook() : Effect.void,
           ),
@@ -907,7 +907,7 @@ function buildBrainWiring(
         const opening = observed
           ? openObserved(observed)
           : Effect.sync(() => current(sessionKey) ?? current(MAIN_SESSION_KEY));
-        yield* Effect.forkDaemon(
+        yield* Effect.forkDetach(
           Effect.flatMap(opening, (agent) => {
             if (agent) return agent.releaseHeld(own);
             dependencies.report(

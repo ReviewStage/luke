@@ -1,4 +1,4 @@
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect } from "effect";
 
 /**
  * Collapses concurrent asks for a refresh into one in-flight run, and every
@@ -35,11 +35,11 @@ export function singleFlightEffect(
       gate.withPermits(1)(
         Effect.sync(() => {
           if (flight) return flight;
-          const own = Deferred.unsafeMake<void, unknown>(FiberId.none);
+          const own = Deferred.makeUnsafe<void, unknown>();
           flight = own;
           Effect.runFork(run()).addObserver((exit) => {
             flight = undefined;
-            Deferred.unsafeDone(own, exit);
+            Deferred.doneUnsafe(own, exit);
           });
           return own;
         }),

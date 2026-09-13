@@ -25,7 +25,7 @@ import { hostedEnvironment } from "./hosted/environment.js";
 const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient, hostedEnvironment);
 
 /** What an effect run at this edge may require. */
-export type WebServices = Layer.Layer.Success<typeof webServices>;
+export type WebServices = Layer.Success<typeof webServices>;
 
 /**
  * How building those services can fail, which is a missing `DATABASE_URL`: the
@@ -33,7 +33,7 @@ export type WebServices = Layer.Layer.Success<typeof webServices>;
  * on an instance configured without one is refused at the edge rather than at
  * whichever query ran first.
  */
-type WebServicesError = Layer.Layer.Error<typeof webServices>;
+type WebServicesError = Layer.Error<typeof webServices>;
 
 /**
  * Module scope is the memoization: Vercel keeps a warm instance's module

@@ -33,7 +33,7 @@ export const AGENT_DATABASE_FILE = "agent.sqlite";
 
 export class StoreDatabase {
   readonly #db: DatabaseSync;
-  readonly #scope: Scope.CloseableScope;
+  readonly #scope: Scope.Closeable;
   readonly #client: Context.Context<SqlClient>;
   #transactionDepth = 0;
   /**
@@ -49,7 +49,7 @@ export class StoreDatabase {
 
   private constructor(
     db: DatabaseSync,
-    scope: Scope.CloseableScope,
+    scope: Scope.Closeable,
     client: Context.Context<SqlClient>,
   ) {
     this.#db = db;
@@ -76,13 +76,13 @@ export class StoreDatabase {
         });
         const scope = yield* Scope.make();
         const database = yield* Effect.gen(function* () {
-          const client = yield* Scope.extend(Layer.build(layerFromHandle(db)), scope);
+          const client = yield* Scope.provide(Layer.build(layerFromHandle(db)), scope);
           const opened = new StoreDatabase(db, scope, client);
           yield* Effect.provide(migrateStoreSchema, client);
           return opened;
         }).pipe(
           Effect.onError(() =>
-            Effect.zipRight(
+            Effect.andThen(
               Scope.close(scope, Exit.void),
               Effect.sync(() => db.close()),
             ),

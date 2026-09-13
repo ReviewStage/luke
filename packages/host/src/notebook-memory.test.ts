@@ -20,7 +20,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
-import { Effect, type FileSystem, Runtime, type Scope } from "effect";
+import { Context, Effect, type FileSystem, type Scope } from "effect";
 import { composeNotebookMemory, type NotebookMemoryDependencies } from "./notebook-memory.js";
 
 const NOW = 1_800_000_000_000;
@@ -67,7 +67,7 @@ function adapter(
 function harness(overrides: Partial<NotebookMemoryDependencies> = {}) {
   return Effect.gen(function* () {
     const root = yield* agentRoot();
-    const store = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
+    const store = storeClient(inProcessStoreTransport(), Context.empty());
     yield* Effect.promise(() =>
       store.open({
         agentRoot: root,

@@ -247,7 +247,9 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
         userId === "user-slow" ? Effect.never : Effect.succeed({ complete: true, changed: true }),
     );
 
-    const fiber = yield* Effect.fork(Effect.provide(handleObservationTick(options), noDatabase));
+    const fiber = yield* Effect.forkChild(
+      Effect.provide(handleObservationTick(options), noDatabase),
+    );
     yield* TestClock.adjust(Duration.millis(20));
     const response = yield* Fiber.join(fiber);
     const body = yield* Effect.promise(() => response.json());

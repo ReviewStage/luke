@@ -35,7 +35,7 @@ import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import type { Fiber } from "effect";
-import { Chunk, Duration, Effect, FiberId, Runtime, Scope } from "effect";
+import { Chunk, Context, Duration, Effect, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { TestContext } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
@@ -141,13 +141,13 @@ interface Composed {
 }
 
 /**
- * The child service's timer seam, over whichever runtime a test is running
- * on — the ambient `TestClock` under `it.effect` — so an archive delay
+ * The child service's timer seam, over whichever services a test is running
+ * under — the ambient `TestClock` under `it.effect` — so an archive delay
  * advances on the same clock a test drives rather than firing on its own.
  */
-function childTimersOn(runtime: Runtime.Runtime<never>) {
-  const fork = Runtime.runFork(runtime);
-  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+function childTimersOn(services: Context.Context<never>) {
+  const fork = Effect.runForkWith(services);
+  const armed = new Map<ScheduledTimer, Fiber.Fiber<void>>();
   return {
     schedule: (callback: () => void, delayMs: number): ScheduledTimer => {
       const handle: ScheduledTimer = {};
@@ -163,7 +163,7 @@ function childTimersOn(runtime: Runtime.Runtime<never>) {
       const fiber = armed.get(timer);
       if (fiber === undefined) return;
       armed.delete(timer);
-      fiber.unsafeInterruptAsFork(FiberId.none);
+      fiber.interruptUnsafe();
     },
   };
 }
@@ -225,7 +225,7 @@ async function composed(
   let ids = 0;
   const workspace = await temporaryDirectory(t, "luke-children-");
   const building = wireBrain({
-    execution: Runtime.defaultRuntime,
+    execution: Context.empty(),
     repositoryFor: (sessionKey) => {
       let repository = repositories.get(sessionKey);
       if (!repository) {
@@ -306,8 +306,8 @@ async function composed(
   // The wiring's generation clocks read the clock and arm their waits in the
   // scope it is built in, which is the one `it.scoped` gives this test and
   // closes when it ends. No store here enables automatic reset, so what those
-  // clocks arm is nothing and the default runtime this is built on is the only
-  // clock they would have asked.
+  // clocks arm is nothing and the default clock this is built under is the
+  // only one they would have asked.
   const wiring = await Effect.runPromise(Effect.provideService(building, Scope.Scope, scope));
   return {
     wiring,
@@ -355,10 +355,10 @@ it.scoped(
   "a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       const c = yield* Effect.promise(() =>
-        composed(t, scope, delegatingScript(), { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, delegatingScript(), { childTimers: childTimersOn(services) }),
       );
       yield* c.wiring.rebuild();
       const runId = yield* Effect.promise(() => ask(c, "look into the last commit"));
@@ -424,7 +424,7 @@ it.scoped(
   "a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       // Every child spawns another until refused; the last child answers text.
       const script: Script = (seen) => {
@@ -440,7 +440,7 @@ it.scoped(
         return textAnswer("ok");
       };
       const c = yield* Effect.promise(() =>
-        composed(t, scope, script, { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, script, { childTimers: childTimersOn(services) }),
       );
       yield* c.wiring.rebuild();
       yield* Effect.promise(() => ask(c, "go deep"));
@@ -473,7 +473,7 @@ it.scoped(
   "a fork carries the requester's context into the child and an isolated child sees none of it",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       const script: Script = (seen) => {
         if (seen.answeringTool) return textAnswer("ok");
@@ -493,7 +493,7 @@ it.scoped(
         return textAnswer(MAIN_SECRET);
       };
       const c = yield* Effect.promise(() =>
-        composed(t, scope, script, { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, script, { childTimers: childTimersOn(services) }),
       );
       yield* c.wiring.rebuild();
       // Main first says something memorable, so its context holds a secret to fork.
@@ -532,7 +532,7 @@ it.scoped(
   "Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       let releaseChild: (() => void) | undefined;
       const script: Script = (seen) => {
@@ -554,7 +554,7 @@ it.scoped(
             }
             return script(seen, calls);
           },
-          { childTimers: childTimersOn(runtime) },
+          { childTimers: childTimersOn(services) },
         ),
       );
       yield* c.wiring.rebuild();

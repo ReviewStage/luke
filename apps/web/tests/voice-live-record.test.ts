@@ -148,7 +148,7 @@ async function stand(live: VoiceTarget) {
   // The socket's own scope, as the attachment opens one: the fiber that makes every write is forked into it.
   const scope = await database.run(Scope.make());
   const record = await database.run(
-    Scope.extend(hostedLiveRecord({ writer, target: live }), scope),
+    Scope.provide(hostedLiveRecord({ writer, target: live }), scope),
   );
   const socket = new FakeLiveSocket();
   // The session acknowledges every thinking append at once, as the real one
@@ -180,7 +180,7 @@ async function stand(live: VoiceTarget) {
   };
   let ids = 0;
   const service = await database.run(
-    Scope.extend(
+    Scope.provide(
       Effect.provide(
         LiveSessionService.make({
           source: () => source,
@@ -436,7 +436,7 @@ test("the record door answers from the stream: an undelegated utterance and Luke
   const live = await target();
   const scope = await database.run(Scope.make());
   const record = await database.run(
-    Scope.extend(hostedLiveRecord({ writer, target: live }), scope),
+    Scope.provide(hostedLiveRecord({ writer, target: live }), scope),
   );
   const utterance = {
     rowId: 1,

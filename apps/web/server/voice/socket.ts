@@ -108,7 +108,7 @@ export function voiceSocket(
               if (options.byteBudget !== undefined) {
                 spent += frameBytes(frame);
                 if (spent > options.byteBudget) {
-                  Deferred.unsafeDone(overspent, Exit.void);
+                  Deferred.doneUnsafe(overspent, Exit.void);
                   return;
                 }
               }
@@ -117,15 +117,15 @@ export function voiceSocket(
             {
               onOpen: Effect.sync(() => {
                 reading = true;
-                Deferred.unsafeDone(standing, Effect.void);
+                Deferred.doneUnsafe(standing, Effect.void);
               }),
             },
           ),
         ),
-        Effect.zipRight(
+        Effect.andThen(
           Effect.sync(() => {
             reading = false;
-            Deferred.unsafeDone(standing, Effect.void);
+            Deferred.doneUnsafe(standing, Effect.void);
           }),
           inbound.end,
         ),
@@ -135,7 +135,7 @@ export function voiceSocket(
     const write = (chunk: string | Uint8Array | Socket.CloseEvent): Effect.Effect<void> =>
       Effect.suspend(() => (reading ? Effect.ignore(writeRaw(chunk)) : Effect.void));
     yield* Effect.forkScoped(
-      Effect.zipRight(
+      Effect.andThen(
         Deferred.await(overspent),
         write(new Socket.CloseEvent(SOCKET_CLOSE_CODE.POLICY_VIOLATION, BUDGET_SPENT_REASON)),
       ),

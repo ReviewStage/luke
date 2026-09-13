@@ -6,7 +6,7 @@ import {
 } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 import { test } from "vitest";
 import type {
   LiveCaptionRow,
@@ -123,7 +123,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
   const stops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
-    runtime: Runtime.defaultRuntime,
+    services: Context.empty(),
     bridge: {
       reportView: (view, exchange) => {
         views.push(view);
@@ -178,7 +178,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   };
 }
 
-/** Lets the orchestrator's own forked fibers, on `Runtime.defaultRuntime`, run their queued microtasks. */
+/** Lets the orchestrator's own forked fibers, under no services of their own, run their queued microtasks. */
 async function settleFibers(ticks = 30): Promise<void> {
   for (let turn = 0; turn < ticks; turn += 1) await Promise.resolve();
 }

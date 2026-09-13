@@ -25,7 +25,7 @@ describe("withLane", () => {
       const gates = yield* Effect.all(Array.from({ length: 4 }, () => Deferred.make<void>()));
       const fibers = yield* Effect.all(
         gates.map((gate, index) =>
-          Effect.fork(
+          Effect.forkChild(
             withLane(
               scheduler,
               LANE.BACKGROUND,
@@ -63,9 +63,9 @@ describe("withLane", () => {
       const scheduler = new LaneScheduler(uniformWidths(1));
       const gate = yield* Deferred.make<void>();
       const secondStarted = yield* Deferred.make<void>();
-      const first = yield* Effect.fork(withLane(scheduler, LANE.CHILD, Deferred.await(gate)));
+      const first = yield* Effect.forkChild(withLane(scheduler, LANE.CHILD, Deferred.await(gate)));
       yield* tick;
-      const second = yield* Effect.fork(
+      const second = yield* Effect.forkChild(
         withLane(scheduler, LANE.CHILD, Deferred.succeed(secondStarted, undefined)),
       );
       yield* tick;
@@ -99,8 +99,8 @@ describe("acquireLane", () => {
     Effect.gen(function* () {
       const scheduler = new LaneScheduler(uniformWidths(1));
       const holding = yield* Deferred.make<void>();
-      const first = yield* Effect.fork(
-        Effect.scoped(Effect.zipRight(acquireLane(scheduler, LANE.CHILD), Deferred.await(holding))),
+      const first = yield* Effect.forkChild(
+        Effect.scoped(Effect.andThen(acquireLane(scheduler, LANE.CHILD), Deferred.await(holding))),
       );
       yield* tick;
 
@@ -108,7 +108,7 @@ describe("acquireLane", () => {
       // the port admits this waiter for real, the scope's own interruption
       // handling is what releases the slot right back, before anything runs
       // under it.
-      const queued = yield* Effect.fork(Effect.scoped(acquireLane(scheduler, LANE.CHILD)));
+      const queued = yield* Effect.forkChild(Effect.scoped(acquireLane(scheduler, LANE.CHILD)));
       yield* tick;
       assert.deepEqual(yield* laneSnapshot(scheduler, LANE.CHILD), {
         width: 1,
@@ -119,7 +119,7 @@ describe("acquireLane", () => {
       // `Fiber.interrupt` would itself wait for `queued` to terminate, which
       // cannot happen until `first` releases the slot below, so the signal is
       // sent without waiting for it.
-      yield* Fiber.interruptFork(queued);
+      yield* Effect.sync(() => queued.interruptUnsafe());
       yield* Deferred.succeed(holding, undefined);
       yield* Fiber.join(first);
       yield* Fiber.await(queued);

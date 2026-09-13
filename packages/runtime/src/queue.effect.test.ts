@@ -189,7 +189,7 @@ describe("makePendingInputQueue", () => {
   it.effect("drains nothing after its scope closes", () =>
     Effect.gen(function* () {
       const scope = yield* Scope.make();
-      const { queue, batches } = yield* Scope.extend(openQueue, scope);
+      const { queue, batches } = yield* Scope.provide(openQueue, scope);
       yield* queue.push(input("a"));
 
       yield* Scope.close(scope, Exit.void);

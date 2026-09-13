@@ -72,7 +72,7 @@ it.effect(
         const messages: string[] = [];
         const closes: number[] = [];
         let ended = false;
-        yield* Effect.fork(
+        yield* Effect.forkChild(
           Stream.runForEach(opening.socket.arrivals, (arrival) =>
             Effect.sync(() => {
               if ("frame" in arrival) {
@@ -159,7 +159,7 @@ it.effect(
     Effect.gen(function* () {
       const remote = yield* Effect.promise(() => serverThatNeverAnswers());
       try {
-        const opening = yield* Effect.fork(openSocketOverWs(remote.url, {}));
+        const opening = yield* Effect.forkChild(openSocketOverWs(remote.url, {}));
         yield* waitOnTheNetwork(() => remote.connected() === 1);
         assert.equal(Exit.isInterrupted(yield* Fiber.interrupt(opening)), true);
         // The handshake the interrupted attempt began is given up rather than left standing.
@@ -240,7 +240,7 @@ it.effect(
         });
         yield* waitFor(() => tickPassed);
         const types: string[] = [];
-        yield* Effect.fork(
+        yield* Effect.forkChild(
           Stream.runForEach(opening.socket.arrivals, (arrival) =>
             Effect.sync(() => {
               if (!("frame" in arrival)) return;

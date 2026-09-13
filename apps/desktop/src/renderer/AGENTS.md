@@ -15,8 +15,8 @@ to a named receiver a late subscriber must not receive, or a reading that expire
 before the next version could carry it.
 
 The runtime beside that registry is **the bundle's one Effect edge**. Work that is
-a fiber of its own runs through `rendererRuntimeNow`, so nothing here builds a
-second runtime to fork on.
+a fiber of its own runs under the services it was built over, read through
+`rendererServicesNow`, so nothing here builds a second runtime to fork on.
 
 Effects leave on `app:act` alone, one invoke carrying one `{kind, payload}` from
 `ACT_KIND`, parsed here and again in `main/act-router.ts`, answered as an

@@ -33,7 +33,7 @@ afterAll(async () => {
 });
 
 const liveBrain = (agent: () => LiveBrainAgent | undefined) =>
-  Effect.runPromise(Scope.extend(brainAgentLiveBrain({ agent }), scope));
+  Effect.runPromise(Scope.provide(brainAgentLiveBrain({ agent }), scope));
 
 /** The adapter pumps the agent's stream on a fiber of its own, so a fired event is heard a turn later. */
 const settle = () => Effect.runPromise(Effect.repeatN(Effect.yieldNow(), 20));
@@ -155,7 +155,7 @@ test("an ask follows the agent before it submits, so the first event of the run 
   const agent: LiveBrainAgent = {
     // A subscription that takes a tick of its own, as the agent's does once a
     // fiber stands between the caller and the pubsub it subscribes to.
-    runEvents: Effect.zipRight(Effect.yieldNow(), Stream.fromPubSub(published, { scoped: true })),
+    runEvents: Effect.andThen(Effect.yieldNow(), Stream.fromPubSub(published, { scoped: true })),
     submitAsk: () =>
       Effect.sync(() => {
         events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });

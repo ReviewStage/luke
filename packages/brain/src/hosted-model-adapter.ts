@@ -52,7 +52,7 @@ export interface HostedModelAdapterOptions extends AccountToken {
   serviceBaseUrl: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  /** The services a request effect is run on; an empty `Context` for a caller that gave none. */
   execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;

@@ -220,7 +220,7 @@ const makeFromHandle = (
     const permit = yield* Effect.makeSemaphore(1);
     const acquirer: Connection.Acquirer = Effect.uninterruptibleMask((restore) =>
       restore(permit.take(1)).pipe(
-        Effect.zipRight(Effect.addFinalizer(() => permit.release(1))),
+        Effect.andThen(Effect.addFinalizer(() => permit.release(1))),
         Effect.as(connection),
       ),
     );
@@ -248,8 +248,8 @@ const makeFromHandle = (
       spanAttributes: SPAN_ATTRIBUTES,
       acquireConnection: Effect.flatMap(Scope.make(), (scope) =>
         Effect.map(
-          Scope.extend(acquirer, scope),
-          (held): readonly [Scope.CloseableScope, Connection] => [scope, held],
+          Scope.provide(acquirer, scope),
+          (held): readonly [Scope.Closeable, Connection] => [scope, held],
         ),
       ),
       begin: (held) =>
@@ -266,7 +266,7 @@ const makeFromHandle = (
           : control("COMMIT")(held),
       rollback: (held) => {
         if (nestedInHandleTransaction) {
-          return Effect.zipRight(
+          return Effect.andThen(
             control(`ROLLBACK TO ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
             control(`RELEASE ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
           );
@@ -274,7 +274,7 @@ const makeFromHandle = (
         return db.isTransaction ? control("ROLLBACK")(held) : Effect.void;
       },
       rollbackSavepoint: (held, depth) =>
-        Effect.zipRight(
+        Effect.andThen(
           control(`ROLLBACK TO ${savepointAt(depth)}`)(held),
           control(`RELEASE ${savepointAt(depth)}`)(held),
         ),
@@ -298,7 +298,7 @@ const make = (
 
 /** The client over a database opened here, with the store's pragmas, and closed when the layer's scope closes. */
 export const layer = (options: NodeSqliteClientOptions): Layer.Layer<Client.SqlClient, SqlError> =>
-  Layer.scoped(Client.SqlClient, make(options)).pipe(Layer.provide(Reactivity.layer));
+  Layer.effect(Client.SqlClient, make(options)).pipe(Layer.provide(Reactivity.layer));
 
 /**
  * The client over a handle its owner opened and will close, for the store

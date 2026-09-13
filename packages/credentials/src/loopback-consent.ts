@@ -367,7 +367,7 @@ export function loopbackConsent<Grant extends object>(
       // so a cancel that arrives after it withdraws nothing.
       abandon = () => {
         if (claimed) return;
-        Deferred.unsafeDone(settled, Exit.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }));
+        Deferred.doneUnsafe(settled, Exit.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }));
       };
       reopenPage = () => {
         void Promise.resolve(options.openExternal(authorizationUrl)).catch(() => undefined);
@@ -387,11 +387,11 @@ export function loopbackConsent<Grant extends object>(
           // requests keep arriving unclaimed, and decides a grace period after
           // the last one, so a stray request delays it rather than holding the
           // trip open.
-          Effect.zipRight(
+          Effect.andThen(
             Effect.iterate(undefined, {
               while: () => arrived && !claimed,
               body: () =>
-                Effect.zipRight(
+                Effect.andThen(
                   Effect.sync(() => {
                     arrived = false;
                   }),

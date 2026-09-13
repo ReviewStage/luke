@@ -228,9 +228,9 @@ it.scoped(
     Effect.gen(function* () {
       const performances = { count: 0 };
       const held = yield* heldMemory(performances);
-      const first = yield* Effect.fork(held.memory.take(INVOCATION));
+      const first = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Deferred.await(held.started);
-      const duplicateWhilePending = yield* Effect.fork(held.memory.take(INVOCATION));
+      const duplicateWhilePending = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Effect.yieldNow();
       assert.equal(performances.count, 1);
       yield* Deferred.succeed(held.release, undefined);
@@ -251,10 +251,10 @@ it.scoped(
     Effect.gen(function* () {
       const performances = { count: 0 };
       const held = yield* heldMemory(performances);
-      const first = yield* Effect.fork(held.memory.take(INVOCATION));
+      const first = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Deferred.await(held.started);
       yield* Fiber.interrupt(first);
-      const duplicate = yield* Effect.fork(held.memory.take(INVOCATION));
+      const duplicate = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Deferred.succeed(held.release, undefined);
       assert.deepEqual(yield* Fiber.join(duplicate), {
         invocationId: "i-1",

@@ -12,7 +12,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
-import { Deferred, Duration, Effect, Fiber, FiberId, Option } from "effect";
+import { Deferred, Duration, Effect, Fiber, Option } from "effect";
 import { whenAborted } from "./effect/settled.js";
 import { anticipatedAskInputText, prefetchedReadsInputText } from "./input-items.js";
 import type { BrainRoster } from "./performer.js";
@@ -189,7 +189,7 @@ interface Slot {
   /** The reads this slot planned, for the turn that takes them; `undefined` where the plan answered none. */
   ready: Deferred.Deferred<readonly HeldRead[] | undefined>;
   /** The slot's own fiber, held from the statement that forks it. */
-  fiber: Fiber.RuntimeFiber<void> | undefined;
+  fiber: Fiber.Fiber<void> | undefined;
   readyAt: number | undefined;
 }
 
@@ -250,7 +250,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * finish into the memo, and plan again.
    */
   anticipate(anticipation: BrainAnticipation): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#unavailable) return;
       const standing = this.#slot;
       if (
@@ -266,7 +266,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
         partialAsk: anticipation.partialAsk,
         startedAt: this.#options.now(),
         abort: new AbortController(),
-        ready: Deferred.unsafeMake(FiberId.none),
+        ready: Deferred.makeUnsafe(),
         fiber: undefined,
         readyAt: undefined,
       };
@@ -274,7 +274,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
       // A daemon's, not the caller's: the words that opened the slot are said
       // in a fiber that ends with them, and the slot outlives it until the
       // spoken ask takes what it read or the next words supersede it.
-      slot.fiber = yield* Effect.forkDaemon(this.#run(slot, anticipation));
+      slot.fiber = yield* Effect.forkDetach(this.#run(slot, anticipation));
     });
   }
 
@@ -286,7 +286,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * failure of the runtime it was forked onto.
    */
   #run(slot: Slot, anticipation: BrainAnticipation): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const kept = yield* Effect.onInterrupt(this.#plan(slot, anticipation), () =>
         Effect.sync(() =>
           this.#traceOutcome(
@@ -320,7 +320,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
    */
   #abandon(slot: Slot): void {
     slot.abort.abort();
-    slot.fiber?.unsafeInterruptAsFork(FiberId.none);
+    slot.fiber?.interruptUnsafe();
   }
 
   /** Everything under way is abandoned and everything held is forgotten: nothing planned before survives. */
@@ -342,7 +342,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * for the turn that follows.
    */
   take(policy: EffectiveToolPolicy, signal: AbortSignal): Effect.Effect<PrefetchTake> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const slot = this.#slot;
       const startedAt = this.#options.now();
       if (!slot) return this.#took(BRAIN_PREFETCH_TAKE.MISS_NONE, [], 0);
@@ -422,7 +422,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
     slot: Slot,
     anticipation: BrainAnticipation,
   ): Effect.Effect<readonly HeldRead[] | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const chars = anticipation.partialAsk.length;
       const policy = yield* Effect.promise(async () => await this.#options.policy());
       const offeredKinds = Object.values(PREFETCH_READ_KIND).filter((kind) => policy.allows(kind));
@@ -524,7 +524,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
     sessions: readonly Session[],
     options: readonly PrefetchSessionOption[],
   ): Effect.Effect<HeldRead | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { name, args, about } = this.#invocationOf(read, sessions, options);
       const argumentsJson = JSON.stringify(args);
       const memoized = yield* this.#memoized(name, argumentsJson, () =>
@@ -583,13 +583,13 @@ export class ReadPrefetch implements TurnReadPrefetch {
     argumentsJson: string,
     execute: () => Effect.Effect<WireRecord>,
   ): Effect.Effect<Effect.Effect<WireRecord>> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const byArguments = this.#memo.get(name) ?? new Map<string, MemoEntry>();
       this.#memo.set(name, byArguments);
       const standing = byArguments.get(argumentsJson);
       const now = this.#options.now();
       if (standing && now - standing.readAt <= PREFETCH_BOUNDS.TTL_MS) return standing.read;
-      const fiber = yield* Effect.forkDaemon(
+      const fiber = yield* Effect.forkDetach(
         Effect.catchAllDefect(execute(), () =>
           Effect.succeed(rejection(REFUSAL_REASON.READ_FAILED)),
         ),
@@ -632,7 +632,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
    * unsuperseded, because an append cannot be taken back.
    */
   #summarize(slot: Slot, reads: readonly HeldRead[]): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (reads.length === 0 || this.#factsListeners.size === 0) return;
       const answer = yield* Effect.promise(
         async () =>

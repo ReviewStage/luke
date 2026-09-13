@@ -178,7 +178,7 @@ export function createBrainActionPerformer(
       // it, because what a cancel ends is the wait and never the observation:
       // an interrupted pass would leave the registry half-written.
       const observed = yield* Effect.cached(
-        Effect.flatMap(Effect.forkDaemon(dependencies.refreshSessions()), Fiber.join),
+        Effect.flatMap(Effect.forkDetach(dependencies.refreshSessions()), Fiber.join),
       );
       return {
         // The reads before an effect wait only as long as the standing does: a

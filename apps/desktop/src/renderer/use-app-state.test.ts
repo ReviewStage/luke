@@ -90,7 +90,7 @@ it.live("a delivery that raced past the read is the newer reading and the answer
           answer = resolve;
         }),
     );
-    const reader = yield* Effect.fork(state.read());
+    const reader = yield* Effect.forkChild(state.read());
     yield* settled;
     // The push leaves the main process before the invoke's reply returns.
     state.deliver(snapshot(5));

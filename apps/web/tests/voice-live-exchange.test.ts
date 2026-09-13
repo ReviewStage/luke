@@ -220,7 +220,7 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
   // The socket's own scope, as the attachment opens one: the exchange is built in it and the test's own stop closes it.
   const scope = await database.run(Scope.make());
   const standing = await database.run(
-    Scope.extend(
+    Scope.provide(
       hostedLiveExchange({
         userId: target.userId,
         liveSessionId,

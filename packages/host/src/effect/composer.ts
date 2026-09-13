@@ -24,7 +24,7 @@ export const startedAndStopped = (
   stop: Effect.Effect<void>,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.uninterruptible(
-    Effect.zipRight(
+    Effect.andThen(
       Effect.addFinalizer(() => stop),
       start,
     ),

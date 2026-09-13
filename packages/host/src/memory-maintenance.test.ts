@@ -23,7 +23,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 import { type TestContext, test } from "vitest";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance.js";
 
@@ -50,7 +50,7 @@ function turnOf(phase: MemoryCapturePhase, items: readonly WireRecord[]): Memory
 }
 
 function client() {
-  const store = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
+  const store = storeClient(inProcessStoreTransport(), Context.empty());
   return { store, close: () => store.close() };
 }
 

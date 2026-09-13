@@ -234,7 +234,7 @@ it.effect("a dropped connection is retried and an answer is not", () =>
       if (calls === 1) throw new Error("connection reset");
       return new Response("{}", { status: 401, headers: { "x-vercel-cache": "MISS" } });
     });
-    const fiber = yield* Effect.fork(
+    const fiber = yield* Effect.forkChild(
       probeDeployment({ address: PREVIEW, bypassSecret: Option.none() }, [
         get("/api/brain/capabilities", PROBE_STATUS.UNAUTHORIZED),
       ]).pipe(Effect.provide(layer)),

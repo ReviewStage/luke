@@ -3,22 +3,11 @@ import { NodeWorker } from "@effect/platform-node";
 import { MemorySeamRefused, type NotebookMemoryStore } from "@sidecar/memory";
 import type { ChildStore } from "@sidecar/runtime";
 import type { ExecutionRuntime, SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
-import {
-  Cause,
-  Data,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  ManagedRuntime,
-  Option,
-  Runtime,
-  Scope,
-} from "effect";
+import { Cause, Data, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { type Rpc, RpcClient } from "effect/unstable/rpc";
 import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import type { WorkerError } from "effect/unstable/workers/WorkerError";
+import { isManagedRuntime } from "../effect/carry.js";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "../envelope.js";
 import { EnvelopeTracker } from "./envelope.js";
 import type { StoreSchemaRefused } from "./migration.js";
@@ -159,18 +148,18 @@ export const workerStoreTransport = (spawn: () => WorkerThreads.Worker): StoreTr
     const watched = (): WorkerThreads.Worker => {
       const worker = spawn();
       worker.once("exit", (code) => {
-        Deferred.unsafeDone(gone, Exit.fail(new StoreWorkerGone({ code, cause: undefined })));
+        Deferred.doneUnsafe(gone, Exit.fail(new StoreWorkerGone({ code, cause: undefined })));
       });
       worker.once("error", (cause: Error) => {
-        Deferred.unsafeDone(gone, Exit.fail(new StoreWorkerGone({ code: undefined, cause })));
+        Deferred.doneUnsafe(gone, Exit.fail(new StoreWorkerGone({ code: undefined, cause })));
       });
       return worker;
     };
     const protocol = RpcClient.layerProtocolWorker({ size: 1, concurrency: 1 }).pipe(
       Layer.provide(NodeWorker.layerPlatform(watched)),
     );
-    const ready = yield* Effect.forkDaemon(
-      Scope.extend(
+    const ready = yield* Effect.forkDetach(
+      Scope.provide(
         Effect.flatMap(Layer.build(protocol), (context) =>
           Effect.provide(
             RpcClient.make(StoreRpcs, { flatten: true, disableTracing: true }),
@@ -196,10 +185,9 @@ export const workerStoreTransport = (spawn: () => WorkerThreads.Worker): StoreTr
 const settledOn = (
   execution: ExecutionRuntime,
 ): (<A, E>(effect: Effect.Effect<A, E>) => Promise<A>) => {
-  const exits =
-    ManagedRuntime.TypeId in execution
-      ? <A, E>(effect: Effect.Effect<A, E>) => execution.runPromiseExit(effect)
-      : Runtime.runPromiseExit(execution);
+  const exits = isManagedRuntime(execution)
+    ? <A, E>(effect: Effect.Effect<A, E>) => execution.runPromiseExit(effect)
+    : Effect.runPromiseExitWith(execution);
   return (effect) =>
     exits(effect).then((exit) =>
       Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
@@ -224,9 +212,9 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
   const settled = settledOn(execution);
   const sends = Effect.unsafeMakeSemaphore(1);
   interface Standing extends StoreConnection {
-    readonly scope: Scope.CloseableScope;
+    readonly scope: Scope.Closeable;
     /** Hears the server go and lets the connection down; interrupted by a close that came first. */
-    readonly watcher: Fiber.RuntimeFiber<void>;
+    readonly watcher: Fiber.Fiber<void>;
   }
   let standing: Standing | undefined;
   let gone: StoreWorkerGone | undefined;
@@ -249,13 +237,13 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
         if (gone) return yield* Effect.fail(gone);
         if (standing) return standing;
         const scope = yield* Scope.make();
-        const connection = yield* restore(Scope.extend(transport.connect, scope)).pipe(
+        const connection = yield* restore(Scope.provide(transport.connect, scope)).pipe(
           Effect.onExit((exit) =>
             Exit.isSuccess(exit) ? Effect.void : Scope.close(scope, Exit.void),
           ),
         );
         const watcher = yield* restore(
-          Effect.forkDaemon(
+          Effect.forkDetach(
             Effect.catchAll(connection.gone, (failure) =>
               Effect.suspend(() => {
                 gone = failure;

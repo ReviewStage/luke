@@ -7,7 +7,7 @@ import { SteeredDeliveries } from "./steered-deliveries.js";
 
 const assertPending = (effect: Effect.Effect<boolean>): Effect.Effect<void> =>
   Effect.gen(function* () {
-    const fiber = yield* Effect.fork(effect);
+    const fiber = yield* Effect.forkChild(effect);
     yield* Effect.yieldNow();
     assert.equal(Option.isNone(yield* Fiber.poll(fiber)), true);
   });

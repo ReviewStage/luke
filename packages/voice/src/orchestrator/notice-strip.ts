@@ -4,17 +4,18 @@
  * enough that the shape does not wear a fault all afternoon. The next attempt
  * clears it sooner — connecting starts by reporting nothing wrong.
  */
-import { Duration, Effect, type Fiber, FiberId } from "effect";
+import { Duration, Effect, type Fiber } from "effect";
 
 export const VOICE_ERROR_NOTICE_MS = 12_000;
 
 export interface NoticeStripOptions {
   onChanged(): void;
   /**
-   * Forks the expiry effect on whichever runtime the caller holds; the strip
-   * never runs one itself, only holds the fiber back to interrupt it early.
+   * Forks the expiry effect under whichever services the caller holds; the
+   * strip never runs one itself, only holds the fiber back to interrupt it
+   * early.
    */
-  fork(effect: Effect.Effect<void>): Fiber.RuntimeFiber<void>;
+  fork(effect: Effect.Effect<void>): Fiber.Fiber<void>;
 }
 
 /**
@@ -28,8 +29,8 @@ export class NoticeStrip {
   readonly #options: NoticeStripOptions;
   #error: string | undefined;
   #notice: string | undefined;
-  #errorTimer: Fiber.RuntimeFiber<void> | undefined;
-  #noticeTimer: Fiber.RuntimeFiber<void> | undefined;
+  #errorTimer: Fiber.Fiber<void> | undefined;
+  #noticeTimer: Fiber.Fiber<void> | undefined;
 
   constructor(options: NoticeStripOptions) {
     this.#options = options;
@@ -78,10 +79,10 @@ export class NoticeStrip {
   }
 
   #arm(
-    standing: Fiber.RuntimeFiber<void> | undefined,
+    standing: Fiber.Fiber<void> | undefined,
     message: string | undefined,
     expire: () => void,
-  ): Fiber.RuntimeFiber<void> | undefined {
+  ): Fiber.Fiber<void> | undefined {
     this.#cancel(standing);
     if (message === undefined) return undefined;
     return this.#options.fork(
@@ -90,7 +91,7 @@ export class NoticeStrip {
   }
 
   /** Interrupts a bound without waiting for it to finish: what it guarantees is that the work does not run after, never that the fiber has already ended. */
-  #cancel(fiber: Fiber.RuntimeFiber<void> | undefined): void {
-    fiber?.unsafeInterruptAsFork(FiberId.none);
+  #cancel(fiber: Fiber.Fiber<void> | undefined): void {
+    fiber?.interruptUnsafe();
   }
 }

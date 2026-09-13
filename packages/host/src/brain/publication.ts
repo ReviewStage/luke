@@ -120,7 +120,7 @@ export function followBrainRequests(
     let accepting = true;
     let following = true;
     const reports = yield* Queue.unbounded<PublicationItem>();
-    const publication = yield* Effect.forkDaemon(
+    const publication = yield* Effect.forkDetach(
       Effect.gen(function* () {
         while (true) {
           const item = yield* Queue.take(reports);
@@ -147,7 +147,7 @@ export function followBrainRequests(
       Queue.unsafeOffer(reports, { kind: PUBLICATION_ITEM.REPORT, records });
     };
     const unsubscribe = agent.subscribe(listener);
-    yield* Effect.forkDaemon(
+    yield* Effect.forkDetach(
       Effect.flatMap(agent.ready(), () => Effect.sync(() => listener(agent.requests()))),
     );
     // Unfollowing takes no more reports at once, but lets the ones already

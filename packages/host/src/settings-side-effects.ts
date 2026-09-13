@@ -48,7 +48,7 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) => dependencies.setVoice(settings.voice),
     [SETTING_SIDE_EFFECT.VOICE_SOURCE]: () =>
-      Effect.zipRight(dependencies.applyVoiceCredential, dependencies.emitSettings()),
+      Effect.andThen(dependencies.applyVoiceCredential, dependencies.emitSettings()),
     [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () => dependencies.reconcileSpeech,
   } satisfies HostSettingSideEffects;
 }

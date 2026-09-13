@@ -71,7 +71,7 @@ describe("the node:sqlite client", () => {
         const directory = yield* temporaryDirectoryScoped();
         const filename = databaseIn(directory);
         const scope = yield* Scope.make();
-        const sql = yield* Scope.extend(openClient(filename), scope);
+        const sql = yield* Scope.provide(openClient(filename), scope);
         yield* sql`CREATE TABLE marks (name TEXT NOT NULL)`;
         yield* sql`INSERT INTO marks (name) VALUES ('open')`;
 
@@ -149,7 +149,7 @@ describe("the node:sqlite client", () => {
         const began = yield* Deferred.make<void>();
         const release = yield* Deferred.make<void>();
 
-        const holder = yield* Effect.fork(
+        const holder = yield* Effect.forkChild(
           sql.withTransaction(
             Effect.gen(function* () {
               yield* sql`INSERT INTO arrivals (name) VALUES ('in-transaction')`;
@@ -159,7 +159,9 @@ describe("the node:sqlite client", () => {
           ),
         );
         yield* Deferred.await(began);
-        const outsider = yield* Effect.fork(sql`INSERT INTO arrivals (name) VALUES ('outside')`);
+        const outsider = yield* Effect.forkChild(
+          sql`INSERT INTO arrivals (name) VALUES ('outside')`,
+        );
         yield* TestClock.adjust("1 second");
 
         assert.equal(Option.isNone(yield* Fiber.poll(outsider)), true);
@@ -186,7 +188,7 @@ describe("the node:sqlite client", () => {
           const began = yield* Deferred.make<void>();
           const release = yield* Deferred.make<void>();
 
-          const holder = yield* Effect.fork(
+          const holder = yield* Effect.forkChild(
             first.withTransaction(
               Effect.gen(function* () {
                 yield* first`INSERT INTO writers (name) VALUES ('first')`;
