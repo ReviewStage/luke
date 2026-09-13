@@ -3451,3 +3451,25 @@ verified against a known row before it runs. Staffed as the next slot frees.
 **The general lesson: a machine's local defects — its zone, its stale directories, its load — are
 invisible to every fresh-clone UTC runner by construction, and the only instrument that sees them is
 a run on that machine.** LUKE-159 was offered for cancellation an hour before it found this.
+
+
+## 2026-09-13 ~01:50Z — Dean's five rulings on his return
+
+1. **LUKE-197 — option 1.** *"Yes. The words he answered don't come back."* The hosted record will store
+   undelegated spoken exchanges as messages (the developer's words as user rows, Luke's spoken words as
+   assistant rows); `PRIVACY.md` says so in as many words. **Contract widened: what the service stores.**
+   His relaunch check confirmed the diagnosis — since #977 the record held only delegated exchanges.
+2. **LUKE-143 — hold.** *"Wait for shift to hosted memory."* #1294/#1298 wait for LUKE-200; then a pure
+   deletion with no interim where remember/forget refuse on the Mac.
+3. **LUKE-199 — yes.** `conversations.journal_revision` (a schema column) and the partial index on
+   unsettled rows; the head becomes `{seq, revision}`; clients unchanged. Migration under the slot protocol.
+4. **LUKE-185 — the orchestrator's recommendation.** 2a (type allowlist of what remains desktop-side)
+   lands **inside LUKE-200's commit**; then 2c (the stop becomes a service frame the relay intercepts, so
+   "the desktop never appends" is literally true) as its own follow-up; **close on a bad frame, never a
+   silent drop.** Trust rule moved: the sessions route filters what the developer's own client may send.
+5. **LUKE-164 — open the no-secret door:** Vercel OPTIONS Allowlist over `/api` and `/eve`, repository
+   variable `PREVIEW_PROBE_DOOR=options-allowlist`. Bypass secret stays declined.
+
+**Staffed on the rulings:** R-197 builds LUKE-197 (READY-and-report — PRIVACY moves); R-177 builds
+LUKE-199 (migration — tells me before enqueue); R-143 stands down; **W-200 launched** for the exchange
+flip with 2a in the same commit and the transport/activity-report question named as its own.
