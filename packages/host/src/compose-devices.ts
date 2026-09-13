@@ -14,15 +14,18 @@ import {
   isDeviceWireId,
 } from "@sidecar/hosted";
 import { cadenceGate } from "@sidecar/runtime/effect";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { text, type WireRecord } from "@sidecar/wire";
 import { Deferred, Duration, Effect, Exit, Fiber, Ref, Schedule, type Scope } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
+import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import {
   activeUntilFrom,
   DEVICE_POLL_INTERVAL_MS,
   type DevicePresenceReport,
+  reportedQuietUntil,
 } from "./device-presence.js";
 import { HostKernelTag } from "./effect/kernel.js";
 import { MachinePresenceReader } from "./effect/seams.js";
@@ -107,17 +110,27 @@ export interface DeviceCadence {
   readonly start: Effect.Effect<void>;
   /** Disarms the poll and, at a sign-out, asks the service to forget the row on the departing token. */
   stop: (options: { forget: DepartingCredential | false }) => Effect.Effect<void>;
+  /**
+   * One beat now, outside the cadence, while a registration stands; nothing
+   * otherwise, since a row not registered has nothing to restate. What a hold
+   * that just moved owes the service is a report that does not wait for the
+   * next scheduled beat: a pause released or an introduction completed would
+   * otherwise leave the row quiet for up to a minute more.
+   */
+  readonly restate: Effect.Effect<void>;
 }
 
 /**
  * This Mac's device row on the service, kept standing while an account is
  * signed in. `start` registers the installation, polls once, and arms the
  * poll; each poll moves the row's last-seen instant and restates both of its
- * instants — presence and the meeting hold — as they stand at that moment,
- * `null` where neither holds, so a registration that cleared them is never
- * followed by a stale hold re-asserted from memory. A registration clears
- * both on the service, so every registration that lands is followed by a
- * poll at once rather than a minute of the row reading absent. A poll
+ * instants — presence and the quiet — as they stand at that moment, `null`
+ * where neither holds, so a registration that cleared them is never
+ * followed by a stale hold re-asserted from memory. `restate` is one such
+ * beat between the scheduled ones, taken through the same in-flight slot so
+ * it never overlaps a call already out. A registration clears both on the
+ * service, so every registration that lands is followed by a poll at once
+ * rather than a minute of the row reading absent. A poll
  * answered unseen re-registers, as does one after a registration that never
  * landed. A beat that fails is reported and the cadence keeps its own beat
  * all the same: the loop never ends on an error, since nothing else would
@@ -233,6 +246,21 @@ export const deviceCadence = (
       );
 
     /**
+     * One beat of the generation named, or nothing once that generation has
+     * passed. The generation is read after the wait for the call already out,
+     * not before it: a restate is forked as a daemon, so no disarm interrupts
+     * its wait the way it does the cadence fiber's, and a sign-out that lands
+     * while it waits would otherwise be followed by a registration for an
+     * account that has left.
+     */
+    const passOf = (gen: number): Effect.Effect<void> =>
+      settle(
+        Effect.suspend(() =>
+          gen === generation ? Effect.uninterruptible(beat(gen)) : Effect.void,
+        ),
+      );
+
+    /**
      * What an arming stands up: the registration's own beat and the cadence
      * after it, as one fiber the arming's scope interrupts. `Effect.schedule`
      * and not `Effect.repeat`: the cadence's first beat is one interval on
@@ -251,9 +279,7 @@ export const deviceCadence = (
     const armed = Effect.gen(function* () {
       const gen = ++generation;
       standing = true;
-      const pass = Effect.suspend(() =>
-        gen === generation ? settle(Effect.uninterruptible(beat(gen))) : Effect.void,
-      );
+      const pass = passOf(gen);
       yield* Effect.acquireRelease(
         Effect.forkDaemon(
           Effect.interruptible(
@@ -284,6 +310,10 @@ export const deviceCadence = (
       },
       deviceId: () => options.state.read()?.deviceId,
       start: gate.arm,
+      // Reads the generation at the moment it runs: a restate offered after a
+      // stop, or after a stop and the next start, beats for the registration
+      // standing then or not at all.
+      restate: Effect.suspend(() => (standing ? passOf(generation) : Effect.void)),
       stop: (stopOptions: { forget: DepartingCredential | false }) =>
         Effect.gen(function* () {
           yield* gate.disarm;
@@ -324,11 +354,19 @@ export interface DevicesComposer extends Composer {
   release: (departing: StoredAccount | undefined) => Effect.Effect<void>;
   /** The row's id as the service last answered it, or nothing before a registration lands. */
   deviceId: () => string | undefined;
+  /**
+   * One heartbeat now, forked rather than awaited, so a hold that just moved
+   * reaches the service without the caller waiting on the round trip; a
+   * beat that fails is reported by the cadence as any beat is. Nothing while
+   * no registration stands.
+   */
+  readonly reportPresence: Effect.Effect<void>;
 }
 
 export interface DevicesDependencies {
   account: AccountComposer;
   calendars: CalendarsComposer;
+  settings: SettingsComposer;
 }
 
 /**
@@ -336,16 +374,21 @@ export interface DevicesDependencies {
  * at sign-in, kept warm by the change-signal poll, and forgotten at sign-out.
  * Each poll carries the two facts this machine reports of itself — the
  * instant its presence holds until, from the idle time and lock state the
- * client reads off the machine, and the instant the calendar's meeting hold
- * ends — and decides nothing from either. The installation id lives in the
- * host's own state root beside the onboarding record, and a fixture or
- * evidence run, which sends nothing, registers nothing.
+ * client reads off the machine, and the instant its quiet ends: the
+ * calendar's meeting hold, the announce-sessions pause, and the spoken
+ * introduction still owed, folded to the one instant the heartbeat carries
+ * (`reportedQuietUntil`) — and decides nothing from either. The service's
+ * exchange is what speaks a briefing since E5-3, so a hold that stays on
+ * this Mac holds nothing; the heartbeat is where each crosses. The
+ * installation id lives in the host's own state root beside the onboarding
+ * record, and a fixture or evidence run, which sends nothing, registers
+ * nothing.
  */
 export const composeDevices = (
   dependencies: DevicesDependencies,
 ): Effect.Effect<DevicesComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> =>
   Effect.gen(function* () {
-    const { account, calendars } = dependencies;
+    const { account, calendars, settings } = dependencies;
     const kernel: HostKernel = yield* HostKernelTag;
     const machinePresence = yield* MachinePresenceReader;
     const { runMode, report, now } = kernel;
@@ -367,9 +410,16 @@ export const composeDevices = (
       mintInstallationId: kernel.createId,
       presence: Effect.gen(function* () {
         const at = now();
+        const paused = !(yield* Effect.orDie(
+          settings.store.get(APP_SETTING_SCHEMA.announceSessions.field),
+        ));
         return {
           activeUntil: activeUntilFrom(machinePresence.read?.(), at),
-          quietUntil: yield* calendars.meetingQuietUntil(at),
+          quietUntil: reportedQuietUntil(
+            yield* calendars.meetingQuietUntil(at),
+            { paused, introductionOwed: calendars.introductionOwed() },
+            at,
+          ),
         };
       }),
       report,
@@ -392,6 +442,7 @@ export const composeDevices = (
       register,
       release,
       deviceId: () => cadence.deviceId(),
+      reportPresence: Effect.asVoid(Effect.forkDaemon(cadence.restate)),
       // A quit is not a sign-out: the poll stops and the row stands for the next launch.
       lifetime: Effect.addFinalizer(() => release(undefined)),
     };

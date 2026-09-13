@@ -110,9 +110,11 @@ in for the missing job before the first release.
   words are pushed now; a Mac active but not claiming within two minutes of the
   offer (`SPEECH_PUSH.GRACE_MS`) means they are pushed anyway; a claim means a
   device is saying them and the offer is never pushed, whatever became of the
-  claim; a quiet instant standing on any device of the account, a meeting its
-  calendar hold observes, means nothing is pushed and nothing expires until it
-  lifts; and an offer past its own instant is the sweep's to end, never pushed
+  claim; a quiet instant standing on any device of the account (a meeting its
+  calendar hold observes, or the announcements switch off or the spoken
+  introduction owed on a Mac, each restated by its heartbeat as an instant one
+  to two hours ahead so it lapses with the Mac that asserts it), means nothing
+  is pushed and nothing expires until it lifts; and an offer past its own instant is the sweep's to end, never pushed
   stale. A phone or watch reporting itself present is no reason to wait, since
   neither can say a briefing (`SPEAKING_PLATFORMS`). The mark precedes the send:
   `markSpeechPushed` settles the offer under the conversation's lock, only a

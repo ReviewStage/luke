@@ -600,9 +600,10 @@ export const unreadableRowRefusalSchema = EffectSchema.transform(
 /**
  * The change-signal poll's request: the device asking, and what it reports
  * of itself on the way. `activeUntil` is the instant its presence holds
- * until, `quietUntil` the instant a meeting hold it observes ends; each is
- * epoch milliseconds, `null` to clear the one on file, and absent to leave
- * it. The service reports them and decides nothing from them here: what a
+ * until, `quietUntil` the instant the quiet it observes ends — a meeting's
+ * end, or the bounded instant a Mac restates its announcement pause or its
+ * owed introduction as on every beat; each is epoch milliseconds, `null` to
+ * clear the one on file, and absent to leave it. The service reports them and decides nothing from them here: what a
  * quiet instant does is hold speech, and holding is the whole of its power.
  */
 export interface ChangesRequest {
