@@ -11,6 +11,7 @@ import { isRecord, isWireString, type UnparsedWireValue, valueFromJsonText } fro
 import {
   Context,
   Effect,
+  Exit,
   FiberSet,
   Layer,
   Mailbox,
@@ -21,7 +22,8 @@ import {
 } from "effect";
 import { WebSocket, WebSocketServer } from "ws";
 import {
-  InvocationMemory,
+  type InvocationMemory,
+  invocationMemory,
   NODE_INVOCATION_REFUSAL,
   type NodeInvocationHandler,
   PendingInvocations,
@@ -695,11 +697,8 @@ export function layerGatewaySocket(
 }
 
 /**
- * The client end of the socket. The credential rides on the upgrade
- * request's authorization header and is dropped from memory once the
- * handshake ends; the address the socket opens names only the host. A
- * request that is in flight when the socket closes answers the typed
- * disconnected error rather than hanging.
+ * What one client asks of a host to reach it: where it is, and what says who
+ * is asking.
  */
 export interface WebSocketGatewayConnectOptions {
   url: string;
@@ -734,22 +733,94 @@ function disconnected(id: string): GatewayResponse {
   };
 }
 
+/**
+ * The socket a handshake admitted, and the text frames it has carried since
+ * its own first tick. The mailbox is made before the socket is opened and
+ * filled from `ws`'s own callback, so a frame the host wrote between the 101
+ * and the reader's first step waits in it rather than being lost; its ending
+ * is the socket's ending, which is what ends the reader.
+ */
+interface HeldGatewaySocket {
+  readonly socket: WebSocket;
+  readonly arrivals: Mailbox.Mailbox<string>;
+}
+
+type GatewaySocketHandshake =
+  | { readonly ok: true; readonly held: HeldGatewaySocket }
+  | { readonly ok: false; readonly failure: GatewayHandshakeRefusal | typeof GATEWAY_UNREACHABLE };
+
+/**
+ * The handshake, and the socket it was made over held for the scope that
+ * asked: the credential rides on the upgrade request's authorization header
+ * and is dropped from memory once the handshake ends. The socket and the
+ * listeners that fill its mailbox are acquired in one synchronous step, so a
+ * frame the host wrote on the tick it admitted this client waits in the
+ * mailbox rather than arriving before anything was listening. Whatever the
+ * handshake answers — and a fiber interrupted while it is still out answers
+ * nothing — the scope that asked is what ends the socket.
+ */
+function openGatewaySocket(
+  options: WebSocketGatewayConnectOptions,
+): Effect.Effect<GatewaySocketHandshake, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const arrivals = yield* Mailbox.make<string>();
+    const socket = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const opening = new WebSocket(options.url, {
+          headers: {
+            ...options.headers,
+            [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(GATEWAY_PROTOCOL_VERSION),
+            [GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]: options.client.clientId,
+            [GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]: options.client.role,
+          },
+          handshakeTimeout: options.timeoutMs ?? WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS.TIMEOUT_MS,
+          perMessageDeflate: false,
+        });
+        opening.on("message", (data, isBinary) => {
+          if (!isBinary) arrivals.unsafeOffer(data.toString());
+        });
+        const ending = (): void => {
+          arrivals.unsafeDone(Exit.void);
+        };
+        opening.once("close", ending);
+        opening.once("error", ending);
+        return opening;
+      }),
+      (opening) => Effect.sync(() => opening.terminate()),
+    );
+    return yield* Effect.async<GatewaySocketHandshake>((resume) => {
+      let settled = false;
+      const settle = (handshake: GatewaySocketHandshake): void => {
+        if (settled) return;
+        settled = true;
+        resume(Effect.succeed(handshake));
+      };
+      socket.once("unexpected-response", (_request, response: IncomingMessage) => {
+        const refusal = response.headers[GATEWAY_REFUSAL_HEADER];
+        const named = Array.isArray(refusal) ? refusal[0] : refusal;
+        response.resume();
+        socket.terminate();
+        settle({ ok: false, failure: isRefusal(named) ? named : GATEWAY_UNREACHABLE });
+      });
+      socket.once("error", () => settle({ ok: false, failure: GATEWAY_UNREACHABLE }));
+      socket.once("open", () => settle({ ok: true, held: { socket, arrivals } }));
+    });
+  });
+}
+
 class WebSocketGatewayConnection implements GatewayTransport {
   readonly #socket: WebSocket;
   readonly #pending = new Map<string, (response: GatewayResponse) => void>();
   readonly #sinks = new Set<GatewayEventSink>();
   readonly #closedListeners = new Set<() => void>();
+  /** The fibers this connection answers the host's asks on, so a capability that takes its time blocks no later frame. */
+  readonly #answering: FiberSet.FiberSet<void>;
   #memory: InvocationMemory | undefined;
   #open = true;
 
-  constructor(socket: WebSocket) {
+  constructor(socket: WebSocket, answering: FiberSet.FiberSet<void>) {
     this.#socket = socket;
-    socket.on("message", (data, isBinary) => {
-      if (isBinary) return;
-      this.#take(data.toString());
-    });
-    socket.on("close", () => this.#closed());
-    socket.on("error", () => this.#closed());
+    this.#answering = answering;
   }
 
   request(request: GatewayRequest): Effect.Effect<GatewayResponse> {
@@ -786,17 +857,25 @@ class WebSocketGatewayConnection implements GatewayTransport {
   }
 
   /**
-   * Serves the host's invocations arriving on this socket. Each is deduped
-   * by id before the handler runs, and answered on this socket alone; an
-   * invocation arriving while no handler is served is answered unavailable,
-   * so the host never waits on a node that is not there.
+   * Serves the host's invocations arriving on this socket for the scope that
+   * asked. Each is deduped by id before the handler runs, and answered on
+   * this socket alone; an invocation arriving while no handler is served is
+   * answered unavailable, so the host never waits on a node that is not
+   * there.
    */
-  serveInvocations(handler: NodeInvocationHandler): () => void {
-    const memory = new InvocationMemory(handler);
-    this.#memory = memory;
-    return () => {
-      if (this.#memory === memory) this.#memory = undefined;
-    };
+  serveInvocations(handler: NodeInvocationHandler): Effect.Effect<void, never, Scope.Scope> {
+    return Effect.gen(this, function* () {
+      const memory = yield* invocationMemory({ handler });
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          this.#memory = memory;
+        }),
+        () =>
+          Effect.sync(() => {
+            if (this.#memory === memory) this.#memory = undefined;
+          }),
+      );
+    });
   }
 
   onClosed(listener: () => void): () => void {
@@ -806,106 +885,114 @@ class WebSocketGatewayConnection implements GatewayTransport {
     };
   }
 
-  close(): void {
-    if (!this.#open) return;
-    this.#socket.close(1000, "the client is leaving");
-    this.#closed();
+  /** Leaves: the host is told, and every request still out answers disconnected rather than hanging. */
+  close(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (!this.#open) return Effect.void;
+      this.#socket.close(1000, "the client is leaving");
+      return this.closed();
+    });
   }
 
-  #take(text: string): void {
-    let value: UnparsedWireValue;
-    try {
-      // SAFETY: JSON.parse returns a wire value; the reader is the validation.
-      value = JSON.parse(text) as UnparsedWireValue;
-    } catch {
-      return;
-    }
-    if (!isRecord(value) || !isRecord(value.envelope)) return;
-    const { kind, envelope } = value;
-    if (kind === GATEWAY_FRAME.RESPONSE) {
-      const response = gatewayResponseFromWire(envelope);
-      if (!response) return;
-      const resolve = this.#pending.get(response.id);
-      if (!resolve) return;
-      this.#pending.delete(response.id);
-      resolve(response);
-      return;
-    }
-    if (kind === GATEWAY_FRAME.EVENT) {
-      const event: GatewayEvent | undefined = gatewayEventFromWire(envelope);
-      if (!event) return;
-      for (const sink of [...this.#sinks]) sink(event);
-      return;
-    }
-    if (kind === GATEWAY_FRAME.INVOCATION) {
+  /**
+   * One frame the reader took off the socket. A response and an event settle
+   * where they are read; an invocation is answered on a fiber of its own, so
+   * a capability that takes its time holds up nothing behind it on the same
+   * socket.
+   */
+  take(text: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      let value: UnparsedWireValue;
+      try {
+        // SAFETY: JSON.parse returns a wire value; the reader is the validation.
+        value = JSON.parse(text) as UnparsedWireValue;
+      } catch {
+        return Effect.void;
+      }
+      if (!isRecord(value) || !isRecord(value.envelope)) return Effect.void;
+      const { kind, envelope } = value;
+      if (kind === GATEWAY_FRAME.RESPONSE) {
+        const response = gatewayResponseFromWire(envelope);
+        if (!response) return Effect.void;
+        const resolve = this.#pending.get(response.id);
+        if (!resolve) return Effect.void;
+        this.#pending.delete(response.id);
+        return Effect.sync(() => resolve(response));
+      }
+      if (kind === GATEWAY_FRAME.EVENT) {
+        const event: GatewayEvent | undefined = gatewayEventFromWire(envelope);
+        if (!event) return Effect.void;
+        return Effect.sync(() => {
+          for (const sink of [...this.#sinks]) sink(event);
+        });
+      }
+      if (kind !== GATEWAY_FRAME.INVOCATION) return Effect.void;
       const invocation = nodeInvocationFromWire(envelope);
-      if (!invocation) return;
-      void this.#answer(invocation);
-    }
+      if (!invocation) return Effect.void;
+      return Effect.asVoid(FiberSet.run(this.#answering, this.#answer(invocation)));
+    });
   }
 
-  async #answer(invocation: NodeInvocation): Promise<void> {
-    const memory = this.#memory;
-    const answer = memory
-      ? await memory.take(invocation)
-      : {
-          invocationId: invocation.invocationId,
-          result: unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.NOT_SERVING),
-        };
-    if (!this.connected()) return;
-    this.#socket.send(
-      JSON.stringify({
-        kind: GATEWAY_FRAME.ANSWER,
-        envelope: nodeInvocationAnswerToWire(answer),
-      }),
-    );
+  /** The socket is gone: every request still out answers disconnected, and the listeners hear it once. */
+  closed(): Effect.Effect<void> {
+    return Effect.sync(() => {
+      if (!this.#open) return;
+      this.#open = false;
+      for (const [id, resolve] of this.#pending) resolve(disconnected(id));
+      this.#pending.clear();
+      for (const listener of [...this.#closedListeners]) listener();
+      this.#closedListeners.clear();
+      this.#sinks.clear();
+    });
   }
 
-  #closed(): void {
-    if (!this.#open) return;
-    this.#open = false;
-    for (const [id, resolve] of this.#pending) resolve(disconnected(id));
-    this.#pending.clear();
-    for (const listener of [...this.#closedListeners]) listener();
-    this.#closedListeners.clear();
-    this.#sinks.clear();
+  #answer(invocation: NodeInvocation): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const memory = this.#memory;
+      const answer = memory
+        ? yield* memory.take(invocation)
+        : {
+            invocationId: invocation.invocationId,
+            result: unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.NOT_SERVING),
+          };
+      if (!this.connected()) return;
+      this.#socket.send(
+        JSON.stringify({
+          kind: GATEWAY_FRAME.ANSWER,
+          envelope: nodeInvocationAnswerToWire(answer),
+        }),
+      );
+    });
   }
 }
 
+/**
+ * The client end of the socket, held for the scope that opened it: the
+ * frames it carries are read on one fiber of that scope, and the socket, the
+ * fibers it answers the host's asks on, and the requests still out all end
+ * with it. A request that is in flight when the socket closes answers the
+ * typed disconnected error rather than hanging.
+ */
 export function connectWebSocketGateway(
   options: WebSocketGatewayConnectOptions,
-): Promise<GatewayConnectResult> {
-  const { url, client } = options;
-  const timeoutMs = options.timeoutMs ?? WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS.TIMEOUT_MS;
-  return new Promise((resolve) => {
-    const socket = new WebSocket(url, {
-      headers: {
-        ...options.headers,
-        [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(GATEWAY_PROTOCOL_VERSION),
-        [GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]: client.clientId,
-        [GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]: client.role,
-      },
-      handshakeTimeout: timeoutMs,
-      perMessageDeflate: false,
-    });
-    let settled = false;
-    const settle = (result: GatewayConnectResult) => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
-    socket.once("unexpected-response", (_request, response: IncomingMessage) => {
-      const refusal = response.headers[GATEWAY_REFUSAL_HEADER];
-      const named = Array.isArray(refusal) ? refusal[0] : refusal;
-      response.resume();
-      socket.terminate();
-      settle({ ok: false, failure: isRefusal(named) ? named : GATEWAY_UNREACHABLE });
-    });
-    socket.once("error", () => {
-      settle({ ok: false, failure: GATEWAY_UNREACHABLE });
-    });
-    socket.once("open", () => {
-      settle({ ok: true, connection: new WebSocketGatewayConnection(socket) });
-    });
+): Effect.Effect<GatewayConnectResult, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const handshake = yield* openGatewaySocket(options);
+    if (!handshake.ok) return { ok: false, failure: handshake.failure };
+    const answering = yield* FiberSet.make<void>();
+    const connection = new WebSocketGatewayConnection(handshake.held.socket, answering);
+    // The connection is declared closed before the reading is interrupted and
+    // before the socket is ended, so a caller still waiting on a request
+    // reads its disconnected answer rather than the scope's interruption.
+    yield* Effect.addFinalizer(() => connection.closed());
+    yield* Effect.forkScoped(
+      Effect.andThen(
+        Stream.runForEach(Mailbox.toStream(handshake.held.arrivals), (frame) =>
+          connection.take(frame),
+        ),
+        connection.closed(),
+      ),
+    );
+    return { ok: true, connection };
   });
 }

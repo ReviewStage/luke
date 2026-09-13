@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Context, Effect, Fiber, Layer, type Scope } from "effect";
-import { test } from "vitest";
+import { Context, Deferred, Effect, Fiber, Layer, type Scope } from "effect";
 import { WebSocket } from "ws";
 import { gatewayClient } from "./client.js";
-import { InvocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
+import { type InvocationMemory, invocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
 import type { GatewayMethodTable } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
 import {
@@ -185,32 +184,85 @@ async function until(predicate: () => boolean, label: string): Promise<void> {
   assert.fail(label);
 }
 
-test("the node's memory performs a distinct invocation once and answers a duplicate from the first performance", async () => {
-  let performed = 0;
-  let release: (() => void) | undefined;
-  const memory = new InvocationMemory(async (invocation) => {
-    performed += 1;
-    await new Promise<void>((resolve) => {
-      release = resolve;
+const INVOCATION: NodeInvocation = {
+  invocationId: "i-1",
+  nodeId: NODE_ID,
+  capability: CAPABILITY,
+  params: { url: "https://example.test" },
+};
+
+/**
+ * A memory whose one performance says when it began and answers only when
+ * the test lets it, so a duplicate can be made to arrive while the first is
+ * still out.
+ */
+const heldMemory = (performances: {
+  count: number;
+}): Effect.Effect<
+  {
+    readonly memory: InvocationMemory;
+    readonly started: Deferred.Deferred<void>;
+    readonly release: Deferred.Deferred<void>;
+  },
+  never,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    const memory = yield* invocationMemory({
+      handler: (invocation) =>
+        Effect.gen(function* () {
+          performances.count += 1;
+          yield* Deferred.succeed(started, undefined);
+          yield* Deferred.await(release);
+          return { status: NODE_CAPABILITY_STATUS.OK, value: invocation.params.url };
+        }),
     });
-    return { status: NODE_CAPABILITY_STATUS.OK, value: invocation.params.url };
+    return { memory, started, release };
   });
-  const invocation: NodeInvocation = {
-    invocationId: "i-1",
-    nodeId: NODE_ID,
-    capability: CAPABILITY,
-    params: { url: "https://example.test" },
-  };
-  const first = memory.take(invocation);
-  const duplicateWhilePending = memory.take(invocation);
-  assert.equal(performed, 1);
-  release?.();
-  const [a, b] = await Promise.all([first, duplicateWhilePending]);
-  assert.deepEqual(a, b);
-  const duplicateAfterSettling = await memory.take(invocation);
-  assert.deepEqual(duplicateAfterSettling, a);
-  assert.equal(performed, 1);
-});
+
+it.scoped(
+  "the node's memory performs a distinct invocation once and answers a duplicate from the first performance",
+  () =>
+    Effect.gen(function* () {
+      const performances = { count: 0 };
+      const held = yield* heldMemory(performances);
+      const first = yield* Effect.fork(held.memory.take(INVOCATION));
+      yield* Deferred.await(held.started);
+      const duplicateWhilePending = yield* Effect.fork(held.memory.take(INVOCATION));
+      yield* Effect.yieldNow();
+      assert.equal(performances.count, 1);
+      yield* Deferred.succeed(held.release, undefined);
+      const answered = yield* Fiber.join(first);
+      assert.deepEqual(answered, {
+        invocationId: "i-1",
+        result: { status: NODE_CAPABILITY_STATUS.OK, value: "https://example.test" },
+      });
+      assert.deepEqual(yield* Fiber.join(duplicateWhilePending), answered);
+      assert.deepEqual(yield* held.memory.take(INVOCATION), answered);
+      assert.equal(performances.count, 1);
+    }),
+);
+
+it.scoped(
+  "a duplicate is answered from the performance the first frame opened even where that frame's own caller gave up",
+  () =>
+    Effect.gen(function* () {
+      const performances = { count: 0 };
+      const held = yield* heldMemory(performances);
+      const first = yield* Effect.fork(held.memory.take(INVOCATION));
+      yield* Deferred.await(held.started);
+      yield* Fiber.interrupt(first);
+      const duplicate = yield* Effect.fork(held.memory.take(INVOCATION));
+      yield* Deferred.succeed(held.release, undefined);
+      assert.deepEqual(yield* Fiber.join(duplicate), {
+        invocationId: "i-1",
+        result: { status: NODE_CAPABILITY_STATUS.OK, value: "https://example.test" },
+      });
+      assert.equal(performances.count, 1);
+    }),
+);
 
 for (const kind of ["in-process", "loopback"] as const) {
   it.scopedLive(
@@ -223,10 +275,12 @@ for (const kind of ["in-process", "loopback"] as const) {
             ? new InProcessTransport(host, OPERATOR)
             : new TextLoopbackTransport(host, OPERATOR);
         const opened: string[] = [];
-        transport.serveInvocations?.(async (invocation) => {
-          opened.push(String(invocation.params.url));
-          return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
-        });
+        yield* transport.serveInvocations?.((invocation) =>
+          Effect.sync(() => {
+            opened.push(String(invocation.params.url));
+            return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
+          }),
+        ) ?? Effect.void;
         const client = yield* gatewayClient({
           transport,
           createId: () => `r-${opened.length}-${Math.random()}`,
@@ -492,13 +546,11 @@ it.live(
     Effect.scoped(
       Effect.gen(function* () {
         const hosted = yield* socketHost();
-        const connected = yield* Effect.promise(() =>
-          connectWebSocketGateway({
-            url: socketUrl(hosted.port),
-            headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
-            client: OPERATOR,
-          }),
-        );
+        const connected = yield* connectWebSocketGateway({
+          url: socketUrl(hosted.port),
+          headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
+          client: OPERATOR,
+        });
         assert.ok(connected.ok);
         const client = yield* gatewayClient({
           transport: connected.connection,
@@ -516,14 +568,16 @@ it.live(
           assert.equal(unserved.reason, NODE_INVOCATION_REFUSAL.NOT_SERVING);
         }
         const opened: string[] = [];
-        connected.connection.serveInvocations?.((invocation) => {
-          opened.push(String(invocation.params.url));
-          return Promise.resolve({ status: NODE_CAPABILITY_STATUS.OK, value: undefined });
-        });
+        yield* connected.connection.serveInvocations?.((invocation) =>
+          Effect.sync(() => {
+            opened.push(String(invocation.params.url));
+            return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
+          }),
+        ) ?? Effect.void;
         const served = yield* hosted.nodes.invoke(CAPABILITY, { url: "https://served.test" });
         assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
         assert.deepEqual(opened, ["https://served.test"]);
-        connected.connection.close();
+        yield* connected.connection.close();
       }),
     ),
 );

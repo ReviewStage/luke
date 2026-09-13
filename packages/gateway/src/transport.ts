@@ -1,7 +1,8 @@
 import { valueFromJsonText } from "@sidecar/wire";
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect, FiberId, type Scope } from "effect";
 import {
-  InvocationMemory,
+  type InvocationMemory,
+  invocationMemory,
   NODE_INVOCATION_REFUSAL,
   type NodeInvocationHandler,
   unavailableInvocation,
@@ -17,6 +18,7 @@ import {
   gatewayResponseFromWire,
   type NodeCapabilityResult,
   type NodeInvocation,
+  type NodeInvocationAnswer,
 } from "./protocol.js";
 import type { GatewayInProcessConnection, GatewayInProcessHost } from "./server.js";
 
@@ -37,8 +39,12 @@ export interface GatewayTransport {
   request(request: GatewayRequest): Effect.Effect<GatewayResponse>;
   events(sink: GatewayEventSink): () => void;
   connected(): boolean;
-  /** Serves the host's invocations of this client's node capabilities, deduped by id before anything native runs. */
-  serveInvocations?(handler: NodeInvocationHandler): () => void;
+  /**
+   * Serves the host's invocations of this client's node capabilities, deduped
+   * by id before anything native runs, for as long as the scope it is served
+   * in stands.
+   */
+  serveInvocations?(handler: NodeInvocationHandler): Effect.Effect<void, never, Scope.Scope>;
 }
 
 /**
@@ -94,12 +100,19 @@ export abstract class ServerBoundTransport implements GatewayTransport {
     };
   }
 
-  serveInvocations(handler: NodeInvocationHandler): () => void {
-    const memory = new InvocationMemory(handler);
-    this.#memory = memory;
-    return () => {
-      if (this.#memory === memory) this.#memory = undefined;
-    };
+  serveInvocations(handler: NodeInvocationHandler): Effect.Effect<void, never, Scope.Scope> {
+    return Effect.gen(this, function* () {
+      const memory = yield* invocationMemory({ handler });
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          this.#memory = memory;
+        }),
+        () =>
+          Effect.sync(() => {
+            if (this.#memory === memory) this.#memory = undefined;
+          }),
+      );
+    });
   }
 
   #invoke(invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> {
@@ -115,7 +128,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
           unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.NOT_SERVING),
         );
       }
-      return this.carryInvocation(invocation, (carried) => memory.take(carried));
+      return this.carryInvocation(invocation, memory.take);
     });
   }
 
@@ -220,7 +233,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   /** Carries one invocation to the served node and its answer back, as the wire would. */
   protected abstract carryInvocation(
     invocation: NodeInvocation,
-    take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
+    take: (invocation: NodeInvocation) => Effect.Effect<NodeInvocationAnswer>,
   ): Effect.Effect<NodeCapabilityResult>;
 }
 
@@ -242,11 +255,8 @@ export class InProcessTransport extends ServerBoundTransport {
 
   protected carryInvocation(
     invocation: NodeInvocation,
-    take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
+    take: (invocation: NodeInvocation) => Effect.Effect<NodeInvocationAnswer>,
   ): Effect.Effect<NodeCapabilityResult> {
-    return Effect.map(
-      Effect.promise(() => take(invocation)),
-      (answer) => answer.result,
-    );
+    return Effect.map(take(invocation), (answer) => answer.result);
   }
 }

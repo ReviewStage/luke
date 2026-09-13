@@ -82,7 +82,6 @@
     "packages/brain/src/testing.ts",
     "packages/brain/src/turn.ts",
     "packages/gateway/src/testing.ts",
-    "packages/gateway/src/websocket.ts",
     "packages/host/src/brain/wiring.ts",
     "packages/host/src/memory-maintenance.ts",
     "packages/host/src/testing/brain-harness.ts",

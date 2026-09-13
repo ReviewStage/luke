@@ -1,4 +1,4 @@
-import { Deferred, Effect, Exit, FiberId } from "effect";
+import { Deferred, Effect, Exit, FiberId, FiberSet, Ref, type Scope } from "effect";
 import {
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
@@ -100,65 +100,138 @@ export class PendingInvocations {
   }
 }
 
-export type NodeInvocationHandler = (invocation: NodeInvocation) => Promise<NodeCapabilityResult>;
+export type NodeInvocationHandler = (
+  invocation: NodeInvocation,
+) => Effect.Effect<NodeCapabilityResult>;
 
 export const INVOCATION_MEMORY_DEFAULTS = {
   /** How many settled invocation ids a node remembers, so a late duplicate frame is answered rather than performed. */
   SETTLED_CAPACITY: 256,
 } as const;
 
+export interface InvocationMemoryOptions {
+  readonly handler: NodeInvocationHandler;
+  readonly capacity?: number;
+}
+
 /**
- * The node's side: performs each distinct invocation once. A duplicate that
- * arrives while the first is still performing awaits that same performance;
- * one that arrives after it settled is answered what it answered. The native
- * effect therefore runs at most once per id on this process, whatever the
- * wire did; a process that crashed between the effect and its answer cannot
- * be asked again, because the host's ledger has already closed that id.
+ * The node's ledger: one entry per invocation id, holding the answer that id
+ * is performing or has already performed, and the ids answered oldest first,
+ * which is the order the memory forgets them in. An id it still holds is
+ * never performed a second time, whether its answer is out or already in.
  */
-export class InvocationMemory {
-  readonly #handler: NodeInvocationHandler;
-  readonly #inFlight = new Map<string, Promise<NodeCapabilityResult>>();
-  readonly #settled = new Map<string, NodeCapabilityResult>();
-  readonly #capacity: number;
+interface InvocationLedger {
+  readonly held: ReadonlyMap<string, Deferred.Deferred<NodeCapabilityResult>>;
+  readonly answered: readonly string[];
+}
 
-  constructor(
-    handler: NodeInvocationHandler,
-    capacity = INVOCATION_MEMORY_DEFAULTS.SETTLED_CAPACITY,
-  ) {
-    this.#handler = handler;
-    this.#capacity = capacity;
-  }
+/** The one entry an arriving frame names, and whether this frame is what opened it. */
+interface OpenedInvocation {
+  readonly answer: Deferred.Deferred<NodeCapabilityResult>;
+  readonly first: boolean;
+}
 
-  async take(invocation: NodeInvocation): Promise<NodeInvocationAnswer> {
-    const { invocationId } = invocation;
-    const settled = this.#settled.get(invocationId);
-    if (settled) return { invocationId, result: settled };
-    let performance = this.#inFlight.get(invocationId);
-    if (!performance) {
-      performance = this.#perform(invocation);
-      this.#inFlight.set(invocationId, performance);
-    }
-    const result = await performance;
-    return { invocationId, result };
-  }
+export interface InvocationMemory {
+  /**
+   * The answer to that invocation: the performance this frame opens, or the
+   * one an earlier frame of the same id opened, whether it is still out or
+   * already in.
+   */
+  readonly take: (invocation: NodeInvocation) => Effect.Effect<NodeInvocationAnswer>;
+}
 
-  async #perform(invocation: NodeInvocation): Promise<NodeCapabilityResult> {
-    let result: NodeCapabilityResult;
-    try {
-      result = await this.#handler(invocation);
-    } catch (error) {
-      result = {
-        status: NODE_CAPABILITY_STATUS.FAILED,
-        capability: invocation.capability,
-        reason: error instanceof Error ? error.message : String(error),
-      };
-    }
-    this.#inFlight.delete(invocation.invocationId);
-    this.#settled.set(invocation.invocationId, result);
-    if (this.#settled.size > this.#capacity) {
-      const oldest = this.#settled.keys().next().value;
-      if (oldest !== undefined) this.#settled.delete(oldest);
-    }
-    return result;
-  }
+function openInvocation(
+  ledger: InvocationLedger,
+  invocationId: string,
+): readonly [OpenedInvocation, InvocationLedger] {
+  const standing = ledger.held.get(invocationId);
+  if (standing) return [{ answer: standing, first: false }, ledger];
+  const answer = Deferred.unsafeMake<NodeCapabilityResult>(FiberId.none);
+  const held = new Map(ledger.held);
+  held.set(invocationId, answer);
+  return [
+    { answer, first: true },
+    { held, answered: ledger.answered },
+  ];
+}
+
+/**
+ * The node's side: performs each distinct invocation once, for the scope it
+ * is served in. A duplicate that arrives while the first is still performing
+ * awaits that same performance; one that arrives after it settled is
+ * answered what it answered. The native effect therefore runs at most once
+ * per id on this process, whatever the wire did; a process that crashed
+ * between the effect and its answer cannot be asked again, because the
+ * host's ledger has already closed that id.
+ *
+ * A performance is a fiber of this memory's own set rather than of whoever
+ * the frame arrived on, so a caller that gives up on its own await does not
+ * take the performance the duplicates are joined to; the scope that served
+ * the handler is what ends them all.
+ */
+export function invocationMemory(
+  options: InvocationMemoryOptions,
+): Effect.Effect<InvocationMemory, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const capacity = options.capacity ?? INVOCATION_MEMORY_DEFAULTS.SETTLED_CAPACITY;
+    const ledger = yield* Ref.make<InvocationLedger>({ held: new Map(), answered: [] });
+    const performances = yield* FiberSet.make<void>();
+
+    /** Writes the id down as answered and forgets the oldest the memory no longer holds room for. */
+    const remember = (invocationId: string): Effect.Effect<void> =>
+      Ref.update(ledger, (standing) => {
+        const answered = [...standing.answered, invocationId];
+        if (answered.length <= capacity) return { held: standing.held, answered };
+        const held = new Map(standing.held);
+        for (const forgotten of answered.splice(0, answered.length - capacity)) {
+          held.delete(forgotten);
+        }
+        return { held, answered };
+      });
+
+    const perform = (
+      invocation: NodeInvocation,
+      answer: Deferred.Deferred<NodeCapabilityResult>,
+    ): Effect.Effect<void> =>
+      Effect.ensuring(
+        Effect.gen(function* () {
+          // A handler that died answers failed on this node rather than
+          // taking the connection down with it; the host reads a typed
+          // refusal either way.
+          const result = yield* Effect.catchAllDefect(options.handler(invocation), (defect) =>
+            Effect.succeed<NodeCapabilityResult>({
+              status: NODE_CAPABILITY_STATUS.FAILED,
+              capability: invocation.capability,
+              reason: defect instanceof Error ? defect.message : String(defect),
+            }),
+          );
+          yield* Deferred.succeed(answer, result);
+          yield* remember(invocation.invocationId);
+        }),
+        Deferred.interrupt(answer),
+      );
+
+    const take = (invocation: NodeInvocation): Effect.Effect<NodeInvocationAnswer> =>
+      // The frame that opened an id is the frame that performs it: the ledger
+      // is read and written and the performance forked in one step nothing
+      // interrupts, so no duplicate finds the id unopened and performs it a
+      // second time.
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const opened = yield* Ref.modify(ledger, (standing) =>
+            openInvocation(standing, invocation.invocationId),
+          );
+          if (opened.first) {
+            yield* FiberSet.run(
+              performances,
+              Effect.interruptible(perform(invocation, opened.answer)),
+            );
+          }
+          const result = yield* restore(Deferred.await(opened.answer));
+          return { invocationId: invocation.invocationId, result };
+        }),
+      );
+
+    return { take };
+  });
 }
