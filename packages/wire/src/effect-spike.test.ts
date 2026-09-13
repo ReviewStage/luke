@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Context, Effect, Either, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Result, Schema } from "effect";
 import { test } from "vitest";
 
 const SESSION_STATE = {
@@ -19,7 +19,7 @@ const readSessionRow = Schema.decodeUnknownEither(SessionRow);
 test("Schema.Struct decodes a well-formed record to the declared shape", () => {
   const decoded = readSessionRow({ id: "session-1", state: "working", turns: 3 });
 
-  assert.deepEqual(Either.getOrThrow(decoded), {
+  assert.deepEqual(Result.getOrThrow(decoded), {
     id: "session-1",
     state: SESSION_STATE.WORKING,
     turns: 3,
@@ -29,13 +29,13 @@ test("Schema.Struct decodes a well-formed record to the declared shape", () => {
 test("Schema.Struct refuses a record whose field misses its refinement", () => {
   const refused = readSessionRow({ id: "session-1", state: "working", turns: 2.5 });
 
-  assert.equal(Either.isLeft(refused), true);
+  assert.equal(Result.isFailure(refused), true);
 });
 
 test("Schema.Struct refuses a literal outside the declared set", () => {
   const refused = readSessionRow({ id: "session-1", state: "settled", turns: 1 });
 
-  assert.equal(Either.isLeft(refused), true);
+  assert.equal(Result.isFailure(refused), true);
 });
 
 class Clock extends Context.Tag("@sidecar/wire/effect-spike/Clock")<
@@ -95,9 +95,9 @@ test("Effect.gen carries a typed failure to the caller as an Either", async () =
     Effect.all([Effect.either(refuse("session-1")), Effect.either(refuse(""))]),
   );
 
-  assert.deepEqual(accepted, Either.right("session-1"));
-  assert.equal(Either.isLeft(refused), true);
-  assert.equal(Either.isLeft(refused) ? refused.left._tag : null, "Refused");
+  assert.deepEqual(accepted, Result.succeed("session-1"));
+  assert.equal(Result.isFailure(refused), true);
+  assert.equal(Result.isFailure(refused) ? refused.failure._tag : null, "Refused");
 });
 
 test("two tags with different identifiers are different services", () => {

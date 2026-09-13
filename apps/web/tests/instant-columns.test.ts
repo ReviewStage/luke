@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
 import { testSqlClient } from "./support/sql-client";
 

@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
@@ -224,10 +224,10 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
         message: message.message,
       });
       const opened = readEither(openedSession)(await bodyOf(response));
-      if (response.status !== ACCEPTED_STATUS || Either.isLeft(opened)) {
+      if (response.status !== ACCEPTED_STATUS || Result.isFailure(opened)) {
         return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
       }
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.right.sessionId };
+      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.success.sessionId };
     },
     async send(sessionId, message) {
       for (let attempt = 0; ; attempt += 1) {
@@ -237,7 +237,7 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
         const body = await bodyOf(response);
         if (response.status === CONFLICT_STATUS) {
           const refused = readEither(refusedSend)(body);
-          if (Either.isRight(refused) && refused.right.code === EVE_SESSION_NOT_ACTIVE) {
+          if (Result.isSuccess(refused) && refused.success.code === EVE_SESSION_NOT_ACTIVE) {
             const wait = SESSION_NOT_ACTIVE_RETRY_MS[attempt];
             if (wait === undefined) return { outcome: EVE_SEND_OUTCOME.RETIRED };
             await sleep(wait);
@@ -245,23 +245,23 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
           }
         }
         const accepted = readEither(acceptedDelivery)(body);
-        if (response.status !== ACCEPTED_STATUS || Either.isLeft(accepted)) {
+        if (response.status !== ACCEPTED_STATUS || Result.isFailure(accepted)) {
           return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
         }
         return {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
-          sessionId: accepted.right.sessionId,
-          deliveryId: accepted.right.deliveryId,
+          sessionId: accepted.success.sessionId,
+          deliveryId: accepted.success.deliveryId,
         };
       }
     },
     async cancel(sessionId, eveTurnId) {
       const response = await post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId });
       const answer = readEither(cancelAnswer)(await bodyOf(response));
-      if (!response.ok || Either.isLeft(answer)) {
+      if (!response.ok || Result.isFailure(answer)) {
         return { outcome: EVE_CANCEL_OUTCOME.FAILED, status: response.status };
       }
-      return answer.right.status === EVE_CANCEL_STATUS.ACCEPTED
+      return answer.success.status === EVE_CANCEL_STATUS.ACCEPTED
         ? { outcome: EVE_CANCEL_OUTCOME.ACCEPTED }
         : { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
     },

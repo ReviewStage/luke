@@ -16,9 +16,9 @@
  */
 
 import path from "node:path";
-import { FileSystem } from "@effect/platform";
+
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { Effect, Either, Schema } from "effect";
+import { Effect, FileSystem, Result, Schema } from "effect";
 import { Reporter, StateRoot } from "./seams.js";
 
 export interface JsonStateFileEffectOptions<A, I> {
@@ -53,11 +53,11 @@ export function jsonStateFileEffect<A extends object, I>(
     const contents = yield* Effect.option(fs.readFileString(target));
     if (contents._tag === "None") return undefined;
     // SAFETY: JSON.parse answers a runtime value; `decode` below is what validates its shape.
-    const parsed = Either.try(() => JSON.parse(contents.value) as UnparsedWireValue);
-    if (Either.isLeft(parsed)) return undefined;
-    const decoded = decode(parsed.right);
-    if (Either.isLeft(decoded)) return undefined;
-    return Object.keys(decoded.right).length === 0 ? undefined : decoded.right;
+    const parsed = Result.try(() => JSON.parse(contents.value) as UnparsedWireValue);
+    if (Result.isFailure(parsed)) return undefined;
+    const decoded = decode(parsed.success);
+    if (Result.isFailure(decoded)) return undefined;
+    return Object.keys(decoded.success).length === 0 ? undefined : decoded.success;
   });
 
   const update: JsonStateFileEffect<A>["update"] = (mutate) =>

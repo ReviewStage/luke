@@ -2,7 +2,7 @@ import { maximumMemoryQueryLength, NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory"
 import type { Session, SessionIdentity } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { toolArguments } from "./tool-module.js";
 
@@ -149,7 +149,7 @@ export function planReadsFromCall(
   argumentsJson: string,
   offered: readonly SessionIdentity[],
 ): readonly PlannedRead[] | undefined {
-  const parsed = Either.getOrUndefined(readPlan(toolArguments(argumentsJson)));
+  const parsed = Result.getOrUndefined(readPlan(toolArguments(argumentsJson)));
   if (!parsed) return undefined;
   const planned: PlannedRead[] = [];
   const named = new Set<PrefetchReadKind>();

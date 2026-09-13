@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as FileSystem from "@effect/platform/FileSystem";
-import { NodeContext } from "@effect/platform-node";
+import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as FileSystem from "effect/FileSystem";
 import { unboxExportEffect } from "./run.js";
 
 /** Records the golden instead of asserting it. `check.sh` never sets it. */
@@ -35,5 +35,5 @@ it.scoped("a fixture trace exports to the recorded document, byte for byte", () 
       const golden = await readFile(GOLDEN_PATH, "utf8");
       assert.equal(written, golden);
     });
-  }).pipe(Effect.provide(NodeContext.layer)),
+  }).pipe(Effect.provide(NodeServices.layer)),
 );

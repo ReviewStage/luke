@@ -1,13 +1,11 @@
 import path from "node:path";
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
 import type { BrainPrefetchTraceRecord, BrainTurnTraceRecord } from "@sidecar/brain";
 import {
   Cause,
+  Context,
   Deferred,
   Effect,
   FiberId,
-  FiberRefs,
   HashMap,
   List,
   Logger,
@@ -15,6 +13,8 @@ import {
   Queue,
   type Scope,
 } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
 
 /**
@@ -212,7 +212,7 @@ export class AgentTraceWriter {
       logLevel: LogLevel.Info,
       message: entry,
       cause: Cause.empty,
-      context: FiberRefs.empty(),
+      context: Context.empty(),
       spans: List.empty(),
       annotations: HashMap.empty(),
       date: new Date(),

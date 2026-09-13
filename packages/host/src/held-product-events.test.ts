@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import type { FileSystem } from "@effect/platform";
+
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
@@ -10,7 +10,7 @@ import {
   PRODUCT_EVENT,
 } from "@sidecar/analytics";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import { Effect } from "effect";
+import { Effect, type FileSystem } from "effect";
 import { HELD_PRODUCT_EVENTS_FILE, heldProductEvents } from "./held-product-events.js";
 
 const AT = Date.parse("2026-09-12T12:00:00.000Z");

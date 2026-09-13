@@ -1,6 +1,6 @@
-import { type HttpApp, HttpRouter } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { type Cause, Effect } from "effect";
+import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import type { AdminViewer } from "./admin/admin-access.js";
 import { type AdminDayOptions, handleAdminDay } from "./admin/admin-day.js";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin/admin-favorite.js";
@@ -51,12 +51,22 @@ function gate(
     viewer: AdminViewer,
     request: Request,
   ) => Effect.Effect<Response, never, SqlClient.SqlClient>,
-): HttpApp.Default<never, SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return adminViewerGate({ methods, resolveViewer: seams.resolveViewer, handler });
 }
 
 /** The group, which is the dashboard's five addresses and the refusal anywhere else. */
-export function adminApp(seams: AdminSeams): HttpApp.Default<never, SqlClient.SqlClient> {
+export function adminApp(
+  seams: AdminSeams,
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(
       ADMIN_ROUTE_PATH.METRICS,

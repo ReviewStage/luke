@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { FetchHttpClient, FileSystem } from "@effect/platform";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
-import { Config, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Config, Effect, FileSystem, Layer, Option, Redacted, Schema } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
 import {
   PREVIEW_STATE,
   type PreviewReading,
@@ -200,4 +200,4 @@ const httpClient = FetchHttpClient.layer.pipe(
   Layer.provide(Layer.succeed(FetchHttpClient.RequestInit, PROBE_REQUEST_INIT)),
 );
 
-NodeRuntime.runMain(program.pipe(Effect.provide(Layer.mergeAll(httpClient, NodeContext.layer))));
+NodeRuntime.runMain(program.pipe(Effect.provide(Layer.mergeAll(httpClient, NodeServices.layer))));

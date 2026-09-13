@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, Either, type ParseResult } from "effect";
+import { Effect, Schema as EffectSchema, type ParseResult, Result } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ASK_BOUNDS,
   ASK_ORIGIN,
@@ -146,8 +146,8 @@ function pathId(request: Request): string | Response {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
   const read = readEither(wireUuidSchema)(unparsedWire(id));
-  return Either.isRight(read)
-    ? read.right
+  return Result.isSuccess(read)
+    ? read.success
     : errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 }
 
@@ -295,9 +295,9 @@ export function acceptAsk(seams: AskSeams, input: AskInput): AskEffect<AskOutcom
       conversationId = input.conversationId;
     } else {
       const opened = yield* Effect.either(standingMain(userId, now));
-      if (Either.isLeft(opened))
-        return { ok: false, refusal: ASK_REFUSAL.STORE, cause: opened.left };
-      conversationId = opened.right;
+      if (Result.isFailure(opened))
+        return { ok: false, refusal: ASK_REFUSAL.STORE, cause: opened.failure };
+      conversationId = opened.success;
     }
 
     const ask = yield* seams.asks.record({
@@ -364,7 +364,7 @@ export function handleBrainAsk(options: BrainAskOptions): AskEffect<Response> {
     );
     if (parsed instanceof Response) return parsed;
     const request = readEither(hostedBrainAskRequestSchema)(parsed);
-    if (Either.isLeft(request)) {
+    if (Result.isFailure(request)) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
     const outcome = yield* acceptAsk(
@@ -373,7 +373,7 @@ export function handleBrainAsk(options: BrainAskOptions): AskEffect<Response> {
         eve: options.eve(admitted.authorization),
         now: options.now ?? Date.now,
       },
-      { ...request.right, userId: admitted.userId },
+      { ...request.success, userId: admitted.userId },
     );
     if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, outcome.answer);
     switch (outcome.refusal) {
@@ -396,15 +396,15 @@ export function handleBrainTurn(options: BrainAskOptions): AskEffect<Response> {
     const waitText = new URL(options.request.url).searchParams.get(TURN_WAIT_QUERY);
     const wait =
       waitText === null
-        ? Either.right(0)
+        ? Result.succeed(0)
         : readEither(waitSchema)(unparsedWire(waitText === "" ? Number.NaN : Number(waitText)));
-    if (Either.isLeft(wait)) {
+    if (Result.isFailure(wait)) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
     const now = options.now ?? Date.now;
     const sleep =
       options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-    const deadline = now() + wait.right;
+    const deadline = now() + wait.success;
     let standing = yield* askStanding(options, admitted.userId, id);
     while (
       standing !== undefined &&

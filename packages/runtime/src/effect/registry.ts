@@ -7,7 +7,7 @@
  * resolution door restated as an `Effect` over it, for P7's host composer
  * to build the agent's runtime on.
  */
-import { Context, Effect, Either, Layer } from "effect";
+import { Context, Effect, Layer, Result } from "effect";
 import {
   type AgentConfiguration,
   BUILTINS,
@@ -27,9 +27,12 @@ export const BuiltinsLive: Layer.Layer<Builtins> = Layer.succeed(Builtins, BUILT
 /**
  * `resolveConfigurationEither` restated as an `Effect`, for a caller
  * composing a turn's other seams the same way rather than matching an
- * `Either` by hand.
+ * `Result` by hand.
  */
 export const resolveConfigurationEffect = (
   names: AgentConfiguration,
 ): Effect.Effect<AgentConfiguration, ConfigurationRefused> =>
-  Either.match(resolveConfigurationEither(names), { onLeft: Effect.fail, onRight: Effect.succeed });
+  Result.match(resolveConfigurationEither(names), {
+    onFailure: Effect.fail,
+    onSuccess: Effect.succeed,
+  });

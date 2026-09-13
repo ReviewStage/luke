@@ -1,5 +1,5 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { Cause, Effect, Exit, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ADAPTER_FAILURE } from "../../../../packages/providers/src/shared/adapter-failure.js";
 import type {
   CloudAgentProviderId,

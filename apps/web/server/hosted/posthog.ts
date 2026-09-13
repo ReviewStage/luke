@@ -13,9 +13,9 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { accountCall, callAnswered, fixedBearer, NO_CREDENTIAL } from "../core.js";
 
 export const POSTHOG_ENVIRONMENT = {

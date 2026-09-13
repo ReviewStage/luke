@@ -1,4 +1,3 @@
-import { FileSystem } from "@effect/platform";
 import {
   type ConversationRecord,
   DEFAULT_AGENT_ID,
@@ -8,7 +7,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Data, Deferred, Duration, Effect, Ref, type Scope, Stream } from "effect";
+import { Data, Deferred, Duration, Effect, FileSystem, Ref, type Scope, Stream } from "effect";
 import {
   type ConversationLineHit,
   type EmbeddingModelIdentity,

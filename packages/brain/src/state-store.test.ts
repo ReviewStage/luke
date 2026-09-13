@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Chunk, Effect, TestClock } from "effect";
+import { Chunk, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { detachOn } from "./effect/carry.js";
 import {

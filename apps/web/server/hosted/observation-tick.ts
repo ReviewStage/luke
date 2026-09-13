@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import { Duration, Effect, Fiber } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import { NOTHING_OPENED, type TurnOpeningOutcome } from "./brain-host/opener.js";
 import {
   bearerMatchesSecret,

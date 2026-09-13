@@ -1,6 +1,6 @@
-import type { PlatformError } from "@effect/platform/Error";
 import type { VoiceCapabilityApplication } from "@sidecar/voice";
 import { Effect } from "effect";
+import type { PlatformError } from "effect/PlatformError";
 
 /**
  * One voice source transition, from the seams the host owns: the brain

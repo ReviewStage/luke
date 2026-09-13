@@ -1,7 +1,7 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, type ParseResult, Result, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_TOOL,
@@ -315,7 +315,7 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
     if (standing === undefined) {
       if (row.kind !== CONVERSATION_EVENT_KIND.SPEECH_OFFERED) continue;
       const offeredAt = row.createdAt.getTime();
-      const payload = Either.getOrUndefined(readEither(SPEECH_OFFERED_EVENT_PAYLOAD)(row.payload));
+      const payload = Result.getOrUndefined(readEither(SPEECH_OFFERED_EVENT_PAYLOAD)(row.payload));
       standing = {
         state: SPEECH_STATE.OFFERED,
         offeredAt,
@@ -330,7 +330,7 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
       standing = { ...standing, claimedByDeviceId: row.deviceId };
     }
     if (row.kind === CONVERSATION_EVENT_KIND.SPEECH_HELD) {
-      const held = Either.getOrUndefined(readEither(SPEECH_HELD_EVENT_PAYLOAD)(row.payload));
+      const held = Result.getOrUndefined(readEither(SPEECH_HELD_EVENT_PAYLOAD)(row.payload));
       standing = held === undefined ? standing : { ...standing, quietUntil: held.quietUntil };
     }
   }
@@ -993,8 +993,8 @@ export function heldBriefingsNamed(text: string): readonly NamedBriefing[] {
       continue;
     }
     const words = readEither(heldBriefingsWords)(unparsedWire(parsed));
-    if (Either.isLeft(words)) continue;
-    for (const held of words.right.held_briefings) {
+    if (Result.isFailure(words)) continue;
+    for (const held of words.success.held_briefings) {
       const decidedAt = Date.parse(held.decided_at);
       if (Number.isNaN(decidedAt)) continue;
       named.push({ briefing: held.briefing, decidedAt });

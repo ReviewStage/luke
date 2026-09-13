@@ -1,4 +1,3 @@
-import type { FileSystem } from "@effect/platform";
 import { EMBEDDING_BATCH_SIZE } from "@sidecar/brain";
 import type { StoreClient } from "@sidecar/brain/store";
 import {
@@ -10,7 +9,7 @@ import {
   type RetrievalMode,
 } from "@sidecar/memory";
 import type { ConversationRecord, EmbeddingAdapter, SessionKey } from "@sidecar/runtime/vocabulary";
-import { Effect, type Scope } from "effect";
+import { Effect, type FileSystem, type Scope } from "effect";
 
 /** The notebook's index as the host holds it, and what a run without one still answers. */
 export interface MemoryWiring {

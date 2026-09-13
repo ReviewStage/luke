@@ -81,7 +81,7 @@ A door is not what keeps `effect` out of a bundle generally; `@sidecar/wire`'s
 barrel resolves `Schema` beneath it. Root AGENTS.md's "Effect idioms" section
 records that cost against the renderer bundle budget: one copy per bundle,
 paid once. What a door still keeps out is a Node-reaching companion like
-`@effect/platform`.
+`@effect/platform-node`.
 
 A barrel over modules that are all one vocabulary is written as `export *` per
 module, because a hand-listed re-export of a package whose every name is public

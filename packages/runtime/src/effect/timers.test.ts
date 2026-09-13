@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Effect, Exit, Fiber, Schedule, Scope, TestClock } from "effect";
+import { Effect, Exit, Fiber, Schedule, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { scheduleOnce, scheduleRepeat } from "./timers.js";
 
 describe("scheduleOnce", () => {

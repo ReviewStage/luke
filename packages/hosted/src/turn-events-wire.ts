@@ -1,6 +1,6 @@
 import { SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { wireUuidSchema, writtenText } from "./service-wire.js";
 
 /**
@@ -165,7 +165,7 @@ export function decodeTurnEventFrame(frame: string): TurnEvent | undefined {
   } catch {
     return undefined;
   }
-  const event = Either.getOrUndefined(readEither(turnEventSchema)(parsed));
+  const event = Result.getOrUndefined(readEither(turnEventSchema)(parsed));
   if (event === undefined || id !== String(event.seq)) return undefined;
   return event;
 }

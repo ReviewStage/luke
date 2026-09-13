@@ -1,7 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import {
   isRecord,
@@ -12,6 +8,10 @@ import {
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
 import { Duration, Effect, Fiber, type Layer } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { AccountProvider } from "./snapshot.js";
 
 export interface AccountTokens {

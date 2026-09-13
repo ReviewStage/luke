@@ -37,7 +37,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, Either, Fiber } from "effect";
+import { Effect, Schema as EffectSchema, Fiber, Result } from "effect";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -109,7 +109,7 @@ function dropped<Value, Encoded>(
 ): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
   const read = readEither(inner);
   return declareReader<Value | undefined>(
-    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(inner),
   );
 }
@@ -132,7 +132,7 @@ const PANEL_ANSWER = EffectSchema.Struct({
 }).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
 function panelResult(answered: WireRecord): CarriedActionResult | undefined {
-  const read = Either.getOrUndefined(readEither(PANEL_ANSWER)(answered));
+  const read = Result.getOrUndefined(readEither(PANEL_ANSWER)(answered));
   if (read === undefined) return undefined;
   if (read.status === ACTION_RESULT_STATUS.ACCEPTED) {
     const note = read.note ?? read.outcome;

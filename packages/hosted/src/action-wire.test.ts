@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import { hostedActionAnswerSchema, hostedActionWorkspaceAnswerSchema } from "./action-wire.js";
 
@@ -9,7 +9,7 @@ function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 test("an action answer names one of the three outcomes and carries its reason as written", () => {

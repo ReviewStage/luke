@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import * as Headers from "@effect/platform/Headers";
-import * as HttpClient from "@effect/platform/HttpClient";
-import type * as HttpClientError from "@effect/platform/HttpClientError";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import { withoutTrailingSlash } from "@sidecar/wire";
 import { Clock, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
 import type { ParseError } from "effect/ParseResult";
+import * as Headers from "effect/unstable/http/Headers";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
 
 /**

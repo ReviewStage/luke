@@ -1,8 +1,5 @@
 import path from "node:path";
-import type { PlatformError } from "@effect/platform/Error";
 import { NodeFileSystem } from "@effect/platform-node";
-import type { SqlClient } from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import {
   DEFAULT_AGENT_ID,
@@ -12,6 +9,9 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { Cause, Effect, Exit } from "effect";
+import type { PlatformError } from "effect/PlatformError";
+import type { SqlClient } from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type BrainPersistedState, freshBrainState } from "../envelope.js";
 import type { BrainJournalEntry } from "../journal.js";
 import {

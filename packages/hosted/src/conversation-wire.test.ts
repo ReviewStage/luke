@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Result } from "effect";
 import { test } from "vitest";
 import { hostedConversationAnswerSchema } from "./conversation-wire.js";
 
 function parse(value: UnparsedWireValue) {
-  return Either.getOrUndefined(readEither(hostedConversationAnswerSchema)(value));
+  return Result.getOrUndefined(readEither(hostedConversationAnswerSchema)(value));
 }
 
 test("a conversation answer keeps only attributed, non-empty messages", () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either, type Schema } from "effect";
+import { Result, type Schema } from "effect";
 import { test } from "vitest";
 import {
   GATEWAY_EVENT,
@@ -24,7 +24,7 @@ function parse<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 const LIVE_METHODS = [

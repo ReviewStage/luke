@@ -1,9 +1,9 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /**
- * The encrypted provider-key vault over `@effect/sql`: one ciphertext row
+ * The encrypted provider-key vault over `effect/unstable/sql`: one ciphertext row
  * per (user, provider). The plaintext never reaches here — the ciphertext a
  * caller hands `storeVaultKey` is already sealed — and storing again for a
  * provider already stored replaces it atomically. There is no read-back of

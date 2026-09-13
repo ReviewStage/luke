@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Headers } from "@effect/platform";
 import { it } from "@effect/vitest";
 import {
   isRecord,
@@ -11,7 +10,8 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Chunk, Context, Deferred, Effect, Either, Fiber, Layer, Option, Stream } from "effect";
+import { Chunk, Context, Deferred, Effect, Fiber, Layer, Option, Result, Stream } from "effect";
+import { Headers } from "effect/unstable/http";
 import { test } from "vitest";
 import type { GatewayMethodContext, GatewayMethodTable } from "./methods.js";
 import {
@@ -528,12 +528,12 @@ it.effect(
       const retried = yield* Effect.either(
         ledger({ ...asked, next: Effect.fail(new NotFoundRefusal({ message: "ran" })) }),
       );
-      assert.ok(Either.isLeft(retried));
-      assert.ok(retried.left instanceof NotFoundRefusal);
+      assert.ok(Result.isFailure(retried));
+      assert.ok(retried.failure instanceof NotFoundRefusal);
       // The refusal is an answer, and the same key finds it again without running anything.
       const again = yield* Effect.either(ledger({ ...asked, next: Effect.never }));
-      assert.ok(Either.isLeft(again));
-      assert.equal(again.left, retried.left);
+      assert.ok(Result.isFailure(again));
+      assert.equal(again.failure, retried.failure);
     }).pipe(
       Effect.provide(
         layerGatewayLedger({

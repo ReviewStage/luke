@@ -1,12 +1,11 @@
+import { Effect, Redacted } from "effect";
 import {
-  type HttpApp,
   type HttpClient,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
-import { Effect, Redacted } from "effect";
+} from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   BRAIN_DEFAULTS,
   BRAIN_EMBEDDING_MODEL,
@@ -413,7 +412,14 @@ function embed(seams: BrainSeams) {
 /** The group, which is the contract's five paths and the refusal anywhere else. */
 export function brainApp(
   seams: BrainSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, Effect.merge(capabilities(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, Effect.merge(respond(seams))),

@@ -1,6 +1,6 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import * as HttpClient from "@effect/platform/HttpClient";
 import { Effect, Layer } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,

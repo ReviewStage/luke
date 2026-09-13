@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -8,6 +7,7 @@ import {
   MESSAGE_ROLE,
 } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { RATING_REFUSAL, type RatingStore, rateMessage, storeWriter } from "../server/hosted/store";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";

@@ -1,6 +1,4 @@
 import path from "node:path";
-import { Rpc, RpcGroup } from "@effect/rpc";
-import type { SqlError } from "@effect/sql/SqlError";
 import type {
   EmbeddingModelIdentity,
   EmbeddingWrite,
@@ -24,6 +22,8 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import { Effect, Schema, type Scope } from "effect";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { DeletionOptions, DeletionOutcome } from "./archives.js";
 import type { EnvelopeRead } from "./brain-envelope.js";
 import type { ConversationSearchHit } from "./conversation-table.js";

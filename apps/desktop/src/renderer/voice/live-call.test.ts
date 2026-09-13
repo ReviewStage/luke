@@ -11,17 +11,8 @@ import {
 } from "@sidecar/live";
 import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestrator";
 import type { WireRecord } from "@sidecar/wire";
-import {
-  Deferred,
-  Duration,
-  Effect,
-  Exit,
-  Fiber,
-  FiberId,
-  type Runtime,
-  Scope,
-  TestClock,
-} from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, FiberId, type Runtime, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import {
   LiveCall,
   MICROPHONE_ACK_TIMEOUT_MS,

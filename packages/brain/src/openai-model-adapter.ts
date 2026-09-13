@@ -1,4 +1,3 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { BUILTIN_MODEL_ADAPTER } from "@sidecar/runtime";
 import {
   type ExecutionRuntime,
@@ -10,6 +9,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { HTTP_METHOD, HTTP_STATUS, text, type WireRecord } from "@sidecar/wire";
 import type { Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type BrainTransport, keyedBrainTransport } from "./client.js";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {

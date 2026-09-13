@@ -1,7 +1,7 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { accountPreferencesFromStored } from "@sidecar/settings";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { isRealtimeVoiceSpeed } from "../core.js";
 import type { AccountPreferencesRow, HostedAccountPreferences } from "./account-preferences.js";
 

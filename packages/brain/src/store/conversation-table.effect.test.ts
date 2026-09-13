@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import * as Client from "@effect/sql/SqlClient";
 import { describe, it } from "@effect/vitest";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { Effect } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
 import {
   appendConversationEffect,
   conversationClearedAtEffect,

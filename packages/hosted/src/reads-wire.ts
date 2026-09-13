@@ -24,7 +24,7 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import { declareReader, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -73,7 +73,7 @@ function admitted<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /**
@@ -159,9 +159,9 @@ function encodedCursorSchema<Value, Encoded>(record: EffectSchema.Schema<Value, 
       } catch {
         return refuse(SCHEMA_REFUSAL.MALFORMED);
       }
-      return Either.match(read(parsed), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
+      return Result.match(read(parsed), {
+        onFailure: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onSuccess: (value) => ({ ok: true, value }),
       });
     },
     { type: "string", maxLength: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH },
@@ -173,10 +173,10 @@ function encodeCursor<Value, Encoded>(
   value: UnparsedWireValue,
 ): string {
   const read = readEither(record)(value);
-  if (Either.isLeft(read)) {
-    throw new TypeError(`a cursor was minted outside its own shape: ${read.left.refusal}`);
+  if (Result.isFailure(read)) {
+    throw new TypeError(`a cursor was minted outside its own shape: ${read.failure.refusal}`);
   }
-  return base64UrlEncode(JSON.stringify(read.right));
+  return base64UrlEncode(JSON.stringify(read.success));
 }
 
 /**

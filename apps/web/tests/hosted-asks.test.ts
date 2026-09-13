@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";

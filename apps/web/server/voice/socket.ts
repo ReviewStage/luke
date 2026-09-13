@@ -1,9 +1,9 @@
-import * as Socket from "@effect/platform/Socket";
 import { Deferred, Effect, Exit, Mailbox, type Option, type Scope, type Stream } from "effect";
+import * as Socket from "effect/unstable/socket/Socket";
 import type { WebSocket } from "ws";
 
 /**
- * One `ws` socket as `@effect/platform` speaks it: the frames the peer sent
+ * One `ws` socket as `effect/unstable/socket` speaks it: the frames the peer sent
  * read into a mailbox by a fiber of the caller's own scope, so the service
  * takes the opening frame from the same reader the relay then streams the
  * rest from and nothing arriving between the two lands nowhere. A frame

@@ -4,9 +4,9 @@
  * `cli.ts` through `NodeRuntime.runMain`.
  */
 
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import { type UnboxExportOptions, unboxTraceFromLines } from "./unbox-export.js";
 
 /** Where the converted document goes: a path, or standard output when there is none. */

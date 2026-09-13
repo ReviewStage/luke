@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Fiber, Option, Redacted, TestClock } from "effect";
+import { Effect, Fiber, Option, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   EVE_HEALTH_PATH,

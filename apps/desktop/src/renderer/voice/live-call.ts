@@ -31,10 +31,10 @@ import {
   Deferred,
   Duration,
   Effect,
-  Either,
   Exit,
   type Fiber,
   FiberId,
+  Result,
   Runtime,
   type Scope,
 } from "effect";
@@ -525,7 +525,7 @@ export class LiveCall implements LiveVoiceCall {
   // The peer connection's own state names are the transport report's; the
   // report's schema is what says which of them the host is told.
   #onTransport(peer: LivePeer): void {
-    const state = Either.getOrUndefined(
+    const state = Result.getOrUndefined(
       readEither(voiceReportLiveTransportParamsSchema)({
         state: peer.connection.connectionState,
       }),

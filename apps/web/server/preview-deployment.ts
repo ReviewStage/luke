@@ -1,9 +1,9 @@
-import * as HttpClient from "@effect/platform/HttpClient";
-import type * as HttpClientError from "@effect/platform/HttpClientError";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { Duration, Effect, type Redacted, Schedule, Schema } from "effect";
 import type { ParseError } from "effect/ParseResult";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { TRANSPORT_RETRY } from "./preview-probe.js";
 
 /**

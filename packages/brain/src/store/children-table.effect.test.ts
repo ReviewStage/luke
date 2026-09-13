@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as Client from "@effect/sql/SqlClient";
 import { describe, it } from "@effect/vitest";
 import {
   CHILD_CLEANUP,
@@ -14,6 +13,7 @@ import {
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime/vocabulary";
 import { Effect } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
 import {
   deleteChildCompletionEffect,
   deleteChildRunEffect,

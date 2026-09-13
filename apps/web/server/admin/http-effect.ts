@@ -1,5 +1,6 @@
-import { HttpApiSchema, HttpServerResponse } from "@effect/platform";
 import { Schema } from "effect";
+import { HttpServerResponse } from "effect/unstable/http";
+import { HttpApiSchema } from "effect/unstable/httpapi";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "./http.js";
 
 /**

@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { ASK_ORIGIN, type AskOrigin } from "../../core.js";
 import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
 import type { ConversationTarget } from "./writer.js";

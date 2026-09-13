@@ -1,9 +1,9 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
 import { HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either, type Layer } from "effect";
+import { Effect, type Schema as EffectSchema, type Layer, Result } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -206,7 +206,7 @@ export class HostedActionClient {
         const answer =
           payload === undefined
             ? undefined
-            : Either.getOrUndefined(readEither(answerSchema)(unparsedWire(payload)));
+            : Result.getOrUndefined(readEither(answerSchema)(unparsedWire(payload)));
         return answer ? { answer } : { failure: HOSTED_ACTION_FAILURE.UNREADABLE };
       }),
       this.#client,

@@ -1,7 +1,7 @@
-import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Redacted, Schema } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { auth } from "./auth.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "./core.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
@@ -164,7 +164,11 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  */
 function effectPassthrough<R>(
   handle: (request: Request) => Effect.Effect<Response, unknown, R>,
-): HttpApp.Default<never, R> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  R | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
@@ -379,7 +383,11 @@ function observationTickEffect(
  * unreachable in production, since `vercel.json` sends each function only
  * its own path, but the same shape `auth-app.ts` answers with.
  */
-export function observationApp(): HttpApp.Default<never, SqlClient.SqlClient | HostedEnvironment> {
+export function observationApp(): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  SqlClient.SqlClient | HostedEnvironment | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     // `all`, not `get`/`post`: each handler decides its own method refusal,
     // as it did before conversion, so a request to the right path on the

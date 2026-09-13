@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Either, ParseResult, Schema } from "effect";
+import { ParseResult, Result, Schema } from "effect";
 import { test } from "vitest";
 import type { WireRecord } from "../json.js";
 import { type JsonSchemaNode, SCHEMA_REFUSAL } from "../schema-vocabulary.js";
@@ -323,13 +323,13 @@ const readBounded = readEither(bounded);
 
 const WELL_FORMED = { name: "abc", count: 1, tags: ["a"], registered: "known" };
 
-function refusalOf<A>(read: Either.Either<A, SchemaRefusalError>): SchemaRefusalError {
-  assert.ok(Either.isLeft(read));
-  return read.left;
+function refusalOf<A>(read: Result.Result<A, SchemaRefusalError>): SchemaRefusalError {
+  assert.ok(Result.isFailure(read));
+  return read.failure;
 }
 
 test("readEither answers the decoded value", () => {
-  assert.deepEqual(Either.getOrThrow(readBounded(WELL_FORMED)), WELL_FORMED);
+  assert.deepEqual(Result.getOrThrow(readBounded(WELL_FORMED)), WELL_FORMED);
 });
 
 test("a text past its maximum is too large at its key", () => {

@@ -1,8 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { ACCESS_TOKEN_EXPIRY_SLACK_MS } from "@sidecar/credentials";
 import {
   isRecord,
@@ -13,7 +8,12 @@ import {
   type WireValue,
   WireValueSchema,
 } from "@sidecar/wire";
-import { Data, Duration, Effect, Either, type Layer } from "effect";
+import { Data, Duration, Effect, type Layer, Result } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import {
   CALENDAR_LOOKAHEAD_MS,
   MAXIMUM_MEETING_LENGTH_MS,
@@ -222,9 +222,9 @@ export class GoogleCalendarReader {
       const observations: CalendarAccountObservation[] = [];
       for (const account of accounts) {
         const attempt = yield* Effect.either(this.#observeAccount(account));
-        if (Either.isRight(attempt)) {
-          this.#lastObservations.set(account.id, attempt.right);
-          observations.push(attempt.right);
+        if (Result.isSuccess(attempt)) {
+          this.#lastObservations.set(account.id, attempt.success);
+          observations.push(attempt.success);
         } else {
           // One bad account must not blind the rest of the pass: the others
           // still read, and this one answers with what it last showed and why
@@ -235,7 +235,7 @@ export class GoogleCalendarReader {
             accountId: account.id,
             calendars: held?.calendars ?? [],
             meetings: held?.meetings ?? [],
-            failure: `${account.id}: ${attempt.left.message}`,
+            failure: `${account.id}: ${attempt.failure.message}`,
           });
         }
       }

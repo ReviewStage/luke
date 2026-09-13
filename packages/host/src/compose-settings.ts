@@ -1,5 +1,3 @@
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
 import {
   PRODUCT_EVENT,
   type ProductEventPropertiesFor,
@@ -43,6 +41,8 @@ import {
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Cause, Deferred, Effect, Queue, type Scope } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";

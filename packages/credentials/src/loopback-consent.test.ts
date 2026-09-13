@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { it } from "@effect/vitest";
-import { Deferred, Duration, Effect, Either, Exit, Fiber, TestClock } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
+import { TestClock } from "effect/testing";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackAuthorization,
@@ -430,7 +431,7 @@ it.effect("cancelling ends the wait; a grant given after lands nowhere", () =>
         answerCallback(authorization.redirectUri, { state: authorization.state, code: "late" }),
       ),
     );
-    assert.ok(Either.isLeft(late));
+    assert.ok(Result.isFailure(late));
     assert.deepEqual(exchanges, []);
   }),
 );

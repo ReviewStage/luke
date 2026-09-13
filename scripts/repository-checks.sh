@@ -144,12 +144,12 @@ node --input-type=module -e '
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, the way the barrel/vocabulary check above
 # walks its export lists, so a later re-export cannot quietly reintroduce
-# `@effect/platform-node` a few files deep.
+# `@effect/platform-node` or `effect/unstable/sql` a few files deep.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
   const root = path.join(process.argv[1], "packages/runtime/src");
-  const forbidden = /^(node:|@effect\/(platform-node|sql))/;
+  const forbidden = /^(node:|@effect\/platform-node|effect\/unstable\/sql)/;
   const seen = new Set();
   const offenders = [];
   const walk = async (file) => {
@@ -606,7 +606,7 @@ for ported in "${openclaw_ported_files[@]}"; do
         printf 'error: this check names a file that no longer exists: %s\n' "$ported" >&2
         exit 1
     fi
-    openclaw_effect_imports+=$(grep -nE 'from "(effect|@effect/[^"]+)"|require\("(effect|@effect/[^"]+)"\)' \
+    openclaw_effect_imports+=$(grep -nE 'from "(effect(/[^"]+)?|@effect/[^"]+)"|require\("(effect(/[^"]+)?|@effect/[^"]+)"\)' \
         "$SIDECAR_REPO_ROOT/$ported" | sed "s|^|$ported:|" || true)
 done
 if [[ -n "$openclaw_effect_imports" ]]; then
@@ -709,7 +709,7 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# `@effect/platform-node` and `@effect/sql*` reach `node:` modules, so an import
+# `@effect/platform-node` and `effect/unstable/sql` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
 # the sandboxed renderer. The renderer's `node:` grep above catches the direct
 # reach; this catches the Effect layer that would carry it in behind a bare
@@ -717,10 +717,10 @@ node --input-type=module -e '
 # isolation guard in apps/web/tests/build-output.test.ts is what proves each one
 # loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
-    '"@effect/(platform-node|sql)' \
+    '"(@effect/platform-node|effect/unstable/sql)' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" || true)
 if [[ -n "$node_reaching_effect" ]]; then
-    printf 'error: @effect/platform-node and @effect/sql* reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
+    printf 'error: @effect/platform-node and effect/unstable/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
     exit 1
 fi

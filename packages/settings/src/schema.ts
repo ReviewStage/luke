@@ -29,7 +29,7 @@ import {
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import {
   choiceAnalytics,
   choiceSetting,
@@ -148,9 +148,9 @@ const conductorAgentRowDrawn = (view: SettingsVisibility): boolean =>
 function workspaceAgentDefaultsGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<WorkspaceAgentDefaults | undefined> {
-  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
+  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
   if (!isRecord(value)) {
-    return settingGuardFromEither(Either.left(undefined));
+    return settingGuardFromEither(Result.fail(undefined));
   }
   const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
   for (const [providerId, selection] of Object.entries(value)) {
@@ -159,7 +159,7 @@ function workspaceAgentDefaultsGuard(
     defaults[providerId] = parsed;
   }
   return settingGuardFromEither(
-    Either.right(Object.keys(defaults).length > 0 ? defaults : undefined),
+    Result.succeed(Object.keys(defaults).length > 0 ? defaults : undefined),
   );
 }
 
@@ -173,15 +173,15 @@ function workspaceAgentDefaultsGuard(
 function sessionFiltersGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<readonly SessionFilter[] | undefined> {
-  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
-  if (!Array.isArray(value)) return settingGuardFromEither(Either.left(undefined));
+  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
+  if (!Array.isArray(value)) return settingGuardFromEither(Result.fail(undefined));
   const filters: SessionFilter[] = [];
   for (const candidate of value) {
     if (!isWireString(candidate) || !isSessionFilter(candidate)) continue;
     if (filters.includes(candidate)) continue;
     filters.push(candidate);
   }
-  return settingGuardFromEither(Either.right(filters.length > 0 ? filters : undefined));
+  return settingGuardFromEither(Result.succeed(filters.length > 0 ? filters : undefined));
 }
 
 const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
@@ -194,12 +194,12 @@ const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
  * someone is still asking.
  */
 function sessionSearchQueryGuard(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
-  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
-  if (!isWireString(value)) return settingGuardFromEither(Either.left(undefined));
+  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
+  if (!isWireString(value)) return settingGuardFromEither(Result.fail(undefined));
   if (value.trim() === "" || value.length > MAXIMUM_SESSION_SEARCH_QUERY_LENGTH) {
-    return settingGuardFromEither(Either.right(undefined));
+    return settingGuardFromEither(Result.succeed(undefined));
   }
-  return settingGuardFromEither(Either.right(value));
+  return settingGuardFromEither(Result.succeed(value));
 }
 
 const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
@@ -207,9 +207,9 @@ const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
 function workspaceProjectDefaultsGuard(
   value: UnparsedWireValue,
 ): SettingGuardResult<Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined> {
-  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
+  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
   if (!isRecord(value)) {
-    return settingGuardFromEither(Either.left(undefined));
+    return settingGuardFromEither(Result.fail(undefined));
   }
   const defaults: Partial<Record<WorkspaceProviderId, string>> = {};
   for (const [providerId, candidate] of Object.entries(value)) {
@@ -221,7 +221,7 @@ function workspaceProjectDefaultsGuard(
     defaults[providerId] = providerProjectId;
   }
   return settingGuardFromEither(
-    Either.right(Object.keys(defaults).length > 0 ? defaults : undefined),
+    Result.succeed(Object.keys(defaults).length > 0 ? defaults : undefined),
   );
 }
 

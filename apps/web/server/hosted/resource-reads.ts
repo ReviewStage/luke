@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Effect, type Schema as EffectSchema, Either, type ParseResult } from "effect";
+import { Data, Effect, type Schema as EffectSchema, type ParseResult, Result } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
@@ -126,13 +126,13 @@ function readPage<Cursor>(
 ): ReadPage<Cursor> | undefined {
   const afterText = query.get(READ_QUERY.AFTER);
   const after =
-    afterText === null ? undefined : Either.getOrUndefined(readEither(cursorSchema)(afterText));
+    afterText === null ? undefined : Result.getOrUndefined(readEither(cursorSchema)(afterText));
   if (afterText !== null && after === undefined) return undefined;
   const limitText = query.get(READ_QUERY.LIMIT);
   const limit =
     limitText === null
       ? READ_PAGE_BOUNDS.MAX_LIMIT
-      : Either.getOrUndefined(readEither(readLimitSchema)(Number(limitText)));
+      : Result.getOrUndefined(readEither(readLimitSchema)(Number(limitText)));
   if (limit === undefined) return undefined;
   return { after, limit };
 }
@@ -349,7 +349,7 @@ function viewEvent(event: StoredEventRecord): ConversationViewEvent {
   const rating =
     event.kind === CONVERSATION_EVENT_KIND.RATING
       ? // SAFETY: the payload column is jsonb, which the driver hands back as the JSON it holds; the read is the validation.
-        Either.getOrUndefined(
+        Result.getOrUndefined(
           readEither(RATING_EVENT_PAYLOAD)(unparsedWire(event.payload as WireBoundaryInput)),
         )
       : undefined;

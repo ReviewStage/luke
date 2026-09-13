@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { LiveRecord } from "@sidecar/voice/live-session";
 import { Deferred, Effect, FiberId, type ParseResult, Queue, type Scope } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_ENTRY_KIND } from "../core.js";
 import {
   STORE_WRITE_EFFECT,

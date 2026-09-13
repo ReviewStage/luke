@@ -1,9 +1,9 @@
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
-import * as SqlSchema from "@effect/sql/SqlSchema";
 import { MEMORY_HOUSEKEEPING_OUTCOME, type MemoryHousekeepingOutcome } from "@sidecar/memory";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import { Effect, Option, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { columnsDecoded } from "./rows.js";
 
 /**

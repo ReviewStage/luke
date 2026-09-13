@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Chunk, Duration, Effect, Exit, Schedule, Scope, TestClock } from "effect";
+import { Chunk, Duration, Effect, Exit, Schedule, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import {
   admitInput,
   makePendingInputQueue,

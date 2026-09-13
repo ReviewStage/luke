@@ -10,7 +10,7 @@ import {
 } from "@sidecar/hosted";
 import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Exit, Scope } from "effect";
+import { Effect, Exit, Result, Scope } from "effect";
 import { onTestFinished, test } from "vitest";
 import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
@@ -106,7 +106,7 @@ function record(text: string): WireRecord {
 }
 
 function hostedError(text: WireRecord): string | undefined {
-  return Either.getOrUndefined(readEither(hostedErrorSchema)(text));
+  return Result.getOrUndefined(readEither(hostedErrorSchema)(text));
 }
 
 interface Stand {

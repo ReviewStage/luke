@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
@@ -10,7 +10,7 @@ import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
  * stands clear, because it is what decides whether the snapshot is current.
  *
  * Every function here is an `Effect<A, SqlError | ParseResult.ParseError,
- * SqlClient.SqlClient>` over `@effect/sql`.
+ * SqlClient.SqlClient>` over `effect/unstable/sql`.
  */
 export interface RosterSnapshotRecord {
   readonly body: string;

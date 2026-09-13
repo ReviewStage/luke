@@ -1,5 +1,3 @@
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -41,7 +39,9 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Effect, Either, Redacted } from "effect";
+import { Effect, Redacted, Result } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
@@ -461,8 +461,8 @@ function defaultPersistedSettings(): PersistedSettings {
 /**
  * The throwing parse this store's earlier body kept; `SettingsParseRefusal`
  * over `parsePersistedSettingsEither` in `./effect/settings-store-io.js` is
- * what a caller reads today, and this stays private to that Either's own
- * `Either.try` rather than a second parse a caller could reach directly.
+ * what a caller reads today, and this stays private to that Result's own
+ * `Result.try` rather than a second parse a caller could reach directly.
  */
 export function parsePersistedSettingsThrowing(source: string): PersistedSettings {
   const parsed = JSON.parse(source);
@@ -1358,7 +1358,7 @@ export class SettingsStore {
         : // A corrupt settings file is replaced by the next write rather than
           // failing app start, so a refusal here falls back to defaults exactly
           // as an absent file does.
-          Either.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings),
+          Result.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings),
     );
   }
 

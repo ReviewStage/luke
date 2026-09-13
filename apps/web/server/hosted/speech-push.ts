@@ -1,7 +1,7 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
 import { Effect, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRIEFING_PUSH_PAYLOAD_KEY,
   DEVICE_PLATFORM,

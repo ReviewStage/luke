@@ -23,7 +23,7 @@ import {
   type UIMessagePart,
   type UITools,
 } from "ai";
-import { Either } from "effect";
+import { Result } from "effect";
 import { isStoredToolPart, toolPartName } from "./tool-parts.js";
 
 /**
@@ -78,15 +78,15 @@ const readAssistantMetadata = readEither(ASSISTANT_MESSAGE_METADATA);
 function refuse(
   refusal: SchemaRefusal,
   path: SchemaPath,
-): Either.Either<never, SchemaRefusalError> {
-  return Either.left(new SchemaRefusalError({ refusal, path }));
+): Result.Result<never, SchemaRefusalError> {
+  return Result.fail(new SchemaRefusalError({ refusal, path }));
 }
 
 /** A metadata-shaped refusal read at the row's `metadata` field, rather than at the metadata value's own root. */
 function underMetadata<A>(
-  read: Either.Either<A, SchemaRefusalError>,
-): Either.Either<A, SchemaRefusalError> {
-  return Either.mapLeft(
+  read: Result.Result<A, SchemaRefusalError>,
+): Result.Result<A, SchemaRefusalError> {
+  return Result.mapError(
     read,
     (error) =>
       new SchemaRefusalError({ refusal: error.refusal, path: ["metadata", ...error.path] }),
@@ -128,7 +128,7 @@ function refusedPart(
 /** A validated row typed by its role, its metadata read under that role's schema. */
 function readStoredMessage(
   message: ValidatedMessage,
-): Either.Either<StoredUIMessage, SchemaRefusalError> {
+): Result.Result<StoredUIMessage, SchemaRefusalError> {
   const part = refusedPart(message.parts);
   if (part) return refuse(SCHEMA_REFUSAL.MALFORMED, part);
   const { id, parts } = message;
@@ -136,7 +136,7 @@ function readStoredMessage(
   switch (message.role) {
     case MESSAGE_ROLE.USER: {
       const role = message.role;
-      return Either.map(underMetadata(readUserMetadata(metadata)), (value) => ({
+      return Result.map(underMetadata(readUserMetadata(metadata)), (value) => ({
         id,
         role,
         parts,
@@ -145,7 +145,7 @@ function readStoredMessage(
     }
     case MESSAGE_ROLE.ASSISTANT: {
       const role = message.role;
-      return Either.map(underMetadata(readAssistantMetadata(metadata)), (value) => ({
+      return Result.map(underMetadata(readAssistantMetadata(metadata)), (value) => ({
         id,
         role,
         parts,
@@ -154,7 +154,7 @@ function readStoredMessage(
     }
     case MESSAGE_ROLE.SYSTEM:
       if (metadata !== undefined) return refuse(SCHEMA_REFUSAL.MALFORMED, ["metadata"]);
-      return Either.right({ id, role: message.role, parts });
+      return Result.succeed({ id, role: message.role, parts });
   }
 }
 
@@ -171,9 +171,9 @@ function readStoredMessage(
 export async function readStoredUIMessagesEither(
   messages: UnparsedWireValue,
   tools: ToolSet,
-): Promise<Either.Either<StoredUIMessage[], SchemaRefusalError>> {
+): Promise<Result.Result<StoredUIMessage[], SchemaRefusalError>> {
   if (!Array.isArray(messages)) return refuse(SCHEMA_REFUSAL.MALFORMED, []);
-  if (messages.length === 0) return Either.right([]);
+  if (messages.length === 0) return Result.succeed([]);
   const unregistered = unregisteredToolPart(messages, tools);
   if (unregistered) return refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregistered);
   const validated = await safeValidateUIMessages<ValidatedMessage>({
@@ -187,17 +187,17 @@ export async function readStoredUIMessagesEither(
   const stored: StoredUIMessage[] = [];
   for (const [messageIndex, message] of validated.data.entries()) {
     const read = readStoredMessage(message);
-    if (Either.isLeft(read)) {
-      return Either.left(
+    if (Result.isFailure(read)) {
+      return Result.fail(
         new SchemaRefusalError({
-          refusal: read.left.refusal,
-          path: [messageIndex, ...read.left.path],
+          refusal: read.failure.refusal,
+          path: [messageIndex, ...read.failure.path],
         }),
       );
     }
-    stored.push(read.right);
+    stored.push(read.success);
   }
-  return Either.right(stored);
+  return Result.succeed(stored);
 }
 
 /** The boundary entry point every store caller reads a `SchemaRead` from. */
@@ -205,8 +205,8 @@ export async function readStoredUIMessages(
   messages: UnparsedWireValue,
   tools: ToolSet,
 ): Promise<SchemaRead<StoredUIMessage[]>> {
-  return Either.match(await readStoredUIMessagesEither(messages, tools), {
-    onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-    onRight: (value) => ({ ok: true, value }),
+  return Result.match(await readStoredUIMessagesEither(messages, tools), {
+    onFailure: ({ refusal, path }) => ({ ok: false, refusal, path }),
+    onSuccess: (value) => ({ ok: true, value }),
   });
 }

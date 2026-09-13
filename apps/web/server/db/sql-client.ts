@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { PgClient } from "@effect/sql-pg";
 import { Config, Effect, Layer, Redacted } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { Pool } from "pg";
 import { createPool } from "./index.js";
 

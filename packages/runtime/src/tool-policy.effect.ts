@@ -2,14 +2,14 @@
  * The effective tool policy in Effect's own terms. `tool-policy.ts` is a
  * faithful port of OpenClaw `b7528507`'s deny-wins layering and imports
  * nothing from `effect`, so its Effect surface lives here beside it: the
- * dispatch door restated as an `Either` that tells a call outside the
+ * dispatch door restated as a `Result` that tells a call outside the
  * catalog apart from one a layer removed, each carrying what a caller needs
  * to report the refusal.
  *
  * This is the OpenClaw-wrap shape from `queue.effect.ts`: a sibling named for
  * the ported file, wrapping its exported API and reaching inside none of it.
  */
-import { Data, Effect, Either } from "effect";
+import { Data, Effect, Result } from "effect";
 import type { ToolDescriptor } from "./registry.js";
 import {
   type ChildPolicyContext,
@@ -52,7 +52,7 @@ export const resolvePolicy = (
   Effect.sync(() => resolveToolPolicy(catalog, layers, child, turn));
 
 /**
- * The door every dispatch meets, restated as an `Either` rather than the
+ * The door every dispatch meets, restated as a `Result` rather than the
  * policy's own boolean `allows`: a name outside the catalog and a name a
  * layer removed are different refusals, and the tool descriptor a caller
  * dispatches through rides on the right where the policy still allows the
@@ -62,14 +62,14 @@ export const requireAllowed = (
   policy: EffectiveToolPolicy,
   catalog: readonly ToolDescriptor[],
   name: string,
-): Either.Either<ToolDescriptor, ToolCallRefused> => {
+): Result.Result<ToolDescriptor, ToolCallRefused> => {
   const tool = catalog.find((candidate) => candidate.schema.name === name);
   if (!tool) {
-    return Either.left(new ToolCallRefused({ code: TOOL_CALL_REFUSAL.UNCATALOGED, tool: name }));
+    return Result.fail(new ToolCallRefused({ code: TOOL_CALL_REFUSAL.UNCATALOGED, tool: name }));
   }
-  if (policy.allows(name)) return Either.right(tool);
+  if (policy.allows(name)) return Result.succeed(tool);
   const layer = policy.deniedBy(name);
-  return Either.left(
+  return Result.fail(
     new ToolCallRefused({
       code: TOOL_CALL_REFUSAL.DENIED,
       tool: name,

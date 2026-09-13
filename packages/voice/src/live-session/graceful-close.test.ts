@@ -6,7 +6,8 @@ import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
 } from "@sidecar/live";
-import { Deferred, Duration, Effect, Exit, Fiber, type Scope, Stream, TestClock } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, type Scope, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import type { LiveSideband } from "../live-socket.js";
 import { sidebandOverSocket } from "../live-socket.js";
 import { FakeLiveSocket } from "../testing.js";

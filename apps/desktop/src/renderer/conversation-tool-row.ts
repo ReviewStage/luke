@@ -24,7 +24,7 @@ import {
 } from "@sidecar/session";
 import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either, type Schema } from "effect";
+import { Result, type Schema } from "effect";
 import type { SessionView } from "./session-model";
 
 /** A request read against its schema; downstream code reads `ok`/`value` exactly as it did against the facade. */
@@ -32,9 +32,9 @@ function parsedRequest<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   input: UnparsedWireValue,
 ): { readonly ok: true; readonly value: Value } | { readonly ok: false } {
-  return Either.match(readEither(schema)(input), {
-    onRight: (value) => ({ ok: true, value }),
-    onLeft: () => ({ ok: false }),
+  return Result.match(readEither(schema)(input), {
+    onSuccess: (value) => ({ ok: true, value }),
+    onFailure: () => ({ ok: false }),
   });
 }
 
@@ -127,7 +127,7 @@ function envelopeOf(part: StoredToolPart): ActionOutputEnvelope | undefined {
   if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return undefined;
   // SAFETY: a stored part's output is JSON the store holds as jsonb; the wire boundary is where it is read.
   const read = readEither(ACTION_OUTPUT)(unparsedWire(part.output as WireBoundaryInput));
-  return Either.getOrUndefined(read);
+  return Result.getOrUndefined(read);
 }
 
 /** What became of the action and, where it did not simply land, why. */

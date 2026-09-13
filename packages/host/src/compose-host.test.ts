@@ -11,7 +11,7 @@ import {
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { ACTION_RESULT_STATUS, isRecord, isWireString } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Either, Layer } from "effect";
+import { Effect, Layer, Result } from "effect";
 import { hostLayer } from "./compose-host.js";
 import { type Composer, DuplicateGatewayMethod, foldMethods } from "./composer.js";
 import { HostTag } from "./effect/host.js";
@@ -43,15 +43,15 @@ it("a method two composers claim is a construction failure, not a last writer", 
       stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
       stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
     ]),
-    Either.left(new DuplicateGatewayMethod({ method: GATEWAY_METHOD.SETTINGS_SNAPSHOT })),
+    Result.fail(new DuplicateGatewayMethod({ method: GATEWAY_METHOD.SETTINGS_SNAPSHOT })),
   );
   const merged = foldMethods([
     stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
     stubComposer([GATEWAY_METHOD.ACCOUNT_SNAPSHOT]),
   ]);
-  assert.ok(Either.isRight(merged));
+  assert.ok(Result.isSuccess(merged));
   assert.deepEqual(
-    Object.keys(merged.right).sort(),
+    Object.keys(merged.success).sort(),
     [GATEWAY_METHOD.ACCOUNT_SNAPSHOT, GATEWAY_METHOD.SETTINGS_SNAPSHOT].sort(),
   );
 });

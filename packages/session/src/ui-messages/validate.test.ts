@@ -17,7 +17,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
-import { Either } from "effect";
+import { Result } from "effect";
 import { test } from "vitest";
 import { z } from "zod";
 import { isStoredToolPart, TOOL_PART_STATE } from "./tool-parts.js";
@@ -321,8 +321,8 @@ test("what is not a list of rows, or not a row, is malformed", async () => {
 
 test("the Either entry point answers a right of the rows admitted", async () => {
   const read = await readStoredUIMessagesEither([await fixture(FIXTURE.SPOKEN_ASK)], TOOLS);
-  assert.ok(Either.isRight(read));
-  const [ask] = read.right;
+  assert.ok(Result.isSuccess(read));
+  const [ask] = read.success;
   assert.equal(ask?.role, MESSAGE_ROLE.USER);
 });
 
@@ -330,9 +330,9 @@ test("the Either entry point answers a left carrying the refusal and path", asyn
   const spokenAsk = await fixture(FIXTURE.SPOKEN_ASK);
   const extra = withMetadata(spokenAsk, { ...wireRecord(spokenAsk.metadata), mood: "cheerful" });
   const read = await readStoredUIMessagesEither([extra], TOOLS);
-  assert.ok(Either.isLeft(read));
-  assert.equal(read.left.refusal, SCHEMA_REFUSAL.MALFORMED);
-  assert.deepEqual(read.left.path, [0, "metadata"]);
+  assert.ok(Result.isFailure(read));
+  assert.equal(read.failure.refusal, SCHEMA_REFUSAL.MALFORMED);
+  assert.deepEqual(read.failure.path, [0, "metadata"]);
 });
 
 test("the SchemaRead entry point is the Either entry point's result converted, not a second computation", async () => {
@@ -343,9 +343,9 @@ test("the SchemaRead entry point is the Either entry point's result converted, n
   ]);
   assert.deepEqual(
     schemaRead,
-    Either.match(either, {
-      onLeft: (error) => ({ ok: false, refusal: error.refusal, path: error.path }),
-      onRight: (value) => ({ ok: true, value }),
+    Result.match(either, {
+      onFailure: (error) => ({ ok: false, refusal: error.refusal, path: error.path }),
+      onSuccess: (value) => ({ ok: true, value }),
     }),
   );
 });

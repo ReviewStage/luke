@@ -1,5 +1,6 @@
-import { HttpApiSchema, HttpServerRequest, HttpServerResponse } from "@effect/platform";
 import { Effect, Schema, Stream } from "effect";
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 

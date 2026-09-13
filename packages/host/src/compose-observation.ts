@@ -1,4 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import { PRODUCT_EVENT, productSessionCountBucket } from "@sidecar/analytics";
 import type { BrainRoster } from "@sidecar/brain";
 import { sessionContextText } from "@sidecar/brain";
@@ -34,7 +33,8 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Either, type Scope } from "effect";
+import { Effect, Result, type Scope } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -212,8 +212,8 @@ export const composeObservation = (
               expected,
             ),
           );
-          if (Either.isLeft(outcome)) return;
-          const saved = outcome.right;
+          if (Result.isFailure(outcome)) return;
+          const saved = outcome.success;
           if (!saved.cleared) continue;
           if (!isCurrent()) return;
           settings.emitSettingsSnapshot(saved.settings);

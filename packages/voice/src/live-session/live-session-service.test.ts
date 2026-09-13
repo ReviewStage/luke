@@ -38,8 +38,8 @@ import {
   Option,
   type Scope,
   type Stream,
-  TestClock,
 } from "effect";
+import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
 import { holdSocket, type SocketHold } from "../held-socket.js";

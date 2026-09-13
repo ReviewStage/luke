@@ -1,10 +1,10 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { DeviceSeams } from "./devices.js";
 
 /**
- * The device seams over `@effect/sql`. A push token is unique across rows
+ * The device seams over `effect/unstable/sql`. A push token is unique across rows
  * because Apple issues one per installation: a reinstall that minted a fresh
  * installation id but kept its token takes the token off the old row in the
  * same transaction, so the row that can be addressed is always the one that

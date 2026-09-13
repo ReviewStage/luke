@@ -1,11 +1,11 @@
-import * as Reactivity from "@effect/experimental/Reactivity";
-import { NodeContext } from "@effect/platform-node";
-import * as SqlClient from "@effect/sql/SqlClient";
-import type * as SqlConnection from "@effect/sql/SqlConnection";
-import { SqlError } from "@effect/sql/SqlError";
+import { NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { PGlite } from "@electric-sql/pglite";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
+import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
+import { SqlError } from "effect/unstable/sql/SqlError";
 import { runWebMigrations } from "../../server/db/effect-migrator.js";
 import { createPool } from "../../server/db/index.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres.js";
@@ -91,7 +91,7 @@ export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlCl
 export async function openMigratedPglite(): Promise<PGlite> {
   const client = new PGlite();
   const migrationRuntime = ManagedRuntime.make(
-    Layer.mergeAll(sqlClientOverPglite(client), NodeContext.layer),
+    Layer.mergeAll(sqlClientOverPglite(client), NodeServices.layer),
   );
   try {
     await migrationRuntime.runPromise(runWebMigrations());

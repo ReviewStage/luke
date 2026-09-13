@@ -20,7 +20,8 @@ import {
   type Session,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
-import { Deferred, Duration, Effect, Fiber, TestClock } from "effect";
+import { Deferred, Duration, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { createSessionRowActions } from "./session-row-actions.js";
 
 /*

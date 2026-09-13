@@ -1,5 +1,5 @@
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { type Context, Effect, Schema } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import { jsonStateFileEffect } from "./effect/json-state-file.js";
 import { Reporter, StateRoot } from "./effect/seams.js";
 

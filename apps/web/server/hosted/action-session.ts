@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Either, type ParseResult } from "effect";
+import { Effect, type ParseResult, Result } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_KIND,
   ACTION_RESULT_STATUS,
@@ -191,9 +191,9 @@ function admitActionRequest(
     }
 
     const parsed = yield* Effect.either(Effect.tryPromise(() => request.json()));
-    if (Either.isLeft(parsed)) return invalidRequest();
+    if (Result.isFailure(parsed)) return invalidRequest();
     // SAFETY: request.json() returns unknown; isRecord below validates the shape.
-    const body = parsed.right as UnparsedWireValue;
+    const body = parsed.success as UnparsedWireValue;
     if (!isRecord(body)) return invalidRequest();
 
     const providerId = text(body.providerId);

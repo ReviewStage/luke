@@ -4,11 +4,11 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { NodeFileSystem } from "@effect/platform-node";
-import * as Client from "@effect/sql/SqlClient";
 import { describe, it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
 import { migrateStoreSchema, StoreSchemaRefused } from "./migration.js";
 import { STORE_SCHEMA_VERSION } from "./schema.js";
 import { layer } from "./sql-node-sqlite.js";
@@ -344,8 +344,8 @@ describe("the store's schema migration", () => {
 
         const outcome = yield* Effect.either(overStore(filename, migrateStoreSchema));
 
-        assert.equal(Either.isLeft(outcome), true);
-        if (Either.isLeft(outcome)) assert.equal(outcome.left._tag, "SqlError");
+        assert.equal(Result.isFailure(outcome), true);
+        if (Result.isFailure(outcome)) assert.equal(outcome.failure._tag, "SqlError");
         assert.deepEqual(yield* overStore(filename, standing), before);
         assert.deepEqual(before.versions, [1]);
       }),
@@ -361,9 +361,12 @@ describe("the store's schema migration", () => {
 
           const outcome = yield* Effect.either(overStore(filename, migrateStoreSchema));
 
-          assert.equal(Either.isLeft(outcome) && outcome.left instanceof StoreSchemaRefused, true);
-          if (Either.isLeft(outcome) && outcome.left instanceof StoreSchemaRefused) {
-            assert.equal(outcome.left.version, version);
+          assert.equal(
+            Result.isFailure(outcome) && outcome.failure instanceof StoreSchemaRefused,
+            true,
+          );
+          if (Result.isFailure(outcome) && outcome.failure instanceof StoreSchemaRefused) {
+            assert.equal(outcome.failure.version, version);
           }
           assert.deepEqual((yield* overStore(filename, standing)).versions, [version]);
         }

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,

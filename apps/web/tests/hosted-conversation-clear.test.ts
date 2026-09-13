@@ -12,7 +12,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either } from "effect";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { afterAll, test } from "vitest";
 import { handleConversationClear } from "../server/hosted/conversation-clear";
 import { handleConversationMessages } from "../server/hosted/resource-reads";
@@ -58,7 +58,7 @@ function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 async function populate(userId: string): Promise<string> {

@@ -5,15 +5,15 @@ import {
   type StatementResultingChanges,
   type StatementSync,
 } from "node:sqlite";
-import * as Reactivity from "@effect/experimental/Reactivity";
-import * as Client from "@effect/sql/SqlClient";
-import type { Connection } from "@effect/sql/SqlConnection";
-import { SqlError } from "@effect/sql/SqlError";
-import * as Statement from "@effect/sql/Statement";
 import { Cache, Context, Duration, Effect, Layer, Schema, Scope, Stream } from "effect";
+import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { Connection } from "effect/unstable/sql/SqlConnection";
+import { SqlError } from "effect/unstable/sql/SqlError";
+import * as Statement from "effect/unstable/sql/Statement";
 
 /**
- * The store's database as an `@effect/sql` client over Node's own
+ * The store's database as an `effect/unstable/sql` client over Node's own
  * `node:sqlite`. `@effect/sql-sqlite-node` wraps better-sqlite3, a native
  * module this build does not ship, so the client is built here from
  * `Client.make` and the library's own sqlite statement compiler over a

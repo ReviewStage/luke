@@ -1,8 +1,5 @@
 import type * as WorkerThreads from "node:worker_threads";
-import type { WorkerError } from "@effect/platform/WorkerError";
 import { NodeWorker } from "@effect/platform-node";
-import { type Rpc, RpcClient } from "@effect/rpc";
-import type { RpcClientError } from "@effect/rpc/RpcClientError";
 import { MemorySeamRefused, type NotebookMemoryStore } from "@sidecar/memory";
 import type { ChildStore } from "@sidecar/runtime";
 import type { ExecutionRuntime, SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
@@ -19,6 +16,9 @@ import {
   Runtime,
   Scope,
 } from "effect";
+import { type Rpc, RpcClient } from "effect/unstable/rpc";
+import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
+import type { WorkerError } from "effect/unstable/workers/WorkerError";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "../envelope.js";
 import { EnvelopeTracker } from "./envelope.js";
 import type { StoreSchemaRefused } from "./migration.js";

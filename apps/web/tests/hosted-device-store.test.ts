@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { forgetDevice, registerDevice, touchDevice } from "../server/hosted/device-store";
 import { testSqlClient } from "./support/sql-client";
 
@@ -58,7 +58,7 @@ const readDeviceByInstallation = (installationId: string) =>
     return yield* Schema.decodeUnknown(DeviceRowSchema)(rows[0]);
   });
 
-it.layer(testSqlClient)("the device seams over @effect/sql", (it) => {
+it.layer(testSqlClient)("the device seams over effect/unstable/sql", (it) => {
   it.effect("a first registration inserts the row under the account with the minted id", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

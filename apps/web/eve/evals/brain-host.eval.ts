@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
-import { Effect, Either, ManagedRuntime, Schema } from "effect";
+import { Effect, ManagedRuntime, Result, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { defineEval } from "eve/evals";
 import { Pool } from "pg";
 import {
@@ -149,7 +149,7 @@ export default defineEval({
         body: JSON.stringify({ message: "remember that I prefer short replies" }),
       });
       assert.equal(opened.status, 202);
-      const accepted = Either.getOrUndefined(
+      const accepted = Result.getOrUndefined(
         readEither(ACCEPTED_SESSION)(unparsedWire(await opened.json())),
       );
       assert.ok(accepted);

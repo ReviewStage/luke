@@ -1,7 +1,7 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type Layer, type ParseResult } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_KIND,
   type CloudAgentProviderId,

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import {
   ASK_ORIGIN,
   HOSTED_API_ERROR,
@@ -16,7 +15,8 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Runtime, Schema } from "effect";
+import { Effect, Result, Runtime, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
@@ -309,7 +309,7 @@ function parse<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 async function errorOf(response: Response): Promise<[number, string]> {

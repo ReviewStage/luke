@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as Client from "@effect/sql/SqlClient";
 import { describe, it } from "@effect/vitest";
 import {
   COMPACTION_SOURCE,
@@ -10,6 +9,7 @@ import {
   type TranscriptEvent,
 } from "@sidecar/runtime/vocabulary";
 import { Cause, Effect, Exit } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
 import { NOW, overStore } from "./testing.js";
 import {
   appendTranscriptEffect,

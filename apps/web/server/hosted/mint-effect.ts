@@ -1,5 +1,5 @@
-import { type HttpClient, HttpServerRequest, type HttpServerResponse } from "@effect/platform";
 import { Effect, Redacted } from "effect";
+import { type HttpClient, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { RealtimeConnection } from "../core.js";
 import { HostedEnvironment } from "./environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";

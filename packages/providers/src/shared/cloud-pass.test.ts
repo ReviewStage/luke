@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { describe, it } from "@effect/vitest";
 import {
   ACTION_KIND,
@@ -24,7 +23,9 @@ import {
   recordingHttpClient,
   runTest,
 } from "@sidecar/wire/testing";
-import { Cause, Duration, Effect, Exit, Fiber, type Layer, TestClock } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, type Layer } from "effect";
+import { TestClock } from "effect/testing";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import { ADAPTER_FAILURE } from "./adapter-failure.js";

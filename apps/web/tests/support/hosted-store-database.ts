@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { NodeContext } from "@effect/platform-node";
-import * as SqlClient from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
+import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
 import { Effect, Layer, ManagedRuntime } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { Pool } from "pg";
 import { runWebMigrations } from "../../server/db/effect-migrator";
 import { sqlClientOverPool } from "../../server/db/sql-client";
@@ -82,7 +82,7 @@ interface OpenedDatabase {
 async function openPglite(): Promise<OpenedDatabase> {
   const client = new PGlite();
   const sql = sqlClientOverPglite(client);
-  const migrationRuntime = ManagedRuntime.make(Layer.mergeAll(sql, NodeContext.layer));
+  const migrationRuntime = ManagedRuntime.make(Layer.mergeAll(sql, NodeServices.layer));
   try {
     await migrationRuntime.runPromise(runWebMigrations());
   } finally {

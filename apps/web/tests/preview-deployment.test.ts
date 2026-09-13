@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Exit, Fiber, Redacted, TestClock } from "effect";
+import { Effect, Exit, Fiber, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   DEPLOYMENT_STATE,

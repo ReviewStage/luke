@@ -1,6 +1,6 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
-import type { SqlClient } from "@effect/sql";
 import { Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { SqlClient } from "effect/unstable/sql";
 import { CONTEXT_ITEM_KIND, contextItemId, type ObservedSession } from "../core.js";
 import { observedSessionForResponse } from "./observe.js";
 import { remoteSessionContextText } from "./remote-context.js";

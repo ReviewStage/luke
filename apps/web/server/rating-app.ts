@@ -1,6 +1,6 @@
-import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
 import { handleMessageRating } from "./hosted/message-rating.js";
 import { rateMessage, storeWriter } from "./hosted/store/index.js";
@@ -25,7 +25,11 @@ type RatingServices = SqlClient.SqlClient;
  * be read to settle. The write it names no tool, so its writer stands over no
  * registry.
  */
-function ratingPassthrough(): HttpApp.Default<never, RatingServices> {
+function ratingPassthrough(): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  RatingServices | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
@@ -45,7 +49,11 @@ function ratingPassthrough(): HttpApp.Default<never, RatingServices> {
 }
 
 /** The group, over the one path this function's rewrite ever sends here. */
-export function ratingApp(): HttpApp.Default<never, RatingServices> {
+export function ratingApp(): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  RatingServices | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(RATING_PATH, ratingPassthrough()),
     Effect.catchTag("RouteNotFound", () =>

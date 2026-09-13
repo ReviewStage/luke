@@ -1,5 +1,3 @@
-import type { PlatformError } from "@effect/platform/Error";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   BRAIN_PREFETCH_MODEL,
   HostedEmbeddingAdapter,
@@ -20,6 +18,8 @@ import {
   type VoiceSource,
 } from "@sidecar/settings";
 import { Effect, type Layer } from "effect";
+import type { PlatformError } from "effect/PlatformError";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   HostedLiveSessionSource,
   keyedLiveSessions,

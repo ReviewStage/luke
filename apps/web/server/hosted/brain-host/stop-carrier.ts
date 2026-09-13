@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import { EVE_CANCEL_OUTCOME, type EveSessions } from "./eve-sessions.js";
 

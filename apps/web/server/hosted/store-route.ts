@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import type { Effect } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
 import { hostedUserId } from "./bearer.js";

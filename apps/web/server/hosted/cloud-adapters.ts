@@ -1,5 +1,5 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { Effect, Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { conductorPlugin } from "../../../../packages/providers/src/conductor/index.js";
 import type { CloudSessionPlugin } from "../../../../packages/providers/src/shared/cloud-pass.js";
 import type { CloudAgentProviderId, ProviderSessionObservation } from "../core.js";

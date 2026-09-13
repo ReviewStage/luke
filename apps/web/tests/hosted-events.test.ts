@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { SqlError } from "@effect/sql/SqlError";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
+import { SqlError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import {
   PRODUCT_EVENT,

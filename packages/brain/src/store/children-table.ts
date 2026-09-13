@@ -1,6 +1,3 @@
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
-import * as SqlSchema from "@effect/sql/SqlSchema";
 import {
   type ChildCompletionRecord,
   type ChildRunRecord,
@@ -9,6 +6,9 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { changedRows, columnsDecoded } from "./rows.js";
 
 /**

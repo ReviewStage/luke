@@ -11,7 +11,7 @@ import {
   readEither,
   verbatimJsonSchema,
 } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import { writtenText } from "./service-wire.js";
 
 /**
@@ -174,7 +174,7 @@ function admitted<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /** The value a `dropRefused` field admits: whatever the schema read, or nothing. */
@@ -195,7 +195,7 @@ function droppedMappedText<Mapped>(
   return declareReader<Mapped | undefined>(
     (value) => ({
       ok: true,
-      value: Either.match(read(value), { onLeft: () => undefined, onRight: map }),
+      value: Result.match(read(value), { onFailure: () => undefined, onSuccess: map }),
     }),
     emitJsonSchema(text),
   );

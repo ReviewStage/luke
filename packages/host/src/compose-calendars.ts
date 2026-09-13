@@ -1,4 +1,3 @@
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { PRODUCT_CALENDAR_SOURCE, PRODUCT_EVENT, PRODUCT_SETTING_VALUE } from "@sidecar/analytics";
 import {
   activeMeetingEnd,
@@ -27,7 +26,8 @@ import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Either, Fiber, Queue, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, Fiber, Queue, Result, Runtime, Schedule, Scope } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -458,9 +458,9 @@ export const composeCalendars = (
         // defect no `try` here would see, and one failed probe must not end
         // the poll the schedule is repeating.
         const probed = yield* Effect.either(appleCalendar.status());
-        const access = Either.getOrUndefined(probed);
-        if (Either.isLeft(probed) && !appleAccessProbeFailing) {
-          const error = probed.left;
+        const access = Result.getOrUndefined(probed);
+        if (Result.isFailure(probed) && !appleAccessProbeFailing) {
+          const error = probed.failure;
           report(
             `Calendar access probe failed: ${error instanceof Error ? error.message : String(error)}`,
           );

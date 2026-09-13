@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Chunk, Effect, type Scope, TestClock } from "effect";
+import { Chunk, Effect, type Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { detachOn } from "./effect/carry.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,

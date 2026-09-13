@@ -16,7 +16,8 @@
  * closure rather than a clock.
  */
 
-import { Chunk, Effect, TestClock } from "effect";
+import { Chunk, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import {
   answered,
   type BrainClientAnswer,

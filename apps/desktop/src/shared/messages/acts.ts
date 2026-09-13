@@ -52,7 +52,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import { isSessionIdentity, type SessionOpenResult } from "./session";
 import type { UpdateSnapshot } from "./update";
@@ -229,9 +229,9 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>):
   const read = readEither(schema);
   return {
     read: (value) =>
-      Either.match(read(value), {
-        onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-        onRight: (value) => ({ ok: true, value }),
+      Result.match(read(value), {
+        onFailure: ({ refusal, path }) => ({ ok: false, refusal, path }),
+        onSuccess: (value) => ({ ok: true, value }),
       }),
   };
 }
@@ -240,7 +240,7 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>):
 const isReadable =
   <Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>) =>
   (value: UnparsedWireValue): boolean =>
-    Either.isRight(readEither(schema)(value));
+    Result.isSuccess(readEither(schema)(value));
 
 /** A payload's field table as a struct, refusing a key it did not name. */
 function record<Fields extends EffectSchema.Struct.Fields>(
@@ -305,7 +305,7 @@ const isComposedMessage = (value: UnparsedWireValue): boolean =>
 
 /** A control's id as the roster advertised it, admitted as written so it matches the advertisement. */
 const isControlId = (value: UnparsedWireValue): boolean =>
-  Either.isRight(readEither(exactId)(value));
+  Result.isSuccess(readEither(exactId)(value));
 
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
@@ -575,7 +575,9 @@ export const ACT = {
   },
   [ACT_KIND.VOICE_STOP_SPEAKING]: {
     payload: noPayload,
-    result: wireResult<boolean>((value) => Either.isRight(readEither(EffectSchema.Boolean)(value))),
+    result: wireResult<boolean>((value) =>
+      Result.isSuccess(readEither(EffectSchema.Boolean)(value)),
+    ),
     refusal: "Could not tell Luke to stop speaking on this system.",
   },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {

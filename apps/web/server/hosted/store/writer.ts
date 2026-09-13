@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import {
   asSchema,
   type ReasoningUIPart,
@@ -11,6 +9,8 @@ import {
   type UITools,
 } from "ai";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type AssistantMessageMetadata,
   BRAIN_REQUEST_STATUS,

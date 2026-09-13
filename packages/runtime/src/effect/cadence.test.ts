@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Exit, Fiber, Schedule, Scope, TestClock } from "effect";
+import { Duration, Effect, Exit, Fiber, Schedule, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { cadenceGate } from "./cadence.js";
 
 it.effect("a disarm ends the fibers an arming forked from inside an uninterruptible region", () =>

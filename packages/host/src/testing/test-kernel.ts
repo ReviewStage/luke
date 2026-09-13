@@ -7,9 +7,9 @@
  * the same way it drives every other Effect timer.
  */
 
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { ConfigProvider, Layer } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import { type HostKernelTag, type HostService, hostKernelLayer } from "../effect/kernel.js";
 import {
   AppIdentity,

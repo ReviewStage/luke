@@ -1,7 +1,4 @@
 import { randomUUID } from "node:crypto";
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
-import * as SqlSchema from "@effect/sql/SqlSchema";
 import { maximumRememberedFacts } from "@sidecar/actions";
 import {
   appendNotebookEntry,
@@ -13,7 +10,10 @@ import {
   parseNotebook,
   removeNotebookEntry,
 } from "@sidecar/memory";
-import { Data, Effect, Either, Option, Schema } from "effect";
+import { Data, Effect, Option, Result, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { BRAIN_WORKSPACE_SEEDS } from "../workspace-seeds.js";
 import { columnsDecoded } from "./rows.js";
 import { readWorkspaceFileSync, writeWorkspaceFileSync } from "./workspace-files.js";
@@ -209,11 +209,11 @@ class NotebookRefusal extends Data.TaggedError("NotebookRefusal")<{
 }> {}
 
 function notebookMutationOf(
-  result: Either.Either<{ entries: readonly NotebookEntry[] }, NotebookRefusal>,
+  result: Result.Result<{ entries: readonly NotebookEntry[] }, NotebookRefusal>,
 ): NotebookMutation {
-  return Either.match(result, {
-    onLeft: (refusal) => ({ ok: false, entries: refusal.entries, reason: refusal.reason }),
-    onRight: ({ entries }) => ({ ok: true, entries }),
+  return Result.match(result, {
+    onFailure: (refusal) => ({ ok: false, entries: refusal.entries, reason: refusal.reason }),
+    onSuccess: ({ entries }) => ({ ok: true, entries }),
   });
 }
 
@@ -238,7 +238,7 @@ export const rememberNotebookEntryEffect = (
     const current = yield* reconcileNotebookEffect(root, now);
     if (!words)
       return notebookMutationOf(
-        Either.left(
+        Result.fail(
           new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.EMPTY, entries: current.entries }),
         ),
       );
@@ -247,7 +247,7 @@ export const rememberNotebookEntryEffect = (
       : undefined;
     if (ask.replaces !== undefined && !replaced) {
       return notebookMutationOf(
-        Either.left(
+        Result.fail(
           new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.UNKNOWN_ID, entries: current.entries }),
         ),
       );
@@ -258,7 +258,7 @@ export const rememberNotebookEntryEffect = (
     if (!duplicate) {
       if (!replaced && current.entries.length >= maximumRememberedFacts) {
         return notebookMutationOf(
-          Either.left(
+          Result.fail(
             new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.FULL, entries: current.entries }),
           ),
         );
@@ -266,7 +266,7 @@ export const rememberNotebookEntryEffect = (
       content = appendNotebookEntry(content, words);
     }
     if (content === current.content)
-      return notebookMutationOf(Either.right({ entries: current.entries }));
+      return notebookMutationOf(Result.succeed({ entries: current.entries }));
     const sql = yield* Client.SqlClient;
     const entries = yield* sql.withTransaction(
       Effect.gen(function* () {
@@ -278,7 +278,7 @@ export const rememberNotebookEntryEffect = (
         return yield* selectEntriesEffect;
       }),
     );
-    return notebookMutationOf(Either.right({ entries }));
+    return notebookMutationOf(Result.succeed({ entries }));
   });
 
 export const forgetNotebookEntryEffect = (
@@ -291,7 +291,7 @@ export const forgetNotebookEntryEffect = (
     const entry = current.entries.find((candidate) => candidate.id === id);
     if (!entry)
       return notebookMutationOf(
-        Either.left(
+        Result.fail(
           new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.UNKNOWN_ID, entries: current.entries }),
         ),
       );
@@ -305,7 +305,7 @@ export const forgetNotebookEntryEffect = (
         return yield* selectEntriesEffect;
       }),
     );
-    return notebookMutationOf(Either.right({ entries }));
+    return notebookMutationOf(Result.succeed({ entries }));
   });
 
 const personalFactRows = SqlSchema.findAll({

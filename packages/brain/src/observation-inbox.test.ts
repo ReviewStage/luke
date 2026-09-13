@@ -12,7 +12,8 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
-import { Effect, Fiber, TestClock } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {

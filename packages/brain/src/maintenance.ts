@@ -11,7 +11,7 @@ import {
   type MemoryDefinition,
   reserveTokens,
 } from "@sidecar/runtime/vocabulary";
-import { Data, Effect, Either, Fiber, Option } from "effect";
+import { Data, Effect, Fiber, Option, Result } from "effect";
 import { assessCompaction, COMPACTION_NEED, type CompactionAssessment } from "./compaction.js";
 import { whenAborted } from "./effect/settled.js";
 import { CONTEXT_OPENING } from "./generation.js";
@@ -171,8 +171,8 @@ export class Maintenance {
               countedTokens,
             ),
           );
-          if (Either.isLeft(compacted))
-            this.#seam.report(`Brain compaction did not complete: ${compacted.left.reason}`);
+          if (Result.isFailure(compacted))
+            this.#seam.report(`Brain compaction did not complete: ${compacted.failure.reason}`);
         }),
         Effect.sync(() => this.#options.holdTurnInFlight(false)),
       );
@@ -288,9 +288,9 @@ export class Maintenance {
       }
       const marked = yield* this.#writeFlushMarker(turnContext, cycle);
       if (Option.isNone(marked) || this.#revoked(turnContext)) return;
-      if (Either.isLeft(marked.value)) {
+      if (Result.isFailure(marked.value)) {
         this.#seam.report(
-          `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.left.reason}); the cycle stays unflushed and runs again at the next assessment`,
+          `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.failure.reason}); the cycle stays unflushed and runs again at the next assessment`,
         );
         return;
       }
@@ -335,13 +335,13 @@ export class Maintenance {
         }),
       );
       if (this.#revoked(turnContext)) return false;
-      if (Either.isLeft(read)) {
+      if (Result.isFailure(read)) {
         this.#seam.report(
-          `Memory flush marker could not be read (${read.left.reason}); the flush waits for the next assessment`,
+          `Memory flush marker could not be read (${read.failure.reason}); the flush waits for the next assessment`,
         );
         return false;
       }
-      generation.flush = { read: true, lastCompactionCount: read.right };
+      generation.flush = { read: true, lastCompactionCount: read.success };
       return true;
     });
   }
@@ -357,9 +357,9 @@ export class Maintenance {
   #writeFlushMarker(
     turnContext: Pick<TurnContext, "generation" | "signal">,
     cycle: number,
-  ): Effect.Effect<Option.Option<Either.Either<void, FlushMarkerWriteFailed>>> {
+  ): Effect.Effect<Option.Option<Result.Result<void, FlushMarkerWriteFailed>>> {
     const store = this.#options.flushMarker;
-    if (!store) return Effect.succeed(Option.some(Either.right(undefined)));
+    if (!store) return Effect.succeed(Option.some(Result.succeed(undefined)));
     return Effect.gen(this, function* () {
       const { generation, signal } = turnContext;
       // The attempt is a daemon, so the turn ending — of its own accord or
@@ -371,7 +371,7 @@ export class Maintenance {
           Effect.either(writeFlushMarkerEffect(store, generation.id, cycle, signal)),
           (outcome) =>
             Effect.sync(() => {
-              if (Either.isRight(outcome)) generation.flush.lastCompactionCount = cycle;
+              if (Result.isSuccess(outcome)) generation.flush.lastCompactionCount = cycle;
             }),
         ),
       );

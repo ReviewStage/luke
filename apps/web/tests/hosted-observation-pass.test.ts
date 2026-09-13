@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { SESSION_STATUS } from "@sidecar/session";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Layer } from "effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { test } from "vitest";
 import {
   fakeConductorApi,

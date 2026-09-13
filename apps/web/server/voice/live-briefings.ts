@@ -1,8 +1,8 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { BriefingDelivery } from "@sidecar/voice/live-session";
 import type { ToolSet } from "ai";
 import { Cause, Duration, Effect, type ParseResult, Schedule, type Scope } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { briefingWordsOf } from "../hosted/briefing-words.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import {

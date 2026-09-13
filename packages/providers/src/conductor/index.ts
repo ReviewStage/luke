@@ -1,6 +1,6 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { type ProviderSessionObservation, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
 import type { Effect, Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
 import { conductorActions } from "./actions.js";

@@ -1,6 +1,6 @@
-import { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, Effect, Option, type ParseResult } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { BrainWakeEvent, SessionIdentity } from "../../core.js";
 import { holdReleasedInputText, TURN_ORIGIN, wakeInputText } from "../../core.js";
 import { OBSERVATION_TICK } from "../observation-bounds.js";

@@ -1,12 +1,11 @@
+import { Effect, Redacted } from "effect";
 import {
-  type HttpApp,
   type HttpMethod,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
-import { Effect, Redacted } from "effect";
+} from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   type HostedActionEffect,
   handleAgentAction,
@@ -100,7 +99,13 @@ const actionEncryptionSecret: Effect.Effect<string | undefined, never, HostedEnv
  * runs on this group's fiber and reads the connection the edge already
  * opened; a failed statement is a defect here, as a rejected promise was.
  */
-function actionPassthrough(handle: HostedActionHandler): HttpApp.Default<never, ActionsServices> {
+function actionPassthrough(
+  handle: HostedActionHandler,
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  ActionsServices | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
@@ -119,7 +124,11 @@ function actionPassthrough(handle: HostedActionHandler): HttpApp.Default<never, 
  */
 export function buildActionsApp(
   handlers: ActionsGroupHandlers,
-): HttpApp.Default<never, ActionsServices> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  ActionsServices | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(ACTIONS_ROUTE_PATH.MESSAGE, actionPassthrough(handlers.message)),
     HttpRouter.all(ACTIONS_ROUTE_PATH.CONTROL, actionPassthrough(handlers.control)),
@@ -137,7 +146,11 @@ export function buildActionsApp(
 }
 
 /** The deployment's own group, wired to the real endpoints every route file answered with before. */
-export function actionsApp(): HttpApp.Default<never, ActionsServices> {
+export function actionsApp(): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  ActionsServices | HttpServerRequest.HttpServerRequest
+> {
   return buildActionsApp({
     message: handleMessageAction,
     control: handleControlAction,

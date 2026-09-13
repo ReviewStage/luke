@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import {
   type BrainTurnsAnswer,
@@ -38,7 +37,8 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, Either } from "effect";
+import { Effect, Schema as EffectSchema, Result } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, type StoredUIMessage } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
@@ -267,15 +267,16 @@ async function answered<Value, Encoded>(
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
   const body = (await response.json()) as UnparsedWireValue;
   const read = readEither(schema)(body);
-  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
-  return read.right;
+  if (Result.isFailure(read))
+    assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
+  return read.success;
 }
 
 function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /**

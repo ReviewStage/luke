@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { SqlClient } from "@effect/sql";
-import { SqlError } from "@effect/sql/SqlError";
 import { Effect, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import { SqlError } from "effect/unstable/sql/SqlError";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,

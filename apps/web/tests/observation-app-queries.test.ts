@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { CLOUD_AGENT_PROVIDER_ID } from "../server/core";
 import { testSqlClient } from "./support/sql-client";
 
@@ -66,7 +66,7 @@ const insertObservationPass = (userId: string, attemptedAt: Date) =>
     `;
   });
 
-it.layer(testSqlClient)("observation-app's own queries over @effect/sql", (it) => {
+it.layer(testSqlClient)("observation-app's own queries over effect/unstable/sql", (it) => {
   it.effect("reads the signed-in user's own name and email", () =>
     Effect.gen(function* () {
       const userId = yield* openUser("Ada Lovelace");

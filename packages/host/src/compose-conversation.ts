@@ -1,5 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import { catalogToolSet } from "@sidecar/brain/tool-set";
 import {
@@ -31,7 +29,9 @@ import type {
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Effect, Either } from "effect";
+import { Deferred, Effect, Result } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { DevicesComposer } from "./compose-devices.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -368,9 +368,9 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     [GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(conversationRateMessageParamsSchema)(unparsedWire(params));
-        if (Either.isLeft(read))
+        if (Result.isFailure(read))
           return yield* invalid("a rating names one message and one verdict");
-        const { messageId, rating } = read.right;
+        const { messageId, rating } = read.success;
         // A rating names the device it came from, so before this installation's
         // row is registered there is nothing to send one as.
         const deviceId = devices.deviceId();

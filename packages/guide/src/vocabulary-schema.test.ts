@@ -17,7 +17,7 @@ import {
   SessionListSortSchema,
 } from "@sidecar/guide";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import { test } from "vitest";
 
 const NOTHING_ANY_VOCABULARY_HOLDS: readonly UnparsedWireValue[] = [
@@ -37,9 +37,9 @@ function settlesVocabulary<Member extends string>(
   alsoRefused: readonly UnparsedWireValue[] = [],
 ): void {
   const decode = Schema.decodeUnknownEither(schema);
-  for (const member of members) assert.deepEqual(decode(member), Either.right(member));
+  for (const member of members) assert.deepEqual(decode(member), Result.succeed(member));
   for (const refused of [...NOTHING_ANY_VOCABULARY_HOLDS, ...alsoRefused]) {
-    assert.equal(Either.isLeft(decode(refused)), true);
+    assert.equal(Result.isFailure(decode(refused)), true);
   }
 }
 

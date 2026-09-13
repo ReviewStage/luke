@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { auth } from "../../auth.js";
 import { type CloudAgentProviderId, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import type { WebStoreRun } from "../../runtime.js";

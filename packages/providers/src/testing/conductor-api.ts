@@ -1,8 +1,8 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { ProviderSessionObservation, SessionProviderPlugin } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import { Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { conductorPlugin } from "../conductor/index.js";
 
 /**

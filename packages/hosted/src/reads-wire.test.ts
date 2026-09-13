@@ -18,7 +18,7 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
   brainTurnsAnswerSchema,
@@ -64,15 +64,16 @@ function expectRead<Value, Encoded>(
   value: UnparsedWireValue,
 ): Value {
   const read = readEither(schema)(value);
-  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
-  return read.right;
+  if (Result.isFailure(read))
+    assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
+  return read.success;
 }
 
 function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 test("a sequence cursor round-trips in one canonical string whatever order its positions arrived in", () => {
@@ -126,9 +127,9 @@ test("a sequence cursor this build did not mint the shape of is refused, naming 
   const encode = (value: WireValue) =>
     Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
   const refusalOf = (value: UnparsedWireValue) =>
-    Either.match(readEither(sequenceReadCursorSchema)(value), {
-      onLeft: (refused) => refused.refusal,
-      onRight: () => undefined,
+    Result.match(readEither(sequenceReadCursorSchema)(value), {
+      onFailure: (refused) => refused.refusal,
+      onSuccess: () => undefined,
     });
   assert.equal(refusalOf(undefined), SCHEMA_REFUSAL.MALFORMED);
   assert.equal(refusalOf("not base64url!"), SCHEMA_REFUSAL.MALFORMED);
@@ -182,11 +183,11 @@ test("a turn cursor keeps the store's microsecond instant and the id whole", () 
   const cursor = { changedAt: "2026-09-10 12:00:00.000500+00", id: TURN };
   assert.deepEqual(parse(turnReadCursorSchema, encodeTurnReadCursor(cursor)), cursor);
   const refusalOf = (value: WireValue) =>
-    Either.match(
+    Result.match(
       readEither(turnReadCursorSchema)(
         Buffer.from(JSON.stringify(value), "utf8").toString("base64url"),
       ),
-      { onLeft: (refused) => refused.refusal, onRight: () => undefined },
+      { onFailure: (refused) => refused.refusal, onSuccess: () => undefined },
     );
   assert.equal(refusalOf({ changedAt: 1757505600000, id: TURN }), SCHEMA_REFUSAL.MALFORMED);
   assert.equal(
