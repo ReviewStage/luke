@@ -13,6 +13,7 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../../live.js";
 import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";
 import {
   type ConversationTarget,
+  SPOKEN_LINE_BOUNDARY,
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriter,
@@ -483,9 +484,13 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       const voiceSessionId = voiceSession.value.id;
       // The line the delegation is about, where one settled undelegated before it: the latest
       // developer line ending at or before the offset. A delegation told twice finds its own.
+      // The line is found by where it starts: the API may place the delegation's offset before
+      // the line's last fragment ended, and the line is the delegation's all the same, so the cut
+      // then runs to the line's end rather than stopping at the offset.
       const latest = yield* store.latestSpokenLine(target.conversation, {
         voiceSessionId,
-        endingAtOrBeforeMs: created.offset_ms,
+        boundary: SPOKEN_LINE_BOUNDARY.START,
+        atOrBeforeMs: created.offset_ms,
       });
       if (!latest.ok) return { ok: false, refusal: latest.refusal };
       if (latest.line?.clientId === created.delegation.id) return REPEATED;
@@ -504,6 +509,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
               endMs: created.offset_ms - 1,
             });
       const adopting = answered.length === 0 ? candidate : undefined;
+      const cutEndMs = Math.max(created.offset_ms, adopting?.toMs ?? created.offset_ms);
       // The cut starts where the developer's last written words end — the previous ask's, or the
       // last undelegated line's other than the one being adopted, whose own words the cut
       // includes again with whatever joined or followed them before the delegation.
@@ -516,7 +522,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       const spoken = yield* findSpokenSegments({
         voiceSessionId,
         fromMs: previous.toMs,
-        toMs: created.offset_ms,
+        toMs: cutEndMs,
       });
       const text = spoken.map((segment) => segment.text).join("");
       if (text.length === 0) return IGNORED;
@@ -526,7 +532,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         voice_session_id: voiceSessionId,
         delegation_id: created.delegation.id,
         from_ms: Math.min(...spoken.map((segment) => segment.startMs)),
-        to_ms: created.offset_ms,
+        to_ms: cutEndMs,
       };
       if (adopting !== undefined) {
         const adopted = yield* store.adoptSpokenLine(target.conversation, {
@@ -621,7 +627,8 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       const voiceSessionId = voiceSession.value.id;
       const latest = yield* store.latestSpokenLine(target.conversation, {
         voiceSessionId,
-        endingAtOrBeforeMs: utterance.startMs,
+        boundary: SPOKEN_LINE_BOUNDARY.END,
+        atOrBeforeMs: utterance.startMs,
       });
       if (!latest.ok) return { ok: false, refusal: latest.refusal };
       if (latest.line === undefined || latest.line.delegated) return IGNORED;

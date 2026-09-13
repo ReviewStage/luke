@@ -791,3 +791,42 @@ test("Luke's later speech is not his answer: once he has spoken after the develo
     [MESSAGE_ROLE.USER],
   );
 });
+
+test("a delegation whose offset falls before the settled line's last fragment ended is still about that line: adopted whole, its span running to the line's end", async () => {
+  const live = await target();
+  const voice = writer();
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  await database.run(voice.consume(live, heard("Open the failing", 1000, 2200)));
+  await database.run(voice.consume(live, heard(" one.", 2100, 2600)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2600 })),
+    WRITTEN,
+  );
+  // The API places the delegation at an offset inside the utterance, before its last fragment ended.
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_early", 2400))), WRITTEN);
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_early", 2400))), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.REPEATED,
+  });
+  const rows = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.clientId, row.parts, row.metadata]),
+    [
+      [
+        "dl_early",
+        [{ type: "text", text: "Open the failing one.", state: "done" }],
+        {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: voiceSessionId,
+          delegation_id: "dl_early",
+          from_ms: 1000,
+          to_ms: 2600,
+        },
+      ],
+    ],
+  );
+});
