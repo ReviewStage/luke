@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { ADMIN_TREND_DAYS, lastNDayKeys } from "../server/admin/admin-metrics";
 import {
@@ -16,6 +17,11 @@ import {
   type AdminMetricsWindow,
   adminUserId,
 } from "../server/admin/http";
+import { runWithoutDatabase } from "./support/no-database";
+
+/** One read answered the way a function answers it, over a client that refuses every statement. */
+const answer = (options: Parameters<typeof handleAdminUser>[0]) =>
+  runWithoutDatabase(handleAdminUser(options));
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -210,29 +216,31 @@ function userRequest(id: string | null = "user-9", method = "GET"): Request {
   return new Request(`https://luke.test/api/admin/user${query}`, { method });
 }
 
-const readUser = async (
+const readUser = (
   userId: string,
   now: number,
   windowDays: AdminMetricsWindow = ADMIN_METRICS_WINDOW_DEFAULT,
-): Promise<AdminUserDetail | undefined> =>
-  userId === "user-9" ? buildAdminUserDetail(userSource(), now, windowDays) : undefined;
+): Effect.Effect<AdminUserDetail | undefined> =>
+  Effect.succeed(
+    userId === "user-9" ? buildAdminUserDetail(userSource(), now, windowDays) : undefined,
+  );
 
 test("the read answers 400, 404, and 200 as distinct outcomes", async () => {
-  const unnamed = await handleAdminUser({
+  const unnamed = await answer({
     request: userRequest(null),
     readUser,
   });
   assert.equal(unnamed.status, 400);
   assert.equal((await unnamed.json()).error, ADMIN_ERROR.MISSING_USER_ID);
 
-  const missing = await handleAdminUser({
+  const missing = await answer({
     request: userRequest("user-gone"),
     readUser,
   });
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).error, ADMIN_ERROR.USER_NOT_FOUND);
 
-  const ok = await handleAdminUser({
+  const ok = await answer({
     request: userRequest(),
     readUser,
     now: () => NOON_UTC,
@@ -247,12 +255,13 @@ test("the read answers 400, 404, and 200 as distinct outcomes", async () => {
 
 test("the account is read at the window the request asked for; outside the set is a 400", async () => {
   const windows: AdminMetricsWindow[] = [];
-  const countingRead = async (userId: string, now: number, windowDays: AdminMetricsWindow) => {
-    windows.push(windowDays);
-    return readUser(userId, now, windowDays);
-  };
+  const countingRead = (userId: string, now: number, windowDays: AdminMetricsWindow) =>
+    Effect.suspend(() => {
+      windows.push(windowDays);
+      return readUser(userId, now, windowDays);
+    });
   const respond = (query: string) =>
-    handleAdminUser({
+    answer({
       request: new Request(
         `https://luke.test/api/admin/user?${ADMIN_USER_ID_PARAM}=user-9${query}`,
       ),
@@ -273,19 +282,20 @@ test("the account is read at the window the request asked for; outside the set i
 
 test("no account is read for a request that names none", async () => {
   const reads: string[] = [];
-  const countingRead = async (userId: string, now: number) => {
-    reads.push(userId);
-    return readUser(userId, now);
-  };
+  const countingRead = (userId: string, now: number) =>
+    Effect.suspend(() => {
+      reads.push(userId);
+      return readUser(userId, now);
+    });
 
-  const unnamed = await handleAdminUser({
+  const unnamed = await answer({
     request: userRequest(null),
     readUser: countingRead,
   });
   assert.equal(unnamed.status, 400);
   assert.deepEqual(reads, []);
 
-  const ok = await handleAdminUser({
+  const ok = await answer({
     request: userRequest(),
     readUser: countingRead,
   });
@@ -294,11 +304,9 @@ test("no account is read for a request that names none", async () => {
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const readThrew = await handleAdminUser({
+  const readThrew = await answer({
     request: userRequest(),
-    readUser: async () => {
-      throw new Error("database is down");
-    },
+    readUser: () => Effect.die(new Error("database is down")),
   });
   assert.equal(readThrew.status, 503);
   assert.equal((await readThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);

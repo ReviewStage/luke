@@ -1,3 +1,5 @@
+import type { SqlClient } from "@effect/sql";
+import { Effect } from "effect";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
@@ -15,6 +17,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "./http.js";
+import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * One account's own page behind the overview's table, answering the question
@@ -170,7 +173,7 @@ export interface AdminUserOptions {
     userId: string,
     now: number,
     windowDays: AdminMetricsWindow,
-  ) => Promise<AdminUserDetail | undefined>;
+  ) => AdminSeamEffect<AdminUserDetail | undefined>;
   now?: () => number;
 }
 
@@ -182,28 +185,30 @@ export interface AdminUserOptions {
  * a 404 the page can word as the account being gone rather than the service
  * being down.
  */
-export async function handleAdminUser(options: AdminUserOptions): Promise<Response> {
+export function handleAdminUser(
+  options: AdminUserOptions,
+): Effect.Effect<Response, never, SqlClient.SqlClient> {
   const { request } = options;
 
   const userId = adminUserId(request.url);
   if (userId === undefined) {
-    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID);
+    return Effect.succeed(
+      errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID),
+    );
   }
 
   const windowDays = adminMetricsWindow(request.url);
   if (windowDays === undefined) {
-    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW);
+    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
   }
 
   const now = (options.now ?? Date.now)();
-  try {
-    const detail = await options.readUser(userId, now, windowDays);
-    if (detail === undefined) {
-      return errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND);
-    }
-    return jsonResponse(ADMIN_HTTP_STATUS.OK, detail);
-  } catch (error) {
-    console.error("admin user read failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
+  return options.readUser(userId, now, windowDays).pipe(
+    Effect.map((detail) =>
+      detail === undefined
+        ? errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND)
+        : jsonResponse(ADMIN_HTTP_STATUS.OK, detail),
+    ),
+    Effect.catchAllCause((cause) => unavailableSeam("admin user read failed", cause)),
+  );
 }

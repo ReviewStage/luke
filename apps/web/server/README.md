@@ -263,7 +263,12 @@ on it whole, each of its five methods answering an effect over the live
 session row rather than running one. `VoiceService` yields those five
 directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
 `voice/function.ts` hands it, so the registration, the usage snapshot, and the
-close are steps of that effect rather than promises a callback awaited.
+close are steps of that effect rather than promises a callback awaited. The
+three meters of `server/voice/accounts.ts` — the account's spend, the
+introduction's, and a closed session's seconds — are on it on the same terms,
+so the session yields each on its own fiber and a statement any of them was
+refused on ends that session the way its own row failing does, rather than
+becoming a rejected promise the service had to catch.
 `hostedStore()` takes the payload key ring and nothing else, and answers an
 `Effect<A, SqlError | ParseError, SqlClient>` from every method, so the caller
 composes a store read into whatever it already runs. A route group's own seams are effects
@@ -273,8 +278,9 @@ operation spends — so the group yields the seam on the request's own fiber
 and the edge that serves the request is the one place the client behind it is
 provided. What still holds a runner is everything a route composes apart from
 the store and that still hands a promise up — the writers, the speech module,
-the ask record, the brain host's own seams, the admin dashboard's queries, and
-the store route's own secret read — each handed its edge's own, `runWeb` in a
+the ask record, the brain host's two seams the eve project reaches through a
+promise of its own, and the store route's own secret read — each handed its
+edge's own, `runWeb` in a
 function and the store tests'
 runtime in a test; the conversation row lock every write runs under is the
 client's own transaction. What the layer does need at build
@@ -521,13 +527,19 @@ rather than a crash, an anonymous request is a 401 the page answers with a
 sign-in, and a signed-in non-admin is a 403 it answers with a plain refusal —
 and takes the resolver rather than reaching for it, because the real one is
 Better Auth and a gate this much depends on has to be exercisable without a
-database. Each read still answers for its own parameters and its own body,
+database. The resolver answers an effect, so the one promise behind it is
+`getSession`'s own, wrapped with `Effect.tryPromise` where
+`server/admin/admin-route.ts` builds the seam and nowhere in the gate; a
+resolution that failed, however it failed, is the same 503. Each read still answers for its own parameters and its own body,
 and the group carries that answer as it came, status, headers, and bytes, the
 way the auth group carries Better Auth's. `server/admin/admin-route.ts` is
 the one place that hands the group this deployment's real session resolver,
 database, and integration presence booleans. Every query behind it is an
-effect over the ambient `SqlClient`, run at the edge like every other
-converted read, so the file names no database at all: the roster's scope and
+effect over the ambient `SqlClient`, and so is every seam the group is handed
+(`AdminSeamEffect` in `server/admin/seam.ts`): each read composes its query
+into the answer it is already building, and the edge serving the request is
+the one place the client behind it is provided, so the file names no database
+and runs nothing at all: the roster's scope and
 search conditions are `sql` fragments rather than concatenated text, and the
 search term stays a bound parameter with its own wildcards escaped.
 `tests/admin-metrics-queries.test.ts` pins the overview's aggregates for a

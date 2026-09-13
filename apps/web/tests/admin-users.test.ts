@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import {
@@ -22,6 +23,11 @@ import {
   type AdminMetricsScope,
   type AdminMetricsWindow,
 } from "../server/admin/http";
+import { runWithoutDatabase } from "./support/no-database";
+
+/** One read answered the way a function answers it, over a client that refuses every statement. */
+const answer = (options: Parameters<typeof handleAdminUsers>[0]) =>
+  runWithoutDatabase(handleAdminUsers(options));
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -109,11 +115,11 @@ function usersRequest(method = "GET", query = ""): Request {
 
 const ADMIN_VIEWER: AdminViewer = { userId: "user-1", role: "admin" };
 
-const readUsers = async (now: number): Promise<AdminUserList> =>
-  buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT, undefined);
+const readUsers = (now: number) =>
+  Effect.succeed(buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT, undefined));
 
 test("the read answers a whole roster past the gate", async () => {
-  const ok = await handleAdminUsers({
+  const ok = await answer({
     request: usersRequest(),
     viewer: ADMIN_VIEWER,
     readUsers,
@@ -131,20 +137,21 @@ test("the roster is read at the scope and window the request asked for, as the v
   const scopes: AdminMetricsScope[] = [];
   const viewerIds: string[] = [];
   const windows: AdminMetricsWindow[] = [];
-  const countingRead = async (
+  const countingRead = (
     now: number,
     scope: AdminMetricsScope,
     viewerId: string,
     windowDays: AdminMetricsWindow,
     search: string | undefined,
-  ): Promise<AdminUserList> => {
-    scopes.push(scope);
-    viewerIds.push(viewerId);
-    windows.push(windowDays);
-    return buildAdminUserList(listSource(), now, windowDays, search);
-  };
+  ) =>
+    Effect.sync(() => {
+      scopes.push(scope);
+      viewerIds.push(viewerId);
+      windows.push(windowDays);
+      return buildAdminUserList(listSource(), now, windowDays, search);
+    });
   const respond = (request: Request) =>
-    handleAdminUsers({ request, viewer: ADMIN_VIEWER, readUsers: countingRead });
+    answer({ request, viewer: ADMIN_VIEWER, readUsers: countingRead });
 
   assert.equal((await respond(usersRequest())).status, 200);
   const widened = usersRequest("GET", `?${ADMIN_METRICS_SCOPE_PARAM}=${ADMIN_METRICS_SCOPE.ALL}`);
@@ -174,18 +181,19 @@ test("the roster is read at the scope and window the request asked for, as the v
 
 test("the roster is searched by the term the request carried, trimmed, and only a real one", async () => {
   const searches: (string | undefined)[] = [];
-  const countingRead = async (
+  const countingRead = (
     now: number,
     _scope: AdminMetricsScope,
     _viewerId: string,
     windowDays: AdminMetricsWindow,
     search: string | undefined,
-  ): Promise<AdminUserList> => {
-    searches.push(search);
-    return buildAdminUserList(listSource({ total: 3 }), now, windowDays, search);
-  };
+  ) =>
+    Effect.sync(() => {
+      searches.push(search);
+      return buildAdminUserList(listSource({ total: 3 }), now, windowDays, search);
+    });
   const respond = (query: string) =>
-    handleAdminUsers({
+    answer({
       request: usersRequest("GET", query),
       viewer: ADMIN_VIEWER,
       readUsers: countingRead,
@@ -209,12 +217,13 @@ test("the roster is searched by the term the request carried, trimmed, and only 
 
 test("a term past the length bound is a 400 refusal that reaches no read", async () => {
   let reads = 0;
-  const countingRead = async (now: number): Promise<AdminUserList> => {
-    reads += 1;
-    return buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT, undefined);
-  };
+  const countingRead = (now: number) =>
+    Effect.sync(() => {
+      reads += 1;
+      return buildAdminUserList(listSource(), now, ADMIN_METRICS_WINDOW_DEFAULT, undefined);
+    });
   const respond = (term: string) =>
-    handleAdminUsers({
+    answer({
       request: usersRequest("GET", `?${ADMIN_USERS_SEARCH_PARAM}=${encodeURIComponent(term)}`),
       viewer: ADMIN_VIEWER,
       readUsers: countingRead,
@@ -231,12 +240,10 @@ test("a term past the length bound is a 400 refusal that reaches no read", async
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const readThrew = await handleAdminUsers({
+  const readThrew = await answer({
     request: usersRequest(),
     viewer: ADMIN_VIEWER,
-    readUsers: async () => {
-      throw new Error("database is down");
-    },
+    readUsers: () => Effect.die(new Error("database is down")),
   });
   assert.equal(readThrew.status, 503);
   assert.equal((await readThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);

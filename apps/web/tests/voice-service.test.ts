@@ -424,7 +424,7 @@ test("session.closed is forwarded, its seconds reported exactly once, and both e
 test("a seconds report that throws still finalizes the session: both ends are closed and the session is reported ended", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
-  context.accounts.recordSeconds = () => Promise.reject(new Error("the ledger is not reachable"));
+  context.accounts.recordSeconds = () => Effect.die(new Error("the ledger is not reachable"));
   const { desktop, upstream, created } = await openSession(context);
 
   await sendText(

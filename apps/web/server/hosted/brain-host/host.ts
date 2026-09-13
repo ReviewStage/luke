@@ -221,26 +221,41 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     }
   >();
   const vaults = new Map<string, string>();
-  const pluginFor = (userId: string) => (providerId: CloudAgentProviderId) => {
-    const vault = vaults.get(userId) ?? "";
-    let held = plugins.get(userId);
-    if (held === undefined || held.vault !== vault) {
-      held = { vault, byProvider: new Map() };
-      plugins.set(userId, held);
-    }
-    const standing = held.byProvider.get(providerId);
-    if (standing) return standing;
-    const plugin = cloudSessionPluginFor(providerId, {
-      readApiKey: () => Effect.promise(() => seams.providerKey(userId, providerId)),
-      reported: () =>
-        (rosters.get(userId) ?? EMPTY_HOSTED_ROSTER).observations.get(providerId) ?? [],
-    });
-    held.byProvider.set(providerId, plugin);
-    return plugin;
-  };
+  /**
+   * The plugins an account's tools reach, built over the request's own client:
+   * the key each opens is a vault read, and the plugin interface answers
+   * `Effect<A, never, never>`, so the client is provided where the plugin is
+   * built and a row the service cannot read dies rather than becoming a key
+   * that is merely absent.
+   */
+  const pluginFor =
+    (userId: string, client: SqlClient.SqlClient) => (providerId: CloudAgentProviderId) => {
+      const vault = vaults.get(userId) ?? "";
+      let held = plugins.get(userId);
+      if (held === undefined || held.vault !== vault) {
+        held = { vault, byProvider: new Map() };
+        plugins.set(userId, held);
+      }
+      const standing = held.byProvider.get(providerId);
+      if (standing) return standing;
+      const plugin = cloudSessionPluginFor(providerId, {
+        readApiKey: () =>
+          Effect.orDie(
+            Effect.provideService(
+              seams.providerKey(userId, providerId),
+              SqlClient.SqlClient,
+              client,
+            ),
+          ),
+        reported: () =>
+          (rosters.get(userId) ?? EMPTY_HOSTED_ROSTER).observations.get(providerId) ?? [],
+      });
+      held.byProvider.set(providerId, plugin);
+      return plugin;
+    };
   const rosterOf = (userId: string): HostEffect<HostedRoster> =>
     Effect.gen(function* () {
-      const rows = yield* Effect.promise(() => seams.vaultRows(userId));
+      const rows = yield* seams.vaultRows(userId);
       // The vault as it stands, by its sealed rows: a rotated or removed key
       // changes it, and the plugins bound to the old key go with it.
       vaults.set(
@@ -341,7 +356,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           client,
           userId,
           roster,
-          pluginFor: pluginFor(userId),
+          pluginFor: pluginFor(userId, client),
           now: seams.now,
         });
         const carrier = hostedActionCarrier({
@@ -351,7 +366,14 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
               Effect.provideService(readWorkspaceDefaults(userId), SqlClient.SqlClient, client),
             ),
           facts: hostedFactsWriter(client, seams.store(), userId, seams.now),
-          apiKey: (providerId) => Effect.promise(() => seams.providerKey(userId, providerId)),
+          apiKey: (providerId) =>
+            Effect.orDie(
+              Effect.provideService(
+                seams.providerKey(userId, providerId),
+                SqlClient.SqlClient,
+                client,
+              ),
+            ),
           execute: seams.executeAction,
         });
         return yield* runHostedTool(

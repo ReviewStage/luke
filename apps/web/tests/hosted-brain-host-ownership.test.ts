@@ -108,7 +108,7 @@ function hostOverTestDatabase(): TestHost {
     openAi: () => undefined,
     scriptedModel: () => false,
     spend: unreached("spend"),
-    vaultRows: async () => [],
+    vaultRows: () => Effect.succeed([]),
     vaultSecret: () => TEST_VAULT_SECRET,
     providerKey: unreached("providerKey"),
     executeAction: unreached("executeAction"),

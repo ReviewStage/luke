@@ -37,9 +37,9 @@ const voiceUserInfo: UserInfoEndpoint = (input) =>
 
 const deploymentAccounts: VoiceAccounts = {
   resolveUserId: (authorization) => userIdForAuthorization(authorization, voiceUserInfo),
-  spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
-  spendIntroduction: () => runWeb(spendIntroductionMeter({ now: Date.now() })),
-  recordSeconds: (input) => runWeb(recordVoiceSeconds({ ...input, now: Date.now() })),
+  spend: (userId) => Effect.suspend(() => spendHostedMeter({ userId, now: Date.now() })),
+  spendIntroduction: () => Effect.suspend(() => spendIntroductionMeter({ now: Date.now() })),
+  recordSeconds: (input) => Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
 };
 
 let standing: VoiceServer | undefined;

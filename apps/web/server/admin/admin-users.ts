@@ -1,3 +1,5 @@
+import type { SqlClient } from "@effect/sql";
+import { Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
 import {
   ADMIN_ERROR,
@@ -10,6 +12,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "./http.js";
+import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * The whole account roster behind the Users tab, one row per user row the
@@ -127,7 +130,7 @@ export interface AdminUsersOptions {
     viewerId: string,
     windowDays: AdminMetricsWindow,
     search: string | undefined,
-  ) => Promise<AdminUserList>;
+  ) => AdminSeamEffect<AdminUserList>;
   now?: () => number;
 }
 
@@ -136,33 +139,26 @@ export interface AdminUsersOptions {
  * stands behind, at the same scope and window vocabulary: the Users tab hides
  * admin accounts by default the way every dashboard count does.
  */
-export async function handleAdminUsers(options: AdminUsersOptions): Promise<Response> {
+export function handleAdminUsers(
+  options: AdminUsersOptions,
+): Effect.Effect<Response, never, SqlClient.SqlClient> {
   const { request } = options;
 
   const windowDays = adminMetricsWindow(request.url);
   if (windowDays === undefined) {
-    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW);
+    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
   }
 
   const search = adminUsersSearch(request.url);
   if (search === undefined) {
-    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_SEARCH);
+    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_SEARCH));
   }
 
   const now = (options.now ?? Date.now)();
-  try {
-    return jsonResponse(
-      ADMIN_HTTP_STATUS.OK,
-      await options.readUsers(
-        now,
-        adminMetricsScope(request.url),
-        options.viewer.userId,
-        windowDays,
-        search.term,
-      ),
+  return options
+    .readUsers(now, adminMetricsScope(request.url), options.viewer.userId, windowDays, search.term)
+    .pipe(
+      Effect.map((users) => jsonResponse(ADMIN_HTTP_STATUS.OK, users)),
+      Effect.catchAllCause((cause) => unavailableSeam("admin users read failed", cause)),
     );
-  } catch (error) {
-    console.error("admin users read failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
 }

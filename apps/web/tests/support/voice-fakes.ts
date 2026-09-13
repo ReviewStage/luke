@@ -192,19 +192,25 @@ export function fakeAccounts(): FakeAccounts {
         return authorization === fake.knownBearer ? FAKE_USER_ID : undefined;
       });
     },
-    async spend(userId) {
-      fake.spent.push(userId);
-      return fake.spendAnswer;
+    spend(userId) {
+      return Effect.sync(() => {
+        fake.spent.push(userId);
+        return fake.spendAnswer;
+      });
     },
-    async spendIntroduction() {
-      fake.introductions += 1;
-      return fake.introductionAnswer;
+    spendIntroduction() {
+      return Effect.sync(() => {
+        fake.introductions += 1;
+        return fake.introductionAnswer;
+      });
     },
-    async recordSeconds(input) {
-      fake.reports.push(input);
-      if (landed.has(input.sessionId)) return VOICE_SECONDS_OUTCOME.REPEATED;
-      landed.add(input.sessionId);
-      return VOICE_SECONDS_OUTCOME.RECORDED;
+    recordSeconds(input) {
+      return Effect.sync(() => {
+        fake.reports.push(input);
+        if (landed.has(input.sessionId)) return VOICE_SECONDS_OUTCOME.REPEATED;
+        landed.add(input.sessionId);
+        return VOICE_SECONDS_OUTCOME.RECORDED;
+      });
     },
   };
   return fake;
