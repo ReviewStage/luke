@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Chunk, Duration, Effect, Schedule } from "effect";
+import { Chunk, Clock, Deferred, Duration, Effect, Schedule, TestClock } from "effect";
 import {
   CHILD_RUN_STATUS,
   type ChildCompletionRecord,
@@ -16,7 +16,10 @@ import {
   cancelDescendantsOf,
   childDeliveryBackoffSchedule,
   childLines,
+  childSeamsOnRuntime,
   dismissChildCompletion,
+  type EffectChildExecutor,
+  type EffectCompletionDeliverer,
   makeChildRunService,
   retryChildDelivery,
   spawnChild,
@@ -26,12 +29,18 @@ import {
   CHILD_SPAWN_REFUSAL,
   type ChildEnd,
   type ChildExecutor,
+  ChildRunService,
   type ChildSpawnRequest,
   type ChildStore,
   type CompletionDeliverer,
   deliveryBackoffMs,
 } from "./children.js";
-import { DEFAULT_AGENT_ID, MAIN_SESSION_KEY, type SessionKey } from "./identifiers.js";
+import {
+  childSessionKey,
+  DEFAULT_AGENT_ID,
+  MAIN_SESSION_KEY,
+  type SessionKey,
+} from "./identifiers.js";
 
 class MemoryStore implements ChildStore {
   readonly children = new Map<string, ChildRunRecord>();
@@ -327,5 +336,159 @@ describe("childDeliveryBackoffSchedule", () => {
         Array.from({ length: 8 }, (_, index) => deliveryBackoffMs(index + 1)),
       );
     }),
+  );
+});
+
+/**
+ * The executor and deliverer as a host writes them now: every seam an
+ * effect, each held open by a `Deferred` the test releases, so what the port
+ * awaits is a run of this test's own runtime rather than a promise the host
+ * carried to it.
+ */
+class EffectExecutor implements EffectChildExecutor {
+  readonly started: {
+    readonly record: ChildRunRecord;
+    readonly end: Deferred.Deferred<ChildEnd>;
+  }[] = [];
+  readonly cancelled: string[] = [];
+  /** What the `start` seam read of the clock it ran on, in the order the children were started. */
+  readonly observed: number[] = [];
+  start(record: ChildRunRecord) {
+    return Effect.gen(this, function* () {
+      this.observed.push(yield* Clock.currentTimeMillis);
+      const end = yield* Deferred.make<ChildEnd>();
+      this.started.push({ record, end });
+      return { started: true, done: Deferred.await(end) } as const;
+    });
+  }
+  resume(record: ChildRunRecord) {
+    return this.start(record);
+  }
+  cancel(record: ChildRunRecord) {
+    return Effect.gen(this, function* () {
+      this.cancelled.push(record.childId);
+      const held = this.started.find((one) => one.record.childId === record.childId);
+      if (held) yield* Deferred.succeed(held.end, { status: CHILD_RUN_STATUS.CANCELLED });
+      return true;
+    });
+  }
+  archive() {
+    return Effect.succeed(true);
+  }
+  lines() {
+    return Effect.succeed(["reply: done"] as const);
+  }
+}
+
+class EffectDeliverer implements EffectCompletionDeliverer {
+  readonly delivered: string[] = [];
+  deliver(completion: ChildCompletionRecord) {
+    return Effect.sync(() => {
+      this.delivered.push(completion.childId);
+      return { delivered: true };
+    });
+  }
+}
+
+const effectHarness = () =>
+  Effect.gen(function* () {
+    const store = new MemoryStore();
+    const executor = new EffectExecutor();
+    const deliverer = new EffectDeliverer();
+    let ids = 0;
+    const service = new ChildRunService({
+      store,
+      createId: () => `id-${++ids}`,
+      now: () => 0,
+      ...childSeamsOnRuntime(yield* Effect.runtime<never>(), { executor, deliverer }),
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(() => service.stop()));
+    return { service, store, executor, deliverer };
+  });
+
+describe("childSeamsOnRuntime", () => {
+  it.effect("runs a start seam on the runtime it was handed", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { service, executor } = yield* effectHarness();
+        yield* spawnChild(service, request());
+        yield* settle;
+        assert.deepEqual(executor.observed, [0]);
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* spawnChild(service, request());
+        yield* settle;
+        assert.deepEqual(executor.observed, [0, 5_000]);
+      }),
+    ),
+  );
+
+  it.effect("holds one requester to five active children and the lane to eight", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { service, executor } = yield* effectHarness();
+        for (let index = 0; index < 5; index += 1) yield* spawnChild(service, request());
+        yield* settle;
+        assert.equal(executor.started.length, 5);
+        const refusal = yield* Effect.flip(spawnChild(service, request()));
+        assert.equal(refusal.code, CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT);
+
+        const other = (index: number) => childSessionKey(`other-${index}`);
+        for (let index = 0; index < 3; index += 1) {
+          yield* spawnChild(service, request(other(index), { requesterDepth: 1 }));
+        }
+        yield* settle;
+        assert.equal(executor.started.length, 8);
+        const lane = yield* Effect.flip(
+          spawnChild(service, request(other(3), { requesterDepth: 1 })),
+        );
+        assert.equal(lane.code, CHILD_SPAWN_REFUSAL.GLOBAL_LIMIT);
+      }),
+    ),
+  );
+
+  it.effect("hands a completion to the deliverer once", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { service, executor, deliverer } = yield* effectHarness();
+        const receipt = yield* spawnChild(service, request());
+        yield* settle;
+        const held = executor.started[0];
+        assert.ok(held);
+        yield* Deferred.succeed(held.end, {
+          status: CHILD_RUN_STATUS.COMPLETED,
+          resultText: "done",
+        });
+        yield* settle;
+        assert.deepEqual(deliverer.delivered, [receipt.childId]);
+        assert.equal(
+          service.completion(receipt.childId)?.delivery,
+          COMPLETION_DELIVERY_STATUS.DELIVERED,
+        );
+        const again = yield* Effect.flip(retryChildDelivery(service, receipt.childId));
+        assert.equal(again.code, CHILD_COMPLETION_REFUSAL.NOT_RETRYABLE);
+        yield* settle;
+        assert.deepEqual(deliverer.delivered, [receipt.childId]);
+      }),
+    ),
+  );
+
+  it.effect("cascades an explicit cancel through a child's own descendants", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { service, executor } = yield* effectHarness();
+        const parent = yield* spawnChild(service, request());
+        yield* settle;
+        const child = yield* spawnChild(
+          service,
+          request(childSessionKey(parent.childId), { requesterDepth: parent.depth }),
+        );
+        yield* settle;
+        yield* cancelChild(service, parent.childId);
+        yield* settle;
+        assert.deepEqual(executor.cancelled, [child.childId, parent.childId]);
+        assert.equal(service.child(parent.childId)?.status, CHILD_RUN_STATUS.CANCELLED);
+        assert.equal(service.child(child.childId)?.status, CHILD_RUN_STATUS.CANCELLED);
+      }),
+    ),
   );
 });

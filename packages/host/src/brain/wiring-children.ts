@@ -1,5 +1,10 @@
-import { type BrainAgent, type BrainChildAccess, carryOn } from "@sidecar/brain";
+import type { BrainAgent, BrainChildAccess } from "@sidecar/brain";
 import { ChildRunService, type ChildStore, type ScheduledTimer } from "@sidecar/runtime";
+import {
+  childSeamsOnRuntime,
+  type EffectChildExecutor,
+  type EffectCompletionDeliverer,
+} from "@sidecar/runtime/effect";
 import type { ExecutionRuntime, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   CHILD_RUN_STATUS,
@@ -44,9 +49,10 @@ export interface ChildWiringDependencies {
   /** The model adapter the credential policy built, or nothing when it built none. */
   model: () => ModelAdapter | undefined;
   /**
-   * The runtime the brain's conversations run on. The child service's own
-   * seams are promises — it is an OpenClaw port — so a conversation's effects
-   * are carried to them here, on that same runtime.
+   * The runtime the brain's conversations run on. Every seam below is an
+   * effect of that runtime's own; the port beneath them awaits promises — it
+   * imports nothing from `effect` — so `childSeamsOnRuntime` is what runs
+   * each of them, in one place rather than in each seam.
    */
   execution: ExecutionRuntime;
 }
@@ -90,68 +96,80 @@ export function wireChildren(
   dependencies: ChildWiringDependencies,
   host: ChildWiringHost,
 ): ChildWiring {
-  const carry = carryOn(dependencies.execution);
   const openChild = (record: ChildRunRecord, fork?: readonly WireRecord[]) =>
-    host.open(record.childSessionKey, fork);
+    Effect.promise(() => host.open(record.childSessionKey, fork));
+
+  const executor: EffectChildExecutor = {
+    start: (record, fork) =>
+      Effect.gen(function* () {
+        const agent = yield* openChild(record, fork);
+        if (!agent) return { started: false, reason: "no model stands to run the child" } as const;
+        const run = yield* agent.runChildTask(record.task, record.childRunId);
+        if (!run) return { started: false, reason: "the child's run was refused" } as const;
+        return { started: true, done: run.done } as const;
+      }),
+    resume: (record) =>
+      Effect.gen(function* () {
+        const agent = yield* openChild(record);
+        if (!agent) {
+          return { started: false, reason: "no model stands to recover the child" } as const;
+        }
+        // Nothing is run again: the child's own record, marked interrupted
+        // at its conversation's load, is the end the runtime can vouch for;
+        // a child whose run was never recorded ends unknown on the strength
+        // of its requester's receipt alone.
+        const adopted = yield* agent.adoptChildRun(record.childRunId);
+        return {
+          started: true,
+          done: Effect.succeed(
+            adopted ?? {
+              status: CHILD_RUN_STATUS.UNKNOWN,
+              failureDetail: "the child's run was never recorded before the relaunch",
+            },
+          ),
+        } as const;
+      }),
+    cancel: (record) =>
+      Effect.suspend(() => {
+        const agent = host.current(record.childSessionKey);
+        return agent ? agent.cancelChildRun(record.childRunId) : Effect.succeed(true);
+      }),
+    archive: (record) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => host.closeConversation(record.childSessionKey));
+        return yield* Effect.promise(() =>
+          dependencies.archiveConversation(record.childSessionKey),
+        );
+      }),
+    lines: (record, limit) =>
+      Effect.sync(() =>
+        dependencies
+          .conversationLines(record.childSessionKey)
+          .slice(-limit)
+          .map((entry) => `${entry.kind}: ${entry.words}`),
+      ),
+  };
+
+  const deliverer: EffectCompletionDeliverer = {
+    deliver: (completion, record) =>
+      Effect.gen(function* () {
+        // The conversation the completion is for, opened again if it was
+        // stood down — an observed session's whose session left the roster,
+        // a child requester already archived, a thread with no brain yet.
+        // The completion is owed to that conversation and no other, so main
+        // is never handed a sibling's result.
+        const agent = yield* Effect.promise(() => host.open(completion.destination));
+        if (!agent) return { delivered: false, reason: "no brain stands for the requester" };
+        return yield* agent.deliverChildCompletion(completion, record);
+      }),
+  };
 
   const service = new ChildRunService({
     store: dependencies.childStore(),
     createId: dependencies.createId,
     report: dependencies.report,
     ...(dependencies.childTimers ?? undefined),
-    executor: {
-      start: async (record, fork) => {
-        const agent = await openChild(record, fork);
-        if (!agent) return { started: false, reason: "no model stands to run the child" };
-        const run = await carry(agent.runChildTask(record.task, record.childRunId));
-        if (!run) return { started: false, reason: "the child's run was refused" };
-        return { started: true, done: carry(run.done) };
-      },
-      resume: async (record) => {
-        const agent = await openChild(record);
-        if (!agent) return { started: false, reason: "no model stands to recover the child" };
-        // Nothing is run again: the child's own record, marked interrupted
-        // at its conversation's load, is the end the runtime can vouch for;
-        // a child whose run was never recorded ends unknown on the strength
-        // of its requester's receipt alone.
-        const adopted = await carry(agent.adoptChildRun(record.childRunId));
-        return {
-          started: true,
-          done: Promise.resolve(
-            adopted ?? {
-              status: CHILD_RUN_STATUS.UNKNOWN,
-              failureDetail: "the child's run was never recorded before the relaunch",
-            },
-          ),
-        };
-      },
-      cancel: async (record) => {
-        const agent = host.current(record.childSessionKey);
-        if (!agent) return true;
-        return carry(agent.cancelChildRun(record.childRunId));
-      },
-      archive: async (record) => {
-        await host.closeConversation(record.childSessionKey);
-        return dependencies.archiveConversation(record.childSessionKey);
-      },
-      lines: async (record, limit) =>
-        dependencies
-          .conversationLines(record.childSessionKey)
-          .slice(-limit)
-          .map((entry) => `${entry.kind}: ${entry.words}`),
-    },
-    deliverer: {
-      deliver: async (completion, record) => {
-        // The conversation the completion is for, opened again if it was
-        // stood down — an observed session's whose session left the roster,
-        // a child requester already archived, a thread with no brain yet.
-        // The completion is owed to that conversation and no other, so main
-        // is never handed a sibling's result.
-        const agent = await host.open(completion.destination);
-        if (!agent) return { delivered: false, reason: "no brain stands for the requester" };
-        return carry(agent.deliverChildCompletion(completion, record));
-      },
-    },
+    ...childSeamsOnRuntime(dependencies.execution, { executor, deliverer }),
   });
 
   const accessFor = (sessionKey: SessionKey): BrainChildAccess => {

@@ -1097,11 +1097,22 @@ left it with the queue beneath it, so an ask, a wait, a cancel, a mark, a
 context snapshot, a stop, the four child verbs, and a run-event subscription
 are each an `Effect` its caller runs. What holds a promise is the host above
 the agent — `BrainHost`'s transition chain, the publication chain's marks,
-the child service's four executor seams, and the live brain adapter's spoken
-ask and its subscription — and the two edges inside the agent that a timer
-calls with nowhere to answer, which `AgentSeam#detach`
-carries in one place rather than in each. The wake face left that surface in
-P12-16c, named below. The
+the live brain adapter's spoken ask and its subscription — and the two edges
+inside the agent that a timer calls with nowhere to answer, which
+`AgentSeam#detach` carries in one place rather than in each. The child
+service's executor seams left this door in P12-16k.
+`packages/host/src/brain/wiring-children.ts` writes all six of them — the
+spawn's start, the adoption a relaunch resumes, the cancel a cascade reaches,
+the archive, the child's own lines, and the completion's delivery — as effects
+of the runtime its conversations are fibers of, and `childSeamsOnRuntime` in
+`packages/runtime/src/children.effect.ts` is what runs them, beside the
+`now`/`schedule`/`cancel` bridge already there and on the same
+`runOnHandedRuntime` terms: the port beneath is OpenClaw's and awaits promises,
+so one place carries every seam to it rather than each seam carrying its own,
+and a defect is squashed back to the error that caused it so the port's own
+error handling reads what was thrown. A `start` answers its end as an effect,
+and running that effect is what the port's `done` promise is.
+The wake face left that surface in P12-16c, named below. The
 `MemoryProvider` seam left that list in P12-16a:
 `recall`, `capture`, and a memory tool's `execute` are each an `Effect` the
 turn's own fiber runs, so the flush before a compaction is one effect inside

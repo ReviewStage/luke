@@ -15,8 +15,11 @@
  *   its place in the conversation's queue in the same step that asked for it;
  * - and the host's side, where the promises are the seams above the agent:
  *   `BrainHost`'s transition chain (a build and a stop), the publication
- *   chain's marks, the child service's four executor seams, and the live
- *   brain adapter's spoken ask and its subscription.
+ *   chain's marks, and the live brain adapter's spoken ask and its
+ *   subscription. The child service's executor seams left this list in
+ *   P12-16k: `wiring-children.ts` writes each of them as an effect and
+ *   `childSeamsOnRuntime` carries them to the OpenClaw port that awaits
+ *   them.
  *
  * The wake face left that surface in P12-16c: `wake`, `rosterLook`, and
  * `releaseHeld` are effects the host's composers run, and the capture behind
