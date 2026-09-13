@@ -53,15 +53,19 @@ import {
  * developer's settled utterance is a user row on the voice channel naming
  * the session and its span, with no delegation; a delegation that arrives
  * after the utterance settled adopts that row rather than cutting a second
- * (`adoptSpokenLine`), so an ask and its line share one id however the two
- * writes were ordered. Luke's settled utterance is an assistant row authored
+ * (`adoptSpokenLine`), giving it the ask's own cut — the line's words with
+ * any fragment that joined the utterance after it settled and any said after
+ * it before the delegation — so an ask and its line share one id and one text
+ * however the two writes were ordered. Luke's settled utterance is an assistant row authored
  * by the voice model only where it answered such a line: the developer's
- * latest line before it stands undelegated. Where that line is a delegation's
- * the words are the brain's reply spoken, already on record as the turn's
- * journal; where no line precedes them they are a greeting, a beat, or a
- * briefing spoken; and where the utterance is the voice following a
- * commentary append this instance sent, they are a briefing's words. None of
- * those becomes a second row. Segments may overlap, because timed deltas do,
+ * latest line before it stands undelegated, the utterance is the first thing
+ * Luke said after that line, and it begins within `SPOKEN_REPLY.WINDOW_MS` of
+ * the line's end. Where that line is a delegation's the words are the brain's
+ * reply spoken, already on record as the turn's journal; where no line
+ * precedes them, or Luke has spoken since the line, or the line is long past,
+ * they are a greeting, a beat, or a briefing spoken; and where the utterance
+ * is the voice following a commentary append this instance sent, they are a
+ * briefing's words. None of those becomes a second row. Segments may overlap, because timed deltas do,
  * and no audio is ever stored.
  *
  * Every statement here is an `Effect` over the ambient `SqlClient`, decoded
@@ -106,6 +110,16 @@ const IGNORED: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED
 const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 const REPEATED: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
 const NO_SESSION: VoiceWriteResult = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION };
+
+export const SPOKEN_REPLY = {
+  /**
+   * How long after the developer's line Luke's first words may begin and still
+   * be his answer to it, on the session's clock. The voice model answers at
+   * once where it answers itself; words that begin later than this after a
+   * line nobody answered are a beat or a briefing, not the answer.
+   */
+  WINDOW_MS: 30_000,
+} as const;
 
 /** The span one settled utterance covers on the session's own clock, as the ledger grouped it. */
 interface SpokenUtteranceSpan {
@@ -467,9 +481,36 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       });
       if (Option.isNone(voiceSession)) return NO_SESSION;
       const voiceSessionId = voiceSession.value.id;
+      // The line the delegation is about, where one settled undelegated before it: the latest
+      // developer line ending at or before the offset. A delegation told twice finds its own.
+      const latest = yield* store.latestSpokenLine(target.conversation, {
+        voiceSessionId,
+        endingAtOrBeforeMs: created.offset_ms,
+      });
+      if (!latest.ok) return { ok: false, refusal: latest.refusal };
+      if (latest.line?.clientId === created.delegation.id) return REPEATED;
+      const candidate =
+        latest.line !== undefined && !latest.line.delegated ? latest.line : undefined;
+      // A line Luke has already answered is not the one a later delegation is about: the
+      // delegation's words are whatever the developer said since, which the cut takes from that
+      // line's end. A line nobody answered is adopted whole.
+      const answered =
+        candidate === undefined || candidate.toMs >= created.offset_ms
+          ? []
+          : yield* findUtteranceSegments({
+              voiceSessionId,
+              role: VOICE_SEGMENT_ROLE.ASSISTANT,
+              startMs: candidate.toMs,
+              endMs: created.offset_ms - 1,
+            });
+      const adopting = answered.length === 0 ? candidate : undefined;
+      // The cut starts where the developer's last written words end — the previous ask's, or the
+      // last undelegated line's other than the one being adopted, whose own words the cut
+      // includes again with whatever joined or followed them before the delegation.
       const previous = yield* store.spokenAskEnd(target.conversation, {
         voiceSessionId,
         delegationId: created.delegation.id,
+        ...(adopting === undefined ? undefined : { exceptClientId: adopting.clientId }),
       });
       if (!previous.ok) return { ok: false, refusal: previous.refusal };
       const spoken = yield* findSpokenSegments({
@@ -478,7 +519,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         toMs: created.offset_ms,
       });
       const text = spoken.map((segment) => segment.text).join("");
-      if (text.length === 0) return yield* adoptSettledLine(target, voiceSessionId, created);
+      if (text.length === 0) return IGNORED;
       const metadata: SpokenAskMetadata = {
         author: MESSAGE_AUTHOR.DEVELOPER,
         channel: MESSAGE_CHANNEL.VOICE,
@@ -487,6 +528,16 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         from_ms: Math.min(...spoken.map((segment) => segment.startMs)),
         to_ms: created.offset_ms,
       };
+      if (adopting !== undefined) {
+        const adopted = yield* store.adoptSpokenLine(target.conversation, {
+          lineClientId: adopting.clientId,
+          delegationId: created.delegation.id,
+          text,
+          metadata,
+        });
+        if (adopted.ok) return adopted.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
+        return { ok: false, refusal: adopted.refusal };
+      }
       const written = yield* store.recordUserMessage(target.conversation, {
         clientId: created.delegation.id,
         turnOfAsk: true,
@@ -495,37 +546,6 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       });
       if (written.ok) return written.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
       return { ok: false, refusal: written.refusal };
-    });
-  }
-
-  /**
-   * A delegation with no words before it since the last line was written is
-   * about the line that settled undelegated just before it, where one stands
-   * and no delegation owns it yet: that row is adopted under the delegation
-   * rather than a second cut of the same words. A delegation told twice finds
-   * its row standing. One with no such line writes nothing, as before.
-   */
-  function adoptSettledLine(
-    target: VoiceTarget,
-    voiceSessionId: string,
-    created: DelegationCreated,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
-    return Effect.gen(function* () {
-      const latest = yield* store.latestSpokenLine(target.conversation, {
-        voiceSessionId,
-        endingAtOrBeforeMs: created.offset_ms,
-      });
-      if (!latest.ok) return { ok: false, refusal: latest.refusal };
-      const line = latest.line;
-      if (line === undefined) return IGNORED;
-      if (line.clientId === created.delegation.id) return REPEATED;
-      if (line.delegated) return IGNORED;
-      const adopted = yield* store.adoptSpokenLine(target.conversation, {
-        lineClientId: line.clientId,
-        delegationId: created.delegation.id,
-      });
-      if (adopted.ok) return adopted.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
-      return { ok: false, refusal: adopted.refusal };
     });
   }
 
@@ -605,6 +625,19 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       });
       if (!latest.ok) return { ok: false, refusal: latest.refusal };
       if (latest.line === undefined || latest.line.delegated) return IGNORED;
+      // His answer is the first thing he says after the line, and soon after it: words after a
+      // long pause, or after he has already spoken since the line, are a beat or a briefing
+      // whatever memory this instance kept of the appends that carried them.
+      if (utterance.startMs - latest.line.toMs > SPOKEN_REPLY.WINDOW_MS) return IGNORED;
+      if (utterance.startMs > latest.line.toMs) {
+        const spokenSince = yield* findUtteranceSegments({
+          voiceSessionId,
+          role: VOICE_SEGMENT_ROLE.ASSISTANT,
+          startMs: latest.line.toMs,
+          endMs: utterance.startMs - 1,
+        });
+        if (spokenSince.length > 0) return IGNORED;
+      }
       const spoken = yield* findUtteranceSegments({
         voiceSessionId,
         role: VOICE_SEGMENT_ROLE.ASSISTANT,

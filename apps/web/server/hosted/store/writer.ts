@@ -272,16 +272,26 @@ interface SpokenLineFound {
   readonly clientId: string;
   /** Whether a delegation already owns the line. */
   readonly delegated: boolean;
+  /** Where the line ends on the session's clock. */
+  readonly toMs: number;
 }
 
 type SpokenLineResult =
   | { readonly ok: true; readonly line: SpokenLineFound | undefined }
   | typeof NO_CONVERSATION;
 
-/** An undelegated spoken line and the delegation that arrived after it settled. */
+/**
+ * An undelegated spoken line and the delegation that arrived after it
+ * settled, with the words and span the ask's own cut found: the adopted row
+ * carries the cut whole, so a fragment that joined the utterance after it
+ * settled, or words said after it and before the delegation, are not lost
+ * to the row the line was written as.
+ */
 interface SpokenLineAdoption {
   readonly lineClientId: string;
   readonly delegationId: string;
+  readonly text: string;
+  readonly metadata: UserMessageMetadata;
 }
 
 type SpokenLineAdoptionResult =
@@ -299,6 +309,8 @@ interface SpokenAskEnd {
   readonly voiceSessionId: string;
   /** The ask being cut, left out so a delegation told twice cuts the same span. */
   readonly delegationId: string;
+  /** A line the ask is about to adopt, left out so the cut starts before it rather than at its end. */
+  readonly exceptClientId?: string;
 }
 
 type SpokenAskEndResult = { readonly ok: true; readonly toMs: number } | typeof NO_CONVERSATION;
@@ -818,6 +830,7 @@ const findSpokenAskEnd = SqlSchema.findOne({
   Request: Schema.Struct({
     conversationId: Schema.String,
     delegationId: Schema.String,
+    exceptClientId: Schema.String,
     voiceSessionId: Schema.String,
   }),
   Result: Schema.Struct({
@@ -830,6 +843,7 @@ const findSpokenAskEnd = SqlSchema.findOne({
         from messages
         where conversation_id = ${request.conversationId}
           and client_id <> ${request.delegationId}
+          and client_id <> ${request.exceptClientId}
           and metadata ->> 'voice_session_id' = ${request.voiceSessionId}
       `,
     ),
@@ -853,11 +867,13 @@ const findLatestSpokenLine = SqlSchema.findOne({
     delegationId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
       Schema.fromKey("delegation_id"),
     ),
+    toMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("to_ms")),
   }),
   execute: (request) =>
     statement(
       (sql) => sql`
-        select id, client_id, metadata ->> 'delegation_id' as delegation_id
+        select id, client_id, metadata ->> 'delegation_id' as delegation_id,
+               (metadata ->> 'to_ms')::int as to_ms
         from messages
         where conversation_id = ${request.conversationId}
           and role = ${MESSAGE_ROLE.USER}
@@ -869,16 +885,22 @@ const findLatestSpokenLine = SqlSchema.findOne({
     ),
 });
 
-/** The one write that renames a row's client id: an undelegated spoken line taking the delegation's, while no turn owns it. */
+/** The one write that renames a row's client id: an undelegated spoken line taking the delegation's, its words and span the ask's cut, while no turn owns it. */
 const rekeySpokenLine = SqlSchema.findOne({
-  Request: Schema.Struct({ id: Schema.String, delegationId: Schema.String }),
+  Request: Schema.Struct({
+    id: Schema.String,
+    delegationId: Schema.String,
+    parts: StoredPartsColumnSchema,
+    metadata: MessageMetadataColumnSchema,
+  }),
   Result: RowIdSchema,
   execute: (row) =>
     statement(
       (sql) => sql`
         update messages
         set client_id = ${row.delegationId},
-            metadata = metadata || jsonb_build_object('delegation_id', ${row.delegationId}::text)
+            parts = ${row.parts}::jsonb,
+            metadata = ${row.metadata}::jsonb
         where id = ${row.id} and role = ${MESSAGE_ROLE.USER} and turn_id is null
         returning id
       `,
@@ -1588,6 +1610,7 @@ function spokenAskEnd(context: WriterContext, end: SpokenAskEnd): Write<SpokenAs
     findSpokenAskEnd({
       conversationId: context.target.conversationId,
       delegationId: end.delegationId,
+      exceptClientId: end.exceptClientId ?? end.delegationId,
       voiceSessionId: end.voiceSessionId,
     }),
     (row) => ({ ok: true, toMs: Option.match(row, { onNone: () => 0, onSome: (it) => it.toMs }) }),
@@ -1670,6 +1693,7 @@ function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write
           id: row.id,
           clientId: row.clientId,
           delegated: row.delegationId !== null,
+          toMs: row.toMs,
         }),
       }),
     }),
@@ -1688,9 +1712,18 @@ function adoptSpokenLine(
     }
     const line = yield* messageByClientId(context, adoption.lineClientId);
     if (Option.isNone(line)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+    const read = yield* admitted(context, {
+      id: adoption.delegationId,
+      role: MESSAGE_ROLE.USER,
+      metadata: adoption.metadata,
+      parts: [{ type: UI_PART_TYPE.TEXT, text: adoption.text, state: UI_PART_STATE.DONE }],
+    });
+    if (!read.ok) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
     const rekeyed = yield* rekeySpokenLine({
       id: line.value.id,
       delegationId: adoption.delegationId,
+      parts: read.message.parts,
+      metadata: adoption.metadata,
     });
     if (Option.isNone(rekeyed)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
     const turnId = yield* askTurnOf({

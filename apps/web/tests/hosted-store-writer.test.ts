@@ -1519,13 +1519,31 @@ test("adopting a spoken line re-keys it to the delegation, names the delegation 
     ],
   );
 
+  const ADOPTED_METADATA = {
+    author: MESSAGE_AUTHOR.DEVELOPER,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_fixture_3",
+    delegation_id: "dl_late",
+    from_ms: 1000,
+    to_ms: 5000,
+  } as const;
   const adopted = await database.run(
-    writer.adoptSpokenLine(target, { lineClientId: "settled-line", delegationId: "dl_late" }),
+    writer.adoptSpokenLine(target, {
+      lineClientId: "settled-line",
+      delegationId: "dl_late",
+      text: "Open the failing one. Please.",
+      metadata: ADOPTED_METADATA,
+    }),
   );
   assert.ok(adopted.ok);
   assert.deepEqual([adopted.id, adopted.effect], [line.id, STORE_WRITE_EFFECT.WRITTEN]);
   const twice = await database.run(
-    writer.adoptSpokenLine(target, { lineClientId: "settled-line", delegationId: "dl_late" }),
+    writer.adoptSpokenLine(target, {
+      lineClientId: "settled-line",
+      delegationId: "dl_late",
+      text: "Open the failing one. Please.",
+      metadata: ADOPTED_METADATA,
+    }),
   );
   assert.ok(twice.ok);
   assert.deepEqual([twice.id, twice.effect], [line.id, STORE_WRITE_EFFECT.REPEATED]);
@@ -1541,18 +1559,19 @@ test("adopting a spoken line re-keys it to the delegation, names the delegation 
   );
   assert.ok((after[0]?.seq ?? 0) > (before[1]?.seq ?? 0));
   assert.ok((after[1]?.seq ?? 0) > (after[0]?.seq ?? 0));
-  assert.deepEqual(after[0]?.metadata, {
-    author: MESSAGE_AUTHOR.DEVELOPER,
-    channel: MESSAGE_CHANNEL.VOICE,
-    voice_session_id: "vs_fixture_3",
-    delegation_id: "dl_late",
-    from_ms: 1000,
-    to_ms: 2200,
-  });
+  assert.deepEqual(after[0]?.metadata, ADOPTED_METADATA);
+  assert.deepEqual(after[0]?.parts, [
+    { type: "text", text: "Open the failing one. Please.", state: "done" },
+  ]);
   // A line no row stands for is a refusal by name.
   assert.deepEqual(
     await database.run(
-      writer.adoptSpokenLine(target, { lineClientId: "nowhere", delegationId: "dl_other" }),
+      writer.adoptSpokenLine(target, {
+        lineClientId: "nowhere",
+        delegationId: "dl_other",
+        text: "x",
+        metadata: { ...ADOPTED_METADATA, delegation_id: "dl_other" },
+      }),
     ),
     { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE },
   );

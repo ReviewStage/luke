@@ -661,7 +661,7 @@ test("a delegation arriving after the developer's line settled adopts that line 
           voice_session_id: voiceSessionId,
           delegation_id: "dl_late",
           from_ms: 1000,
-          to_ms: 2200,
+          to_ms: 5000,
         },
       ],
     ],
@@ -699,4 +699,95 @@ test("a delegation is one ask however many times it is told, and one with no wor
     effect: STORE_WRITE_EFFECT.REPEATED,
   });
   assert.equal((await spokenAsks(live.conversation)).length, 1);
+});
+
+test("a delegation adopting a settled line gives it the ask's whole cut: a fragment that joined the utterance after it settled and words said after it before the delegation are the ask's words, not lost to the row the line was written as", async () => {
+  const live = await target();
+  const voice = writer();
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  await database.run(voice.consume(live, heard("Open the failing", 1000, 2200)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2200 })),
+    WRITTEN,
+  );
+  // A late fragment of the same utterance, beginning before the line's end, and a second thought after it.
+  await database.run(voice.consume(live, heard(" one.", 2100, 2600)));
+  await database.run(voice.consume(live, heard(" Please.", 3000, 3500)));
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_whole", 5000))), WRITTEN);
+  const rows = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.clientId, row.parts, row.metadata]),
+    [
+      [
+        "dl_whole",
+        [{ type: "text", text: "Open the failing one. Please.", state: "done" }],
+        {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: voiceSessionId,
+          delegation_id: "dl_whole",
+          from_ms: 1000,
+          to_ms: 5000,
+        },
+      ],
+    ],
+  );
+  // A delegation with no line before it and no words writes nothing, as before.
+  const empty = await target();
+  assert.deepEqual(await database.run(voice.consume(empty, delegated("dl_none", 500))), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.IGNORED,
+  });
+});
+
+test("Luke's later speech is not his answer: once he has spoken after the developer's line, or once the line is long past, his words are a beat or a briefing and write nothing", async () => {
+  // Answered, then more of Luke's words later in the session.
+  const answered = await target();
+  const voice = writer();
+  await database.run(voice.consume(answered, heard("Which agent is waiting?", 1000, 2400)));
+  await database.run(voice.consume(answered, said("The fixture agent.", 3000, 4000)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(answered, { startMs: 1000, endMs: 2400 })),
+    WRITTEN,
+  );
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(answered, { startMs: 3000, endMs: 4000 })),
+    WRITTEN,
+  );
+  await database.run(
+    voice.consume(answered, said("By the way, one agent finished.", 20_000, 22_000)),
+  );
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(answered, { startMs: 20_000, endMs: 22_000 })),
+    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+  );
+  assert.deepEqual(
+    (await spokenAsks(answered.conversation)).map((row) => [row.role, row.parts]),
+    [
+      [MESSAGE_ROLE.USER, [{ type: "text", text: "Which agent is waiting?", state: "done" }]],
+      [MESSAGE_ROLE.ASSISTANT, [{ type: "text", text: "The fixture agent.", state: "done" }]],
+    ],
+  );
+
+  // Unanswered, then Luke's words long after the line: a beat, not an answer.
+  const unanswered = await target();
+  await database.run(voice.consume(unanswered, heard("Hm.", 100, 900)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(unanswered, { startMs: 100, endMs: 900 })),
+    WRITTEN,
+  );
+  await database.run(
+    voice.consume(unanswered, said("Your calendar shows a meeting soon.", 40_000, 42_000)),
+  );
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(unanswered, { startMs: 40_000, endMs: 42_000 })),
+    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+  );
+  assert.deepEqual(
+    (await spokenAsks(unanswered.conversation)).map((row) => row.role),
+    [MESSAGE_ROLE.USER],
+  );
 });
